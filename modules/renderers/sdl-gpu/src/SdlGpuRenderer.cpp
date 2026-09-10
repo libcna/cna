@@ -1257,6 +1257,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool failureInjected = false;
         bool debugModeEnabled = false;
         int swapInterval = 1;
+        int appliedSwapInterval = 1;
         int physicalWidth = 0;
         int physicalHeight = 0;
         SDL_GPUTextureFormat depthStencilFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
@@ -1324,6 +1325,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             owner.device_ = device;
             owner.debugModeEnabled_ = debugModeEnabled;
             owner.swapInterval_ = swapInterval;
+            owner.appliedSwapInterval_ = appliedSwapInterval;
             owner.physicalWidth_ = physicalWidth;
             owner.physicalHeight_ = physicalHeight;
             owner.depthStencilFormat_ = depthStencilFormat;
@@ -1437,7 +1439,10 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         resources.FailAt(SdlGpuFailurePointEXT::SwapchainSetup);
         resources.swapInterval = std::max(0, swapInterval);
-        ConfigureSwapchain(resources.device, window_, resources.swapInterval);
+        resources.appliedSwapInterval =
+            ConfigureSwapchain(resources.device, window_, resources.swapInterval);
+        if (resources.appliedSwapInterval < 0)
+            resources.appliedSwapInterval = 1;
 
         resources.FailAt(SdlGpuFailurePointEXT::DepthStencilFormatQuery);
         resources.depthStencilFormat = QueryDepthStencilFormat(resources.device);
@@ -1691,6 +1696,12 @@ namespace CNA::Internal::Renderers::SdlGpu
                 (void)commandBuffer.Submit();
                 throw std::runtime_error(
                     "CNA SDL_GPU: SDL_WaitAndAcquireGPUSwapchainTexture failed: " + error);
+            }
+
+            if (forceNextNullSwapchainTextureForTest_)
+            {
+                forceNextNullSwapchainTextureForTest_ = false;
+                swapchainTexture = nullptr;
             }
 
             if (swapchainTexture == nullptr)
@@ -2576,6 +2587,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         EnsureFrameRendered();
     }
 
+    void SdlGpuRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface.windowId != SDL_GetWindowID(window_))
+        {
+            throw std::invalid_argument(
+                "CNA SDL_GPU: a renderer's platform window identity cannot change");
+        }
+        physicalWidth_ = std::max(0, surface.drawableSize.width);
+        physicalHeight_ = std::max(0, surface.drawableSize.height);
+        displayScale_ = std::isfinite(surface.displayScale) && surface.displayScale > 0.0f
+            ? surface.displayScale
+            : 1.0f;
+    }
+
     SdlGpuRenderer::LogicalViewport SdlGpuRenderer::ComputeLogicalViewport() const
     {
         LogicalViewport viewport{};
@@ -2620,20 +2645,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         height = static_cast<int>(std::lround(viewport.logicalHeight));
     }
 
+    void SdlGpuRenderer::GetDefaultViewportRect(int& x, int& y, int& width, int& height)
+    {
+        const LogicalViewport viewport = ComputeLogicalViewport();
+        x = static_cast<int>(std::lround(viewport.x));
+        y = static_cast<int>(std::lround(viewport.y));
+        width = static_cast<int>(std::lround(viewport.width));
+        height = static_cast<int>(std::lround(viewport.height));
+    }
+
     void SdlGpuRenderer::SetVirtualResolution(int width, int height)
     {
         virtualWidth_ = width;
         virtualHeight_ = height;
-        if (presentationMode_ == CnaPresentationMode::NativeBackBuffer && width > 0 && height > 0)
-        {
-            // A requested native backbuffer resize is the next swapchain extent. Window-system
-            // resize notification and SDL_gpu swapchain acquisition are both asynchronous, but
-            // GraphicsDevice must expose and capture the new full viewport immediately, before
-            // the first acquisition. The acquired extent replaces this prediction in
-            // EnsureFrameRendered(), so a platform-clamped size still becomes authoritative.
-            physicalWidth_ = width;
-            physicalHeight_ = height;
-        }
     }
 
     void SdlGpuRenderer::SetPresentationMode(int mode)
@@ -2644,18 +2668,26 @@ namespace CNA::Internal::Renderers::SdlGpu
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
     }
 
-    void SdlGpuRenderer::ConfigureSwapchain(SDL_GPUDevice* device, SDL_Window* window,
-                                                    int interval)
+    int SdlGpuRenderer::ConfigureSwapchain(SDL_GPUDevice* device, SDL_Window* window,
+                                           int interval)
     {
         // plans/plan_sdlgpu.md: SDL_gpu has no "half-rate" present mode -- XNA's PresentInterval.Two
         // (swapInterval==2) falls back to plain VSYNC, same as swapInterval==1.
         SDL_GPUPresentMode presentMode = SDL_GPU_PRESENTMODE_VSYNC;
+        int appliedInterval = 1;
         if (interval == 0)
         {
             if (SDL_WindowSupportsGPUPresentMode(device, window, SDL_GPU_PRESENTMODE_IMMEDIATE))
+            {
                 presentMode = SDL_GPU_PRESENTMODE_IMMEDIATE;
+                appliedInterval = 0;
+            }
             else if (SDL_WindowSupportsGPUPresentMode(device, window, SDL_GPU_PRESENTMODE_MAILBOX))
+            {
                 presentMode = SDL_GPU_PRESENTMODE_MAILBOX;
+                // Mailbox is synchronized to vblank even though it does not queue old frames.
+                appliedInterval = 1;
+            }
         }
 
         if (!SDL_SetGPUSwapchainParameters(
@@ -2665,14 +2697,18 @@ namespace CNA::Internal::Renderers::SdlGpu
             CNA::Logger::Warn(
                 std::string("CNA SDL_GPU: SDL_SetGPUSwapchainParameters failed: ") + SDL_GetError(),
                 CNA::LogCategory::GPU);
+            return -1;
         }
+        return appliedInterval;
     }
 
     void SdlGpuRenderer::SetSwapInterval(int interval)
     {
         interval = std::max(0, interval);
-        ConfigureSwapchain(device_, window_, interval);
+        const int appliedInterval = ConfigureSwapchain(device_, window_, interval);
         swapInterval_ = interval;
+        if (appliedInterval >= 0)
+            appliedSwapInterval_ = appliedInterval;
     }
 
     void SdlGpuRenderer::MaybeFailForTest(SdlGpuFailurePointEXT point)
@@ -2752,10 +2788,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         const LogicalViewport viewport = ComputeLogicalViewport();
         if (viewport.width == 0.0f || viewport.height == 0.0f)
             return false;
-        logicalX = (windowX - viewport.x) * viewport.logicalWidth / viewport.width;
-        logicalY = (windowY - viewport.y) * viewport.logicalHeight / viewport.height;
-        return windowX >= viewport.x && windowX < viewport.x + viewport.width &&
-               windowY >= viewport.y && windowY < viewport.y + viewport.height;
+        const float inverseDisplayScale = 1.0f / displayScale_;
+        const float clientX = viewport.x * inverseDisplayScale;
+        const float clientY = viewport.y * inverseDisplayScale;
+        const float clientWidth = viewport.width * inverseDisplayScale;
+        const float clientHeight = viewport.height * inverseDisplayScale;
+        logicalX = (windowX - clientX) * viewport.logicalWidth / clientWidth;
+        logicalY = (windowY - clientY) * viewport.logicalHeight / clientHeight;
+        return windowX >= clientX && windowX < clientX + clientWidth &&
+               windowY >= clientY && windowY < clientY + clientHeight;
     }
 
     bool SdlGpuRenderer::TransformLogicalToWindow(float logicalX, float logicalY, float& windowX, float& windowY) const
@@ -2763,8 +2804,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         const LogicalViewport viewport = ComputeLogicalViewport();
         if (viewport.logicalWidth == 0.0f || viewport.logicalHeight == 0.0f)
             return false;
-        windowX = viewport.x + logicalX * viewport.width / viewport.logicalWidth;
-        windowY = viewport.y + logicalY * viewport.height / viewport.logicalHeight;
+        const float inverseDisplayScale = 1.0f / displayScale_;
+        windowX = (viewport.x + logicalX * viewport.width / viewport.logicalWidth) * inverseDisplayScale;
+        windowY = (viewport.y + logicalY * viewport.height / viewport.logicalHeight) * inverseDisplayScale;
         return true;
     }
 
@@ -3542,21 +3584,22 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (viewport.logicalWidth <= 0.0f || viewport.logicalHeight <= 0.0f)
             return;
 
-        // REMED-GFX-072: when a custom sub-Viewport is active, XNA/FNA make SpriteBatch coordinates
-        // VIEWPORT-LOCAL -- sprite (0,0) is the viewport's top-left and the projection extent is
-        // Viewport.Width/Height (CreateOrthographicOffCenter(0, Viewport.Width, Viewport.Height, 0)).
-        // Bake the raw viewport-local pixel coordinates here (no presentation-mode letterbox offset/
-        // scale) and let IssueSpriteDraw divide by Viewport.W/H instead of the full target (see
-        // RenderQueuedDraws' Sprite case, which reads the same per-draw QueuedDrawRef viewport).
-        // Only a genuine sub-region (differs from the physical target extent) overrides -- the
-        // default full-target viewport keeps the existing letterbox/1:1 path byte-identical.
-        const int spritePhysW = currentRenderTarget_ != nullptr ? currentRenderTarget_->GetWidth()
-                                                                 : physicalWidth_;
-        const int spritePhysH = currentRenderTarget_ != nullptr ? currentRenderTarget_->GetHeight()
-                                                                 : physicalHeight_;
-        if (viewportSet_ && viewportW_ > 0 && viewportH_ > 0 &&
-            (viewportX_ != 0 || viewportY_ != 0 || viewportW_ != spritePhysW || viewportH_ != spritePhysH))
+        // REMED-GFX-072 / SDLGPU-68: SpriteBatch positions are viewport-local logical pixels.
+        // GraphicsDevice has already mapped the public logical Viewport to the renderer's physical
+        // presentation rectangle, so recover that logical extent for the shader projection. This
+        // applies to the default letterbox/overscan viewport as well as a custom sub-viewport: the
+        // native viewport supplies the physical offset/scale while the vertices stay local.
+        float spriteProjectionWidth = 0.0f;
+        float spriteProjectionHeight = 0.0f;
+        if (viewportSet_ && viewportW_ > 0 && viewportH_ > 0)
         {
+            spriteProjectionWidth = static_cast<float>(viewportW_);
+            spriteProjectionHeight = static_cast<float>(viewportH_);
+            if (currentRenderTarget_ == nullptr && viewport.width > 0.0f && viewport.height > 0.0f)
+            {
+                spriteProjectionWidth *= viewport.logicalWidth / viewport.width;
+                spriteProjectionHeight *= viewport.logicalHeight / viewport.height;
+            }
             viewport.x = 0.0f;
             viewport.y = 0.0f;
             viewport.width = viewport.logicalWidth = 1.0f;   // ratio 1, offset 0 => px = points.X
@@ -3605,6 +3648,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SpriteCommand command{};
         command.texture = nativeTexture;
+        command.projectionWidth = spriteProjectionWidth;
+        command.projectionHeight = spriteProjectionHeight;
         command.textureFilter = textureFilter;
         command.addressU = addressU;
         command.addressV = addressV;
@@ -6641,21 +6686,14 @@ namespace CNA::Internal::Renderers::SdlGpu
                     const SpriteCommand& c = spriteCommands_[ref.index];
                     if (c.target == target)
                     {
-                        // REMED-GFX-072: the sprite2d shader divides pixel positions by this size to
-                        // reach NDC. A custom sub-Viewport makes sprite coordinates viewport-local
-                        // (QueueSprite baked raw local coords for this ref), so divide by Viewport.W/H
-                        // instead of the full target -- the ApplyViewportForRef call above already
-                        // positions the [-1,1] result at Viewport.X/Y. Default viewport keeps the
-                        // full-target divisor (byte-identical for every existing sprite).
-                        float spriteVpSize[2] = { viewportSize[0], viewportSize[1] };
-                        if (ref.viewportSet && ref.viewportW > 0 && ref.viewportH > 0 &&
-                            (ref.viewportX != 0 || ref.viewportY != 0 ||
-                             ref.viewportW != static_cast<int>(viewportSize[0]) ||
-                             ref.viewportH != static_cast<int>(viewportSize[1])))
-                        {
-                            spriteVpSize[0] = static_cast<float>(ref.viewportW);
-                            spriteVpSize[1] = static_cast<float>(ref.viewportH);
-                        }
+                        // QueueSprite snapshots the logical projection extent because both the
+                        // window's presentation scale and the public viewport may change before
+                        // this deferred command is replayed. Zero preserves the legacy no-viewport
+                        // path and projects over the live render-target extent.
+                        float spriteVpSize[2] = {
+                            c.projectionWidth > 0.0f ? c.projectionWidth : viewportSize[0],
+                            c.projectionHeight > 0.0f ? c.projectionHeight : viewportSize[1]
+                        };
                         IssueSpriteDraw(pass, cmd, c, ref.index, spriteVpSize, colorFormat,
                                         sampleCount, depthStencilFormat, colorTargetCount,
                                         boundPipeline);

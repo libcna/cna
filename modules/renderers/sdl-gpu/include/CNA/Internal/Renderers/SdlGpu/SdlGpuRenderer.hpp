@@ -1327,6 +1327,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             // short-lived public texture may already have released that handle.
             SdlGpuSampledTextureEXT texture;
             std::array<SpriteVertex, 6> vertices{};
+            // SDLGPU-68: the coordinate extent the sprite shader must project over. This is the
+            // logical presentation size for the backbuffer's default letterbox/overscan/stretch
+            // viewport, and the native viewport size for a caller-defined sub-viewport. Captured
+            // with the geometry so a later resize cannot retroactively change a queued sprite.
+            // Zero means the render target's live extent (the legacy no-viewport path).
+            float projectionWidth = 0.0f;
+            float projectionHeight = 0.0f;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -1888,8 +1895,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         void Clear(float r, float g, float b, float a) override;
         /** @brief Renders any pending clear and presents the swapchain texture. */
         void Present() override;
+        /** @brief Adopts the platform's latest drawable size and logical-to-physical scale. */
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /** @brief Returns the current logical (virtual) viewport size. */
         void GetViewportSize(int& width, int& height) override;
+        /** @brief Returns the physical drawable rectangle used for logical presentation. */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         /**
          * @brief Reads a region of the backbuffer into a tightly packed RGBA8 buffer (REMED-GFX-165).
          *
@@ -1906,6 +1917,18 @@ namespace CNA::Internal::Renderers::SdlGpu
         void SetPresentationMode(int mode) override;
         /** @brief Updates the swap interval, reconfiguring the swapchain present mode. */
         void SetSwapInterval(int interval) override;
+        /** @brief Returns the swap interval most recently requested by the XNA presentation path. */
+        CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
+        /**
+         * @brief Returns the interval the selected SDL_gpu present mode can actually provide.
+         *
+         * SDL_gpu has no half-rate mode, so a request for XNA `PresentInterval::Two` applies
+         * ordinary one-vblank VSYNC. Immediate presentation can likewise fall back to a
+         * synchronized mode when the window does not support it.
+         *
+         * @return Zero for immediate presentation or one for a synchronized present mode.
+         */
+        CNAEXT [[nodiscard]] int GetAppliedSwapIntervalEXT() const { return appliedSwapInterval_; }
         /** @brief Converts a physical window point to logical (virtual) game coordinates. */
         bool TransformWindowToLogical(float windowX, float windowY, float& logicalX, float& logicalY) const override;
         /** @brief Converts a logical (virtual) game point to physical window coordinates. */
@@ -2202,6 +2225,15 @@ namespace CNA::Internal::Renderers::SdlGpu
          * requiring swapchain presentation. Test-only GFX-028 failure/retry probe. CNAEXT.
          */
         CNAEXT void InitializeSpritePipelineAndSamplerForTestEXT();
+        /**
+         * @brief Makes the next successful swapchain acquisition follow SDL's documented
+         * minimized-window null-texture path. Test-only; the acquired command buffer is still
+         * submitted exactly as SDL requires. CNAEXT.
+         */
+        CNAEXT void ForceNextNullSwapchainTextureForTestEXT()
+        {
+            forceNextNullSwapchainTextureForTest_ = true;
+        }
 
     private:
         struct ConstructionResources;
@@ -2228,7 +2260,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         void EnsureDepthStencilTexture(Uint32 width, Uint32 height);
         // Queries the best available combined depth+stencil format once, at construction time.
         static SDL_GPUTextureFormat QueryDepthStencilFormat(SDL_GPUDevice* device);
-        static void ConfigureSwapchain(SDL_GPUDevice* device, SDL_Window* window, int interval);
+        [[nodiscard]] static int ConfigureSwapchain(
+            SDL_GPUDevice* device, SDL_Window* window, int interval);
         void MaybeFailForTest(SdlGpuFailurePointEXT point);
         void NotifyResourceEvent(SdlGpuResourceKindEXT resource,
                                  SdlGpuResourceEventEXT event) const noexcept;
@@ -2993,10 +3026,13 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         int physicalWidth_ = 0;
         int physicalHeight_ = 0;
+        float displayScale_ = 1.0f;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         int swapInterval_ = 1;
+        int appliedSwapInterval_ = 1;
+        bool forceNextNullSwapchainTextureForTest_ = false;
 
         bool framePending_ = true;
 

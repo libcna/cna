@@ -58,13 +58,10 @@ NEEDS_TEST = {
     "easygl_environmentmapeffect_multilight_test.cpp": ("SDLGPU-77", "environment-map light count"),
     "easygl_environmentmapeffect_specular_test.cpp": ("SDLGPU-77", "environment-map specular"),
     "easygl_environmentmapeffect_worldtransform_test.cpp": ("SDLGPU-77", "environment-map world transform"),
-    "easygl_graphicsdevicemanager_vsync_test.cpp": ("SDLGPU-68", "public VSync changes"),
     "easygl_model_draw_test.cpp": ("SDLGPU-79", "Model.Draw renderer behavior"),
     "easygl_model_hierarchy_child_mesh_test.cpp": ("SDLGPU-79", "model hierarchy transforms"),
     "easygl_model_skinned_animation_playback_test.cpp": ("SDLGPU-79", "skinned model playback"),
     "easygl_model_two_meshes_effects_test.cpp": ("SDLGPU-79", "per-mesh effects"),
-    "easygl_msaa_change_test.cpp": ("SDLGPU-68", "reset-time MSAA changes"),
-    "easygl_real_window_resize_test.cpp": ("SDLGPU-68", "real resize lifecycle"),
     "easygl_render_target_usage_test.cpp": ("SDLGPU-74", "PreserveContents/DiscardContents"),
     "easygl_rendertargetcube_depthformat_test.cpp": ("SDLGPU-73", "cube depth/stencil formats"),
     "easygl_skinnedeffect_multilight_test.cpp": ("SDLGPU-77", "skinned multiple lights"),
@@ -106,12 +103,12 @@ DIRECT = {
     "easygl_model_json_reader_skeleton_test.cpp",
     "easygl_model_json_reader_test.cpp",
     "easygl_model_json_reader_texture_test.cpp",
-    "easygl_presentation_parameters_test.cpp",
 }
 
 # These exact EasyGL sources are also compiled and registered under SDL GPU. Unlike the CPU-only
 # DIRECT set, they are renderer-discriminating and retain the task that established the evidence.
 VERIFIED_DIRECT = {
+    "easygl_backbuffer_resize_test.cpp": ("SDLGPU-68", "same source passes SDL GPU"),
     "easygl_blendstate_separate_factors_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
     "easygl_blendstate_separate_functions_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
     "easygl_depthstencilstate_compare_function_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
@@ -119,7 +116,12 @@ VERIFIED_DIRECT = {
     "easygl_depthstencilstate_stencil_ops_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
     "easygl_depthstencilstate_stencil_twosided_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
     "easygl_depthstencilstate_write_enable_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
+    "easygl_device_reset_events_test.cpp": ("SDLGPU-68", "same source passes SDL GPU"),
     "easygl_graphicsdevice_reference_stencil_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
+    "easygl_graphicsdevicemanager_vsync_test.cpp": ("SDLGPU-68", "same source passes SDL GPU"),
+    "easygl_msaa_change_test.cpp": ("SDLGPU-68", "same source passes SDL GPU"),
+    "easygl_presentation_parameters_test.cpp": ("SDLGPU-68", "same source passes SDL GPU"),
+    "easygl_real_window_resize_test.cpp": ("SDLGPU-68", "same source passes SDL GPU"),
     "easygl_scissor_test.cpp": ("SDLGPU-67", "same source passes SDL GPU"),
     "easygl_viewport_state_test.cpp": ("SDLGPU-67", "same source passes SDL GPU"),
     "easygl_viewport_subregion_test.cpp": ("SDLGPU-67", "same source passes SDL GPU"),

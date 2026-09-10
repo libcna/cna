@@ -7,7 +7,7 @@ easygl_alphatest_vertexcolor_diffuse_test.cpp,classic-xna-covered-by-existing-sd
 easygl_alphatesteffect_golden_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_animsprite_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_anisotropic_gl_state_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
-easygl_backbuffer_resize_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
+easygl_backbuffer_resize_test.cpp,classic-xna-direct-parity,SDLGPU-68,same source passes SDL GPU
 easygl_background_content_context_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
 easygl_basiceffect_combinations_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-77,effect option combinations
 easygl_basiceffect_combined_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
@@ -59,7 +59,7 @@ easygl_depthstencilstate_stencil_twosided_test.cpp,classic-xna-direct-parity,SDL
 easygl_depthstencilstate_write_enable_golden_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_depthstencilstate_write_enable_test.cpp,classic-xna-direct-parity,SDLGPU-58,same source passes SDL GPU
 easygl_device_dispose_order_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_device_reset_events_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
+easygl_device_reset_events_test.cpp,classic-xna-direct-parity,SDLGPU-68,same source passes SDL GPU
 easygl_device_validation_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_disposed_buffer_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_disposed_resource_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
@@ -118,7 +118,7 @@ easygl_gltf_transmission_ordering_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/
 easygl_goldenimage_smoke_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
 easygl_graphicsdevice_clear_stencil_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_graphicsdevice_reference_stencil_test.cpp,classic-xna-direct-parity,SDLGPU-58,same source passes SDL GPU
-easygl_graphicsdevicemanager_vsync_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-68,public VSync changes
+easygl_graphicsdevicemanager_vsync_test.cpp,classic-xna-direct-parity,SDLGPU-68,same source passes SDL GPU
 easygl_handle_release_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
 easygl_instancedmodel_shader_test.cpp,classic-xna-feature-missing,SDLGPU-79,custom ShaderEffect instancing remains a named boundary; core XNA instance streams are covered by SDLGPU-60
 easygl_model_draw_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-79,Model.Draw renderer behavior
@@ -132,7 +132,7 @@ easygl_model_skinned_animation_playback_test.cpp,classic-xna-new-sdlgpu-test-nee
 easygl_model_two_meshes_effects_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-79,per-mesh effects
 easygl_move_semantics_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
 easygl_mrt_test.cpp,classic-xna-feature-missing,SDLGPU-75,independent MRT outputs
-easygl_msaa_change_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-68,reset-time MSAA changes
+easygl_msaa_change_test.cpp,classic-xna-direct-parity,SDLGPU-68,same source passes SDL GPU
 easygl_msaa_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_normalmapping_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_npot_texture_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
@@ -150,11 +150,11 @@ easygl_perpixellighting_vertexdiffuse_pixelphong_shader_test.cpp,modern-cnaext-o
 easygl_pixeltestgame_smoke_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
 easygl_postprocesseffect_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_present_interval_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_presentation_parameters_test.cpp,classic-xna-direct-parity,-,renderer-independent public API behavior
+easygl_presentation_parameters_test.cpp,classic-xna-direct-parity,SDLGPU-68,same source passes SDL GPU
 easygl_primitivetype_validation_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_rasterizerstate_cullmode_golden_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_rasterizerstate_cullmode_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_real_window_resize_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-68,real resize lifecycle
+easygl_real_window_resize_test.cpp,classic-xna-direct-parity,SDLGPU-68,same source passes SDL GPU
 easygl_render_target_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_render_target_usage_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-74,PreserveContents/DiscardContents
 easygl_rendertarget2d_mip_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog

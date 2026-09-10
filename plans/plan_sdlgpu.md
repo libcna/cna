@@ -16,19 +16,19 @@
 | Renderer contract | `modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp` |
 | Reference renderer | `modules/renderers/easygl/{include,src,examples}` |
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
-| EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files (source count, not capability count) |
+| EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files at audit start; 246 / 40 now (source count, not capability count) |
 | EasyGL / SDL GPU renderer unit-test sources | 2 / 2 `.cpp` files |
-| SDL GPU registered integration tests | 115 CTests (85 baseline plus 30 parity/remediation registrations) |
+| SDL GPU registered integration tests | 123 CTests (85 baseline plus 38 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 31 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 16/31 (wireframe; four sampler; four vertex-semantic; multi-stream; instancing; and five render-state fixtures) |
 | Tasks created by this audit | 30 (`SDLGPU-55`–`SDLGPU-84`) |
-| Completed / open / proven unavoidable | 15 / 15 tasks; 1 capability field (`BlendState.MultiSampleMask`) is proven unavailable in current SDL_gpu and is not a separate task; `SDLGPU-80` remains a candidate limitation |
+| Completed / open / proven unavoidable | 16 / 14 tasks; 2 capability fields (`BlendState.MultiSampleMask` and exact half-rate `PresentInterval::Two`) are proven unavailable in current SDL_gpu and are not separate tasks; `SDLGPU-80` remains a candidate limitation |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
 | Display constraint | Sandboxed tests cannot access host `:0`; SDL `offscreen` successfully creates the real Vulkan GPU device. Escalated preservation checks can use host `:0` (WebGPU), while EasyGL uses Xvfb `:179`. The SDL GPU test-driver cache setting defaults to `x11` and is locally set to `offscreen`. |
-| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline, SDLGPU-58's 14-test state suite and SDLGPU-67's 13-test viewport/scissor suite emitted no captured `VUID`, `Validation Error`, or `Validation Warning`; all tests in the latter suite make those diagnostics fatal. |
-| Focused EasyGL oracle baseline | 28/28 selected tests pass on Xvfb/llvmpipe: five stock-effect goldens, blend/depth/raster goldens, packed/DXT formats, surface-format refusal, 2D/cube RT properties, volume/cube data paths, MRT, instancing (including nonidentity effect World) and occlusion lifecycle/rendering |
+| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline, SDLGPU-58's 14-test state suite, SDLGPU-67's 13-test viewport/scissor suite and SDLGPU-68's 13-test presentation/lifecycle slice emitted no captured `VUID`, `Validation Error`, or `Validation Warning`; every new SDLGPU-68 CTest makes those diagnostics fatal. |
+| Focused EasyGL oracle baseline | 34/34 selected tests pass on Xvfb/llvmpipe: the prior 28 stock-effect/state/format/RT/texture/MRT/instancing/query tests plus six presentation/reset/resize/VSync programs. The VSync program's three CNA-forwarding checks pass; its real-vblank half is correctly skipped because raw GL cannot enable VSync under Xvfb. |
 
 The first attempted baseline used the suite's historical hard-coded `SDL_VIDEODRIVER=x11` and
 could not reach the inaccessible host display: early programs skipped and 47 tests failed for the
@@ -80,9 +80,9 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Family | EasyGL reference | SDL GPU current state | State / owner |
 |---|---|---|---|
 | Clear color/depth/stencil overloads | Direct GL clears; ordered-clear corpus | Deferred clear commands and all combinations | `=` — ordered clear/draw/cube-target tests and state suites pass; `SDLGPU-58/66` |
-| Present, interval and modes | Runtime swap interval; resize examples | SDL claim/present modes and proxy copy | `~` — reset/resize/minimize recheck; `SDLGPU-68` |
-| Backbuffer size/readback/channel order | Direct readback, RGBA contract | Real `backbufferProxy_` download, contrary to old SDLGPU-39 text | `=` — dimension/first-read/range tests pass; recheck in `SDLGPU-68` |
-| Logical resolution/transforms/letterbox | Explicit default viewport and transforms | Explicit physical/logical transforms | `~` — resize and viewport restoration pending; `SDLGPU-68` |
+| Present, interval and modes | Runtime swap interval; resize examples | SDL claim/present modes and proxy copy | `=` for Immediate/One/default forwarding, reset, resize and minimize retry; exact half-rate `PresentInterval::Two` is `⛔` because SDL exposes only VSYNC/IMMEDIATE/MAILBOX and no vblank timing primitive; `SDLGPU-68` |
+| Backbuffer size/readback/channel order | Direct readback, RGBA contract | Real `backbufferProxy_` download, contrary to old SDLGPU-39 text | `=` — dimension/first-read/range plus reset/resize/minimize-retained readback pass; `SDLGPU-68` |
+| Logical resolution/transforms/letterbox | Explicit default viewport and transforms | Explicit physical/logical transforms | `=` — physical rectangle, all modes, HiDPI transforms, zero-size safety, SpriteBatch projection and real resize pass; `SDLGPU-68` |
 | Blend factors/functions/BlendFactor | Full separate RGB/A state | Complete immutable pipeline state and per-draw dynamic factor | `=` — all 13 factors in all four roles, all five equations for RGB/A, separate fields and A→B→A are pixel-verified; `SDLGPU-58` |
 | ColorWriteChannels | Four slot-aligned masks | Four slot-aligned immutable pipeline masks | `=` — every slot-0 mask value plus distinct four-MRT-slot masks and cache restoration pass; `SDLGPU-58` |
 | MultiSampleMask | EasyGL also documents non-default masks as unimplemented | SDL receives the value but cannot apply it | `⛔` — SDL 3.5 requires `sample_mask=0` and `enable_mask=false`; arbitrary-shader emulation cannot preserve sample coverage/depth/stencil side effects; `SDLGPU-58` |
@@ -169,9 +169,9 @@ were checked individually in the declarations and implementations.
 | `IRenderTargetCubeRenderer::{GetSize,BindFace,Unbind,GetData,GetMultiSampleCount,depth/stencil facts}` | explicit where native facts differ | size/bind/read/MSAA explicit; depth/stencil facts partly default | classic (`SDLGPU-66/73/74`) |
 | `IEffectRenderer` compile/bind/unbind, uniform scalar/vector/matrix/arrays, 2D/cube/3D texture binds | all explicit | compile and scalar/vector/matrix explicit; bind/unbind no-op by design; array and texture defaults are covered by renderer-owned compiled path only | ShaderEffect is CNAEXT; ordinary compiled effect separately in scope (`SDLGPU-79`) |
 | `ISpriteBatchRenderer::{Begin,End,SetTransformMatrix,SetCustomEffect,SetSampler*,SetImmediateMode,Draw overloads}` | explicit except default immediate hook | explicit for all public stock paths, including complete sampler state | classic; broad behavior still `~` (`SDLGPU-65/76`) |
-| `AcquireThreadContextLeaseEXT`, surface changed/invalidated, context-loss hooks | context/registry explicit | inherited defaults | lease and simulated recovery are EasyGL-specific/CNAEXT; ordinary resize/lifecycle remains in `SDLGPU-68/81` |
+| `AcquireThreadContextLeaseEXT`, surface changed/invalidated, context-loss hooks | context/registry explicit | surface change explicit; invalidation/recovery defaults retained | surface change is ordinary lifecycle and verified by `SDLGPU-68`; lease and simulated recovery are EasyGL-specific/CNAEXT, while resource lifetime remains `SDLGPU-81` |
 | `Clear`, all six depth/stencil variants, legacy depth/blend/write toggles | explicit | explicit | classic; discriminating sweep (`SDLGPU-58/66`) |
-| `Present`, viewport/default viewport, virtual resolution, presentation mode, swap interval, MSAA/application-format facts | explicit including default viewport and runtime facts | present/size/virtual/mode/interval explicit; default viewport and applied-format hooks inherited | classic observable through GDM/PP/reset (`SDLGPU-68`) |
+| `Present`, viewport/default viewport, virtual resolution, presentation mode, swap interval, MSAA/application-format facts | explicit including default viewport and runtime facts | present/size/default-physical-viewport/virtual/mode/requested interval explicit; SDL-local applied-interval fact distinguishes fallbacks; applied-format hooks remain inherited | classic presentation behavior verified by `SDLGPU-68`; format facts remain `SDLGPU-69–74` |
 | format classifiers, compressed transfer policy, half-float filtering | explicit, runtime/profile aware | all inherited defaults | classic where reached from ordinary texture/RT constructors (`SDLGPU-69–73`) |
 | coordinate transforms and `ReadBackbuffer` | explicit | explicit | classic; readback baseline passes (`SDLGPU-68`) |
 | texture/sprite/RT2D/RTCube/Texture3D/TextureCube factories, including format-bearing `*EXT` RT factories | explicit | base factories explicit, format-bearing factories inherited and drop format | classic observable (`SDLGPU-69–74`) |
@@ -193,9 +193,9 @@ filesystem, rejects duplicates/unknown categories/missing evidence, and currentl
 
 | Category | Count |
 |---|---:|
-| `classic-xna-covered-by-existing-sdlgpu-test` | 126 |
-| `classic-xna-direct-parity` | 19 |
-| `classic-xna-new-sdlgpu-test-needed` | 32 |
+| `classic-xna-covered-by-existing-sdlgpu-test` | 124 |
+| `classic-xna-direct-parity` | 24 |
+| `classic-xna-new-sdlgpu-test-needed` | 29 |
 | `classic-xna-feature-missing` | 9 |
 | `modern-cnaext-out` | 51 |
 | `easygl-specific` | 9 |
@@ -207,10 +207,11 @@ The `easygl-defect` count describes the 246 files physically under EasyGL's exam
 `EASYGL-PARITY-1` below was newly exposed by a shared renderer-neutral fixture, so it is recorded in
 the defect ledger without falsely reclassifying an unrelated EasyGL example source.
 
-Classification is a triage statement, not proof of parity. The 126 “covered” programs map to
+Classification is a triage statement, not proof of parity. The 124 “covered” programs map to
 existing SDL GPU family tests or shared graphics regressions; `SDLGPU-81` must register the same
-31 renderer-neutral parity sources and confirm their discriminating checks. A row moves whenever
-implementation evidence disproves its classification.
+31 renderer-neutral parity sources and confirm their discriminating checks. The 24 direct rows now
+include six exact EasyGL presentation/lifecycle sources compiled under SDL GPU by `SDLGPU-68`. A
+row moves whenever implementation evidence disproves its classification.
 
 ### EasyGL defects discovered by the SDL GPU parity oracle
 
@@ -565,15 +566,49 @@ underlying API limitation proven after reasonable emulation analysis.
   EasyGL oracles pass **7/7** on Xvfb. The corpus checker remains 246/246 with zero unclassified and
   promotes all three reused EasyGL sources to direct parity.
 
-### SDLGPU-68 — close presentation, resize, reset and minimize lifecycle parity ⬜
+### SDLGPU-68 — close presentation, resize, reset and minimize lifecycle parity ✅
 
 - **Problem/public behavior:** GDM/PresentationParameters changes, zero-size windows, VSync modes,
   backbuffer dimensions/readback and logical transforms must remain coherent.
-- **Evidence:** proxy readback tests pass; SDL inherits applied-format/default-viewport hooks and the
-  full EasyGL resize/VSync corpus has not been run against it.
+- **Evidence:** before the fix SDL inherited `GetDefaultViewportRect()`, so the common discriminator
+  passed only 2/6: Letterbox returned logical `(0,0,400×160)` instead of centred physical
+  `(0,80,800×320)`, Overscan returned the same logical rectangle instead of
+  `(-200,0,1200×480)`, and Stretch/FixedHeight returned 400×160 instead of 800×480. SDL also
+  inherited `OnSurfaceChanged()`, ignored display scale in both coordinate transforms and exposed
+  no requested interval fact. `SetVirtualResolution()` additionally overwrote physical drawable
+  dimensions while Native mode was active, conflating two separate facts. The live proxy path did
+  already provide real readback; this row tested rather than replacing it.
 - **Location:** presentation setters, swapchain claim/reclaim, proxy recreation, viewport facts.
 - **Acceptance/test:** same public reset/resize/minimize/restore sequences match dimensions,
   transforms, viewport and readback; unsupported present modes report the applied value truthfully.
+- **Result (2026-09-10):** SDL GPU now consumes `RendererSurfaceInfo` updates with immutable window
+  identity, physical drawable dimensions and normalized display scale; returns the exact physical
+  presentation rectangle; keeps virtual and physical dimensions independent; and transforms
+  between SDL client coordinates and XNA logical coordinates with HiDPI scale. SpriteBatch now
+  snapshots its logical projection extent separately from the mapped physical viewport, so the
+  fixed default rectangle does not turn a letterboxed default viewport into a custom sub-viewport
+  or let a later resize alter a queued sprite. The common physical-presentation suite moves from
+  **2/6 to 6/6**, including pixel-readback coverage of the default letterboxed SpriteBatch viewport.
+
+  The documented successful-null swapchain acquisition path now has a forced real-command-buffer
+  oracle: it submits without error, retains the queued clear, renders it on retry and stays usable
+  (**3/3**). A deterministic surface/present-mode executable passes **13/13** for Letterbox,
+  distinct logical/physical sizes, scaled transforms, bar rejection, zero-size safety, window
+  identity and requested-versus-applied intervals. The five pre-existing swapchain/present/resize/
+  backbuffer-readback tests remain **5/5**. Six exact EasyGL sources are now compiled under SDL GPU
+  and pass **6/6 CTests**: backbuffer resize, reset events, GDM VSync forwarding, MSAA changes,
+  PresentationParameters and real OS-window resize. Their EasyGL originals pass **6/6** under
+  Xvfb after the stale real-resize fixture explicitly selected the FixedHeightDynamicWidth mode its
+  assertions describe. All new SDL tests make `VUID`/validation warnings fatal and emitted none.
+
+  **Exact unavoidable interval difference:** vendored SDL 3.5's `SDL_GPUPresentMode` contains only
+  `VSYNC`, `IMMEDIATE` and `MAILBOX`; both synchronized modes present at each vblank, and the API
+  exposes neither a half-rate mode nor vblank/presentation-timing control from which the renderer
+  could correctly emulate XNA `PresentInterval::Two`. SDL therefore records request `2` while
+  truthfully recording applied interval `1`. An Immediate request is applied natively where
+  supported and otherwise records its synchronized fallback. No fake timing claim is made.
+  Corpus classification remains machine-checked at **246/246** with zero unclassified; all six
+  reused lifecycle sources are promoted to direct parity. Registered SDL GPU CTests: **123**.
 
 ### SDLGPU-69 — implement ordinary Texture2D surface formats ⬜
 

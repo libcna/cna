@@ -365,6 +365,42 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_SwapchainRecovery COMMAND cna_test_sdlgpu_swapchain_recovery
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
+    # SDLGPU-68: SDL documents a successful acquisition with a null swapchain texture while a
+    # window is minimized. The renderer must submit that command buffer, retain pending work, and
+    # render it on the next viable acquisition without becoming unusable.
+    cna_sdlgpu_test(cna_test_sdlgpu_minimized_retry sdlgpu_minimized_retry_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_MinimizedRetry
+        COMMAND cna_test_sdlgpu_minimized_retry
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_MinimizedRetry PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
+    cna_sdlgpu_test(cna_test_sdlgpu_presentation_surface sdlgpu_presentation_surface_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_PresentationSurface
+        COMMAND cna_test_sdlgpu_presentation_surface
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_PresentationSurface PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
+    # SDLGPU-68: compile the exact renderer-neutral EasyGL presentation/lifecycle oracles against
+    # SDL_GPU. Together they cover public resize/reset events, requested VSync forwarding, zero
+    # backbuffer MSAA, PresentationParameters behavior, and a real window-system resize.
+    foreach(presentation_oracle_test IN ITEMS
+            backbuffer_resize
+            device_reset_events
+            graphicsdevicemanager_vsync
+            msaa_change
+            presentation_parameters
+            real_window_resize)
+        cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${presentation_oracle_test}
+            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${presentation_oracle_test}_test.cpp)
+        cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${presentation_oracle_test}
+            COMMAND cna_test_sdlgpu_easygl_oracle_${presentation_oracle_test}
+            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_EasyGLOracle_${presentation_oracle_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
     # plans/plan_sdlgpu.md: render-target-destroyed-before-flush use-after-free regression proof.
     cna_sdlgpu_test(cna_test_sdlgpu_rt_lifetime sdlgpu_rendertarget_lifetime_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetLifetime COMMAND cna_test_sdlgpu_rt_lifetime
