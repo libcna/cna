@@ -323,7 +323,7 @@ namespace
               srvTextures[6] = params.pbrSpecularColorMap ? params.pbrSpecularColorMap : GetOrCreateDefaultWhiteTextureEXT();)",
            R"(range.BaseShaderRegister = static_cast<UINT>(t))",
            R"(cmdList->SetGraphicsRootDescriptorTable(numCbvs + i, srvHandles[i]))",
-           R"(cmdList->SetGraphicsRootDescriptorTable(numCbvs + numSrvs + i, GetSamplerGpuHandleEXT(i)))",
+           R"(cmdList->SetGraphicsRootDescriptorTable(numCbvs + numSrvs + i, samplerHandles[i]))",
            R"(Texture2D uTexture : register(t0);
               SamplerState uTextureSampler : register(s0);
               Texture2D uNormalMap : register(t1);
@@ -1193,13 +1193,13 @@ namespace
          "vout.Position = mul(float4(vin.Position, 1.0), WorldViewProj)",
          "vout.Position = mul(float4(skinnedPos, 1.0), WorldViewProj)"},
         {"directx11",
-         "const Matrix wvp = world * view * projection",
+         "const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection)",
          "D3DCommon::D3DPbrPerDrawConstants perDraw{}; wvp.ToColumnMajor(perDraw.Mvp)",
          "world.ToColumnMajor(perDraw.World)",
          "output.Position = mul(float4(input.Position, 1.0), Mvp)",
          "output.Position = mul(skinnedPos, Mvp)"},
         {"directx12",
-         "const Matrix wvp = world * view * projection",
+         "const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection)",
          "D3DPbrPerDrawConstants perDraw{}; wvp.ToColumnMajor(perDraw.Mvp)",
          "world.ToColumnMajor(perDraw.World)",
          "output.Position = mul(float4(input.Position, 1.0), Mvp)",
@@ -2744,10 +2744,21 @@ TEST(GltfRendererPbrFallbackPolicy, DirectX11SkinnedEffectUsesOpaqueWhiteForMiss
     // the same opaque-white fallback used by the other full renderers.
     const std::string directx11 = RendererText(
         RepositoryRoot() / "modules" / "renderers" / "directx11");
-    EXPECT_EQ(2u, CountOccurrences(directx11, Normalize(R"(
+    const std::string kOpaqueWhiteTexture0 = Normalize(R"(
         srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
                                   : GetOrCreateDefaultWhiteSrvEXT();
-    )"))) << "both the PBR and plain-skinned bindings require opaque-white texture0 fallbacks";
+    )");
+    // plans/plan_dx.md DX-230 extended the SAME fallback to the dual-texture and default branches,
+    // because an unbound D3D11 SRV samples transparent black in every branch, not only these two.
+    // An exact count therefore no longer states this test's guarantee -- it would go red whenever
+    // an unrelated branch adopted the correct behaviour. What must hold is that the PBR and the
+    // plain-skinned bindings both have it, and the PBR one is pinned by its adjacent normal-map
+    // slot so this cannot be satisfied by two arbitrary branches.
+    EXPECT_GE(CountOccurrences(directx11, kOpaqueWhiteTexture0), 2u)
+        << "both the PBR and plain-skinned bindings require opaque-white texture0 fallbacks";
+    EXPECT_EQ(1u, CountOccurrences(directx11, kOpaqueWhiteTexture0 + Normalize(R"(
+        srvs[1] = params.pbrNormalMap ? GetSrvForTextureEXT(params.pbrNormalMap) : GetOrCreateDefaultFlatNormalSrvEXT();
+    )"))) << "the PBR branch specifically must keep the opaque-white texture0 fallback";
 }
 
 // --- plans/plan_gltf.md GLTF-462/GLTF-465: the stride-60 record, per renderer ---------------------------
@@ -3433,12 +3444,13 @@ TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFa
 TEST(GltfRendererPointTopologyPolicy, Direct3DBackendsMapPointsOrRejectBeforeSubmission)
 {
     // GLTF-394 closes the last known silent POINTS reinterpretations. D3D9 duplicates its native
-    // mapper in five independently compiled draw implementations, so checking only the ordinary
-    // path would leave PBR (the glTF path), stock, skinned-colour or instanced draws behind.
+    // mapper in six independently compiled draw implementations, so checking only the ordinary
+    // path would leave PBR (the glTF path), stock, skinned-colour, instanced or compiled-effect
+    // draws behind. The sixth is D3D9CompiledEffect.cpp, added by plans/plan_fx.md FX-070.
     const std::filesystem::path renderers =
         RepositoryRoot() / "modules" / "renderers";
     const std::string d3d9 = RendererText(renderers / "directx9");
-    EXPECT_EQ(5u, CountOccurrences(
+    EXPECT_EQ(6u, CountOccurrences(
                       d3d9,
                       "casePrimitiveType::PointListEXT:returnD3DPT_POINTLIST;"));
 
@@ -3464,23 +3476,34 @@ TEST(GltfRendererPointTopologyPolicy, Direct3DBackendsMapPointsOrRejectBeforeSub
             << renderer << " must remain in the shared point framebuffer suite";
     }
 
-    // D3D12's current PSO cache fixes PrimitiveTopologyType to TRIANGLE. Mapping IA topology to
-    // POINTLIST/LINELIST/LINESTRIP would therefore trade an approximation for a validation error.
-    // Its honest contract is a named refusal, reached by all four ordinary/instanced native paths.
+    // D3D12 used to REFUSE these three by name, because a pipeline state's PrimitiveTopologyType
+    // was hardcoded to TRIANGLE and D3D12 requires it to agree with the topology the command list
+    // sets -- so mapping IA topology would have traded an approximation for a validation error.
+    // plans/plan_dx.md DX-208 made the topology CLASS part of the PSO key
+    // (D3D12PipelineStateCache.cpp: `psoDesc.PrimitiveTopologyType = desc.topologyType`), which is
+    // what the refusal existed to protect, so the honest contract is now a native mapping.
+    //
+    // The guarantee this test exists for is unchanged and is asserted below: no D3D12 path may
+    // SILENTLY reinterpret points or lines as triangles. Only the branch that satisfies it moved
+    // from "refuse by name" to "map natively".
     const std::string d3d12 = RendererText(renderers / "directx12");
     for (const std::string_view topology : {"LineList", "LineStrip", "PointListEXT"})
     {
         EXPECT_NE(std::string::npos, d3d12.find(
             "casePrimitiveType::" + std::string(topology) + ":"));
-        EXPECT_NE(std::string::npos, d3d12.find(
-            "DirectX12rendererdoesnotsupportPrimitiveType::" +
-            std::string(topology) + ":"));
     }
+    EXPECT_NE(std::string::npos, d3d12.find(
+        "casePrimitiveType::LineList:returnD3D_PRIMITIVE_TOPOLOGY_LINELIST;"));
+    EXPECT_NE(std::string::npos, d3d12.find(
+        "casePrimitiveType::LineStrip:returnD3D_PRIMITIVE_TOPOLOGY_LINESTRIP;"));
+    EXPECT_NE(std::string::npos, d3d12.find(
+        "casePrimitiveType::PointListEXT:returnD3D_PRIMITIVE_TOPOLOGY_POINTLIST;"));
     EXPECT_EQ(4u, CountOccurrences(d3d12, "ToD3D12Topology(primitive)"));
+    // The silent-reinterpretation guard, which is the whole point of GLTF-394.
     EXPECT_EQ(std::string::npos, d3d12.find(
         "casePrimitiveType::PointListEXT:returnD3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;"));
     EXPECT_EQ(std::string::npos, d3d12.find(
-        "casePrimitiveType::LineList:returnD3D_PRIMITIVE_TOPOLOGY_LINELIST;"));
+        "casePrimitiveType::LineList:returnD3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;"));
     EXPECT_EQ(std::string::npos, d3d12.find(
-        "casePrimitiveType::LineStrip:returnD3D_PRIMITIVE_TOPOLOGY_LINESTRIP;"));
+        "casePrimitiveType::LineStrip:returnD3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;"));
 }

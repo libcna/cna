@@ -47,7 +47,8 @@ namespace
 #endif
 
 #if defined(CNA_RENDERER_EASYGL)
-    const char* kVertexShader = R"(#version 330 core
+    const char* kVertexShader = R"(#version 300 es
+precision highp float;
 layout(location = 0) in vec2 aPosition;
 layout(location = 1) in vec2 aTexCoord;
 layout(location = 2) in vec4 aColor;
@@ -57,17 +58,20 @@ void main() {
 }
 )";
 
-    const char* kSinglePixelShader = R"(#version 330 core
+    const char* kSinglePixelShader = R"(#version 300 es
+precision highp float;
 out vec4 FragColor;
 void main() { FragColor = vec4(4.0, 0.0, 0.0, 1.0); }
 )";
 
-    const char* kHalfPixelShader = R"(#version 330 core
+    const char* kHalfPixelShader = R"(#version 300 es
+precision highp float;
 out vec4 FragColor;
 void main() { FragColor = vec4(2.0, -1.0, 0.5, 4.0); }
 )";
 
-    const char* kColorPixelShader = R"(#version 330 core
+    const char* kColorPixelShader = R"(#version 300 es
+precision highp float;
 out vec4 FragColor;
 void main() { FragColor = vec4(0.25, 0.5, 0.75, 1.0); }
 )";

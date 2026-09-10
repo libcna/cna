@@ -293,7 +293,20 @@ TEST(EasyGLSurfaceState, StretchAndNativeBackBufferAlsoCoverTheWholeDrawable)
     }
 }
 
-TEST(EasyGLSurfaceState, NativeBackBufferInputUsesIndependentAxisScales)
+// plans/plan_dx.md DX-217 settled what NativeBackBuffer means, and it is the mode's own
+// documentation: "no scaling; game draws at its requested size" (IGraphicsRenderer.hpp's
+// CnaPresentationMode). The logical surface IS the client area, so a requested virtual resolution
+// is deliberately NOT applied in this mode.
+//
+// This test previously asserted the opposite -- that each axis scaled independently to the
+// requested 800x480 -- and it was carried on `next` while the `dx` branch implemented the mode's
+// documented meaning. The merge brought the two together and the owner ruled for the documented
+// semantics on 2026-09-10. Keeping the old expectation would have mapped input onto coordinates
+// the game never draws at in this mode.
+//
+// A 2400x1080 drawable at displayScale 3 is an 800x360 client area, so window and logical
+// coordinates coincide and the round trip is the identity.
+TEST(EasyGLSurfaceState, NativeBackBufferDoesNotScaleAndIgnoresTheRequestedVirtualSize)
 {
     EasyGLSurfaceState state(
         Surface(83, 2400, 1080, 3.0f), 800, 480,
@@ -303,7 +316,7 @@ TEST(EasyGLSurfaceState, NativeBackBufferInputUsesIndependentAxisScales)
     float y = 0.0f;
     ASSERT_TRUE(state.WindowToLogical(600.0f, 270.0f, x, y));
     EXPECT_FLOAT_EQ(x, 600.0f);
-    EXPECT_FLOAT_EQ(y, 360.0f);
+    EXPECT_FLOAT_EQ(y, 270.0f);
 
     ASSERT_TRUE(state.LogicalToWindow(x, y, x, y));
     EXPECT_FLOAT_EQ(x, 600.0f);

@@ -40,14 +40,26 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
+// Whether MipMapLevelOfDetailBias is representable at all here. For EasyGL this is a property of
+// the GL PROFILE rather than of the renderer identity: EasyGL adapts one ES 3.00 source per
+// profile, and GL_TEXTURE_LOD_BIAS exists only on the desktop core profile -- the ES 3 profiles
+// have no such sampler parameter (docs/sampler-state-support.md).
 #if defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "D3D11";
+    constexpr bool kLodBiasIsRepresentable = true;
 #elif defined(CNA_RENDERER_DIRECTX12)
     constexpr const char* kRendererName = "D3D12";
+    constexpr bool kLodBiasIsRepresentable = true;
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr const char* kRendererName = "EasyGL";
+#  if defined(CNA_GL_PROFILE_OPENGL33)
+    constexpr bool kLodBiasIsRepresentable = true;
+#  else
+    constexpr bool kLodBiasIsRepresentable = false;
+#  endif
 #else
     constexpr const char* kRendererName = "unknown";
+    constexpr bool kLodBiasIsRepresentable = false;
 #endif
 
     const Color kLevel0(255, 0, 0, 255);
@@ -56,7 +68,8 @@ namespace
     const Color kYellow(255, 255, 0, 255);
 
 #if defined(CNA_RENDERER_EASYGL)
-    const char* kVolumeVertexShader = R"(#version 330 core
+    const char* kVolumeVertexShader = R"(#version 300 es
+precision highp float;
 layout(location = 0) in vec2 aPosition;
 layout(location = 1) in vec2 aTexCoord;
 layout(location = 2) in vec4 aColor;
@@ -68,7 +81,9 @@ void main() {
 }
 )";
 
-    const char* kVolumePixelShader = R"(#version 330 core
+    const char* kVolumePixelShader = R"(#version 300 es
+precision highp float;
+precision highp sampler3D;
 uniform sampler3D VolumeSampler;
 in vec4 vColor;
 out vec4 FragColor;
@@ -250,7 +265,20 @@ protected:
 
         SamplerState biased = baseline;
         biased.setMipMapLevelOfDetailBiasProperty(1.0f);
-        CheckColor("LOD bias +1 selects mip level 1", DrawTexture2D(biased), kLevel1);
+        // docs/sampler-state-support.md: MipMapLevelOfDetailBias is representable wherever there is
+        // a GL_TEXTURE_LOD_BIAS -- desktop core profile -- and NOT on the OpenGL ES 3 profiles,
+        // which have no such sampler parameter at all. Assert whichever of the two the running
+        // profile actually promises, rather than skipping: a bias that silently DID move the mip
+        // on a profile that cannot represent it would be just as wrong as one that failed to.
+        if (kLodBiasIsRepresentable)
+        {
+            CheckColor("LOD bias +1 selects mip level 1", DrawTexture2D(biased), kLevel1);
+        }
+        else
+        {
+            CheckColor("LOD bias is not representable on this profile and does not move the mip",
+                       DrawTexture2D(biased), kLevel0);
+        }
         CheckColor("LOD bias state does not leak", DrawTexture2D(baseline), kLevel0);
 
         if (!volumeEffect_->IsEffectValid())

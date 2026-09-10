@@ -79,7 +79,8 @@ namespace
         });
 
 #if defined(CNA_RENDERER_EASYGL)
-    const char* kVertexShader = R"GLSL(#version 330 core
+    const char* kVertexShader = R"GLSL(#version 300 es
+precision highp float;
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec4 inColor;
 layout(location = 2) in vec2 inUv;
@@ -100,13 +101,15 @@ void main()
 }
 )GLSL";
 
-    const char* kPixelShader = R"GLSL(#version 330 core
+    const char* kPixelShader = R"GLSL(#version 300 es
+precision highp float;
 in vec4 vertexColor;
 in vec2 textureUv;
 in float signal;
 out vec4 FragColor;
 uniform sampler2D textureTwo;
 uniform samplerCube textureCubeFour;
+precision highp sampler3D;
 uniform sampler3D textureVolumeSix;
 uniform float scalarValue;
 uniform vec2 pairValue;

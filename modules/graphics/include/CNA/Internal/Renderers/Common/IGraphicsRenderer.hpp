@@ -3053,7 +3053,16 @@ namespace CNA::Internal::Renderers
      * - Letterbox            – scale = min(surfW/virtW, surfH/virtH); adds bars.
      * - Overscan             – scale = max(surfW/virtW, surfH/virtH); crops edges.
      * - Stretch              – stretches to fill without preserving aspect ratio.
-     * - NativeBackBuffer     – no scaling; game draws at its requested size.
+     * - NativeBackBuffer     – no scaling: the logical surface IS the client area, so the
+     *                          requested virtual size is deliberately ignored and a
+     *                          resize changes the logical coordinate system. "Draws at
+     *                          its requested size" therefore means the back buffer the
+     *                          window actually gives it, NOT PreferredBackBufferWidth/
+     *                          Height, which have no effect in this mode. Settled by the
+     *                          project owner on 2026-09-10 when the `dx` branch's
+     *                          implementation (plans/plan_dx.md DX-217) met a `next` test
+     *                          asserting the opposite; the earlier one-line wording was
+     *                          ambiguous enough to support both readings.
      * - FixedHeightDynamicWidth – keeps the game's preferred height as the logical
      *                            height and computes logical width from the actual
      *                            surface aspect ratio:
