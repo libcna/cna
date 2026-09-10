@@ -263,14 +263,15 @@ implementation tasks.**
   and `MOD-2239v` packages `GpuInstanceCuller`'s compute stage plus its cross-language
   vertex-storage contract, while `MOD-2239w` packages `ParticleSystem`'s compute and draw stages
   plus the low-level compute-particle example, and `MOD-2239x` packages `AutoExposureEXT`'s
-  sampled-texture compute reduction,
+  sampled-texture compute reduction, while `MOD-2239y` packages `ClusteredLightCompute`'s
+  four-buffer assignment kernel and constant parameters,
   all with an explicit
   texture-UV/XNA-camera-NDC bridge where reconstruction needs it. The
   bloom work also fixes secondary
   `RenderTarget2D` sampling through Vulkan `ShaderEffect`, which previously substituted the white
   fallback because the binding accepted only the uploaded-texture concrete type.
   All through `MOD-2239t` are verified on RADV, Vulkan llvmpipe and EasyGL; `MOD-2239u` through
-  `MOD-2239x` are verified on Vulkan llvmpipe and EasyGL because hardware Vulkan cannot present
+  `MOD-2239y` are verified on Vulkan llvmpipe and EasyGL because hardware Vulkan cannot present
   through Xvfb here and the
   user's real desktop was deliberately not used. The HDR encoder does not
   claim an HDR swap chain; all built-in shader-based post-process passes are packaged, while

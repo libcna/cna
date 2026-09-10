@@ -264,8 +264,9 @@ screen-space contact shadows, `MOD-2239o` adds projected decals, `MOD-2239p` add
 perspective, `MOD-2239r` adds volumetric fog, `MOD-2239s`/`MOD-2239t` add the legacy
 `CRTEffect`/`DepthEffect` pair, `MOD-2239u` adds weighted order-independent transparency,
 `MOD-2239v` adds portable GPU instance culling, `MOD-2239w` adds portable GPU particle
-simulation and drawing, and `MOD-2239x` adds portable auto-exposure reduction. The remaining
-shader-based built-in post-process rollout is now complete. Portable packages use the
+simulation and drawing, `MOD-2239x` adds portable auto-exposure reduction, and `MOD-2239y`
+adds portable clustered-light assignment. The shader-based built-in post-process rollout is now
+complete. Portable packages use the
 language/stage query to select a payload; third-party source-only passes remain conservatively
 unsupported on a binary-only renderer, and subsystems still ask their own semantic capability
 before promising a visible result.
@@ -303,7 +304,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable cube and atmospheric skies, all eighteen built-in post-process consumers, both legacy post-process effects and their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, portable auto-exposure, compute/storage resources, indirect draws and GPU timers work. The remaining engine-layer shader-package gaps are clustered assignment/shading; arbitrary third-party GLSL source remains intentionally unavailable, and presentation remains sRGB-only. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable cube and atmospheric skies, all eighteen built-in post-process consumers, both legacy post-process effects and their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, portable auto-exposure and clustered assignment, compute/storage resources, indirect draws and GPU timers work. The remaining engine-layer shader-package gap is clustered forward shading; arbitrary third-party GLSL source remains intentionally unavailable, and presentation remains sRGB-only. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -1602,11 +1603,13 @@ device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, triangles);
   buffer would be the natural answer and is not available here, because an SSBO in a *fragment*
   shader needs GLSL ES 3.10 and this layer's shader floor is 3.00.
 - **`ClusteredLightCompute` sorts on the GPU and produces the identical list**, element for element,
-  not a similar one — everything downstream refers to a light by index. It falls back to the CPU
-  where compute is absent and says so. Its per-cluster capacity is fixed, since a GPU cannot grow an
-  array; a fuller cluster raises `hasOverflowed()` rather than truncating in silence. The GPU path
-  is flat in the light count and the CPU path is not, and the two cross around 128–256 lights on
-  this machine — see `docs/cnaext-perf.md`.
+  not a similar one — everything downstream refers to a light by index. Its generated package
+  selects GLSL ES, desktop GLSL or SPIR-V, and it falls back to the CPU where compute or a usable
+  variant is absent and says so. Its per-cluster capacity is fixed, since a GPU cannot grow an
+  array; a fuller cluster raises `hasOverflowed()` rather than truncating in silence. The same ten
+  cases pass on Vulkan llvmpipe and EasyGL, including all boundary/overflow cases. The GPU path is
+  flat in the light count and the CPU path is not, and the two cross around 128–256 lights on this
+  machine — see `docs/cnaext-perf.md`.
 - **Shadows are still a small budget.** Clustering removed the limit on how many lights can *light*
   a scene and nothing at all about how many can *shadow* one: a shadow map is a render target and a
   geometry pass, six of them for a point light. `ClusteredShadowPolicyEXT` spends that budget on a
