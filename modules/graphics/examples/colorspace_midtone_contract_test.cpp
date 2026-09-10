@@ -132,9 +132,8 @@ namespace
      *
      * `SourcePlusDestination` -- XNA's own SourceAlpha/One equation.
      * `SourceOnly` -- the destination term is dropped, as if ColorDestinationBlend were Zero.
-     * REMED-GFX-148: measured on Software, whose NonPremultiplied blend against the same
-     * destination in the same fixture is correct, so the destination is present and Additive
-     * alone discards it. Recorded, not fixed, here.
+     * REMED-GFX-148 originally measured the latter on Software; SOFTWARE-169 repaired it and the
+     * declaration below now keeps the corrected equation under test.
      */
     enum class AdditiveContract
     {
@@ -150,7 +149,7 @@ namespace
     constexpr const char* kRendererName = "HEADLESS";
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr RtContract kRtContract = RtContract::Exact;
-    constexpr bool kCubeSupported = false;
+    constexpr bool kCubeSupported = true;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
     constexpr const char* kRendererName = "SOFTWARE";

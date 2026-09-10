@@ -266,6 +266,8 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   `SOFTWARE-313` removes three older fixtures' pre-implementation cube exclusions and their
   Reach-induced MRT/backbuffer skips: Software now executes all 22 present-lifecycle legs, all 30
   backbuffer-order checks and all 43 render-target pass-boundary checks without a skipped branch.
+  `SOFTWARE-314` likewise activates the shared cube mid-tone contract, preserving exact
+  `(128,128,127,64)` face output and bringing that Software/EasyGL comparison to 17/17.
 - **Every classic renderable target format preserves its declared storage** (`SOFTWARE-143`,
   `SOFTWARE-146`, `SOFTWARE-151`). `RenderTarget2D` and `RenderTargetCube` accept Color,
   `Rgba1010102`, `Rg32`, `Rgba64`, `Single`, `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2`,
