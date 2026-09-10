@@ -62,6 +62,7 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -543,7 +544,7 @@ protected:
             const int rx = 12, ry = 5, rw = 6, rh = 4;
             std::vector<Color> pixels(64, sentinel);
             const Rectangle rect(rx, ry, rw, rh);
-            target.GetData(0, &rect, pixels.data(), 0, static_cast<int>(pixels.size()));
+            target.GetData(0, &rect, pixels.data(), 0, rw * rh);
 
             bool exact = true;
             std::string detail;
@@ -593,40 +594,40 @@ protected:
             std::vector<Color> buffer(total, SentinelCD());
             const Rectangle whole(0, 0, kRTW, kRTH);
 
-            check(Throws<std::invalid_argument>(
+            check(Throws<System::ArgumentNullException>(
                       [&] { target.GetData(0, &whole, nullptr, 0, static_cast<int>(total)); }),
                   "E1 null destination rejected");
-            check(Throws<std::out_of_range>(
+            check(Throws<System::ArgumentOutOfRangeException>(
                       [&] { target.GetData(0, &whole, buffer.data(), -1, static_cast<int>(total)); }),
                   "E2 negative destination start index rejected");
-            check(Throws<std::invalid_argument>(
+            check(Throws<System::ArgumentOutOfRangeException>(
                       [&] { target.GetData(0, &whole, buffer.data(), 0, 0); }),
                   "E3 zero element count rejected");
-            check(Throws<std::out_of_range>(
+            check(Throws<System::ArgumentException>(
                       [&] {
                           const Rectangle outside(kRTW - 2, 0, 4, 4);
                           target.GetData(0, &outside, buffer.data(), 0, static_cast<int>(total));
                       }),
                   "E4 rectangle leaving the target rejected");
-            check(Throws<std::out_of_range>(
+            check(Throws<System::ArgumentException>(
                       [&] {
                           const Rectangle negative(-1, -1, 4, 4);
                           target.GetData(0, &negative, buffer.data(), 0, static_cast<int>(total));
                       }),
                   "E5 negative rectangle origin rejected");
-            check(Throws<std::out_of_range>(
+            check(Throws<System::ArgumentException>(
                       [&] {
                           const Rectangle empty(0, 0, 0, 4);
                           target.GetData(0, &empty, buffer.data(), 0, static_cast<int>(total));
                       }),
                   "E6 zero-width rectangle rejected");
-            check(Throws<std::out_of_range>(
+            check(Throws<System::ArgumentException>(
                       [&] {
                           const Rectangle region(0, 0, 8, 8);
                           target.GetData(0, &region, buffer.data(), 0, 8 * 8 - 1);
                       }),
                   "E7 element count smaller than the requested region rejected");
-            check(Throws<std::out_of_range>(
+            check(Throws<System::InvalidOperationException>(
                       [&] { target.GetData(-1, &whole, buffer.data(), 0, static_cast<int>(total)); }),
                   "E8 negative mip level rejected");
             // REMED-GFX-198: this public request is an invalid Texture2D argument, not a request
@@ -674,22 +675,22 @@ protected:
                     depthBefore = framebuffer.depthBuffer;
                 }
 
-                bool wasOutOfRange = false;
+                bool wasInvalidOperation = false;
                 std::string what;
                 try
                 {
                     target.GetData(requestedLevel, nullptr, rejected.data(), prefix,
                                    requestedCount);
                 }
-                catch (const std::out_of_range& e)
+                catch (const System::InvalidOperationException& e)
                 {
-                    wasOutOfRange = true;
+                    wasInvalidOperation = true;
                     what = e.what();
                 }
                 catch (const std::exception& e) { what = e.what(); }
 
-                check(wasOutOfRange,
-                      "E9c invalid public level is std::out_of_range, not Software's "
+                check(wasInvalidOperation,
+                      "E9c invalid public level is XNA InvalidOperationException, not Software's "
                       "NotSupportedException");
                 check(what.find("level 1") != std::string::npos &&
                           what.find("LevelCount 1") != std::string::npos,
@@ -771,20 +772,20 @@ protected:
                           " intact)");
             }
 
-            // The capacity rule is the same on both overloads: one element short of the region is
-            // rejected before any transfer, and a larger capacity is legal and leaves its tail
-            // alone.
-            check(Throws<std::out_of_range>(
+            // Microsoft XNA requires elementCount to describe the exact selected region. Both a
+            // short and a surplus count are rejected before any transfer.
+            check(Throws<System::ArgumentException>(
                       [&] { target.GetData(buffer.data(), 0, static_cast<int>(total) - 1); }),
                   "E10c the whole-level overload rejects an elementCount below the region size");
             {
                 std::vector<Color> roomy(total + 40, SentinelA5());
-                target.GetData(roomy.data(), 0, static_cast<int>(total) + 40);
-                std::size_t tail = 0;
-                for (std::size_t i = total; i < roomy.size(); ++i)
-                    if (Same(roomy[i], SentinelA5())) ++tail;
-                check(tail == 40, "E10d excess elementCount is accepted and its tail untouched (" +
-                                      std::to_string(tail) + "/40 intact)");
+                const auto before = roomy;
+                check(Throws<System::ArgumentException>([&] {
+                          target.GetData(roomy.data(), 0, static_cast<int>(total) + 40);
+                      }),
+                      "E10d the whole-level overload rejects a surplus elementCount");
+                check(roomy == before,
+                      "E10e the rejected surplus request leaves the destination untouched");
             }
 
             // The same guards straight against the renderer, where a hostile rectangle can be built
@@ -848,14 +849,19 @@ protected:
                           " sentinel bytes)");
             }
 
-            // The Software format boundary is the framework-wide one: only SurfaceFormat::Color is
-            // implemented, and a render target of any other format fails at CONSTRUCTION rather
-            // than reporting a format its storage does not have.
-            check(ThrowsAnything([&] {
-                      RenderTarget2D bad(dev, 8, 8, false, SurfaceFormat::Bgra4444,
-                                         DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
-                  }),
-                  "E22 a non-Color render target format is rejected at construction");
+            // XNA coerces a non-renderable texture format to Color for RenderTarget2D.
+            bool packedRequestFellBackToColor = false;
+            try
+            {
+                RenderTarget2D packed(dev, 8, 8, false, SurfaceFormat::Bgra4444,
+                                      DepthFormat::None, 0,
+                                      RenderTargetUsage::DiscardContents);
+                packedRequestFellBackToColor =
+                    packed.getFormatProperty() == SurfaceFormat::Color;
+            }
+            catch (...) {}
+            check(packedRequestFellBackToColor,
+                  "E22 a non-renderable Bgra4444 request falls back to Color");
             check(target.getFormatProperty() == SurfaceFormat::Color,
                   "E23 a supported render target reports SurfaceFormat::Color (4 bytes, RGBA order)");
         }
@@ -872,24 +878,18 @@ protected:
             check(Throws<System::InvalidOperationException>([&] { target.Dispose(); }),
                   "F3 disposing the ACTIVE render target is rejected");
 
-            // GetData while the target is still bound: CNA establishes no rejection here, and the
-            // corrected storage is the live colour attachment, so this returns the real current
-            // contents rather than a stale or fabricated frame. Recorded, not invented.
-            std::string detail;
+            // Microsoft XNA rejects data transfer while the target remains active. The failed read
+            // must not modify the caller's destination.
             const std::size_t total = static_cast<std::size_t>(kRTW) * kRTH;
             std::vector<Color> pixels(total, SentinelCD());
-            bool ok = true;
-            target.GetData(pixels.data(), 0, static_cast<int>(total));
-            for (int y = 0; y < kRTH && ok; ++y)
-                for (int x = 0; x < kRTW; ++x)
-                    if (!Same(pixels[static_cast<std::size_t>(y) * kRTW + x], ExpectedTargetPixel(x, y)))
-                    {
-                        ok = false;
-                        detail = " (" + std::to_string(x) + "," + std::to_string(y) + ")=" +
-                                 ColorText(pixels[static_cast<std::size_t>(y) * kRTW + x]);
-                        break;
-                    }
-            check(ok, "F4 GetData while the target is bound returns its live colour attachment" + detail);
+            check(Throws<System::InvalidOperationException>([&] {
+                      target.GetData(pixels.data(), 0, static_cast<int>(total));
+                  }),
+                  "F4 GetData while the target is bound is rejected");
+            check(std::all_of(pixels.begin(), pixels.end(), [](const Color& color) {
+                      return Same(color, SentinelCD());
+                  }),
+                  "F4b the rejected active-target read leaves its destination untouched");
 
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             ResetState(dev);
@@ -957,21 +957,23 @@ protected:
                       std::to_string(msaa.getMultiSampleCountProperty()) +
                       ")");
 
-            // A clear updates both planes, but rasterization updates only the live samples. Reading
-            // before unbind therefore distinguishes a real active-pass resolve from stale `color`.
+            // A clear updates both planes, but rasterization updates only the live samples. XNA
+            // rejects an active-target read, then unbinding resolves the live samples for readback.
             dev.SetRenderTarget(&msaa);
             ResetState(dev);
             dev.Clear(Color(0, 0, 0, 255));
             // Primary channels are exact through the byte->float->byte tint path, keeping this an
             // MSAA/readback assertion rather than a floating-point colour-rounding assertion.
             FillRect(dev, Rectangle(0, 0, 16, 8), Color(255, 0, 255, 255));
-            const bool activeSnapshotExact =
-                WholeTargetIs(msaa, Color(255, 0, 255, 255), detail);
-            check(activeSnapshotExact,
-                  "H4 GetData snapshots live four-sample raster output while the target remains "
-                  "bound" + detail);
+            check(Throws<System::InvalidOperationException>([&] {
+                      std::string ignored;
+                      (void) WholeTargetIs(msaa, Color(255, 0, 255, 255), ignored);
+                  }),
+                  "H4 GetData rejects a live four-sample target while it remains bound");
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             ResetState(dev);
+            check(WholeTargetIs(msaa, Color(255, 0, 255, 255), detail),
+                  "H5 unbinding resolves live four-sample raster output for GetData" + detail);
         }
 
         // ---- I: depth/stencil isolation ---------------------------------------------------------
@@ -1212,6 +1214,7 @@ public:
     SoftwareRenderTargetReadbackTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
     }

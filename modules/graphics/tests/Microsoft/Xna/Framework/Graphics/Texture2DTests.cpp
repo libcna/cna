@@ -41,6 +41,7 @@ using namespace CNA::Testing::Renderers;
 #include "System/ArgumentNullException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
@@ -70,6 +71,24 @@ namespace
         {
             EXPECT_EQ(typeid(exception), typeid(TException));
             EXPECT_EQ(exception.getParamNameProperty(), parameterName);
+        }
+        catch (...)
+        {
+            FAIL() << "unexpected exception type; expected " << typeid(TException).name();
+        }
+    }
+
+    template <typename TException, typename TCallable>
+    void ExpectExactException(TCallable&& callable)
+    {
+        try
+        {
+            callable();
+            FAIL() << "expected " << typeid(TException).name();
+        }
+        catch (const TException& exception)
+        {
+            EXPECT_EQ(typeid(exception), typeid(TException));
         }
         catch (...)
         {
@@ -554,7 +573,8 @@ TEST(Texture2DMipLevelValidationTest, RejectedSetDataLeavesEveryValidMipAndItsSo
         SCOPED_TRACE("level=" + std::to_string(level));
         std::vector<Color> source(6, Color(201, 111, 77, 255));
         const std::vector<Color> sourceBefore = source;
-        EXPECT_THROW(texture.SetData(level, nullptr, source.data(), 2, 1), std::out_of_range);
+        ExpectExactException<System::InvalidOperationException>(
+            [&] { texture.SetData(level, nullptr, source.data(), 2, 1); });
         EXPECT_EQ(source, sourceBefore);
         EXPECT_EQ(renderer->levelZeroUpdates, levelZeroUpdatesBefore);
         EXPECT_EQ(renderer->levelUpdates, levelUpdatesBefore);
@@ -585,13 +605,14 @@ TEST(Texture2DMipLevelValidationTest, RejectedGetDataLeavesDestinationAndRendere
         SCOPED_TRACE("level=" + std::to_string(level));
         std::vector<Color> destination(7, sentinel);
         const Rectangle* rect = (request % 2 == 0) ? &one : nullptr;
-        EXPECT_THROW(texture.GetData(level, rect, destination.data(), 3, 1), std::out_of_range);
+        ExpectExactException<System::InvalidOperationException>(
+            [&] { texture.GetData(level, rect, destination.data(), 3, 1); });
         for (const Color& value : destination) ExpectExactColor(value, sentinel);
         EXPECT_EQ(renderer->getDataCalls, 0);
     }
 }
 
-TEST(Texture2DMipLevelValidationTest, ExistingDataAndStartIndexValidationStillPrecedeLevelValidation)
+TEST(Texture2DMipLevelValidationTest, NullPrecedesLevelButLevelPrecedesCopyWindowValidation)
 {
     constexpr int kLevelCount = 1;
     auto renderer = std::make_shared<RecordingMipTextureRenderer>(13, 7);
@@ -602,10 +623,35 @@ TEST(Texture2DMipLevelValidationTest, ExistingDataAndStartIndexValidationStillPr
         [&] { texture.GetData(kLevelCount, nullptr, nullptr, -1, 0); }, "data");
     ExpectExactNamedException<System::ArgumentNullException>(
         [&] { texture.SetData(kLevelCount, nullptr, nullptr, -1, 0); }, "data");
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { texture.GetData(kLevelCount, nullptr, &value, -1, 1); });
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { texture.SetData(kLevelCount, nullptr, &value, -1, 1); });
+    EXPECT_EQ(renderer->getDataCalls, 0);
+    EXPECT_EQ(renderer->levelZeroUpdates, 0);
+    EXPECT_TRUE(renderer->levelUpdates.empty());
+}
+
+TEST(Texture2DMipLevelValidationTest, CopyWindowPrecedesElementWidthAndRectangleValidation)
+{
+    struct EightByteValue final
+    {
+        std::uint64_t value;
+    };
+
+    auto renderer = std::make_shared<RecordingMipTextureRenderer>(2, 2);
+    Texture2D texture = Texture2D::CreateWithRendererForTests(2, 2, renderer);
+    EightByteValue value{};
+    const Rectangle outside(2, 0, 1, 1);
+
     ExpectExactNamedException<System::ArgumentOutOfRangeException>(
-        [&] { texture.GetData(kLevelCount, nullptr, &value, -1, 1); }, "dataIndex");
+        [&] { texture.SetData(0, &outside, &value, -1, 1); }, "dataIndex");
     ExpectExactNamedException<System::ArgumentOutOfRangeException>(
-        [&] { texture.SetData(kLevelCount, nullptr, &value, -1, 1); }, "dataIndex");
+        [&] { texture.GetData(0, &outside, &value, -1, 1); }, "dataIndex");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { texture.SetData(0, &outside, &value, 0, 1); }, "");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { texture.GetData(0, &outside, &value, 0, 1); }, "");
     EXPECT_EQ(renderer->getDataCalls, 0);
     EXPECT_EQ(renderer->levelZeroUpdates, 0);
     EXPECT_TRUE(renderer->levelUpdates.empty());
@@ -1270,11 +1316,12 @@ TEST(Texture2DTest, GetDataLevelZeroElementCountThrowsNamedArgumentOutOfRangeExc
         [&] { tex.GetData(0, nullptr, buf, 0, 0); }, "elementCount");
 }
 
-TEST(Texture2DTest, GetDataNegativeLevelThrowsOutOfRange)
+TEST(Texture2DTest, GetDataNegativeLevelThrowsExactInvalidOperationException)
 {
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
-    EXPECT_THROW(tex.GetData(-1, nullptr, buf, 0, 1), std::out_of_range);
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { tex.GetData(-1, nullptr, buf, 0, 1); });
 }
 
 // Task 265: negative startIndex is rejected before it can compute a negative
@@ -1365,11 +1412,12 @@ TEST(Texture2DTest, SetDataLevelNegativeStartIndexThrowsOutOfRange)
         [&] { tex.SetData(0, nullptr, buf, -1, 1); }, "dataIndex");
 }
 
-TEST(Texture2DTest, SetDataNegativeLevelThrowsOutOfRange)
+TEST(Texture2DTest, SetDataNegativeLevelThrowsExactInvalidOperationException)
 {
     Texture2D tex;
     Color buf[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
-    EXPECT_THROW(tex.SetData(-1, nullptr, buf, 0, 1), std::out_of_range);
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { tex.SetData(-1, nullptr, buf, 0, 1); });
 }
 
 TEST(Texture2DTest, SetDataLevelExtraElementsThrowsArgumentException)

@@ -306,6 +306,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   block-compressed rectangles report `ArgumentException("rect")`. This validation is shared by
   Color, byte, packed, float/vector and application-defined value types and runs before caller
   pointer arithmetic.
+- **Texture2D validation follows Microsoft `CopyData<T>` precedence** (`SOFTWARE-280`). After
+  disposal and null checks, an active render target or sampled write is rejected before mip and
+  array-window validation; invalid mip levels report `InvalidOperationException`; then copy-window,
+  element-width, rectangle and exact-total validation run in that order. Shared mixed-invalid tests
+  cover both Software and EasyGL so a renderer fallback cannot accidentally choose the exception.
 - **Every XNA-permitted ordinary `TextureCube` format has the same exact storage and sampling**
   (`SOFTWARE-145`, `SOFTWARE-149`, `SOFTWARE-150`). Each of the six faces and every declared mip
   independently retains Color, DXT1/3/5, normalized-integer, binary32 or binary16 bytes. Typed

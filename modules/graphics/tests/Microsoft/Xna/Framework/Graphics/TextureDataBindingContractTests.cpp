@@ -4,6 +4,8 @@
 
 #include <array>
 #include <memory>
+#include <string>
+#include <typeinfo>
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -69,6 +71,29 @@ TEST(TextureDataBindingContractTest, PixelBoundTexture2DRejectsWritesButAllowsRe
 
     device.getTexturesProperty()(0, nullptr);
     EXPECT_NO_THROW(texture.SetData(replacement.data(), static_cast<int>(replacement.size())));
+}
+
+TEST(TextureDataBindingContractTest, Texture2DResourceUsePrecedesLevelAndCopyWindowValidation)
+{
+    GraphicsDevice device;
+    Texture2D texture(device, 2, 2);
+    std::array<Color, 4> data{};
+    device.getTexturesProperty()(0, &texture);
+
+    try
+    {
+        texture.SetData(1, nullptr, data.data(), -1, 0);
+        FAIL() << "expected the bound-resource failure";
+    }
+    catch (const System::InvalidOperationException& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(System::InvalidOperationException));
+        EXPECT_NE(std::string(exception.what()).find("resource is in use"), std::string::npos);
+    }
+    catch (...)
+    {
+        FAIL() << "unexpected exception type";
+    }
 }
 
 TEST(TextureDataBindingContractTest, VertexBoundTexture2DRejectsWrites)
@@ -139,6 +164,30 @@ TEST(TextureDataBindingContractTest, ActiveRenderTarget2DRejectsWritesAndReadbac
     device.SetRenderTarget(nullptr);
     EXPECT_NO_THROW(target.SetData(data.data(), static_cast<int>(data.size())));
     EXPECT_NO_THROW(target.GetData(destination.data(), static_cast<int>(destination.size())));
+}
+
+TEST(TextureDataBindingContractTest, ActiveRenderTarget2DPrecedesLevelAndCopyWindowValidation)
+{
+    GraphicsDevice device;
+    RenderTarget2D target(device, 2, 2);
+    if (!BindOrSkip(device, target))
+        GTEST_SKIP() << "this renderer does not support RenderTarget2D";
+
+    std::array<Color, 4> destination{};
+    try
+    {
+        target.GetData(1, nullptr, destination.data(), -1, 0);
+        FAIL() << "expected the active-render-target failure";
+    }
+    catch (const System::InvalidOperationException& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(System::InvalidOperationException));
+        EXPECT_NE(std::string(exception.what()).find("render target"), std::string::npos);
+    }
+    catch (...)
+    {
+        FAIL() << "unexpected exception type";
+    }
 }
 
 TEST(TextureDataBindingContractTest, ActiveRenderTargetCubeRejectsWritesAndReadback)

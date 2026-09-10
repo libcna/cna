@@ -20,6 +20,7 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp"
@@ -207,11 +208,13 @@ namespace Microsoft::Xna::Framework::Graphics
     static void validateMipLevel(const char* api, int level, int levelCount)
     {
         if (level < 0)
-            throw std::out_of_range(std::string(api) + ": level must be >= 0");
-        if (level >= levelCount)
-            throw std::out_of_range(
+            throw System::InvalidOperationException(
                 std::string(api) + ": level " + std::to_string(level) +
-                " must be less than LevelCount " + std::to_string(levelCount));
+                " must be in [0, LevelCount " + std::to_string(levelCount) + ")");
+        if (level >= levelCount)
+            throw System::InvalidOperationException(
+                std::string(api) + ": level " + std::to_string(level) +
+                " must be in [0, LevelCount " + std::to_string(levelCount) + ")");
     }
 
     static void validateTransferWindow(const char* api, int startIndex, int elementCount,
@@ -254,8 +257,6 @@ namespace Microsoft::Xna::Framework::Graphics
                                               int level, int levelCount, const Rectangle* rect,
                                               SurfaceFormat format, int elementBytes)
     {
-        const int texels = ValidatedRequestedTexelCount(
-            api, baseWidth, baseHeight, level, levelCount, rect);
         const int formatBytes = Texture::GetFormatSizeEXT(format);
         if (Texture::GetBlockSizeSquaredEXT(format) != 1 || elementBytes <= 0 ||
             elementBytes > formatBytes || formatBytes % elementBytes != 0)
@@ -264,6 +265,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 std::string(api) +
                 ": element width does not divide the uncompressed texture format");
         }
+        const int texels = ValidatedRequestedTexelCount(
+            api, baseWidth, baseHeight, level, levelCount, rect);
         return texels * formatBytes / elementBytes;
     }
 
@@ -460,24 +463,40 @@ namespace Microsoft::Xna::Framework::Graphics
     // -----------------------------------------------------------------------
 
     void Texture2D::ValidateCopyArgumentsEXT(
-        const void* data, int startIndex, int elementCount) const
+        int level, const void* data, int startIndex, int elementCount)
+    {
+        ValidateCopyArgumentsEXT(
+            "Texture2D::SetData", true, level, data, startIndex, elementCount);
+    }
+
+    void Texture2D::ValidateCopyArgumentsEXT(
+        int level, const void* data, int startIndex, int elementCount) const
+    {
+        ValidateCopyArgumentsEXT(
+            "Texture2D::GetData", false, level, data, startIndex, elementCount);
+    }
+
+    void Texture2D::ValidateCopyArgumentsEXT(
+        const char* api, bool setting, int level, const void* data,
+        int startIndex, int elementCount) const
     {
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
+        if (!data)
+            throw System::ArgumentNullException("data");
+        ThrowIfDataTransferResourceInUseEXT(setting);
+        validateMipLevel(api, level, levelCount_);
         ValidateCopyArguments(data, startIndex, elementCount);
     }
 
     void Texture2D::SetData(const Color* data, int elementCount)
     {
-        if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
-        ValidateCopyArguments(data, 0, elementCount);
+        ValidateCopyArgumentsEXT(0, data, 0, elementCount);
         if (Texture::GetFormatSizeEXT(format_) != 4)
         {
             SetData(0, nullptr, data, 0, elementCount);
             return;
         }
-        ThrowIfDataTransferResourceInUseEXT(true);
         if (!graphicsDevice_) return;
         const int total = width * height;
         validateTransferWindow("Texture2D::SetData", 0, elementCount, total);
@@ -523,9 +542,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect,
                             const Color* data, int startIndex, int elementCount)
     {
-        if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
-        ValidateCopyArguments(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         if (Texture::GetFormatSizeEXT(format_) != 4)
         {
             const int requiredElements = ValidatedRequestedElementCount(
@@ -544,9 +561,6 @@ namespace Microsoft::Xna::Framework::Graphics
             SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
             return;
         }
-        ThrowIfDataTransferResourceInUseEXT(true);
-        validateMipLevel("Texture2D::SetData", level, levelCount_);
-
         const int levelW = mipDim(width,  level);
         const int levelH = mipDim(height, level);
 
@@ -1058,9 +1072,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetTrivialDataEXT(int level, const Rectangle* rect, const void* data,
                                       int startIndex, int elementCount, int elementBytes)
     {
-        if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
-        ValidateCopyArguments(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect,
             format_, elementBytes);
@@ -1074,9 +1086,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetTrivialDataEXT(int level, const Rectangle* rect, void* data,
                                       int startIndex, int elementCount, int elementBytes) const
     {
-        if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
-        ValidateCopyArguments(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect,
             format_, elementBytes);
@@ -1095,7 +1105,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Bgr565* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1112,7 +1122,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Bgra4444* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1129,7 +1139,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Bgra5551* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1147,7 +1157,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             const PackedVector::Rgba1010102* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1164,7 +1174,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Alpha8* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 1);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1181,7 +1191,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Rg32* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1198,7 +1208,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Rgba64* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 8);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1216,7 +1226,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             const PackedVector::NormalizedByte2* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1234,7 +1244,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             const PackedVector::NormalizedByte4* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1251,7 +1261,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const float* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1267,7 +1277,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const Vector2* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 8);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1283,7 +1293,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const Vector4* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 16);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1300,7 +1310,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             const PackedVector::HalfSingle* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1318,7 +1328,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             const PackedVector::HalfVector2* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1336,7 +1346,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             const PackedVector::HalfVector4* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 8);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1353,7 +1363,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const std::uint8_t* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         if (IsCompressedTransferFormatEXT(graphicsDevice_, format_))
         {
             SetCompressedDataBytes(level, rect, data, startIndex, elementCount);
@@ -1375,7 +1385,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const std::uint16_t* data,
                             int startIndex, int elementCount)
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
@@ -1462,15 +1472,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::GetData(Color* data, int startIndex, int elementCount) const
     {
-        if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
-        ValidateCopyArguments(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(0, data, startIndex, elementCount);
         if (Texture::GetFormatSizeEXT(format_) != 4)
         {
             GetData(0, nullptr, data, startIndex, elementCount);
             return;
         }
-        ThrowIfDataTransferResourceInUseEXT(false);
         Texture::ValidateGetDataFormat(format_, 4);
 
         // The requested region of this overload is the COMPLETE level 0 -- never elementCount,
@@ -1553,9 +1560,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect,
                             Color* data, int startIndex, int elementCount) const
     {
-        if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
-        ValidateCopyArguments(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         if (Texture::GetFormatSizeEXT(format_) != 4)
         {
             const int requiredElements = ValidatedRequestedElementCount(
@@ -1575,8 +1580,6 @@ namespace Microsoft::Xna::Framework::Graphics
             }
             return;
         }
-        ThrowIfDataTransferResourceInUseEXT(false);
-        validateMipLevel("Texture2D::GetData", level, levelCount_);
         Texture::ValidateGetDataFormat(format_, 4);
 
         // Delegate before touching the CPU-side mip shadow at all -- the 3-arg overload has its
@@ -1812,7 +1815,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Bgr565* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -1835,7 +1838,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Bgra4444* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -1858,7 +1861,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Bgra5551* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -1883,7 +1886,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             PackedVector::Rgba1010102* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -1906,7 +1909,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Alpha8* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 1);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -1929,7 +1932,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Rg32* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -1952,7 +1955,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Rgba64* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 8);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -1977,7 +1980,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             PackedVector::NormalizedByte2* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -2002,7 +2005,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             PackedVector::NormalizedByte4* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -2025,7 +2028,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, float* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -2047,7 +2050,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, Vector2* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 8);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -2069,7 +2072,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, Vector4* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 16);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -2093,7 +2096,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             PackedVector::HalfSingle* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -2118,7 +2121,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             PackedVector::HalfVector2* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -2143,7 +2146,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             PackedVector::HalfVector4* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 8);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
@@ -2166,7 +2169,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, std::uint8_t* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         if (IsCompressedTransferFormatEXT(graphicsDevice_, format_))
         {
             GetCompressedDataBytes(level, rect, data, startIndex, elementCount);
@@ -2193,7 +2196,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, std::uint16_t* data,
                             int startIndex, int elementCount) const
     {
-        ValidateCopyArgumentsEXT(data, startIndex, elementCount);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
