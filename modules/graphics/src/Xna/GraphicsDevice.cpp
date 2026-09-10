@@ -59,6 +59,15 @@ namespace Microsoft::Xna::Framework::Graphics
         // Matches FNA's internal GraphicsDevice.MAX_RENDERTARGET_BINDINGS.
         constexpr std::size_t MAX_RENDERTARGET_BINDINGS = 4;
 
+        [[nodiscard]] int SaturatingDrawOffsetAdd(int left, int right) noexcept
+        {
+            const std::int64_t sum = static_cast<std::int64_t>(left) + right;
+            return static_cast<int>(std::clamp(
+                sum,
+                static_cast<std::int64_t>((std::numeric_limits<int>::min)()),
+                static_cast<std::int64_t>((std::numeric_limits<int>::max)())));
+        }
+
         constexpr std::array<SurfaceFormat, 27> CapabilitySurfaceFormats = {
             SurfaceFormat::Color,
             SurfaceFormat::Bgr565,
@@ -1464,8 +1473,9 @@ namespace Microsoft::Xna::Framework::Graphics
             if (stream.instanceFrequency != 0 || !stream.vertexShaderInputUsed)
                 continue;   // the instanced route validates its per-instance stream separately
             // Every term is an element count of THIS shader-consumed stream, so the arithmetic is
-            // done against this stream's own capacity. A short active secondary stream is rejected
-            // even when stream 0 could satisfy the same request; an inactive stream is not fetched.
+            // done against this stream's own capacity. On renderers that retain the compatibility
+            // guard, a short active secondary stream is rejected even when stream 0 is long enough;
+            // an inactive stream is never fetched.
             const std::int64_t available = stream.vertexCount;
             const std::int64_t effectiveStart =
                 static_cast<std::int64_t>(stream.vertexOffset) + startElement;
@@ -1490,10 +1500,6 @@ namespace Microsoft::Xna::Framework::Graphics
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
 
-        // REMED-GFX-113: vertexStart is a vertex-element offset and primitiveCount fixes the exact
-        // topology-derived vertex count, so the pair [vertexStart, vertexStart + consumed) must fit
-        // the bound buffer. Rejecting here keeps every renderer's native binding an exact range: a
-        // request that leaves the buffer is an error, never a silently clamped or widened draw.
         const int consumedVertexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
 
@@ -1504,7 +1510,6 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawPrimitives: no vertex buffer is bound.");
         ThrowIfBoundVertexBufferDisposed();
-        System::ArgumentOutOfRangeException::ThrowIfNegative(vertexStart, "vertexStart");
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -1521,13 +1526,16 @@ namespace Microsoft::Xna::Framework::Graphics
         // offsets and each stream carries the rest itself; with one it is the whole offset and the
         // remainder is 0, which is exactly what REMED-GFX-200 measured.
         const int foldedOffset = FoldedVertexStreamOffset();
-        p.vertexStart = vertexStart + foldedOffset;
+        // An invalid native range is forwarded rather than rejected, but folding CNA's binding
+        // offset into the 32-bit renderer channel must not itself invoke signed-overflow UB.
+        p.vertexStart = SaturatingDrawOffsetAdd(vertexStart, foldedOffset);
         FillVertexStreamBindings(
             p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
         // The legacy empty-declaration route has no stream metadata. Its named buffer remains the
         // authoritative byte source and therefore keeps the original whole-buffer range check.
         if (p.vertexStreamCount == 0)
         {
+            System::ArgumentOutOfRangeException::ThrowIfNegative(vertexStart, "vertexStart");
             const int availableVertexCount = currentVertexBuffer_->getVertexCountProperty();
             const int bindingVertexOffset = CurrentVertexBufferOffset();
             if (bindingVertexOffset > availableVertexCount ||
@@ -1539,11 +1547,16 @@ namespace Microsoft::Xna::Framework::Graphics
                     "The requested primitive range exceeds the bound vertex buffer.");
             }
         }
-        // Argument validation first, capability second: an out-of-range request is wrong on every
-        // renderer, so it must report the same public exception everywhere.
-        ValidateVertexStreamRanges(
-            p, p.vertexStart, consumedVertexCount,
-            "primitiveCount", std::to_string(primitiveCount));
+        else if (renderer_->RequiresManagedBufferedDrawRangeValidationEXT())
+        {
+            // SOFTWARE-322: XNA forwards these values to its native D3D draw. Keep CNA's former
+            // managed guard only for renderers whose CPU staging would otherwise read invalid
+            // host memory; Software and EasyGL explicitly opt into native-style forwarding.
+            System::ArgumentOutOfRangeException::ThrowIfNegative(vertexStart, "vertexStart");
+            ValidateVertexStreamRanges(
+                p, p.vertexStart, consumedVertexCount,
+                "primitiveCount", std::to_string(primitiveCount));
+        }
         ValidateVertexStreamCapability(p);
         applySamplerStatesToRenderer();
         renderer_->DrawPrimitivesEx(
@@ -1585,17 +1598,6 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound.");
         ThrowIfBoundVertexBufferDisposed();
-        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
-
-        const int availableIndexCount = currentIndexBuffer_->GetRenderer().GetIndexCount();
-        if (startIndex > availableIndexCount ||
-            consumedIndexCount > availableIndexCount - startIndex)
-        {
-            throw System::ArgumentOutOfRangeException(
-                "primitiveCount", std::to_string(primitiveCount),
-                "The requested primitive range exceeds the bound index buffer.");
-        }
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -1612,11 +1614,26 @@ namespace Microsoft::Xna::Framework::Graphics
         // REMED-GFX-201: baseVertex advances EVERY per-vertex stream, each by that many of its own
         // elements, which is FNA3D's `vertexStride * (vertexOffset + baseVertex)` per binding.
         const int foldedOffset = FoldedVertexStreamOffset();
-        p.baseVertex = static_cast<int>(static_cast<std::int64_t>(baseVertex) + foldedOffset);
+        p.baseVertex = SaturatingDrawOffsetAdd(baseVertex, foldedOffset);
         p.minVertexIndex = minVertexIndex;
         p.numVertices = numVertices;
         FillVertexStreamBindings(
             p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
+        const bool validateBufferedRange = p.vertexStreamCount == 0 ||
+            renderer_->RequiresManagedBufferedDrawRangeValidationEXT();
+        if (validateBufferedRange)
+        {
+            System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
+            System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
+            const int availableIndexCount = currentIndexBuffer_->GetRenderer().GetIndexCount();
+            if (startIndex > availableIndexCount ||
+                consumedIndexCount > availableIndexCount - startIndex)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "primitiveCount", std::to_string(primitiveCount),
+                    "The requested primitive range exceeds the bound index buffer.");
+            }
+        }
         if (p.vertexStreamCount == 0)
         {
             const int availableVertexCount = currentVertexBuffer_->getVertexCountProperty();
@@ -1631,13 +1648,12 @@ namespace Microsoft::Xna::Framework::Graphics
                     "The declared vertex range exceeds the bound vertex buffer.");
             }
         }
-        // The declared window is [baseVertex + minVertexIndex, + numVertices) in every
-        // shader-consumed stream's own elements, so every active stream must hold it -- not only
-        // the one named by `vb`. Argument validation precedes the capability gate for the reason
-        // DrawPrimitives states.
-        ValidateVertexStreamRanges(
-            p, static_cast<std::int64_t>(p.baseVertex) + minVertexIndex, numVertices,
-            "numVertices", std::to_string(numVertices));
+        else if (validateBufferedRange)
+        {
+            ValidateVertexStreamRanges(
+                p, static_cast<std::int64_t>(p.baseVertex) + minVertexIndex, numVertices,
+                "numVertices", std::to_string(numVertices));
+        }
         ValidateVertexStreamCapability(p);
         applySamplerStatesToRenderer();
         renderer_->DrawIndexedPrimitivesEx(
@@ -1669,13 +1685,6 @@ namespace Microsoft::Xna::Framework::Graphics
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(instanceCount, "instanceCount");
         ValidateProfilePrimitiveCount(graphicsProfile_, instanceCount, "instanceCount");
 
-        // REMED-GFX-118: the instanced entry point takes the same indexed contract as
-        // DrawIndexedPrimitives above -- startIndex is an index-element offset, primitiveCount
-        // fixes the exact topology-derived index count, baseVertex is added to every decoded index
-        // once, and minVertexIndex/numVertices declare the referenced vertex window. Rejecting a
-        // request that leaves either bound buffer here keeps every renderer's native binding an
-        // exact range instead of a silently widened or clamped draw. instanceCount is validated
-        // independently: it never widens or narrows the geometry range.
         const int consumedIndexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
 
@@ -1690,17 +1699,6 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawInstancedPrimitives: no vertex buffer is bound.");
         ThrowIfBoundVertexBufferDisposed();
-        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
-
-        const int availableIndexCount = currentIndexBuffer_->GetRenderer().GetIndexCount();
-        if (startIndex > availableIndexCount ||
-            consumedIndexCount > availableIndexCount - startIndex)
-        {
-            throw System::ArgumentOutOfRangeException(
-                "primitiveCount", std::to_string(primitiveCount),
-                "The requested primitive range exceeds the bound index buffer.");
-        }
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -1726,15 +1724,28 @@ namespace Microsoft::Xna::Framework::Graphics
         // the per-vertex streams has no reason to be shared with them.
         FillVertexStreamBindings(
             p, /*foldedOffset=*/0, /*allowLegacyEmptyDeclarationFallback=*/false);
-        // The declared window is [baseVertex + minVertexIndex, + numVertices) in every active
-        // per-vertex stream's own elements, and every per-instance stream owes one record per
-        // complete frequency-sized group of instances. Argument validation precedes the capability
-        // gate for the reason DrawPrimitives states: an out-of-range request is wrong on every
-        // renderer.
-        ValidateVertexStreamRanges(
-            p, static_cast<std::int64_t>(baseVertex) + minVertexIndex, numVertices,
-            "numVertices", std::to_string(numVertices));
-        ValidateInstanceStreamRanges(p, instanceCount);
+        const auto& boundDeclaration = currentVertexBuffer_->getVertexDeclarationProperty();
+        const bool legacyEmptyDeclaration = boundDeclaration.GetVertexElements().empty() &&
+            boundDeclaration.getVertexStrideProperty() == 0;
+        const bool validateBufferedRange = legacyEmptyDeclaration ||
+            renderer_->RequiresManagedBufferedDrawRangeValidationEXT();
+        if (validateBufferedRange)
+        {
+            System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
+            System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
+            const int availableIndexCount = currentIndexBuffer_->GetRenderer().GetIndexCount();
+            if (startIndex > availableIndexCount ||
+                consumedIndexCount > availableIndexCount - startIndex)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "primitiveCount", std::to_string(primitiveCount),
+                    "The requested primitive range exceeds the bound index buffer.");
+            }
+            ValidateVertexStreamRanges(
+                p, static_cast<std::int64_t>(baseVertex) + minVertexIndex, numVertices,
+                "numVertices", std::to_string(numVertices));
+            ValidateInstanceStreamRanges(p, instanceCount);
+        }
         ValidateVertexStreamCapability(p);
         applySamplerStatesToRenderer();
         renderer_->DrawInstancedPrimitivesEx(

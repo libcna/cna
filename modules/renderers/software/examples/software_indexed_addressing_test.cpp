@@ -11,16 +11,16 @@
 //     corresponding line/point formulas).
 //   * The declared index width decides 16-bit or 32-bit decoding and never changes any of the
 //     three values above.
-//   * `minVertexIndex` / `numVertices` are validation/range hints. They never add to a decoded
+//   * `minVertexIndex` / `numVertices` are native range hints. They never add to a decoded
 //     index, never replace `startIndex`, and never trim the vertices an index legitimately reaches.
 //
 // Pre-fix Software signature (this test FAILS pre-fix): both indexed raster loops
 // (DrawIndexedColoredPrimitives and DrawIndexedPrimitivesEx) read `readIndex(i * 3 + k)` -- always
 // from element zero -- and fetched `vbBase + index * stride` with no base addend, so `startIndex`
 // and a positive `baseVertex` were silently discarded and every draw rendered the buffer prefix.
-// Their available-index guard (`primitiveCount * 3 > ib.GetIndexCount()`) likewise omitted
-// `startIndex`, and neither path validated the decoded vertex address at all, so an index outside
-// the bound vertex buffer formed an out-of-range pointer into the CPU vertex storage.
+// Their old available-index guard (`primitiveCount * 3 > ib.GetIndexCount()`) likewise omitted
+// `startIndex`. SOFTWARE-322 later established that public classic ranges must be forwarded, so
+// Software now defaults missing records instead of either throwing or forming an invalid pointer.
 //
 // All geometry uses an identity World*View*Projection, so clip.W == 1 and NDC == the raw vertex
 // position. Four separated "slots" across the framebuffer carry distinctive full-intensity colors,
@@ -238,6 +238,14 @@ class SoftwareIndexedAddressingTest : public Game
         catch (const ExceptionT&) { return true; }
         catch (...) { return false; }
         return false;
+    }
+
+    template <typename Fn>
+    bool Completes(Fn&& fn)
+    {
+        try { fn(); }
+        catch (...) { return false; }
+        return true;
     }
 
 protected:
@@ -544,7 +552,7 @@ protected:
                   "K1: TriangleStrip/LineList/LineStrip/PointListEXT all use the validated indexed path");
         }
 
-        // ---- L: invalid public ranges are rejected deterministically before any storage read --
+        // ---- L: required counts are validated; native buffered ranges are forwarded safely ----
         {
             fx.Apply();
             dev.SetVertexBuffer(&vbA);
@@ -554,44 +562,68 @@ protected:
                 int baseVertex, minVertexIndex, numVertices, startIndex, primitiveCount;
                 const char* name;
             };
-            const std::array<RangeCase, 11> cases{{
+            const std::array<RangeCase, 7> nativeCases{{
                 {0, 0, 12, -1, 1, "negative startIndex"},
-                {-1, 0, 12, 0, 1, "negative baseVertex underflows the declared range"},
-                {0, -1, 12, 0, 1, "negative minVertexIndex"},
+                {-1, 0, 12, 0, 1, "negative baseVertex"},
+                {0, -1, 12, 0, 1, "negative minVertexIndex hint"},
+                {0, 0, 12, 13, 1, "startIndex past the index buffer"},
+                {0, 0, 12, 10, 1, "startIndex plus count past the index buffer"},
+                {13, 0, 1, 0, 1, "baseVertex past the vertex buffer"},
+                {6, 0, 7, 0, 1, "hint range past the vertex buffer"},
+            }};
+            const std::array<RangeCase, 4> requiredCases{{
                 {0, 0, -1, 0, 1, "negative numVertices"},
                 {0, 0, 0, 0, 1, "zero numVertices"},
                 {0, 0, 12, 0, 0, "zero primitiveCount"},
                 {0, 0, 12, 0, -1, "negative primitiveCount"},
-                {0, 0, 12, 13, 1, "startIndex past the index buffer"},
-                {0, 0, 12, 10, 1, "startIndex + consumed count past the index buffer"},
-                {13, 0, 1, 0, 1, "baseVertex past the vertex buffer"},
-                {6, 0, 7, 0, 1, "hint range past the vertex buffer"},
             }};
-            bool allRejected = true;
-            std::string failing;
-            for (const auto& rangeCase : cases)
+            bool allForwarded = true;
+            std::string unforwarded;
+            for (const auto& rangeCase : nativeCases)
+            {
+                const bool accepted = Completes([&] {
+                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, rangeCase.baseVertex,
+                                              rangeCase.minVertexIndex, rangeCase.numVertices,
+                                              rangeCase.startIndex, rangeCase.primitiveCount);
+                });
+                if (!accepted)
+                {
+                    allForwarded = false;
+                    unforwarded += std::string(" ") + rangeCase.name;
+                }
+            }
+            bool allRequiredRejected = true;
+            std::string unrejected;
+            for (const auto& rangeCase : requiredCases)
             {
                 const bool rejected = Throws<System::ArgumentOutOfRangeException>([&] {
                     dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, rangeCase.baseVertex,
                                               rangeCase.minVertexIndex, rangeCase.numVertices,
                                               rangeCase.startIndex, rangeCase.primitiveCount);
                 });
-                if (!rejected) { allRejected = false; failing += std::string(" ") + rangeCase.name; }
+                if (!rejected)
+                {
+                    allRequiredRejected = false;
+                    unrejected += std::string(" ") + rangeCase.name;
+                }
             }
             dev.SetVertexBuffer(nullptr);
             dev.SetIndexBuffer(nullptr);
-            check(allRejected,
-                  "L1: every invalid indexed range throws ArgumentOutOfRangeException;"
-                  " unrejected:" + (failing.empty() ? std::string(" <none>") : failing));
+            check(allForwarded,
+                  "L1: XNA-native buffered ranges are forwarded without a managed exception;"
+                  " failed:" + (unforwarded.empty() ? std::string(" <none>") : unforwarded));
+            check(allRequiredRejected,
+                  "L2: non-positive required counts still throw ArgumentOutOfRangeException;"
+                  " unrejected:" + (unrejected.empty() ? std::string(" <none>") : unrejected));
             check(Throws<System::NotSupportedException>([&] {
                       dev.DrawIndexedPrimitives(
                           PrimitiveType::TriangleList, 0, 0, 12, 0,
                           std::numeric_limits<int>::max());
                   }),
-                  "L2: an over-profile primitiveCount throws NotSupportedException before range arithmetic");
+                  "L3: an over-profile primitiveCount throws NotSupportedException before native forwarding");
         }
 
-        // ---- M: a decoded vertex address outside the bound vertex buffer is rejected ----------
+        // ---- M: decoded out-of-range addresses use safe CPU defaults, never host OOB ----------
         {
             VertexBuffer smallVb(dev, VertexPositionColor::getVertexDeclarationStatic(), 6,
                                  BufferUsage::None);
@@ -618,28 +650,35 @@ protected:
             dev.SetVertexBuffer(&smallVb);
 
             dev.SetIndexBuffer(&ibPastEnd);
-            const bool rejectedPastEnd = Throws<System::ArgumentOutOfRangeException>([&] {
+            const bool forwardedPastEnd = Completes([&] {
                 dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 6, 0, 1);
             });
             dev.SetIndexBuffer(&ibNearEnd);
-            const bool rejectedBased = Throws<System::ArgumentOutOfRangeException>([&] {
+            const bool forwardedBased = Completes([&] {
                 dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 3, 0, 3, 0, 1);
             });
             dev.SetIndexBuffer(&ibWrapping);
-            const bool rejectedWrapping = Throws<System::ArgumentOutOfRangeException>([&] {
+            const bool forwardedWrapping = Completes([&] {
                 dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 1, 0, 5, 0, 1);
             });
+            check(forwardedPastEnd, "M1: a decoded index past the vertex buffer is forwarded safely");
+            check(forwardedBased,
+                  "M2: baseVertex pushing a decoded index past the buffer is forwarded safely");
+            check(forwardedWrapping,
+                  "M3: a 32-bit index near UINT32_MAX cannot wrap into a host pointer");
+
+            dev.Clear(Color::Black);
+            fx.Apply();
+            dev.SetIndexBuffer(&ibNearEnd);
+            const bool validAfter = Completes([&] {
+                dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 6, 0, 1);
+            });
+            check(validAfter, "M4: a valid draw remains usable after native out-of-range draws");
             dev.SetVertexBuffer(nullptr);
             dev.SetIndexBuffer(nullptr);
-
-            check(rejectedPastEnd, "M1: a decoded index past the vertex buffer is rejected");
-            check(rejectedBased,
-                  "M2: baseVertex pushing a decoded index past the vertex buffer is rejected");
-            check(rejectedWrapping,
-                  "M3: a 32-bit index near UINT32_MAX is rejected instead of wrapping");
             CheckScene(dev, kBBW, kBBH,
-                       {Color::Black, Color::Black, Color::Black, Color::Black},
-                       "M4: a rejected indexed draw writes no pixels at all");
+                       Lit(colorsA, {1}),
+                       "M5: the valid follow-up draw reads the real vertex/index buffers");
         }
 
         // ---- N: exact addressing survives the established depth/rasterizer contract -----------

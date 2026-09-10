@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 // Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced.
 using namespace CNA::Testing::Renderers;
@@ -2736,10 +2737,10 @@ TEST_F(IndexedDrawDeferredTest, SoftwareRejectsAnInvalidIndexedTopologyWithoutRe
         << "the invalid indexed topology submitted partial geometry";
 }
 
-// REMED-GFX-110: the CPU raster paths address real host storage, so a decoded index that leaves
-// the bound vertex buffer must be rejected deterministically instead of forming an out-of-range
-// pointer. The public arguments below are all individually legal; only the decoded address is not.
-TEST_F(IndexedDrawDeferredTest, SoftwareRejectsDecodedVertexAddressesOutsideTheBoundBuffer)
+// SOFTWARE-322: XNA forwards decoded out-of-range vertex addresses to D3D. Software must preserve
+// that absence of a managed exception without ever forming an invalid host pointer, then remain
+// usable for a fully valid draw. Undefined pixels from the invalid calls are deliberately ignored.
+TEST_F(IndexedDrawDeferredTest, SoftwareSafelyForwardsDecodedAddressesOutsideTheBoundBuffer)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
@@ -2776,27 +2777,29 @@ TEST_F(IndexedDrawDeferredTest, SoftwareRejectsDecodedVertexAddressesOutsideTheB
     device.SetVertexBuffer(&vertexBuffer);
 
     device.SetIndexBuffer(&pastEndBuffer);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1),
-        System::ArgumentOutOfRangeException);
+    EXPECT_NO_THROW(
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1));
 
     device.SetIndexBuffer(&basedBuffer);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 1, 0, 2, 0, 1),
-        System::ArgumentOutOfRangeException);
+    EXPECT_NO_THROW(
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 1, 0, 2, 0, 1));
 
     device.SetIndexBuffer(&wrappingBuffer);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 1, 0, 2, 0, 1),
-        System::ArgumentOutOfRangeException);
+    EXPECT_NO_THROW(
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 1, 0, 2, 0, 1));
 
-    // No rejected draw may have written a pixel.
+    // A valid draw after all three undefined native ranges proves that Software retained usable
+    // state and that its safety defaults did not corrupt the actual buffer resources.
+    device.Clear(Color::Black);
+    device.SetIndexBuffer(&basedBuffer);
+    EXPECT_NO_THROW(
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1));
     ExpectExactColor(
-        ReadCenter(device), Color::Black,
-        "rejected Software indexed draws write nothing");
+        ReadCenter(device), Color::White,
+        "valid Software indexed draw after native out-of-range forwarding");
 }
 
-TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSubmission)
+TEST_F(IndexedDrawDeferredTest, PublicContractSeparatesRequiredCountsFromNativeIndexedRanges)
 {
     RequireIndexedRendering();
 
@@ -2826,6 +2829,26 @@ TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSu
     device.SetVertexBuffer(&vertexBuffer);
     device.SetIndexBuffer(&indexBuffer);
 
+    const bool managedRangeGuard =
+        device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT();
+    const auto expectBufferedRangeOutcome = [&](auto&& draw, const std::string& label) {
+        bool caughtRange = false;
+        try
+        {
+            draw();
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            caughtRange = true;
+        }
+        catch (const std::exception& e)
+        {
+            ADD_FAILURE() << label << ": wrong exception: " << e.what();
+            return;
+        }
+        EXPECT_EQ(managedRangeGuard, caughtRange) << label;
+    };
+
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(
         PrimitiveType::TriangleList, 0, 0, 9, 0, 1));
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(
@@ -2848,33 +2871,33 @@ TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSu
     }};
     for (const auto& countCase : countCases)
     {
-        EXPECT_THROW(
+        expectBufferedRangeOutcome([&] {
             device.DrawIndexedPrimitives(
                 countCase.primitive,
                 0,
                 0,
                 9,
                 9 - countCase.consumedIndices,
-                countCase.primitiveCount + 1),
-            System::ArgumentOutOfRangeException);
+                countCase.primitiveCount + 1);
+        }, "index range one primitive past the bound buffer");
     }
 
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 9, -1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, 9, -1, 1);
+    }, "negative startIndex");
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 9, 7, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, 9, 7, 1);
+    }, "index range crossing the buffer end");
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 9, 10, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, 9, 10, 1);
+    }, "startIndex past the buffer");
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 9, 0, 4),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 0, 0, 9, 0, 4);
+    }, "primitive count consuming more indices than the buffer");
     EXPECT_THROW(
         device.DrawIndexedPrimitives(
             PrimitiveType::TriangleList,
@@ -2888,14 +2911,14 @@ TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSu
         device.DrawIndexedPrimitives(
             PrimitiveType::TriangleList, 0, 0, 9, 0, 0),
         System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, -1, 0, 9, 0, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, -1, 0, 9, 0, 1);
+    }, "negative baseVertex");
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, -1, 9, 0, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 0, -1, 9, 0, 1);
+    }, "negative minVertexIndex hint");
     EXPECT_THROW(
         device.DrawIndexedPrimitives(
             PrimitiveType::TriangleList, 0, 0, -1, 0, 1),
@@ -2904,18 +2927,18 @@ TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSu
         device.DrawIndexedPrimitives(
             PrimitiveType::TriangleList, 0, 0, 0, 0, 1),
         System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 10, 0, 1, 0, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 10, 0, 1, 0, 1);
+    }, "baseVertex past the buffer");
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 3, 7, 1, 0, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 3, 7, 1, 0, 1);
+    }, "declared vertex start past the buffer");
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 3, 3, 4, 0, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 3, 3, 4, 0, 1);
+    }, "declared vertex window crossing the buffer end");
 }
 
 TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedBaseVertex)

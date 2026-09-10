@@ -69,6 +69,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 // Lets CNA_RENDERER_IS name identities bare, matching the compile-time guard it replaced.
 using namespace CNA::Testing::Renderers;
@@ -964,8 +965,8 @@ TEST_F(OrdinaryDrawMultiStreamTest, Indexed16DifferentNonzeroOffsetsSelectDiffer
     device.Clear(Color::Black);
     ApplyMeshEffect(effect);
     // The declared window is the three records this draw actually references. Declaring the whole
-    // mesh here would be untruthful for the colour stream, whose own offset is one slot further
-    // in -- and REMED-GFX-201's per-stream range gate rejects exactly that.
+    // mesh here would be an untruthful native range hint for the colour stream, whose own offset is
+    // one slot further in.
     device.DrawIndexedPrimitives(
         PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1);
     device.SetRenderTarget(nullptr);
@@ -1131,9 +1132,11 @@ TEST_F(OrdinaryDrawMultiStreamTest, StreamsWithDifferentVertexCountsRenderTheVal
 }
 
 // ---------------------------------------------------------------------------
-// Coverage item 12: an invalid range in STREAM 0 still throws, exactly as REMED-GFX-113 defined.
+// SOFTWARE-322: Microsoft XNA forwards a classic buffered range that leaves stream 0. Renderers
+// whose host-staging paths are not safe retain CNA's compatibility guard; Software and EasyGL
+// advertise native forwarding and must not synthesize a managed exception.
 // ---------------------------------------------------------------------------
-TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingStream0IsRejected)
+TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingStream0MatchesNativeForwardingContract)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryMultiStream())
@@ -1157,19 +1160,21 @@ TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingStream0IsRejected)
     });
     ApplyMeshEffect(effect);
 
-    EXPECT_THROW(
+    const auto draw = [&] {
         device.DrawPrimitives(
-            PrimitiveType::TriangleList, kMeshElementCount - kVerticesPerSlot + 1, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, kMeshElementCount - kVerticesPerSlot + 1, 1);
+    };
+    if (device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT())
+        EXPECT_THROW(draw(), System::ArgumentOutOfRangeException);
+    else
+        EXPECT_NO_THROW(draw());
 }
 
 // ---------------------------------------------------------------------------
-// Coverage item 13: an invalid range in STREAM 1 ONLY. This is the validation case that cannot be
-// expressed at all without per-stream ranges: stream 0 is long enough for the whole request, and
-// only the secondary stream is short. A gate that validates stream 0 alone lets the draw through
-// and the renderer reads past the colour buffer's end.
+// Coverage item 13: a native range leaving STREAM 1 ONLY. Software must default the missing colour
+// records without reading past host memory; EasyGL forwards the undefined native fetch to GL.
 // ---------------------------------------------------------------------------
-TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingOnlyStream1IsRejected)
+TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingOnlyStream1MatchesNativeForwardingContract)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryMultiStream())
@@ -1196,16 +1201,20 @@ TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingOnlyStream1IsRejected)
     ApplyMeshEffect(effect);
 
     // Slot 2 exists in the position stream and does not exist in the colour stream.
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleList, 2 * kVerticesPerSlot, 1),
-        System::ArgumentOutOfRangeException);
+    const auto draw = [&] {
+        device.DrawPrimitives(PrimitiveType::TriangleList, 2 * kVerticesPerSlot, 1);
+    };
+    if (device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT())
+        EXPECT_THROW(draw(), System::ArgumentOutOfRangeException);
+    else
+        EXPECT_NO_THROW(draw());
 }
 
 // ---------------------------------------------------------------------------
-// Coverage item 13b: the indexed counterpart -- the declared window leaves the secondary stream
-// only. REMED-GFX-113's gate is per-stream on both routes or on neither.
+// Coverage item 13b: the indexed counterpart -- the declared window leaves only the secondary
+// stream, which is still a natively forwarded range rather than a managed XNA exception.
 // ---------------------------------------------------------------------------
-TEST_F(OrdinaryDrawMultiStreamTest, IndexedRangeLeavingOnlyStream1IsRejected)
+TEST_F(OrdinaryDrawMultiStreamTest, IndexedRangeLeavingOnlyStream1MatchesNativeForwardingContract)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryMultiStream())
@@ -1236,10 +1245,14 @@ TEST_F(OrdinaryDrawMultiStreamTest, IndexedRangeLeavingOnlyStream1IsRejected)
     device.SetIndexBuffer(&indexBuffer);
     ApplyMeshEffect(effect);
 
-    EXPECT_THROW(
+    const auto draw = [&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 2 * kVerticesPerSlot, 0, kVerticesPerSlot, 0, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 2 * kVerticesPerSlot, 0, kVerticesPerSlot, 0, 1);
+    };
+    if (device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT())
+        EXPECT_THROW(draw(), System::ArgumentOutOfRangeException);
+    else
+        EXPECT_NO_THROW(draw());
 }
 
 // ---------------------------------------------------------------------------

@@ -2887,6 +2887,24 @@ namespace CNA::Internal::Renderers
                                                   int primitiveCount) = 0;
 
         /**
+         * @brief Whether GraphicsDevice must protect this renderer from native buffered-draw
+         *        ranges that leave the bound buffers. CNAEXT.
+         *
+         * XNA forwards `vertexStart`, `startIndex`, `baseVertex`, `minVertexIndex`, and declared
+         * buffer extents to the native graphics API without managed range validation. A renderer
+         * that returns false promises that the same inputs cannot make it read outside host
+         * memory; GPU-native undefined output and a safe CPU default/no-op are both acceptable.
+         * The conservative default retains CNA's historical guard for renderers that stage draw
+         * input through unchecked CPU copies.
+         *
+         * @return True when GraphicsDevice must retain its compatibility range guard.
+         */
+        [[nodiscard]] virtual bool RequiresManagedBufferedDrawRangeValidationEXT() const noexcept
+        {
+            return true;
+        }
+
+        /**
          * @brief Effect-aware draw — selects the shader variant based on
          *        vertex layout (derived from stride) and @p params.
          *

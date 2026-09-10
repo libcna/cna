@@ -14,8 +14,8 @@
 //   binding 0 is the per-vertex geometry stream on the ordinary routes; no later binding ever
 //       supplies that stream's offset
 //   the ordinary and instanced routes agree: the same binding offset selects the same records
-//   a range that leaves the bound buffer once the offset is included is rejected before native
-//       submission, never silently clamped
+//   valid ranges include the offset in their native address; XNA forwards out-of-buffer native
+//       ranges without converting them to a managed exception (SOFTWARE-322)
 //
 // Fixture geometry -- a two-axis oracle. The target is divided into `kSlotCount` equal-width
 // vertical slots and `kBandCount` equal-height horizontal bands.
@@ -58,12 +58,14 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 // Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
 using namespace CNA::Testing::Renderers;
@@ -1057,13 +1059,13 @@ TEST_F(OrdinaryDrawBindingOffsetTest, BindingOffsetSurvivesDisposalAndHandleReus
 }
 
 // ---------------------------------------------------------------------------
-// Range validation (REMED-GFX-113/118's gate, extended by the offset): once the binding offset is
-// included, a request that leaves the bound buffer must be rejected before native submission
-// rather than silently clamped or allowed to read past the records. The rejected request is legal
-// at offset zero and illegal only because of the offset, so this cannot pass by rejecting
-// everything -- the accepted sibling below is the exact boundary case that must still work.
+// Native range forwarding (SOFTWARE-322): the offset participates in the native address, but
+// Microsoft XNA does not turn an out-of-buffer address into a managed exception. Software and
+// EasyGL therefore forward it safely; renderers with unchecked host staging retain CNA's explicit
+// compatibility guard. The exact valid boundary and zero-offset sibling still prove that the
+// ordinary offset itself has not been rejected or clamped.
 // ---------------------------------------------------------------------------
-TEST_F(OrdinaryDrawBindingOffsetTest, OffsetIsIncludedInTheDrawRangeValidation)
+TEST_F(OrdinaryDrawBindingOffsetTest, OffsetRangeMatchesTheRendererSafetyContract)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
@@ -1093,17 +1095,39 @@ TEST_F(OrdinaryDrawBindingOffsetTest, OffsetIsIncludedInTheDrawRangeValidation)
         PrimitiveType::TriangleList, kMeshElementCount - kVerticesPerSlot, 1));
 
     // One record too far, only because of the offset: 3 + 22 > 24.
-    EXPECT_THROW(
+    const auto indexedOutside = [&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kMeshElementCount + 1, 0, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, kMeshElementCount + 1, 0, 1);
+    };
+    const auto nonIndexedOutside = [&] {
         device.DrawPrimitives(
-            PrimitiveType::TriangleList, kMeshElementCount - kVerticesPerSlot + 1, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, kMeshElementCount - kVerticesPerSlot + 1, 1);
+    };
+    const auto nonIndexedOverflow = [&] {
+        device.DrawPrimitives(
+            PrimitiveType::TriangleList, (std::numeric_limits<int>::max)(), 1);
+    };
+    const auto indexedOverflow = [&] {
+        device.DrawIndexedPrimitives(
+            PrimitiveType::TriangleList, (std::numeric_limits<int>::max)(), 0,
+            kMeshElementCount, 0, 1);
+    };
+    if (device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT())
+    {
+        EXPECT_THROW(indexedOutside(), System::ArgumentOutOfRangeException);
+        EXPECT_THROW(nonIndexedOutside(), System::ArgumentOutOfRangeException);
+        EXPECT_THROW(nonIndexedOverflow(), System::ArgumentOutOfRangeException);
+        EXPECT_THROW(indexedOverflow(), System::ArgumentOutOfRangeException);
+    }
+    else
+    {
+        EXPECT_NO_THROW(indexedOutside());
+        EXPECT_NO_THROW(nonIndexedOutside());
+        EXPECT_NO_THROW(nonIndexedOverflow());
+        EXPECT_NO_THROW(indexedOverflow());
+    }
 
-    // The same two requests are legal with the offset removed, which is what makes the rejections
-    // above attributable to the offset and to nothing else.
+    // The same two requests are legal with the offset removed.
     device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0)});
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(
         PrimitiveType::TriangleList, 0, 0, kMeshElementCount + 1, 0, 1));

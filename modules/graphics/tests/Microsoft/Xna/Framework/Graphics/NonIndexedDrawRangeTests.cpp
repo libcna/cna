@@ -13,8 +13,8 @@
 //   the draw consumes NOTHING before vertexStart and nothing at or after
 //       vertexStart + consumed vertices
 //   a queued/deferred draw captures vertexStart and primitiveCount by value
-//   a range that leaves the bound vertex buffer is rejected before native submission,
-//       never silently clamped
+//   valid ranges reach exactly those records; native out-of-buffer ranges are forwarded by XNA
+//       rather than converted into a managed exception (SOFTWARE-322)
 //
 // Geometry layout. The backbuffer is divided into `kSlotCount` equal-width vertical slots. Every
 // vertex in the fixture sits on the centre line of its own slot, so a "slot" is simultaneously one
@@ -40,6 +40,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 // Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced.
 using namespace CNA::Testing::Renderers;
@@ -1089,9 +1090,9 @@ TEST_F(NonIndexedDrawRangeTest, UntypedDrawUserPrimitivesUploadsOnlyTheRequested
 }
 
 
-// Nothing a rejected range requested may reach the target: after a clean frame, every invalid draw
-// must leave the framebuffer exactly as the clear left it.
-TEST_F(NonIndexedDrawRangeTest, RejectedNonIndexedRangesRenderNothing)
+// SOFTWARE-322: buffered ranges are native inputs, not managed XNA validation failures. Renderers
+// with unsafe CPU staging retain a guard; Software/EasyGL forward safely and must remain usable.
+TEST_F(NonIndexedDrawRangeTest, BufferedNonIndexedRangeHandlingMatchesRendererSafetyContract)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
@@ -1110,34 +1111,44 @@ TEST_F(NonIndexedDrawRangeTest, RejectedNonIndexedRangesRenderNothing)
     device.Clear(Color::Black);
     device.SetVertexBuffer(&vertexBuffer);
 
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleList, 19, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 8),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleList, vertexCount + 1, 1),
-        System::ArgumentOutOfRangeException);
+    const bool managedRangeGuard =
+        device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT();
+    const auto first = [&] { device.DrawPrimitives(PrimitiveType::TriangleList, 19, 1); };
+    const auto second = [&] { device.DrawPrimitives(PrimitiveType::TriangleList, 0, 8); };
+    const auto third = [&] {
+        device.DrawPrimitives(PrimitiveType::TriangleList, vertexCount + 1, 1);
+    };
+    if (managedRangeGuard)
+    {
+        EXPECT_THROW(first(), System::ArgumentOutOfRangeException);
+        EXPECT_THROW(second(), System::ArgumentOutOfRangeException);
+        EXPECT_THROW(third(), System::ArgumentOutOfRangeException);
+    }
+    else
+    {
+        EXPECT_NO_THROW(first());
+        EXPECT_NO_THROW(second());
+        EXPECT_NO_THROW(third());
+    }
     EXPECT_THROW(
         device.DrawPrimitives(
             PrimitiveType::TriangleList, 0, std::numeric_limits<int>::max()),
         System::NotSupportedException);
 
+    // Native out-of-range pixels are undefined. Clear them and prove the next valid draw still
+    // consumes the real buffer normally.
+    device.Clear(Color::Black);
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
     const FrameSnapshot pixels =
         CaptureBackbuffer(device, layout.width, layout.height);
-    EXPECT_EQ(0, pixels.CountLitInColumns(0, layout.width, Color::Black))
-        << "a rejected non-indexed draw still reached the renderer -- "
-        << pixels.DescribeFirstLitInColumns(0, layout.width, Color::Black);
+    EXPECT_GT(pixels.CountLitInColumns(0, layout.width, Color::Black), 0)
+        << "the valid draw after buffered range probes produced no pixels";
 }
 
 
-// The public non-indexed range contract is owed by every renderer, including the ones that
-// render nothing: an out-of-buffer range must be rejected deterministically, before anything
-// reaches a renderer at all. Deliberately unguarded, exactly like its indexed sibling in
-// IndexedDrawDeferredTests.cpp. The rendered counterpart -- a rejected draw leaves the frame
-// untouched -- is RejectedNonIndexedRangesRenderNothing above.
-TEST_F(NonIndexedDrawRangeTest, PublicContractValidatesEveryNonIndexedRangeBeforeSubmission)
+// Required positive/profile limits remain managed XNA validation. Buffer-capacity and vertexStart
+// ranges follow the renderer's explicitly advertised native-forwarding safety contract.
+TEST_F(NonIndexedDrawRangeTest, PublicContractSeparatesRequiredCountsFromNativeNonIndexedRanges)
 {
     RequireRangeRendering();
 
@@ -1161,6 +1172,26 @@ TEST_F(NonIndexedDrawRangeTest, PublicContractValidatesEveryNonIndexedRangeBefor
     device.Clear(Color::Black);
     device.SetVertexBuffer(&vertexBuffer);
 
+    const bool managedRangeGuard =
+        device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT();
+    const auto expectBufferedRangeOutcome = [&](auto&& draw, const std::string& label) {
+        bool caughtRange = false;
+        try
+        {
+            draw();
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            caughtRange = true;
+        }
+        catch (const std::exception& e)
+        {
+            ADD_FAILURE() << label << ": wrong exception: " << e.what();
+            return;
+        }
+        EXPECT_EQ(managedRangeGuard, caughtRange) << label;
+    };
+
     // Legal ranges: first, middle, exact end boundary, and the complete buffer.
     EXPECT_NO_THROW(device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1));
     EXPECT_NO_THROW(device.DrawPrimitives(PrimitiveType::TriangleList, 9, 1));
@@ -1183,20 +1214,19 @@ TEST_F(NonIndexedDrawRangeTest, PublicContractValidatesEveryNonIndexedRangeBefor
     }};
     for (const CountCase& countCase : countCases)
     {
-        EXPECT_THROW(
+        expectBufferedRangeOutcome([&] {
             device.DrawPrimitives(
                 countCase.primitive,
                 vertexCount - countCase.consumedVertices,
-                countCase.primitiveCount + 1),
-            System::ArgumentOutOfRangeException)
-            << TopologyName(countCase.primitive)
-            << ": one primitive past the end boundary was accepted";
+                countCase.primitiveCount + 1);
+        }, std::string(TopologyName(countCase.primitive)) +
+           ": one primitive past the end boundary");
     }
 
     // Negative and non-positive arguments.
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleList, -1, 1),
-        System::ArgumentOutOfRangeException);
+    expectBufferedRangeOutcome([&] {
+        device.DrawPrimitives(PrimitiveType::TriangleList, -1, 1);
+    }, "negative vertexStart");
     EXPECT_THROW(
         device.DrawPrimitives(PrimitiveType::TriangleList, 0, 0),
         System::ArgumentOutOfRangeException);
@@ -1204,18 +1234,18 @@ TEST_F(NonIndexedDrawRangeTest, PublicContractValidatesEveryNonIndexedRangeBefor
         device.DrawPrimitives(PrimitiveType::TriangleList, 0, -1),
         System::ArgumentOutOfRangeException);
     // vertexStart past the buffer, and a range that starts inside but ends outside.
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleList, vertexCount + 1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleList, vertexCount, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleList, 19, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 8),
-        System::ArgumentOutOfRangeException);
+    expectBufferedRangeOutcome([&] {
+        device.DrawPrimitives(PrimitiveType::TriangleList, vertexCount + 1, 1);
+    }, "vertexStart past the buffer");
+    expectBufferedRangeOutcome([&] {
+        device.DrawPrimitives(PrimitiveType::TriangleList, vertexCount, 1);
+    }, "vertexStart at the buffer end with non-empty draw");
+    expectBufferedRangeOutcome([&] {
+        device.DrawPrimitives(PrimitiveType::TriangleList, 19, 1);
+    }, "draw crossing the buffer end");
+    expectBufferedRangeOutcome([&] {
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 8);
+    }, "primitive count consuming more vertices than the buffer");
     // Arithmetic overflow in the topology count itself, and in vertexStart + consumed.
     EXPECT_THROW(
         device.DrawPrimitives(
@@ -1778,11 +1808,10 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareRejectsAnInvalidNonIndexedTopologyWithou
         << pixels.DescribeFirstLitInColumns(0, layout.width, Color::Black);
 }
 
-// A rejected range must leave nothing partially committed on the CPU raster path: the draw that
-// follows it renders exactly what the identical draw before it rendered. Reading each of the three
-// frames separately is what makes "the valid draw still works" a real assertion rather than a
-// side effect of the last draw overwriting the frame.
-TEST_F(NonIndexedDrawRangeTest, SoftwareValidInvalidValidNonIndexedSequenceKeepsRendering)
+// Native out-of-range draws must not access invalid CPU memory or corrupt later Software state.
+// Their pixels are undefined, so only absence of a managed exception and the valid draws on both
+// sides are asserted.
+TEST_F(NonIndexedDrawRangeTest, SoftwareValidNativeOutOfRangeValidSequenceKeepsRendering)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
@@ -1810,20 +1839,17 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareValidInvalidValidNonIndexedSequenceKeeps
     ExpectIntendedPrimitivesRendered(before, plan, "valid draw before the rejected range");
     ExpectRangeExclusive(before, plan, Color::Black, "valid draw before the rejected range");
 
-    // Every rejected form: past the end, one primitive too many, a topology-count overflow, a
-    // byte-offset-scale overflow and an invalid topology. None may render or corrupt state.
+    // Native range forms are forwarded. Required count/profile/topology validation is independent
+    // and still throws before renderer submission.
     ApplyVertexColorEffect(effect);
     device.Clear(Color::Black);
     device.SetVertexBuffer(&vertexBuffer);
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleList, vertexCount, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleList, 19, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::TriangleList, -1, 1),
-        System::ArgumentOutOfRangeException);
+    EXPECT_NO_THROW(
+        device.DrawPrimitives(PrimitiveType::TriangleList, vertexCount, 1));
+    EXPECT_NO_THROW(
+        device.DrawPrimitives(PrimitiveType::TriangleList, 19, 1));
+    EXPECT_NO_THROW(
+        device.DrawPrimitives(PrimitiveType::TriangleList, -1, 1));
     EXPECT_THROW(
         device.DrawPrimitives(PrimitiveType::TriangleList, 0, 0),
         System::ArgumentOutOfRangeException);
@@ -1841,12 +1867,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareValidInvalidValidNonIndexedSequenceKeeps
         device.DrawPrimitives(static_cast<PrimitiveType>(999), 0, 1),
         System::InvalidOperationException);
 
-    const FrameSnapshot rejected =
-        CaptureBackbuffer(device, layout.width, layout.height);
-    EXPECT_EQ(0, rejected.CountLitInColumns(0, layout.width, Color::Black))
-        << "a rejected non-indexed range reached Software storage -- "
-        << rejected.DescribeFirstLitInColumns(0, layout.width, Color::Black);
-
+    device.Clear(Color::Black);
     const FrameSnapshot after = drawValidRange();
     ExpectIntendedPrimitivesRendered(after, plan, "valid draw after the rejected range");
     ExpectRangeExclusive(after, plan, Color::Black, "valid draw after the rejected range");

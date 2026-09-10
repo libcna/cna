@@ -2540,10 +2540,12 @@ namespace CNA::Internal::Renderers::Software
                     const auto& stream = params->vertexStreams[static_cast<std::size_t>(i)];
                     if (stream.instanceFrequency != 0 || !stream.vertexShaderInputUsed)
                         continue;
+                    const std::uint8_t* base = recordBase[static_cast<std::size_t>(i)];
+                    if (base == nullptr)
+                        continue;   // SOFTWARE-322: native out-of-range fetch -> default attribute
                     const auto* buffer =
                         static_cast<const SoftwareVertexBufferRenderer*>(stream.buffer);
-                    const Attribute attribute = readFrom(
-                        *buffer, recordBase[static_cast<std::size_t>(i)], &stream);
+                    const Attribute attribute = readFrom(*buffer, base, &stream);
                     if (attribute.found)
                         return attribute;
                 }
@@ -2574,9 +2576,14 @@ namespace CNA::Internal::Renderers::Software
                     {
                         if (column >= 4)
                             break;
+                        const std::uint8_t* base = recordBase[static_cast<std::size_t>(i)];
+                        if (base == nullptr)
+                        {
+                            ++column;
+                            continue;   // retain GL's disabled-attribute default for this column
+                        }
                         const Attribute attribute = Decode(
-                            recordBase[static_cast<std::size_t>(i)] +
-                                element.getOffsetProperty(),
+                            base + element.getOffsetProperty(),
                             element.getVertexElementFormatProperty());
                         for (int component = 0; component < 4; ++component)
                         {
@@ -3605,16 +3612,16 @@ namespace CNA::Internal::Renderers::Software
         }
 
 #ifndef CNA_SOFTWARE_2D_ONLY
-        // ---- REMED-GFX-110: indexed addressing and bounds ----
+        // ---- REMED-GFX-110 / SOFTWARE-322: indexed addressing and safe fallback bounds ----
         //
-        // Shared by both CPU indexed raster paths so they cannot drift apart again. The public
-        // contract reconciled by REMED-GFX-106 is:
+        // Shared by the strict renderer-contract/legacy fallback paths so they cannot drift apart.
+        // The address equation reconciled by REMED-GFX-106 is:
         //
         //   consumed element  = startIndex + localIndex          (an ELEMENT offset, never bytes)
         //   decoded index     = 16- or 32-bit value at that element, per the buffer's own width
         //   fetched vertex    = decoded index + baseVertex       (added exactly once)
         //
-        // minVertexIndex/numVertices are validation hints: they never add to a decoded index,
+        // minVertexIndex/numVertices are native range hints: they never add to a decoded index,
         // never replace startIndex, and never narrow the vertices an index legitimately reaches.
 
         /// Exact topology-derived consumed element count, computed in 64-bit so an extreme
@@ -3669,30 +3676,6 @@ namespace CNA::Internal::Renderers::Software
             return value;
         }
 
-        /// Validates the complete consumed range -- including every decoded vertex address --
-        /// before a single vertex byte is read, so an out-of-range index can never form an
-        /// invalid pointer into the CPU vertex storage. All arithmetic is 64-bit, so neither a
-        /// large primitiveCount nor an index near UINT32_MAX can wrap into an apparently valid
-        /// address. Throws the public CNA range exception rather than any implementation type.
-        /// REMED-GFX-201 / SOFTWARE-321: the element count every shader-consumed per-vertex stream
-        /// can satisfy once its own binding offset is deducted. A multi-stream draw addresses each
-        /// active stream with the same element number, so the shortest active stream bounds the
-        /// draw; an inactive stream is never fetched and therefore cannot bound it.
-        int SmallestAddressableVertexCount(const GpuDrawParams& params, int fallback)
-        {
-            if (params.vertexStreamCount == 0)
-                return fallback;
-            int smallest = std::numeric_limits<int>::max();
-            for (int i = 0; i < params.vertexStreamCount; ++i)
-            {
-                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
-                if (stream.instanceFrequency != 0 || !stream.vertexShaderInputUsed)
-                    continue;
-                smallest = std::min(smallest, stream.vertexCount - stream.vertexOffset);
-            }
-            return std::max(smallest, 0);
-        }
-
         void ValidateIndexedAddressing(const std::uint8_t* indexBase, bool thirtyTwoBit,
                                        int availableIndexCount, int availableVertexCount,
                                        std::int64_t consumedIndexCount, int startIndex,
@@ -3742,17 +3725,13 @@ namespace CNA::Internal::Renderers::Software
         // copied exactly the requested source range into the temporary buffer it binds. Applying an
         // offset there as well would consume that range twice.
 
-        /// Validates the complete consumed vertex range before a single vertex byte is read, so an
-        /// out-of-buffer request can never form an invalid pointer into the CPU vertex storage. All
-        /// arithmetic is 64-bit, so neither an extreme primitiveCount nor a large vertexStart can
-        /// wrap into an apparently valid address, and the stride multiply happens only afterwards.
-        /// Throws the public CNA range exception rather than any implementation type, and rejects
-        /// rather than clamps.
+        /// Protects the renderer-contract/empty-declaration compatibility path before it reads raw
+        /// host storage. Classic declared public draws instead follow XNA native forwarding and
+        /// make each individual fetch safe in their declaration-driven reader.
         void ValidateNonIndexedAddressing(int availableVertexCount,
                                           std::int64_t consumedVertexCount, int vertexStart)
         {
-            // CNA's public contract rejects a negative vertexStart before renderer dispatch; the CPU
-            // paths address real host storage, so they re-assert it rather than trust it.
+            // This legacy fallback has no per-stream bounds metadata, so it remains strict.
             if (vertexStart < 0)
             {
                 throw System::ArgumentOutOfRangeException(
@@ -4686,9 +4665,12 @@ namespace CNA::Internal::Renderers::Software
         const int vertexStart = params.vertexStart;
         const std::int64_t consumedVertexCount =
             PrimitiveElementCount(primitive, primitiveCount);
-        ValidateNonIndexedAddressing(
-            SmallestAddressableVertexCount(params, vb.GetVertexCount()),
-            consumedVertexCount, vertexStart);
+        // The renderer-contract fallback has no per-stream bounds metadata and may be CNAEXT's
+        // empty-declaration CPU layout, so retain its strict guard. Public classic draws carry a
+        // stream tuple and follow XNA's native forwarding semantics; individual missing records
+        // become default attributes in fetchVertex below instead of forming invalid host pointers.
+        if (params.vertexStreamCount == 0)
+            ValidateNonIndexedAddressing(vb.GetVertexCount(), consumedVertexCount, vertexStart);
 
         const auto& swVb = static_cast<const SoftwareVertexBufferRenderer&>(vb);
         // The combined stride remains relevant only to the empty-declaration compatibility path;
@@ -4724,8 +4706,7 @@ namespace CNA::Internal::Renderers::Software
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 scissorTestEnable_, scX, scY, scW, scH);
 
-        // REMED-GFX-119: element = vertexStart + local (never a byte offset); the stride multiply
-        // happens only after the element range above was validated.
+        // REMED-GFX-119: element = vertexStart + local (never a byte offset).
         // REMED-GFX-201: every bound per-vertex stream advances by the SAME element count, each
         // multiplied by its OWN stride and shifted by its OWN binding offset -- FNA3D's
         // `vertexStride * (vertexOffset + start)`, per stream.
@@ -4742,13 +4723,17 @@ namespace CNA::Internal::Renderers::Software
             for (int s = 0; s < params.vertexStreamCount; ++s)
             {
                 const auto& stream = params.vertexStreams[static_cast<std::size_t>(s)];
-                if (!stream.vertexShaderInputUsed)
+                if (stream.instanceFrequency != 0 || !stream.vertexShaderInputUsed)
                     continue;
                 const auto* streamVb =
                     static_cast<const SoftwareVertexBufferRenderer*>(stream.buffer);
+                const std::int64_t streamElement =
+                    static_cast<std::int64_t>(stream.vertexOffset) + element;
+                if (streamElement < 0 || streamElement >= stream.vertexCount)
+                    continue;
                 reader.recordBase[static_cast<std::size_t>(s)] =
                     streamVb->Data().data() +
-                    static_cast<std::size_t>(stream.vertexOffset + element) *
+                    static_cast<std::size_t>(streamElement) *
                         static_cast<std::size_t>(stream.strideInBytes);
             }
             return reader;
@@ -4877,9 +4862,15 @@ namespace CNA::Internal::Renderers::Software
         const int startIndex = params.startIndex;
         const int baseVertex = params.baseVertex;
         const std::int64_t consumedIndexCount = PrimitiveElementCount(primitive, primitiveCount);
-        ValidateIndexedAddressing(ibBase, thirtyTwoBit, ib.GetIndexCount(),
-                                  SmallestAddressableVertexCount(params, vb.GetVertexCount()),
-                                  consumedIndexCount, startIndex, baseVertex);
+        // Strict validation remains for renderer-contract/legacy calls whose packed fallback
+        // would otherwise form raw host pointers. Public declared-buffer draws intentionally match
+        // XNA and pass native ranges through; missing index/vertex records are defaulted below.
+        if (params.vertexStreamCount == 0 || swVb.Declaration().IsEmpty())
+        {
+            ValidateIndexedAddressing(ibBase, thirtyTwoBit, ib.GetIndexCount(),
+                                      vb.GetVertexCount(), consumedIndexCount,
+                                      startIndex, baseVertex);
+        }
 
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
@@ -4902,13 +4893,16 @@ namespace CNA::Internal::Renderers::Software
                                                 scissorTestEnable_, scX, scY, scW, scH);
 
         // REMED-GFX-110: element = startIndex + local (never a byte offset), vertex = decoded
-        // index + baseVertex (added exactly once). Every address below was validated above.
+        // index + baseVertex (added exactly once).
         // REMED-GFX-201: the decoded index plus baseVertex addresses EVERY bound per-vertex
         // stream, each shifted by its own binding offset and multiplied by its own stride.
         const auto fetchVertex = [&](std::int64_t local) -> CombinedVertexReader {
+            const std::int64_t indexElement = static_cast<std::int64_t>(startIndex) + local;
+            std::uint32_t decodedIndex = 0;
+            if (indexElement >= 0 && indexElement < ib.GetIndexCount())
+                decodedIndex = DecodeIndexElement(ibBase, thirtyTwoBit, indexElement);
             const std::int64_t vertexIndex =
-                static_cast<std::int64_t>(
-                    DecodeIndexElement(ibBase, thirtyTwoBit, startIndex + local)) + baseVertex;
+                static_cast<std::int64_t>(decodedIndex) + baseVertex;
             CombinedVertexReader reader;
             reader.params = &params;
             reader.fallbackBuffer = &swVb;
@@ -4929,6 +4923,8 @@ namespace CNA::Internal::Renderers::Software
                 const std::int64_t streamElement = stream.instanceFrequency > 0
                     ? static_cast<std::int64_t>(stream.vertexOffset)
                     : static_cast<std::int64_t>(stream.vertexOffset) + vertexIndex;
+                if (streamElement < 0 || streamElement >= stream.vertexCount)
+                    continue;
                 reader.recordBase[static_cast<std::size_t>(s2)] =
                     streamVb->Data().data() +
                     static_cast<std::size_t>(streamElement) *
@@ -5052,17 +5048,6 @@ namespace CNA::Internal::Renderers::Software
             }
             nextInstanceLocation += std::min<int>(
                 static_cast<int>(elements.size()), 4 - nextInstanceLocation);
-
-            const int requiredElements =
-                1 + (instanceCount - 1) / stream.instanceFrequency;
-            if (stream.vertexOffset < 0 || stream.vertexOffset > stream.vertexCount ||
-                requiredElements > stream.vertexCount - stream.vertexOffset)
-            {
-                throw System::ArgumentOutOfRangeException(
-                    "instanceCount", std::to_string(instanceCount),
-                    "The requested instance range exceeds the per-instance vertex buffer bound "
-                    "to slot " + std::to_string(stream.slot) + '.');
-            }
         }
 
         normalized.instanceCount = 1;

@@ -25,6 +25,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
@@ -76,39 +77,44 @@ namespace
 
     void ExpectPersistentDrawCeiling(GraphicsProfile profile, int maximum)
     {
-        BoundTriangle fixture(profile);
+        // SOFTWARE-322: a primitive count at the profile ceiling is legal even when its native
+        // buffered range would exceed the resource. Use the missing-effect failure immediately
+        // after the profile gate as the cheap acceptance oracle; actually asking the CPU renderer
+        // to assemble up to one million undefined primitives would add no conformance evidence.
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), profile, PresentationParameters{});
 
         EXPECT_THROW(
-            fixture.device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, maximum),
-            System::ArgumentOutOfRangeException);
+            device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, maximum),
+            System::InvalidOperationException);
         EXPECT_THROW(
-            fixture.device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, maximum + 1),
+            device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, maximum + 1),
             System::NotSupportedException);
 
         EXPECT_THROW(
-            fixture.device.DrawIndexedPrimitives(
+            device.DrawIndexedPrimitives(
                 PrimitiveType::TriangleStrip, 0, 0, 3, 0, maximum),
-            System::ArgumentOutOfRangeException);
+            System::InvalidOperationException);
         EXPECT_THROW(
-            fixture.device.DrawIndexedPrimitives(
+            device.DrawIndexedPrimitives(
                 PrimitiveType::TriangleStrip, 0, 0, 3, 0, maximum + 1),
             System::NotSupportedException);
 
         EXPECT_THROW(
-            fixture.device.DrawInstancedPrimitives(
+            device.DrawInstancedPrimitives(
                 PrimitiveType::TriangleStrip, 0, 0, 3, 0, maximum, 1),
-            System::ArgumentOutOfRangeException);
+            System::InvalidOperationException);
         EXPECT_THROW(
-            fixture.device.DrawInstancedPrimitives(
+            device.DrawInstancedPrimitives(
                 PrimitiveType::TriangleStrip, 0, 0, 3, 0, maximum + 1, 1),
             System::NotSupportedException);
 
         EXPECT_THROW(
-            fixture.device.DrawInstancedPrimitives(
+            device.DrawInstancedPrimitives(
                 PrimitiveType::TriangleList, 0, 0, 3, 0, 2, maximum),
-            System::ArgumentOutOfRangeException);
+            System::InvalidOperationException);
         EXPECT_THROW(
-            fixture.device.DrawInstancedPrimitives(
+            device.DrawInstancedPrimitives(
                 PrimitiveType::TriangleList, 0, 0, 3, 0, 2, maximum + 1),
             System::NotSupportedException);
     }

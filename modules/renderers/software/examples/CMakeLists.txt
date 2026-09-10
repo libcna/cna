@@ -488,13 +488,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_BoundTargetLifetime COMMAND cna_test_software_bound_target_lifetime
         TIMEOUT 600 LABELS "Software")
 
-    # REMED-GFX-180: the public render-target -> Present lifecycle contract. `SdlGpu_RenderState`
-    # aborted with `Cannot present while render targets are bound`, which is the SECOND event in a
-    # two-stage chain: an over-range DrawPrimitives (two triangles from a three-vertex buffer) was
-    # correctly rejected by REMED-GFX-113's range guard, that rejection unwound past the fixture's own
-    # SetRenderTarget(nullptr), and EndDraw then met a still-bound target. FNA's contract is REJECT,
-    # never auto-unbind, so both guards are right and the fixture was wrong. Every leg runs in its own
-    # process; leg C2 reproduces the abort end to end and its correct outcome is SIGABRT.
+    # REMED-GFX-180/SOFTWARE-322: Present refuses while a target is bound independently of whether
+    # the preceding classic buffered draw used an out-of-range native input. Every leg runs in its
+    # own process; C1 proves explicit-unbind recovery and C2 proves the unhandled refusal is SIGABRT.
     cna_software_test(cna_test_software_present_lifecycle
         ${CNA_GRAPHICS_EXAMPLES_DIR}/present_lifecycle_contract_test.cpp)
     cna_register_renderer_test(NAME Software_PresentLifecycle COMMAND cna_test_software_present_lifecycle

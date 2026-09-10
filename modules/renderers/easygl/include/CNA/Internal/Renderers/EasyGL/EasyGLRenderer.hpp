@@ -1536,6 +1536,13 @@ namespace CNA::Internal::Renderers::EasyGL
         ~EasyGLRenderer() override;
 
         /**
+         * @brief Reports that EasyGL forwards buffered draw ranges directly to GL.
+         * @return False so GraphicsDevice preserves XNA's native range-forwarding behavior.
+         */
+        [[nodiscard]] bool RequiresManagedBufferedDrawRangeValidationEXT() const noexcept override
+        { return false; }
+
+        /**
          * @brief Serializes a complete operation while owning this renderer's GL context.
          * @param release Selects whether this renderer's own prior binding is restored or released.
          * @return A token that releases the calling thread's context ownership when destroyed.

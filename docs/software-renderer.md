@@ -173,8 +173,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   while every unique element beside it remains live. The fixture proves both a partially colliding
   stream and a fully colliding `TextureCoordinate0` stream remapped to `TextureCoordinate1`.
   `SOFTWARE-321` additionally proves that a short stream whose remapped semantics are absent from
-  the selected stock vertex shader does not bound the draw or form a Software CPU fetch, while an
-  equally short shader-consumed stream still fails range validation as before.
+  the selected stock vertex shader forms no Software CPU fetch. `SOFTWARE-322` then recovered the
+  wider XNA rule: even an active short stream is forwarded without a managed range exception.
+  Software bounds-checks each record before pointer formation and supplies deterministic defaults
+  for missing native data; pixels from such an invalid native range remain intentionally undefined.
   EasyGL's stock path now supplies the matching
   FNA3D-style native format conversion instead of requiring canonical byte formats or selecting an
   effect variant from an accidentally colliding stride. Only CNAEXT's old empty-declaration
@@ -192,7 +194,7 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   support `GetData` and valid draw ranges before their first upload, matching XNA/FNA native
   allocation; Software initializes the otherwise undefined bytes to zero deterministically.
   Source-window uploads, `None`/`Discard`/`NoOverwrite`, repeated mutation, typed readback,
-  `BufferUsage`, missing bindings, disposed-resource guards and draw-range validation pass the same
+  `BufferUsage`, missing bindings, disposed-resource guards and valid draw addressing pass the same
   nine renderer-neutral fixtures on Software and EasyGL (122/122 checks each). Destination-window
   CNAEXT overloads and exact offset/base/index-width behavior have additional shared/unit coverage.
 - **Null classic stock-effect samplers are opaque black** (`SOFTWARE-302/303`). Microsoft XNA 4.0
@@ -494,6 +496,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   missing state raises `InvalidOperationException`, and user-array null/range checks precede the
   shader check. The public 32-bit user-index overload remains the deliberate exception: under
   Reach its profile refusal occurs first, exactly where Microsoft places that gate.
+- **Classic buffered ranges are native inputs, not managed validation failures** (`SOFTWARE-322`)
+  — Microsoft XNA/FNA forward `vertexStart`, `startIndex`, `baseVertex`, `minVertexIndex`, declared
+  windows and buffer-capacity mistakes after the required count/profile checks. Software and
+  EasyGL no longer synthesize `ArgumentOutOfRangeException` for those inputs. Software turns every
+  missing record into a safe default rather than forming an invalid CPU pointer; EasyGL protects
+  its two CPU index-expansion fallbacks. CNAEXT empty-declaration buffers remain strictly guarded,
+  as do other renderers that explicitly require compatibility protection for host staging.
 - **Model name lookups expose XNA collection failures** (`SOFTWARE-254`) — missing bones/meshes
   throw `KeyNotFoundException`; empty lookup names throw `ArgumentNullException` before changing
   the caller's out pointer, identically above Software and EasyGL.

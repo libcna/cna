@@ -1001,7 +1001,8 @@ TEST_F(SdlGpuIndexedDrawRangeTest, DrawUserIndexedPrimitivesRebasesBeforeTheRend
 }
 
 // ---------------------------------------------------------------------------
-// Invalid ranges must be rejected before anything reaches SDL, never clamped.
+// SDL_GPU's host-side staging path retains CNA's explicit compatibility range guard. Microsoft
+// XNA itself forwards these native inputs; Software/EasyGL opt out once their paths are safe.
 // ---------------------------------------------------------------------------
 TEST_F(SdlGpuIndexedDrawRangeTest, RejectsIndexedRangesOutsideTheBoundBuffers)
 {
@@ -1535,4 +1536,3 @@ TEST_F(SdlGpuIndexedDrawRangeTest, IndexedOffsetsAreIndependentOfViewportScissor
         pixels.AtNdc(kIntendedX), Color::Red, "explicit render state does not disturb addressing");
     ExpectColorAbsent(pixels, Color::Magenta, "explicit render state decoy");
 }
-

@@ -20,31 +20,15 @@
 // the framework reports it rather than papering over it. Every leg below is written against that
 // contract; none of them asks the framework to unbind anything.
 //
-// WHAT REMED-GFX-180 ACTUALLY WAS. `examples/sdlgpu_renderstate_test.cpp` aborted with
-// `Cannot present while render targets are bound` before any check was visible. That message is the
-// SECOND event in a two-stage chain, and it is not the defect:
+// SOFTWARE-322 corrected the original causal analysis: Microsoft XNA forwards an over-range
+// classic buffered draw to D3D and does not synthesize ArgumentOutOfRangeException. Software and
+// EasyGL now do the same; renderers with unchecked host-side staging retain a declared compatibility
+// guard. Leg C1 accepts exactly the outcome each renderer advertises, then proves that the target
+// remains bound, Present refuses independently, and an explicit unbind recovers the device. Pixels
+// from a native out-of-range fetch are undefined and are not asserted.
 //
-//   1. `RunFillModeChecks` bound a target, cleared it, and drew a THREE-vertex triangle buffer
-//      through a helper named `DrawFullQuad` that hardcodes `DrawPrimitives(TriangleList, 0, 2)` --
-//      six vertices. REMED-GFX-113's range guard in `GraphicsDevice::DrawPrimitives` correctly
-//      rejected it with `ArgumentOutOfRangeException: The requested primitive range exceeds the
-//      bound vertex buffer. (Parameter 'primitiveCount')`.
-//   2. That exception unwound past the leg's own `SetRenderTarget(nullptr)`, so the target was STILL
-//      BOUND when `Draw` returned. `Game::EndDraw` then called `Present`, which -- correctly --
-//      refused. Nothing caught it, so it left `main` and `std::terminate` raised SIGABRT.
-//
-// BOTH guards are right, and BOTH are load-bearing. The fixture was wrong. The "zero checks were
-// reached" reading in the original report was an artefact of block-buffered stdout being discarded
-// by the abort, not evidence that nothing ran -- which is why every print in this file is flushed.
-//
-// THE ORACLE IS NEVER "did not throw". Leg C1 asserts each link of that chain separately -- the
-// range rejection, the target still being publicly bound afterwards, the refusal, and the recovery
-// -- so a future renderer that swallowed the range error, or a future Present that consulted renderer
-// state instead of the public binding, turns a specific leg red and names which link moved.
-//
-// LEG C2 IS THE PROCESS-LEVEL REPRODUCTION. It runs the same sequence with nothing catching it and
-// the supervisor requires the child to die by SIGABRT. The terminate classification is therefore
-// MEASURED rather than inferred from the message text.
+// LEG C2 IS THE PROCESS-LEVEL REPRODUCTION. It returns with the target bound and the supervisor
+// requires EndDraw's unhandled Present refusal to terminate the child by SIGABRT.
 //
 // PROCESS ISOLATION: one leg deliberately aborts and several drive teardown, so a leg runs in its
 // own child. With no arguments this binary is a SUPERVISOR: it re-execs itself once per leg as
@@ -71,14 +55,15 @@
 //   B2  destroyed while bound       the refusal is identical for a destroyed bound target
 //   B3  destroyed after unbind      releasing an UNBOUND target leaves Present legal
 //   B4  other binding shapes        a bound cube face and a bound MRT set refuse identically
-//   C1  THE GFX-180 CHAIN           over-range draw -> still bound -> refusal -> recovery
-//   C2  THE GFX-180 ABORT           the same, unhandled: the child must die by SIGABRT
+//   C1  native draw + Present       forwarded range -> still bound -> refusal -> recovery
+//   C2  bound-target abort          the same Present refusal, unhandled -> SIGABRT
 //   C3  unwinding + recovery        any exception mid-cycle, caught and unbound, leaves Present legal
 //   C4  teardown                    a live target handed to device teardown after a clean unbind
 //
 // Exit code 0 = every leg passed, 1 = any FAIL or unexpected CRASH, 77 = no usable display.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -819,16 +804,16 @@ class PresentLifecycleContractTest : public Game
     // ---------------------------------------------------------------- group C: the GFX-180 chain
 
     /**
-     * @brief Leg C1 -- THE REMED-GFX-180 CAUSAL CHAIN, one assertion per link.
+     * @brief Leg C1 -- native draw-range forwarding and the independent Present contract.
      *
      * This is the exact sequence `sdlgpu_renderstate_test.cpp`'s `RunFillModeChecks` issued: a bound
-     * target, a Clear, and then a request for TWO triangles out of a THREE-vertex buffer. Every link
-     * is asserted separately so a future change that moves any one of them names itself:
+     * target, a Clear, and then a request for TWO triangles out of a THREE-vertex buffer:
      *
-     *   1. the over-range request is rejected by REMED-GFX-113's range guard, naming `primitiveCount`;
-     *   2. the rejection unwinds without unbinding, so the target is STILL publicly bound;
-     *   3. Present therefore refuses -- the secondary exception the original report saw;
-     *   4. unbinding is all that is needed to make the device presentable again.
+     *   1. the native range completes when the renderer advertises safe forwarding, while a
+     *      host-staging renderer's declared compatibility guard rejects it;
+     *   2. the target remains publicly bound because draws never alter binding state;
+     *   3. Present therefore refuses;
+     *   4. explicit unbinding makes the device presentable again.
      */
     void LegC1(GraphicsDevice& dev)
     {
@@ -839,20 +824,23 @@ class PresentLifecycleContractTest : public Game
         dev.Clear(kClearA);
 
         step("C1: ask for TWO triangles out of a THREE-vertex buffer");
-        bool rejected = false;
+        bool caughtRange = false;
         std::string drawWhat;
         try { IssueDraw(dev, *triangle_, 2); }
-        catch (const System::ArgumentOutOfRangeException& e) { rejected = true; drawWhat = e.what(); }
+        catch (const System::ArgumentOutOfRangeException& e)
+        {
+            caughtRange = true;
+            drawWhat = e.what();
+        }
         catch (const std::exception& e) { drawWhat = std::string("WRONG TYPE: ") + e.what(); }
-        check(rejected, "C1 link 1: an over-range DrawPrimitives throws ArgumentOutOfRangeException: " +
-                        drawWhat);
-        check(drawWhat.find("primitiveCount") != std::string::npos,
-              "C1 link 1: the rejection names the offending parameter: " + drawWhat);
-        check(drawWhat.find("exceeds the bound vertex buffer") != std::string::npos,
-              "C1 link 1: the rejection names the range it exceeded: " + drawWhat);
+        const bool managedRangeGuard =
+            dev.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT();
+        check(caughtRange == managedRangeGuard &&
+                  drawWhat.find("WRONG TYPE:") == std::string::npos,
+              "C1 link 1: buffered draw outcome matches the renderer safety contract: " + drawWhat);
 
         check(BoundCount(dev) == 1,
-              "C1 link 2: the rejection unwound WITHOUT unbinding -- the target is still bound");
+              "C1 link 2: drawing does not unbind the target");
         check(dev.GetRenderTargets()[0].getRenderTargetProperty() == static_cast<Texture*>(&a),
               "C1 link 2: the still-bound target is the one the leg bound, not some stale entry");
 
@@ -865,9 +853,6 @@ class PresentLifecycleContractTest : public Game
         step("C1: unbind -- the only thing needed to recover");
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         RequirePresentSucceeds(dev, "C1 link 4: unbinding alone makes Present legal again");
-        // The Clear that was queued before the rejected draw is still the cycle's work, and it must
-        // not have been discarded by the failed draw or by the refused Present.
-        RequireHalfAndHalf(a, "C1 link 4", kClearA, kClearA);
 
         step("C1: a correctly counted ONE-triangle draw of the same buffer is accepted");
         RenderTarget2D b(dev, kRT, kRT, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -968,10 +953,8 @@ class PresentLifecycleContractTest : public Game
     /**
      * @brief Leg C2 -- THE GFX-180 ABORT, reproduced end to end and left unhandled.
      *
-     * Runs the identical sequence to leg C1 and then simply RETURNS with the target still bound. The
-     * frame loop's `EndDraw` calls `Present`, `Present` refuses, nothing catches it, and the process
-     * dies by SIGABRT. The supervisor requires exactly that signal, so "the fixture aborted" is a
-     * measured outcome attached to a named cause rather than a message read out of a log.
+     * Runs the identical sequence to leg C1 and then simply returns with the target still bound.
+     * EndDraw calls Present, nothing catches its refusal, and the process dies by SIGABRT.
      */
     void LegC2(GraphicsDevice& dev)
     {
@@ -981,7 +964,7 @@ class PresentLifecycleContractTest : public Game
         step("C2: bind a target and clear it");
         dev.SetRenderTarget(leaked);
         dev.Clear(kClearA);
-        step("C2: issue the over-range draw and swallow ONLY that exception");
+        step("C2: issue the over-range draw (native-forwarded or compatibility-guarded)");
         try { IssueDraw(dev, *triangle_, 2); }
         catch (const System::ArgumentOutOfRangeException&) {}
         step("C2: return from Draw with the target STILL BOUND -- EndDraw must now abort");

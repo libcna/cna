@@ -1541,11 +1541,9 @@ namespace Microsoft::Xna::Framework::Graphics
         void ValidateVertexStreamCapability(
             const CNA::Internal::Renderers::GpuDrawParams& p) const;
 
-        // REMED-GFX-201: REMED-GFX-113's range gate widened from stream 0 to every per-vertex
-        // stream. `startElement` is vertexStart for the non-indexed route and
-        // baseVertex + minVertexIndex for the indexed one; `elementCount` is the topology-derived
-        // vertex count or numVertices respectively. A stream too short for the requested window is
-        // rejected here even when stream 0 is long enough, naming the offending slot.
+        // Compatibility guard for renderers that stage unchecked CPU copies. Microsoft XNA does
+        // not perform this validation for classic buffered draws, so GraphicsDevice calls it only
+        // when the renderer explicitly requires protection from out-of-range host-memory access.
         void ValidateVertexStreamRanges(
             const CNA::Internal::Renderers::GpuDrawParams& p,
             std::int64_t startElement,
@@ -1556,12 +1554,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /** Clears a selected effect only when the exact resource is being disposed. */
         void ClearCurrentEffectIf(const Effect* effect) noexcept;
 
-        // REMED-GFX-202: REMED-GFX-118's instance-range gate widened from the first per-instance
-        // binding to EVERY one of them. `instanceCount` instances consume
-        // `1 + (instanceCount - 1) / InstanceFrequency` records of each per-instance stream,
-        // beginning at that stream's own VertexOffset -- all in vertex ELEMENTS of that stream's own
-        // declaration, never bytes. A stream too short is rejected here, naming the offending slot,
-        // even when another per-instance stream is long enough.
+        // Per-instance counterpart of ValidateVertexStreamRanges, retained only for renderers whose
+        // CPU staging paths have not yet made native-style out-of-range fetches memory-safe.
         void ValidateInstanceStreamRanges(
             const CNA::Internal::Renderers::GpuDrawParams& p,
             int instanceCount) const;

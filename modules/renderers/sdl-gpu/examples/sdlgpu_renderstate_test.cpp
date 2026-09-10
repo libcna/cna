@@ -33,7 +33,7 @@
 //
 // REMED-GFX-180 (fixture defect, not a renderer one): Check E's triangle buffer holds THREE
 // vertices and used to be drawn through a helper that hardcoded two primitives -- a request for six.
-// REMED-GFX-113's range guard rejected it, the rejection unwound past RunFillModeChecks' unbind, and
+// CNA's renderer-safety range guard rejected it, the rejection unwound past RunFillModeChecks' unbind, and
 // the frame then ended with a render target still bound, which Game::EndDraw's Present rightly
 // refuses. Nothing caught that refusal, so the process aborted and its whole check log died in an
 // unflushed stdout buffer. The primitive count is now named at every call site, every print is

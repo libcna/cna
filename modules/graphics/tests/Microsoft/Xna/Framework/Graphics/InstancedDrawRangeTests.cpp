@@ -14,11 +14,11 @@
 //       TriangleList  = 3 * primitiveCount        TriangleStrip = primitiveCount + 2
 //       LineList      = 2 * primitiveCount        LineStrip     = primitiveCount + 1
 //       PointListEXT  = primitiveCount
-//   minVertexIndex/numVertices are range-validation hints, never addressing
+//   minVertexIndex/numVertices are native range hints, never addressing
 //   instanceCount  chooses how many instances consume that one geometry range; it never changes
 //       how much geometry is consumed, and the geometry range never changes how many instances run
-//   a range that leaves the bound index or vertex buffer is rejected before native submission,
-//       never silently clamped
+//   native ranges that leave a bound buffer are forwarded by XNA rather than converted into a
+//       managed exception (SOFTWARE-322)
 //
 // Fixture geometry — a two-axis oracle. The target is divided into `kSlotCount` equal-width
 // vertical slots (the geometry axis) and `kRowCount` equal-height horizontal bands (the instance
@@ -46,6 +46,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 // Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced.
 using namespace CNA::Testing::Renderers;
@@ -1438,9 +1439,9 @@ TEST_F(InstancedDrawRangeTest, DeferredInstancedDrawsAtoBtoAKeepTheirOwnParamete
     }
 }
 
-// The public entry point rejects every out-of-contract request before it can reach a native draw,
-// and never clamps one into a smaller valid range.
-TEST_F(InstancedDrawRangeTest, InvalidInstancedRangesAreRejectedNotClamped)
+// Required count/profile validation remains managed. Buffer-capacity, offsets and range hints are
+// natively forwarded by XNA and follow each renderer's host-memory safety contract.
+TEST_F(InstancedDrawRangeTest, RequiredInstancedCountsAndNativeRangesRemainDistinct)
 {
     RequireInstancedRendering();
 
@@ -1470,20 +1471,40 @@ TEST_F(InstancedDrawRangeTest, InvalidInstancedRangesAreRejectedNotClamped)
     });
     device.SetIndexBuffer(&indexBuffer);
 
+    const bool managedRangeGuard =
+        device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT();
+    const auto expectBufferedRangeOutcome = [&](auto&& draw, const std::string& label) {
+        bool caughtRange = false;
+        try
+        {
+            draw();
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            caughtRange = true;
+        }
+        catch (const std::exception& e)
+        {
+            ADD_FAILURE() << label << ": wrong exception: " << e.what();
+            return;
+        }
+        EXPECT_EQ(managedRangeGuard, caughtRange) << label;
+    };
+
     constexpr int kIndexCount = kSlotCount * kVerticesPerSlot;
     // Negative and non-positive scalars.
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kIndexCount, -1, 1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, kIndexCount, -1, 1, 1);
+    }, "negative startIndex");
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, -1, 0, kIndexCount, 0, 1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, -1, 0, kIndexCount, 0, 1, 1);
+    }, "negative baseVertex");
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, -1, kIndexCount, 0, 1, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 0, -1, kIndexCount, 0, 1, 1);
+    }, "negative minVertexIndex hint");
     EXPECT_THROW(
         device.DrawInstancedPrimitives(
             PrimitiveType::TriangleList, 0, 0, 0, 0, 1, 1),
@@ -1502,34 +1523,34 @@ TEST_F(InstancedDrawRangeTest, InvalidInstancedRangesAreRejectedNotClamped)
         System::ArgumentOutOfRangeException);
 
     // Index range leaving the logical index buffer, both by offset and by count.
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kIndexCount, kIndexCount, 1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, kIndexCount, kIndexCount, 1, 1);
+    }, "startIndex at the buffer end");
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kIndexCount, 19, 1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, kIndexCount, 19, 1, 1);
+    }, "index range crossing the buffer end");
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kIndexCount, 0, kSlotCount + 1, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 0, 0, kIndexCount, 0, kSlotCount + 1, 1);
+    }, "primitive count consuming more indices than the buffer");
 
     // Declared vertex range leaving the logical vertex buffer after baseVertex.
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, kIndexCount + 1, 0, 1, 0, 1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, kIndexCount + 1, 0, 1, 0, 1, 1);
+    }, "baseVertex past the vertex buffer");
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 18, 0, kIndexCount, 0, 1, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 18, 0, kIndexCount, 0, 1, 1);
+    }, "declared vertex range crossing the buffer end");
 
     // More instances than the bound per-instance stream can supply.
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kIndexCount, 0, 1, kRowCount + 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 0, 0, kIndexCount, 0, 1, kRowCount + 1);
+    }, "instance range crossing the instance buffer end");
 
     // Microsoft XNA rejects the profile-count violation before topology expansion can overflow.
     EXPECT_THROW(
@@ -1538,7 +1559,7 @@ TEST_F(InstancedDrawRangeTest, InvalidInstancedRangesAreRejectedNotClamped)
             std::numeric_limits<int>::max(), 1),
         System::NotSupportedException);
 
-    // A rejected request must leave the device able to draw the valid range that follows it.
+    // Native undefined draws and managed rejections alike must leave the next valid draw usable.
     device.Clear(Color::Black);
     const int instances = InstancesFor(2);
     device.DrawInstancedPrimitives(
@@ -1546,8 +1567,8 @@ TEST_F(InstancedDrawRangeTest, InvalidInstancedRangesAreRejectedNotClamped)
     const FrameSnapshot pixels = CaptureBackbuffer(device, layout.width, layout.height);
     const ExpectedRange range = ResolveExpectedRange(3, 6, 2);
     ExpectInstancedGeometryRendered(
-        pixels, layout, range, instances, "after rejected requests");
-    ExpectColumnsExclusive(pixels, layout, range, Color::Black, "after rejected requests");
+        pixels, layout, range, instances, "after native-range probes");
+    ExpectColumnsExclusive(pixels, layout, range, Color::Black, "after native-range probes");
 }
 
 // The range contract holds on a RenderTarget2D exactly as on the backbuffer, the target-only draw

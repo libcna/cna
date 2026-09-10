@@ -12474,22 +12474,20 @@ if (ProfileIsEs2ApiGeneration())
 
         const std::size_t indexSize = ib.thirtyTwoBit
             ? sizeof(std::uint32_t) : sizeof(std::uint16_t);
-        const std::size_t firstByte =
-            static_cast<std::size_t>(startIndex) * indexSize;
         const std::size_t byteCount =
             static_cast<std::size_t>(indexCount) * indexSize;
         const auto& source = ib.GetCpuBytes();
-        if (firstByte > source.size() || byteCount > source.size() - firstByte)
-        {
-            throw System::InvalidOperationException(
-                "EasyGL negative-base fallback cannot read the requested CPU index-buffer slice");
-        }
-
-        negativeBaseVertexScratch_.resize(byteCount);
+        negativeBaseVertexScratch_.assign(byteCount, 0);
         for (int i = 0; i < indexCount; ++i)
         {
+            const std::int64_t sourceElement =
+                static_cast<std::int64_t>(startIndex) + i;
+            if (sourceElement < 0 || sourceElement >= ib.GetIndexCount())
+                continue;   // SOFTWARE-322: undefined native fetch, safe zero in CPU fallback
             const std::size_t sourceOffset =
-                firstByte + static_cast<std::size_t>(i) * indexSize;
+                static_cast<std::size_t>(sourceElement) * indexSize;
+            if (sourceOffset > source.size() || indexSize > source.size() - sourceOffset)
+                continue;
             const std::size_t targetOffset = static_cast<std::size_t>(i) * indexSize;
             if (ib.thirtyTwoBit)
             {
@@ -12498,10 +12496,7 @@ if (ProfileIsEs2ApiGeneration())
                 const std::int64_t effective =
                     static_cast<std::int64_t>(sourceIndex) + baseVertex;
                 if (effective < 0 || effective > (std::numeric_limits<std::uint32_t>::max)())
-                {
-                    throw System::InvalidOperationException(
-                        "EasyGL negative baseVertex leaves the 32-bit index range");
-                }
+                    continue;
                 const auto rebased = static_cast<std::uint32_t>(effective);
                 std::memcpy(negativeBaseVertexScratch_.data() + targetOffset,
                             &rebased, indexSize);
@@ -12513,10 +12508,7 @@ if (ProfileIsEs2ApiGeneration())
                 const std::int64_t effective =
                     static_cast<std::int64_t>(sourceIndex) + baseVertex;
                 if (effective < 0 || effective > (std::numeric_limits<std::uint16_t>::max)())
-                {
-                    throw System::InvalidOperationException(
-                        "EasyGL negative baseVertex leaves the 16-bit index range");
-                }
+                    continue;
                 const auto rebased = static_cast<std::uint16_t>(effective);
                 std::memcpy(negativeBaseVertexScratch_.data() + targetOffset,
                             &rebased, indexSize);
@@ -12610,14 +12602,21 @@ if (ProfileIsEs2ApiGeneration())
         auto readSrc = [&](int pos) -> std::uint32_t {
             if (!ib) return static_cast<std::uint32_t>(firstVertex + pos);
             const auto& bytes = ib->GetCpuBytes();
+            const std::int64_t sourceElement =
+                static_cast<std::int64_t>(startIndex) + pos;
+            if (sourceElement < 0 || sourceElement >= ib->GetIndexCount())
+                return 0;   // SOFTWARE-322: never over-read the CPU wireframe expansion source
+            const std::size_t sourceOffset =
+                static_cast<std::size_t>(sourceElement) * (ib->IsThirtyTwoBit() ? 4u : 2u);
+            const std::size_t sourceWidth = ib->IsThirtyTwoBit() ? 4u : 2u;
+            if (sourceOffset > bytes.size() || sourceWidth > bytes.size() - sourceOffset)
+                return 0;
             std::uint32_t sourceIndex = 0;
             if (ib->IsThirtyTwoBit()) {
-                std::memcpy(&sourceIndex,
-                            bytes.data() + static_cast<std::size_t>(startIndex + pos) * 4, 4);
+                std::memcpy(&sourceIndex, bytes.data() + sourceOffset, 4);
             } else {
                 std::uint16_t value = 0;
-                std::memcpy(&value,
-                            bytes.data() + static_cast<std::size_t>(startIndex + pos) * 2, 2);
+                std::memcpy(&value, bytes.data() + sourceOffset, 2);
                 sourceIndex = value;
             }
             if (!foldNegativeIndices) return sourceIndex;
@@ -12625,10 +12624,7 @@ if (ProfileIsEs2ApiGeneration())
             const std::int64_t effective =
                 static_cast<std::int64_t>(sourceIndex) + baseVertex;
             if (effective < 0 || effective > (std::numeric_limits<std::uint32_t>::max)())
-            {
-                throw System::InvalidOperationException(
-                    "EasyGL wireframe negative baseVertex leaves the index range");
-            }
+                return 0;
             return static_cast<std::uint32_t>(effective);
         };
 

@@ -1384,6 +1384,13 @@ namespace CNA::Internal::Renderers::Software
                                 bool allocateStencilBuffer = true);
         ~SoftwareRenderer() override;
 
+        /**
+         * @brief Reports that buffered draw ranges are made host-memory-safe inside Software.
+         * @return False so GraphicsDevice preserves XNA's native range-forwarding behavior.
+         */
+        [[nodiscard]] bool RequiresManagedBufferedDrawRangeValidationEXT() const noexcept override
+        { return false; }
+
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
