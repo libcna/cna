@@ -701,7 +701,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     class SdlGpuTextureCubeRenderer final : public ITextureCubeRenderer
     {
     public:
-        SdlGpuTextureCubeRenderer(SdlGpuRenderer& owner, int size, bool mipMap);
+        SdlGpuTextureCubeRenderer(SdlGpuRenderer& owner, int size, bool mipMap,
+                                  int surfaceFormat);
         ~SdlGpuTextureCubeRenderer() override;
 
         SdlGpuTextureCubeRenderer(const SdlGpuTextureCubeRenderer&) = delete;
@@ -710,6 +711,22 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// REMED-GFX-135: same explicit completion contract as SdlGpuTexture3DRenderer::SetData.
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+        /**
+         * @brief Uploads exact DXT blocks to a cube face region.
+         *
+         * @param face Cube face index, 0 through 5.
+         * @param level Mip level to update.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Source block bytes.
+         * @param dataLength Source size in bytes.
+         * @return true when the complete logical update was stored; otherwise false.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(int face, int level, int x, int y,
+                                                int w, int h, const void* data,
+                                                int dataLength) override;
         /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
         /// face rectangle has been copied out of the transfer buffer; false for an empty request.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
@@ -718,6 +735,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         /** @brief Returns the underlying `SDL_GPUTexture`. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
         /**
+         * @brief Reports whether DXT blocks use native BC storage. Test-only CNAEXT.
+         *
+         * @return true for native BC storage; false for renderer-decoded RGBA8 storage.
+         */
+        CNAEXT [[nodiscard]] bool UsesNativeCompressionEXT() const
+        {
+            return compressedNative_;
+        }
+        /**
          * @brief Returns this cube texture as a bindable, lifetime-safe sampled resource. CNAEXT.
          *
          * @return The native handle paired with the shared state that keeps it alive.
@@ -725,6 +751,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->texture, state_}; }
 
     private:
+        [[nodiscard]] bool UploadCompressedLevel(
+            int face, int level, const std::vector<std::uint8_t>& blocks);
+
         SdlGpuRenderer* owner_ = nullptr;
         // Same rationale as SdlGpuTextureRenderer's own state_ -- see SdlGpuSampledTextureState.
         std::shared_ptr<SdlGpuSampledTextureState> state_;
@@ -732,6 +761,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool mipMap_ = false;
         /// Mip levels SDL really allocated for this cube (REMED-GFX-135).
         int levelCount_ = 1;
+        int surfaceFormat_ = 0;
+        SDL_GPUTextureFormat nativeFormat_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        int blockBytes_ = 4;
+        bool compressed_ = false;
+        bool compressedNative_ = false;
+        /// Exact DXT blocks indexed by `[face * levelCount_ + level]`.
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 
     /**
@@ -1984,6 +2020,15 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
         /**
+         * @brief Classifies the classic formats implemented by the plain TextureCube path.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to classify.
+         * @return Supported for Color and DXT1/3/5, Unsupported for other classic formats, or
+         *         Defer for CNAEXT formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+        /**
          * @brief Classifies whether Color-shaped transfers preserve the requested format.
          *
          * @param surfaceFormat SurfaceFormat ordinal to classify.
@@ -1997,6 +2042,14 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @return true for Dxt1, Dxt3 or Dxt5; otherwise false.
          */
         [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports the classic DXT formats transferred as cube-face blocks.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to inspect.
+         * @return true for Dxt1, Dxt3 or Dxt5; otherwise false.
+         */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(
+            int surfaceFormat) const override;
         /**
          * @brief Reports whether DDS/XNB blocks can remain compressed during content loading.
          *

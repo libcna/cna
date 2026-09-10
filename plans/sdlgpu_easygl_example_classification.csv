@@ -228,10 +228,10 @@ easygl_texture_anisotropic_effect_test.cpp,classic-xna-covered-by-existing-sdlgp
 easygl_texture_filter_linear_golden_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_texture_filter_point_vs_linear_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_texture_mip_filter_effect_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-64,authored mip filter and level selection pass shared pixel oracles
-easygl_texturecube_content_load_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_texturecube_faces_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_texturecube_mip_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_texturecube_partial_rect_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
+easygl_texturecube_content_load_test.cpp,classic-xna-direct-parity,SDLGPU-70,same DDS content source passes SDL GPU
+easygl_texturecube_faces_test.cpp,classic-xna-direct-parity,SDLGPU-70,same six-face source passes SDL GPU
+easygl_texturecube_mip_test.cpp,classic-xna-direct-parity,SDLGPU-70,same authored-mip source passes SDL GPU
+easygl_texturecube_partial_rect_test.cpp,classic-xna-direct-parity,SDLGPU-70,same partial-rectangle source passes SDL GPU
 easygl_textured_quad_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_thread_context_lease_exclusion_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
 easygl_transform_matrix_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog

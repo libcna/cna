@@ -444,6 +444,54 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_Texture2D_FormatMatrixFallback PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # SDLGPU-70: compile the exact renderer-neutral EasyGL cube oracles under SDL GPU. They prove
+    # six independent faces, partial rectangles/startIndex, authored mip levels and DDS content
+    # loading without cloning expectations into a renderer-specific copy.
+    foreach(texturecube_oracle_test IN ITEMS
+            texturecube_faces
+            texturecube_partial_rect
+            texturecube_mip
+            texturecube_content_load)
+        cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${texturecube_oracle_test}
+            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${texturecube_oracle_test}_test.cpp)
+        cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${texturecube_oracle_test}
+            COMMAND cna_test_sdlgpu_easygl_oracle_${texturecube_oracle_test}
+            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_EasyGLOracle_${texturecube_oracle_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
+    # The shared fixture compares DXT1 and Color cube sampling through EnvironmentMapEffect; the
+    # SDL-local matrix covers DXT1/3/5 decoded readback, NPOT partial blocks, authored tail mips,
+    # exact classifier boundaries and a forced decode path.
+    cna_sdlgpu_test(cna_test_sdlgpu_parity_compressed_cube
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_compressed_cube.cpp)
+    cna_register_renderer_test(NAME SdlGpu_Parity_compressed_cube
+        COMMAND cna_test_sdlgpu_parity_compressed_cube
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_Parity_compressed_cube PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    cna_register_renderer_test(NAME SdlGpu_Parity_compressed_cube_fallback
+        COMMAND cna_test_sdlgpu_parity_compressed_cube
+        TIMEOUT 120 LABELS "SdlGpu;Parity"
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT};CNA_SDLGPU_FORCE_DXT_FALLBACK=1")
+    set_tests_properties(SdlGpu_Parity_compressed_cube_fallback PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
+    cna_sdlgpu_test(cna_test_sdlgpu_texturecube_format_matrix
+        sdlgpu_texturecube_format_matrix_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_TextureCube_FormatMatrix
+        COMMAND cna_test_sdlgpu_texturecube_format_matrix
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_TextureCube_FormatMatrix PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    cna_register_renderer_test(NAME SdlGpu_TextureCube_FormatMatrixFallback
+        COMMAND cna_test_sdlgpu_texturecube_format_matrix
+        TIMEOUT 120 LABELS "SdlGpu;Parity"
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT};CNA_SDLGPU_FORCE_DXT_FALLBACK=1")
+    set_tests_properties(SdlGpu_TextureCube_FormatMatrixFallback PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # The renderer-neutral WEBGPU-144 fixture already discriminates DDS and XNB content-loader
     # policy, four authored mip levels and real SpriteBatch sampling. Reuse it unchanged here.
     cna_sdlgpu_test(cna_test_sdlgpu_compressed_content

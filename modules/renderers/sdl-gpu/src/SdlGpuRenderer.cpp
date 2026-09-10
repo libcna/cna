@@ -3035,7 +3035,53 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
     }
 
+    RendererFormatVerdict SdlGpuRenderer::ClassifyTextureCubeFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            // A plain TextureCube's public Color overload is RGBA8-shaped. DXT1/3/5 have the
+            // separate exact-block overload and are either stored as native BC or decoded into a
+            // renderer-owned RGBA8 cube when this SDL_gpu driver cannot sample the BC format.
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+                return RendererFormatVerdict::Supported;
+
+            // Unlike Texture2D, TextureCube exposes no typed packed/float transfer overload. In
+            // particular EasyGL's inherited 2D classifier accepts the three packed formats even
+            // though its cube implementation always allocates RGBA8 and can only consume Color;
+            // copying that false capability would reproduce an EasyGL defect, not XNA behavior.
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
     bool SdlGpuRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
+    {
+        return IsClassicDxtFormat(
+            static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat));
+    }
+
+    bool SdlGpuRenderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
     {
         return IsClassicDxtFormat(
             static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat));
@@ -3051,8 +3097,16 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPU_TEXTUREFORMAT_BC3_RGBA_UNORM,
         };
         return std::all_of(formats.begin(), formats.end(), [this](SDL_GPUTextureFormat format) {
+            // This process-wide content-reader policy is shared by Texture2D and TextureCube. It
+            // may retain source blocks only when BOTH resource kinds can keep all classic DXT
+            // variants compressed; otherwise the reader's established Color decode is the one
+            // truthful representation for every resource it may construct.
             return SDL_GPUTextureSupportsFormat(
-                device_, format, SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_SAMPLER);
+                       device_, format, SDL_GPU_TEXTURETYPE_2D,
+                       SDL_GPU_TEXTUREUSAGE_SAMPLER) &&
+                   SDL_GPUTextureSupportsFormat(
+                       device_, format, SDL_GPU_TEXTURETYPE_CUBE,
+                       SDL_GPU_TEXTUREUSAGE_SAMPLER);
         });
     }
 
@@ -3427,9 +3481,9 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     std::unique_ptr<ITextureCubeRenderer> SdlGpuRenderer::CreateTextureCube(
-        int size, bool mipMap, int /*surfaceFormat*/)
+        int size, bool mipMap, int surfaceFormat)
     {
-        return std::make_unique<SdlGpuTextureCubeRenderer>(*this, size, mipMap);
+        return std::make_unique<SdlGpuTextureCubeRenderer>(*this, size, mipMap, surfaceFormat);
     }
 
     void SdlGpuRenderer::SetRenderTargets(
@@ -8261,25 +8315,60 @@ namespace CNA::Internal::Renderers::SdlGpu
         return true;
     }
 
-    // ---- SdlGpuTextureCubeRenderer (Phase SDLGPU-9, SDLGPU-51) ----
+    // ---- SdlGpuTextureCubeRenderer (Phase SDLGPU-9, SDLGPU-51, SDLGPU-70) ----
 
-    SdlGpuTextureCubeRenderer::SdlGpuTextureCubeRenderer(SdlGpuRenderer& owner, int size, bool mipMap)
+    SdlGpuTextureCubeRenderer::SdlGpuTextureCubeRenderer(
+        SdlGpuRenderer& owner, int size, bool mipMap, int surfaceFormat)
         : owner_(&owner)
         , state_(std::make_shared<SdlGpuSampledTextureState>())
         , size_(size), mipMap_(mipMap)
         , levelCount_(mipMap ? CalculateMipLevels(size, size) : 1)
+        , surfaceFormat_(surfaceFormat)
     {
         state_->owner = &owner;
 
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        compressed_ = IsClassicDxtFormat(format);
+        blockBytes_ = LogicalTextureBlockBytes(format);
+        if ((!compressed_ && format != SurfaceFormat::Color) || blockBytes_ == 0)
+        {
+            throw std::invalid_argument(
+                "CNA SDL_GPU: TextureCube received unsupported SurfaceFormat ordinal " +
+                std::to_string(surfaceFormat_));
+        }
+
+        const SDL_GPUTextureFormat preferredFormat = PreferredTextureFormat(format);
+        compressedNative_ = compressed_ && !ForceDxtFallbackForTest() &&
+            SDL_GPUTextureSupportsFormat(
+                owner_->Device(), preferredFormat, SDL_GPU_TEXTURETYPE_CUBE,
+                SDL_GPU_TEXTUREUSAGE_SAMPLER);
+        nativeFormat_ = compressedNative_
+            ? preferredFormat
+            : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+
+        if (compressed_)
+        {
+            compressedLevels_.resize(static_cast<std::size_t>(6 * levelCount_));
+            for (int face = 0; face < 6; ++face)
+            {
+                for (int level = 0; level < levelCount_; ++level)
+                {
+                    const int levelSize = std::max(1, size_ >> level);
+                    compressedLevels_[static_cast<std::size_t>(face * levelCount_ + level)]
+                        .resize(static_cast<std::size_t>((levelSize + 3) / 4) *
+                                static_cast<std::size_t>((levelSize + 3) / 4) *
+                                static_cast<std::size_t>(blockBytes_), 0u);
+                }
+            }
+        }
+
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_CUBE;
-        createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-        // SDL_gpu's own debug validation requires COLOR_TARGET usage (in addition to SAMPLER) on
-        // any texture SDL_GenerateMipmapsForGPUTexture is called on -- see
-        // SdlGpuTexture3DRenderer's own identical constructor comment for the real finding this fix
-        // came from. Only widened when mipMap is actually requested.
-        createInfo.usage = mipMap_ ? (SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET)
-                                    : SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        createInfo.format = nativeFormat_;
+        // Plain XNA TextureCube mip levels are explicitly authored with SetData, exactly like
+        // Texture2D/Texture3D. This resource is never a render target and therefore needs neither
+        // COLOR_TARGET usage nor SDL's whole-cube mip generator.
+        createInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
         createInfo.width = static_cast<Uint32>(size);
         createInfo.height = static_cast<Uint32>(size);
         createInfo.layer_count_or_depth = 6;
@@ -8299,7 +8388,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         // REMED-GFX-135: see SdlGpuTexture3DRenderer::SetData -- silent returns looked like writes,
         // and neither the face nor the level was range-checked before reaching SDL.
-        if (data == nullptr || w <= 0 || h <= 0) return false;
+        if (compressed_ || data == nullptr || w <= 0 || h <= 0) return false;
         if (face < 0 || face >= 6 || level < 0 || level >= levelCount_) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
@@ -8349,21 +8438,154 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_UploadToGPUTexture(copyPass, &source, &destination, false);
         SDL_EndGPUCopyPass(copyPass);
 
-        // "Generated case": a full level-0 upload of a given face with mips requested regenerates
-        // the whole chain (all 6 faces) immediately -- matches SdlGpuRenderTargetCubeRenderer's own
-        // "regenerates all faces" convention (SDL_gpu has no per-layer mip-regen control), and
-        // real XNA/FNA has no explicit "regenerate mips" call for TextureCube either. Must run
-        // outside any pass, per SDL_gpu.h.
-        const bool isFullLevel0Upload = level == 0 && x == 0 && y == 0 && w == size_ && h == size_;
-        if (mipMap_ && isFullLevel0Upload)
-            SDL_GenerateMipmapsForGPUTexture(cmd, state_->texture);
-
         if (!SDL_SubmitGPUCommandBuffer(cmd))
         {
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
             throw std::runtime_error(std::string("CNA SDL_GPU: TextureCube::SetData: SDL_SubmitGPUCommandBuffer failed: ") + SDL_GetError());
         }
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+        return true;
+    }
+
+    bool SdlGpuTextureCubeRenderer::UploadCompressedLevel(
+        int face, int level, const std::vector<std::uint8_t>& blocks)
+    {
+        const int levelSize = std::max(1, size_ >> level);
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+
+        std::vector<std::uint8_t> converted;
+        const std::uint8_t* uploadBytes = blocks.data();
+        std::size_t uploadByteCount = blocks.size();
+        if (!compressedNative_)
+        {
+            converted = ConvertTextureLevelForFallback(
+                format, blocks.data(), blocks.size(), levelSize, levelSize);
+            uploadBytes = converted.data();
+            uploadByteCount = converted.size();
+        }
+
+        const Uint32 expectedBytes = SDL_CalculateGPUTextureFormatSize(
+            nativeFormat_, static_cast<Uint32>(levelSize),
+            static_cast<Uint32>(levelSize), 1);
+        if (uploadByteCount != expectedBytes)
+        {
+            throw std::runtime_error(
+                "CNA SDL_GPU: TextureCube converted upload size does not match SDL_gpu's "
+                "format size");
+        }
+
+        SDL_GPUDevice* device = owner_->Device();
+        SDL_GPUTransferBufferCreateInfo transferInfo{};
+        transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        transferInfo.size = expectedBytes;
+        SDL_GPUTransferBuffer* transferBuffer =
+            SDL_CreateGPUTransferBuffer(device, &transferInfo);
+        if (transferBuffer == nullptr)
+        {
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: TextureCube compressed upload transfer allocation "
+                            "failed: ") + SDL_GetError());
+        }
+
+        void* mapped = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
+        if (mapped == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: TextureCube compressed upload map failed: ") +
+                SDL_GetError());
+        }
+        std::memcpy(mapped, uploadBytes, expectedBytes);
+        SDL_UnmapGPUTransferBuffer(device, transferBuffer);
+
+        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
+        if (cmd == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: TextureCube compressed upload command buffer failed: ") +
+                SDL_GetError());
+        }
+
+        SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
+        SDL_GPUTextureTransferInfo source{};
+        source.transfer_buffer = transferBuffer;
+        // SDL's zero values select the tight, format-aware pitch. For BC formats that is a row
+        // of 4x4 blocks; for the decode fallback it is a row of RGBA8 texels.
+        source.pixels_per_row = 0;
+        source.rows_per_layer = 0;
+        SDL_GPUTextureRegion destination{};
+        destination.texture = state_->texture;
+        destination.mip_level = static_cast<Uint32>(level);
+        destination.layer = static_cast<Uint32>(face);
+        destination.w = static_cast<Uint32>(levelSize);
+        destination.h = static_cast<Uint32>(levelSize);
+        destination.d = 1;
+        // A cube is assembled over six faces and possibly several authored mip levels. Cycling
+        // any single subresource would orphan every previously uploaded face/level.
+        SDL_UploadToGPUTexture(copyPass, &source, &destination, false);
+        SDL_EndGPUCopyPass(copyPass);
+
+        if (!SDL_SubmitGPUCommandBuffer(cmd))
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: TextureCube compressed upload submit failed: ") +
+                SDL_GetError());
+        }
+        SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+        return true;
+    }
+
+    bool SdlGpuTextureCubeRenderer::SetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h,
+        const void* data, int dataLength)
+    {
+        if (!compressed_ || data == nullptr || w <= 0 || h <= 0)
+            return false;
+        if (face < 0 || face >= 6 || level < 0 || level >= levelCount_)
+            return false;
+
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize ||
+            (x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelSize) ||
+            ((h % 4) != 0 && y + h != levelSize))
+        {
+            return false;
+        }
+
+        const int levelBlockCols = (levelSize + 3) / 4;
+        const int rectBlockCols = (w + 3) / 4;
+        const int rectBlockRows = (h + 3) / 4;
+        const std::size_t requiredBytes =
+            static_cast<std::size_t>(rectBlockCols) * rectBlockRows * blockBytes_;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredBytes)
+            return false;
+
+        const std::size_t index = static_cast<std::size_t>(face * levelCount_ + level);
+        std::vector<std::uint8_t> replacement = compressedLevels_[index];
+        const std::size_t levelRowBytes =
+            static_cast<std::size_t>(levelBlockCols) * blockBytes_;
+        const std::size_t rectRowBytes =
+            static_cast<std::size_t>(rectBlockCols) * blockBytes_;
+        const auto* source = static_cast<const std::uint8_t*>(data);
+        for (int row = 0; row < rectBlockRows; ++row)
+        {
+            const std::size_t destinationOffset =
+                static_cast<std::size_t>(y / 4 + row) * levelRowBytes +
+                static_cast<std::size_t>(x / 4) * blockBytes_;
+            std::memcpy(replacement.data() + destinationOffset,
+                        source + static_cast<std::size_t>(row) * rectRowBytes,
+                        rectRowBytes);
+        }
+
+        // Upload the reconstructed complete level. SDL_gpu can express native partial BC copies,
+        // but the complete-level upload gives native BC and decoded RGBA fallback the same exact
+        // preservation semantics for untouched blocks, including NPOT edge blocks.
+        if (!UploadCompressedLevel(face, level, replacement))
+            return false;
+        compressedLevels_[index] = std::move(replacement);
         return true;
     }
 
@@ -8384,6 +8606,27 @@ namespace CNA::Internal::Renderers::SdlGpu
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA SDL_GPU: TextureCube::GetData: dataLength too small for the requested region");
+
+        if (compressed_)
+        {
+            const auto& blocks = compressedLevels_[
+                static_cast<std::size_t>(face * levelCount_ + level)];
+            const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+            const std::vector<std::uint8_t> rgba = ConvertTextureLevelForFallback(
+                format, blocks.data(), blocks.size(), levelSize, levelSize);
+            if (rgba.size() < static_cast<std::size_t>(levelSize) * levelSize * 4u)
+                return false;
+            auto* destination = static_cast<std::uint8_t*>(data);
+            for (int row = 0; row < h; ++row)
+            {
+                std::memcpy(
+                    destination + static_cast<std::size_t>(row) * w * 4u,
+                    rgba.data() +
+                        (static_cast<std::size_t>(y + row) * levelSize + x) * 4u,
+                    static_cast<std::size_t>(w) * 4u);
+            }
+            return true;
+        }
 
         SDL_GPUDevice* device = owner_->Device();
         SDL_GPUTransferBufferCreateInfo transferInfo{};

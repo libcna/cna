@@ -63,6 +63,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
@@ -153,6 +154,15 @@ protected:
             plain.SetData(kFaceOrder[face], texels.data(), static_cast<int>(texels.size()));
         }
 
+        // EnvironmentMapEffect always samples its ordinary 2D base texture as well as the cube.
+        // Make that input explicit and neutral. Leaving it null made SDL GPU correctly refuse to
+        // produce fragment colour while a renderer with an internal null-texture fallback could
+        // still draw, so the old fixture was not actually renderer-neutral and its two equally
+        // clear columns could satisfy the agreement check for the wrong reason.
+        Texture2D white(device, 1, 1, false, SurfaceFormat::Color);
+        const Color whiteTexel = Color::White;
+        white.SetData(&whiteTexel, 1);
+
         // Leg 1, before anything is drawn: the blocks read back DECODED, matching the oracle. This
         // is the half a rendered comparison cannot isolate -- two columns could agree because both
         // cubes are wrong in the same way.
@@ -193,6 +203,7 @@ protected:
             effect.setViewProperty(Matrix::getIdentityProperty());
             effect.setProjectionProperty(Matrix::getIdentityProperty());
             effect.setEnvironmentMapProperty(&cube);
+            effect.setTextureProperty(&white);
             effect.setEnvironmentMapAmountProperty(1.0f);
             effect.setFresnelFactorProperty(0.0f);
             effect.setDiffuseColorProperty(Vector3::Zero);

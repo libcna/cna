@@ -123,6 +123,10 @@ VERIFIED_DIRECT = {
     "easygl_real_window_resize_test.cpp": ("SDLGPU-68", "same source passes SDL GPU"),
     "easygl_scissor_test.cpp": ("SDLGPU-67", "same source passes SDL GPU"),
     "easygl_surface_format_throws_test.cpp": ("SDLGPU-69", "same source passes SDL GPU with truthful format classification"),
+    "easygl_texturecube_content_load_test.cpp": ("SDLGPU-70", "same DDS content source passes SDL GPU"),
+    "easygl_texturecube_faces_test.cpp": ("SDLGPU-70", "same six-face source passes SDL GPU"),
+    "easygl_texturecube_mip_test.cpp": ("SDLGPU-70", "same authored-mip source passes SDL GPU"),
+    "easygl_texturecube_partial_rect_test.cpp": ("SDLGPU-70", "same partial-rectangle source passes SDL GPU"),
     "easygl_viewport_state_test.cpp": ("SDLGPU-67", "same source passes SDL GPU"),
     "easygl_viewport_subregion_test.cpp": ("SDLGPU-67", "same source passes SDL GPU"),
 }

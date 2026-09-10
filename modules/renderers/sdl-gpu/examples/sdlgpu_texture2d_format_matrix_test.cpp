@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -32,6 +33,7 @@
 using CNA::Internal::Renderers::RendererFormatVerdict;
 using CNA::Internal::Renderers::SdlGpu::SdlGpuRenderer;
 using CNA::Internal::Renderers::SdlGpu::SdlGpuTextureRenderer;
+using CNA::Internal::Renderers::SdlGpu::SdlGpuTextureCubeRenderer;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -195,14 +197,23 @@ class SdlGpuTexture2DFormatMatrixTest final : public Game
         const auto& native = dynamic_cast<const SdlGpuTextureRenderer&>(texture.GetRenderer());
         Texture2D dxt3(device, 4, 4, false, SurfaceFormat::Dxt3);
         Texture2D dxt5(device, 4, 4, false, SurfaceFormat::Dxt5);
+        TextureCube cubeDxt1(device, 4, false, SurfaceFormat::Dxt1);
+        TextureCube cubeDxt3(device, 4, false, SurfaceFormat::Dxt3);
+        TextureCube cubeDxt5(device, 4, false, SurfaceFormat::Dxt5);
         const bool allNative = native.UsesNativeCompressionEXT() &&
             dynamic_cast<const SdlGpuTextureRenderer&>(dxt3.GetRenderer())
                 .UsesNativeCompressionEXT() &&
             dynamic_cast<const SdlGpuTextureRenderer&>(dxt5.GetRenderer())
+                .UsesNativeCompressionEXT() &&
+            dynamic_cast<const SdlGpuTextureCubeRenderer&>(cubeDxt1.GetRenderer())
+                .UsesNativeCompressionEXT() &&
+            dynamic_cast<const SdlGpuTextureCubeRenderer&>(cubeDxt3.GetRenderer())
+                .UsesNativeCompressionEXT() &&
+            dynamic_cast<const SdlGpuTextureCubeRenderer&>(cubeDxt5.GetRenderer())
                 .UsesNativeCompressionEXT();
         const auto& renderer = dynamic_cast<const SdlGpuRenderer&>(device.GetRenderer());
         Check(renderer.LoadsCompressedContentNativelyEXT() == allNative,
-              "compressed-content loader policy matches actual BC1/2/3 device storage");
+              "compressed-content loader policy matches actual 2D/cube BC1/2/3 device storage");
         std::printf("[INFO] DXT storage path: %s\n",
                     native.UsesNativeCompressionEXT() ? "native BC1" : "renderer RGBA8 decode");
     }
