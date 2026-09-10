@@ -317,6 +317,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **`Texture2D.FromStream` preserves XNA/FNA stream position semantics** (`SOFTWARE-297`). Both
   overloads decode from the current position, allowing an encoded image after a caller-owned
   prefix, while a seekable stream positioned exactly at its end is rewound and reused from zero.
+- **Resolved render targets can be saved through the classic image APIs** (`SOFTWARE-298`).
+  `SaveAsPng` and `SaveAsJpeg` obtain live level-zero Color pixels through renderer readback rather
+  than requiring an upload shadow that rendered targets deliberately do not own.
 - **Every XNA-permitted ordinary `TextureCube` format has the same exact storage and sampling**
   (`SOFTWARE-145`, `SOFTWARE-149`, `SOFTWARE-150`). Each of the six faces and every declared mip
   independently retains Color, DXT1/3/5, normalized-integer, binary32 or binary16 bytes. Typed

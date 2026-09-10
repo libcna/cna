@@ -25,6 +25,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
@@ -53,6 +54,7 @@ using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::PresentationParameters;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using System::IO::MemoryStream;
 
 namespace
@@ -2037,6 +2039,27 @@ TEST_F(SaveAsPngTest, SaveWithDifferentTargetSizeResizesOutput)
     EXPECT_EQ(loaded.getHeightProperty(), 4);
 }
 
+TEST_F(SaveAsPngTest, ResolvedRenderTargetSavesItsLivePixels)
+{
+    RenderTarget2D target(gd, 2, 2);
+    gd.SetRenderTarget(&target);
+    gd.Clear(Color(17, 93, 201, 255));
+    gd.SetRenderTarget(nullptr);
+
+    MemoryStream encoded;
+    target.SaveAsPng(&encoded, 2, 2);
+    const auto bytes = encoded.GetBuffer();
+    MemoryStream source(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D decoded = Texture2D::FromStream(gd, source);
+    std::vector<Color> pixels(4);
+    decoded.GetData(pixels.data(), 0, static_cast<int>(pixels.size()));
+
+    EXPECT_TRUE(std::all_of(pixels.begin(), pixels.end(), [](const Color& pixel)
+    {
+        return pixel == Color(17, 93, 201, 255);
+    }));
+}
+
 TEST_F(SaveAsPngTest, FilenameOverloadWritesReadableFile)
 {
     Texture2D src(gd, 2, 2);
@@ -2189,6 +2212,27 @@ TEST_F(SaveAsJpegTest, SaveWithDifferentTargetSizeResizesOutput)
 
     EXPECT_EQ(loaded.getWidthProperty(), 6);
     EXPECT_EQ(loaded.getHeightProperty(), 4);
+}
+
+TEST_F(SaveAsJpegTest, ResolvedRenderTargetSavesItsLivePixels)
+{
+    RenderTarget2D target(gd, 4, 4);
+    gd.SetRenderTarget(&target);
+    gd.Clear(Color(30, 180, 70, 255));
+    gd.SetRenderTarget(nullptr);
+
+    MemoryStream encoded;
+    target.SaveAsJpeg(&encoded, 4, 4);
+    const auto bytes = encoded.GetBuffer();
+    MemoryStream source(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D decoded = Texture2D::FromStream(gd, source);
+    std::vector<Color> pixels(16);
+    decoded.GetData(pixels.data(), 0, static_cast<int>(pixels.size()));
+
+    EXPECT_TRUE(std::all_of(pixels.begin(), pixels.end(), [&](const Color& pixel)
+    {
+        return IsCloseTo(pixel, 30, 180, 70, 8);
+    }));
 }
 
 TEST_F(SaveAsJpegTest, FilenameOverloadWritesReadableFile)

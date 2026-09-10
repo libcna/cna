@@ -704,6 +704,8 @@ namespace Microsoft::Xna::Framework::Graphics
             GraphicsDevice& device, int w, int h, SurfaceFormat format,
             std::vector<std::vector<std::uint8_t>>&& blockLevels);
 
+        /// Returns encoder-ready RGBA8 pixels, reading live Color render-target storage when needed.
+        [[nodiscard]] std::vector<std::uint8_t> GetPixelsForSave(const char* api) const;
         void storeCpuPixels(const uint8_t* rgba, int pixelCount);
         std::vector<uint8_t>& getMipBuffer(int level);
         const std::vector<uint8_t>* getMipBufferConst(int level) const;

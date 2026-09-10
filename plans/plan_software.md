@@ -181,7 +181,9 @@
 > `SOFTWARE-295` restores the exact XNA exception types.
 > That scan then found the same leak for unresolved SpriteFont glyphs (`SOFTWARE-296`), and the
 > adjacent stream audit proved that both `Texture2D.FromStream` overloads ignored FNA's current-
-> position and rewind-at-end behavior (`SOFTWARE-297`).
+> position and rewind-at-end behavior (`SOFTWARE-297`). Following the image path in the opposite
+> direction exposed `SaveAsPng`/`SaveAsJpeg` reading stale-or-absent upload shadows instead of live
+> render-target storage; `SOFTWARE-298` restores FNA's native-readback behavior.
 > The adjacent Effect reflection audit found another FNA divergence: Microsoft returns null for
 > every invalid integer index in the annotation, parameter, pass and technique collections, while
 > CNA's reference-returning API made that result impossible and leaked `std::out_of_range`.
@@ -546,6 +548,7 @@ its own tests and plan evidence in the same commit.
 | SOFTWARE-295 | Restore classic `Model` public exception identities | ✅ | **Closed 2026-09-10.** A scan for native C++ throws found that the three classic bone-transform copy methods reported an undersized caller array as `std::out_of_range`, while `Model.Draw` reported an Effect not implementing `IEffectMatrices` as `std::runtime_error`. FNA and Microsoft's public contract use `ArgumentOutOfRangeException` with the matching array parameter name and `InvalidOperationException`, respectively. The existing size tests accepted the broad native base class and no test exercised the invalid Effect family; four exact discriminators failed 0/4 before repair. All four paths now expose the XNA exception types. The complete 24-test Software `ModelTest` suite and the focused 4/4 shared EasyGL proof pass. |
 | SOFTWARE-296 | Restore unresolved `SpriteFont` glyph exception identity | ✅ | **Closed 2026-09-10.** The native-throw audit found that `SpriteFont.MeasureString` and `SpriteBatch.DrawString` reported an unresolvable character without a default glyph as `std::invalid_argument`. FNA explicitly throws `ArgumentException(..., "text")` in the string and StringBuilder paths, matching the XNA-visible contract. Two existing measure tests required the wrong native type and no post-`Begin` DrawString test reached the glyph resolver. All three exact discriminators failed before repair; the shared text paths now expose `System::ArgumentException` with parameter name `text`. The complete Software `SpriteFontTest`/`SpriteBatchTest` family passes 80/80, and the focused 3/3 proof passes on EasyGL GLES and desktop compiled-effect EasyGL. |
 | SOFTWARE-297 | Restore classic `Texture2D.FromStream` position semantics | ✅ | **Closed 2026-09-10.** FNA decodes from the caller's current stream position and, for a seekable stream positioned exactly at its end, rewinds to the beginning first. CNA instead allocated the stream's complete `Length` and demanded that many bytes from the current position; any nonzero prefix over-read at EOF, and the documented rewind case read zero bytes. Two public-overload discriminators failed 0/2 before repair. The shared decoder now rewinds the exact end position and otherwise reads only `Length - Position`, retaining the caller's prefix semantics. The complete eight-test Software format/resize slice passes, and the focused two-test proof passes on EasyGL GLES and desktop compiled-effect EasyGL. |
+| SOFTWARE-298 | Save resolved render-target pixels through classic PNG/JPEG APIs | ✅ | **Closed 2026-09-10.** FNA's `SaveAsPng` and `SaveAsJpeg` always read level zero from the live native texture before encoding. CNA instead encoded only `cpuPixels_`, which is deliberately absent for a `RenderTarget2D` because draws mutate renderer-owned storage; both inherited save methods therefore failed every resolved render target without reading one pixel. Two end-to-end clear/save/decode/readback discriminators failed 0/2 before repair. Color saves now obtain encoder-ready bytes through the authoritative public texture readback, preserving ordinary uploads while also inheriting disposed/active-target validation. The complete Software PNG/JPEG family passes 16/16, and both focused round trips pass on EasyGL GLES and desktop compiled-effect EasyGL. |
 
 ### Current dependency order
 Tasks through `SOFTWARE-161` plus `SOFTWARE-166/167/169/170/171/172/174/175/176/177/179..197/199..206/208..225` are complete except for the intentionally
@@ -576,7 +579,8 @@ bitwise conversion and separates generic transfer width from the fixed vertex de
 draw ranges exist in the first place; `SOFTWARE-295` closes the exact public exception boundary on
 the remaining classic `Model` native-throw paths; `SOFTWARE-296` does the same for unresolved
 SpriteFont glyphs in both measurement and drawing; `SOFTWARE-297` restores both classic image-
-stream overloads' current-position and end-rewind rules.
+stream overloads' current-position and end-rewind rules; `SOFTWARE-298` makes the matching classic
+save APIs consume live resolved render-target content.
 `SOFTWARE-175` closes the EasyGL context-lifecycle defect found while validating
 `SOFTWARE-174`; `SOFTWARE-176` closes the shared normalized-depth-bias defect exposed by the
 property-level rasterizer audit, while `SOFTWARE-177` closes the desktop wireframe half and leaves

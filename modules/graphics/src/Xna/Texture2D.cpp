@@ -2582,25 +2582,52 @@ namespace Microsoft::Xna::Framework::Graphics
     // SaveAsPng
     // -----------------------------------------------------------------------
 
+    std::vector<std::uint8_t> Texture2D::GetPixelsForSave(const char* api) const
+    {
+        // FNA reads level zero from the live native texture for every save. In CNA an ordinary
+        // Color texture's upload shadow is normally equivalent, but a RenderTarget2D deliberately
+        // has no authoritative shadow because draws mutate its renderer storage. Route Color
+        // through the public readback path so render targets are resolved/read correctly and the
+        // same disposed/active-resource checks apply before encoding.
+        if (format_ == SurfaceFormat::Color && width > 0 && height > 0)
+        {
+            const int total = width * height;
+            std::vector<Color> colors(static_cast<std::size_t>(total));
+            GetData(colors.data(), 0, total);
+
+            std::vector<std::uint8_t> rgba(static_cast<std::size_t>(total) * 4u);
+            for (int i = 0; i < total; ++i)
+            {
+                rgba[static_cast<std::size_t>(i) * 4u + 0u] = colors[i].getRProperty();
+                rgba[static_cast<std::size_t>(i) * 4u + 1u] = colors[i].getGProperty();
+                rgba[static_cast<std::size_t>(i) * 4u + 2u] = colors[i].getBProperty();
+                rgba[static_cast<std::size_t>(i) * 4u + 3u] = colors[i].getAProperty();
+            }
+            return rgba;
+        }
+
+        if (!cpuPixels_ || cpuPixels_->empty())
+            throw std::runtime_error(std::string(api) + ": no CPU-side pixel data available");
+        return *cpuPixels_;
+    }
+
     void Texture2D::SaveAsPng(System::IO::Stream* stream, int targetWidth, int targetHeight) const
     {
         if (!stream)
             throw std::invalid_argument("Texture2D::SaveAsPng: stream is null");
-        if (!cpuPixels_ || cpuPixels_->empty())
-            throw std::runtime_error("Texture2D::SaveAsPng: no CPU-side pixel data available");
+        const std::vector<std::uint8_t> pixels = GetPixelsForSave("Texture2D::SaveAsPng");
 
         const std::vector<uint8_t> encoded = ImageLoader::EncodePng(
-            cpuPixels_->data(), width, height, targetWidth, targetHeight);
+            pixels.data(), width, height, targetWidth, targetHeight);
         stream->Write(reinterpret_cast<const System::IO::bytecs*>(encoded.data()), 0,
                       static_cast<System::IO::intcs>(encoded.size()));
     }
 
     void Texture2D::SaveAsPng(const std::string& filename) const
     {
-        if (!cpuPixels_ || cpuPixels_->empty())
-            throw std::runtime_error("Texture2D::SaveAsPng: no CPU-side pixel data available");
+        const std::vector<std::uint8_t> pixels = GetPixelsForSave("Texture2D::SaveAsPng");
 
-        ImageLoader::SavePng(cpuPixels_->data(), width, height, filename);
+        ImageLoader::SavePng(pixels.data(), width, height, filename);
     }
 
     // -----------------------------------------------------------------------
@@ -2624,22 +2651,20 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!stream)
             throw std::invalid_argument("Texture2D::SaveAsJpeg: stream is null");
-        if (!cpuPixels_ || cpuPixels_->empty())
-            throw std::runtime_error("Texture2D::SaveAsJpeg: no CPU-side pixel data available");
+        const std::vector<std::uint8_t> pixels = GetPixelsForSave("Texture2D::SaveAsJpeg");
 
         const std::vector<uint8_t> encoded = ImageLoader::EncodeJpeg(
-            cpuPixels_->data(), width, height, targetWidth, targetHeight, GetJpegSaveQuality());
+            pixels.data(), width, height, targetWidth, targetHeight, GetJpegSaveQuality());
         stream->Write(reinterpret_cast<const System::IO::bytecs*>(encoded.data()), 0,
                       static_cast<System::IO::intcs>(encoded.size()));
     }
 
     void Texture2D::SaveAsJpeg(const std::string& filename) const
     {
-        if (!cpuPixels_ || cpuPixels_->empty())
-            throw std::runtime_error("Texture2D::SaveAsJpeg: no CPU-side pixel data available");
+        const std::vector<std::uint8_t> pixels = GetPixelsForSave("Texture2D::SaveAsJpeg");
 
         ImageLoader::SaveJpeg(
-            cpuPixels_->data(), width, height, filename, GetJpegSaveQuality());
+            pixels.data(), width, height, filename, GetJpegSaveQuality());
     }
 
     Texture2D Texture2D::CreateFromPixels(GraphicsDevice& device,
