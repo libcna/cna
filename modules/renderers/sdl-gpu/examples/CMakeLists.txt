@@ -958,8 +958,26 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # a SIGSEGV is an attributable result instead of a lost shard.
     cna_sdlgpu_test(cna_test_sdlgpu_bound_target_lifetime
         ${CNA_GRAPHICS_EXAMPLES_DIR}/bound_target_lifetime_test.cpp)
-    cna_register_renderer_test(NAME SdlGpu_BoundTargetLifetime COMMAND cna_test_sdlgpu_bound_target_lifetime
-        TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    if(WIN32)
+        # SDLGPU-113: the source's Unix supervisor uses fork/exec because several legs deliberately
+        # destroy bound objects and cross frame boundaries. Give Win32 the same fresh-process
+        # contract through CTest instead of its weaker all-in-one fallback.
+        foreach(lifetime_leg IN ITEMS
+                A1 A2 B1 B2 C1 D1 E1 F1 G1 G2 H1 I1 J1 K1 L1 M1 N1 P1)
+            cna_register_renderer_test(NAME SdlGpu_BoundTargetLifetime_${lifetime_leg}
+                COMMAND cna_test_sdlgpu_bound_target_lifetime --leg=${lifetime_leg}
+                TIMEOUT 600 LABELS "SdlGpu;Parity"
+                ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+            set_tests_properties(SdlGpu_BoundTargetLifetime_${lifetime_leg} PROPERTIES
+                FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+        endforeach()
+    else()
+        cna_register_renderer_test(NAME SdlGpu_BoundTargetLifetime
+            COMMAND cna_test_sdlgpu_bound_target_lifetime
+            TIMEOUT 600 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_BoundTargetLifetime PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endif()
 
     # REMED-GFX-180: the public render-target -> Present lifecycle contract. `SdlGpu_RenderState`
     # aborted with `Cannot present while render targets are bound`, which is the SECOND event in a
@@ -970,8 +988,31 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # process; leg C2 reproduces the abort end to end and its correct outcome is SIGABRT.
     cna_sdlgpu_test(cna_test_sdlgpu_present_lifecycle
         ${CNA_GRAPHICS_EXAMPLES_DIR}/present_lifecycle_contract_test.cpp)
-    cna_register_renderer_test(NAME SdlGpu_PresentLifecycle COMMAND cna_test_sdlgpu_present_lifecycle
-        TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    if(WIN32)
+        foreach(present_leg IN ITEMS
+                A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14
+                B1 B2 B3 B4 C1 C3 C4)
+            cna_register_renderer_test(NAME SdlGpu_PresentLifecycle_${present_leg}
+                COMMAND cna_test_sdlgpu_present_lifecycle --leg=${present_leg}
+                TIMEOUT 900 LABELS "SdlGpu;Parity"
+                ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+            set_tests_properties(SdlGpu_PresentLifecycle_${present_leg} PROPERTIES
+                FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+        endforeach()
+        # C2 intentionally lets FNA's bound-target Present refusal escape main. Unix proves the
+        # exact SIGABRT in its supervisor; Win32's portable observable is abnormal/non-zero exit.
+        cna_register_renderer_test(NAME SdlGpu_PresentLifecycle_C2
+            COMMAND cna_test_sdlgpu_present_lifecycle --leg=C2
+            TIMEOUT 900 LABELS "SdlGpu;Parity"
+            ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_PresentLifecycle_C2 PROPERTIES WILL_FAIL TRUE)
+    else()
+        cna_register_renderer_test(NAME SdlGpu_PresentLifecycle
+            COMMAND cna_test_sdlgpu_present_lifecycle
+            TIMEOUT 900 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_PresentLifecycle PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endif()
 
     # REMED-GFX-163 cross-renderer control: the same public depth-backed MULTISAMPLED
     # RenderTarget2D construction and lifecycle that aborted the process on Bgfx. Only Bgfx
@@ -1216,22 +1257,69 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # aspect-scaled live viewport WebGPU used; both are addressed here.
     cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_readback_dimension
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_readback_dimension_test.cpp)
-    cna_register_renderer_test(NAME SdlGpu_BackbufferReadbackDimension COMMAND cna_test_sdlgpu_backbuffer_readback_dimension
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    # SDLGPU-113: these fixtures use fork/exec on Unix to give every first-frame/first-read leg a
+    # fresh process. Windows deliberately compiles that supervisor out, so registering its empty-
+    # argument fallback would run incompatible initial extents in one device and make later legs
+    # measure stale state. CTest supplies the missing process isolation without another binary.
+    if(WIN32)
+        foreach(backbuffer_leg IN ITEMS A1 A2 B1 C1 D1 F1 G1 G2)
+            cna_register_renderer_test(
+                NAME SdlGpu_BackbufferReadbackDimension_${backbuffer_leg}
+                COMMAND cna_test_sdlgpu_backbuffer_readback_dimension --leg=${backbuffer_leg}
+                TIMEOUT 300 LABELS "SdlGpu;Parity"
+                ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+            set_tests_properties(SdlGpu_BackbufferReadbackDimension_${backbuffer_leg} PROPERTIES
+                FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+        endforeach()
+    else()
+        cna_register_renderer_test(NAME SdlGpu_BackbufferReadbackDimension
+            COMMAND cna_test_sdlgpu_backbuffer_readback_dimension
+            TIMEOUT 300 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_BackbufferReadbackDimension PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endif()
 
     # REMED-GFX-161: cross-renderer control for the first-read completion contract (preserves the
     # GFX-165 lazy-proxy backbuffer read; no SDL_GPU production change here).
     cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_first_read
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_first_read_test.cpp)
-    cna_register_renderer_test(NAME SdlGpu_BackbufferFirstRead COMMAND cna_test_sdlgpu_backbuffer_first_read
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    if(WIN32)
+        foreach(backbuffer_leg IN ITEMS A1 A3 A4 A6 B1 B2 B3 B4 C1 D63 D64 D65 E1)
+            cna_register_renderer_test(NAME SdlGpu_BackbufferFirstRead_${backbuffer_leg}
+                COMMAND cna_test_sdlgpu_backbuffer_first_read --leg=${backbuffer_leg}
+                TIMEOUT 300 LABELS "SdlGpu;Parity"
+                ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+            set_tests_properties(SdlGpu_BackbufferFirstRead_${backbuffer_leg} PROPERTIES
+                FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+        endforeach()
+    else()
+        cna_register_renderer_test(NAME SdlGpu_BackbufferFirstRead
+            COMMAND cna_test_sdlgpu_backbuffer_first_read
+            TIMEOUT 300 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_BackbufferFirstRead PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endif()
 
     # REMED-GFX-162 cross-renderer control: SdlGpu's lazy-proxy GetBackBufferData (GFX-165) SUCCEEDS
     # and fully writes the requested range, so the Headless rejection is specific, not universal.
     cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_reject
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_headless_reject_test.cpp)
-    cna_register_renderer_test(NAME SdlGpu_BackbufferReject COMMAND cna_test_sdlgpu_backbuffer_reject
-        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    if(WIN32)
+        foreach(backbuffer_leg IN ITEMS R1 R2 R3 R4 R5 R6 D1 P1 P2 P3 P4 P5)
+            cna_register_renderer_test(NAME SdlGpu_BackbufferReject_${backbuffer_leg}
+                COMMAND cna_test_sdlgpu_backbuffer_reject --leg=${backbuffer_leg}
+                TIMEOUT 300 LABELS "SdlGpu;Parity"
+                ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+            set_tests_properties(SdlGpu_BackbufferReject_${backbuffer_leg} PROPERTIES
+                FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+        endforeach()
+    else()
+        cna_register_renderer_test(NAME SdlGpu_BackbufferReject
+            COMMAND cna_test_sdlgpu_backbuffer_reject
+            TIMEOUT 300 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_BackbufferReject PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endif()
 
     # SDLGPU-74: RenderTarget2D inherits Texture2D::SetData and RenderTargetCube inherits
     # TextureCube::SetData. The SDL_GPU 2D target used to accept-and-discard both level-zero and
