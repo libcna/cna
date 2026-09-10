@@ -41,6 +41,13 @@ namespace CNA::Internal::Graphics
         std::same_as<std::remove_cvref_t<T>, float> ||
         std::same_as<std::remove_cvref_t<T>, Microsoft::Xna::Framework::Vector2> ||
         std::same_as<std::remove_cvref_t<T>, Microsoft::Xna::Framework::Vector4>;
+
+    /** @brief Identifies other C++ value types that can use XNA's raw generic transfer path. */
+    template<typename T>
+    concept TextureCubeRawElement =
+        std::is_trivially_copyable_v<std::remove_cvref_t<T>> &&
+        (!TextureCubePackedElement<std::remove_cvref_t<T>>) &&
+        (!TextureCubeFloatElement<std::remove_cvref_t<T>>);
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -113,9 +120,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param rect         Sub-rectangle to update, or nullptr for the entire level.
          * @param data         Pointer to the source Color array.
          * @param startIndex   First element within @p data to start reading.
-         * @param elementCount Number of Color elements the caller offers; must be at least the
-         *                     number of texels in the requested region, of which exactly that many
-         *                     are read starting at @p startIndex.
+         * @param elementCount Exact number of Color elements required for the selected region.
          * @throws System::ObjectDisposedException if this TextureCube has been disposed.
          * @throws System::NotSupportedException if this renderer cannot store the requested face,
          *         mip level or region -- including a renderer that creates no cube-map resource.
@@ -129,10 +134,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads packed-vector data to an entire cube face.
          *
-         * @tparam T An XNA packed-vector type whose packed width matches the cube format.
+         * @tparam T An XNA packed-vector type whose packed width divides the cube format.
          * @param face Cube face to update.
          * @param data Source packed elements.
-         * @param elementCount Number of available elements.
+         * @param elementCount Exact number of elements required for the complete face.
          */
         template<CNA::Internal::Graphics::TextureCubePackedElement T>
         void SetData(CubeMapFace face, const T* data, int elementCount)
@@ -147,7 +152,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param face Cube face to update.
          * @param data Source packed elements.
          * @param startIndex First source element.
-         * @param elementCount Number of available elements beginning at @p startIndex.
+         * @param elementCount Exact number of elements required for the complete face.
          */
         template<CNA::Internal::Graphics::TextureCubePackedElement T>
         void SetData(CubeMapFace face, const T* data, int startIndex, int elementCount)
@@ -164,7 +169,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param rect Destination rectangle, or null for the complete level.
          * @param data Source packed elements.
          * @param startIndex First source element.
-         * @param elementCount Number of available elements beginning at @p startIndex.
+         * @param elementCount Exact number of elements required for the selected region.
          */
         template<CNA::Internal::Graphics::TextureCubePackedElement T>
         void SetData(CubeMapFace face, int level,
@@ -197,7 +202,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @tparam T `float`, `Vector2` or `Vector4`, matching the cube format.
          * @param face Cube face to update.
          * @param data Source elements.
-         * @param elementCount Number of available elements.
+         * @param elementCount Exact number of elements required for the complete face.
          */
         template<CNA::Internal::Graphics::TextureCubeFloatElement T>
         void SetData(CubeMapFace face, const T* data, int elementCount)
@@ -212,7 +217,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param face Cube face to update.
          * @param data Source elements.
          * @param startIndex First source element.
-         * @param elementCount Number of available elements beginning at @p startIndex.
+         * @param elementCount Exact number of elements required for the complete face.
          */
         template<CNA::Internal::Graphics::TextureCubeFloatElement T>
         void SetData(CubeMapFace face, const T* data, int startIndex, int elementCount)
@@ -229,7 +234,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param rect Destination rectangle, or null for the complete level.
          * @param data Source elements.
          * @param startIndex First source element.
-         * @param elementCount Number of available elements beginning at @p startIndex.
+         * @param elementCount Exact number of elements required for the selected region.
          */
         template<CNA::Internal::Graphics::TextureCubeFloatElement T>
         void SetData(CubeMapFace face, int level,
@@ -278,6 +283,61 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /**
+         * @brief Uploads arbitrary value-type data to an entire cube face.
+         *
+         * @tparam T Trivially copyable type whose object representation is the transfer data.
+         * @param face Cube face to update.
+         * @param data Source elements.
+         * @param elementCount Exact number of elements required for the complete face.
+         */
+        template<CNA::Internal::Graphics::TextureCubeRawElement T>
+        void SetData(CubeMapFace face, const T* data, int elementCount)
+        {
+            SetData(face, 0, nullptr, data, 0, elementCount);
+        }
+
+        /**
+         * @brief Uploads a source window of arbitrary value-type data to an entire cube face.
+         *
+         * @tparam T Trivially copyable type whose object representation is the transfer data.
+         * @param face Cube face to update.
+         * @param data Source elements.
+         * @param startIndex First source element.
+         * @param elementCount Exact number of elements required for the complete face.
+         */
+        template<CNA::Internal::Graphics::TextureCubeRawElement T>
+        void SetData(CubeMapFace face, const T* data, int startIndex, int elementCount)
+        {
+            SetData(face, 0, nullptr, data, startIndex, elementCount);
+        }
+
+        /**
+         * @brief Uploads arbitrary value-type data to a cube-face mip or rectangle.
+         *
+         * @tparam T Trivially copyable type whose object representation is the transfer data.
+         * @param face Cube face to update.
+         * @param level Mip level beginning at zero.
+         * @param rect Destination rectangle, or null for the complete level.
+         * @param data Source elements.
+         * @param startIndex First source element.
+         * @param elementCount Exact number of elements required for the selected region.
+         */
+        template<CNA::Internal::Graphics::TextureCubeRawElement T>
+        void SetData(CubeMapFace face, int level,
+                     const Microsoft::Xna::Framework::Rectangle* rect,
+                     const T* data, int startIndex, int elementCount)
+        {
+            if (data == nullptr)
+                throw std::invalid_argument("TextureCube::SetData: data must not be null");
+            const int elementBytes = static_cast<int>(sizeof(T));
+            (void) ValidateTypedTransferEXT(
+                "TextureCube::SetData", face, level, rect,
+                startIndex, elementCount, elementBytes);
+            const auto* bytes = reinterpret_cast<const std::uint8_t*>(data + startIndex);
+            SetTypedDataBytesEXT(face, level, rect, bytes, elementBytes);
+        }
+
+        /**
          * @brief Uploads exact bytes to an entire cube face.
          *
          * This represents XNA's generic byte-array SetData route. For Dxt1, Dxt3 and Dxt5 the
@@ -285,7 +345,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param face         The cube face to update.
          * @param data         Source bytes.
-         * @param elementCount Number of available bytes.
+         * @param elementCount Exact number of bytes required for the complete face.
          */
         void SetData(CubeMapFace face, const std::uint8_t* data, int elementCount);
 
@@ -297,7 +357,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param rect         Region in texel coordinates, or null for the whole mip.
          * @param data         Source bytes.
          * @param startIndex   First source byte.
-         * @param elementCount Number of available source bytes from @p startIndex.
+         * @param elementCount Exact number of source bytes required for the selected region.
          */
         void SetData(CubeMapFace face, int level,
                      const Microsoft::Xna::Framework::Rectangle* rect,
@@ -308,7 +368,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param face Cube face to read.
          * @param data Destination bytes.
-         * @param elementCount Number of available destination bytes.
+         * @param elementCount Exact number of destination bytes required for the complete face.
          */
         void GetData(CubeMapFace face, std::uint8_t* data, int elementCount) const;
 
@@ -318,7 +378,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param face Cube face to read.
          * @param data Destination bytes.
          * @param startIndex First destination byte.
-         * @param elementCount Number of available destination bytes from @p startIndex.
+         * @param elementCount Exact number of destination bytes required for the complete face.
          */
         void GetData(CubeMapFace face, std::uint8_t* data,
                      int startIndex, int elementCount) const;
@@ -331,7 +391,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param rect Source rectangle, or null for the complete level.
          * @param data Destination bytes.
          * @param startIndex First destination byte.
-         * @param elementCount Number of available destination bytes from @p startIndex.
+         * @param elementCount Exact number of destination bytes required for the selected region.
          */
         void GetData(CubeMapFace face, int level,
                      const Microsoft::Xna::Framework::Rectangle* rect,
@@ -377,16 +437,14 @@ namespace Microsoft::Xna::Framework::Graphics
          * has exactly two outcomes. It either writes the requested region's real content into
          * @p data starting at @p startIndex, or it throws and leaves @p data byte-for-byte
          * untouched -- there is no partially written or fabricated result. Elements of @p data
-         * outside `[startIndex, startIndex + width * height)` are never modified, even when the
-         * caller passes an @p elementCount larger than the region.
+         * outside `[startIndex, startIndex + elementCount)` are never modified.
          *
          * @param face         The cube map face to read from.
          * @param level        Mip level to read (0 = full size).
          * @param rect         Sub-rectangle to read, or nullptr for the entire level.
          * @param data         Output array to receive the Color data.
          * @param startIndex   First element within @p data to write to.
-         * @param elementCount Number of Color elements to read; must be at least the number of
-         *                     texels in the requested region.
+         * @param elementCount Exact number of Color elements required for the selected region.
          * @throws System::ObjectDisposedException if this texture has been disposed.
          * @throws System::NotSupportedException if this graphics renderer cannot read the requested
          *         cube face/mip level back to the CPU (including renderers that create no cube-map
@@ -404,7 +462,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @tparam T An XNA packed-vector type whose packed width matches the cube format.
          * @param face Cube face to read.
          * @param data Destination packed elements.
-         * @param elementCount Number of available destination elements.
+         * @param elementCount Exact number of elements required for the complete face.
          */
         template<CNA::Internal::Graphics::TextureCubePackedElement T>
         void GetData(CubeMapFace face, T* data, int elementCount) const
@@ -415,11 +473,11 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Reads an entire cube face into a destination window of packed-vector elements.
          *
-         * @tparam T An XNA packed-vector type whose packed width matches the cube format.
+         * @tparam T An XNA packed-vector type whose packed width divides the cube format.
          * @param face Cube face to read.
          * @param data Destination packed elements.
          * @param startIndex First destination element.
-         * @param elementCount Number of available elements beginning at @p startIndex.
+         * @param elementCount Exact number of elements required for the complete face.
          */
         template<CNA::Internal::Graphics::TextureCubePackedElement T>
         void GetData(CubeMapFace face, T* data, int startIndex, int elementCount) const
@@ -430,13 +488,13 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Reads a cube-face mip or rectangle into packed-vector elements.
          *
-         * @tparam T An XNA packed-vector type whose packed width matches the cube format.
+         * @tparam T An XNA packed-vector type whose packed width divides the cube format.
          * @param face Cube face to read.
          * @param level Mip level beginning at zero.
          * @param rect Source rectangle, or null for the complete level.
          * @param data Destination packed elements.
          * @param startIndex First destination element.
-         * @param elementCount Number of available elements beginning at @p startIndex.
+         * @param elementCount Exact number of elements required for the selected region.
          */
         template<CNA::Internal::Graphics::TextureCubePackedElement T>
         void GetData(CubeMapFace face, int level,
@@ -468,10 +526,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Reads an entire cube face into scalar/vector binary32 elements.
          *
-         * @tparam T `float`, `Vector2` or `Vector4`, matching the cube format.
+         * @tparam T `float`, `Vector2` or `Vector4`, whose width divides the cube format.
          * @param face Cube face to read.
          * @param data Destination elements.
-         * @param elementCount Number of available destination elements.
+         * @param elementCount Exact number of elements required for the complete face.
          */
         template<CNA::Internal::Graphics::TextureCubeFloatElement T>
         void GetData(CubeMapFace face, T* data, int elementCount) const
@@ -482,11 +540,11 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Reads an entire cube face into a destination window of binary32 elements.
          *
-         * @tparam T `float`, `Vector2` or `Vector4`, matching the cube format.
+         * @tparam T `float`, `Vector2` or `Vector4`, whose width divides the cube format.
          * @param face Cube face to read.
          * @param data Destination elements.
          * @param startIndex First destination element.
-         * @param elementCount Number of available elements beginning at @p startIndex.
+         * @param elementCount Exact number of elements required for the complete face.
          */
         template<CNA::Internal::Graphics::TextureCubeFloatElement T>
         void GetData(CubeMapFace face, T* data, int startIndex, int elementCount) const
@@ -497,13 +555,13 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Reads a cube-face mip or rectangle into scalar/vector binary32 elements.
          *
-         * @tparam T `float`, `Vector2` or `Vector4`, matching the cube format.
+         * @tparam T `float`, `Vector2` or `Vector4`, whose width divides the cube format.
          * @param face Cube face to read.
          * @param level Mip level beginning at zero.
          * @param rect Source rectangle, or null for the complete level.
          * @param data Destination elements.
          * @param startIndex First destination element.
-         * @param elementCount Number of available elements beginning at @p startIndex.
+         * @param elementCount Exact number of elements required for the selected region.
          */
         template<CNA::Internal::Graphics::TextureCubeFloatElement T>
         void GetData(CubeMapFace face, int level,
@@ -552,6 +610,61 @@ namespace Microsoft::Xna::Framework::Graphics
                     }
                 }
             }
+        }
+
+        /**
+         * @brief Reads an entire cube face into arbitrary value-type elements.
+         *
+         * @tparam T Trivially copyable type whose object representation receives the data.
+         * @param face Cube face to read.
+         * @param data Destination elements.
+         * @param elementCount Exact number of elements required for the complete face.
+         */
+        template<CNA::Internal::Graphics::TextureCubeRawElement T>
+        void GetData(CubeMapFace face, T* data, int elementCount) const
+        {
+            GetData(face, 0, nullptr, data, 0, elementCount);
+        }
+
+        /**
+         * @brief Reads an entire cube face into a window of arbitrary value-type elements.
+         *
+         * @tparam T Trivially copyable type whose object representation receives the data.
+         * @param face Cube face to read.
+         * @param data Destination elements.
+         * @param startIndex First destination element.
+         * @param elementCount Exact number of elements required for the complete face.
+         */
+        template<CNA::Internal::Graphics::TextureCubeRawElement T>
+        void GetData(CubeMapFace face, T* data, int startIndex, int elementCount) const
+        {
+            GetData(face, 0, nullptr, data, startIndex, elementCount);
+        }
+
+        /**
+         * @brief Reads a cube-face mip or rectangle into arbitrary value-type elements.
+         *
+         * @tparam T Trivially copyable type whose object representation receives the data.
+         * @param face Cube face to read.
+         * @param level Mip level beginning at zero.
+         * @param rect Source rectangle, or null for the complete level.
+         * @param data Destination elements.
+         * @param startIndex First destination element.
+         * @param elementCount Exact number of elements required for the selected region.
+         */
+        template<CNA::Internal::Graphics::TextureCubeRawElement T>
+        void GetData(CubeMapFace face, int level,
+                     const Microsoft::Xna::Framework::Rectangle* rect,
+                     T* data, int startIndex, int elementCount) const
+        {
+            if (data == nullptr)
+                throw std::invalid_argument("TextureCube::GetData: data must not be null");
+            const int elementBytes = static_cast<int>(sizeof(T));
+            (void) ValidateTypedTransferEXT(
+                "TextureCube::GetData", face, level, rect,
+                startIndex, elementCount, elementBytes);
+            auto* bytes = reinterpret_cast<std::uint8_t*>(data + startIndex);
+            GetTypedDataBytesEXT(face, level, rect, bytes, elementBytes);
         }
 
         /**

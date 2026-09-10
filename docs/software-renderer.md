@@ -308,6 +308,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   probes distinguish the packed layouts and prove that `2.0 * 0.25` reaches the framebuffer as
   0.5 rather than being narrowed through RGBA8. `NormalizedByte2/4` remain rejected because the
   measured XNA cube-format table excludes them on both Reach and HiDef.
+- **TextureCube transfer element types obey Microsoft's generic raw-byte rules**
+  (`SOFTWARE-277`). Application PODs, packed vectors, scalar/vector floats, Color and byte arrays
+  all use the same exact-total and divisible-width validation across faces, mips and rectangles.
+  Multiple narrower elements may compose one wide texel without semantic conversion. DXT accepts
+  byte elements only, matching Microsoft's one-byte compressed-format element oracle; exact block
+  readback remains available through `GetData<byte>`.
 - **NPOT textures use the ordinary complete texture path** (`SOFTWARE-144`). Exact public transfer
   coverage includes 3x5 full and partial-row updates plus the 1x2/1x1 mip tail. The unchanged 3x5
   sampled-row scene passes on Software and EasyGL, while the shared sampler contracts cover NPOT
