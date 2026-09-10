@@ -36,6 +36,7 @@ using namespace CNA::Testing::Renderers;
 #include "System/Environment.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/Environment.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -256,7 +257,7 @@ namespace
             std::vector<Color> destination(
                 static_cast<std::size_t>(kDestinationStart + count + kExtraCapacity + 3), sentinel);
             texture.GetData(level, nullptr, destination.data(), kDestinationStart,
-                            count + kExtraCapacity);
+                            count);
             for (int i = 0; i < count; ++i)
             {
                 SCOPED_TRACE("mip=" + std::to_string(level) + " index=" + std::to_string(i));
@@ -311,11 +312,11 @@ TEST(Texture2DTest, ByteTransfersUseByteCountsAndCallerArrayWindowsForClassicFor
         0xEEu, 0xEEu, 0xEEu,
         0x11u, 0x22u, 0x33u, 0x44u, 0x55u, 0x66u, 0x77u, 0x88u,
         0xEEu};
-    texture.SetData(0, nullptr, source.data(), 3, 9);
+    texture.SetData(0, nullptr, source.data(), 3, 8);
 
     std::array<std::uint8_t, 14> destination{};
     destination.fill(0xCDu);
-    texture.GetData(0, nullptr, destination.data(), 4, 10);
+    texture.GetData(0, nullptr, destination.data(), 4, 8);
     EXPECT_TRUE(std::equal(source.begin() + 3, source.begin() + 11,
                            destination.begin() + 4));
     EXPECT_TRUE(std::all_of(destination.begin(), destination.begin() + 4,
@@ -891,6 +892,62 @@ TEST_F(HiDefFormatConstructionTest, Alpha8IsTheRenderersCallOnHiDef)
     ExpectConstructionMatchesRenderer(SurfaceFormat::Alpha8);
 }
 
+TEST_F(HiDefFormatConstructionTest, GenericValueTypeRoundTripsAnExactSourceAndDestinationWindow)
+{
+    struct RawWord
+    {
+        std::uint16_t low;
+        std::uint16_t high;
+        bool operator==(const RawWord&) const = default;
+    };
+    static_assert(std::is_trivially_copyable_v<RawWord>);
+    static_assert(sizeof(RawWord) == 4);
+
+    Texture2D texture(gd, 2, 1, false, SurfaceFormat::Color);
+    const std::array<RawWord, 4> source{{
+        {0xEEEEu, 0xEEEEu}, {0x0123u, 0x4567u},
+        {0x89ABu, 0xCDEFu}, {0xDDDDu, 0xDDDDu},
+    }};
+    texture.SetData(0, nullptr, source.data(), 1, 2);
+
+    const RawWord sentinel{0xBEEFu, 0xCAFEu};
+    std::array<RawWord, 4> destination{{sentinel, sentinel, sentinel, sentinel}};
+    texture.GetData(0, nullptr, destination.data(), 1, 2);
+    EXPECT_EQ(destination[0], sentinel);
+    EXPECT_EQ(destination[1], source[1]);
+    EXPECT_EQ(destination[2], source[2]);
+    EXPECT_EQ(destination[3], sentinel);
+}
+
+TEST_F(HiDefFormatConstructionTest, ScalarFloatElementsSpanOneVector4Texel)
+{
+    if (gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Vector4)) !=
+        CNA::Internal::Renderers::RendererFormatVerdict::Supported)
+    {
+        GTEST_SKIP() << "The active renderer cannot allocate a Vector4 texture";
+    }
+
+    Texture2D texture(gd, 1, 1, false, SurfaceFormat::Vector4);
+    const std::array<float, 4> source{{1.25f, -2.5f, 3.75f, -4.125f}};
+    texture.SetData(source.data(), static_cast<int>(source.size()));
+    std::array<float, 4> destination{};
+    texture.GetData(destination.data(), static_cast<int>(destination.size()));
+    EXPECT_EQ(destination, source);
+}
+
+TEST_F(HiDefFormatConstructionTest, TotalByteCountMustBeExactAndElementWidthMustDivideFormat)
+{
+    Texture2D texture(gd, 1, 1, false, SurfaceFormat::Color);
+    const std::array<Color, 2> colors{{Color::Red, Color::Blue}};
+    std::array<Color, 2> destination{};
+    EXPECT_THROW(texture.SetData(colors.data(), 2), System::ArgumentException);
+    EXPECT_THROW(texture.GetData(destination.data(), 2), System::ArgumentException);
+
+    std::uint64_t tooWide = 0;
+    EXPECT_THROW(texture.SetData(&tooWide, 1), System::ArgumentException);
+    EXPECT_THROW(texture.GetData(&tooWide, 1), System::ArgumentException);
+}
+
 // Task 290: exhaustive sweep over every SurfaceFormat value. This stays correct automatically if
 // SurfaceFormat grows because every entry is listed explicitly rather than assumed.
 TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsClearly)
@@ -1291,13 +1348,13 @@ TEST(Texture2DTest, SetDataNegativeLevelThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(-1, nullptr, buf, 0, 1), std::out_of_range);
 }
 
-TEST(Texture2DTest, SetDataLevelExtraElementsDoesNotThrow)
+TEST(Texture2DTest, SetDataLevelExtraElementsThrowsArgumentException)
 {
     // Default texture: mipDim(0,0)=1, effective region is 1×1 = 1 pixel.
-    // Providing elementCount=2 (> region size) is allowed — XNA ignores extras.
+    // Microsoft XNA's private ValidateTotalSize requires exact byte equality.
     Texture2D tex;
     Color buf[2] = { Color(0,0,0,0), Color(0,0,0,0) };
-    EXPECT_NO_THROW(tex.SetData(0, nullptr, buf, 0, 2));
+    EXPECT_THROW(tex.SetData(0, nullptr, buf, 0, 2), System::ArgumentException);
 }
 
 TEST(Texture2DTest, SetDataLevelInsufficientElementsThrowsOutOfRange)
@@ -1417,11 +1474,11 @@ protected:
     GraphicsDevice gd;
 };
 
-TEST_F(SetDataSimpleGuardTest, InsufficientElementCountThrowsOutOfRange)
+TEST_F(SetDataSimpleGuardTest, InsufficientElementCountThrowsArgumentException)
 {
     Texture2D tex(gd, 4, 4);
     Color buf[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
-    EXPECT_THROW(tex.SetData(buf, 4), std::out_of_range);
+    EXPECT_THROW(tex.SetData(buf, 4), System::ArgumentException);
 }
 
 TEST_F(SetDataSimpleGuardTest, ExactElementCountDoesNotThrow)

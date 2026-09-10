@@ -75,10 +75,10 @@ configure time.
   `D3DUSAGE_RENDERTARGET`-flagged texture exists in-process alongside any subsequent draw call.
   Documented in `NEXT.md` §4 with a full reproduction record; needs Vulkan validation layers or
   DXVK-internals debugging to root-cause, not another oracle-scene attempt.
-- **Every `SurfaceFormat` besides `Color`**: CNA's own `Texture2D::SetData`/`GetData` C++ API is
-  `Color`-only (no generic `SetData<T>` matching real XNA's own generic API) — a shared,
-  cross-renderer limitation (see `docs/graphics-renderer-feature-matrix.md`'s own `Texture2D` row),
-  not specific to D3D9.
+- **Every `SurfaceFormat` besides `Color`**: the former shared API blocker is closed by
+  `SOFTWARE-276`, which restores generic, byte-width-compatible Texture2D transfers. Dedicated
+  D3D9 oracle scenes for the remaining formats have still not been run, so this is an evidence gap
+  in that renderer's corpus rather than a missing CNA submission API.
 - **`EnvironmentMapEffect`'s specular variants, `PreferPerPixelLighting`**
   (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`): blocked on a confirmed, cross-cutting
   `GpuDrawParams` gap present on **every** CNA renderer (Divergence 1/4 in `plans/plan_dx9.md`'s own

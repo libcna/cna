@@ -294,6 +294,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   point-sampled channel layouts, and `BasicEffect` probes that would fail if `Single(2)` or
   `NormalizedByte4(-0.5)` were narrowed early. Non-XNA `*EXT` texture formats remain outside this
   campaign rather than being accepted as Color.
+- **Texture2D transfer element types follow Microsoft's generic byte contract** (`SOFTWARE-276`).
+  Application-defined trivially-copyable value types are accepted alongside CNA's logical XNA
+  packed/vector wrappers; an element may be narrower than a texel when its width divides the
+  format. `elementCount * elementWidth` must equal the exact selected region storage, so neither a
+  short nor a surplus count is silently accepted. Shared Software/EasyGL tests include a custom
+  structure, nonzero array windows and four scalar floats composing one `Vector4` texel.
 - **Every XNA-permitted ordinary `TextureCube` format has the same exact storage and sampling**
   (`SOFTWARE-145`, `SOFTWARE-149`, `SOFTWARE-150`). Each of the six faces and every declared mip
   independently retains Color, DXT1/3/5, normalized-integer, binary32 or binary16 bytes. Typed

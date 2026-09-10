@@ -92,7 +92,7 @@ namespace
         const Rectangle patchRectangle(1, 1, 2, 2);
         std::vector<T> patch(6, makeValue(91));
         for (int i = 0; i < 4; ++i) patch[static_cast<std::size_t>(i + 1)] = makeValue(20 + i);
-        texture.SetData(0, &patchRectangle, patch.data(), 1, static_cast<int>(patch.size()));
+        texture.SetData(0, &patchRectangle, patch.data(), 1, 4);
         expected[5] = patch[1];
         expected[6] = patch[2];
         expected[9] = patch[3];
@@ -103,8 +103,7 @@ namespace
         EXPECT_EQ(afterPatch, expected);
 
         std::vector<T> rectangleRead(6, makeValue(93));
-        texture.GetData(0, &patchRectangle, rectangleRead.data(), 1,
-                        static_cast<int>(rectangleRead.size()));
+        texture.GetData(0, &patchRectangle, rectangleRead.data(), 1, 4);
         EXPECT_EQ(rectangleRead[0], makeValue(93));
         EXPECT_EQ(rectangleRead[1], patch[1]);
         EXPECT_EQ(rectangleRead[2], patch[2]);

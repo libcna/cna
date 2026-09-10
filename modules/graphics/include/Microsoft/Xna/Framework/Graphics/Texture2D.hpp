@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
@@ -219,11 +220,45 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void SetData(int level, const Rectangle* rect, const std::uint8_t* data,
                      int startIndex, int elementCount);
-        /** @brief Uploads exact unsigned 16-bit values to a UShortEXT texture. */
-        CNAEXT void SetData(const std::uint16_t* data, int elementCount);
-        /** @brief Uploads exact unsigned 16-bit values to a UShortEXT mip level or rectangle. */
-        CNAEXT void SetData(int level, const Rectangle* rect, const std::uint16_t* data,
-                           int startIndex, int elementCount);
+        /** @brief Uploads unsigned 16-bit elements through the generic texture-transfer contract. */
+        void SetData(const std::uint16_t* data, int elementCount);
+        /** @brief Uploads unsigned 16-bit elements to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const std::uint16_t* data,
+                     int startIndex, int elementCount);
+
+        /**
+         * @brief Uploads an arbitrary XNA-compatible value-type representation.
+         *
+         * The element's native byte width must not exceed and must evenly divide the texture
+         * format width. The selected element window must contain exactly the requested region.
+         *
+         * @tparam T Trivially copyable value type whose object representation is the transfer data.
+         * @param data Source elements.
+         * @param elementCount Exact number of elements required for the complete level.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void SetData(const T* data, int elementCount)
+        {
+            SetData(0, nullptr, data, 0, elementCount);
+        }
+
+        /**
+         * @brief Uploads an arbitrary XNA-compatible value-type representation to a region.
+         *
+         * @tparam T Trivially copyable value type whose object representation is the transfer data.
+         * @param level Mip level beginning at zero.
+         * @param rect Destination rectangle, or null for the complete level.
+         * @param data Source elements.
+         * @param startIndex First source element.
+         * @param elementCount Exact number of elements required for the region.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void SetData(int level, const Rectangle* rect, const T* data,
+                     int startIndex, int elementCount)
+        {
+            SetTrivialDataEXT(level, rect, data, startIndex, elementCount,
+                              static_cast<int>(sizeof(T)));
+        }
 
         /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
         void SetData(std::nullptr_t, int elementCount)
@@ -378,13 +413,58 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void GetData(int level, const Rectangle* rect, std::uint8_t* data,
                      int startIndex, int elementCount) const;
-        /** @brief Reads exact unsigned 16-bit values from a UShortEXT texture. */
-        CNAEXT void GetData(std::uint16_t* data, int startIndex, int elementCount) const;
-        /** @brief Reads all exact unsigned 16-bit values from a UShortEXT texture. */
-        CNAEXT void GetData(std::uint16_t* data, int elementCount) const;
-        /** @brief Reads exact unsigned 16-bit values from a UShortEXT mip level or rectangle. */
-        CNAEXT void GetData(int level, const Rectangle* rect, std::uint16_t* data,
-                           int startIndex, int elementCount) const;
+        /** @brief Reads unsigned 16-bit elements through the generic texture-transfer contract. */
+        void GetData(std::uint16_t* data, int startIndex, int elementCount) const;
+        /** @brief Reads all unsigned 16-bit elements from the complete level. */
+        void GetData(std::uint16_t* data, int elementCount) const;
+        /** @brief Reads unsigned 16-bit elements from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, std::uint16_t* data,
+                     int startIndex, int elementCount) const;
+
+        /**
+         * @brief Reads a complete level through an arbitrary XNA-compatible value type.
+         *
+         * @tparam T Trivially copyable value type whose object representation receives the data.
+         * @param data Destination elements.
+         * @param elementCount Exact number of elements required for the complete level.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void GetData(T* data, int elementCount) const
+        {
+            GetData(data, 0, elementCount);
+        }
+
+        /**
+         * @brief Reads a complete level into a window of arbitrary XNA-compatible values.
+         *
+         * @tparam T Trivially copyable value type whose object representation receives the data.
+         * @param data Destination elements.
+         * @param startIndex First destination element.
+         * @param elementCount Exact number of elements required for the complete level.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void GetData(T* data, int startIndex, int elementCount) const
+        {
+            GetData(0, nullptr, data, startIndex, elementCount);
+        }
+
+        /**
+         * @brief Reads a region through an arbitrary XNA-compatible value type.
+         *
+         * @tparam T Trivially copyable value type whose object representation receives the data.
+         * @param level Mip level beginning at zero.
+         * @param rect Source rectangle, or null for the complete level.
+         * @param data Destination elements.
+         * @param startIndex First destination element.
+         * @param elementCount Exact number of elements required for the region.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void GetData(int level, const Rectangle* rect, T* data,
+                     int startIndex, int elementCount) const
+        {
+            GetTrivialDataEXT(level, rect, data, startIndex, elementCount,
+                              static_cast<int>(sizeof(T)));
+        }
 
         /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
         void GetData(std::nullptr_t, int elementCount) const
@@ -628,6 +708,10 @@ namespace Microsoft::Xna::Framework::Graphics
                           int startIndex, int elementCount, int elementBytes);
         void GetDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
                           int startIndex, int elementCount, int elementBytes) const;
+        void SetTrivialDataEXT(int level, const Rectangle* rect, const void* data,
+                               int startIndex, int elementCount, int elementBytes);
+        void GetTrivialDataEXT(int level, const Rectangle* rect, void* data,
+                               int startIndex, int elementCount, int elementBytes) const;
 
         /// Raw block-compressed byte upload for Dxt1/Dxt3/Dxt5 (SKIA-140). Unlike SetDataBytes,
         /// there is no CPU-side mirror: each call reads back, patches, and re-uploads through
