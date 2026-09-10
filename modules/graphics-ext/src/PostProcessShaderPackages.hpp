@@ -27,6 +27,9 @@ namespace CNA::Graphics::detail
 
     /** @brief Creates the portable spatial-upscale fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateSpatialUpscaleShaderPackage();
+
+    /** @brief Creates the portable light-shaft fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateLightShaftShaderPackage();
 }
 
 #endif // CNA_CNAEXT

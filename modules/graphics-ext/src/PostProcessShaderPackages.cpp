@@ -156,6 +156,18 @@ namespace CNA::Graphics::detail
              kSpatialUpscaleVulkanFragmentSpirVByteSize,
              "post_process/spatial_upscale.vulkan.frag.spv"});
     }
+
+    ShaderPackageEXT CreateLightShaftShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kLightShaftEsFragmentSource, "post_process/light_shaft.es.frag.glsl"},
+            {kLightShaftDesktopFragmentSource,
+             "post_process/light_shaft.desktop.frag.glsl"},
+            {kLightShaftVulkanFragmentSpirV,
+             kLightShaftVulkanFragmentSpirVByteSize,
+             "post_process/light_shaft.vulkan.frag.spv"});
+    }
 }
 
 #endif // CNA_CNAEXT

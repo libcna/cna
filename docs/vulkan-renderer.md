@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239d`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239e`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -810,6 +810,15 @@ llvmpipe: a diagonal has lower staircase residual than the bilinear control, sha
 the sampled neighbourhood, its strength is observable and identity is pixel-exact. The GPU-driven
 application is **4/4** and the complete portable post-process regression set is **51/51** on all
 three paths, including its independent pixel-exact identity leg.
+
+`LightShaftPass` is the eighth consumer. Light position, threshold and intensity occupy the existing
+`vec4`, decay uses the scalar slot, and its public fixed 24-step count is compiled into the shader.
+The source stays a rendered `RenderTarget2D` in the shared oracle: the GLSL variant maps the
+absolute light position into SpriteBatch's corrected OpenGL target UV space, while Vulkan remains
+top-left throughout. The suite changes from three Vulkan shader-execution skips to **5/5** on
+EasyGL, RADV and llvmpipe, proving clear-path accumulation, the occluder's dark shaft shape,
+off-screen falloff and exact disabled output. The complete portable post-process regression set is
+now **56/56** on all three paths, with no Khronos validation messages.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.
