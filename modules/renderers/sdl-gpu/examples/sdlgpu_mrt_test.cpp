@@ -17,6 +17,10 @@
 // Framework 9.1 program writes oC0/oC1 through public Effect. It also varies target count, changes
 // only slot 1 from Color to HdrBlendable, applies per-slot masks plus additive blending, and returns
 // to the original tuple. Every result is read back; Vulkan validation is fatal for the CTest.
+// SDLGPU-108 keeps that classic oracle runnable when the optional CNAEXT ShaderEffect compiler is
+// unavailable (notably the D3D12 cross-build): the runtime capability gates only Checks D/E and
+// their custom count/segment variants. The ordinary compiled Effect and stock pipeline-cache
+// matrix remain mandatory and retain their complete expected check count.
 //
 // The render targets are members created once in LoadContent(), not Draw()-local variables --
 // this renderer defers all rendering to its own Present()-time EnsureFrameRendered() pass, so a
@@ -202,6 +206,7 @@ class SdlGpuMrtTest : public Game
     std::unique_ptr<RenderTarget2D> rtMrtMsaaC_;
     std::unique_ptr<Texture2D> whiteTex_;
     std::array<std::unique_ptr<ShaderEffect>, 4> mrtEffects_;
+    bool customEffectsSupported_ = false;
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
@@ -511,8 +516,21 @@ protected:
 
         const std::vector<std::uint8_t> whitePixels = {255, 255, 255, 255};
         whiteTex_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(dev, 1, 1, whitePixels));
-        for (int targetCount = 1; targetCount <= 4; ++targetCount)
-            mrtEffects_[targetCount - 1] = std::make_unique<ShaderEffect>(dev, kMrtVertSrc, BuildMrtFragSource(targetCount));
+        customEffectsSupported_ = dev.SupportsCapability(CNA::GraphicsCapability::CustomEffects);
+        if (customEffectsSupported_)
+        {
+            for (int targetCount = 1; targetCount <= 4; ++targetCount)
+            {
+                mrtEffects_[targetCount - 1] = std::make_unique<ShaderEffect>(
+                    dev, kMrtVertSrc, BuildMrtFragSource(targetCount));
+            }
+        }
+        else
+        {
+            std::printf("[INFO] optional CNAEXT ShaderEffect MRT checks are excluded: "
+                        "the renderer reports CustomEffects unavailable\n");
+            std::fflush(stdout);
+        }
 
         const VertexPositionColor verts[6] = {
             { Vector3(-1.0f, -1.0f, 0.0f), Color::Green }, { Vector3(-1.0f, 1.0f, 0.0f), Color::Green }, { Vector3(1.0f, -1.0f, 0.0f), Color::Green },
@@ -590,23 +608,27 @@ protected:
                 dev.Clear(Color::CornflowerBlue);
                 Check(true, "ClearColorAndDepth on the MRT set + SetRenderTargets(nullptr,0) restore renders with no exception");
 
-                stage = "custom Effect MRT count matrix";
                 const std::array<RenderTarget2D*, 4> primary{{rtMrtA_.get(), rtMrtB_.get(), rtMrtC_.get(), rtMrtD_.get()}};
                 const std::array<RenderTarget2D*, 4> alternate{{rtMrtAltA_.get(), rtMrtAltB_.get(), rtMrtAltC_.get(), nullptr}};
                 const std::array<RenderTarget2D*, 4> depthBacked{{rt0_.get(), rt1_.get(), rt2_.get(), nullptr}};
-                const std::array<RenderTarget2D*, 4> msaa{{rtMrtMsaaA_.get(), rtMrtMsaaB_.get(), nullptr, nullptr}};
-                RunMrtCountCheck(dev, primary, 1, "one-target control");
-                RunMrtCountCheck(dev, primary, 2, "two targets");
-                RunMrtCountCheck(dev, primary, 3, "three targets");
-                RunMrtCountCheck(dev, primary, 4, "four targets");
-                RunMrtCountCheck(dev, primary, 1, "A→B→A return to one target");
-                RunMrtCountCheck(dev, primary, 3, "one→three transition");
-                RunMrtCountCheck(dev, primary, 1, "three→one transition");
-                RunMrtCountCheck(dev, primary, 3, "three→one→three return");
-                RunMrtCountCheck(dev, alternate, 3, "identical alternate target objects");
-                RunMrtCountCheck(dev, depthBacked, 3, "depth-backed three targets");
-                RunMrtCountCheck(dev, msaa, 2, "two targets with requested/applied " +
-                                 std::to_string(rtMrtMsaaA_->getMultiSampleCountProperty()) + "x MSAA");
+                if (customEffectsSupported_)
+                {
+                    stage = "custom Effect MRT count matrix";
+                    const std::array<RenderTarget2D*, 4> msaa{{rtMrtMsaaA_.get(), rtMrtMsaaB_.get(), nullptr, nullptr}};
+                    RunMrtCountCheck(dev, primary, 1, "one-target control");
+                    RunMrtCountCheck(dev, primary, 2, "two targets");
+                    RunMrtCountCheck(dev, primary, 3, "three targets");
+                    RunMrtCountCheck(dev, primary, 4, "four targets");
+                    RunMrtCountCheck(dev, primary, 1, "A→B→A return to one target");
+                    RunMrtCountCheck(dev, primary, 3, "one→three transition");
+                    RunMrtCountCheck(dev, primary, 1, "three→one transition");
+                    RunMrtCountCheck(dev, primary, 3, "three→one→three return");
+                    RunMrtCountCheck(dev, alternate, 3, "identical alternate target objects");
+                    RunMrtCountCheck(dev, depthBacked, 3, "depth-backed three targets");
+                    RunMrtCountCheck(dev, msaa, 2, "two targets with requested/applied " +
+                                     std::to_string(rtMrtMsaaA_->getMultiSampleCountProperty()) +
+                                     "x MSAA");
+                }
                 auto& renderer = static_cast<SdlGpuRenderer&>(dev.GetRenderer());
                 Check(renderer.GetSpritePipelineCacheSizeEXT() == 0, "MRT SpriteBatch cache begins cold");
                 const std::array<RenderTarget2D*, 4> msaaThree{{rtMrtMsaaA_.get(), rtMrtMsaaB_.get(), rtMrtMsaaC_.get(), nullptr}};
@@ -635,9 +657,12 @@ protected:
                 masks.setColorWriteChannels2Property(ColorWriteChannels::Blue);
                 cacheStep(primary, 3, masks, 7, "3 targets per-slot masks (new write state)");
                 cacheStep(primary, 3, BlendState::Opaque, 7, "return all write masks (reuse)");
-                RunMrtWriteMaskCheck(dev);
-                stage = "MRT bind-cycle boundaries in one flush window";
-                RunMrtSegmentBoundaryCheck(dev);
+                if (customEffectsSupported_)
+                {
+                    RunMrtWriteMaskCheck(dev);
+                    stage = "MRT bind-cycle boundaries in one flush window";
+                    RunMrtSegmentBoundaryCheck(dev);
+                }
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
                 stage = "ordinary compiled Effect MRT outputs and mixed formats";
                 RunCompiledEffectMrtCheck(dev);
@@ -669,10 +694,9 @@ protected:
 
         if (frame_ == kTotalFrames)
         {
+            int expectedPasses = 30 + (customEffectsSupported_ ? 15 : 0);
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-            constexpr int expectedPasses = 55;
-#else
-            constexpr int expectedPasses = 45;
+            expectedPasses += 10;
 #endif
             std::printf("=== %d/%d PASS ===\n", passCount_, expectedPasses);
             result_ = (passCount_ == expectedPasses) ? 0 : 1;
