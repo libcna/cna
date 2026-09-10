@@ -55,13 +55,38 @@ PROJECT_TAIL = """  </ItemGroup>
 
 
 def matches(rules, relative):
-    """The last rule whose pattern matches, or None."""
+    """The last rule whose pattern matches, or None.
+
+    Without regard to case, because a runner classifies an asset by
+    `Path.GetExtension(...).ToLowerInvariant()` and the filesystem it ran on folded case anyway:
+    SAMPLE-141's flight-sim series holds `skybox_back.JPG`, which XNA built as a texture and a
+    case-sensitive `fnmatch` against `*.jpg` does not match at all
+    (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-194`).
+    """
     found = None
+    lowered = relative.lower()
     for rule in rules:
-        pattern = rule["match"]
-        if fnmatch.fnmatch(relative, pattern) or fnmatch.fnmatch(posixpath.basename(relative),
-                                                                 pattern):
+        pattern = rule["match"].lower()
+        if fnmatch.fnmatch(lowered, pattern) or fnmatch.fnmatch(posixpath.basename(lowered),
+                                                                pattern):
             found = rule
+    return found
+
+
+def everything(root, unit):
+    """Every file under the unit's source root, matched or not, in a sorted walk's order."""
+    base = os.path.join(root, unit["sourceRoot"].replace("/", os.sep))
+    found = []
+    if unit.get("recurse", True):
+        for directory, names, files in os.walk(base):
+            names.sort()
+            for name in sorted(files):
+                found.append(os.path.relpath(os.path.join(directory, name), base)
+                             .replace(os.sep, "/"))
+    else:
+        for name in sorted(os.listdir(base)):
+            if os.path.isfile(os.path.join(base, name)):
+                found.append(name)
     return found
 
 
@@ -95,6 +120,16 @@ def write(description, root, out):
         if os.path.isdir(staged):
             shutil.rmtree(staged)
         os.makedirs(staged)
+        # Every file in the source root is copied, not only the ones that become items. A model
+        # names its own textures and resolves them against the directory it sits in, and the
+        # runner gave `BuildContent` that whole directory as its `RootDirectory`; staging only the
+        # items leaves a `.x` pointing at a texture that is not there, which is how SAMPLE-141's
+        # `skybox.x` failed with "primary source is not a regular file"
+        # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-194`).
+        for relative in everything(root, unit):
+            target = os.path.join(staged, relative.replace("/", os.sep))
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            shutil.copyfile(os.path.join(base, relative.replace("/", os.sep)), target)
         text = PROJECT_HEAD % (
             "tests/reference/xna40/build-units/%s.json" % sample,
             description["runner"], MSBUILD_NS, description["guid"],
@@ -102,10 +137,6 @@ def write(description, root, out):
             "true" if unit.get("compress") else "false")
         for relative in items:
             rule = matches(unit["items"], relative)
-            source = os.path.join(base, relative.replace("/", os.sep))
-            target = os.path.join(staged, relative.replace("/", os.sep))
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            shutil.copyfile(source, target)
             # `Minigun_S&WModel19.wav` is a real file in SoundLab: an unescaped `&` makes the
             # project unreadable, and the mapper then finds none at all.
             stem = posixpath.splitext(posixpath.basename(relative))[0]

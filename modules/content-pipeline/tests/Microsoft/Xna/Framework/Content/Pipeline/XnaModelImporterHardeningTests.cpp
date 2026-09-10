@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -174,6 +175,84 @@ TEST(XnaModelReaderHardening, NoMutatedFbxDocumentCrashesOrEscapesItsOwnExceptio
 }
 
 // A declared size no host could serve is refused on the declaration, not by trying to allocate it.
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-195: a binary `.x` that declares its templates
+// inline. The binary form spells `template` as a token rather than as the word, and the reader
+// mapped that token to a generic keyword name -- so the parser's own `SkipTemplate` never fired,
+// the declaration was read as an *object*, and the first `array` inside it (token 52, which was
+// missing from the keyword list outright) ended the parse with `D3DXFERR_PARSEERROR`.
+// SAMPLE-141's `target.x` and `xwing.x` are exactly this shape and XNA read both.
+TEST(XnaModelReaderHardening, ABinaryXFileMayDeclareItsTemplatesInline)
+{
+    const auto word = [](std::vector<std::uint8_t>& out, const std::uint16_t value)
+    {
+        out.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>(value >> 8));
+    };
+    const auto dword = [](std::vector<std::uint8_t>& out, const std::uint32_t value)
+    {
+        for (int at = 0; at < 4; ++at)
+        {
+            out.push_back(static_cast<std::uint8_t>((value >> (8 * at)) & 0xFFu));
+        }
+    };
+    const auto name = [&](std::vector<std::uint8_t>& out, const std::string& text)
+    {
+        word(out, 1u);
+        dword(out, static_cast<std::uint32_t>(text.size()));
+        out.insert(out.end(), text.begin(), text.end());
+    };
+
+    std::vector<std::uint8_t> bytes;
+    const std::string header = "xof 0303bin 0032";
+    bytes.insert(bytes.end(), header.begin(), header.end());
+
+    // template Vector { <guid> FLOAT x; FLOAT y; FLOAT z; }
+    word(bytes, 31u);                                  // TOKEN_TEMPLATE
+    name(bytes, "Vector");
+    word(bytes, 10u);                                  // {
+    word(bytes, 5u);                                   // TOKEN_GUID
+    bytes.insert(bytes.end(), 16u, 0u);
+    for (const char* member : {"x", "y", "z"})
+    {
+        word(bytes, 42u);                              // TOKEN_FLOAT
+        name(bytes, member);
+        word(bytes, 20u);                              // ;
+    }
+    // array FLOAT more[3];  -- the token that ended the parse
+    word(bytes, 52u);                                  // TOKEN_ARRAY
+    word(bytes, 42u);                                  // TOKEN_FLOAT
+    name(bytes, "more");
+    word(bytes, 14u);                                  // [
+    word(bytes, 3u);                                   // TOKEN_INTEGER
+    dword(bytes, 3u);
+    word(bytes, 15u);                                  // ]
+    word(bytes, 20u);                                  // ;
+    word(bytes, 11u);                                  // }
+
+    // Vector Here { 1.0; 2.0; 3.0; }
+    name(bytes, "Vector");
+    name(bytes, "Here");
+    word(bytes, 10u);                                  // {
+    word(bytes, 7u);                                   // TOKEN_FLOAT_LIST
+    dword(bytes, 3u);
+    for (const float value : {1.0f, 2.0f, 3.0f})
+    {
+        std::uint32_t raw = 0;
+        std::memcpy(&raw, &value, sizeof(raw));
+        dword(bytes, raw);
+    }
+    word(bytes, 11u);                                  // }
+
+    Canon::DirectXFile document;
+    ASSERT_NO_THROW(document = Canon::ReadDirectXFile(bytes));
+    ASSERT_EQ(document.objects.size(), 1u) << "the template must be skipped, not read as an object";
+    EXPECT_TRUE(document.objects[0].TypeIs("Vector"));
+    EXPECT_EQ(document.objects[0].name, "Here");
+    ASSERT_EQ(document.objects[0].numbers.size(), 3u);
+    EXPECT_FLOAT_EQ(static_cast<float>(document.objects[0].numbers[0]), 1.0f);
+    EXPECT_FLOAT_EQ(static_cast<float>(document.objects[0].numbers[2]), 3.0f);
+}
+
 TEST(XnaModelReaderHardening, ADeclaredSizeIsCheckedBeforeItIsBelieved)
 {
     const Canon::DirectXFileLimits tight{4096u, 4u, 64u, 16u, 32u};

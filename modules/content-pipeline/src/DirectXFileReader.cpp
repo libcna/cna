@@ -291,10 +291,19 @@ namespace CNA::Content::Pipeline
                     case 18: return Token{Kind::Dot, {}, 0.0};
                     case 19: return Token{Kind::Comma, {}, 0.0};
                     case 20: return Token{Kind::Semicolon, {}, 0.0};
-                    // Every remaining token is a keyword (template, array, and the primitive type
-                    // names), which a reader that does not interpret templates skips.
-                    case 31: case 40: case 41: case 42: case 43: case 44: case 45: case 46:
-                    case 47: case 48: case 49: case 50: case 51:
+                    // `template` opens a declaration this reader does not interpret, and it is
+                    // named here rather than lumped in with the other keywords so that the parser's
+                    // own `SkipTemplate` fires for a binary file exactly as it does for a text one.
+                    // Without it the declaration is read as an *object* whose type is a keyword,
+                    // and the first `array` inside it ends the parse. SAMPLE-141's `target.x` and
+                    // `xwing.x` are binary and declare all eleven of their templates inline, which
+                    // is what found this (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-195`).
+                    case 31: return Token{Kind::Name, "template", 0.0};
+                    // The rest are keywords a skipped template body may hold: `array` and the
+                    // primitive type names. `array` is 52 and was missing from this list, which is
+                    // the token those two files actually failed on.
+                    case 40: case 41: case 42: case 43: case 44: case 45: case 46:
+                    case 47: case 48: case 49: case 50: case 51: case 52:
                         return Token{Kind::Name, "<keyword>", 0.0};
                     default:
                         Fail(DirectXFileError::ParseError,
