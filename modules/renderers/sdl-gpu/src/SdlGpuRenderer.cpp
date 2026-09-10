@@ -101,6 +101,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             DualTextureFragment,
             EnvMapVertex,
             EnvMapFragment,
+            InstancedVertex,
             SkinnedVertex,
             SkinnedColoredVertex,
             SkinnedColoredFragment,
@@ -141,6 +142,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case SdlGpuFailurePointEXT::DualTextureFragmentShaderCreation: return "dual-texture fragment shader creation";
                 case SdlGpuFailurePointEXT::EnvMapVertexShaderCreation: return "environment-map vertex shader creation";
                 case SdlGpuFailurePointEXT::EnvMapFragmentShaderCreation: return "environment-map fragment shader creation";
+                case SdlGpuFailurePointEXT::InstancedVertexShaderCreation: return "instanced vertex shader creation";
                 case SdlGpuFailurePointEXT::SkinnedVertexShaderCreation: return "skinned vertex shader creation";
                 case SdlGpuFailurePointEXT::SkinnedColoredVertexShaderCreation: return "skinned-colored vertex shader creation";
                 case SdlGpuFailurePointEXT::SkinnedColoredFragmentShaderCreation: return "skinned-colored fragment shader creation";
@@ -653,7 +655,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         struct SdlGpuStockVertexStateEXT
         {
-            std::array<SDL_GPUVertexBufferDescription, 2> buffers{};
+            std::array<SDL_GPUVertexBufferDescription,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT + 1> buffers{};
             std::array<SDL_GPUVertexAttribute,
                        CNA::Internal::Graphics::kMaxStockVertexAttributes> attributes{};
             Uint32 bufferCount = 0;
@@ -665,18 +668,27 @@ namespace CNA::Internal::Renderers::SdlGpu
             SdlGpuStockVertexStateEXT& out)
         {
             out = {};
-            out.buffers[0].slot = 0;
-            out.buffers[0].pitch = static_cast<Uint32>(layout.stride);
-            out.buffers[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-            out.bufferCount = 1;
+            const std::size_t streamCount = layout.streamCount > 0 ? layout.streamCount : 1u;
+            for (std::size_t stream = 0; stream < streamCount; ++stream)
+            {
+                out.buffers[stream].slot = static_cast<Uint32>(stream);
+                out.buffers[stream].pitch = static_cast<Uint32>(
+                    stream < layout.streamCount ? layout.streams[stream].stride : layout.stride);
+                out.buffers[stream].input_rate =
+                    stream < layout.streamCount &&
+                    layout.streams[stream].instanceFrequency > 0
+                        ? SDL_GPU_VERTEXINPUTRATE_INSTANCE
+                        : SDL_GPU_VERTEXINPUTRATE_VERTEX;
+            }
+            out.bufferCount = static_cast<Uint32>(streamCount);
 
             if (layout.usesNeutralRecord)
             {
-                out.buffers[1].slot = 1;
-                out.buffers[1].pitch = static_cast<Uint32>(
+                out.buffers[streamCount].slot = static_cast<Uint32>(streamCount);
+                out.buffers[streamCount].pitch = static_cast<Uint32>(
                     sizeof(CNA::Internal::Graphics::kNeutralVertexRecordEXT));
-                out.buffers[1].input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE;
-                out.bufferCount = 2;
+                out.buffers[streamCount].input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE;
+                out.bufferCount = static_cast<Uint32>(streamCount + 1);
             }
 
             for (std::size_t i = 0; i < layout.count; ++i)
@@ -684,7 +696,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                 const auto& resolved = layout.attributes[i];
                 SDL_GPUVertexAttribute& attribute = out.attributes[out.attributeCount++];
                 attribute.location = static_cast<Uint32>(resolved.shaderLocation);
-                attribute.buffer_slot = resolved.defaulted ? 1u : 0u;
+                attribute.buffer_slot = resolved.defaulted
+                    ? static_cast<Uint32>(streamCount)
+                    : static_cast<Uint32>(resolved.streamIndex);
                 attribute.format = ToSdlGpuStockVertexFormat(resolved.format);
                 attribute.offset = static_cast<Uint32>(resolved.offset);
             }
@@ -1342,6 +1356,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 shaders[static_cast<std::size_t>(ConstructionShader::DualTextureFragment)];
             owner.envMapVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::EnvMapVertex)];
             owner.envMapFragmentShader_ = shaders[static_cast<std::size_t>(ConstructionShader::EnvMapFragment)];
+            owner.instancedVertexShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::InstancedVertex)];
             owner.skinnedVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::SkinnedVertex)];
             owner.skinnedColoredVertexShader_ =
                 shaders[static_cast<std::size_t>(ConstructionShader::SkinnedColoredVertex)];
@@ -1433,6 +1449,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         CreateAlphaTestResources(resources);
         CreateDualTextureResources(resources);
         CreateEnvMapResources(resources);
+        CreateInstancedResources(resources);
         CreateSkinnedResources(resources);
         CreatePbrResources(resources);
 
@@ -1491,6 +1508,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         drawOrder_.clear();
         DestroyPbrResources();
         DestroySkinnedResources();
+        DestroyInstancedResources();
         DestroyEnvMapResources();
         DestroyDualTextureResources();
         DestroyAlphaTestResources();
@@ -1537,6 +1555,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             case CNA::GraphicsCapability::CustomEffects:
             case CNA::GraphicsCapability::Texture3D:
             case CNA::GraphicsCapability::AdditiveBlending:
+            case CNA::GraphicsCapability::MultiStreamVertexInput:
+            case CNA::GraphicsCapability::Instancing:
                 return true;
             case CNA::GraphicsCapability::DepthStencilBuffer:
             case CNA::GraphicsCapability::StencilBuffer:
@@ -1555,8 +1575,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                 return true;
             case CNA::GraphicsCapability::MultipleRenderTargets:
             case CNA::GraphicsCapability::OcclusionQuery:
-            case CNA::GraphicsCapability::MultiStreamVertexInput:
-            case CNA::GraphicsCapability::Instancing:
             case CNA::GraphicsCapability::FloatRenderTargets:
             case CNA::GraphicsCapability::HalfFloatRenderTargets:
             case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
@@ -1569,9 +1587,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     std::string_view SdlGpuRenderer::GetAdditionalLimitationsTextEXT() const
     {
-        return "SDL GPU currently supports one vertex stream and one independently writable "
-               "color target. DrawInstancedPrimitives and OcclusionQuery are not implemented; "
-               "SDL_gpu 3.5 exposes no occlusion-query primitive.";
+        return "SDL GPU currently supports eight stock-effect vertex streams and one "
+               "independently writable color target. Compiled/custom-effect instancing is not "
+               "implemented; SDL_gpu 3.5 exposes no OcclusionQuery primitive.";
     }
 
     SDL_GPUTextureFormat SdlGpuRenderer::QueryDepthStencilFormat(SDL_GPUDevice* device)
@@ -4122,10 +4140,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         ColoredDrawCommand command;
         command.vertexLayout = vertexLayout;
         const int vertexStart = params != nullptr ? params->vertexStart : 0;
-        const auto& shadow = sdlGpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * sdlGpuVb.Stride();
-        if (byteOffset <= shadow.size())
-            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        StockDrawVertexStreamsEXT streams;
+        CollectStockVertexStreamsEXT(sdlGpuVb, params, streams);
+        CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
+                                     command.vertexData, command.extraVertexStreams);
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -4178,16 +4196,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         // caller to report to.
         EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        const std::size_t stride = sdlGpuVb.Stride();
-
         TexturedDrawCommand command;
         command.hasVertexColor = hasVertexColor;
         command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
-        const auto& shadow = sdlGpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
-        if (byteOffset <= shadow.size())
-            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        StockDrawVertexStreamsEXT streams;
+        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams);
+        CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
+                                     command.vertexData, command.extraVertexStreams);
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -4238,15 +4254,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         // caller to report to.
         EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        const std::size_t stride = sdlGpuVb.Stride();
-
         LitTexturedDrawCommand command;
         command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
-        const auto& shadow = sdlGpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
-        if (byteOffset <= shadow.size())
-            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        StockDrawVertexStreamsEXT streams;
+        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams);
+        CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
+                                     command.vertexData, command.extraVertexStreams);
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -4563,6 +4577,72 @@ namespace CNA::Internal::Renderers::SdlGpu
         envMapPipelines_.clear();
         ReleaseShader(envMapFragmentShader_);
         ReleaseShader(envMapVertexShader_);
+    }
+
+    void SdlGpuRenderer::CreateInstancedResources(ConstructionResources& resources)
+    {
+        SDL_GPUShaderCreateInfo vsInfo{};
+        vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kInstanced3dVertSpv);
+        vsInfo.code_size = Shaders::kInstanced3dVertSpv_size;
+        vsInfo.entrypoint = "main";
+        vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        vsInfo.num_uniform_buffers = 2;
+        resources.CreateShader(
+            ConstructionShader::InstancedVertex,
+            SdlGpuFailurePointEXT::InstancedVertexShaderCreation, vsInfo,
+            "CNA SDL_GPU: failed to create instanced3d vertex shader: ");
+    }
+
+    void SdlGpuRenderer::DestroyInstancedResources()
+    {
+        for (auto& [key, pipeline] : instancedPipelines_)
+            ReleaseGraphicsPipeline(pipeline);
+        instancedPipelines_.clear();
+        ReleaseShader(instancedVertexShader_);
+    }
+
+    SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineInstanced3D(
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+        SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
+        const RenderStateSnapshot& renderState)
+    {
+        const std::size_t key = StockPipelineKey(
+            PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat,
+                             colorTargetCount, sampleCount, depthStencilFormat, renderState),
+            vertexLayout);
+        if (const auto it = instancedPipelines_.find(key); it != instancedPipelines_.end())
+            return it->second;
+
+        SdlGpuStockVertexStateEXT vertexState;
+        BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
+        std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
+        FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormat, renderState);
+
+        SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.vertex_shader = instancedVertexShader_;
+        pipelineInfo.fragment_shader = coloredFragmentShader_;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
+        pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
+        pipelineInfo.vertex_input_state.vertex_attributes = vertexState.attributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_attributes = vertexState.attributeCount;
+        pipelineInfo.primitive_type = topology;
+        FillRasterizerState(pipelineInfo.rasterizer_state, renderState,
+                            topology, depthStencilFormat);
+        pipelineInfo.multisample_state.sample_count = sampleCount;
+        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite,
+                              depthFunc, renderState);
+        pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
+        pipelineInfo.target_info.num_color_targets = static_cast<Uint32>(colorTargetCount);
+        pipelineInfo.target_info.has_depth_stencil_target =
+            depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID;
+        pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
+
+        SDL_GPUGraphicsPipeline* pipeline = CreateGraphicsPipeline(
+            pipelineInfo, "CNA SDL_GPU: failed to create instanced3d pipeline: ");
+        return CacheGraphicsPipeline(instancedPipelines_, key, pipeline);
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineEnvMap3D(
@@ -4963,16 +5043,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         // caller to report to.
         EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        const std::size_t stride = sdlGpuVb.Stride();
-
         AlphaTestDrawCommand command;
         command.hasVertexColor = hasVertexColor;
         command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
-        const auto& shadow = sdlGpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
-        if (byteOffset <= shadow.size())
-            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        StockDrawVertexStreamsEXT streams;
+        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams);
+        CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
+                                     command.vertexData, command.extraVertexStreams);
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -5018,16 +5096,14 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        const std::size_t stride = sdlGpuVb.Stride();
-
         DualTextureDrawCommand command;
         command.hasVertexColor = hasVertexColor;
         command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
-        const auto& shadow = sdlGpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
-        if (byteOffset <= shadow.size())
-            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        StockDrawVertexStreamsEXT streams;
+        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams);
+        CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
+                                     command.vertexData, command.extraVertexStreams);
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -5082,8 +5158,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                 const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        const std::size_t stride = sdlGpuVb.Stride();
-
         // params.envMap (ITextureCubeRenderer*) may be either a plain, uploaded TextureCube
         // (SdlGpuTextureCubeRenderer, SDLGPU-51) or a RenderTargetCube sampled after being rendered
         // into (SdlGpuRenderTargetCubeRenderer, SDLGPU-36) -- unrelated concrete classes, resolved
@@ -5094,10 +5168,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         EnvMapDrawCommand command;
         command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
-        const auto& shadow = sdlGpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
-        if (byteOffset <= shadow.size())
-            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        StockDrawVertexStreamsEXT streams;
+        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams);
+        CaptureStockVertexStreamsEXT(vertexLayout, streams, vertexStart,
+                                     command.vertexData, command.extraVertexStreams);
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
@@ -5559,11 +5633,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "CNA SDL_GPU: the applied compiled effect was not created by this renderer.");
         }
 
-        // plans/plan_fx.md FX-082: this renderer binds exactly one vertex stream, and reports
-        // MultiStreamVertexInput false so GraphicsDevice refuses a wider binding set before it
-        // ever reaches here. Draw*PrimitivesEx is still a public interface method a harness can
-        // call with a hand-built GpuDrawParams, and a truncated binding list looks exactly like a
-        // correct draw of the wrong data -- so it is refused by name rather than silently reduced.
+        // plans/plan_fx.md FX-082: the compiled-effect path remains single-stream even though the
+        // stock semantic path now supports several. Never silently reduce a compiled draw.
         RejectUnsupportedStreamCombination(params, "CNA SDL_GPU compiled-effect drawing");
 
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
@@ -5723,6 +5794,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.extraVertexStreams,
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
@@ -5771,6 +5843,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
 
         BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.extraVertexStreams,
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         // SDLGPU-21: texture0/texture1 are independent GraphicsDevice.SamplerStates[0]/[1]
@@ -5828,6 +5901,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUFragmentUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
 
         BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.extraVertexStreams,
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         // REMED-GFX-173: binding 0 (sampler2D uTexture) and binding 1 (samplerCube uEnvMap) are two
@@ -6033,28 +6107,76 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::BindStockVertexBuffersEXT(
         SDL_GPURenderPass* pass, SDL_GPUBuffer* vertexBuffer,
+        const std::vector<CapturedStockVertexStreamEXT>& extraVertexStreams,
         SDL_GPUBuffer* neutralVertexBuffer,
         const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout)
     {
-        SDL_GPUBufferBinding bindings[2]{};
+        std::array<SDL_GPUBufferBinding,
+                   CNA::Internal::Graphics::kMaxStockVertexStreamsEXT + 1> bindings{};
         bindings[0].buffer = vertexBuffer;
         Uint32 count = 1;
+        for (const CapturedStockVertexStreamEXT& stream : extraVertexStreams)
+        {
+            if (count >= layout.streamCount || stream.uploadedBuffer == nullptr)
+                break;
+            bindings[count++].buffer = stream.uploadedBuffer;
+        }
+        if (count != layout.streamCount)
+        {
+            throw std::runtime_error(
+                "CNA SDL_GPU: a stock draw is missing one of its captured vertex streams");
+        }
         if (layout.usesNeutralRecord)
         {
             if (neutralVertexBuffer == nullptr)
                 throw std::runtime_error(
                     "CNA SDL_GPU: a stock draw needs the neutral vertex record, but it was not uploaded");
-            bindings[1].buffer = neutralVertexBuffer;
-            count = 2;
+            bindings[count++].buffer = neutralVertexBuffer;
         }
-        SDL_BindGPUVertexBuffers(pass, 0, bindings, count);
+        SDL_BindGPUVertexBuffers(pass, 0, bindings.data(), count);
+    }
+
+    void SdlGpuRenderer::IssueInstancedDraw(
+        SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+        const InstancedDrawCommand& command, SDL_GPUTextureFormat colorFormat,
+        SDL_GPUSampleCount sampleCount, SDL_GPUTextureFormat depthStencilFormat,
+        int colorTargetCount, SDL_GPUGraphicsPipeline*& boundPipeline)
+    {
+        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineInstanced3D(
+            command.vertexLayout, command.topology, command.depthTest, command.depthWrite,
+            command.depthFunc, colorFormat, sampleCount, depthStencilFormat,
+            colorTargetCount, command.renderState);
+        if (pipeline != boundPipeline)
+        {
+            SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            boundPipeline = pipeline;
+        }
+        SDL_SetGPUStencilReference(
+            pass, static_cast<Uint8>(command.renderState.stencilReference));
+        SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUVertexUniformData(
+            cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.extraVertexStreams,
+                                  command.uploadedNeutralVertexBuffer,
+                                  command.vertexLayout);
+
+        SDL_GPUBufferBinding indexBinding{};
+        indexBinding.buffer = command.uploadedIndexBuffer;
+        SDL_BindGPUIndexBuffer(
+            pass, &indexBinding,
+            command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT
+                            : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+        SDL_DrawGPUIndexedPrimitives(
+            pass, command.indexCount, command.instanceCount, command.firstIndex,
+            command.vertexOffset, 0);
     }
 
     void SdlGpuRenderer::UploadSceneDrawData(SDL_GPUCommandBuffer* cmd)
     {
         if (coloredDrawCommands_.empty() && texturedDrawCommands_.empty() && litTexturedDrawCommands_.empty() &&
             alphaTestDrawCommands_.empty() && dualTextureDrawCommands_.empty() && envMapDrawCommands_.empty() &&
-            skinnedDrawCommands_.empty() && pbrDrawCommands_.empty()
+            instancedDrawCommands_.empty() && skinnedDrawCommands_.empty() && pbrDrawCommands_.empty()
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
             && compiledEffectDrawCommands_.empty()
 #endif
@@ -6116,12 +6238,18 @@ namespace CNA::Internal::Renderers::SdlGpu
                 command.uploadedNeutralVertexBuffer =
                     uploadOne(neutralData, SDL_GPU_BUFFERUSAGE_VERTEX);
         };
+        const auto uploadExtraStreams = [&](auto& command)
+        {
+            for (CapturedStockVertexStreamEXT& stream : command.extraVertexStreams)
+                stream.uploadedBuffer = uploadOne(stream.data, SDL_GPU_BUFFERUSAGE_VERTEX);
+        };
 
         for (ColoredDrawCommand& command : coloredDrawCommands_)
         {
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
@@ -6131,6 +6259,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
@@ -6140,6 +6269,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
@@ -6149,6 +6279,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
@@ -6158,6 +6289,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
@@ -6167,9 +6299,21 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadExtraStreams(command);
             uploadNeutralIfNeeded(command);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+        }
+        for (InstancedDrawCommand& command : instancedDrawCommands_)
+        {
+            if (command.vertexData.empty() || command.indexData.empty())
+                continue;
+            command.uploadedVertexBuffer = uploadOne(
+                command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadExtraStreams(command);
+            uploadNeutralIfNeeded(command);
+            command.uploadedIndexBuffer = uploadOne(
+                command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
         }
         for (SkinnedDrawCommand& command : skinnedDrawCommands_)
         {
@@ -6229,6 +6373,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
 
         BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.extraVertexStreams,
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -6268,6 +6413,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.extraVertexStreams,
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
@@ -6318,6 +6464,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
 
         BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.extraVertexStreams,
                                   command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
@@ -6446,6 +6593,18 @@ namespace CNA::Internal::Renderers::SdlGpu
                                         depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
                 }
+                case DrawKind::Instanced:
+                {
+                    const InstancedDrawCommand& c = instancedDrawCommands_[ref.index];
+                    if (c.uploadedVertexBuffer != nullptr &&
+                        c.uploadedIndexBuffer != nullptr && c.target == target)
+                    {
+                        IssueInstancedDraw(pass, cmd, c, colorFormat, sampleCount,
+                                           depthStencilFormat, colorTargetCount,
+                                           boundPipeline);
+                    }
+                    break;
+                }
                 case DrawKind::Skinned:
                 {
                     const SkinnedDrawCommand& c = skinnedDrawCommands_[ref.index];
@@ -6513,10 +6672,16 @@ namespace CNA::Internal::Renderers::SdlGpu
                 buffer = nullptr;
             }
         };
+        const auto releaseExtraStreams = [&](auto& command)
+        {
+            for (CapturedStockVertexStreamEXT& stream : command.extraVertexStreams)
+                release(stream.uploadedBuffer);
+        };
 
         for (ColoredDrawCommand& command : coloredDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            releaseExtraStreams(command);
             release(command.uploadedNeutralVertexBuffer);
             release(command.uploadedIndexBuffer);
         }
@@ -6524,6 +6689,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (TexturedDrawCommand& command : texturedDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            releaseExtraStreams(command);
             release(command.uploadedNeutralVertexBuffer);
             release(command.uploadedIndexBuffer);
         }
@@ -6531,6 +6697,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (LitTexturedDrawCommand& command : litTexturedDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            releaseExtraStreams(command);
             release(command.uploadedNeutralVertexBuffer);
             release(command.uploadedIndexBuffer);
         }
@@ -6538,6 +6705,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (AlphaTestDrawCommand& command : alphaTestDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            releaseExtraStreams(command);
             release(command.uploadedNeutralVertexBuffer);
             release(command.uploadedIndexBuffer);
         }
@@ -6545,6 +6713,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (DualTextureDrawCommand& command : dualTextureDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            releaseExtraStreams(command);
             release(command.uploadedNeutralVertexBuffer);
             release(command.uploadedIndexBuffer);
         }
@@ -6552,10 +6721,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (EnvMapDrawCommand& command : envMapDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            releaseExtraStreams(command);
             release(command.uploadedNeutralVertexBuffer);
             release(command.uploadedIndexBuffer);
         }
         if (clearCommands) envMapDrawCommands_.clear();
+        for (InstancedDrawCommand& command : instancedDrawCommands_)
+        {
+            release(command.uploadedVertexBuffer);
+            releaseExtraStreams(command);
+            release(command.uploadedNeutralVertexBuffer);
+            release(command.uploadedIndexBuffer);
+        }
+        if (clearCommands) instancedDrawCommands_.clear();
         for (SkinnedDrawCommand& command : skinnedDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
@@ -6580,6 +6758,155 @@ namespace CNA::Internal::Renderers::SdlGpu
 #endif
     }
 
+    void SdlGpuRenderer::CollectStockVertexStreamsEXT(
+        const SdlGpuVertexBufferRenderer& vb, const GpuDrawParams* params,
+        StockDrawVertexStreamsEXT& streams, bool includePerInstance)
+    {
+        streams = StockDrawVertexStreamsEXT{};
+        if (params != nullptr)
+        {
+            for (int i = 0; i < params->vertexStreamCount; ++i)
+            {
+                const GpuVertexStreamBinding& binding = params->vertexStreams[i];
+                if (binding.instanceFrequency != 0 && !includePerInstance)
+                    continue;
+                const auto* buffer =
+                    static_cast<const SdlGpuVertexBufferRenderer*>(binding.buffer);
+                if (buffer == nullptr)
+                    continue;
+                if (streams.count >= streams.declarations.size())
+                {
+                    throw System::NotSupportedException(
+                        "CNA SDL_GPU: this stock draw uses more than eight vertex streams");
+                }
+
+                auto& declaration = streams.declarations[streams.count];
+                auto& source = streams.sources[streams.count];
+                declaration.elements = &buffer->Declaration().GetElements();
+                declaration.stride = binding.strideInBytes > 0
+                    ? binding.strideInBytes : static_cast<int>(buffer->Stride());
+                declaration.instanceFrequency = binding.instanceFrequency;
+                source.buffer = buffer;
+                source.stride = declaration.stride;
+                source.vertexOffset = binding.vertexOffset;
+                source.slot = binding.slot;
+                source.instanceFrequency = binding.instanceFrequency;
+                source.vertexCount = binding.vertexCount > 0
+                    ? binding.vertexCount : buffer->GetVertexCount();
+                ++streams.count;
+            }
+        }
+        if (streams.count == 0)
+        {
+            streams.declarations[0].elements = &vb.Declaration().GetElements();
+            streams.declarations[0].stride = static_cast<int>(vb.Stride());
+            streams.sources[0].buffer = &vb;
+            streams.sources[0].stride = static_cast<int>(vb.Stride());
+            streams.sources[0].vertexCount = vb.GetVertexCount();
+            streams.count = 1;
+        }
+    }
+
+    void SdlGpuRenderer::SynthesizeMissingStreamDeclarationsEXT(
+        StockDrawVertexStreamsEXT& streams)
+    {
+        using namespace CNA::Internal::Graphics;
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        for (std::size_t i = 0; i < streams.count; ++i)
+        {
+            auto& declaration = streams.declarations[i];
+            if (declaration.elements != nullptr && !declaration.elements->empty())
+                continue;
+
+            auto& elements = streams.synthesized[i];
+            if (streams.sources[i].instanceFrequency > 0)
+            {
+                const int stride = declaration.stride > 0 ? declaration.stride : 64;
+                for (int column = 0; column < 4 && (column + 1) * 16 <= stride; ++column)
+                {
+                    elements.emplace_back(column * 16, VertexElementFormat::Vector4,
+                                          VertexElementUsage::Position, column + 1);
+                }
+            }
+            else
+            {
+                const InferredVertexLayout inferred = InferredLayoutForStride(
+                    declaration.stride, UnlistedStrideLayout::PositionOnlyFallback);
+                for (std::size_t e = 0; e < inferred.count; ++e)
+                {
+                    const auto& element = inferred.elements[e];
+                    elements.emplace_back(element.offset, element.format, element.usage,
+                                          element.usageIndex);
+                }
+            }
+            declaration.elements = &elements;
+        }
+    }
+
+    void SdlGpuRenderer::CaptureStockVertexStreamsEXT(
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout,
+        const StockDrawVertexStreamsEXT& streams, int vertexStart,
+        std::vector<std::uint8_t>& stream0Data,
+        std::vector<CapturedStockVertexStreamEXT>& extra, int instanceCount)
+    {
+        stream0Data.clear();
+        extra.clear();
+        const std::size_t resolvedCount = layout.streamCount > 0 ? layout.streamCount : 1u;
+        const int instances = std::max(1, instanceCount);
+
+        for (std::size_t i = 0; i < resolvedCount; ++i)
+        {
+            const std::size_t sourceIndex = i < layout.streamCount
+                ? static_cast<std::size_t>(layout.streams[i].sourceIndex) : 0u;
+            if (sourceIndex >= streams.count)
+                continue;
+            const StockVertexStreamSourceEXT& source = streams.sources[sourceIndex];
+            if (source.buffer == nullptr)
+                continue;
+
+            const int stride = source.stride > 0 ? source.stride : 1;
+            const auto& shadow = source.buffer->ShadowData();
+            std::vector<std::uint8_t>* destination = &stream0Data;
+            if (i > 0)
+            {
+                extra.emplace_back();
+                destination = &extra.back().data;
+            }
+
+            if (source.instanceFrequency > 0)
+            {
+                const std::size_t recordBytes = static_cast<std::size_t>(stride);
+                const std::size_t base =
+                    static_cast<std::size_t>(std::max(0, source.vertexOffset)) * recordBytes;
+                destination->assign(static_cast<std::size_t>(instances) * recordBytes, 0u);
+                for (int instance = 0; instance < instances; ++instance)
+                {
+                    const std::size_t sourceOffset = base +
+                        static_cast<std::size_t>(instance / source.instanceFrequency) * recordBytes;
+                    if (sourceOffset + recordBytes > shadow.size())
+                        break;
+                    std::memcpy(destination->data() +
+                                    static_cast<std::size_t>(instance) * recordBytes,
+                                shadow.data() + sourceOffset, recordBytes);
+                }
+                continue;
+            }
+
+            const std::size_t firstRecord =
+                static_cast<std::size_t>(std::max(0, vertexStart)) +
+                static_cast<std::size_t>(std::max(0, source.vertexOffset));
+            const std::size_t byteOffset = firstRecord * static_cast<std::size_t>(stride);
+            if (byteOffset <= shadow.size())
+            {
+                destination->assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset),
+                                    shadow.end());
+            }
+        }
+    }
+
     // Kept for the stock families SDLGPU-59 deliberately does not translate (Skinned/PBR). The
     // classic Basic/AlphaTest/DualTexture/EnvironmentMap paths below resolve their inputs directly
     // from the declaration instead.
@@ -6593,34 +6920,34 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     SdlGpuRenderer::StockVertexShapeEXT SdlGpuRenderer::SelectStockVertexShapeEXT(
-        const SdlGpuVertexBufferRenderer& vb, const GpuDrawParams& params)
+        const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
+        std::size_t streamCount, std::size_t stride, const GpuDrawParams& params)
     {
         using namespace CNA::Internal::Graphics;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
-        const auto& declaration = vb.Declaration();
-        const bool haveDeclaration = !declaration.IsEmpty();
-        const std::size_t stride = vb.Stride();
+        const bool haveDeclaration = AnyStreamDeclaresEXT(streams, streamCount);
         if (!haveDeclaration &&
             !InferredLayoutForStride(static_cast<int>(stride),
                                      UnlistedStrideLayout::RendererRefusesIt).known)
             return StockVertexShapeEXT::StrideDerived;
 
         if (haveDeclaration &&
-            FindDeclaredSemanticEXT(declaration.GetElements(), VertexElementUsage::Position, 0) == nullptr)
+            !AnyStreamNamesSemanticEXT(streams, streamCount, VertexElementUsage::Position, 0))
         {
             throw System::NotSupportedException(
                 "CNA SDL_GPU: stock effects require POSITION0, but this VertexDeclaration does not declare it");
         }
 
         const bool hasNormal = haveDeclaration
-            ? DeclarationNamesUsageEXT(declaration.GetElements(), VertexElementUsage::Normal)
+            ? AnyStreamNamesUsageEXT(streams, streamCount, VertexElementUsage::Normal)
             : stride == 32;
         const bool hasColor = haveDeclaration
-            ? FindDeclaredSemanticEXT(declaration.GetElements(), VertexElementUsage::Color, 0) != nullptr
+            ? AnyStreamNamesSemanticEXT(streams, streamCount, VertexElementUsage::Color, 0)
             : stride == 16 || stride == 24;
         const bool hasUv = haveDeclaration
-            ? FindDeclaredSemanticEXT(declaration.GetElements(), VertexElementUsage::TextureCoordinate, 0) != nullptr
+            ? AnyStreamNamesSemanticEXT(
+                streams, streamCount, VertexElementUsage::TextureCoordinate, 0)
             : stride == 20 || stride == 24 || stride == 32;
 
         const bool needsAlphaTest = !params.pbr &&
@@ -6699,7 +7026,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
     SdlGpuRenderer::ResolveStockVertexLayoutForDrawEXT(
-        const SdlGpuVertexBufferRenderer& vb, StockVertexShapeEXT shape) const
+        const SdlGpuVertexBufferRenderer& vb,
+        const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
+        std::size_t streamCount, StockVertexShapeEXT shape) const
     {
         using namespace CNA::Internal::Graphics;
         const StockProgramInput* inputs = nullptr;
@@ -6707,20 +7036,25 @@ namespace CNA::Internal::Renderers::SdlGpu
         const char* programName = nullptr;
         StockVertexInputsForShapeEXT(shape, inputs, inputCount, programName);
 
-        const auto& declaration = vb.Declaration();
-        if (!declaration.IsEmpty())
+        if (AnyStreamDeclaresEXT(streams, streamCount))
         {
             using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
-            if (FindDeclaredSemanticEXT(
-                    declaration.GetElements(), VertexElementUsage::Position, 0) == nullptr)
+            if (!AnyStreamNamesSemanticEXT(
+                    streams, streamCount, VertexElementUsage::Position, 0))
             {
                 throw System::NotSupportedException(
                     "CNA SDL_GPU: stock effects require POSITION0, but this VertexDeclaration does not declare it");
             }
-            RequireDeclarationMatchesStockProgram(
-                declaration.GetElements(), inputs, inputCount, "SDL_GPU", programName);
-            return ResolveStockVertexLayoutEXT(
-                declaration.GetElements(), static_cast<int>(vb.Stride()), inputs, inputCount);
+            for (std::size_t i = 0; i < streamCount; ++i)
+            {
+                if (streams[i].elements != nullptr)
+                {
+                    RequireDeclarationMatchesStockProgram(
+                        *streams[i].elements, inputs, inputCount, "SDL_GPU", programName);
+                }
+            }
+            return ResolveStockVertexLayoutAcrossStreamsEXT(
+                streams, streamCount, inputs, inputCount);
         }
 
         const InferredVertexLayout inferred = InferredLayoutForStride(
@@ -6742,13 +7076,126 @@ namespace CNA::Internal::Renderers::SdlGpu
         return resolved;
     }
 
+    CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
+    SdlGpuRenderer::ResolveInstancedVertexLayoutEXT(
+        const StockDrawVertexStreamsEXT& streams, bool hasVertexColor)
+    {
+        using namespace CNA::Internal::Graphics;
+        using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        namespace In = CNA::Internal::Graphics::StockVertexInputsEXT;
+
+        ResolvedStockVertexLayoutEXT resolved;
+        resolved.stride = streams.declarations[0].stride;
+        resolved.fromDeclaration = AnyStreamDeclaresEXT(
+            streams.declarations.data(), streams.count);
+
+        std::array<int, kMaxStockVertexStreamsEXT> resolvedIndexOfSource;
+        resolvedIndexOfSource.fill(-1);
+        const auto keep = [&](std::size_t source) {
+            if (resolvedIndexOfSource[source] < 0)
+            {
+                ResolvedStockStreamEXT& kept = resolved.streams[resolved.streamCount];
+                kept.sourceIndex = static_cast<int>(source);
+                kept.stride = streams.declarations[source].stride;
+                kept.instanceFrequency = streams.declarations[source].instanceFrequency;
+                resolvedIndexOfSource[source] = static_cast<int>(resolved.streamCount++);
+            }
+            return resolvedIndexOfSource[source];
+        };
+
+        const StockProgramInput perVertexInputs[2] = {In::kPos, In::kColor};
+        for (std::size_t location = 0; location < 2; ++location)
+        {
+            const StockProgramInput& input = perVertexInputs[location];
+            auto& attribute = resolved.attributes[resolved.count++];
+            attribute.usage = input.usage;
+            attribute.usageIndex = input.usageIndex;
+            attribute.shaderLocation = static_cast<int>(location);
+
+            const VertexElement* element = nullptr;
+            std::size_t source = 0;
+            for (; source < streams.count; ++source)
+            {
+                if (streams.sources[source].instanceFrequency > 0 ||
+                    streams.declarations[source].elements == nullptr)
+                    continue;
+                element = FindDeclaredSemanticEXT(*streams.declarations[source].elements,
+                                                  input.usage, input.usageIndex);
+                if (element != nullptr)
+                    break;
+            }
+            if (element != nullptr && (location == 0 || hasVertexColor))
+            {
+                if (element->getVertexElementFormatProperty() != input.format &&
+                    element->getVertexElementFormatProperty() != input.alternateFormat)
+                {
+                    throw System::NotSupportedException(
+                        "CNA SDL_GPU: the instanced stock program received an incompatible per-vertex format");
+                }
+                attribute.format = element->getVertexElementFormatProperty();
+                attribute.offset = element->getOffsetProperty();
+                attribute.streamIndex = keep(source);
+            }
+            else
+            {
+                if (location == 0)
+                {
+                    throw System::NotSupportedException(
+                        "CNA SDL_GPU: instanced stock effects require POSITION0 in a per-vertex stream");
+                }
+                attribute.format = NeutralFormatForStockInputEXT(input.format);
+                attribute.defaulted = true;
+                resolved.usesNeutralRecord = true;
+            }
+        }
+
+        int column = 0;
+        for (std::size_t source = 0; source < streams.count; ++source)
+        {
+            if (streams.sources[source].instanceFrequency <= 0 ||
+                streams.declarations[source].elements == nullptr)
+                continue;
+            for (const VertexElement& element : *streams.declarations[source].elements)
+            {
+                if (column >= 4)
+                {
+                    throw System::NotSupportedException(
+                        "CNA SDL_GPU: instanced stock effects require exactly four per-instance Vector4 matrix columns");
+                }
+                if (element.getVertexElementFormatProperty() != VertexElementFormat::Vector4)
+                {
+                    throw System::NotSupportedException(
+                        "CNA SDL_GPU: instanced stock world-matrix columns must use Vector4 format");
+                }
+                auto& attribute = resolved.attributes[resolved.count++];
+                attribute.usage = element.getVertexElementUsageProperty();
+                attribute.usageIndex = element.getUsageIndexProperty();
+                attribute.format = element.getVertexElementFormatProperty();
+                attribute.offset = element.getOffsetProperty();
+                attribute.shaderLocation = 4 + column;
+                attribute.streamIndex = keep(source);
+                ++column;
+            }
+        }
+        if (column != 4)
+        {
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: instanced stock effects require exactly four per-instance Vector4 matrix columns");
+        }
+        return resolved;
+    }
+
     void SdlGpuRenderer::DispatchStockDrawEXT(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        const StockVertexShapeEXT shape = SelectStockVertexShapeEXT(sdlGpuVb, params);
+        StockDrawVertexStreamsEXT streams;
+        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams);
+        const StockVertexShapeEXT shape = SelectStockVertexShapeEXT(
+            streams.declarations.data(), streams.count, sdlGpuVb.Stride(), params);
         if (shape == StockVertexShapeEXT::StrideDerived)
         {
             RequireFaithfulDeclarationEXT(vb, ib == nullptr ? "ordinary-nonindexed" : "ordinary-indexed");
@@ -6769,7 +7216,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "CNA SDL_GPU: the selected stock effect cannot be matched to this VertexDeclaration");
         }
 
-        const auto layout = ResolveStockVertexLayoutForDrawEXT(sdlGpuVb, shape);
+        const auto layout = ResolveStockVertexLayoutForDrawEXT(
+            sdlGpuVb, streams.declarations.data(), streams.count, shape);
         switch (shape)
         {
             case StockVertexShapeEXT::Colored:
@@ -6807,8 +7255,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                        PrimitiveType primitive, int primitiveCount)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
+        StockDrawVertexStreamsEXT streams;
+        CollectStockVertexStreamsEXT(sdlGpuVb, nullptr, streams);
         const auto layout = ResolveStockVertexLayoutForDrawEXT(
-            sdlGpuVb, StockVertexShapeEXT::Colored);
+            sdlGpuVb, streams.declarations.data(), streams.count,
+            StockVertexShapeEXT::Colored);
         QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount,
                          nullptr, layout);
     }
@@ -6819,8 +7270,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                               PrimitiveType primitive, int primitiveCount)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
+        StockDrawVertexStreamsEXT streams;
+        CollectStockVertexStreamsEXT(sdlGpuVb, nullptr, streams);
         const auto layout = ResolveStockVertexLayoutForDrawEXT(
-            sdlGpuVb, StockVertexShapeEXT::Colored);
+            sdlGpuVb, streams.declarations.data(), streams.count,
+            StockVertexShapeEXT::Colored);
         QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount,
                          nullptr, layout);
     }
@@ -6861,6 +7315,101 @@ namespace CNA::Internal::Renderers::SdlGpu
 #endif
         DispatchStockDrawEXT(
             vb, &ib, world, view, projection, primitive, primitiveCount, params);
+    }
+
+    void SdlGpuRenderer::DrawInstancedPrimitivesEx(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, int instanceCount,
+        const GpuDrawParams& params)
+    {
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: compiled-effect instancing is not implemented");
+        }
+#endif
+        if (params.customEffectRenderer != nullptr)
+        {
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: custom-effect instancing is not implemented");
+        }
+        if (FirstInstanceStream(params) == nullptr)
+        {
+            DrawIndexedPrimitivesEx(vb, ib, world, view, projection,
+                                    primitive, primitiveCount, params);
+            return;
+        }
+
+        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
+        const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferRenderer&>(ib);
+        StockDrawVertexStreamsEXT streams;
+        CollectStockVertexStreamsEXT(sdlGpuVb, &params, streams, true);
+        SynthesizeMissingStreamDeclarationsEXT(streams);
+
+        bool hasVertexColor = false;
+        for (std::size_t i = 0; i < streams.count && !hasVertexColor; ++i)
+        {
+            if (streams.sources[i].instanceFrequency > 0 ||
+                streams.declarations[i].elements == nullptr)
+                continue;
+            hasVertexColor = CNA::Internal::Graphics::FindDeclaredSemanticEXT(
+                *streams.declarations[i].elements,
+                Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color, 0) != nullptr;
+        }
+
+        const int clampedInstanceCount = std::max(1, instanceCount);
+        for (std::size_t i = 0; i < streams.count; ++i)
+        {
+            const StockVertexStreamSourceEXT& source = streams.sources[i];
+            if (source.instanceFrequency > 0)
+            {
+                const int lastRecord = source.vertexOffset +
+                    (clampedInstanceCount - 1) / source.instanceFrequency;
+                if (source.vertexOffset < 0 || lastRecord >= source.vertexCount)
+                {
+                    throw System::ArgumentOutOfRangeException(
+                        "instanceCount", std::to_string(instanceCount),
+                        "CNA SDL_GPU: the per-instance stream bound to slot " +
+                        std::to_string(source.slot) + " does not contain the requested record.");
+                }
+            }
+            else if (source.vertexOffset < 0 || source.vertexOffset > source.vertexCount ||
+                     params.baseVertex > source.vertexCount - source.vertexOffset)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "baseVertex", std::to_string(params.baseVertex),
+                    "CNA SDL_GPU: a per-vertex binding offset leaves its buffer.");
+            }
+        }
+
+        InstancedDrawCommand command;
+        command.vertexLayout = ResolveInstancedVertexLayoutEXT(streams, hasVertexColor);
+        CaptureStockVertexStreamsEXT(command.vertexLayout, streams, 0,
+                                     command.vertexData, command.extraVertexStreams,
+                                     clampedInstanceCount);
+        command.indexData = sdlGpuIb.ShadowData();
+        command.index32 = sdlGpuIb.IsThirtyTwoBit();
+        command.instanceCount = static_cast<Uint32>(clampedInstanceCount);
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthWrite = depthWriteEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.renderState = CaptureRenderState();
+        const NativeIndexedRange range = ResolveIndexedRange(
+            sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
+        command.indexCount = range.indexCount;
+        command.firstIndex = range.firstIndex;
+        command.vertexOffset = range.vertexOffset;
+        FillExtUniforms(
+            command.uniforms, ApplyXnaPixelCenter(world * view * projection), params);
+        FillFogUniforms(command.fogUniforms, params);
+        command.target = CurrentDrawTarget();
+
+        instancedDrawCommands_.push_back(std::move(command));
+        PushDrawOrder(DrawKind::Instanced, instancedDrawCommands_.size() - 1);
+        framePending_ = true;
     }
 
     // ---- SdlGpuSampledTextureState / texture resolution (REMED-GFX-152) ----

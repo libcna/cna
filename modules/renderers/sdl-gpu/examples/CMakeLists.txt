@@ -70,6 +70,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endforeach()
 
+    # SDLGPU-60: reuse the renderer-neutral EasyGL/WebGPU fixtures. The first compares a packed
+    # vertex with POSITION0/COLOR0 split across independent strides and offsets; the second proves
+    # one draw advances a matrix stream once per instance and leaves alternating cells untouched.
+    foreach(stream_parity_test IN ITEMS multi_stream_split instanced_draw)
+        cna_sdlgpu_test(cna_test_sdlgpu_parity_${stream_parity_test}
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_${stream_parity_test}.cpp)
+        cna_register_renderer_test(NAME SdlGpu_Parity_${stream_parity_test}
+            COMMAND cna_test_sdlgpu_parity_${stream_parity_test}
+            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_Parity_${stream_parity_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
     foreach(sampler_parity_test IN ITEMS
             sampler_filters
             sampler_max_mip_level

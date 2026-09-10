@@ -66,7 +66,7 @@ namespace
         const char* label;
     };
 
-    constexpr std::array<FailureCase, 32> kConstructionFailures{{
+    constexpr std::array<FailureCase, 33> kConstructionFailures{{
         {SdlGpuFailurePointEXT::DeviceCreation, "device creation"},
         {SdlGpuFailurePointEXT::WindowClaim, "window claiming"},
         {SdlGpuFailurePointEXT::SwapchainSetup, "swapchain setup"},
@@ -88,6 +88,7 @@ namespace
         {SdlGpuFailurePointEXT::DualTextureFragmentShaderCreation, "dual-texture fragment shader"},
         {SdlGpuFailurePointEXT::EnvMapVertexShaderCreation, "environment-map vertex shader"},
         {SdlGpuFailurePointEXT::EnvMapFragmentShaderCreation, "environment-map fragment shader"},
+        {SdlGpuFailurePointEXT::InstancedVertexShaderCreation, "instanced vertex shader"},
         {SdlGpuFailurePointEXT::SkinnedVertexShaderCreation, "skinned vertex shader"},
         {SdlGpuFailurePointEXT::SkinnedColoredVertexShaderCreation, "skinned-colored vertex shader"},
         {SdlGpuFailurePointEXT::SkinnedColoredFragmentShaderCreation, "skinned-colored fragment shader"},

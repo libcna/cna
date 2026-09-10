@@ -143,10 +143,10 @@ protected:
                   "OcclusionQuery is false because the underlying API exposes no query primitive");
             check(renderer.CreateOcclusionQuery() == nullptr,
                   "OcclusionQuery factory agrees with the false capability");
-            check(!dev.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput),
-                  "MultiStreamVertexInput is false while one stream is consumed");
-            check(!dev.SupportsCapability(CNA::GraphicsCapability::Instancing),
-                  "Instancing is false while the draw hook is unimplemented");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput),
+                  "MultiStreamVertexInput is reported after split-stream pixel verification");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::Instancing),
+                  "Instancing is reported after per-instance placement verification");
             check(!dev.SupportsCapability(CNA::GraphicsCapability::FloatRenderTargets) &&
                       !dev.SupportsCapability(CNA::GraphicsCapability::HalfFloatRenderTargets),
                   "float render-target capabilities remain false while factories substitute Color");
@@ -157,8 +157,8 @@ protected:
                       !dev.SupportsCapability(CNA::GraphicsCapability::IndirectDraw),
                   "out-of-scope modern capabilities are not inherited as true");
 
-            check(renderer.GetMaxVertexStreams() == 1,
-                  "numeric vertex-stream limit agrees with the current encoder");
+            check(renderer.GetMaxVertexStreams() == 8,
+                  "numeric vertex-stream limit agrees with the stock semantic resolver");
             const std::string_view limitations = renderer.GetAdditionalLimitationsTextEXT();
             check(limitations.find("WireFrame") == std::string_view::npos &&
                       limitations.find("OcclusionQuery") != std::string_view::npos,

@@ -58,6 +58,7 @@ using namespace CNA::Testing::Renderers;
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -81,6 +82,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
 using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
@@ -110,8 +112,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool InstancedVertexColor()
 {
-    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, 
-                            DirectX12);
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU,
+                           Vulkan, DirectX9, DirectX11, DirectX12, SdlGpu);
 }
 
 // The renderers whose instanced route this file has MEASURED on a real display, and which therefore
@@ -123,7 +125,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedVertexColorMeasured()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx,
+                           Vulkan, WebGPU, SdlGpu);
 }
 
 // The renderers whose instanced route was measured obeying the PUBLIC CONTRACT: EasyGL always did,
@@ -144,7 +147,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the public-contract set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedVertexColorContract()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU, Bgfx);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan,
+                           WebGPU, Bgfx, SdlGpu);
 }
 
 
@@ -991,6 +995,62 @@ TEST_F(InstancedVertexColorTest, InstanceFrequencyTwoRepeatsARecordWithoutTouchi
     }
 }
 
+TEST_F(InstancedVertexColorTest, EffectWorldComposesAfterTheInstanceWorld)
+{
+    if (!InstancedVertexColor())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
+    RequireInstancedRendering();
+
+    const std::vector<PackedVertex> mesh =
+        BuildSingleQuadMesh(0, kColumnColors[0]);
+    const std::vector<std::uint16_t> indices = BuildQuadIndices<std::uint16_t>(1);
+    const std::array<MatrixRecord, 1> instances{ShiftMatrix(1)};
+
+    VertexBuffer meshBuffer(device, PackedDeclaration(), kVerticesPerQuad, BufferUsage::None);
+    meshBuffer.SetDataRaw(mesh.data(), kVerticesPerQuad, 16);
+    VertexBuffer instanceBuffer(device, MatrixDeclaration(), 1, BufferUsage::None);
+    instanceBuffer.SetDataRaw(instances.data(), 1, 64);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kIndicesPerQuad, BufferUsage::None);
+    indexBuffer.SetData(indices.data(), kIndicesPerQuad);
+    device.SetIndexBuffer(&indexBuffer);
+
+    BasicEffect effect(device);
+    effect.setWorldProperty(Matrix::CreateTranslation(
+        2.0f / static_cast<float>(kColumnCount), 0.0f, 0.0f));
+    RenderTarget2D target = MakeTarget();
+    device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
+                             VertexBufferBinding(&instanceBuffer, 0, 1)});
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    ApplyEffect(effect, true);
+    device.DrawInstancedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, kVerticesPerQuad, 0, 2, 1);
+    device.SetRenderTarget(nullptr);
+
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    PrintMeasurement("effect-world-after-instance-world", snapshot);
+    if (InstancedVertexColorContract())
+    {
+        int spread = 0;
+        int lit = 0;
+        const Rgba sample = SampleColumn(snapshot, 2, spread, lit);
+        EXPECT_GT(lit, 0)
+            << "instance shift + Effect.World shift did not reach column 2"
+            << DescribeFrame(snapshot);
+        EXPECT_TRUE(NearlyEqual(
+            sample, AssertedColor(kColumnColors[0], true, Route::Instanced)))
+            << "the composed transform changed the instance colour" << DescribeFrame(snapshot);
+
+        int wrongSpread = 0;
+        int wrongLit = 0;
+        (void)SampleColumn(snapshot, 1, wrongSpread, wrongLit);
+        EXPECT_EQ(wrongLit, 0)
+            << "Effect.World was ignored; only the instance shift reached column 1"
+            << DescribeFrame(snapshot);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Property transitions. Nothing a previous draw selected -- shader, layout, pipeline or uniform --
 // may reach the next one.
@@ -1201,4 +1261,3 @@ TEST_F(InstancedVertexColorTest, QueuedInstancedDrawSurvivesItsGeometryWrapperBe
 
     ExpectColumns(CaptureTarget(target), true, Route::Instanced, "lifetime/destroyed-wrapper");
 }
-

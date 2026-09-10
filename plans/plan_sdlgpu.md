@@ -2,9 +2,9 @@
 
 > **Current verdict (audit opened 2026-09-09): B. CLASSIC SDL GPU ↔ EASYGL PARITY NOT YET
 > REACHED.** The current renderer is a substantial, real Vulkan-backed implementation, but live
-> source and pixel tests demonstrate ordinary-XNA gaps in instancing/multiple streams,
-> texture/render-target formats and independent MRT outputs. The inherited
-> capability default also advertises features SDL GPU does not implement. This verdict supersedes
+> source and pixel tests demonstrate ordinary-XNA gaps in texture/render-target formats,
+> independent MRT outputs and several effect permutations. Core instancing and multiple streams
+> were closed by `SDLGPU-60`. This verdict supersedes
 > historical completion banners below; those remain as implementation history, not current truth.
 
 ## 2026-09-09 parity audit status
@@ -18,17 +18,17 @@
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
 | EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files (source count, not capability count) |
 | EasyGL / SDL GPU renderer unit-test sources | 2 / 2 `.cpp` files |
-| SDL GPU registered integration tests | 94 CTests (85 baseline plus nine shared parity fixtures) |
+| SDL GPU registered integration tests | 96 CTests (85 baseline plus eleven shared parity fixtures) |
 | Shared EasyGL parity fixtures available | 30 renderer-neutral sources in `modules/graphics/examples/parity` |
-| Shared parity fixtures registered for SDL GPU | 9/30 (wireframe, four sampler and four vertex-semantic fixtures) |
+| Shared parity fixtures registered for SDL GPU | 11/30 (wireframe, four sampler, four vertex-semantic, multi-stream and instancing fixtures) |
 | Tasks created by this audit | 30 (`SDLGPU-55`–`SDLGPU-84`) |
-| Completed / open / proven unavoidable | 12 / 18 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
+| Completed / open / proven unavoidable | 13 / 17 / 0; `SDLGPU-80` is a candidate limitation, not yet counted complete |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
 | Display constraint | Sandboxed tests cannot access host `:0`; SDL `offscreen` successfully creates the real Vulkan GPU device. Escalated preservation checks can use host `:0` (WebGPU), while EasyGL uses Xvfb `:179`. The SDL GPU test-driver cache setting defaults to `x11` and is locally set to `offscreen`. |
 | Validation | Debug mode is enabled in current source. The offscreen 85-test baseline emitted no captured `VUID`, `Validation Error`, or `Validation Warning`; all new GPU regressions must retain fatal validation regexes. |
-| Focused EasyGL oracle baseline | 27/27 selected tests pass on Xvfb/llvmpipe: five stock-effect goldens, blend/depth/raster goldens, packed/DXT formats, surface-format refusal, 2D/cube RT properties, volume/cube data paths, MRT, instancing and occlusion lifecycle/rendering |
+| Focused EasyGL oracle baseline | 28/28 selected tests pass on Xvfb/llvmpipe: five stock-effect goldens, blend/depth/raster goldens, packed/DXT formats, surface-format refusal, 2D/cube RT properties, volume/cube data paths, MRT, instancing (including nonidentity effect World) and occlusion lifecycle/rendering |
 
 The first attempted baseline used the suite's historical hard-coded `SDL_VIDEODRIVER=x11` and
 could not reach the inaccessible host display: early programs skipped and 47 tests failed for the
@@ -105,7 +105,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Vertex buffers/declarations/dynamic options | declaration semantic+offset driven | classic single-stream stock inputs use semantic/index/format/offset and declaration-aware pipeline keys | `=` for declaration interpretation; dynamic/range cases remain `~` in `SDLGPU-78` |
 | Index buffers 16/32-bit/dynamic | Both sizes/options | Both sizes/options implemented | `~` — offsets/ranges/replacement sweep; `SDLGPU-78` |
 | Draw primitive/indexed/user ranges/order | Full public family | ordinary variants and chronological queue exist | `~` — range/topology/base/start adversarial sweep; `SDLGPU-78` |
-| Instancing/multiple vertex streams | Real per-instance divisors and streams | no `DrawInstancedPrimitivesEx`; inherited multistream default false | `∅` despite SDL vertex bindings/input rates; `SDLGPU-60` |
+| Instancing/multiple vertex streams | Real per-instance divisors and streams | semantic multi-stream pipeline layouts; native instance rate with frequency materialization | `~` — core geometry/BasicEffect path has 69 shared pixel/state/lifetime tests plus two byte-identical EasyGL fixtures (`SDLGPU-60`); remaining stock-effect and compiled/custom permutations are `SDLGPU-77/79` |
 | SpriteBatch geometry/sort/state | Broad 2D corpus | real deferred/immediate sprite renderer | `~` — shared geometry/state/font fixtures pending; `SDLGPU-76` |
 | BasicEffect | broad lighting/fog/option corpus | real shader families | `~`; `SDLGPU-77` |
 | AlphaTest/DualTexture effects | broad compare/source/UV corpus | real shaders; independent TEXCOORD0/1 is byte-exact with EasyGL | `=` for vertex input semantics; remaining effect combinations `~` in `SDLGPU-77` |
@@ -177,9 +177,9 @@ were checked individually in the declarations and implementations.
 | `SetRenderTarget2D`, `SetRenderTargetCubeFace`, `SetRenderTargets` | all explicit | 2D and plural explicit; single cube-face hook inherited and delegates to plural | classic; cube ordering verified, MRT semantics remain `SDLGPU-75` |
 | blend/depth/raster/sampler applications; BlendFactor/reference/scissor/viewport | all explicit | all explicit | classic; immutable-key and propagation verification (`SDLGPU-58/63/65`) |
 | buffer factories and colored/extended primitive/indexed draw hooks | explicit | explicit | classic; semantic stock dispatch verified by `SDLGPU-59`, ranges remain `SDLGPU-78` |
-| `DrawInstancedPrimitivesEx`, `GetMaxVertexStreams`, multistream capability | explicit | draw inherited throw, max-stream/capability inherited false | classic XNA 4.0 (`SDLGPU-60`) |
+| `DrawInstancedPrimitivesEx`, `GetMaxVertexStreams`, multistream capability | explicit | explicit stock-effect draw, eight-stream limit and truthful capabilities | classic XNA 4.0; `=` for stock BasicEffect/multi-stream semantics (`SDLGPU-60`), compiled/custom/skinned combinations remain named boundaries for `SDLGPU-77/79` |
 | `SupportsDepth*`, `Ensure3DSupported`, unsupported-call behavior, `CanBeginDrawEXT` | runtime-aware | depth/stencil availability is now exposed through explicit capability answers; other defaults retained where semantically applicable | classic capability/profile truthfulness (`SDLGPU-57`) |
-| `SupportsCapability`, numeric texture/cube/volume/RT limits, limitations text | explicit runtime answers | explicit exhaustive capability switch, one-stream limit and limitations text; format/device limits remain owned by their dedicated tasks | publicly observable; false promises removed by `SDLGPU-57` |
+| `SupportsCapability`, numeric texture/cube/volume/RT limits, limitations text | explicit runtime answers | explicit exhaustive capability switch, eight stock-effect streams and limitations text; format/device limits remain owned by their dedicated tasks | publicly observable; false promises removed by `SDLGPU-57`, stream claims verified by `SDLGPU-60` |
 | compiled-effect factory/runtime/support | explicit | explicit | ordinary Effect bytecode path in scope (`SDLGPU-79`) |
 | ShaderEffect dialect/source execution | EasyGL explicit | SDL dialect/compile path explicit | existing CNAEXT, `out` |
 | compute/storage/image, indirect draw, barriers, GPU timer, shadow/IBL, display-color-space extensions | EasyGL implements a subset | SDL mostly inherits safe false/no-op defaults | modern CNAEXT, `out` |
@@ -302,10 +302,10 @@ underlying API limitation proven after reasonable emulation analysis.
   SkinnedEffectVertexColor, SkinnedEffect_WorldNormal and Effects_Fog) also pass. The separate
   CNAEXT PBR fixtures remain outside this parity task; their existing current-tree failures were
   reproduced and traced through their unchanged stride-derived queue/issue path rather than hidden
-  or misreported as classic evidence. Multi-stream input and instancing remain deliberately owned
-  by `SDLGPU-60`, while deeper Skinned declaration coverage remains with `SDLGPU-77`.
+  or misreported as classic evidence. Multi-stream input and ordinary BasicEffect instancing are
+  now closed by `SDLGPU-60`, while deeper Skinned declaration coverage remains with `SDLGPU-77`.
 
-### SDLGPU-60 — implement ordinary XNA instancing and multi-stream input ⬜
+### SDLGPU-60 — implement ordinary XNA instancing and multi-stream input ✅
 
 - **Problem/public behavior:** `DrawInstancedPrimitives` and multiple `VertexBufferBinding`s are
   ordinary XNA 4.0 but SDL inherits a throwing draw and false max-stream default.
@@ -314,6 +314,42 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Location:** buffer bindings, SDL vertex input/pipeline keys, deferred draw command.
 - **Acceptance/test:** shared split-stream and instanced fixtures pass, including nonzero vertex/
   base/start/instance offsets, per-instance signatures, frequency and lifetime snapshots.
+- **Result (2026-09-10):** accepted. The ordinary stock-effect dispatcher now collects every
+  bound per-vertex stream, selects the shader family across the complete declaration set and
+  resolves each consumed semantic to its declaring stream's own format, offset and stride.
+  Pipeline identity includes the resolved stream table and input rate; replay binds the densely
+  resolved buffers plus the optional neutral record. Each queued command copies every stream at
+  the public draw call, so later rebinding, updates, wrapper destruction and allocator address
+  reuse cannot alter an issued draw.
+
+  `DrawInstancedPrimitivesEx` now resolves POSITION0/COLOR0 semantically and the four world-matrix
+  columns positionally across any per-instance declarations, matching EasyGL's declaration-order
+  rule. SDL_gpu's native `SDL_GPU_VERTEXINPUTRATE_INSTANCE` supplies the step mode. Because its
+  descriptor has no divisor field, XNA `InstanceFrequency > 1` is emulated exactly by materializing
+  source record `VertexOffset + instance / frequency` once per submitted instance. The native
+  indexed draw preserves 16/32-bit indices, `startIndex`, signed `baseVertex` and each stream's own
+  element offset. Missing matrix columns, incompatible formats and the still-unimplemented
+  compiled/custom-effect instanced combinations raise named exceptions rather than drawing from a
+  subset. Capabilities now report multi-stream input and instancing, with an honest eight-stream
+  stock resolver limit (SDL_gpu itself exposes 16 slots/attributes). This closes the core
+  geometry path; texture, lighting, AlphaTest, DualTexture, EnvironmentMap, Skinned and compiled
+  effect permutations remain explicitly tracked by `SDLGPU-77/79` and therefore keep the
+  feature-family matrix at `~` rather than overclaiming whole-effect parity.
+
+  Verification is deliberately redundant: `OrdinaryDrawMultiStreamTest` passes **20/20** and
+  `InstancedDrawMultiStreamTest` passes **28/28**, covering two per-vertex plus two per-instance
+  streams, non-contiguous/dropped bindings, independent offsets, `vertexStart`, `startIndex`,
+  `baseVertex`, 16/32-bit indices, frequencies 1/2/3, A→B→A pipeline/binding sequences, dynamic
+  replacement, deferred snapshots and wrapper death. The newly enabled diffuse/vertex-color
+  instancing suites pass another **21/21** checks, including non-neutral RGB/alpha multiplication,
+  enabled/disabled transitions, packed stride 24, a nonidentity effect World composed after the
+  instance World, and queued state/data lifetime. The shared
+  `multi_stream_split` and `instanced_draw` sources pass under both renderers and their complete
+  RGBA8 dumps are byte-identical (SHA-256 respectively
+  `bef17637de93bbc0ce6bfd85f342dafb322968cd1f9ea494d5b29e708b6957d4` and
+  `cd2d27772b4d72f808185524fbc87fd7f976924911e306bc9da32c4ad4ae2842`). Both SDL CTests make
+  validation diagnostics fatal. The construction failure matrix also passes after adding the new
+  instanced shader acquisition, proving transactional release at every stage.
 
 ### SDLGPU-61 — verify and advertise FillMode.WireFrame ✅
 

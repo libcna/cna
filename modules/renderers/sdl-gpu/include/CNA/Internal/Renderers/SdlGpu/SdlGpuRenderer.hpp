@@ -127,6 +127,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         DualTextureFragmentShaderCreation,
         EnvMapVertexShaderCreation,
         EnvMapFragmentShaderCreation,
+        InstancedVertexShaderCreation,
         SkinnedVertexShaderCreation,
         SkinnedColoredVertexShaderCreation,
         SkinnedColoredFragmentShaderCreation,
@@ -1145,7 +1146,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Adversarial-review finding #4: which per-family queue a QueuedDrawRef points into.
         enum class DrawKind : Uint8
         {
-            Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Skinned, Sprite, Pbr
+            Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Instanced,
+            Skinned, Sprite, Pbr
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
             // plans/plan_fx.md FX-071: guarded like every other compiled-effect member in this header,
             // so a build without the option never declares an enumerator no switch handles.
@@ -1374,6 +1376,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             Sint32 vertexOffset = 0;  ///< SDL_DrawGPUIndexedPrimitives `vertex_offset`
         };
 
+        /** @brief One additional vertex stream captured for deferred replay. */
+        struct CapturedStockVertexStreamEXT
+        {
+            std::vector<std::uint8_t> data;
+            SDL_GPUBuffer* uploadedBuffer = nullptr;
+        };
+
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d draw commands.
         // Vertex/index data is shadow-copied at Draw-call time (see
         // SdlGpuVertexBufferRenderer::ShadowData()'s own rationale) and re-uploaded into a
@@ -1383,6 +1392,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         struct ColoredDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;  ///< empty for a non-indexed draw
             bool indexed = false;
             bool index32 = false;
@@ -1410,6 +1420,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         struct TexturedDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -1447,6 +1458,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         struct LitTexturedDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -1484,6 +1496,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         struct AlphaTestDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -1523,6 +1536,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         struct DualTextureDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -1571,6 +1585,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         struct EnvMapDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -1613,6 +1628,31 @@ namespace CNA::Internal::Renderers::SdlGpu
             ///@}
             CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
+            SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
+        };
+
+        /** @brief One ordinary XNA indexed instanced draw captured for deferred replay. */
+        struct InstancedDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
+            std::vector<std::uint8_t> indexData;
+            bool index32 = false;
+            Uint32 indexCount = 0;
+            Uint32 firstIndex = 0;
+            Sint32 vertexOffset = 0;
+            Uint32 instanceCount = 1;
+            SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            std::array<float, 32> uniforms{};
+            std::array<float, 8> fogUniforms{};
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            RenderStateSnapshot renderState;
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
+            DrawTarget target;
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
@@ -1807,10 +1847,9 @@ namespace CNA::Internal::Renderers::SdlGpu
          * block reaches the GPU, LOD clamp and bias included.
          *
          * Still refused explicitly rather than silently mishandled: a compiled effect's vertex
-         * shader sampling a texture, and a 3D/cube (not 2D) sampler binding. Multi-stream and
-         * instanced draws are refused one level up -- this renderer reports neither
-         * `MultiStreamVertexInput` nor implements `DrawInstancedPrimitivesEx`, so `GraphicsDevice`
-         * rejects them before submission, for compiled and stock effects alike.
+         * shader sampling a texture, a 3D/cube (not 2D) sampler binding, and compiled-effect
+         * multi-stream/instanced draws. The stock-effect route implements both stream families;
+         * the compiled route raises a named refusal rather than consuming a subset.
          * @return true.
          */
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
@@ -1836,8 +1875,11 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
-        /** @brief Returns the one per-vertex stream the current draw encoder consumes faithfully. */
-        [[nodiscard]] int GetMaxVertexStreams() const override { return 1; }
+        /** @brief Returns the eight streams the stock semantic resolver can consume faithfully. */
+        [[nodiscard]] int GetMaxVertexStreams() const override
+        {
+            return static_cast<int>(CNA::Internal::Graphics::kMaxStockVertexStreamsEXT);
+        }
 
         /** @brief Describes current qualitative SDL_gpu API and renderer limitations. */
         [[nodiscard]] std::string_view GetAdditionalLimitationsTextEXT() const override;
@@ -2085,6 +2127,26 @@ namespace CNA::Internal::Renderers::SdlGpu
                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
+        /**
+         * @brief Draws indexed primitives using per-vertex and per-instance vertex streams.
+         *
+         * @param vb The primary per-vertex buffer.
+         * @param ib The index buffer.
+         * @param world The effect world matrix; instance records supply the stock shader's worlds.
+         * @param view The view matrix.
+         * @param projection The projection matrix.
+         * @param primitive Primitive topology.
+         * @param primitiveCount Number of primitives per instance.
+         * @param instanceCount Number of instances to draw.
+         * @param params Captured effect state, draw ranges, and complete vertex binding set.
+         */
+        void DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb,
+                                       const IIndexBufferRenderer& ib,
+                                       const Matrix& world, const Matrix& view,
+                                       const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount,
+                                       int instanceCount,
+                                       const GpuDrawParams& params) override;
 
         /**
          * @brief Queues a sprite quad for drawing on the next render pass. CNAEXT — internal use
@@ -2272,21 +2334,60 @@ namespace CNA::Internal::Renderers::SdlGpu
             StrideDerived
         };
 
+        struct StockVertexStreamSourceEXT
+        {
+            const SdlGpuVertexBufferRenderer* buffer = nullptr;
+            int stride = 0;
+            int vertexOffset = 0;
+            int slot = 0;
+            int instanceFrequency = 0;
+            int vertexCount = 0;
+        };
+
+        struct StockDrawVertexStreamsEXT
+        {
+            std::array<CNA::Internal::Graphics::StockVertexStreamEXT,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> declarations{};
+            std::array<StockVertexStreamSourceEXT,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> sources{};
+            std::array<std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> synthesized{};
+            std::size_t count = 0;
+        };
+
+        static void CollectStockVertexStreamsEXT(
+            const SdlGpuVertexBufferRenderer& vb, const GpuDrawParams* params,
+            StockDrawVertexStreamsEXT& out, bool includePerInstance = false);
+        static void SynthesizeMissingStreamDeclarationsEXT(StockDrawVertexStreamsEXT& streams);
+        static void CaptureStockVertexStreamsEXT(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout,
+            const StockDrawVertexStreamsEXT& streams, int vertexStart,
+            std::vector<std::uint8_t>& stream0Data,
+            std::vector<CapturedStockVertexStreamEXT>& extra,
+            int instanceCount = 1);
+
         [[nodiscard]] static StockVertexShapeEXT SelectStockVertexShapeEXT(
-            const SdlGpuVertexBufferRenderer& vb, const GpuDrawParams& params);
+            const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
+            std::size_t streamCount, std::size_t stride, const GpuDrawParams& params);
         static void StockVertexInputsForShapeEXT(
             StockVertexShapeEXT shape,
             const CNA::Internal::Graphics::StockProgramInput*& inputs,
             std::size_t& count, const char*& programName);
         [[nodiscard]] CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
         ResolveStockVertexLayoutForDrawEXT(
-            const SdlGpuVertexBufferRenderer& vb, StockVertexShapeEXT shape) const;
+            const SdlGpuVertexBufferRenderer& vb,
+            const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
+            std::size_t streamCount, StockVertexShapeEXT shape) const;
+        [[nodiscard]] static CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
+        ResolveInstancedVertexLayoutEXT(const StockDrawVertexStreamsEXT& streams,
+                                        bool hasVertexColor);
         void DispatchStockDrawEXT(
             const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
             const Matrix& world, const Matrix& view, const Matrix& projection,
             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
         static void BindStockVertexBuffersEXT(
             SDL_GPURenderPass* pass, SDL_GPUBuffer* vertexBuffer,
+            const std::vector<CapturedStockVertexStreamEXT>& extraVertexStreams,
             SDL_GPUBuffer* neutralVertexBuffer,
             const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout);
 
@@ -2386,6 +2487,22 @@ namespace CNA::Internal::Renderers::SdlGpu
                             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
                             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                             SDL_GPUGraphicsPipeline*& boundPipeline);
+
+        void CreateInstancedResources(ConstructionResources& resources);
+        void DestroyInstancedResources();
+        [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineInstanced3D(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
+            const RenderStateSnapshot& renderState);
+        void IssueInstancedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                const InstancedDrawCommand& command,
+                                SDL_GPUTextureFormat colorFormat,
+                                SDL_GPUSampleCount sampleCount,
+                                SDL_GPUTextureFormat depthStencilFormat,
+                                int colorTargetCount,
+                                SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Phase SDLGPU-7: SkinnedEffect (SDLGPU-34). GetOrCreatePipelineSkinned3D's `hasVertexColor`
         // selects the stride-56 skinnedColoredVertexShader_/skinnedColoredFragmentShader_ pair
@@ -2782,6 +2899,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUShader* envMapFragmentShader_ = nullptr;
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> envMapPipelines_;
         std::vector<EnvMapDrawCommand> envMapDrawCommands_;
+
+        SDL_GPUShader* instancedVertexShader_ = nullptr;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> instancedPipelines_;
+        std::vector<InstancedDrawCommand> instancedDrawCommands_;
 
         // No dedicated fragment shader for stride 52 -- reuses litTexturedFragmentShader_ (see
         // SkinnedDrawCommand's own doc comment). Stride 56 (vertex color) uses its own dedicated

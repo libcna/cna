@@ -120,7 +120,7 @@ easygl_graphicsdevice_clear_stencil_test.cpp,classic-xna-covered-by-existing-sdl
 easygl_graphicsdevice_reference_stencil_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_graphicsdevicemanager_vsync_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-68,public VSync changes
 easygl_handle_release_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
-easygl_instancedmodel_shader_test.cpp,classic-xna-feature-missing,SDLGPU-60,DrawInstancedPrimitives and multi-stream input
+easygl_instancedmodel_shader_test.cpp,classic-xna-feature-missing,SDLGPU-79,custom ShaderEffect instancing remains a named boundary; core XNA instance streams are covered by SDLGPU-60
 easygl_model_draw_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-79,Model.Draw renderer behavior
 easygl_model_hierarchy_child_mesh_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-79,model hierarchy transforms
 easygl_model_json_reader_32bit_indices_test.cpp,classic-xna-direct-parity,-,renderer-independent public API behavior
