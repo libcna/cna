@@ -23,6 +23,8 @@
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
@@ -169,8 +171,33 @@ protected:
             OcclusionQuery q5(device);
             q5.Begin();
             q5.End();
-            (void) q5.getIsCompleteProperty();
-            check(true, "a fresh query still works normally after 50 active-disposed queries");
+            // A backbuffer read forces earlier GL work through the command stream. Merely calling
+            // IsComplete and then unconditionally checking true (the former test) cannot detect a
+            // poisoned query target: a failed native Begin leaves this particular object forever
+            // incomplete, while End happens to close the deleted query that poisoned the target.
+            Color flushPixel;
+            const Rectangle flushRegion(0, 0, 1, 1);
+            bool freshComplete = false;
+            for (int attempt = 0; attempt < 30 && !freshComplete; ++attempt)
+            {
+                device.GetBackBufferData(&flushRegion, &flushPixel, 0, 1);
+                freshComplete = q5.getIsCompleteProperty();
+            }
+            check(freshComplete,
+                  "a fresh query completes normally after 50 active-disposed queries");
+            if (freshComplete)
+            {
+                bool pixelCountSucceeded = false;
+                try
+                {
+                    pixelCountSucceeded = q5.getPixelCountProperty() >= 0;
+                }
+                catch (...)
+                {
+                }
+                check(pixelCountSucceeded,
+                      "the fresh query publishes its result after active-query disposal stress");
+            }
         }
 
         Exit();

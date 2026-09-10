@@ -430,14 +430,16 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   and that a true/false/true transition restores the exact independently sampled image. The same
   contract exposed and repaired EasyGL's former silent omission of non-default sample masks and now
   maps this rasterizer toggle to desktop `GL_MULTISAMPLE`; OpenGL ES has no equivalent.
-- **`OcclusionQuery` is an exact CPU raster query** (`SOFTWARE-122`, `SOFTWARE-199`). `Begin` starts a fresh
-  measurement, `End` completes synchronously, and `PixelCount` is the number of raster samples
+- **`OcclusionQuery` is an exact CPU raster query** (`SOFTWARE-122`, `SOFTWARE-199`). `Begin` starts
+  a fresh measurement, `End` completes synchronously, and `PixelCount` is the number of raster samples
   surviving clipping, scissor, geometric coverage, `MultiSampleMask`, alpha test, depth and
   stencil. Color-write masks do not suppress visibility, 4× MSAA counts individual selected
   samples, and deferred SpriteBatch draws participate in the same interval. The three existing
   EasyGL public lifecycle/visible/occluded scenes compile unchanged for Software, while the CPU
   exact contract passes 44/44 checks. The renderer-neutral public object also enforces recovered
-  Microsoft XNA profile, result-availability, Begin/End/reuse and disposal rules.
+  Microsoft XNA profile, result-availability, Begin/End/reuse and disposal rules. `SOFTWARE-309`
+  additionally proves that destroying 50 active queries leaves the next query able to complete and
+  publish its result on Software and both EasyGL profiles.
 - **`SpriteBatch` honors a custom `GraphicsDevice.Viewport`** (`REMED-GFX-073`) — sprite
   coordinates are viewport-local (sprite `(0,0)` = the viewport's top-left), the result is placed at
   `Viewport.X/Y`, and pixels outside the viewport rectangle are clipped, matching real XNA/FNA and

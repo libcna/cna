@@ -33,7 +33,10 @@ project-wide resource rule and throw `ObjectDisposedException`.
 query before the base resource is marked disposed. Subsequent Begin/End/result operations throw
 `ObjectDisposedException`. Destroying a query that's still active (`Begin()` with no matching
 `End()`) remains covered by a 50-iteration stress test: the native destructor releases any shared
-active slot, no crash occurs, and resource tracking returns to baseline.
+active slot, no crash occurs, and resource tracking returns to baseline. `SOFTWARE-309` removed an
+unconditional final assertion from that test; it now also forces command progress and proves that a
+fresh query completes and publishes `PixelCount` after the stress on Software and both EasyGL
+profiles.
 
 ## Per-renderer support matrix
 
