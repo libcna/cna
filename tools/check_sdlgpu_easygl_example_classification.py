@@ -74,7 +74,6 @@ NEEDS_TEST = {
     "easygl_skinnedeffect_weightspervertex_test.cpp": ("SDLGPU-77", "weights-per-vertex variants"),
     "easygl_spritebatch_layerdepth_test.cpp": ("SDLGPU-76", "sort modes and layer depth"),
     "easygl_spritebatch_rendertarget_size_test.cpp": ("SDLGPU-76", "render-target-local sprite coordinates"),
-    "easygl_viewport_state_test.cpp": ("SDLGPU-68", "viewport reset/restoration"),
 }
 
 MODERN_TOKENS = (
@@ -121,6 +120,9 @@ VERIFIED_DIRECT = {
     "easygl_depthstencilstate_stencil_twosided_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
     "easygl_depthstencilstate_write_enable_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
     "easygl_graphicsdevice_reference_stencil_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
+    "easygl_scissor_test.cpp": ("SDLGPU-67", "same source passes SDL GPU"),
+    "easygl_viewport_state_test.cpp": ("SDLGPU-67", "same source passes SDL GPU"),
+    "easygl_viewport_subregion_test.cpp": ("SDLGPU-67", "same source passes SDL GPU"),
 }
 
 VERIFIED_COVERED = {

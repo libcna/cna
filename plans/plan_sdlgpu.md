@@ -18,16 +18,16 @@
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
 | EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files (source count, not capability count) |
 | EasyGL / SDL GPU renderer unit-test sources | 2 / 2 `.cpp` files |
-| SDL GPU registered integration tests | 109 CTests (85 baseline plus 24 parity/remediation registrations) |
+| SDL GPU registered integration tests | 115 CTests (85 baseline plus 30 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 31 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 16/31 (wireframe; four sampler; four vertex-semantic; multi-stream; instancing; and five render-state fixtures) |
 | Tasks created by this audit | 30 (`SDLGPU-55`–`SDLGPU-84`) |
-| Completed / open / proven unavoidable | 14 / 16 tasks; 1 capability field (`BlendState.MultiSampleMask`) is proven unavailable in current SDL_gpu and is not a separate task; `SDLGPU-80` remains a candidate limitation |
+| Completed / open / proven unavoidable | 15 / 15 tasks; 1 capability field (`BlendState.MultiSampleMask`) is proven unavailable in current SDL_gpu and is not a separate task; `SDLGPU-80` remains a candidate limitation |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
 | Display constraint | Sandboxed tests cannot access host `:0`; SDL `offscreen` successfully creates the real Vulkan GPU device. Escalated preservation checks can use host `:0` (WebGPU), while EasyGL uses Xvfb `:179`. The SDL GPU test-driver cache setting defaults to `x11` and is locally set to `offscreen`. |
-| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline and SDLGPU-58's 14-test state suite emitted no captured `VUID`, `Validation Error`, or `Validation Warning`; all new GPU regressions retain fatal validation regexes. |
+| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline, SDLGPU-58's 14-test state suite and SDLGPU-67's 13-test viewport/scissor suite emitted no captured `VUID`, `Validation Error`, or `Validation Warning`; all tests in the latter suite make those diagnostics fatal. |
 | Focused EasyGL oracle baseline | 28/28 selected tests pass on Xvfb/llvmpipe: five stock-effect goldens, blend/depth/raster goldens, packed/DXT formats, surface-format refusal, 2D/cube RT properties, volume/cube data paths, MRT, instancing (including nonidentity effect World) and occlusion lifecycle/rendering |
 
 The first attempted baseline used the suite's historical hard-coded `SDL_VIDEODRIVER=x11` and
@@ -88,7 +88,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | MultiSampleMask | EasyGL also documents non-default masks as unimplemented | SDL receives the value but cannot apply it | `⛔` — SDL 3.5 requires `sample_mask=0` and `enable_mask=false`; arbitrary-shader emulation cannot preserve sample coverage/depth/stencil side effects; `SDLGPU-58` |
 | Depth compare/write | All comparisons | Complete immutable depth state | `=` — shared 8×3 signature matrix, exact EasyGL frame, direct EasyGL source and write-enable oracle pass; `SDLGPU-58` |
 | Stencil masks/ops/two-sided/reference | Full front/back state | Complete immutable descriptor and per-draw dynamic reference | `=` — all eight compares and operations, masks, two-sided state and reference pass, including A→B→A; `SDLGPU-58` |
-| Cull/scissor/viewport/depth range | Full GL state | Cull/bias immutable; scissor/viewport/range captured per draw | `~` — cull/scissor/bias are verified; target-switch and depth-range lifecycle remains `SDLGPU-67/68` |
+| Cull/scissor/viewport/depth range | Full GL state | Cull/bias immutable; scissor/viewport/range captured per draw | `=` — exact EasyGL sources, exhaustive deferred A→B→A draws, cube/RT2D/backbuffer switches and resize all pass; presentation-mode lifecycle remains separately `SDLGPU-68` |
 | FillMode.WireFrame | Renderer-side triangle-edge expansion | Native `SDL_GPU_FILLMODE_LINE` in every ordinary pipeline | `=` — shared asymmetric three-edge fixture passes; `SDLGPU-61` |
 | Constant/slope depth bias | GL polygon offset with XNA normalization | Per-format normalized-to-native conversion in every immutable pipeline; SpriteBatch uses projected layer depth | `=` — expanded 67/67 pixel/cache oracle, validation clean; `SDLGPU-65` |
 | Sampler filter/address/anisotropy | All stock/effect slots | Every stock, compiled-effect and SpriteBatch command captures the complete state | `=` — shared pixel oracles plus 29/29 descriptor-capacity checks; `SDLGPU-64` |
@@ -193,9 +193,9 @@ filesystem, rejects duplicates/unknown categories/missing evidence, and currentl
 
 | Category | Count |
 |---|---:|
-| `classic-xna-covered-by-existing-sdlgpu-test` | 128 |
-| `classic-xna-direct-parity` | 16 |
-| `classic-xna-new-sdlgpu-test-needed` | 33 |
+| `classic-xna-covered-by-existing-sdlgpu-test` | 126 |
+| `classic-xna-direct-parity` | 19 |
+| `classic-xna-new-sdlgpu-test-needed` | 32 |
 | `classic-xna-feature-missing` | 9 |
 | `modern-cnaext-out` | 51 |
 | `easygl-specific` | 9 |
@@ -207,7 +207,7 @@ The `easygl-defect` count describes the 246 files physically under EasyGL's exam
 `EASYGL-PARITY-1` below was newly exposed by a shared renderer-neutral fixture, so it is recorded in
 the defect ledger without falsely reclassifying an unrelated EasyGL example source.
 
-Classification is a triage statement, not proof of parity. The 128 “covered” programs map to
+Classification is a triage statement, not proof of parity. The 126 “covered” programs map to
 existing SDL GPU family tests or shared graphics regressions; `SDLGPU-81` must register the same
 31 renderer-neutral parity sources and confirm their discriminating checks. A row moves whenever
 implementation evidence disproves its classification.
@@ -544,7 +544,7 @@ underlying API limitation proven after reasonable emulation analysis.
   `SDLGPU-65`'s XNA depth clipping. The SDL ordered-clear CTest now makes native validation
   diagnostics fatal.
 
-### SDLGPU-67 — verify viewport/scissor/depth-range capture across target changes ⬜
+### SDLGPU-67 — verify viewport/scissor/depth-range capture across target changes ✅
 
 - **Problem/public behavior:** deferred draws must retain the exact viewport, MinDepth/MaxDepth and
   scissor active at issue time and restore full target/backbuffer viewports on switches.
@@ -553,6 +553,17 @@ underlying API limitation proven after reasonable emulation analysis.
 - **Location:** draw snapshots, target-pass setup and viewport conversion.
 - **Acceptance/test:** adversarial A→B→A viewport/scissor/depth-range sequences across differently
   sized RT2D/cube/backbuffer and resize match EasyGL invariants.
+- **Result (2026-09-10):** accepted without a production change: the live draw queue already
+  snapshots viewport bounds, MinDepth/MaxDepth, scissor enable and rectangle per public draw. The
+  stale SDL contracts in both exhaustive deferred fixtures were corrected to exercise the real
+  proxy-backed backbuffer readback; they now complete **39/39** viewport and **47/47** scissor
+  checks instead of skipping the backbuffer half. Six missing shared/oracle programs are now
+  registered under SDL GPU, including the exact EasyGL `viewport_state`, `viewport_subregion` and
+  `scissor` sources. The existing renderer-neutral cube fixture now dirties state and proves the
+  exact cube 32×32 → RT2D 19×23 → backbuffer viewport, depth-range and scissor resets. The focused
+  SDL GPU suite passes **13/13** with `VUID`/validation diagnostics fatal; the corresponding seven
+  EasyGL oracles pass **7/7** on Xvfb. The corpus checker remains 246/246 with zero unclassified and
+  promotes all three reused EasyGL sources to direct parity.
 
 ### SDLGPU-68 — close presentation, resize, reset and minimize lifecycle parity ⬜
 

@@ -199,8 +199,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         PRIVATE CNA_GFX096_CUBE_GETDATA=1)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetCube_PluralBinding
         COMMAND cna_test_sdlgpu_rendertargetcube_plural_binding
-        TIMEOUT 60 LABELS "SdlGpu"
+        TIMEOUT 60 LABELS "SdlGpu;Parity"
         ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_RenderTargetCube_PluralBinding PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-097: a depthless cube-face SpriteBatch draw must use a graphics pipeline whose
     # target info also has no depth/stencil target. Pixel checks prove exact face selection; make
@@ -372,6 +374,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rt_viewport sdlgpu_rendertarget_viewport_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetViewport COMMAND cna_test_sdlgpu_rt_viewport
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_RenderTargetViewport PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-068: GraphicsDevice.ScissorRectangle honored per-draw in RenderTarget2D passes
     # (deferred-model analog of Vulkan GFX-013; scissor was applied once per pass from the live
@@ -379,6 +383,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rt_scissor sdlgpu_rendertarget_scissor_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_RenderTargetScissor COMMAND cna_test_sdlgpu_rt_scissor
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_RenderTargetScissor PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-069: GraphicsDevice.BlendFactor (constant blend color) reaches the GPU per-draw in
     # RenderTarget2D passes (blend-constant analog of GFX-064/068; SdlGpu never overrode the base
@@ -391,12 +397,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # (Viewport.Width/Height), not the full target -- the sprite2d viewportSize uniform was fed the
     # full target dims while ApplyViewportForRef (GFX-064) mapped NDC into the sub-region, squishing
     # the sprite. The per-QueuedDrawRef viewport must also drive the sprite NDC divide. SdlGpu does
-    # not implement GetBackBufferData, so this uses the RenderTarget2D-readback variant (GetData
-    # flushes the deferred sprite batch into the RT); it also covers the two-viewports-per-frame
-    # (per-QueuedDrawRef) and transformMatrix cases.
+    # keeps the RenderTarget2D-readback variant so target-local coordinates remain independently
+    # covered now that SDL_GPU also implements real proxy-backed GetBackBufferData. It additionally
+    # covers the two-viewports-per-frame (per-QueuedDrawRef) and transformMatrix cases.
     cna_sdlgpu_test(cna_test_sdlgpu_spritebatch_custom_viewport ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_rt_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SpriteBatch_CustomViewport COMMAND cna_test_sdlgpu_spritebatch_custom_viewport
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_SpriteBatch_CustomViewport PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-081: SpriteBatch.Begin must apply its RasterizerState argument (shared fix in
     # SpriteBatch.cpp). Deferred-renderer control: the scissor state must reach the QueuedDrawRef
@@ -817,6 +825,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/deferred_viewport_capture_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Deferred_Viewport COMMAND cna_test_sdlgpu_deferred_viewport
         TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_Deferred_Viewport PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-146 cross-renderer control: every deferred draw must execute under the
     # GraphicsDevice.ScissorRectangle and RasterizerState.ScissorTestEnable active at its own
@@ -827,6 +837,35 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
                     ${CNA_GRAPHICS_EXAMPLES_DIR}/deferred_scissor_capture_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Deferred_Scissor COMMAND cna_test_sdlgpu_deferred_scissor
         TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_Deferred_Scissor PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
+    # SDLGPU-67: use the existing renderer-neutral target-switch/resize fixtures and the exact
+    # EasyGL public viewport/scissor sources. Together with the two exhaustive deferred fixtures
+    # above they cover property resets, GPU placement, SpriteBatch-local coordinates and A->B->A
+    # capture without maintaining SDL-specific copies.
+    foreach(viewport_shared_test IN ITEMS
+            rendertarget_viewport_scissor_reset
+            viewport_reset_after_resize
+            spritebatch_viewport_switch)
+        cna_sdlgpu_test(cna_test_sdlgpu_${viewport_shared_test}
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/${viewport_shared_test}_test.cpp)
+        cna_register_renderer_test(NAME SdlGpu_${viewport_shared_test}
+            COMMAND cna_test_sdlgpu_${viewport_shared_test}
+            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_${viewport_shared_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
+    foreach(viewport_oracle_test IN ITEMS viewport_state viewport_subregion scissor)
+        cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${viewport_oracle_test}
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${viewport_oracle_test}_test.cpp)
+        cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${viewport_oracle_test}
+            COMMAND cna_test_sdlgpu_easygl_oracle_${viewport_oracle_test}
+            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_EasyGLOracle_${viewport_oracle_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
 
     # REMED-GFX-145: the SDL_GPU-specific half of the same contract. The shared oracle above drives
     # SpriteBatch only and scopes itself to colour, so it cannot see a segment filter that works for

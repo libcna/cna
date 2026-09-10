@@ -171,7 +171,7 @@ easygl_sample_keyboard_cube3d_test.cpp,classic-xna-covered-by-existing-sdlgpu-te
 easygl_sample_layered_blend_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_sample_moving_quad3d_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_sampler_state_effect_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-64,complete stock sampler snapshots pass shared and SDL pixel oracles
-easygl_scissor_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
+easygl_scissor_test.cpp,classic-xna-direct-parity,SDLGPU-67,same source passes SDL GPU
 easygl_shader_effect_spritebatch_uniform_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_shader_effect_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_shadereffect_3d_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
@@ -242,6 +242,6 @@ easygl_vertexbuffer_setdata_test.cpp,classic-xna-covered-by-existing-sdlgpu-test
 easygl_vertexlighting_diffuse_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_vertexlighting_diffusephong_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
 easygl_vertexlighting_directional_shader_test.cpp,modern-cnaext-out,-,ShaderEffect/PBR/glTF/sample-specific modern graphics path
-easygl_viewport_state_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-68,viewport reset/restoration
-easygl_viewport_subregion_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
+easygl_viewport_state_test.cpp,classic-xna-direct-parity,SDLGPU-67,same source passes SDL GPU
+easygl_viewport_subregion_test.cpp,classic-xna-direct-parity,SDLGPU-67,same source passes SDL GPU
 easygl_viewspace_fog_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
