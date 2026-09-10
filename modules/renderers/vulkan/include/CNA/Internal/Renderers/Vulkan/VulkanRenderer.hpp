@@ -970,20 +970,28 @@ namespace CNA::Internal::Renderers::Vulkan
         /// fragment-stage pipeline-layout total at Vulkan's guaranteed minimum of sixteen.
         static constexpr int kEffectTextureArrayBindingBase = kEffectMat4ArrayBinding + 1;
         static constexpr int kEffectTextureArrayBindingCount = kMaxEffectBoundTextures - 1;
-        static constexpr int kEffectBoundBindingCount =
+        /// MOD-2237: the two named matrices used by the engine shadow casters. General scalar
+        /// ShaderEffect uniforms retain the fixed push-constant contract; this separate block is
+        /// what lets `uLightViewProjection`/`uFaceViewProjection` and `uWorld` coexist instead of
+        /// overwriting the same push-constant matrix slot.
+        static constexpr int kEffectShadowMatrixBinding =
             kEffectTextureArrayBindingBase + kEffectTextureArrayBindingCount;
+        static constexpr int kEffectBoundBindingCount =
+            kEffectShadowMatrixBinding + 1;
+        static constexpr int kEffectUniformBufferBindingCount = kEffectArrayBindingCount + 1;
         /// VULKAN-252: elements per array, all four kinds. 72 is XNA's own `SkinnedEffect.MaxBones`,
         /// so the array a custom effect most plausibly wants -- a bone palette -- fits exactly, and
-        /// the whole block is 8448 bytes against the 16384 every Vulkan device must allow.
+        /// the four arrays occupy 8448 bytes at the usual alignment; the two caster matrices make
+        /// the complete allocation 8704 bytes, still below the 16384 every device must allow.
         static constexpr int kEffectUniformArrayCapacity = 72;
         /**
-         * @brief VULKAN-253: the set-1 descriptor set holding this effect's bound textures.
+         * @brief Returns the set-1 descriptor snapshot for this effect's resources.
          *
          * Built on demand at `SpriteBatch::End()` and captured by value into the batch snapshot,
          * so a texture unbound or disposed after `End()` cannot change what the recorded frame
          * samples. VK_NULL_HANDLE when nothing was ever bound, in which case the replay binds
-         * nothing and a shader that reads set 1 gets whatever the pipeline layout's own default
-         * says -- which is why the layout is created with all four bindings written.
+         * nothing. Uniform arrays and the MOD-2237 caster matrices share this set and are always
+         * written with initialized ranges, as are all sampler bindings through typed fillers.
          */
         VkDescriptorSet GetOrCreateBoundTextureSetEXT(std::uint64_t segment);
         /**
@@ -1051,12 +1059,16 @@ namespace CNA::Internal::Renderers::Vulkan
             VkShaderStageFlags stages = 0;
         };
         std::vector<DrawStorageBindingEXT> drawStorageBindings_;
+        /// MOD-2237: reflected vertex-stage locations, used to omit declaration fields the
+        /// portable shader does not consume and to refuse genuinely missing inputs.
+        std::vector<std::uint32_t> vertexInputLocations_;
         static constexpr std::uint32_t DrawStorageSetCapacity = 64;
         VkDescriptorSetLayout drawStorageLayout_ = VK_NULL_HANDLE;
         VkDescriptorPool drawStoragePool_ = VK_NULL_HANDLE;
         VkDescriptorSet drawStorageSet_ = VK_NULL_HANDLE;
         std::vector<std::weak_ptr<VulkanStorageBufferRenderer>> drawStorageSetBuffers_;
-        /// VULKAN-252: the CPU-side copy of the four arrays, in the layout the buffer holds. Each
+        /// VULKAN-252/MOD-2237: the CPU-side copy of the four arrays followed by the two shadow
+        /// caster matrices, in the layout the buffer holds. Each
         /// element occupies 16 bytes for `float`, `vec2` and `vec3` alike, which is what std140
         /// does to an array of any of them -- so a shader declaring `float uFloats[72]` reads
         /// element `i` at offset `16 * i`, exactly where this writes it.
@@ -1064,6 +1076,8 @@ namespace CNA::Internal::Renderers::Vulkan
         /// VULKAN-252: byte offsets of the four sub-ranges inside `uniformBuffer_`, each aligned up
         /// to the device's `minUniformBufferOffsetAlignment`.
         std::array<VkDeviceSize, 4> arrayOffsets_{};
+        /// MOD-2237: byte offset of `{ light-or-face view-projection, world }`.
+        VkDeviceSize          shadowMatrixOffset_ = 0;
         VkDeviceSize          arrayBlockSize_  = 0;
         bool                  arraysDirty_     = false;
         VkBuffer              uniformBuffer_   = VK_NULL_HANDLE;
@@ -4987,7 +5001,7 @@ namespace CNA::Internal::Renderers::Vulkan
             bool                    useCustomEffect = false;
             VkPipeline              customPipeline  = VK_NULL_HANDLE;
             VkPipelineLayout        customLayout    = VK_NULL_HANDLE;
-            /// The effect's set-1 descriptor set: bound textures and the array uniforms.
+            /// The effect's set-1 descriptor set: textures, array uniforms and caster matrices.
             VkDescriptorSet         customBoundSet  = VK_NULL_HANDLE;
             /// MOD-2250: reflected set-2 graphics storage-buffer descriptors and lifetimes.
             VkDescriptorSet         customStorageSet = VK_NULL_HANDLE;

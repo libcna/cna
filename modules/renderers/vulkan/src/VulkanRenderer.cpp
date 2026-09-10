@@ -5897,7 +5897,8 @@ namespace CNA::Internal::Renderers::Vulkan
             return false;
 
         drawStorageBindings_.clear();
-        const auto reflectDrawStorage = [this](
+        vertexInputLocations_.clear();
+        const auto reflectSpirV = [this](
             const std::string& blob, const VkShaderStageFlagBits stage,
             const char* stageName) -> bool
         {
@@ -5909,8 +5910,10 @@ namespace CNA::Internal::Renderers::Vulkan
             constexpr std::uint32_t DecorationBlock = 2;
             constexpr std::uint32_t DecorationBufferBlock = 3;
             constexpr std::uint32_t DecorationNonWritable = 24;
+            constexpr std::uint32_t DecorationLocation = 30;
             constexpr std::uint32_t DecorationBinding = 33;
             constexpr std::uint32_t DecorationDescriptorSet = 34;
+            constexpr std::uint32_t StorageClassInput = 1;
             constexpr std::uint32_t StorageClassUniform = 2;
             constexpr std::uint32_t StorageClassStorageBuffer = 12;
             struct PointerType
@@ -5930,6 +5933,7 @@ namespace CNA::Internal::Renderers::Vulkan
             std::unordered_map<std::uint32_t, Variable> variables;
             std::unordered_map<std::uint32_t, std::uint32_t> bindings;
             std::unordered_map<std::uint32_t, std::uint32_t> sets;
+            std::unordered_map<std::uint32_t, std::uint32_t> locations;
             std::unordered_map<std::uint32_t, bool> blockTypes;
             std::unordered_map<std::uint32_t, bool> bufferBlockTypes;
             std::unordered_map<std::uint32_t, bool> nonWritable;
@@ -5964,6 +5968,8 @@ namespace CNA::Internal::Renderers::Vulkan
                         bufferBlockTypes[target] = true;
                     else if (decoration == DecorationNonWritable)
                         nonWritable[target] = true;
+                    else if (decoration == DecorationLocation && wordCount >= 4)
+                        locations[target] = words[cursor + 3];
                     else if (decoration == DecorationBinding && wordCount >= 4)
                         bindings[target] = words[cursor + 3];
                     else if (decoration == DecorationDescriptorSet && wordCount >= 4)
@@ -5976,6 +5982,17 @@ namespace CNA::Internal::Renderers::Vulkan
                     nonWritableMembers[member] = true;
                 }
                 cursor += wordCount;
+            }
+
+            if (stage == VK_SHADER_STAGE_VERTEX_BIT)
+            {
+                for (const auto& [variableId, variable] : variables)
+                {
+                    if (variable.storageClass != StorageClassInput) continue;
+                    const auto location = locations.find(variableId);
+                    if (location != locations.end())
+                        vertexInputLocations_.push_back(location->second);
+                }
             }
 
             for (const auto& [variableId, variable] : variables)
@@ -6024,7 +6041,8 @@ namespace CNA::Internal::Renderers::Vulkan
                     compileError_ = std::string("Vulkan ShaderEffect: ") + stageName +
                         " storage buffer binding " + std::to_string(binding->second) +
                         " declares set " + std::to_string(set->second) +
-                        "; graphics storage buffers use set 2 (sets 0 and 1 are textures)";
+                        "; graphics storage buffers use set 2 (sets 0 and 1 are reserved by the "
+                        "draw and ShaderEffect resource contracts)";
                     return false;
                 }
                 if (binding->second >
@@ -6052,14 +6070,18 @@ namespace CNA::Internal::Renderers::Vulkan
             }
             return true;
         };
-        if (!reflectDrawStorage(vertSpv, VK_SHADER_STAGE_VERTEX_BIT, "vertex") ||
-            !reflectDrawStorage(fragSpv, VK_SHADER_STAGE_FRAGMENT_BIT, "fragment"))
+        if (!reflectSpirV(vertSpv, VK_SHADER_STAGE_VERTEX_BIT, "vertex") ||
+            !reflectSpirV(fragSpv, VK_SHADER_STAGE_FRAGMENT_BIT, "fragment"))
             return false;
         std::sort(
             drawStorageBindings_.begin(), drawStorageBindings_.end(),
             [](const DrawStorageBindingEXT& left, const DrawStorageBindingEXT& right) {
                 return left.binding < right.binding;
             });
+        std::sort(vertexInputLocations_.begin(), vertexInputLocations_.end());
+        vertexInputLocations_.erase(
+            std::unique(vertexInputLocations_.begin(), vertexInputLocations_.end()),
+            vertexInputLocations_.end());
         const auto countStage = [this](const VkShaderStageFlagBits stage) {
             return static_cast<std::uint32_t>(std::count_if(
                 drawStorageBindings_.begin(), drawStorageBindings_.end(),
@@ -6188,11 +6210,34 @@ namespace CNA::Internal::Renderers::Vulkan
 
     std::string VulkanEffectRenderer::GetCompileError() const { return compileError_; }
 
-    void VulkanEffectRenderer::SetUniformMat4(const char* /*name*/, const float* matrix)
+    void VulkanEffectRenderer::SetUniformMat4(const char* name, const float* matrix)
     {
         // uMatrix at byte offset 16 (GLSL pads vec2 to 16 before mat4): float[4..19]
         std::memcpy(pushConst_ + 4, matrix, 64);
         matrixSetByGame_ = true;   // VULKAN-255: the game's matrix outranks the draw's own
+
+        // MOD-2237: the portable shadow-caster shaders need two matrices at once. Preserve the
+        // established one-matrix push contract for every custom effect, and additionally mirror
+        // only the engine caster's exact public names into its dedicated set-1 block. Both light
+        // spellings share the first field because a draw is either cube-face or 2D/cascade, never
+        // both; uWorld owns the second field and can still be changed by callers through the
+        // ShadowMap::getCasterEffect() API before each draw.
+        int shadowMatrix = -1;
+        if (name != nullptr &&
+            (std::strcmp(name, "uLightViewProjection") == 0 ||
+             std::strcmp(name, "uFaceViewProjection") == 0))
+            shadowMatrix = 0;
+        else if (name != nullptr && std::strcmp(name, "uWorld") == 0)
+            shadowMatrix = 1;
+        if (shadowMatrix >= 0)
+        {
+            EnsureUniformArrayStorageEXT();
+            const std::size_t base = static_cast<std::size_t>(
+                shadowMatrixOffset_ / sizeof(float)) + static_cast<std::size_t>(shadowMatrix * 16);
+            std::memcpy(arrayBlock_.data() + base, matrix, 64);
+            arraysDirty_ = true;
+            boundSetDirty_ = true;
+        }
     }
 
     void VulkanEffectRenderer::SetUniformVec4(const char* /*name*/, float x, float y, float z, float w)
@@ -6251,19 +6296,20 @@ namespace CNA::Internal::Renderers::Vulkan
         if (boundLayout_ != VK_NULL_HANDLE || !owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         std::array<VkDescriptorSetLayoutBinding, kEffectBoundBindingCount> lb{};
         for (int i = 0; i < kEffectBoundBindingCount; ++i) {
-            const bool isUniformArray =
-                i >= kEffectFloatArrayBinding && i < kEffectTextureArrayBindingBase;
+            const bool isUniformBuffer =
+                (i >= kEffectFloatArrayBinding && i < kEffectTextureArrayBindingBase) ||
+                i == kEffectShadowMatrixBinding;
             lb[static_cast<std::size_t>(i)].binding         = static_cast<uint32_t>(i);
             lb[static_cast<std::size_t>(i)].descriptorType  =
-                isUniformArray ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
-                               : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                isUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+                                : VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             lb[static_cast<std::size_t>(i)].descriptorCount = 1;
             // VULKAN-252: the arrays are visible to BOTH stages. The one array a custom effect is
             // most likely to want is a bone palette, which is read in the vertex shader; declaring
             // them fragment-only would have made the headline use case impossible.
             lb[static_cast<std::size_t>(i)].stageFlags      =
-                isUniformArray ? (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-                               : VK_SHADER_STAGE_FRAGMENT_BIT;
+                isUniformBuffer ? (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+                                : VK_SHADER_STAGE_FRAGMENT_BIT;
         }
         VkDescriptorSetLayoutCreateInfo lci{};
         lci.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -6297,8 +6343,11 @@ namespace CNA::Internal::Renderers::Vulkan
             arrayOffsets_[static_cast<std::size_t>(i)] = at;
             at += ((sizes[i] + align - 1) / align) * align;
         }
+        shadowMatrixOffset_ = at;
+        constexpr VkDeviceSize shadowMatrixBytes = 2u * 16u * sizeof(float);
+        at += ((shadowMatrixBytes + align - 1) / align) * align;
         // Asked once, here, rather than discovered as a validation error at bind time. The whole
-        // block is 8448 bytes at the usual 256-byte alignment and every Vulkan device must allow
+        // block is 8704 bytes at the usual 256-byte alignment and every Vulkan device must allow
         // at least 16384, so this is a guard against an exotic device rather than a live limit.
         const VkDeviceSize largest = *std::max_element(std::begin(sizes), std::end(sizes));
         if (largest > owner_->GetDeviceLimitsEXT().maxUniformBufferRange)
@@ -6311,6 +6360,12 @@ namespace CNA::Internal::Renderers::Vulkan
 
         arrayBlockSize_ = at;
         arrayBlock_.assign(static_cast<std::size_t>(at / sizeof(float)), 0.0f);
+        const std::size_t shadowBase =
+            static_cast<std::size_t>(shadowMatrixOffset_ / sizeof(float));
+        for (int matrix = 0; matrix < 2; ++matrix)
+            for (int diagonal = 0; diagonal < 4; ++diagonal)
+                arrayBlock_[shadowBase + static_cast<std::size_t>(matrix * 16 + diagonal * 5)] =
+                    1.0f;
     }
 
     void VulkanEffectRenderer::WriteUniformArrayEXT(const char* setter, const char* name, int slot,
@@ -6332,8 +6387,9 @@ namespace CNA::Internal::Renderers::Vulkan
                 ") -- a null array with a non-zero count. Refused rather than reading it.");
         EnsureUniformArrayStorageEXT();
         // The name is not consulted, exactly as it is not by the scalar setters above: this
-        // renderer has no shader reflection, so the array's TYPE selects its slot the way a
-        // scalar's type selects its push-constant offset. VULKAN-256 records that divergence.
+        // renderer has resource and input reflection, but no named-value reflection, so the
+        // array's TYPE selects its slot the way a scalar's type selects its push-constant offset.
+        // VULKAN-256 records that divergence.
         const std::size_t base =
             static_cast<std::size_t>(arrayOffsets_[static_cast<std::size_t>(slot)] / sizeof(float));
         const std::size_t stride = (elementFloats == 16) ? 16u : 4u;
@@ -6389,12 +6445,12 @@ namespace CNA::Internal::Renderers::Vulkan
               static_cast<uint32_t>(VulkanRenderer::kEffectPoolMaxSets
                                     * (kEffectFloatArrayBinding +
                                        kEffectTextureArrayBindingCount)) },
-            // VULKAN-252: four uniform-buffer descriptors per set, sized with the samplers so a
-            // pool that can hold N sets can hold N of BOTH kinds -- an under-sized second pool
-            // size fails the allocation just as surely as an under-sized first one.
+            // VULKAN-252/MOD-2237: five uniform-buffer descriptors per set, sized with the samplers
+            // so a pool that can hold N sets can hold N of BOTH kinds -- an under-sized second
+            // pool size fails the allocation just as surely as an under-sized first one.
             { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
               static_cast<uint32_t>(VulkanRenderer::kEffectPoolMaxSets
-                                    * kEffectArrayBindingCount) },
+                                    * kEffectUniformBufferBindingCount) },
         };
         VkDescriptorSet set = VK_NULL_HANDLE;
         VkDescriptorPool pool = VK_NULL_HANDLE;
@@ -6403,7 +6459,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (set == VK_NULL_HANDLE)
             throw std::runtime_error(
                 "The Vulkan renderer: no descriptor set available for a ShaderEffect's bound "
-                "textures. Refused rather than binding a null descriptor set.");
+                "resources. Refused rather than binding a null descriptor set.");
 
         // Every binding is written, including the ones nothing was bound to: a set must be fully
         // written before it is bound, and the renderer's own white 1x1 is the honest filler --
@@ -6414,9 +6470,9 @@ namespace CNA::Internal::Renderers::Vulkan
         owner_->EnsureDefaultWhiteTexture();
         owner_->EnsureEnvMapResources();            // VULKAN-254: creates defaultWhiteCubeView_
         owner_->EnsureDefaultWhiteVolumeTexture();
-        // VULKAN-252: the same argument one level up -- a set must be FULLY written, so the four
-        // array bindings need a real buffer even for an effect that never set an array. It then
-        // holds zeros, which is what a shader reading an array nothing was written to should see.
+        // VULKAN-252/MOD-2237: the same argument one level up -- a set must be FULLY written, so
+        // the four array bindings and caster-matrix binding need a real buffer even when untouched.
+        // Arrays then hold zeros and the two matrices hold identities.
         EnsureUniformArrayStorageEXT();
         std::array<VkDescriptorImageInfo,
                    kEffectFloatArrayBinding + kEffectTextureArrayBindingCount> infos{};
@@ -6489,12 +6545,12 @@ namespace CNA::Internal::Renderers::Vulkan
             vkUnmapMemory(owner_->device_, uniformMemory_);
             arraysDirty_ = false;
         }
-        std::array<VkDescriptorBufferInfo, kEffectArrayBindingCount> bufInfos{};
+        std::array<VkDescriptorBufferInfo, kEffectUniformBufferBindingCount> bufInfos{};
         for (int i = 0; i < kEffectArrayBindingCount; ++i) {
             const VkDeviceSize begin = arrayOffsets_[static_cast<std::size_t>(i)];
             const VkDeviceSize end = (i + 1 < kEffectArrayBindingCount)
                                          ? arrayOffsets_[static_cast<std::size_t>(i + 1)]
-                                         : arrayBlockSize_;
+                                         : shadowMatrixOffset_;
             bufInfos[static_cast<std::size_t>(i)] = { uniformBuffer_, begin, end - begin };
             auto& w = writes[static_cast<std::size_t>(kEffectFloatArrayBinding + i)];
             w.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -6504,6 +6560,15 @@ namespace CNA::Internal::Renderers::Vulkan
             w.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             w.pBufferInfo     = &bufInfos[static_cast<std::size_t>(i)];
         }
+        auto& shadowInfo = bufInfos[static_cast<std::size_t>(kEffectArrayBindingCount)];
+        shadowInfo = {uniformBuffer_, shadowMatrixOffset_, 2u * 16u * sizeof(float)};
+        auto& shadowWrite = writes[static_cast<std::size_t>(kEffectShadowMatrixBinding)];
+        shadowWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        shadowWrite.dstSet = set;
+        shadowWrite.dstBinding = static_cast<std::uint32_t>(kEffectShadowMatrixBinding);
+        shadowWrite.descriptorCount = 1;
+        shadowWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        shadowWrite.pBufferInfo = &shadowInfo;
         // MOD-2226: sampler2DArray has its own bindings and its own dimensional filler. A 2D view
         // in one of these descriptors is invalid even if it refers to the same 1x1 image.
         for (int unit = 0; unit < kEffectTextureArrayBindingCount; ++unit) {
@@ -7585,6 +7650,33 @@ namespace CNA::Internal::Renderers::Vulkan
                 attrs3D.insert(attrs3D.end(), three->instanceLayout.attributes.begin(),
                                three->instanceLayout.attributes.begin() +
                                    three->instanceLayout.attributeCount);
+            }
+            // MOD-2237: unlike a stock program, a ShaderEffect used to bake every field in the
+            // caller's declaration even when its SPIR-V did not consume it. The Vulkan validation
+            // layer correctly reports each such extra field. Reflection at compile time gives us
+            // the exact location set: retain those fields, and refuse an actually missing one
+            // instead of letting the shader read undefined input data.
+            attrs3D.erase(
+                std::remove_if(
+                    attrs3D.begin(), attrs3D.end(),
+                    [this](const VkVertexInputAttributeDescription& attribute) {
+                        return !std::binary_search(vertexInputLocations_.begin(),
+                                                   vertexInputLocations_.end(),
+                                                   attribute.location);
+                    }),
+                attrs3D.end());
+            for (const std::uint32_t location : vertexInputLocations_)
+            {
+                const bool supplied = std::any_of(
+                    attrs3D.begin(), attrs3D.end(),
+                    [location](const VkVertexInputAttributeDescription& attribute) {
+                        return attribute.location == location;
+                    });
+                if (!supplied)
+                    throw System::NotSupportedException(
+                        "CNA Vulkan: this ShaderEffect's vertex stage consumes location " +
+                        std::to_string(location) +
+                        ", but the active vertex/instance declarations do not supply it");
             }
             vertexInput.vertexBindingDescriptionCount = bindingCount;
             vertexInput.pVertexBindingDescriptions = bindings.data();

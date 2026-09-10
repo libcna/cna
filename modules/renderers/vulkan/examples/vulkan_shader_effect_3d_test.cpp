@@ -33,10 +33,12 @@
 //   E  The split layout also renders on the indexed route, including its separate compaction path.
 //   F  A buffer with NO VertexDeclaration is refused BY NAME. The stock routes may fall back to a
 //      stride table; for a custom shader that table is a guess about someone else's program.
-//   G  `DrawInstancedPrimitives` consumes its per-instance binding through the custom shader.
-//   H  A negative first instance is rejected before submission.
-//   I  The base-instance extension starts at instance one rather than silently using zero.
-//   J  No validation message.
+//   G  `DrawInstancedPrimitives` consumes its per-instance binding through the custom shader, and
+//      an extra declaration field the shader does not consume is omitted from the native layout.
+//   H  A reflected shader input absent from the active declarations is refused by location.
+//   I  A negative first instance is rejected before submission.
+//   J  The base-instance extension starts at instance one rather than silently using zero.
+//   K  No validation message.
 //
 // The transform: the effect's `IEffectMatrices` properties supply world/view/projection, and this
 // renderer writes their product into the push-constant block's one matrix slot because it has no
@@ -504,9 +506,9 @@ protected:
             instFx.setViewProperty(Matrix::getIdentityProperty());
             instFx.setProjectionProperty(Matrix::getIdentityProperty());
 
-            // A position-only mesh, so the pipeline declares no attribute this shader ignores:
-            // the layer warns about an unconsumed one, and without SPIR-V reflection -- which this
-            // renderer does not do -- a declaration-driven layout cannot know which those are.
+            // The shader reads position and the FIRST per-instance field. The second instance
+            // field is deliberate: compile-time SPIR-V reflection must omit its location from the
+            // native layout, otherwise the validation layer reports an unconsumed attribute.
             const VertexDeclaration meshDecl(12, {
                 VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
             });
@@ -516,15 +518,19 @@ protected:
                                           1.f, -1.f, 0.f,
                                           1.f,  1.f, 0.f };
             meshVb.SetDataRaw(meshData, 4, 12);
-            const VertexDeclaration instDecl(16, {
+            const VertexDeclaration instDecl(32, {
                 VertexElement(0, VertexElementFormat::Vector4,
                               VertexElementUsage::TextureCoordinate, 1),
+                VertexElement(16, VertexElementFormat::Vector4,
+                              VertexElementUsage::TextureCoordinate, 2),
             });
             VertexBuffer instVb(dev, instDecl, 2, BufferUsage::None);
             // instance 0: left half, probe (0.2, 0.8); instance 1: right half, probe (0.8, 0.2)
-            const float instData[8] = { -0.5f, 0.0f, 0.2f, 0.8f,
-                                         0.5f, 0.0f, 0.8f, 0.2f };
-            instVb.SetDataRaw(instData, 2, 16);
+            const float instData[16] = {
+                -0.5f, 0.0f, 0.2f, 0.8f,  11.f, 12.f, 13.f, 14.f,
+                 0.5f, 0.0f, 0.8f, 0.2f,  21.f, 22.f, 23.f, 24.f,
+            };
+            instVb.SetDataRaw(instData, 2, 32);
 
             RenderTarget2D rt(dev, kN, kN, false, SurfaceFormat::Color, DepthFormat::None, 0,
                               RenderTargetUsage::DiscardContents);
@@ -551,9 +557,28 @@ protected:
             check(!threw && Near(left.getRProperty(), 51) && Near(left.getGProperty(), 204) &&
                       Near(right.getRProperty(), 204) && Near(right.getGProperty(), 51),
                   "G an instanced draw through a ShaderEffect reads a DIFFERENT per-instance "
-                  "record per instance: left=" + Text(left) + " right=" + Text(right) +
+                  "record per instance while ignoring its extra declared field: left=" +
+                      Text(left) + " right=" + Text(right) +
                       " (want ~(51,204,0) and ~(204,51,0)" +
                       (threw ? std::string("; threw: ") + what : std::string("")) + ")");
+
+            dev.SetRenderTarget(&rt);
+            dev.Clear(kClear);
+            instFx.Apply();
+            dev.SetVertexBuffer(&meshVb);
+            bool missingRefused = false;
+            what.clear();
+            try { dev.DrawPrimitives(PrimitiveType::TriangleStrip, 0, 2); }
+            catch (const System::NotSupportedException& e) {
+                missingRefused = true;
+                what = e.what();
+            }
+            catch (const std::exception& e) { what = e.what(); }
+            dev.SetVertexBuffer(nullptr);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            check(missingRefused && what.find("location 1") != std::string::npos,
+                  "H a reflected vertex input absent from the active declarations is refused "
+                  "by location: " + (missingRefused ? what : std::string("NOT REFUSED")));
 
             dev.SetRenderTarget(&rt);
             dev.Clear(kClear);
@@ -571,7 +596,7 @@ protected:
             catch (const System::ArgumentOutOfRangeException&) { negativeRefused = true; }
             catch (...) {}
             check(negativeRefused,
-                  "H a negative firstInstance is refused before native submission");
+                  "I a negative firstInstance is refused before native submission");
             try {
                 dev.DrawInstancedPrimitivesBaseInstanceEXT(
                     PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 1, 1);
@@ -587,7 +612,7 @@ protected:
             const Color baseRight = p[kN * (kN / 2) + 5];
             check(!threw && baseLeft == kClear && Near(baseRight.getRProperty(), 204) &&
                       Near(baseRight.getGProperty(), 51),
-                  "I base-instance draw count=1 firstInstance=1 skips instance zero and reads "
+                  "J base-instance draw count=1 firstInstance=1 skips instance zero and reads "
                   "instance one: left=" + Text(baseLeft) + " right=" + Text(baseRight) +
                       " (want clear and ~(204,51,0)" +
                       (threw ? std::string("; threw: ") + what : std::string("")) + ")");
@@ -596,7 +621,7 @@ protected:
         {
             const std::size_t after = Renderer().GetValidationMessagesEXT().size();
             check(!VulkanRenderer::IsValidationActiveEXT() || after == messagesBefore,
-                  "J no validation message: " + std::to_string(messagesBefore) + " -> " +
+                  "K no validation message: " + std::to_string(messagesBefore) + " -> " +
                       std::to_string(after));
         }
 

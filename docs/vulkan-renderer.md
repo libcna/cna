@@ -637,13 +637,15 @@ SPIR-V payloads that exercise the same capabilities:
 
 One capability in that family is **not** available here and says so rather than approximating: the
 shader source itself is never translated (`plans/plan_csl.md`). An instanced draw with a custom
-effect was refused by name until `VULKAN-168`; it works now, and `Vulkan_ShaderEffect_3D` leg E
-covers it.
+effect was refused by name until `VULKAN-168`; it works now. `Vulkan_ShaderEffect_3D` covers the
+ordinary and base-instance routes, reflected removal of unused declaration fields, and refusal when
+a shader-required location is genuinely missing.
 
 ### Writing a `ShaderEffect` for this renderer
 
-- **Uniforms** live in one 128-byte push-constant block with fixed slots, because there is no
-  shader reflection here: the setter's *type* selects the slot the way a name would elsewhere.
+- **Ordinary named values** live in one 128-byte push-constant block with fixed slots. SPIR-V
+  resource and vertex-input reflection exist, but the setter's *type* still selects this legacy
+  value slot the way a name would elsewhere.
   `vec2 vpSize` at bytes 0–7, `mat4 uMatrix` at 16–79 (`SetUniformMat4`), `vec4 uColor` at 80–95
   (`SetUniformVec4`/`Vec3`/`Vec2`), eight floats at 96–127 (`SetUniformFloat`/`SetUniformInt`).
 - **Textures** are descriptor set 1: `sampler2D` at bindings 0–3, `samplerCube` at 4–7,
@@ -704,10 +706,29 @@ sampling. `CNAEXT_ImageBasedLighting` additionally proves the direct-only intera
 stock-family regressions plus `Vulkan_EffectDescriptorCacheIdentity` stay green with Khronos
 validation.
 
-This is reception parity, not generation parity. `ShadowMap`, `CascadedShadowMap`, `CubeShadowMap`
-and `SpotShadowMap` still author their caster as GLSL `ShaderEffect` source. Vulkan deliberately
-reports `ExecutesShaderEffectSourceEXT() == false` because it consumes packaged SPIR-V, so those
-helpers remain unsupported until portable caster payloads exist.
+Generation is supplied separately by `MOD-2237`; `ExecutesShaderEffectSourceEXT()` remains false
+because Vulkan consumes the selected SPIR-V package payload rather than pretending to execute the
+package's GLSL variants.
+
+### Portable shadow generation (`MOD-2237`, 2026-09-10)
+
+`ShadowMap`, `CascadedShadowMap`, `CubeShadowMap` and `SpotShadowMap` select one reproducibly
+generated shader package with GLSL ES, desktop GLSL and checked-in SPIR-V payloads. Directional and
+cascade casters include rigid and 72-bone skinned vertex variants; point-cube and spot casters share
+the same distance-output fragment contract as EasyGL.
+
+Vulkan set 1 binding 19 carries the light-or-face view-projection and per-object world matrices,
+so the public `SetUniformMat4("uWorld", ...)` hook does not collide with the legacy one-matrix push
+slot. Compile-time vertex-input reflection filters declaration attributes the selected caster does
+not consume and rejects a missing required location. The off-screen caster intentionally keeps the
+XNA light-space Y orientation: applying the swapchain Y flip here mirrors the stored shadow and was
+detected by the directional centroid oracle.
+
+**Test:** the shared directional, cascade and point/spot applications pass **8/8**, **5/5** and
+**4/4** on RADV, Vulkan llvmpipe and EasyGL. The complete three shadow-visibility suites pass
+**31/31** on both Vulkan devices, including posed skinned casting and one-mesh self-shadowing.
+`Vulkan_ShaderEffect_3D` passes **11/11**, and the generated package passes its reproducibility
+check. All Vulkan runs use Khronos validation and emit no validation messages.
 
 ### Instancing (`plans/plan_vulkan.md` VULKAN-217…VULKAN-234, 2026-09-08)
 
@@ -838,11 +859,10 @@ short form a reader needs before opening it.
 | `SpriteSortMode::Immediate` honoured at the renderer boundary | EasyGL does not override `SetImmediateMode` at all. |
 | Precise occlusion counts on real hardware | `VK_QUERY_CONTROL_PRECISE_BIT` with the feature enabled, answered honestly through `PixelCountIsPreciseEXT` (`VULKAN-370`). |
 
-**Difference that is still a gap, and is owned:** stock shadow reception reached parity in
-`MOD-2236`, but the engine layer's source-authored caster programs still cannot run here.
-`plans/plan_modern.md` owns that generation half. `ExecutesShaderEffectSourceEXT()` stays false
-because the renderer executes packaged SPIR-V, not caller-provided source text. Indirect execution
-is the additional device-gated path described above.
+**Former shadow gap now closed:** `MOD-2236` supplies stock-effect reception and `MOD-2237` supplies
+portable directional, cascade, point and spot generation without changing Vulkan's shader dialect.
+`ExecutesShaderEffectSourceEXT()` stays false because the renderer executes packaged SPIR-V, not
+caller-provided source text. Indirect execution is the additional device-gated path described above.
 
 ---
 

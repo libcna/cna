@@ -235,6 +235,10 @@ implementation tasks.**
   conditional ordinary-`Texture2D` bridge, eligible zero-copy `RenderTarget2D` bridges and
   cross-target compute/readback closure are complete in `MOD-2244`; the common deferred-order,
   dependency and lifetime foundation is complete in `MOD-2247`–`MOD-2253` in the modern plan;
+- engine-layer shadows remain owned by the modern plan. `MOD-2236` completes directional,
+  cascade, point and spot reception in all four stock-effect families; `MOD-2237` completes
+  portable rigid/skinned directional, cascade, point-cube and spot generation through generated
+  GLSL ES/desktop GLSL/SPIR-V packages, verified on RADV and llvmpipe;
 - the renderer-neutral immutable storage-buffer descriptor, exact range transfers/copy and tracked
   facade are complete (`MOD-2229`). Vulkan translates every declared role into exact
   `VkBufferUsageFlags`, keeps CPU-none buffers device-local and unmapped, and has byte-exact
@@ -1947,7 +1951,7 @@ as a method change rather than a rediscovered bug.
 **The census — four categories: as `VULKAN-027` first measured it on 2026-09-05, as `VULKAN-474`
 re-measured it on 2026-09-06, as `VULKAN-207` re-measured it on 2026-09-07 at the end of the
 campaign, and after `VULKAN-240`/`VULKAN-241` corrected the compressed-content omissions on
-2026-09-08, followed by the current modern-plan implementation through `MOD-2236`/`MOD-2251`.
+2026-09-08, followed by the current modern-plan implementation through `MOD-2237`/`MOD-2251`.
 The movement is accounted for
 exactly at every step. The interface itself grew from 186 virtuals to 189 before the compressed
 overrides moved categories, then to 202 through the detailed format/limit contract, and to 207
@@ -2082,7 +2086,7 @@ deleting the row would leave the count smaller with no account of why.
 | `IGraphicsRenderer` | `DispatchCompute` | default | no-op | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2242` snapshots bindings/uniforms and records a real Vulkan dispatch. |
 | `IGraphicsRenderer` | `MemoryBarrierEXT` | default | no-op | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2242` implements the storage-buffer visibility barrier used by the compute path. |
 | `IGraphicsRenderer` | `ExecutesShaderEffectSourceEXT` | default | `return false` | DEFAULT_CORRECT | Truthful and load-bearing: Vulkan's `ShaderEffect` consumes SPIR-V against a fixed push-constant layout and never executes the GLSL source the engine layer writes. `CLAUDE.md` tells callers to ask exactly this query. |
-| `IGraphicsRenderer` | `SupportsShadowSamplingEXT` | default | `return false` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2236` implements directional, cascade, point and spot sampling in all four stock receiver families and proves it against EasyGL on RADV and llvmpipe. Source-authored caster execution remains a separate limitation. |
+| `IGraphicsRenderer` | `SupportsShadowSamplingEXT` | default | `return false` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2236` implements directional, cascade, point and spot sampling in all four stock receiver families and proves it against EasyGL on RADV and llvmpipe. `MOD-2237` separately packages all engine-layer caster variants for Vulkan without changing this capability's receiver meaning. |
 | `IGraphicsRenderer` | `SupportsImageBasedLightingEXT` | default | `return false` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2235` implements the three-texture split-sum path in both stock PBR families and proves it on RADV and llvmpipe. |
 | `IGraphicsRenderer` | `SupportsComputeShadersEXT` | default | `return false` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2240`/`MOD-2242` answer from the selected queue family, implemented resource path and device limits. |
 | `IGraphicsRenderer` | `SupportsIndirectDrawEXT` | default | `return false` | ~~UNSUPPORTED_HONEST~~ → **NO LONGER IN A.1** | It was an honest absence at `VULKAN-470`; `MOD-2245` now overrides it from enabled `drawIndirectFirstInstance` and proves native execution on two devices. |

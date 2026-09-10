@@ -9,9 +9,9 @@ pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compu
 **The engine layer is implemented on its EasyGL reference path and is being rolled out to other
 renderers capability by capability.** Its HDR/post-process pipeline, shadows, skybox, image-based
 lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
-now implements exact HDR targets, stock-PBR IBL, stock-effect shadow reception, instancing and the
-modern compute/resource paths, while source-authored post-process, skybox and shadow-caster shaders
-remain unavailable there. The design is
+now implements exact HDR targets, stock-PBR IBL, portable directional/cascade/point/spot shadow
+generation and stock-effect reception, instancing and the modern compute/resource paths. Its
+remaining engine-layer shader gaps are the source-authored post-process and skybox paths. The design is
 [`../CNAEXT.md`](../misc/CNAEXT.md); the task backlog and its evidence trail are
 [`../plans/plan_modern.md`](../plans/plan_modern.md).
 
@@ -202,10 +202,10 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
 | Float/HDR render targets | ✅ exact 2D/cube targets, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D` and `RenderTargetCube`, device-probed (`MOD-2223`/`MOD-2234`) | ⬜ | ⬜ — each reports `false` and the target constructor refuses the format rather than substituting `Color` |
 | `RenderPipeline` + post-process passes | ✅ | 🟨 runs and copies through — measured, frame identical to no pipeline | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
-| Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | 🟨 stock reception complete (`MOD-2236`); source-authored caster unavailable | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
-| Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | 🟨 reception complete; generation unavailable | ⬜ | ⬜ — same accepted-and-ignored convention |
+| Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ✅ portable rigid/skinned generation (`MOD-2237`) + stock reception (`MOD-2236`) | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
+| Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ✅ portable atlas generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Contact shadows | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `ContactShadowPass::isSupported()` is false and the pass copies its input through, so the frame keeps the shadow map it already had |
-| Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | 🟨 stock reception complete; cube/spot caster unavailable | ⬜ | ⬜ — same accepted-and-ignored convention |
+| Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | ✅ portable cube/spot generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Skybox | ✅ one fullscreen pass; needs `CustomEffects` | ⬜ | ⬜ | ⬜ — where the shader will not compile the sky is skipped and logged once |
 | Image-based lighting | ✅ CPU precompute + split-sum shading | ✅ stock `PbrEffect` and `SkinnedPbrEffect`, same three-product split sum (`MOD-2235`) | ⬜ | ⬜ — precompute additionally requires working cube/2D texture storage; shading needs a renderer-specific stock PBR path |
 | Materials (`PbrMaterial` ↔ `PbrEffect`) | ✅ | ✅ | ✅ | ✅ — no renderer code at all: it moves values between two existing objects |
@@ -239,11 +239,11 @@ same question:
 
 The distinction is not academic: the Vulkan renderer now answers **true** to the first, shadow
 sampling and IBL questions, while its language query accepts SPIR-V and refuses GLSL. Its stock
-SPIR-V programs consume the latter two states, but this layer's passes and shadow casters hand a
-`ShaderEffect` GLSL source. Before those semantic queries existed, the shadow example on Vulkan
-did not fail — it crashed, because the caster's effect failed to compile and the draw proceeded with
-no effect applied. Portable packages use the language/stage query to select a payload; subsystems
-still ask their own semantic capability before promising a visible result.
+SPIR-V programs consume the latter two states. Since `MOD-2237`, every shadow caster selects a
+portable package containing GLSL ES, desktop GLSL and SPIR-V instead of handing only GLSL source to
+the renderer. The post-process and skybox paths still provide source alone and therefore remain
+unavailable on Vulkan. Portable packages use the language/stage query to select a payload;
+subsystems still ask their own semantic capability before promising a visible result.
 
 **Explicit code values.** `ShaderCodeEXT` is the owned input atom for portable shader packages. It
 stores one exact language/dialect, stage, non-empty entry point, diagnostic label and either owned
@@ -278,7 +278,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, stock directional/cascade/point/spot reception, compute/storage resources, indirect draws and GPU timers work. Source-authored post-process, skybox and shadow-caster paths remain unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Source-authored post-process and skybox paths remain unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -1537,6 +1537,12 @@ shadowMap.end();
 pipeline.getSettings().setShadowsEnabled(true);
 pipeline.setShadowScene(&shadowMap, sun, sceneBounds, [&] { drawEveryCaster(); });
 ```
+
+The effect applied by `begin()` comes from one portable package: GLSL ES and desktop GLSL keep the
+EasyGL path, while Vulkan selects checked-in SPIR-V. For object transforms, set `uWorld` through
+`getCasterEffect()` after `begin()` and before drawing each rigid object. Use
+`getSkinnedCasterEffect()` for skinned geometry and set its bones in the same interval. The package
+preserves those public hooks across renderers; no Vulkan-specific drawing API is involved.
 
 Either way, the receiving half is the app's: shadows arrive at a surface through the effect that
 shades it, so each lit effect is told about the map.
