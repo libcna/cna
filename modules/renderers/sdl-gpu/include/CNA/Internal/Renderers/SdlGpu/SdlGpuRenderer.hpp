@@ -1550,6 +1550,22 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressW = 1;
         };
 
+        /** @brief Owns the MojoShader references backing one deferred compiled-effect binding. */
+        struct CompiledEffectShaderLease
+        {
+            CompiledEffectShaderLease(MOJOSHADER_sdlContext* context,
+                                      MOJOSHADER_sdlShaderData* vertexShaderData,
+                                      MOJOSHADER_sdlShaderData* pixelShaderData);
+            ~CompiledEffectShaderLease();
+
+            CompiledEffectShaderLease(const CompiledEffectShaderLease&) = delete;
+            CompiledEffectShaderLease& operator=(const CompiledEffectShaderLease&) = delete;
+
+            MOJOSHADER_sdlContext* context = nullptr;
+            MOJOSHADER_sdlShaderData* vertexShaderData = nullptr;
+            MOJOSHADER_sdlShaderData* pixelShaderData = nullptr;
+        };
+
         /**
          * @brief plans/plan_fx.md FX-071: everything a compiled-effect draw needs from the applied pass,
          * captured once so an ordinary 3D draw (`QueueCompiledEffectDraw`) and a SpriteBatch draw
@@ -1563,6 +1579,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             SDL_GPUShader* vertexShader = nullptr;
             SDL_GPUShader* pixelShader = nullptr;
+            /// Keeps both native shader modules valid until this deferred binding is discarded.
+            std::shared_ptr<CompiledEffectShaderLease> shaderLease;
             std::vector<SDL_GPUVertexAttribute> vertexAttributes;
             std::vector<SDL_GPUVertexBufferDescription> vertexBuffers;
             /// Dense native slot to offered source-stream index, used while capturing draw data.

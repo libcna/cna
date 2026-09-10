@@ -42,6 +42,26 @@
 
 namespace CNA::Internal::Renderers::SdlGpu
 {
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+    SdlGpuRenderer::CompiledEffectShaderLease::CompiledEffectShaderLease(
+        MOJOSHADER_sdlContext* shaderContext,
+        MOJOSHADER_sdlShaderData* vertexData,
+        MOJOSHADER_sdlShaderData* pixelData)
+        : context(shaderContext)
+        , vertexShaderData(vertexData)
+        , pixelShaderData(pixelData)
+    {
+        MOJOSHADER_sdlShaderAddRef(vertexShaderData);
+        MOJOSHADER_sdlShaderAddRef(pixelShaderData);
+    }
+
+    SdlGpuRenderer::CompiledEffectShaderLease::~CompiledEffectShaderLease()
+    {
+        MOJOSHADER_sdlDeleteShader(context, vertexShaderData);
+        MOJOSHADER_sdlDeleteShader(context, pixelShaderData);
+    }
+#endif
+
     // plans/plan_fx.md FX-091: the sampler cache's key. REMED-GFX-170 established that the key must be
     // the COMPLETE sampler description; FX-083 then added the LOD clamp and bias to it by hand-
     // packing them into a uint64, which silently discarded the top eight bits of the 32-bit bias
@@ -2441,14 +2461,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
             registeredForWindow_ = false;
         }
-#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plans/plan_fx.md FX-061: released before the device it was created against.
-        if (mojoShaderContext_ != nullptr)
-        {
-            MOJOSHADER_sdlDestroyContext(mojoShaderContext_);
-            mojoShaderContext_ = nullptr;
-        }
-#endif
         // Drops every queued command, and with it every SdlGpuSampledTextureEXT::keepAlive a
         // command still holds (REMED-GFX-152). This must happen HERE, while the renderer and its
         // device are both fully alive: a resource whose last reference was one of those commands
@@ -2470,12 +2482,18 @@ namespace CNA::Internal::Renderers::SdlGpu
         DestroyColoredResources();
         DestroySpriteResources();
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plans/plan_fx.md FX-071: unlike every stock family's own Destroy*Resources, there are no fixed
-        // shader fields here to release -- every shader module compiled-effect pipelines reference
-        // is owned by mojoShaderContext_, already destroyed above.
+        // Compiled-effect pipelines must go before their shader-owning MojoShader context. Queued
+        // shader leases were already released by ReleaseSceneDrawBuffers()/spriteCommands_.clear().
         for (auto& [key, pipeline] : compiledEffectPipelines_)
             ReleaseGraphicsPipeline(pipeline);
         compiledEffectPipelines_.clear();
+        // plans/plan_fx.md FX-061: released after its queued leases and pipelines, but before the
+        // SDL_GPU device it was created against.
+        if (mojoShaderContext_ != nullptr)
+        {
+            MOJOSHADER_sdlDestroyContext(mojoShaderContext_);
+            mojoShaderContext_ = nullptr;
+        }
 #endif
         // Any render target destroyed earlier but never followed by another real frame (e.g. the
         // game shut down right after) leaves its GPU texture handles deferred -- release them now
@@ -7451,6 +7469,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             binding.vertexDummyTexture = ResolveSampledTextureEXT(
                 defaultWhiteTexture_.get(), "CompiledEffect.VertexDummySampler");
         }
+
+        // The public Effect owns the MojoShader objects, but the draw is replayed only at the next
+        // flush. Retain both shader-data records (and therefore their linked native shader modules)
+        // after every operation above that can throw; the shared lease then also covers copies made
+        // while a SpriteCommand enters its queue.
+        binding.shaderLease = std::make_shared<CompiledEffectShaderLease>(
+            mojoShaderContext_, vertexShaderData, pixelShaderData);
 
         return binding;
     }
