@@ -1239,15 +1239,11 @@ namespace CNA::Internal::Renderers::SdlGpu
     /**
      * @brief `SDL_gpu`-backed graphics renderer (`CNA_GRAPHICS_RENDERER=SDL_GPU`).
      *
-     * See `plans/plan_sdlgpu.md` for the phased implementation plan. As of Phase `SDLGPU-6`, device/
-     * window/swapchain lifecycle, color+depth+stencil clear/present, `Texture2D`, vertex/index
-     * buffers, `SpriteBatch`, and the core 3D vertex formats (`colored3d`/`textured3d`/
-     * `colored_textured3d`/`lit_textured3d`, i.e. `BasicEffect`) are real and verified.
-     * `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`-specific
-     * `GpuDrawParams` fields (`alphaTest`, `dualTexture`, `envMapping`, `skinned`) are not yet
-     * checked by this renderer's `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` dispatch — such a
-     * draw currently renders as a plain `BasicEffect` draw instead (later phases add real
-     * per-effect dispatch, matching `WebGPURenderer`'s own precedent).
+     * See `plans/plan_sdlgpu.md` for the phased implementation and current parity evidence. Device,
+     * swapchain, multisampled backbuffer, all classic texture/target/buffer/draw families,
+     * `SpriteBatch`, the five XNA stock effects, Models and ordinary compiled Effects are real and
+     * discriminating-pixel verified. The renderer queues public draws and snapshots the complete
+     * target, resource, effect, uniform, sampler and immutable-pipeline state needed for replay.
      */
     class SdlGpuRenderer final : public IGraphicsRenderer
     {
@@ -2085,10 +2081,10 @@ namespace CNA::Internal::Renderers::SdlGpu
          * conformance suite's own read-back pixel checks. The pass's declared `sampler_state`
          * block reaches the GPU, LOD clamp and bias included.
          *
-         * Still refused explicitly rather than silently mishandled: a compiled effect's vertex
-         * shader sampling a texture, a 3D/cube (not 2D) sampler binding, and compiled-effect
-         * multi-stream/instanced draws. The stock-effect route implements both stream families;
-         * the compiled route raises a named refusal rather than consuming a subset.
+         * A compiled effect's vertex shader sampling a texture remains explicitly refused because
+         * the shared renderer contract exposes only fragment-stage texture/sampler bindings.
+         * Fragment-stage 2D/cube/volume samplers and multi-stream/instanced draws are implemented
+         * and covered by the shared compiled-effect conformance suite.
          * @return true.
          */
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
@@ -2389,10 +2385,9 @@ namespace CNA::Internal::Renderers::SdlGpu
          *
          * plans/plan_fx.md FX-083. SDL_GPU expresses both exactly -- `min_lod` and `mip_lod_bias` on
          * `SDL_GPUSamplerCreateInfo`, the same mapping FNA3D's own SDL_GPU driver makes -- and
-         * both now participate in the sampler cache key so two slots asking for different LOD
-         * clamps do not share one sampler object. The compiled-effect draw route consumes them.
-         * The stock 3D draw families still capture only filter/addressing/anisotropy into their
-         * own command structs; that pre-existing gap is recorded in docs/sampler-state-support.md.
+         * both participate in the sampler cache key so two slots asking for different LOD clamps
+         * do not share one sampler object. Stock 3D, SpriteBatch and compiled-effect commands all
+         * capture and consume both fields at public draw time.
          *
          * @param slot Sampler slot.
          * @param maxMipLevel Most detailed mip level the sampler may use.
@@ -2402,11 +2397,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Records XNA's `SamplerState.AddressW` for a slot.
          *
-         * plans/plan_fx.md FX-091. This renderer's compiled-effect route resolves 2D textures only, so
-         * the third addressing axis is never observable in a sampled result today -- but it IS part
-         * of a sampler's identity, and recording it keeps the cache key complete. Overriding the
-         * hook also means the device's own W selection is what an unassigned slot reports, instead
-         * of a silently invented default.
+         * plans/plan_fx.md FX-091. AddressW participates in the complete sampler identity and is
+         * observable through ordinary compiled-effect volume sampling; the parity oracle
+         * distinguishes Wrap from Clamp across deliberately different first/last slices.
          *
          * @param slot Sampler slot.
          * @param addressW Raw `TextureAddressMode` ordinal for W.
