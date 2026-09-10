@@ -272,15 +272,7 @@ namespace CNA::Content::Pipeline
             [[nodiscard]] ContentWriteResult Write(
                 const ContentValue& input, const std::string& logicalName) const override
             {
-                const Cnb::CnbSoundEffectData& sound = input.Get<Cnb::CnbSoundEffectData>();
-                if (sound.format != Cnb::CnbAudioFormat::Pcm16)
-                {
-                    throw XnbWriteException(
-                        "'" + logicalName + "': the XNB SoundEffect writer emits 16-bit PCM "
-                        "only, but the processed audio is '" +
-                        Cnb::CnbAudioFormatToString(sound.format) +
-                        "'. Configure the SoundEffect processor to produce PCM16.");
-                }
+                const ProcessedSoundEffect& sound = input.Get<ProcessedSoundEffect>();
                 if (sound.channels == 0u || sound.channels > 2u)
                 {
                     throw XnbWriteException(
@@ -289,12 +281,24 @@ namespace CNA::Content::Pipeline
                         " channels.");
                 }
 
+                // The WAVEFORMATEX the genuine writer emits for the source's own width, field for
+                // field: format tag 1, `bitsPerSample` the source's, `blockAlign` channels times
+                // the sample size, `averageBytesPerSecond` the rate times that, and the payload
+                // exactly as it came in -- unsigned for 8-bit, signed for 16. Measured on nine
+                // genuine builds covering both widths, mono and stereo, three rates, a loop and
+                // no loop, Windows, Windows Phone and HiDef
+                // (`tests/reference/xna40/differential-sound-widths/`,
+                // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+                const std::uint16_t sampleBytes =
+                    static_cast<std::uint16_t>(ProcessedPcmSampleBytes(sound.encoding));
                 Xnb::XnbSoundEffectData converted;
                 converted.formatTag = 1u;
                 converted.channels = static_cast<std::uint16_t>(sound.channels);
                 converted.sampleRate = sound.sampleRate;
-                converted.bitsPerSample = 16u;
-                converted.blockAlign = static_cast<std::uint16_t>(2u * sound.channels);
+                converted.bitsPerSample =
+                    static_cast<std::uint16_t>(ProcessedPcmBitsPerSample(sound.encoding));
+                converted.blockAlign =
+                    static_cast<std::uint16_t>(sampleBytes * sound.channels);
                 converted.averageBytesPerSecond = sound.sampleRate * converted.blockAlign;
                 converted.samples = sound.samples;
                 converted.loopStart = static_cast<std::int32_t>(sound.loopStart);

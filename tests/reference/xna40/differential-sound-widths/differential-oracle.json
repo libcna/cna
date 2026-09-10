@@ -1,0 +1,16 @@
+{
+  "format": "CNA.XnaDifferential.Results",
+  "version": 1,
+  "producer": "tools/xna-pipeline-oracle/differential/DifferentialOracle.cs",
+  "cases": [
+    {"case": "sound/pcm8_mono_22050", "built": true, "bytes": 546, "sha256": "E6CA868202A3A1BCB6D2FA35BB889134DA97A6DABD493C18DAF0040B5C67361C", "outputs": ["media/pcm8_mono_22050.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
+    {"case": "sound/pcm8_stereo_22050", "built": true, "bytes": 987, "sha256": "BC4B138695131B96001034A8298C3C09709F24F29508C6F3348D90A000F01DE6", "outputs": ["media/pcm8_stereo_22050.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
+    {"case": "sound/pcm8_mono_8000", "built": true, "bytes": 505, "sha256": "591F5162BACC172DBF7F00A9A906529ADFDAC40664CB437D0FB7DB022DB73DD6", "outputs": ["media/pcm8_mono_8000.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
+    {"case": "sound/pcm8_mono_44100", "built": true, "bytes": 546, "sha256": "FB48180CD4D1C0E068F3595ED34D63D1765857249C0F7FB2824C69E506AAC6D0", "outputs": ["media/pcm8_mono_44100.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
+    {"case": "sound/pcm8_mono_22050_loop", "built": true, "bytes": 546, "sha256": "E1A40A5498FF50A91C6E2355D353580F49F78CCEE38441B3E97FFE3DCFF01A1B", "outputs": ["media/pcm8_mono_22050_loop.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
+    {"case": "sound/pcm16_mono_22050_loop", "built": true, "bytes": 987, "sha256": "47CE0B305C5FFFA1979B9F1370B8418328B437620145DC4D77973849A8DB59CD", "outputs": ["media/pcm16_mono_22050_loop.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
+    {"case": "sound/pcm8_stereo_44100_loop", "built": true, "bytes": 987, "sha256": "52E18239CE1E1BEAB521746745898509C38DD4CF701503F5E294E69256EC20D2", "outputs": ["media/pcm8_stereo_44100_loop.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
+    {"case": "sound/pcm8_mono_22050_phone", "built": true, "bytes": 546, "sha256": "4AA1DF48EB5806C9B6DFD719DAAEED5410CDE605265EDCCB5DEF5F898A3892E6", "outputs": ["media/pcm8_mono_22050.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []},
+    {"case": "sound/pcm8_mono_22050_hidef", "built": true, "bytes": 546, "sha256": "CC113130D4D6AE0E0149515F8773663A7BF5A8BCAA05CC9D9B3A0FE311C49EBA", "outputs": ["media/pcm8_mono_22050.xnb"], "intermediates": ["ContentPipeline-{7C1D0F4E-5B2A-4E97-9E3C-1B7A2D6F4E80}.xml"], "errors": [], "warnings": []}
+  ]
+}

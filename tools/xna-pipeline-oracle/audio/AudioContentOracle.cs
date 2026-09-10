@@ -569,11 +569,15 @@ namespace Cna.Xna40.AudioOracle
                         AudioContent audio = importer.Import(path, new ProbeImporterContext());
                         var bytes = new byte[audio.Data.Count];
                         audio.Data.CopyTo(bytes, 0);
-                        int trailingZeros = 0;
-                        while (trailingZeros < bytes.Length &&
-                               bytes[bytes.Length - 1 - trailingZeros] == 0) trailingZeros++;
-                        builder.Append(label + "=[dataLength=" + bytes.Length + " trailingZeros=" +
-                                       trailingZeros + "]");
+                        // Only the *length* is recorded. The bytes past the end of the file are
+                        // not XNA's answer at all: `data_past_by_4000` came back with 4,000
+                        // trailing zeros on one run and none on the next, with the only difference
+                        // being how many unrelated files the driver had written first -- so what
+                        // fills a `data` chunk that claims more than the file holds is whatever
+                        // was in that memory. A reference has to be reproducible from the tree
+                        // that produces it, and that number is not
+                        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-201`).
+                        builder.Append(label + "=[dataLength=" + bytes.Length + "]");
                     }
                     catch (Exception error) { builder.Append(label + "=" + error.GetType().Name); }
                 };
@@ -634,6 +638,71 @@ namespace Cna.Xna40.AudioOracle
                       WriteWavRaw(work, "p_pcm16.wav", 1, 1, 22050, 16, 2, 44100, null, Ramp(4410), 0, 0, 0));
                 probe("pcm8_stereo_22050",
                       WriteWavRaw(work, "p_pcm8s.wav", 1, 2, 22050, 8, 2, 44100, null, Ramp(4410), 0, 0, 0));
+                return builder.ToString();
+            });
+            // The whole matrix `XNASWEEP-197` was decided on, rather than the three widths that
+            // opened it: every PCM encoding XNA's own `WavImporter` accepts, mono and stereo, at
+            // three rates, through the same conversion `SoundEffectProcessor` performs. What each
+            // one comes back as is what the XNB writer has to reproduce, and extrapolating
+            // "preserves the width" from 8- and 16-bit mono is exactly what this refuses to do.
+            Record("processors/SoundEffectProcessor_pcm_matrix", () =>
+            {
+                var builder = new StringBuilder();
+                // Import and convert are recorded separately, because which of the two refuses a
+                // width is what says where CNA has to refuse it.
+                Action<string, string> probe = delegate(string label, string path)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    AudioContent audio = null;
+                    try
+                    {
+                        audio = new WavImporter().Import(path, new ProbeImporterContext());
+                    }
+                    catch (Exception error)
+                    {
+                        builder.Append(label + "=[import threw " + error.GetType().Name + ": " +
+                                       Escape(error.Message ?? string.Empty) + "]");
+                        return;
+                    }
+                    string before = Describe(audio);
+                    try
+                    {
+                        audio.ConvertFormat(ConversionFormat.Pcm, ConversionQuality.Best, null);
+                        builder.Append(label + "=[before " + before + " | after " +
+                                       Describe(audio) + "]");
+                    }
+                    catch (Exception error)
+                    {
+                        builder.Append(label + "=[before " + before + " | convert threw " +
+                                       error.GetType().Name + ": " +
+                                       Escape(error.Message ?? string.Empty) + "]");
+                    }
+                };
+                int index = 0;
+                foreach (int rate in new int[] { 8000, 22050, 44100 })
+                {
+                    foreach (ushort channels in new ushort[] { 1, 2 })
+                    {
+                        foreach (ushort bits in new ushort[] { 8, 16, 24, 32 })
+                        {
+                            ushort align = (ushort)(channels * bits / 8);
+                            probe("pcm" + bits + "_" + (channels == 1 ? "mono" : "stereo") + "_" + rate,
+                                  WriteWavRaw(work, "m" + (index++) + ".wav", 1, channels, rate, bits,
+                                              align, rate * align, null, Ramp(align * 100), 0, 0, 0));
+                        }
+                        ushort floatAlign = (ushort)(channels * 4);
+                        probe("float32_" + (channels == 1 ? "mono" : "stereo") + "_" + rate,
+                              WriteWavRaw(work, "m" + (index++) + ".wav", 3, channels, rate, 32,
+                                          floatAlign, rate * floatAlign, new byte[0],
+                                          Ramp(floatAlign * 100), 0, 0, 100));
+                    }
+                }
+                // A loop is carried through the conversion or it is not, and the writer needs to
+                // know which: the same 8-bit source with an `smpl` chunk.
+                probe("pcm8_mono_22050_loop",
+                      WriteWavRaw(work, "m_loop8.wav", 1, 1, 22050, 8, 1, 22050, null, Ramp(2205), 100, 200, 0));
+                probe("pcm24_mono_22050_loop",
+                      WriteWavRaw(work, "m_loop24.wav", 1, 1, 22050, 24, 3, 22050 * 3, null, Ramp(2205 * 3), 100, 200, 0));
                 return builder.ToString();
             });
             Record("processors/SongProcessor", () =>

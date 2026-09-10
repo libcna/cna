@@ -592,7 +592,13 @@ namespace CNA::Content::Cnb
         }
 
         CnbSoundEffectData sound;
-        sound.format = CnbAudioFormat::Pcm16;
+        // 8-bit stays 8-bit: the `SoundEffect` schema carries the width from version 2 on, so the
+        // source route answers what the source declared for the same reason the XNA-compatible
+        // pipeline does. Wider encodings still narrow to 16 bits, because no schema version
+        // stores them (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+        sound.format = imported.encoding == CNA::Content::Import::ImportedPcmEncoding::Unsigned8
+                           ? CnbAudioFormat::Pcm8
+                           : CnbAudioFormat::Pcm16;
         sound.sampleRate = imported.sampleRate;
         sound.channels = imported.channels;
         sound.frameCount = imported.frameCount;
@@ -600,7 +606,8 @@ namespace CNA::Content::Cnb
         sound.loopLength = effectiveLoopLength;
 
         using CNA::Content::Import::ImportedPcmEncoding;
-        if (imported.encoding == ImportedPcmEncoding::Signed16LittleEndian)
+        if (imported.encoding == ImportedPcmEncoding::Signed16LittleEndian ||
+            imported.encoding == ImportedPcmEncoding::Unsigned8)
         {
             sound.samples = imported.samples;
             return sound;
@@ -627,11 +634,6 @@ namespace CNA::Content::Cnb
             std::int64_t value = 0;
             switch (imported.encoding)
             {
-            case ImportedPcmEncoding::Unsigned8:
-                // 8-bit WAV samples are UNSIGNED with a bias of 128. (s - 128) * 256 is exact:
-                // nothing is rounded or clipped.
-                value = (static_cast<std::int64_t>(imported.samples[offset]) - 128) * 256;
-                break;
             case ImportedPcmEncoding::Signed24LittleEndian:
             {
                 std::int32_t packed =
@@ -671,6 +673,7 @@ namespace CNA::Content::Cnb
                 value = std::llround(std::clamp(scaled, -32768.0, 32767.0));
                 break;
             }
+            case ImportedPcmEncoding::Unsigned8:
             case ImportedPcmEncoding::Signed16LittleEndian:
             default:
                 throw ContentLoadException(

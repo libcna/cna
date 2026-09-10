@@ -212,11 +212,13 @@ TEST(SoundEffectContentPipelineTest, ImportPreservesSourceEncodingUntilTheProces
     EXPECT_EQ(imported.frameCount, 4u);
 
     const Cnb::CnbSoundEffectData processed = Cnb::ProcessImportedSoundEffect(imported);
-    ASSERT_EQ(processed.samples.size(), 8u);
+    EXPECT_EQ(processed.format, Cnb::CnbAudioFormat::Pcm8);
+    EXPECT_EQ(processed.samples, pcm8);
+    const std::vector<std::uint8_t> widened = Cnb::CnbSoundEffectSamplesAsPcm16(processed);
+    ASSERT_EQ(widened.size(), 8u);
     const auto sample = [&](std::size_t index)
     {
-        return static_cast<std::int16_t>(
-            processed.samples[index * 2u] | (processed.samples[index * 2u + 1u] << 8u));
+        return static_cast<std::int16_t>(widened[index * 2u] | (widened[index * 2u + 1u] << 8u));
     };
     EXPECT_EQ(sample(0u), static_cast<std::int16_t>(-32768));
     EXPECT_EQ(sample(1u), 0);
@@ -236,14 +238,14 @@ TEST(SoundEffectContentPipelineTest, IsDeterministicAndByteIdenticalToTheExistin
     EXPECT_EQ(first.output.bytes, second.output.bytes);
     EXPECT_EQ(first.importer, (Pipeline::ContentComponentIdentity{"CNA.WavImporter", "2"}));
     EXPECT_EQ(first.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.SoundEffectProcessor", "2"}));
+              (Pipeline::ContentComponentIdentity{"CNA.SoundEffectProcessor", "3"}));
     ASSERT_EQ(first.messages.size(), 2u);
     EXPECT_EQ(first.messages[0].stage, Pipeline::ContentPipelineStage::Import);
     EXPECT_EQ(first.messages[0].component, "CNA.WavImporter");
     EXPECT_EQ(first.messages[1].stage, Pipeline::ContentPipelineStage::Process);
     EXPECT_EQ(first.messages[1].component, "CNA.SoundEffectProcessor");
     EXPECT_EQ(first.writer,
-              (Pipeline::ContentComponentIdentity{"CNA.SoundEffectContentWriter", "1"}));
+              (Pipeline::ContentComponentIdentity{"CNA.SoundEffectContentWriter", "2"}));
     EXPECT_EQ(first.output.assetTypeId, Cnb::CnbAssetTypeId::SoundEffect);
     ASSERT_EQ(first.dependencies.size(), 1u);
     EXPECT_EQ(first.dependencies[0].kind, Pipeline::ContentDependencyKind::PrimarySource);
@@ -309,12 +311,22 @@ TEST(SoundEffectContentPipelineTest, EightBitPipelineBytesMatchTheExistingProduc
 {
     ScratchDirectory scratch("eight");
     const std::filesystem::path source = scratch.Path() / "explosion.wav";
-    WriteBytes(source, MakeWav(1u, 11025u, 8u, {0u, 64u, 128u, 192u, 255u}));
+    const std::vector<std::uint8_t> pcm8{0u, 64u, 128u, 192u, 255u};
+    WriteBytes(source, MakeWav(1u, 11025u, 8u, pcm8));
 
     const Pipeline::ContentBuildResult result = BuildSound(scratch.Path());
     const std::vector<std::uint8_t> oldBytes = Cnb::EncodeSoundEffectToCnb(
         Cnb::ImportWavAsCnbSoundEffect(source.string()), "Sounds/explosion");
     EXPECT_EQ(result.output.bytes, oldBytes);
+
+    // Both front ends now answer the source's own width rather than a widened copy of it, which
+    // is what the genuine processor does with every width it accepts
+    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+    const Cnb::CnbSoundEffectData decoded = Cnb::DecodeSoundEffectFromCnb(
+        Cnb::CnbDocument::Parse(result.output.bytes, "eight-bit pipeline output"));
+    EXPECT_EQ(decoded.format, Cnb::CnbAudioFormat::Pcm8);
+    EXPECT_EQ(decoded.frameCount, 5u);
+    EXPECT_EQ(decoded.samples, pcm8);
 }
 
 TEST(SoundEffectContentPipelineTest, ProcessingRejectsAnInconsistentImportedSound)
@@ -512,30 +524,41 @@ TEST(SoundEffectSourcePcmTest, StereoAndLoopMetadataSurviveAWiderSource)
     EXPECT_EQ(sound.samples.size(), 4u * 2u * 2u);
 }
 
-TEST(SoundEffectSourcePcmTest, ARouteBuildWarnsThatNarrowingDiscardsPrecision)
+TEST(SoundEffectSourcePcmTest, ARouteBuildRefusesTheWidthsXnaRefuses)
 {
+    // The genuine `WavImporter` answers *"Audio file X contains 24-bit audio. Only 8-bit and
+    // 16-bit audio data is supported."* for 24- and 32-bit PCM and *"contains non-PCM data."* for
+    // IEEE float, over the whole matrix of widths, channel counts and rates
+    // (`tests/reference/xna40/audio/audio-content-oracle.json`,
+    // `processors/SoundEffectProcessor_pcm_matrix`). The route that claims to be XNA's refuses
+    // them rather than narrowing, which is what makes its answer lossless
+    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
     ScratchDirectory scratch("narrow");
     WriteBytes(scratch.Path() / "explosion.wav",
                MakeWav(1u, 44100u, 24u, MakePcm24(std::vector<std::int32_t>(64, 12345))));
-
-    const Pipeline::ContentBuildResult result = BuildSound(scratch.Path());
-    bool warned = false;
-    for (const Pipeline::ContentLogMessage& message : result.messages)
+    try
     {
-        if (message.level == Pipeline::ContentLogLevel::Warning &&
-            message.text.find("24-bit PCM") != std::string::npos)
-        {
-            warned = true;
-        }
+        (void)BuildSound(scratch.Path());
+        ADD_FAILURE() << "a 24-bit source must be refused, not narrowed";
     }
-    EXPECT_TRUE(warned) << "narrowing to 16 bits is a real loss and has to be reported";
-
-    // A 16-bit source is exact, so it must not produce the same warning.
-    ScratchDirectory exact("exact");
-    WriteBytes(exact.Path() / "explosion.wav", MakeWav(1u, 44100u, 16u, MakePcm16(64u, 1u)));
-    for (const Pipeline::ContentLogMessage& message : BuildSound(exact.Path()).messages)
+    catch (const std::exception& error)
     {
-        EXPECT_NE(message.level, Pipeline::ContentLogLevel::Warning) << message.text;
+        EXPECT_NE(std::string(error.what()).find("Only 8-bit and 16-bit audio data is supported"),
+                  std::string::npos)
+            << error.what();
+    }
+
+    // The two widths XNA accepts build, and neither warns about anything.
+    for (const unsigned bits : {8u, 16u})
+    {
+        ScratchDirectory exact(bits == 8u ? "exact8" : "exact16");
+        WriteBytes(exact.Path() / "explosion.wav",
+                   bits == 8u ? MakeWav(1u, 44100u, 8u, std::vector<std::uint8_t>(64u, 200u))
+                              : MakeWav(1u, 44100u, 16u, MakePcm16(64u, 1u)));
+        for (const Pipeline::ContentLogMessage& message : BuildSound(exact.Path()).messages)
+        {
+            EXPECT_NE(message.level, Pipeline::ContentLogLevel::Warning) << message.text;
+        }
     }
 }
 

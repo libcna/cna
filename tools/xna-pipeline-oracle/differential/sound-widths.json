@@ -1,0 +1,79 @@
+{
+ "format": "CNA.XnaDifferential.Corpus",
+ "version": 1,
+ "comment": "plans/plan_xna_sample_xnb_sweep.md XNASWEEP-197: what the genuine SoundEffectProcessor and XNB writer make of an 8-bit source. The width matrix in audio-content-oracle.json says XNA's WavImporter accepts 8-bit and 16-bit PCM and refuses 24-bit, 32-bit and float outright, so these are the widths that reach a writer at all.",
+ "cases": [
+  {
+   "case": "sound/pcm8_mono_22050",
+   "source": "media/pcm8_mono_22050.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "sound/pcm8_stereo_22050",
+   "source": "media/pcm8_stereo_22050.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "sound/pcm8_mono_8000",
+   "source": "media/pcm8_mono_8000.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "sound/pcm8_mono_44100",
+   "source": "media/pcm8_mono_44100.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "sound/pcm8_mono_22050_loop",
+   "source": "media/pcm8_mono_22050_loop.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "sound/pcm16_mono_22050_loop",
+   "source": "media/pcm16_mono_22050_loop.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "sound/pcm8_stereo_44100_loop",
+   "source": "media/pcm8_stereo_44100_loop.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
+   "case": "sound/pcm8_mono_22050_phone",
+   "source": "media/pcm8_mono_22050.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "WindowsPhone",
+   "profile": "Reach"
+  },
+  {
+   "case": "sound/pcm8_mono_22050_hidef",
+   "source": "media/pcm8_mono_22050.wav",
+   "importer": "WavImporter",
+   "processor": "SoundEffectProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  }
+ ]
+}

@@ -9,14 +9,24 @@
 
 #include "CNA/Content/Import/ImportedSound.hpp"
 #include "CNA/Content/Pipeline/ContentPipeline.hpp"
+#include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
+#include "CNA/Content/Pipeline/ProcessedSoundEffect.hpp"
 
 namespace CNA::Content::Pipeline
 {
     /** @brief Stable in-memory type identity for source-oriented imported WAV audio. */
     inline constexpr const char* ImportedSoundType = "CNA.Content.Pipeline.ImportedSound";
 
-    /** @brief Stable in-memory type identity for processed SoundEffect CNB data. */
-    inline constexpr const char* ProcessedSoundEffectType = "CNA.Content.Cnb.SoundEffectData";
+    /**
+     * @brief Stable in-memory type identity for processed, container-neutral SoundEffect data.
+     *
+     * It used to name `CNA.Content.Cnb.SoundEffectData`, and that was the defect rather than the
+     * spelling: the CNB schema's 16-bit-only rule then decided what the XNA-compatible `.xnb`
+     * writer was able to say, and an 8-bit source came out of both containers widened
+     * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+     */
+    inline constexpr const char* ProcessedSoundEffectType =
+        "CNA.Content.Pipeline.ProcessedSoundEffect";
 
     /** @brief Headless WAV importer backed by CNA's existing bounded RIFF parser. */
     class WavImporter final : public ContentImporter
@@ -64,11 +74,14 @@ namespace CNA::Content::Pipeline
         void ValidateParameters(const ContentProcessorParameters& parameters) const override;
 
         /**
-         * @brief Converts accepted source PCM into CNB's Pcm16 representation.
+         * @brief Settles the source PCM into container-neutral SoundEffect data.
+         *
+         * The source's own sample width is preserved, because that is what the genuine processor
+         * does with every width it accepts (`XNASWEEP-197`).
          *
          * @param input ImportedSound value.
          * @param context Call-scoped processor context.
-         * @return Canonical CnbSoundEffectData value.
+         * @return A ProcessedSoundEffect value.
          */
         [[nodiscard]] ContentValue Process(const ContentValue& input,
                                            ContentProcessorContext& context) const override;
@@ -92,15 +105,40 @@ namespace CNA::Content::Pipeline
         [[nodiscard]] std::string InputType() const override;
 
         /**
-         * @brief Calls the existing EncodeSoundEffectToCnb() implementation.
+         * @brief Adapts the processed sound to the CNB `SoundEffect` schema and encodes it.
          *
-         * @param input Canonical CnbSoundEffectData value.
+         * @param input ProcessedSoundEffect value.
          * @param logicalName Logical asset name written to CNB metadata.
          * @return Complete CNB bytes and the frozen SoundEffect asset identity.
          */
         [[nodiscard]] ContentWriteResult Write(const ContentValue& input,
                                                const std::string& logicalName) const override;
     };
+
+    /**
+     * @brief Turns imported WAV semantics into the processor's own container-neutral answer.
+     *
+     * This is `SoundEffectProcessor`'s whole behaviour, exposed so that both writer adapters and
+     * the tests can be written against one definition of what "processed" means. A source that
+     * declares no loop is given the whole sound, which is what the genuine processor writes into
+     * every `.xnb` measured here.
+     *
+     * @param imported The imported sound. Its encoding must be 8-bit unsigned or 16-bit PCM.
+     * @return The processed sound, at the source's own width.
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the channel count,
+     *         sample rate, loop region or payload length is inconsistent, or the encoding is one
+     *         the genuine importer refuses.
+     */
+    [[nodiscard]] ProcessedSoundEffect MakeProcessedSoundEffect(
+        const CNA::Content::Import::ImportedSound& imported);
+
+    /**
+     * @brief Adapts a processed sound to the CNB `SoundEffect` schema's own description.
+     *
+     * @param sound The processed sound.
+     * @return CNB `SoundEffect` data carrying the same width, rate, channels, frames and loop.
+     */
+    [[nodiscard]] Cnb::CnbSoundEffectData ToCnbSoundEffect(const ProcessedSoundEffect& sound);
 
     /**
      * @brief Decodes a compressed audio source to PCM, or answers nothing when it cannot.

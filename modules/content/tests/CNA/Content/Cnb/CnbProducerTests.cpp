@@ -254,17 +254,25 @@ TEST(CnbProducerTest, AStereoPcm16WavKeepsBothChannels)
     EXPECT_EQ(sound.samples.size(), 300u * 2u * 2u);
 }
 
-TEST(CnbProducerTest, AnEightBitWavIsWidenedExactly)
+TEST(CnbProducerTest, AnEightBitWavKeepsItsWidthAndWidensExactlyWhenItHasTo)
 {
-    // 8-bit WAV samples are UNSIGNED with a bias of 128. Getting that wrong shifts the whole
-    // waveform by half its range, which is a very loud kind of wrong.
+    // The width is kept, because the `SoundEffect` schema carries it from version 2 on and the
+    // genuine XNA processor keeps it (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
     const std::vector<std::uint8_t> pcm8{0u, 128u, 255u, 64u};
     const auto sound = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(
         MakeWav(1u, 8000u, 8u, pcm8), "eight.wav");
-    ASSERT_EQ(sound.samples.size(), 8u);
+    EXPECT_EQ(sound.format, CNA::Content::Cnb::CnbAudioFormat::Pcm8);
+    EXPECT_EQ(sound.samples, pcm8);
+    EXPECT_EQ(sound.frameCount, 4u);
+
+    // And where it does have to be given up -- CNA's `SoundEffect` takes a 16-bit buffer -- 8-bit
+    // WAV samples are UNSIGNED with a bias of 128. Getting that wrong shifts the whole waveform by
+    // half its range, which is a very loud kind of wrong.
+    const std::vector<std::uint8_t> widened =
+        CNA::Content::Cnb::CnbSoundEffectSamplesAsPcm16(sound);
+    ASSERT_EQ(widened.size(), 8u);
     const auto sample = [&](std::size_t i)
-    { return static_cast<std::int16_t>(sound.samples[i * 2u] |
-                                        (sound.samples[i * 2u + 1u] << 8)); };
+    { return static_cast<std::int16_t>(widened[i * 2u] | (widened[i * 2u + 1u] << 8)); };
     EXPECT_EQ(sample(0), static_cast<std::int16_t>(-32768));
     EXPECT_EQ(sample(1), 0);
     EXPECT_EQ(sample(2), static_cast<std::int16_t>(32512));
@@ -1083,8 +1091,10 @@ TEST(CnbProducerTest, ValidPcmFixturesStillCompileAcrossEveryAcceptedShape)
         EXPECT_EQ(sound.sampleRate, shape.rate);
         EXPECT_EQ(sound.channels, shape.channels);
         EXPECT_EQ(sound.frameCount, frames);
-        EXPECT_EQ(sound.samples.size(), frames * shape.channels * 2u);
-        EXPECT_EQ(sound.format, CNA::Content::Cnb::CnbAudioFormat::Pcm16);
+        EXPECT_EQ(sound.samples.size(),
+                  frames * shape.channels * (shape.bits == 16u ? 2u : 1u));
+        EXPECT_EQ(sound.format, shape.bits == 16u ? CNA::Content::Cnb::CnbAudioFormat::Pcm16
+                                                  : CNA::Content::Cnb::CnbAudioFormat::Pcm8);
         // And it encodes to a .cnb that loads back, so "the parser accepted it" is not the end of
         // the claim.
         EXPECT_NO_THROW((void)CNA::Content::Cnb::EncodeSoundEffectToCnb(sound, "valid"));
