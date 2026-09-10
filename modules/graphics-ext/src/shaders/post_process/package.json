@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Graphics::detail::PostProcessGenerated",
+  "package": "post_process",
+  "preprocessor_guard": "CNA_CNAEXT",
+  "payloads": [
+    {"symbol":"kFullscreenEsVertexSource","source":"fullscreen.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kChromaticEsFragmentSource","source":"chromatic.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kFullscreenDesktopVertexSource","source":"fullscreen.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kChromaticDesktopFragmentSource","source":"chromatic.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kFullscreenVulkanVertexSpirV","source":"fullscreen.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
+    {"symbol":"kChromaticVulkanFragmentSpirV","source":"chromatic.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"}
+  ]
+}

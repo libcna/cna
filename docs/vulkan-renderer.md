@@ -749,6 +749,22 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
+### Portable post-process start (`MOD-2239`, 2026-09-10)
+
+`ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
+internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
+Vulkan consumes SpriteBatch's source at set 0 binding 0 and the strength from the established
+scalar push slot. No renderer API or descriptor layout changed.
+
+The pass overrides the source-oriented base support answer with the result that matters for a
+package: `CustomEffects` plus a successfully selected and compiled effect. Its shared three-case
+oracle passes **3/3** on EasyGL, RADV and Vulkan llvmpipe, covering optical-axis invariance, strong
+edge fringing, exact disabled output and settings. Both Vulkan runs emit no Khronos validation
+messages. `PostProcessShaderPackageReproducibility` permanently checks the generated payloads.
+
+Other engine post-process effects remain source-only and keep their exact copy-through fallback;
+the shared package/helper is the landing point for their subsequent fragment variants.
+
 ### Instancing (`plans/plan_vulkan.md` VULKAN-217…VULKAN-234, 2026-09-08)
 
 `DrawInstancedPrimitives` adds an **optional per-instance world matrix to every stock 3D program**,

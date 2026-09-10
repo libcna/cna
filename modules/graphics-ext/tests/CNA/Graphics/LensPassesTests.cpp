@@ -89,7 +89,8 @@ TEST(ChromaticAberrationTest, TheCentreIsUntouchedAndTheCornersFringe)
     // separate at every radius.
     GraphicsDevice gd;
     ChromaticAberrationPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable chromatic-aberration shader variant";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeImage(gd, [](const int x, int) {
@@ -134,14 +135,17 @@ TEST(ChromaticAberrationTest, ZeroStrengthLeavesTheFrameAlone)
         return x < kSize / 2 ? Color(255, 255, 255, 255) : Color(0, 0, 0, 255);
     });
     RenderTarget2D destination(gd, kSize, kSize);
+    const std::vector<Color> expected = ReadTarget(*source);
 
     PostProcessContext context = MakeContext(*source, destination);
     pass.apply(context);
 
     const std::vector<Color> pixels = ReadTarget(destination);
-    const Color corner = pixels[At(4, 4)];
-    EXPECT_EQ(corner.getRProperty(), corner.getBProperty())
-        << "a disabled pass still fringed the frame";
+    ASSERT_EQ(pixels.size(), expected.size());
+    for (std::size_t index = 0; index < pixels.size(); ++index)
+        EXPECT_EQ(pixels[index].getPackedValueProperty(),
+                  expected[index].getPackedValueProperty())
+            << "a disabled pass changed pixel " << index;
 }
 
 TEST(ChromaticAberrationTest, TheStrengthIsClampedAndTheNameIsStable)
