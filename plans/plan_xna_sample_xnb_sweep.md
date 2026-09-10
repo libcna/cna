@@ -323,6 +323,9 @@ final qualification.
 | `XNASWEEP-216` | `XNASWEEP-212` read the first identifier of an expression as the whole of it. | [x] **Fixed, and caught by comparing run 49 against run 47 reference by reference rather than by reading its total.** The `RootDirectory` extractor matched `RootDirectory\\s*=\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*,`, which reads SAMPLE-003's `RootDirectory = root + @"\\TexturesAndColors\\Content"` as `root` and throws the rest away. The sweep then staged the sample's whole `xna4-original` tree as the build root and every `Include` resolved to a file that is not there: eight `BuildContent: the source asset "Cube.fbx" does not exist` and sixteen references that had been `IDENTICAL` in run 47 became `UNEXPLAINED`. The extractor now resolves the **whole** expression -- a `+` chain of string literals and `const string` names this file declares -- and answers nothing when any part of it is neither, because a root guessed at is worse than the project's own. Of the 118 runners, 93 name a root and exactly **three** name one that is not the project's own directory: SAMPLE-146 (the reason the rule exists), SAMPLE-060 and SAMPLE-064, and neither of the last two moved a single reference in either direction. The two units this cost were rebuilt with the corrected manifest and merged; nothing else in the corpus is touched by the difference, which is checked rather than assumed. |
 | `XNASWEEP-217` | Two build units that name the same project raced on the directory they stage it in. | [x] **Fixed with a lock, and it was one reference deep.** SAMPLE-003's two output roots are written by the same `.contentproj`, so `sweep.py` gives them the same staging path -- and at `--jobs 2` one thread copied the source tree and wrote the reconstruction while the other was already building from it. The loser read a copy that still carried the project's own `ProcessorParameters_GenerateMipmaps True`, which the reconstruction removes because the runner sets no parameters, and `Clouds.xnb` came out with **ten mip levels against a reference that has one**. Run serially the same two units answer 12 identical and 4 differing; at `-j2` they answered 11 and 5, and which one lost was not stable. A lock per staging directory makes the reconstruction happen once however many units want it, and three consecutive `-j2` runs now answer 12 and 4. Found by asking why one reference regressed against run 47 rather than by reading the run's total, which is the same discipline that found `XNASWEEP-216` -- a sweep is a measurement and a measurement that is not reproducible is not one. |
 | `XNASWEEP-218` | A PNG's `gAMA` reaches GDI+ only when the image has an alpha channel. | [x] **Measured on the whole corpus, confirmed on two purpose-built files, and fixed -- 14 references.** The eighteen level-digest references left unexplained split into three source kinds, and the largest is fourteen `.png` whose *level 0* is one unit low on **every** RGB channel with alpha untouched. `XNASWEEP-109` established that GDI+ honours a PNG's own `gAMA`, measured against NetRumble's `barrierPurple.png`, and that is right; what it could not see from one file is when. Over every corpus source that declares a non-standard `gAMA` and no `sRGB` or `iCCP`, the split is exact and has no counterexample: **94 whose colour type is 6** are byte-identical or semantically identical *with* the correction, and **14 whose colour type is 2** differ *with* it and are byte-identical without. GDI+ loads a truecolour PNG without alpha as `Format24bppRgb` and one with alpha as `Format32bppArgb`, and only the second applies the file gamma. **Held out**: two eight-by-eight PNGs written for this, identical but for the alpha channel and both declaring `gAMA` 0.45, built through the genuine `BuildContent` -- the one without alpha comes back with all 256 channels equal to its source and the one with alpha with 122 of 256, and CNA now reproduces both **byte for byte**. `ApplyPngFileGammaEXT` reads IHDR's colour type and returns before looking for a `gAMA` when bit 2 is clear. |
+| `XNASWEEP-219` | The buffer decoder read an Xbox 360 container little-endian. | [x] **Fixed, and it was two references pretending to be a mechanism.** `XNASWEEP-210`'s decoder reads a vertex element with `struct.unpack('<3f')` whatever the container is, and the Xbox 360 target writes big-endian. SAMPLE-041's `Content-xbox/terrain.xnb` and SAMPLE-055's `Content-xbox/baseballbat.xnb` therefore came back with the position and the texture coordinate differing as well as the normal, at magnitudes no rounding produces -- which reads like a platform-specific defect and is the decoder byte-swapping itself. Read the way the container is written, the *only* element that differs is `NORMAL0`, at **1.59e-07** and **2.53e-07** of the larger magnitude, which is the same one-to-two-ulp rounding their Windows twins were already classified under. The parse already reports the platform; the decoder asks it now. |
+| `XNASWEEP-220` | `Stripe2.dds`: the alpha channel one lower, on every level of the file's own chain. | [ ] **Open, measured, and small.** Two references, one source: SAMPLE-073's `Stripe2.dds`, built with `ColorKeyEnabled False` and `PremultiplyAlpha False`, so nothing in the processor touches alpha at all. Every one of the ten levels the file brings differs, and **only in the alpha channel and only by -1** -- 350 of 262,144 texels at level 0, 739 at level 1, and falling with the level's size; the two smallest levels differ in a colour channel instead, by +3 and -2 on four texels. That is a **block decoder**, not the pipeline: the alpha of a DXT5 block is a pair of endpoints and six interpolated values, and two conformant decoders round the interpolation differently. It is the same coin as the `ACCEPTED_DIFFERENCE` for two *compressors* choosing different endpoints, from the other side, and it stays `UNEXPLAINED` until that is measured rather than asserted -- the experiment is a DXT5 block with known endpoints through both decoders, which is a fixture rather than a corpus. |
+| `XNASWEEP-221` | `riemerstexture.bmp`: a fifth of the image decodes to different colours. | [ ] **Open, and it is not rounding.** Two references, one source. 55,886 of 262,144 bytes differ across all three colour channels with alpha untouched, and the deltas are spread (-12, +17, +12, +18, +10) rather than clustered at one: the first differing texel is **white in the reference and black in CNA's**. That is a decode disagreement about a `.bmp`, not a filter and not a tolerance, and it is the only source extension in the corpus with an unexplained reference that no rule has been written for at all. **Next**: read the file's own header -- bit depth, compression, palette, row order -- and compare CNA's decoded texels against the reference's before touching any code, because a 21% disagreement is a shape difference and reading the header is how a shape difference is named. |
 
 
 ---
@@ -566,7 +569,50 @@ references between classes. `XNASWEEP-182`, `183`, `187`, `190` and `191` are th
 instruments, and `191` is the one worth remembering: a rule that changes which
 files are compared has to reach every program that compares them.
 
-### 11.4 The read-only roots, re-audited 2026-09-09 (fourth pass)
+### 11.4 The read-only roots, re-audited 2026-09-10 (fifth pass)
+
+Run with `bash build/xna-sample-sweep/audit-readonly.sh` and a `find -newermt`
+over both roots.
+
+**Every corpus reference still on disk hashes to the `sha256`
+`corpus_inventory.py` froze it with: 7,705 identical, 0 changed, 21 missing of
+7,726.** The 21 are the same prune the fourth pass recorded and are itemised in
+§11.4.3; nothing else moved.
+
+**`/rv/tmp/XNAGameStudio` has no file with a modification time inside this
+session at all** -- not one, checked over the whole tree. Under
+`/rv/tmp/samples`, 85 files do, and every one of them belongs to
+`SAMPLE-047-PickingSample_4_0`: 72 under its `evidence/` and 13 under
+`xna4-build/pipeline-runner/` and `xna4-build/obj/`, which is another session
+standing up the genuine runner the way this campaign's own samples have one.
+**None of the 85 is a corpus reference** -- checked by name against the frozen
+inventory rather than by directory -- and none of them changed a digest. This
+session reads both roots and writes to neither, which the check confirms rather
+than assumes.
+
+### 11.4.3 `REFERENCE_REMOVED`, counted rather than assumed
+
+`removed_references.py` answers the four questions the class has to answer, for
+each of the 21:
+
+| | |
+|---|---:|
+| frozen references no longer on disk | **21** |
+| of those, the containing directory is gone too | 21 |
+| **with a byte-identical twin still on disk** | **21** |
+| with no twin at all -- coverage genuinely lost | **0** |
+| whose every twin is itself uncompared | 3 |
+
+Every one has a twin, so no bytes stopped being built. The three whose twins are
+themselves uncompared are SAMPLE-099's `Tank.xnb` and two of its generated
+textures, and their twins are `CUSTOM_PIPELINE_GAP` -- the sample's `ObjImporter`
+is its own. Those three were a custom-pipeline gap before the removal as well, so
+the removal changed nothing about them either; what it changed is which *path*
+carries the gap. **The class is not counted as parity**: it is its own row in
+§11.3 and it is 21, not folded into `IDENTICAL` because a twin happens to match.
+
+
+### 11.4.4 The fourth pass, 2026-09-09
 
 The one check that does not depend on a baseline file, and is therefore the one
 worth stating first: **every corpus reference still on disk hashes to the

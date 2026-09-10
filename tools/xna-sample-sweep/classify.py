@@ -121,6 +121,12 @@ def buffer_differences(reference, mine, found):
         right = X.parse(mine, keep_payloads=True)
     except Exception:  # noqa: BLE001 - a payload that will not decode leaves the digests as found
         return None
+    # The Xbox 360 target writes its containers big-endian, so a decoder that assumes little
+    # will read a normal as a number with a huge exponent and report the position and texture
+    # coordinate beside it as differing too. Two references read that way and looked like a
+    # mechanism of their own; read the right way round they are the same one-to-two-ulp normal
+    # rounding as their Windows twins (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-219`).
+    order = ">" if left.get("platform") == "x" else "<"
     expanded = []
     for index in indices:
         try:
@@ -148,15 +154,15 @@ def buffer_differences(reference, mine, found):
                 width = 4 * count
                 for vertex in range(one["vertexCount"]):
                     at = stride * vertex + element["offset"]
-                    a = struct.unpack("<%df" % count, one["payload"][at:at + width])
-                    b = struct.unpack("<%df" % count, two["payload"][at:at + width])
+                    a = struct.unpack("%s%df" % (order, count), one["payload"][at:at + width])
+                    b = struct.unpack("%s%df" % (order, count), two["payload"][at:at + width])
                     for lane in range(count):
                         if a[lane] != b[lane]:
                             expanded.append("sharedResources[%d]/vertices[%d]/%s[%d]: %r vs %r"
                                             % (index, vertex, name, lane, a[lane], b[lane]))
         elif "IndexBufferReader" in one["reader"]:
             width = one["indexElementSize"]
-            code = "<H" if width == 2 else "<I"
+            code = ("%sH" if width == 2 else "%sI") % order
             for position in range(one["indexCount"]):
                 at = width * position
                 a = struct.unpack(code, one["payload"][at:at + width])[0]
