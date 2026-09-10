@@ -627,6 +627,79 @@ namespace CNA::Internal::Renderers::SdlGpu
             return seed ^ (value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
         }
 
+        [[nodiscard]] SDL_GPUVertexElementFormat ToSdlGpuStockVertexFormat(
+            Microsoft::Xna::Framework::Graphics::VertexElementFormat format)
+        {
+            using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+            switch (format)
+            {
+                case VertexElementFormat::Single:           return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT;
+                case VertexElementFormat::Vector2:          return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+                case VertexElementFormat::Vector3:          return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+                case VertexElementFormat::Vector4:          return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+                case VertexElementFormat::Color:            return SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
+                case VertexElementFormat::Byte4:            return SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4;
+                case VertexElementFormat::Short2:           return SDL_GPU_VERTEXELEMENTFORMAT_SHORT2;
+                case VertexElementFormat::Short4:           return SDL_GPU_VERTEXELEMENTFORMAT_SHORT4;
+                case VertexElementFormat::NormalizedShort2: return SDL_GPU_VERTEXELEMENTFORMAT_SHORT2_NORM;
+                case VertexElementFormat::NormalizedShort4: return SDL_GPU_VERTEXELEMENTFORMAT_SHORT4_NORM;
+                case VertexElementFormat::HalfVector2:      return SDL_GPU_VERTEXELEMENTFORMAT_HALF2;
+                case VertexElementFormat::HalfVector4:      return SDL_GPU_VERTEXELEMENTFORMAT_HALF4;
+            }
+            throw std::invalid_argument(
+                "CNA SDL_GPU: unrecognized stock VertexElementFormat ordinal " +
+                std::to_string(static_cast<int>(format)));
+        }
+
+        struct SdlGpuStockVertexStateEXT
+        {
+            std::array<SDL_GPUVertexBufferDescription, 2> buffers{};
+            std::array<SDL_GPUVertexAttribute,
+                       CNA::Internal::Graphics::kMaxStockVertexAttributes> attributes{};
+            Uint32 bufferCount = 0;
+            Uint32 attributeCount = 0;
+        };
+
+        void BuildSdlGpuStockVertexStateEXT(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout,
+            SdlGpuStockVertexStateEXT& out)
+        {
+            out = {};
+            out.buffers[0].slot = 0;
+            out.buffers[0].pitch = static_cast<Uint32>(layout.stride);
+            out.buffers[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+            out.bufferCount = 1;
+
+            if (layout.usesNeutralRecord)
+            {
+                out.buffers[1].slot = 1;
+                out.buffers[1].pitch = static_cast<Uint32>(
+                    sizeof(CNA::Internal::Graphics::kNeutralVertexRecordEXT));
+                out.buffers[1].input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE;
+                out.bufferCount = 2;
+            }
+
+            for (std::size_t i = 0; i < layout.count; ++i)
+            {
+                const auto& resolved = layout.attributes[i];
+                SDL_GPUVertexAttribute& attribute = out.attributes[out.attributeCount++];
+                attribute.location = static_cast<Uint32>(resolved.shaderLocation);
+                attribute.buffer_slot = resolved.defaulted ? 1u : 0u;
+                attribute.format = ToSdlGpuStockVertexFormat(resolved.format);
+                attribute.offset = static_cast<Uint32>(resolved.offset);
+            }
+        }
+
+        [[nodiscard]] std::size_t StockPipelineKey(
+            std::size_t pipelineKey,
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout)
+        {
+            return HashCombine(
+                pipelineKey,
+                static_cast<std::size_t>(
+                    CNA::Internal::Graphics::HashResolvedStockVertexLayoutEXT(layout)));
+        }
+
         struct PipelineDepthBias
         {
             bool enabled = false;
@@ -3767,25 +3840,21 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineColored3D(
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
         SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
         SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState)
     {
-        const std::size_t key = PipelineCacheKey(
-            topology, depthTest, depthWrite, depthFunc, colorFormat, colorTargetCount, sampleCount,
-            depthStencilFormat, renderState);
+        const std::size_t key = StockPipelineKey(
+            PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat,
+                             colorTargetCount, sampleCount, depthStencilFormat, renderState),
+            vertexLayout);
         const auto it = coloredPipelines_.find(key);
         if (it != coloredPipelines_.end())
             return it->second;
 
-        SDL_GPUVertexBufferDescription vbDesc{};
-        vbDesc.slot = 0;
-        vbDesc.pitch = 16;  // VertexPositionColor
-        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-
-        SDL_GPUVertexAttribute attrs[2]{};
-        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
-        attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[1].offset = 12;
+        SdlGpuStockVertexStateEXT vertexState;
+        BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
 
         std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
         FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormat, renderState);
@@ -3793,10 +3862,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = coloredVertexShader_;
         pipelineInfo.fragment_shader = coloredFragmentShader_;
-        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
-        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
-        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
-        pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
+        pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
+        pipelineInfo.vertex_input_state.vertex_attributes = vertexState.attributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_attributes = vertexState.attributeCount;
         pipelineInfo.primitive_type = topology;
         FillRasterizerState(
             pipelineInfo.rasterizer_state, renderState,
@@ -3869,25 +3938,21 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineTextured3D(
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
         SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
         SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState)
     {
-        const std::size_t key = PipelineCacheKey(
-            topology, depthTest, depthWrite, depthFunc, colorFormat, colorTargetCount, sampleCount,
-            depthStencilFormat, renderState);
+        const std::size_t key = StockPipelineKey(
+            PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat,
+                             colorTargetCount, sampleCount, depthStencilFormat, renderState),
+            vertexLayout);
         const auto it = texturedPipelines_.find(key);
         if (it != texturedPipelines_.end())
             return it->second;
 
-        SDL_GPUVertexBufferDescription vbDesc{};
-        vbDesc.slot = 0;
-        vbDesc.pitch = 20;  // VertexPositionTexture
-        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-
-        SDL_GPUVertexAttribute attrs[2]{};
-        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
-        attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[1].offset = 12;
+        SdlGpuStockVertexStateEXT vertexState;
+        BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
 
         std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
         FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormat, renderState);
@@ -3895,10 +3960,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = texturedVertexShader_;
         pipelineInfo.fragment_shader = texturedFragmentShader_;
-        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
-        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
-        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
-        pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
+        pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
+        pipelineInfo.vertex_input_state.vertex_attributes = vertexState.attributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_attributes = vertexState.attributeCount;
         pipelineInfo.primitive_type = topology;
         FillRasterizerState(
             pipelineInfo.rasterizer_state, renderState,
@@ -3918,26 +3983,21 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineColoredTextured3D(
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
         SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
         SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState)
     {
-        const std::size_t key = PipelineCacheKey(
-            topology, depthTest, depthWrite, depthFunc, colorFormat, colorTargetCount, sampleCount,
-            depthStencilFormat, renderState);
+        const std::size_t key = StockPipelineKey(
+            PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat,
+                             colorTargetCount, sampleCount, depthStencilFormat, renderState),
+            vertexLayout);
         const auto it = coloredTexturedPipelines_.find(key);
         if (it != coloredTexturedPipelines_.end())
             return it->second;
 
-        SDL_GPUVertexBufferDescription vbDesc{};
-        vbDesc.slot = 0;
-        vbDesc.pitch = 24;  // VertexPositionColorTexture
-        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-
-        SDL_GPUVertexAttribute attrs[3]{};
-        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
-        attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[1].offset = 12;
-        attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 16;
+        SdlGpuStockVertexStateEXT vertexState;
+        BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
 
         std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
         FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormat, renderState);
@@ -3945,10 +4005,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = coloredTexturedVertexShader_;
         pipelineInfo.fragment_shader = texturedFragmentShader_;
-        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
-        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
-        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
-        pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
+        pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
+        pipelineInfo.vertex_input_state.vertex_attributes = vertexState.attributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_attributes = vertexState.attributeCount;
         pipelineInfo.primitive_type = topology;
         FillRasterizerState(
             pipelineInfo.rasterizer_state, renderState,
@@ -4006,26 +4066,21 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineLitTextured3D(
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
         SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
         SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState)
     {
-        const std::size_t key = PipelineCacheKey(
-            topology, depthTest, depthWrite, depthFunc, colorFormat, colorTargetCount, sampleCount,
-            depthStencilFormat, renderState);
+        const std::size_t key = StockPipelineKey(
+            PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat,
+                             colorTargetCount, sampleCount, depthStencilFormat, renderState),
+            vertexLayout);
         const auto it = litTexturedPipelines_.find(key);
         if (it != litTexturedPipelines_.end())
             return it->second;
 
-        SDL_GPUVertexBufferDescription vbDesc{};
-        vbDesc.slot = 0;
-        vbDesc.pitch = 32;  // VertexPositionNormalTexture
-        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-
-        SDL_GPUVertexAttribute attrs[3]{};
-        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
-        attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[1].offset = 12;
-        attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 24;
+        SdlGpuStockVertexStateEXT vertexState;
+        BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
 
         std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
         FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormat, renderState);
@@ -4033,10 +4088,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = litTexturedVertexShader_;
         pipelineInfo.fragment_shader = litTexturedFragmentShader_;
-        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
-        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
-        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
-        pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
+        pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
+        pipelineInfo.vertex_input_state.vertex_attributes = vertexState.attributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_attributes = vertexState.attributeCount;
         pipelineInfo.primitive_type = topology;
         FillRasterizerState(
             pipelineInfo.rasterizer_state, renderState,
@@ -4059,17 +4114,16 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuRenderer::QueueColoredDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                                   PrimitiveType primitive, int primitiveCount,
-                                                  const GpuDrawParams* params)
+                                                  const GpuDrawParams* params,
+                                                  const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        if (sdlGpuVb.Stride() != 16)
-            throw std::invalid_argument("CNA SDL_GPU: DrawColoredPrimitives requires a stride-16 "
-                                        "(VertexPositionColor) vertex buffer");
 
         ColoredDrawCommand command;
+        command.vertexLayout = vertexLayout;
         const int vertexStart = params != nullptr ? params->vertexStart : 0;
         const auto& shadow = sdlGpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * 16u;
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * sdlGpuVb.Stride();
         if (byteOffset <= shadow.size())
             command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
         command.topology = ToTopology(primitive);
@@ -4114,7 +4168,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::QueueTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                    const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+                                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                                   bool hasVertexColor,
+                                                   const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
         // plans/plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
         // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
@@ -4125,7 +4181,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::size_t stride = sdlGpuVb.Stride();
 
         TexturedDrawCommand command;
-        command.hasVertexColor = (stride == 24);
+        command.hasVertexColor = hasVertexColor;
+        command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
         const auto& shadow = sdlGpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
@@ -4172,7 +4229,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::QueueLitTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                      PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+                                                      PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                                      const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
         // plans/plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
         // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
@@ -4180,14 +4238,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         // caller to report to.
         EnsureDefaultPbrTextures();
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        if (sdlGpuVb.Stride() != 32)
-            throw std::invalid_argument("CNA SDL_GPU: lit_textured3d requires a stride-32 "
-                                        "(VertexPositionNormalTexture) vertex buffer");
+        const std::size_t stride = sdlGpuVb.Stride();
 
         LitTexturedDrawCommand command;
+        command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
         const auto& shadow = sdlGpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * 32u;
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
         if (byteOffset <= shadow.size())
             command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
         command.topology = ToTopology(primitive);
@@ -4283,31 +4340,24 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineAlphaTest3D(
-        std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        bool hasVertexColor,
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
         SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState)
     {
-        // stride 24 (vertex colour) uses its own dedicated map, keyed the same way every other
-        // stride-specific map here is. strides 20/32 share alphaTestVertexShader_ but need
-        // DIFFERENT vertex_input_state (different attribute offsets), so that map's key folds in
-        // the stride explicitly.
-        if (stride == 24)
+        if (hasVertexColor)
         {
-            const std::size_t key = PipelineCacheKey(
-                topology, depthTest, depthWrite, depthFunc, colorFormat, colorTargetCount, sampleCount,
-                depthStencilFormat, renderState);
+            const std::size_t key = StockPipelineKey(
+                PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat,
+                                 colorTargetCount, sampleCount, depthStencilFormat, renderState),
+                vertexLayout);
             const auto it = alphaTestColoredPipelines_.find(key);
             if (it != alphaTestColoredPipelines_.end())
                 return it->second;
 
-            SDL_GPUVertexBufferDescription vbDesc{};
-            vbDesc.slot = 0;
-            vbDesc.pitch = 24;
-            vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-            SDL_GPUVertexAttribute attrs[3]{};
-            attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
-            attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[1].offset = 12;
-            attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 16;
+            SdlGpuStockVertexStateEXT vertexState;
+            BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
 
             std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
             FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormat, renderState);
@@ -4315,10 +4365,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
             pipelineInfo.vertex_shader = alphaTestColoredVertexShader_;
             pipelineInfo.fragment_shader = alphaTestFragmentShader_;
-            pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
-            pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
-            pipelineInfo.vertex_input_state.vertex_attributes = attrs;
-            pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
+            pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
+            pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
+            pipelineInfo.vertex_input_state.vertex_attributes = vertexState.attributes.data();
+            pipelineInfo.vertex_input_state.num_vertex_attributes = vertexState.attributeCount;
             pipelineInfo.primitive_type = topology;
             FillRasterizerState(
                 pipelineInfo.rasterizer_state, renderState,
@@ -4338,21 +4388,16 @@ namespace CNA::Internal::Renderers::SdlGpu
             return CacheGraphicsPipeline(alphaTestColoredPipelines_, key, pipeline);
         }
 
-        const std::size_t key = HashCombine(static_cast<std::size_t>(stride),
-            PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat, colorTargetCount, sampleCount,
-                             depthStencilFormat, renderState));
+        const std::size_t key = StockPipelineKey(
+            PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat,
+                             colorTargetCount, sampleCount, depthStencilFormat, renderState),
+            vertexLayout);
         const auto it = alphaTestPipelines_.find(key);
         if (it != alphaTestPipelines_.end())
             return it->second;
 
-        SDL_GPUVertexBufferDescription vbDesc{};
-        vbDesc.slot = 0;
-        vbDesc.pitch = static_cast<Uint32>(stride);
-        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-        SDL_GPUVertexAttribute attrs[2]{};
-        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
-        attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
-        attrs[1].offset = (stride == 32) ? 24 : 12;  // stride 32: UV past the 3-float normal; stride 20: UV right after position
+        SdlGpuStockVertexStateEXT vertexState;
+        BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
 
         std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
         FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormat, renderState);
@@ -4360,10 +4405,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = alphaTestVertexShader_;
         pipelineInfo.fragment_shader = alphaTestFragmentShader_;
-        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
-        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
-        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
-        pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
+        pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
+        pipelineInfo.vertex_input_state.vertex_attributes = vertexState.attributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_attributes = vertexState.attributeCount;
         pipelineInfo.primitive_type = topology;
         FillRasterizerState(
             pipelineInfo.rasterizer_state, renderState,
@@ -4436,49 +4481,34 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineDualTexture3D(
-        std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        bool hasVertexColor,
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
         SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState)
     {
-        auto& cache = (stride == 24) ? dualTextureColoredPipelines_ : dualTexturePipelines_;
-        const std::size_t key = PipelineCacheKey(
-            topology, depthTest, depthWrite, depthFunc, colorFormat, colorTargetCount, sampleCount,
-            depthStencilFormat, renderState);
+        auto& cache = hasVertexColor ? dualTextureColoredPipelines_ : dualTexturePipelines_;
+        const std::size_t key = StockPipelineKey(
+            PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat,
+                             colorTargetCount, sampleCount, depthStencilFormat, renderState),
+            vertexLayout);
         const auto it = cache.find(key);
         if (it != cache.end())
             return it->second;
 
-        SDL_GPUVertexBufferDescription vbDesc{};
-        vbDesc.slot = 0;
-        vbDesc.pitch = static_cast<Uint32>(stride);
-        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-
-        SDL_GPUVertexAttribute attrs[3]{};
-        Uint32 numAttrs;
-        if (stride == 24)
-        {
-            attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
-            attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[1].offset = 12;
-            attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 16;
-            numAttrs = 3;
-        }
-        else
-        {
-            attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
-            attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[1].offset = 12;
-            numAttrs = 2;
-        }
+        SdlGpuStockVertexStateEXT vertexState;
+        BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
 
         std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
         FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormat, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = (stride == 24) ? dualTextureColoredVertexShader_ : dualTextureVertexShader_;
+        pipelineInfo.vertex_shader = hasVertexColor ? dualTextureColoredVertexShader_ : dualTextureVertexShader_;
         pipelineInfo.fragment_shader = dualTextureFragmentShader_;
-        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
-        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
-        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
-        pipelineInfo.vertex_input_state.num_vertex_attributes = numAttrs;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
+        pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
+        pipelineInfo.vertex_input_state.vertex_attributes = vertexState.attributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_attributes = vertexState.attributeCount;
         pipelineInfo.primitive_type = topology;
         FillRasterizerState(
             pipelineInfo.rasterizer_state, renderState,
@@ -4536,27 +4566,21 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineEnvMap3D(
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
         SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
         SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState)
     {
-        const std::size_t key = PipelineCacheKey(
-            topology, depthTest, depthWrite, depthFunc, colorFormat, colorTargetCount, sampleCount,
-            depthStencilFormat, renderState);
+        const std::size_t key = StockPipelineKey(
+            PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat,
+                             colorTargetCount, sampleCount, depthStencilFormat, renderState),
+            vertexLayout);
         const auto it = envMapPipelines_.find(key);
         if (it != envMapPipelines_.end())
             return it->second;
 
-        // Stride 32: VertexPositionNormalTexture -- identical vertex layout to lit_textured3d.
-        SDL_GPUVertexBufferDescription vbDesc{};
-        vbDesc.slot = 0;
-        vbDesc.pitch = 32;
-        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-
-        SDL_GPUVertexAttribute attrs[3]{};
-        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
-        attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[1].offset = 12;
-        attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 24;
+        SdlGpuStockVertexStateEXT vertexState;
+        BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
 
         std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
         FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormat, renderState);
@@ -4564,10 +4588,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = envMapVertexShader_;
         pipelineInfo.fragment_shader = envMapFragmentShader_;
-        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
-        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
-        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
-        pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexState.buffers.data();
+        pipelineInfo.vertex_input_state.num_vertex_buffers = vertexState.bufferCount;
+        pipelineInfo.vertex_input_state.vertex_attributes = vertexState.attributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_attributes = vertexState.attributeCount;
         pipelineInfo.primitive_type = topology;
         FillRasterizerState(
             pipelineInfo.rasterizer_state, renderState,
@@ -4929,7 +4953,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::QueueAlphaTestDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                     const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                    PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+                                                    PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                                    bool hasVertexColor,
+                                                    const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
         // plans/plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
         // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
@@ -4940,7 +4966,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::size_t stride = sdlGpuVb.Stride();
 
         AlphaTestDrawCommand command;
-        command.stride = stride;
+        command.hasVertexColor = hasVertexColor;
+        command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
         const auto& shadow = sdlGpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
@@ -4986,13 +5013,16 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::QueueDualTextureDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                      PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+                                                      PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                                      bool hasVertexColor,
+                                                      const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
 
         DualTextureDrawCommand command;
-        command.hasVertexColor = (stride == 24);
+        command.hasVertexColor = hasVertexColor;
+        command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
         const auto& shadow = sdlGpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
@@ -5048,12 +5078,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::QueueEnvMapDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                                 const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+                                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                                const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        if (sdlGpuVb.Stride() != 32)
-            throw std::invalid_argument("CNA SDL_GPU: env_map3d requires a stride-32 "
-                                        "(VertexPositionNormalTexture) vertex buffer");
+        const std::size_t stride = sdlGpuVb.Stride();
 
         // params.envMap (ITextureCubeRenderer*) may be either a plain, uploaded TextureCube
         // (SdlGpuTextureCubeRenderer, SDLGPU-51) or a RenderTargetCube sampled after being rendered
@@ -5063,9 +5092,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             ResolveSampledCubeEXT(params.envMap, "EnvironmentMapEffect.EnvironmentMap");
 
         EnvMapDrawCommand command;
+        command.vertexLayout = vertexLayout;
         const int vertexStart = params.vertexStart;
         const auto& shadow = sdlGpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * 32u;
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
         if (byteOffset <= shadow.size())
             command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
         command.topology = ToTopology(primitive);
@@ -5683,7 +5713,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                    SDL_GPUGraphicsPipeline*& boundPipeline)
     {
         SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineAlphaTest3D(
-            command.stride, command.topology, command.depthTest, command.depthWrite,
+            command.hasVertexColor, command.vertexLayout,
+            command.topology, command.depthTest, command.depthWrite,
             command.depthFunc, colorFormat, sampleCount, depthStencilFormat, colorTargetCount, command.renderState);
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
@@ -5691,9 +5722,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
 
-        SDL_GPUBufferBinding vbBinding{};
-        vbBinding.buffer = command.uploadedVertexBuffer;
-        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
         // plans/plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
@@ -5731,7 +5761,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                      SDL_GPUGraphicsPipeline*& boundPipeline)
     {
         SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineDualTexture3D(
-            command.hasVertexColor ? 24 : 20, command.topology, command.depthTest,
+            command.hasVertexColor, command.vertexLayout,
+            command.topology, command.depthTest,
             command.depthWrite, command.depthFunc, colorFormat, sampleCount,
             depthStencilFormat, colorTargetCount, command.renderState);
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
@@ -5739,9 +5770,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
 
-        SDL_GPUBufferBinding vbBinding{};
-        vbBinding.buffer = command.uploadedVertexBuffer;
-        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         // SDLGPU-21: texture0/texture1 are independent GraphicsDevice.SamplerStates[0]/[1]
         // slots in real XNA -- each gets its own sampler object, not a shared one.
@@ -5786,6 +5816,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                 SDL_GPUGraphicsPipeline*& boundPipeline)
     {
         SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineEnvMap3D(
+            command.vertexLayout,
             command.topology, command.depthTest, command.depthWrite, command.depthFunc,
             colorFormat, sampleCount, depthStencilFormat, colorTargetCount, command.renderState);
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
@@ -5796,9 +5827,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
 
-        SDL_GPUBufferBinding vbBinding{};
-        vbBinding.buffer = command.uploadedVertexBuffer;
-        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         // REMED-GFX-173: binding 0 (sampler2D uTexture) and binding 1 (samplerCube uEnvMap) are two
         // INDEPENDENT sampled resources, so each takes the sampler captured from its own public
@@ -6001,6 +6031,25 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
     }
 
+    void SdlGpuRenderer::BindStockVertexBuffersEXT(
+        SDL_GPURenderPass* pass, SDL_GPUBuffer* vertexBuffer,
+        SDL_GPUBuffer* neutralVertexBuffer,
+        const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout)
+    {
+        SDL_GPUBufferBinding bindings[2]{};
+        bindings[0].buffer = vertexBuffer;
+        Uint32 count = 1;
+        if (layout.usesNeutralRecord)
+        {
+            if (neutralVertexBuffer == nullptr)
+                throw std::runtime_error(
+                    "CNA SDL_GPU: a stock draw needs the neutral vertex record, but it was not uploaded");
+            bindings[1].buffer = neutralVertexBuffer;
+            count = 2;
+        }
+        SDL_BindGPUVertexBuffers(pass, 0, bindings, count);
+    }
+
     void SdlGpuRenderer::UploadSceneDrawData(SDL_GPUCommandBuffer* cmd)
     {
         if (coloredDrawCommands_.empty() && texturedDrawCommands_.empty() && litTexturedDrawCommands_.empty() &&
@@ -6056,11 +6105,24 @@ namespace CNA::Internal::Renderers::SdlGpu
             return buffer;
         };
 
+        const auto* neutralBegin = reinterpret_cast<const std::uint8_t*>(
+            CNA::Internal::Graphics::kNeutralVertexRecordEXT.data());
+        const std::vector<std::uint8_t> neutralData(
+            neutralBegin,
+            neutralBegin + sizeof(CNA::Internal::Graphics::kNeutralVertexRecordEXT));
+        const auto uploadNeutralIfNeeded = [&](auto& command)
+        {
+            if (command.vertexLayout.usesNeutralRecord)
+                command.uploadedNeutralVertexBuffer =
+                    uploadOne(neutralData, SDL_GPU_BUFFERUSAGE_VERTEX);
+        };
+
         for (ColoredDrawCommand& command : coloredDrawCommands_)
         {
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadNeutralIfNeeded(command);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
         }
@@ -6069,6 +6131,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadNeutralIfNeeded(command);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
         }
@@ -6077,6 +6140,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadNeutralIfNeeded(command);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
         }
@@ -6085,6 +6149,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadNeutralIfNeeded(command);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
         }
@@ -6093,6 +6158,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadNeutralIfNeeded(command);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
         }
@@ -6101,6 +6167,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            uploadNeutralIfNeeded(command);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
         }
@@ -6151,7 +6218,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                               SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                                                  SDL_GPUGraphicsPipeline*& boundPipeline)
     {
-        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineColored3D(command.topology, command.depthTest,
+        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineColored3D(command.vertexLayout,
+                                                                          command.topology, command.depthTest,
                                                                           command.depthWrite, command.depthFunc,
                                                                           colorFormat, sampleCount,
                                                                           depthStencilFormat, colorTargetCount, command.renderState);
@@ -6160,9 +6228,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
 
-        SDL_GPUBufferBinding vbBinding{};
-        vbBinding.buffer = command.uploadedVertexBuffer;
-        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
@@ -6187,9 +6254,11 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         SDL_GPUGraphicsPipeline* pipeline = command.hasVertexColor
             ? GetOrCreatePipelineColoredTextured3D(
+                command.vertexLayout,
                 command.topology, command.depthTest, command.depthWrite, command.depthFunc,
                 colorFormat, sampleCount, depthStencilFormat, colorTargetCount, command.renderState)
             : GetOrCreatePipelineTextured3D(
+                command.vertexLayout,
                 command.topology, command.depthTest, command.depthWrite, command.depthFunc,
                 colorFormat, sampleCount, depthStencilFormat, colorTargetCount, command.renderState);
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
@@ -6198,9 +6267,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
 
-        SDL_GPUBufferBinding vbBinding{};
-        vbBinding.buffer = command.uploadedVertexBuffer;
-        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
         // plans/plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
@@ -6238,6 +6306,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                      SDL_GPUGraphicsPipeline*& boundPipeline)
     {
         SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineLitTextured3D(
+            command.vertexLayout,
             command.topology, command.depthTest, command.depthWrite, command.depthFunc,
             colorFormat, sampleCount, depthStencilFormat, colorTargetCount, command.renderState);
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
@@ -6248,9 +6317,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
 
-        SDL_GPUBufferBinding vbBinding{};
-        vbBinding.buffer = command.uploadedVertexBuffer;
-        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+        BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
+                                  command.uploadedNeutralVertexBuffer, command.vertexLayout);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
         // plans/plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
@@ -6341,7 +6409,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case DrawKind::Textured:
                 {
                     const TexturedDrawCommand& c = texturedDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.texture && c.target == target)
+                    if (c.uploadedVertexBuffer != nullptr && c.target == target)
                         IssueTexturedDraw(pass, cmd, c, colorFormat, sampleCount,
                                           depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -6349,7 +6417,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case DrawKind::LitTextured:
                 {
                     const LitTexturedDrawCommand& c = litTexturedDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.texture && c.target == target)
+                    if (c.uploadedVertexBuffer != nullptr && c.target == target)
                         IssueLitTexturedDraw(pass, cmd, c, colorFormat, sampleCount,
                                              depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -6357,7 +6425,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case DrawKind::AlphaTest:
                 {
                     const AlphaTestDrawCommand& c = alphaTestDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.texture && c.target == target)
+                    if (c.uploadedVertexBuffer != nullptr && c.target == target)
                         IssueAlphaTestDraw(pass, cmd, c, colorFormat, sampleCount,
                                            depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -6449,36 +6517,42 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (ColoredDrawCommand& command : coloredDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            release(command.uploadedNeutralVertexBuffer);
             release(command.uploadedIndexBuffer);
         }
         if (clearCommands) coloredDrawCommands_.clear();
         for (TexturedDrawCommand& command : texturedDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            release(command.uploadedNeutralVertexBuffer);
             release(command.uploadedIndexBuffer);
         }
         if (clearCommands) texturedDrawCommands_.clear();
         for (LitTexturedDrawCommand& command : litTexturedDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            release(command.uploadedNeutralVertexBuffer);
             release(command.uploadedIndexBuffer);
         }
         if (clearCommands) litTexturedDrawCommands_.clear();
         for (AlphaTestDrawCommand& command : alphaTestDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            release(command.uploadedNeutralVertexBuffer);
             release(command.uploadedIndexBuffer);
         }
         if (clearCommands) alphaTestDrawCommands_.clear();
         for (DualTextureDrawCommand& command : dualTextureDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            release(command.uploadedNeutralVertexBuffer);
             release(command.uploadedIndexBuffer);
         }
         if (clearCommands) dualTextureDrawCommands_.clear();
         for (EnvMapDrawCommand& command : envMapDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
+            release(command.uploadedNeutralVertexBuffer);
             release(command.uploadedIndexBuffer);
         }
         if (clearCommands) envMapDrawCommands_.clear();
@@ -6506,11 +6580,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 #endif
     }
 
-    // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. This renderer selects its
-    // SDL_GPUVertexAttribute set from the stride (REMED-GFX-217), so a declaration that set cannot
-    // represent is refused before a pipeline is created or a command queued. An unlisted stride is
-    // left to this renderer's own established rejection -- the unmatched-shape fall-through reaches
-    // QueueColoredDraw, which refuses anything but a stride-16 buffer.
+    // Kept for the stock families SDLGPU-59 deliberately does not translate (Skinned/PBR). The
+    // classic Basic/AlphaTest/DualTexture/EnvironmentMap paths below resolve their inputs directly
+    // from the declaration instead.
     static void RequireFaithfulDeclarationEXT(const IVertexBufferRenderer& vb, const char* route)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
@@ -6520,11 +6592,225 @@ namespace CNA::Internal::Renderers::SdlGpu
             "SDL_GPU", route);
     }
 
+    SdlGpuRenderer::StockVertexShapeEXT SdlGpuRenderer::SelectStockVertexShapeEXT(
+        const SdlGpuVertexBufferRenderer& vb, const GpuDrawParams& params)
+    {
+        using namespace CNA::Internal::Graphics;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        const auto& declaration = vb.Declaration();
+        const bool haveDeclaration = !declaration.IsEmpty();
+        const std::size_t stride = vb.Stride();
+        if (!haveDeclaration &&
+            !InferredLayoutForStride(static_cast<int>(stride),
+                                     UnlistedStrideLayout::RendererRefusesIt).known)
+            return StockVertexShapeEXT::StrideDerived;
+
+        if (haveDeclaration &&
+            FindDeclaredSemanticEXT(declaration.GetElements(), VertexElementUsage::Position, 0) == nullptr)
+        {
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: stock effects require POSITION0, but this VertexDeclaration does not declare it");
+        }
+
+        const bool hasNormal = haveDeclaration
+            ? DeclarationNamesUsageEXT(declaration.GetElements(), VertexElementUsage::Normal)
+            : stride == 32;
+        const bool hasColor = haveDeclaration
+            ? FindDeclaredSemanticEXT(declaration.GetElements(), VertexElementUsage::Color, 0) != nullptr
+            : stride == 16 || stride == 24;
+        const bool hasUv = haveDeclaration
+            ? FindDeclaredSemanticEXT(declaration.GetElements(), VertexElementUsage::TextureCoordinate, 0) != nullptr
+            : stride == 20 || stride == 24 || stride == 32;
+
+        const bool needsAlphaTest = !params.pbr &&
+                                    (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
+        if (needsAlphaTest && hasUv)
+            return hasColor ? StockVertexShapeEXT::AlphaTestColored
+                            : StockVertexShapeEXT::AlphaTest;
+
+        const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
+        if (needsDualTexture && hasUv)
+            return hasColor ? StockVertexShapeEXT::DualTexturedColored
+                            : StockVertexShapeEXT::DualTextured;
+
+        const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
+        if (needsEnvMap && hasNormal && hasUv)
+            return StockVertexShapeEXT::EnvMapped;
+
+        if (needsAlphaTest || needsDualTexture || needsEnvMap || params.skinned || params.pbr)
+            return StockVertexShapeEXT::StrideDerived;
+        if (hasNormal)
+            return StockVertexShapeEXT::Lit;
+        if (hasUv)
+            return hasColor ? StockVertexShapeEXT::ColoredTextured
+                            : StockVertexShapeEXT::Textured;
+        return StockVertexShapeEXT::Colored;
+    }
+
+    void SdlGpuRenderer::StockVertexInputsForShapeEXT(
+        StockVertexShapeEXT shape,
+        const CNA::Internal::Graphics::StockProgramInput*& inputs,
+        std::size_t& count, const char*& programName)
+    {
+        using CNA::Internal::Graphics::StockProgramInput;
+        namespace In = CNA::Internal::Graphics::StockVertexInputsEXT;
+
+        static constexpr StockProgramInput kColored[] = {In::kPos, In::kColor};
+        static constexpr StockProgramInput kTextured[] = {In::kPos, In::kUv};
+        static constexpr StockProgramInput kColoredTextured[] = {In::kPos, In::kColor, In::kUv};
+        static constexpr StockProgramInput kLit[] = {In::kPos, In::kNormal, In::kUv, In::kColor};
+        static constexpr StockProgramInput kDualTextured[] = {In::kPos, In::kUv, In::kUv1};
+        static constexpr StockProgramInput kDualTexturedColored[] = {
+            In::kPos, In::kColor, In::kUv, In::kUv1};
+        static constexpr StockProgramInput kEnvMapped[] = {In::kPos, In::kNormal, In::kUv};
+
+        switch (shape)
+        {
+            case StockVertexShapeEXT::Colored:
+                inputs = kColored; count = std::size(kColored); programName = "colored3d"; return;
+            case StockVertexShapeEXT::Textured:
+                inputs = kTextured; count = std::size(kTextured); programName = "textured3d"; return;
+            case StockVertexShapeEXT::ColoredTextured:
+                inputs = kColoredTextured; count = std::size(kColoredTextured);
+                programName = "colored_textured3d"; return;
+            case StockVertexShapeEXT::Lit:
+                inputs = kLit; count = std::size(kLit); programName = "lit_textured3d"; return;
+            case StockVertexShapeEXT::AlphaTest:
+                inputs = kTextured; count = std::size(kTextured); programName = "alpha_test3d"; return;
+            case StockVertexShapeEXT::AlphaTestColored:
+                inputs = kColoredTextured; count = std::size(kColoredTextured);
+                programName = "alpha_test_colored3d"; return;
+            case StockVertexShapeEXT::DualTextured:
+                inputs = kDualTextured; count = std::size(kDualTextured);
+                programName = "dual_texture3d"; return;
+            case StockVertexShapeEXT::DualTexturedColored:
+                inputs = kDualTexturedColored; count = std::size(kDualTexturedColored);
+                programName = "dual_texture_colored3d"; return;
+            case StockVertexShapeEXT::EnvMapped:
+                inputs = kEnvMapped; count = std::size(kEnvMapped); programName = "env_map3d"; return;
+            case StockVertexShapeEXT::StrideDerived:
+                break;
+        }
+        inputs = nullptr;
+        count = 0;
+        programName = "stride-derived";
+    }
+
+    CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
+    SdlGpuRenderer::ResolveStockVertexLayoutForDrawEXT(
+        const SdlGpuVertexBufferRenderer& vb, StockVertexShapeEXT shape) const
+    {
+        using namespace CNA::Internal::Graphics;
+        const StockProgramInput* inputs = nullptr;
+        std::size_t inputCount = 0;
+        const char* programName = nullptr;
+        StockVertexInputsForShapeEXT(shape, inputs, inputCount, programName);
+
+        const auto& declaration = vb.Declaration();
+        if (!declaration.IsEmpty())
+        {
+            using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+            if (FindDeclaredSemanticEXT(
+                    declaration.GetElements(), VertexElementUsage::Position, 0) == nullptr)
+            {
+                throw System::NotSupportedException(
+                    "CNA SDL_GPU: stock effects require POSITION0, but this VertexDeclaration does not declare it");
+            }
+            RequireDeclarationMatchesStockProgram(
+                declaration.GetElements(), inputs, inputCount, "SDL_GPU", programName);
+            return ResolveStockVertexLayoutEXT(
+                declaration.GetElements(), static_cast<int>(vb.Stride()), inputs, inputCount);
+        }
+
+        const InferredVertexLayout inferred = InferredLayoutForStride(
+            static_cast<int>(vb.Stride()), UnlistedStrideLayout::RendererRefusesIt);
+        if (!inferred.known)
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: no VertexDeclaration was propagated and this vertex stride has no canonical stock layout");
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> synthesized;
+        synthesized.reserve(inferred.count);
+        for (std::size_t i = 0; i < inferred.count; ++i)
+        {
+            const InferredVertexElement& element = inferred.elements[i];
+            synthesized.emplace_back(
+                element.offset, element.format, element.usage, element.usageIndex);
+        }
+        ResolvedStockVertexLayoutEXT resolved = ResolveStockVertexLayoutEXT(
+            synthesized, static_cast<int>(vb.Stride()), inputs, inputCount);
+        resolved.fromDeclaration = false;
+        return resolved;
+    }
+
+    void SdlGpuRenderer::DispatchStockDrawEXT(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
+        const StockVertexShapeEXT shape = SelectStockVertexShapeEXT(sdlGpuVb, params);
+        if (shape == StockVertexShapeEXT::StrideDerived)
+        {
+            RequireFaithfulDeclarationEXT(vb, ib == nullptr ? "ordinary-nonindexed" : "ordinary-indexed");
+            const std::size_t stride = sdlGpuVb.Stride();
+            if (params.pbr &&
+                ((params.skinned && (stride == 68 || stride == 80)) ||
+                 (!params.skinned && (stride == 48 || stride == 60))))
+            {
+                QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
+                return;
+            }
+            if (params.skinned && (stride == 52 || stride == 56))
+            {
+                QueueSkinnedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params);
+                return;
+            }
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: the selected stock effect cannot be matched to this VertexDeclaration");
+        }
+
+        const auto layout = ResolveStockVertexLayoutForDrawEXT(sdlGpuVb, shape);
+        switch (shape)
+        {
+            case StockVertexShapeEXT::Colored:
+                QueueColoredDraw(vb, ib, world, view, projection, primitive, primitiveCount,
+                                 &params, layout); return;
+            case StockVertexShapeEXT::Textured:
+                QueueTexturedDraw(vb, ib, world, view, projection, primitive, primitiveCount,
+                                  params, false, layout); return;
+            case StockVertexShapeEXT::ColoredTextured:
+                QueueTexturedDraw(vb, ib, world, view, projection, primitive, primitiveCount,
+                                  params, true, layout); return;
+            case StockVertexShapeEXT::Lit:
+                QueueLitTexturedDraw(vb, ib, world, view, projection, primitive, primitiveCount,
+                                     params, layout); return;
+            case StockVertexShapeEXT::AlphaTest:
+            case StockVertexShapeEXT::AlphaTestColored:
+                QueueAlphaTestDraw(
+                    vb, ib, world, view, projection, primitive, primitiveCount, params,
+                    shape == StockVertexShapeEXT::AlphaTestColored, layout); return;
+            case StockVertexShapeEXT::DualTextured:
+            case StockVertexShapeEXT::DualTexturedColored:
+                QueueDualTextureDraw(
+                    vb, ib, world, view, projection, primitive, primitiveCount, params,
+                    shape == StockVertexShapeEXT::DualTexturedColored, layout); return;
+            case StockVertexShapeEXT::EnvMapped:
+                QueueEnvMapDraw(vb, ib, world, view, projection, primitive, primitiveCount,
+                                params, layout); return;
+            case StockVertexShapeEXT::StrideDerived:
+                break;
+        }
+    }
+
     void SdlGpuRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb,
                                                        const Matrix& world, const Matrix& view, const Matrix& projection,
                                                        PrimitiveType primitive, int primitiveCount)
     {
-        QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount);
+        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
+        const auto layout = ResolveStockVertexLayoutForDrawEXT(
+            sdlGpuVb, StockVertexShapeEXT::Colored);
+        QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount,
+                         nullptr, layout);
     }
 
     void SdlGpuRenderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer& vb,
@@ -6532,7 +6818,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                               const Matrix& world, const Matrix& view, const Matrix& projection,
                                                               PrimitiveType primitive, int primitiveCount)
     {
-        QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount);
+        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
+        const auto layout = ResolveStockVertexLayoutForDrawEXT(
+            sdlGpuVb, StockVertexShapeEXT::Colored);
+        QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount,
+                         nullptr, layout);
     }
 
     void SdlGpuRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& vb,
@@ -6551,74 +6841,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             return;
         }
 #endif
-        RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
-        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        const std::size_t stride = sdlGpuVb.Stride();
-        // Matches VulkanRenderer/WebGPURenderer's own dispatch precedence: PBR keeps its shader
-        // when MASK coverage is active, while the standalone alpha-test effect still wins over
-        // the other non-PBR effect families. Env-map/PBR/skinned win over plain lit_textured3d
-        // (env-map shares stride 32, skinned has its own stride 52/56, PBR its own stride 48/68).
-        // needsPbr is checked (and excluded from needsSkinned) before needsSkinned since
-        // SkinnedPbrEffect::FillGpuDrawParams() sets BOTH params.pbr and params.skinned -- the PBR
-        // shader variant, not the plain SkinnedEffect one, must win for that combination.
-        const bool needsPbr = params.pbr;
-        const bool needsAlphaTest = !needsPbr &&
-                                    (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
-        const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
-        const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
-        const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && !needsPbr && params.skinned;
-        // plans/plan_gltf.md GLTF-474: no `params.texture0 != nullptr` here any more. A stock effect's
-        // base-colour map is optional in XNA and absent in glTF's own default material, and the
-        // replay binds neutral white for it -- so requiring one here did not make the draw safe, it
-        // made the draw fall past every branch into the stride-16 colour path and be refused there.
-        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32))
-        {
-            QueueAlphaTestDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (needsDualTexture && (stride == 20 || stride == 24) && params.texture0 != nullptr && params.texture1 != nullptr)
-        {
-            QueueDualTextureDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (needsEnvMap && stride == 32 && params.texture0 != nullptr && params.envMap != nullptr)
-        {
-            QueueEnvMapDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        // plans/plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the stride-48 and
-        // stride-68 records with TEXCOORD_1 and a packed COLOR_0 appended, and QueuePbrDraw
-        // selects the colour-carrying pipeline for them. They must be listed HERE too: this is
-        // the only route into that queue, and a stride the dispatch omits falls through every
-        // branch below to the stride-16 coloured path, which refuses it.
-        if (needsPbr &&
-            ((params.skinned && (stride == 68 || stride == 80)) ||
-             (!params.skinned && (stride == 48 || stride == 60))))
-        {
-            QueuePbrDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (needsSkinned && (stride == 52 || stride == 56))
-        {
-            QueueSkinnedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (stride == 16)
-        {
-            QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, &params);
-            return;
-        }
-        if (stride == 20 || stride == 24)
-        {
-            QueueTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (stride == 32)
-        {
-            QueueLitTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
+        DispatchStockDrawEXT(
+            vb, nullptr, world, view, projection, primitive, primitiveCount, params);
     }
 
     void SdlGpuRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
@@ -6635,67 +6859,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             return;
         }
 #endif
-        RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
-        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
-        const std::size_t stride = sdlGpuVb.Stride();
-        const bool needsPbr = params.pbr;
-        const bool needsAlphaTest = !needsPbr &&
-                                    (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
-        const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
-        const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
-        const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && !needsPbr && params.skinned;
-        // plans/plan_gltf.md GLTF-474: no `params.texture0 != nullptr` here any more. A stock effect's
-        // base-colour map is optional in XNA and absent in glTF's own default material, and the
-        // replay binds neutral white for it -- so requiring one here did not make the draw safe, it
-        // made the draw fall past every branch into the stride-16 colour path and be refused there.
-        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32))
-        {
-            QueueAlphaTestDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (needsDualTexture && (stride == 20 || stride == 24) && params.texture0 != nullptr && params.texture1 != nullptr)
-        {
-            QueueDualTextureDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (needsEnvMap && stride == 32 && params.texture0 != nullptr && params.envMap != nullptr)
-        {
-            QueueEnvMapDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        // plans/plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the stride-48 and
-        // stride-68 records with TEXCOORD_1 and a packed COLOR_0 appended, and QueuePbrDraw
-        // selects the colour-carrying pipeline for them. They must be listed HERE too: this is
-        // the only route into that queue, and a stride the dispatch omits falls through every
-        // branch below to the stride-16 coloured path, which refuses it.
-        if (needsPbr &&
-            ((params.skinned && (stride == 68 || stride == 80)) ||
-             (!params.skinned && (stride == 48 || stride == 60))))
-        {
-            QueuePbrDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (needsSkinned && (stride == 52 || stride == 56))
-        {
-            QueueSkinnedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (stride == 16)
-        {
-            QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
-            return;
-        }
-        if (stride == 20 || stride == 24)
-        {
-            QueueTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        if (stride == 32)
-        {
-            QueueLitTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
-            return;
-        }
-        DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
+        DispatchStockDrawEXT(
+            vb, &ib, world, view, projection, primitive, primitiveCount, params);
     }
 
     // ---- SdlGpuSampledTextureState / texture resolution (REMED-GFX-152) ----

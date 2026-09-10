@@ -7,6 +7,7 @@
 #include "mojoshader.h"
 #endif
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Graphics/StockVertexSemantics.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <SDL3/SDL_gpu.h>
@@ -734,11 +735,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         void SetData(const void* data, int vertexCount, std::size_t strideInBytes) override;
         /**
-         * @brief REMED-GFX-DECL-GUARD: remembers the declaration this buffer carries.
+         * @brief Remembers the declaration this buffer carries for semantic stock-input resolution.
          *
-         * This renderer still selects its `SDL_GPUVertexAttribute` set from the byte stride
-         * (REMED-GFX-217). Storing the declaration is what lets a draw refuse one that layout
-         * would silently reinterpret, without translating it.
+         * Ordinary stock draws translate each `(VertexElementUsage, usageIndex, offset, format)`
+         * into the immutable SDL GPU pipeline input layout. The remaining stride-derived
+         * Skinned/PBR paths retain the fidelity guard until their dedicated effect work lands.
          *
          * @param vertexDeclaration The declaration the caller propagated for this buffer.
          */
@@ -769,7 +770,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // IVertexBufferRenderer already destroyed by then (matches WebGPUVertexBufferRenderer's own
         // ShadowData() rationale).
         CNAEXT [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
-        /** @brief The declaration this buffer carries, for REMED-GFX-DECL-GUARD. CNAEXT. */
+        /** @brief The declaration this buffer carries for stock-input resolution. CNAEXT. */
         CNAEXT [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
         {
             return declaration_;
@@ -1396,14 +1397,16 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool depthWrite = false;
             int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;  ///< transient, set by UploadSceneDrawData
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;   ///< transient, set by UploadSceneDrawData
         };
 
-        // textured3d (stride 20, VertexPositionTexture) and colored_textured3d (stride 24,
-        // VertexPositionColorTexture) share this command shape and the same fragment shader --
-        // `hasVertexColor` selects the stride-24 vertex-input-state/pipeline vs stride-20's.
+        // textured3d and colored_textured3d share this command shape and fragment shader;
+        // `hasVertexColor` selects the shader family while `vertexLayout` supplies the declaration's
+        // actual semantic formats, offsets and stride.
         struct TexturedDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
@@ -1431,13 +1434,16 @@ namespace CNA::Internal::Renderers::SdlGpu
             int maxMipLevel = 0;
             float lodBias = 0.0f;
             int addressW = 1;
-            bool hasVertexColor = false;  ///< stride 24 vs stride 20
+            bool hasVertexColor = false;  ///< Selects the COLOR0-consuming shader family.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
-        // lit_textured3d (stride 32, VertexPositionNormalTexture) -- real Blinn-Phong lighting.
+        // lit_textured3d -- declaration-resolved POSITION0/NORMAL0/TEXCOORD0 plus optional COLOR0,
+        // with real Blinn-Phong lighting.
         struct LitTexturedDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
@@ -1466,15 +1472,15 @@ namespace CNA::Internal::Renderers::SdlGpu
             int maxMipLevel = 0;
             float lodBias = 0.0f;
             int addressW = 1;
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
-        // AlphaTestEffect (Phase SDLGPU-7) -- strides 20 (VertexPositionTexture)/32
-        // (VertexPositionNormalTexture, normal unread) share one shader (alphaTestVertexShader_);
-        // stride 24 (VertexPositionColorTexture, vertex-color tint) uses
-        // alphaTestColoredVertexShader_. `stride` selects which at render time.
+        // AlphaTestEffect (Phase SDLGPU-7/59) -- declaration-resolved POSITION0/TEXCOORD0;
+        // COLOR0 selects the tinted vertex shader while unrelated declaration elements are ignored.
         struct AlphaTestDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
@@ -1502,17 +1508,18 @@ namespace CNA::Internal::Renderers::SdlGpu
             int maxMipLevel = 0;
             float lodBias = 0.0f;
             int addressW = 1;
-            std::size_t stride = 20;  ///< 20, 24, or 32 -- selects vertex layout + shader
+            bool hasVertexColor = false;
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
-        // DualTextureEffect (Phase SDLGPU-7) -- two texture units sampled at the same UV
-        // (`tex1.rgb*=2; result=tex1*tex2*tint`). Strides 20/24 use dedicated vertex shaders
-        // (dualTextureVertexShader_/dualTextureColoredVertexShader_); the fragment shader is
-        // shared and does not need the primary PC block at all (fragTint is already resolved by
-        // the vertex stage).
+        // DualTextureEffect (Phase SDLGPU-7/59) -- two texture units sampled from independently
+        // resolved TEXCOORD0/TEXCOORD1 (`tex1.rgb*=2; result=tex1*tex2*tint`). COLOR0 selects the
+        // tinted vertex shader; the shared fragment shader consumes the two UV varyings and the
+        // tint already resolved by the vertex stage.
         struct DualTextureDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
@@ -1548,14 +1555,16 @@ namespace CNA::Internal::Renderers::SdlGpu
             float texture1LodBias = 0.0f;
             int texture1AddressW = 1;
             ///@}
-            bool hasVertexColor = false;  ///< stride 24 vs stride 20
+            bool hasVertexColor = false;  ///< Selects the COLOR0-consuming shader family.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
-        // EnvironmentMapEffect (Phase SDLGPU-9, SDLGPU-33) -- stride 32 (VertexPositionNormalTexture,
-        // same layout lit_textured3d uses). `envMapTexture` is resolved at Queue-time to the raw
+        // EnvironmentMapEffect (Phase SDLGPU-9, SDLGPU-33/59) resolves
+        // POSITION0/NORMAL0/TEXCOORD0 by semantic. `envMapTexture` is resolved at Queue-time to the raw
         // SDL_GPUTexture* since GpuDrawParams::envMap (an ITextureCubeRenderer*) may be either a
         // plain SdlGpuTextureCubeRenderer or a SdlGpuRenderTargetCubeRenderer -- mirrors
         // SpriteBatch::Draw's own dual-renderer resolve for ITextureRenderer.
@@ -1602,8 +1611,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             float envMapLodBias = 0.0f;
             int envMapAddressW = 1;
             ///@}
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
@@ -2055,7 +2066,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
 
-        /** @brief Draws stride-16 (VertexPositionColor) primitives with a hardcoded white/vertex-color-enabled BasicEffect. */
+        /** @brief Draws declared POSITION0/COLOR0 primitives with a white, vertex-color-enabled BasicEffect. */
         void DrawColoredPrimitives(const IVertexBufferRenderer& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
@@ -2064,7 +2075,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                           const IIndexBufferRenderer& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
-        /** @brief Effect-aware draw — dispatches to colored3d/textured3d/colored_textured3d/lit_textured3d by vertex stride. */
+        /** @brief Effect-aware draw that selects and binds stock inputs by declaration semantics. */
         void DrawPrimitivesEx(const IVertexBufferRenderer& vb,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount,
@@ -2246,6 +2257,39 @@ namespace CNA::Internal::Renderers::SdlGpu
                              int colorTargetCount,
                              SDL_GPUGraphicsPipeline*& boundPipeline);
 
+        /** @brief SDLGPU-59: stock shader family selected from declaration semantics plus effect state. */
+        enum class StockVertexShapeEXT
+        {
+            Colored,
+            Textured,
+            ColoredTextured,
+            Lit,
+            AlphaTest,
+            AlphaTestColored,
+            DualTextured,
+            DualTexturedColored,
+            EnvMapped,
+            StrideDerived
+        };
+
+        [[nodiscard]] static StockVertexShapeEXT SelectStockVertexShapeEXT(
+            const SdlGpuVertexBufferRenderer& vb, const GpuDrawParams& params);
+        static void StockVertexInputsForShapeEXT(
+            StockVertexShapeEXT shape,
+            const CNA::Internal::Graphics::StockProgramInput*& inputs,
+            std::size_t& count, const char*& programName);
+        [[nodiscard]] CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
+        ResolveStockVertexLayoutForDrawEXT(
+            const SdlGpuVertexBufferRenderer& vb, StockVertexShapeEXT shape) const;
+        void DispatchStockDrawEXT(
+            const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        static void BindStockVertexBuffersEXT(
+            SDL_GPURenderPass* pass, SDL_GPUBuffer* vertexBuffer,
+            SDL_GPUBuffer* neutralVertexBuffer,
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout);
+
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d.
         void CreateColoredResources(ConstructionResources& resources);
         void DestroyColoredResources();
@@ -2254,18 +2298,22 @@ namespace CNA::Internal::Renderers::SdlGpu
         void CreateLitTexturedResources(ConstructionResources& resources);
         void DestroyLitTexturedResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineColored3D(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineTextured3D(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineColoredTextured3D(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineLitTextured3D(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
@@ -2274,13 +2322,17 @@ namespace CNA::Internal::Renderers::SdlGpu
         void QueueColoredDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount,
-                              const GpuDrawParams* params = nullptr);
+                              const GpuDrawParams* params,
+                              const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                const Matrix& world, const Matrix& view, const Matrix& projection,
-                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                               bool hasVertexColor,
+                               const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueLitTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
-                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                  const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
 
         // Phase SDLGPU-7: AlphaTestEffect / DualTextureEffect.
         void CreateAlphaTestResources(ConstructionResources& resources);
@@ -2288,19 +2340,27 @@ namespace CNA::Internal::Renderers::SdlGpu
         void CreateDualTextureResources(ConstructionResources& resources);
         void DestroyDualTextureResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineAlphaTest3D(
-            std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            bool hasVertexColor,
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineDualTexture3D(
-            std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            bool hasVertexColor,
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         void QueueAlphaTestDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                 const Matrix& world, const Matrix& view, const Matrix& projection,
-                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                bool hasVertexColor,
+                                const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueDualTextureDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
-                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                  bool hasVertexColor,
+                                  const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void IssueAlphaTestDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const AlphaTestDrawCommand& command,
                                SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
                                SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
@@ -2314,12 +2374,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         void CreateEnvMapResources(ConstructionResources& resources);
         void DestroyEnvMapResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineEnvMap3D(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         void QueueEnvMapDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
-                             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                             const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void IssueEnvMapDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const EnvMapDrawCommand& command,
                             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
                             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
@@ -2688,9 +2750,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> coloredPipelines_;
         std::vector<ColoredDrawCommand> coloredDrawCommands_;
 
-        SDL_GPUShader* texturedVertexShader_ = nullptr;         ///< stride 20 (VertexPositionTexture)
-        SDL_GPUShader* coloredTexturedVertexShader_ = nullptr;  ///< stride 24 (VertexPositionColorTexture)
-        SDL_GPUShader* texturedFragmentShader_ = nullptr;       ///< shared by both stride-20/24 pipelines
+        SDL_GPUShader* texturedVertexShader_ = nullptr;         ///< POSITION0/TEXCOORD0 variant.
+        SDL_GPUShader* coloredTexturedVertexShader_ = nullptr;  ///< POSITION0/COLOR0/TEXCOORD0 variant.
+        SDL_GPUShader* texturedFragmentShader_ = nullptr;       ///< Shared by both semantic variants.
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> texturedPipelines_;
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> coloredTexturedPipelines_;
         std::vector<TexturedDrawCommand> texturedDrawCommands_;
@@ -2700,19 +2762,17 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> litTexturedPipelines_;
         std::vector<LitTexturedDrawCommand> litTexturedDrawCommands_;
 
-        // Phase SDLGPU-7. alphaTestPipelines_ holds BOTH stride-20 and stride-32 pipelines
-        // (shared shader, different vertex_input_state) -- its cache key folds in the stride
-        // (see GetOrCreatePipelineAlphaTest3D's own key computation), unlike every other
-        // pipeline map here which is already stride-specific by construction.
-        SDL_GPUShader* alphaTestVertexShader_ = nullptr;         ///< strides 20/32 (no vertex colour)
-        SDL_GPUShader* alphaTestColoredVertexShader_ = nullptr;  ///< stride 24 (vertex colour tint)
+        // Phase SDLGPU-7/59. Each cache key includes the fully resolved semantic input layout;
+        // colour and non-colour variants use separate shaders and maps.
+        SDL_GPUShader* alphaTestVertexShader_ = nullptr;         ///< No COLOR0 tint.
+        SDL_GPUShader* alphaTestColoredVertexShader_ = nullptr;  ///< COLOR0 tint.
         SDL_GPUShader* alphaTestFragmentShader_ = nullptr;
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> alphaTestPipelines_;
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> alphaTestColoredPipelines_;
         std::vector<AlphaTestDrawCommand> alphaTestDrawCommands_;
 
-        SDL_GPUShader* dualTextureVertexShader_ = nullptr;         ///< stride 20
-        SDL_GPUShader* dualTextureColoredVertexShader_ = nullptr;  ///< stride 24
+        SDL_GPUShader* dualTextureVertexShader_ = nullptr;         ///< TEXCOORD0/1, no COLOR0 tint.
+        SDL_GPUShader* dualTextureColoredVertexShader_ = nullptr;  ///< TEXCOORD0/1 with COLOR0 tint.
         SDL_GPUShader* dualTextureFragmentShader_ = nullptr;
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> dualTexturePipelines_;
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> dualTextureColoredPipelines_;

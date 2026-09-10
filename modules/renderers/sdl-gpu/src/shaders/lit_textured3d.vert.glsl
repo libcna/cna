@@ -4,6 +4,7 @@
 layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inUV;
+layout(location = 3) in vec4 inColor;
 
 layout(location = 0) out vec2  fragUV;
 layout(location = 1) out vec3  fragNormal;
@@ -57,7 +58,7 @@ void main() {
     mat3 normalMatrix = transpose(inverse(mat3(lp.world)));
     fragNormal = normalize(normalMatrix * inNormal);
     fragWorldPos = (lp.world * vec4(inPos, 1.0)).xyz;
-    fragTint = pc.diffuseColor;
+    fragTint = (pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor : pc.diffuseColor;
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
     // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (matches Vulkan).

@@ -841,7 +841,16 @@ class DualTextureSlotSamplerContractTest : public Game
         dev.SetRenderTarget(&rt);
         ResetDeviceState(dev, edge, edge);
         dev.Clear(kSentinel);
-        DrawDual(dev, cfg);
+        try
+        {
+            DrawDual(dev, cfg);
+        }
+        catch (...)
+        {
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ResetDeviceState(dev, kBBW, kBBH);
+            throw;
+        }
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         ResetDeviceState(dev, kBBW, kBBH);
         std::vector<Color> pix(static_cast<std::size_t>(edge) * edge, Color(0, 0, 0, 0));
@@ -860,12 +869,21 @@ class DualTextureSlotSamplerContractTest : public Game
         dev.SetRenderTarget(&rt);
         ResetDeviceState(dev, kRT, kRT);
         dev.Clear(kSentinel);
-        dev.setViewportProperty(Viewport(0, 0, kRT, kRT / 2));
-        DrawDual(dev, a);
-        if (between) between(dev);
-        dev.setViewportProperty(Viewport(0, kRT / 2, kRT, kRT / 2));
-        DrawDual(dev, b);
-        if (after) after(dev);
+        try
+        {
+            dev.setViewportProperty(Viewport(0, 0, kRT, kRT / 2));
+            DrawDual(dev, a);
+            if (between) between(dev);
+            dev.setViewportProperty(Viewport(0, kRT / 2, kRT, kRT / 2));
+            DrawDual(dev, b);
+            if (after) after(dev);
+        }
+        catch (...)
+        {
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ResetDeviceState(dev, kBBW, kBBH);
+            throw;
+        }
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         ResetDeviceState(dev, kBBW, kBBH);
         std::vector<Color> pix(static_cast<std::size_t>(kRT) * kRT, Color(0, 0, 0, 0));

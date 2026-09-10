@@ -384,7 +384,18 @@ class StockEffectSamplerContractTest : public Game
         dev.SetRenderTarget(&rt);
         ResetDeviceState(dev, kRT, kRT);
         dev.Clear(kSentinel);
-        draw(dev);
+        try
+        {
+            draw(dev);
+        }
+        catch (...)
+        {
+            // A capability skip is still an exceptional exit from `draw`; never leave its
+            // temporary target bound for the next independent family (or for Game::EndDraw).
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ResetDeviceState(dev, kBBW, kBBH);
+            throw;
+        }
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         ResetDeviceState(dev, kBBW, kBBH);
         std::vector<Color> pix(static_cast<std::size_t>(kRT) * kRT, Color(0, 0, 0, 0));

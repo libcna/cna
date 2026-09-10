@@ -4,10 +4,12 @@
 layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec4 inColor;
 layout(location = 2) in vec2 inUV;
+layout(location = 3) in vec2 inUV1;
 
 layout(location = 0) out vec2 fragUV;
-layout(location = 1) out vec4 fragTint;
-layout(location = 2) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-factor
+layout(location = 1) out vec2 fragUV1;
+layout(location = 2) out vec4 fragTint;
+layout(location = 3) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-factor
 
 layout(set = 1, binding = 0) uniform PC {
     mat4  mvp;
@@ -31,6 +33,7 @@ layout(set = 1, binding = 1) uniform FogParams {
 void main() {
     gl_Position = pc.mvp * vec4(inPos, 1.0);
     fragUV = inUV;
+    fragUV1 = inUV1;
     fragTint = (pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor : pc.diffuseColor;
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->

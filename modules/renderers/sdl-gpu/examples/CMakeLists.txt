@@ -53,6 +53,23 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_Parity_fill_mode_wireframe PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # SDLGPU-59: the same EasyGL/WebGPU semantic-declaration oracles now exercise SDL_GPU's
+    # declaration-resolved stock vertex inputs, including independent DualTexture TEXCOORD1 and
+    # the stock ModelProcessor's lit Position+Normal+Color+TextureCoordinate record.
+    foreach(vertex_parity_test IN ITEMS
+            vertex_semantics
+            lit_vertex_color
+            unlit_position_color
+            dual_texture_uv1)
+        cna_sdlgpu_test(cna_test_sdlgpu_parity_${vertex_parity_test}
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_${vertex_parity_test}.cpp)
+        cna_register_renderer_test(NAME SdlGpu_Parity_${vertex_parity_test}
+            COMMAND cna_test_sdlgpu_parity_${vertex_parity_test}
+            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_Parity_${vertex_parity_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
     foreach(sampler_parity_test IN ITEMS
             sampler_filters
             sampler_max_mip_level
@@ -92,6 +109,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_3d sdlgpu_3d_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_3D COMMAND cna_test_sdlgpu_3d
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_3D PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # plans/plan_sdlgpu.md SDLGPU-31/32: AlphaTestEffect and DualTextureEffect.
     cna_sdlgpu_test(cna_test_sdlgpu_effects sdlgpu_effects_test.cpp)
@@ -397,6 +416,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         ${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_sampler_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_StockEffectSamplerContract COMMAND cna_test_sdlgpu_stock_effect_sampler
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_StockEffectSamplerContract PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-150 cross-renderer control: TextureFilter::Point must select exactly ONE texel and
     # TextureAddressMode must decide which one, on SpriteBatch and on the device SamplerStates[0] 3D
@@ -460,6 +481,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         ${CNA_GRAPHICS_EXAMPLES_DIR}/dualtexture_slot_sampler_contract_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_DualTextureSlotSamplerContract COMMAND cna_test_sdlgpu_dualtexture_slot_sampler
         TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_DualTextureSlotSamplerContract PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # REMED-GFX-182 cross-renderer control: the slot-1 sampler questions the fixture above does not
     # ask -- returning to a previous sampler, interleaving with an unrelated effect, sweeping either
