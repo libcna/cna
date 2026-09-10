@@ -260,9 +260,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   distinct CPU color planes. Clear/discard, resolve and mip generation visit every attachment;
   only slot zero owns depth/stencil and receives the `COLOR0` output emitted by classic stock
   effects. Higher attachments therefore retain their own explicit clear/preserved contents. This
-  includes mixed 2D/cube sets and distinct faces of one cube. The shared 22-check contract passes
+  includes mixed 2D/cube sets and faces from distinct cube resources. The shared 22-check contract passes
   unchanged on both Software and EasyGL, including face-local 4x resolve, independent mip chains,
   cube depth ownership and bound-cube destruction with live-peer finalization (`SOFTWARE-135`).
+  `SOFTWARE-313` removes three older fixtures' pre-implementation cube exclusions and their
+  Reach-induced MRT/backbuffer skips: Software now executes all 22 present-lifecycle legs, all 30
+  backbuffer-order checks and all 43 render-target pass-boundary checks without a skipped branch.
 - **Every classic renderable target format preserves its declared storage** (`SOFTWARE-143`,
   `SOFTWARE-146`, `SOFTWARE-151`). `RenderTarget2D` and `RenderTargetCube` accept Color,
   `Rgba1010102`, `Rg32`, `Rgba64`, `Single`, `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2`,

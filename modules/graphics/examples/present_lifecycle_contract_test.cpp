@@ -160,12 +160,12 @@ namespace
     /**
      * @brief Whether a `RenderTargetCube` face can be bound as a destination here.
      *
-     * Declared rather than asserted, exactly as the neighbouring render-target fixtures do. Software
-     * refuses a cube destination outright (REMED-GFX-182 records that as a deliberate v1 boundary),
-     * and Headless does not rasterize at all.
+     * Declared rather than asserted, exactly as the neighbouring render-target fixtures do.
+     * Headless does not rasterize at all; Software has implemented cube destinations since
+     * SOFTWARE-119 and must execute these lifecycle legs too.
      */
     constexpr bool kCubeTargetSupported =
-#if defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE)
+#if defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;
@@ -353,7 +353,8 @@ class PresentLifecycleContractTest : public Game
         const Color right = ReadPixel(rt, (kRT * 3) / 4, kRT / 2, rightFailed);
         if (leftFailed || rightFailed)
         {
-            boundary(label + ": GetData is unavailable on " + kRendererName + " -- boundary recorded");
+            boundary(label + ": GetData is unavailable in this state on " + kRendererName +
+                     " (an active render target is intentionally unreadable) -- boundary recorded");
             return;
         }
         check(Near(left, drawn),
