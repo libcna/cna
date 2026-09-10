@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import xml.etree.ElementTree as ET
 
@@ -81,6 +82,23 @@ def first_difference(left, right):
 
 
 MSBUILD_NS = "http://schemas.microsoft.com/developer/msbuild/2003"
+
+
+# One lock per staged directory. Two build units can name the same project -- SAMPLE-003's two
+# output roots do -- and they get the same staging path, so at `--jobs 2` one thread copied the
+# source tree and wrote the reconstruction while the other was already building from it. The
+# reference that lost the race came out with ten mip levels against a reference that has one,
+# because the copy it read still carried the project's own `GenerateMipmaps True` that the
+# reconstruction removes. Serially both are byte-identical
+# (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-217`).
+_STAGING_LOCKS = {}
+_STAGING_LOCKS_GUARD = threading.Lock()
+
+
+def staging_lock(path):
+    """The lock that owns one staging directory, created once however many ask for it."""
+    with _STAGING_LOCKS_GUARD:
+        return _STAGING_LOCKS.setdefault(os.path.abspath(path), threading.Lock())
 
 
 def reconstruct_project(project, runner, staged, source_root=None):
@@ -156,7 +174,8 @@ def build_one(job):
     if runner.get("kind") in ("explicit", "enumerated") or source_root:
         staged = os.path.join(staging, slug(unit["project"]).replace(".contentproj", ""))
         try:
-            reconstructed = reconstruct_project(project, runner, staged, source_root)
+            with staging_lock(staged):
+                reconstructed = reconstruct_project(project, runner, staged, source_root)
         except Exception as error:  # noqa: BLE001 - a reconstruction that fails is a finding
             reconstructed = None
             print("reconstruct failed for %s: %s" % (unit["project"], error), flush=True)
