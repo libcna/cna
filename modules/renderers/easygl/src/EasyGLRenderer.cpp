@@ -11500,19 +11500,29 @@ CNA_GL_PUNCTUAL_DECL
                 [&input, &sourceBuffer, &sourceElement, &sourceStride, &sourceBaseOffset](
                     const EasyGLVertexBufferRenderer& candidateBuffer,
                     std::size_t candidateStride,
-                    int vertexOffset)
+                    int vertexOffset,
+                    const GpuVertexStreamBinding* stream)
                 {
                     const auto& candidateDeclaration = candidateBuffer.GetDeclarationElements();
-                    const auto element = std::find_if(
-                        candidateDeclaration.begin(), candidateDeclaration.end(),
-                        [&input](const VertexElement& candidate)
+                    const VertexElement* element = nullptr;
+                    for (std::size_t elementIndex = 0;
+                         elementIndex < candidateDeclaration.size(); ++elementIndex)
+                    {
+                        const VertexElement& candidate = candidateDeclaration[elementIndex];
+                        const int effectiveUsageIndex = stream != nullptr
+                            ? stream->EffectiveUsageIndex(
+                                elementIndex, candidate.getUsageIndexProperty())
+                            : candidate.getUsageIndexProperty();
+                        if (candidate.getVertexElementUsageProperty() == input.usage &&
+                            effectiveUsageIndex == input.usageIndex)
                         {
-                            return candidate.getVertexElementUsageProperty() == input.usage &&
-                                   candidate.getUsageIndexProperty() == input.usageIndex;
-                        });
-                    if (element == candidateDeclaration.end()) return false;
+                            element = &candidate;
+                            break;
+                        }
+                    }
+                    if (element == nullptr) return false;
                     sourceBuffer = &candidateBuffer;
-                    sourceElement = &*element;
+                    sourceElement = element;
                     sourceStride = candidateStride;
                     sourceBaseOffset = static_cast<std::size_t>(std::max(vertexOffset, 0)) *
                                        candidateStride;
@@ -11531,10 +11541,10 @@ CNA_GL_PUNCTUAL_DECL
                 const std::size_t candidateStride = stream.strideInBytes > 0
                     ? static_cast<std::size_t>(stream.strideInBytes)
                     : candidateBuffer.GetStride();
-                findInStream(candidateBuffer, candidateStride, stream.vertexOffset);
+                findInStream(candidateBuffer, candidateStride, stream.vertexOffset, &stream);
             }
             if (sourceElement == nullptr)
-                findInStream(buffer, buffer.GetStride(), 0);
+                findInStream(buffer, buffer.GetStride(), 0, nullptr);
             if (sourceElement == nullptr) continue;
 
             const VertexAttribFormat desc =
@@ -12791,6 +12801,7 @@ else
                     static_cast<std::size_t>(std::max(stream.vertexOffset, 0)) * stride;
                 entry.instanceFrequency = stream.instanceFrequency > 0
                     ? static_cast<unsigned int>(stream.instanceFrequency) : 0u;
+                entry.binding = &stream;
                 streams.push_back(entry);
             }
             if (streams.empty())

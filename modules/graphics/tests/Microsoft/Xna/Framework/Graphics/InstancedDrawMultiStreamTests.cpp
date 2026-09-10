@@ -1208,12 +1208,12 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedDrawsUnderDifferentBindingSetsKeepThe
 }
 
 // ---------------------------------------------------------------------------
-// Coverage item 6 (non-contiguous ACTIVE slots) and the REMED-GFX-201 semantic-composition rule on
-// the instanced route. Slots 1 and 3 repeat an earlier per-vertex stream's complete (usage,
-// usageIndex) set, so XNA drops them -- "Stream not in use!" -- and the ACTIVE stream slots become
-// 0, 2, 4, 5 rather than 0, 1, 2, 3. Every active stream must keep its OWN public slot number.
+// Coverage item 6 and the REMED-GFX-201/SOFTWARE-320 semantic-composition rule on the instanced
+// route. Slots 1 and 3 repeat an earlier per-vertex stream's complete (usage, usageIndex) set, so
+// FNA remaps them to the next free indices. BasicEffect does not consume those remapped inputs, but
+// the later instance streams must still keep their own public slots and rates.
 // ---------------------------------------------------------------------------
-TEST_F(InstancedDrawMultiStreamTest, DuplicateSemanticStreamsAreDroppedAndSlotsStayNonContiguous)
+TEST_F(InstancedDrawMultiStreamTest, DuplicateSemanticStreamsRemapToUnusedIndices)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
@@ -1279,7 +1279,7 @@ TEST_F(InstancedDrawMultiStreamTest, DuplicateSemanticStreamsAreDroppedAndSlotsS
     const FrameSnapshot snapshot = CaptureTarget(target);
     ExpectExactlyTheseCells(
         snapshot, layout, CanonicalCells(0),
-        "a repeated (usage, usageIndex) set contributes nothing and does not renumber the rest");
+        "a repeated usage/index remaps away from BasicEffect inputs without disturbing later streams");
 }
 
 // ---------------------------------------------------------------------------

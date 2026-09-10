@@ -1294,23 +1294,38 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<int>(currentVertexBuffers_.size()),
             CNA::Internal::Renderers::kMaxVertexStreams);
         int combinedByteBase = 0;
-        // REMED-GFX-201: XNA composes the bound declarations by SEMANTIC, not by position. FNA3D's
-        // drivers walk the bindings in slot order tracking every (usage, usageIndex) pair already
-        // claimed; a later element that repeats a claimed pair is pushed to the next free usage
-        // index, which no stock vertex shader has an input for, so it resolves to "Stream not in
-        // use!" and is skipped. A second stream that simply repeats stream 0's declaration
-        // therefore contributes nothing at all -- it is not a second half of the vertex.
+        // REMED-GFX-201/SOFTWARE-320: XNA composes the bound declarations by semantic. FNA3D's
+        // drivers walk every element in binding order and move a repeated (usage, usageIndex) pair
+        // to the first free index of that same usage. Preserve that effective index explicitly:
+        // a stock shader may ignore the remapped duplicate while still consuming another unique
+        // element in the same stream, and an arbitrary compiled effect may consume the remapped
+        // index itself.
         bool usageClaimed[static_cast<std::size_t>(VertexElementUsage::TessellateFactor) + 1u]
                          [16] = {};
-        const auto claimUsage = [&](const VertexElement& element) -> bool {
+        const auto remapUsage = [&](const VertexElement& element) -> int {
             const auto usage = static_cast<std::size_t>(element.getVertexElementUsageProperty());
-            const int index = element.getUsageIndexProperty();
+            int index = element.getUsageIndexProperty();
             if (usage >= std::size(usageClaimed) || index < 0 || index >= 16)
-                return false;
+                return index;
             if (usageClaimed[usage][static_cast<std::size_t>(index)])
-                return false;
+            {
+                index = -1;
+                for (int candidate = 0; candidate < 16; ++candidate)
+                {
+                    if (!usageClaimed[usage][static_cast<std::size_t>(candidate)])
+                    {
+                        index = candidate;
+                        break;
+                    }
+                }
+                if (index < 0)
+                {
+                    throw System::NotSupportedException(
+                        "All sixteen usage indices for one vertex semantic are already bound.");
+                }
+            }
             usageClaimed[usage][static_cast<std::size_t>(index)] = true;
-            return true;
+            return index;
         };
 
         for (int slot = 0; slot < bindingCount; ++slot)
@@ -1320,25 +1335,6 @@ namespace Microsoft::Xna::Framework::Graphics
             if (buffer == nullptr)
                 continue;   // SetVertexBuffers rejects nulls; a defaulted binding is simply unused
 
-            // REMED-GFX-202: the usage claim covers per-instance streams too, exactly as FNA3D's
-            // own drivers walk one `attrUse` table across every binding regardless of frequency.
-            {
-                const auto& elements = buffer->getVertexDeclarationProperty().GetVertexElements();
-                int claimed = 0;
-                for (const VertexElement& element : elements)
-                    if (claimUsage(element)) ++claimed;
-                if (!elements.empty() && claimed == 0)
-                    continue;   // every element repeats an earlier stream's: not in use
-                if (claimed != static_cast<int>(elements.size()))
-                {
-                    throw System::NotSupportedException(
-                        "The VertexBuffer bound to slot " + std::to_string(slot) +
-                        " repeats some but not all of an earlier binding's vertex element "
-                        "usages. CNA describes a combined vertex layout by its byte stride, so a "
-                        "partially-duplicated stream has no expressible layout.");
-                }
-            }
-
             auto& stream = p.vertexStreams[static_cast<std::size_t>(p.vertexStreamCount)];
             stream.slot = slot;
             stream.buffer = &buffer->GetRenderer();
@@ -1346,6 +1342,17 @@ namespace Microsoft::Xna::Framework::Graphics
                 buffer->getVertexDeclarationProperty().getVertexStrideProperty();
             stream.instanceFrequency = binding.getInstanceFrequencyProperty();
             stream.vertexCount = buffer->getVertexCountProperty();  // plans/plan_fx.md FX-131, see above
+            // REMED-GFX-202: one usage table covers per-vertex and per-instance streams, exactly as
+            // FNA3D's native drivers do. Keep every stream: even a fully colliding declaration can
+            // become usage indices 1..15 and be consumed by the active shader.
+            const auto& elements =
+                buffer->getVertexDeclarationProperty().GetVertexElements();
+            stream.effectiveUsageIndexCount = static_cast<int>(elements.size());
+            for (std::size_t elementIndex = 0; elementIndex < elements.size(); ++elementIndex)
+            {
+                stream.effectiveUsageIndices[elementIndex] =
+                    remapUsage(elements[elementIndex]);
+            }
             if (stream.instanceFrequency == 0)
             {
                 stream.combinedByteBase = combinedByteBase;

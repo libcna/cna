@@ -910,10 +910,17 @@ namespace CNA::Internal::Renderers::EasyGL
             {
                 const CompiledEffectStreamEXT& stream = streams[s];
                 if (stream.buffer == nullptr) continue;
-                for (const VertexElement& element : stream.buffer->GetDeclarationElements())
+                const auto& elements = stream.buffer->GetDeclarationElements();
+                for (std::size_t elementIndex = 0;
+                     elementIndex < elements.size(); ++elementIndex)
                 {
+                    const VertexElement& element = elements[elementIndex];
+                    const int effectiveUsageIndex = stream.binding != nullptr
+                        ? stream.binding->EffectiveUsageIndex(
+                            elementIndex, element.getUsageIndexProperty())
+                        : element.getUsageIndexProperty();
                     if (ToMojoShaderUsage(element.getVertexElementUsageProperty()) == shaderInput.usage &&
-                        element.getUsageIndexProperty() == shaderInput.index)
+                        effectiveUsageIndex == shaderInput.index)
                     {
                         match = &element;
                         matchStream = &stream;

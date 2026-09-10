@@ -2507,11 +2507,19 @@ namespace CNA::Internal::Renderers::Software
                 int usageIndex) const
             {
                 const auto readFrom = [&](const SoftwareVertexBufferRenderer& buffer,
-                                          const std::uint8_t* base) -> Attribute {
-                    for (const auto& element : buffer.Declaration().GetElements())
+                                          const std::uint8_t* base,
+                                          const GpuVertexStreamBinding* stream) -> Attribute {
+                    const auto& elements = buffer.Declaration().GetElements();
+                    for (std::size_t elementIndex = 0;
+                         elementIndex < elements.size(); ++elementIndex)
                     {
+                        const auto& element = elements[elementIndex];
+                        const int effectiveUsageIndex = stream != nullptr
+                            ? stream->EffectiveUsageIndex(
+                                elementIndex, element.getUsageIndexProperty())
+                            : element.getUsageIndexProperty();
                         if (element.getVertexElementUsageProperty() == usage &&
-                            element.getUsageIndexProperty() == usageIndex)
+                            effectiveUsageIndex == usageIndex)
                         {
                             return Decode(base + element.getOffsetProperty(),
                                           element.getVertexElementFormatProperty());
@@ -2524,7 +2532,7 @@ namespace CNA::Internal::Renderers::Software
                 {
                     if (fallbackBuffer == nullptr || fallbackBuffer->Declaration().IsEmpty())
                         return {};
-                    return readFrom(*fallbackBuffer, recordBase[0]);
+                    return readFrom(*fallbackBuffer, recordBase[0], nullptr);
                 }
 
                 for (int i = 0; i < params->vertexStreamCount; ++i)
@@ -2535,7 +2543,7 @@ namespace CNA::Internal::Renderers::Software
                     const auto* buffer =
                         static_cast<const SoftwareVertexBufferRenderer*>(stream.buffer);
                     const Attribute attribute = readFrom(
-                        *buffer, recordBase[static_cast<std::size_t>(i)]);
+                        *buffer, recordBase[static_cast<std::size_t>(i)], &stream);
                     if (attribute.found)
                         return attribute;
                 }

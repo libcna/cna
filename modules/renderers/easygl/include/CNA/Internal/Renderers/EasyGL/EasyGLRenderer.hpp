@@ -1612,6 +1612,11 @@ namespace CNA::Internal::Renderers::EasyGL
             std::size_t baseByteOffset = 0;
             /** @brief `InstanceFrequency`; 0 means the stream advances once per vertex. */
             unsigned int instanceFrequency = 0;
+            /**
+             * @brief Renderer-neutral binding metadata containing XNA/FNA's effective usage-index
+             *        remap, or null for an internal single-stream draw with no collisions.
+             */
+            const GpuVertexStreamBinding* binding = nullptr;
         };
 
         /**

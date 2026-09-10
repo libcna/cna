@@ -1289,6 +1289,28 @@ namespace CNA::Internal::Renderers
 
         /// Vertex elements the stream's buffer holds, for renderers that must bound a native range.
         int vertexCount = 0;
+
+        /// SOFTWARE-320: effective usage index for each declaration element after XNA/FNA's
+        /// binding-order collision remap. A repeated usage/index takes the first free index of the
+        /// same usage; zero count means the declaration's own indices are already authoritative.
+        std::array<int, 16> effectiveUsageIndices{};
+        int effectiveUsageIndexCount = 0;
+
+        /**
+         * @brief Returns one declaration element's binding-time usage index.
+         *
+         * @param elementOrdinal Zero-based ordinal in this stream's vertex declaration.
+         * @param declaredUsageIndex The usage index stored in that declaration element.
+         * @return The collision-remapped index, or @p declaredUsageIndex when no remap metadata
+         *         accompanies this internal stream tuple.
+         */
+        [[nodiscard]] int EffectiveUsageIndex(
+            std::size_t elementOrdinal, int declaredUsageIndex) const noexcept
+        {
+            if (elementOrdinal < static_cast<std::size_t>(effectiveUsageIndexCount))
+                return effectiveUsageIndices[elementOrdinal];
+            return declaredUsageIndex;
+        }
     };
 
     /// XNA 4.0 HiDef's `SetVertexBuffers` limit, and therefore the fixed capacity of a draw's

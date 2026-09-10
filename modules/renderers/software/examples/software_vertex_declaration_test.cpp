@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-108 / SOFTWARE-130: renderer-independent public pixel contract for
+// SOFTWARE-108 / SOFTWARE-130 / SOFTWARE-320: renderer-independent public pixel contract for
 // declaration-driven vertex input, compiled against both Software and EasyGL.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -9,10 +9,13 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
@@ -20,10 +23,12 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <memory>
 #include <vector>
 
@@ -254,6 +259,143 @@ class VertexDeclarationFormatContractTest final : public Game
         device.SetVertexBuffers({});
     }
 
+    struct PositionColorVertex
+    {
+        float position[3];
+        std::uint8_t color[4];
+    };
+
+    struct PositionTextureVertex
+    {
+        float position[3];
+        float textureCoordinate[2];
+    };
+
+    void TestPartialCrossStreamUsageCollision(GraphicsDevice& device, BasicEffect& effect)
+    {
+        std::array<PositionColorVertex, 6> primary{};
+        std::array<PositionTextureVertex, 6> secondary{};
+        for (std::size_t i = 0; i < kQuad.size(); ++i)
+        {
+            std::memcpy(primary[i].position, kQuad[i].data(), 12);
+            std::fill(std::begin(primary[i].color), std::end(primary[i].color), 255);
+            secondary[i].textureCoordinate[0] = 0.75f;
+            secondary[i].textureCoordinate[1] = 0.75f;
+        }
+
+        const VertexDeclaration primaryDeclaration(sizeof(PositionColorVertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+        });
+        const VertexDeclaration secondaryDeclaration(sizeof(PositionTextureVertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        VertexBuffer primaryBuffer(device, primaryDeclaration, 6, BufferUsage::None);
+        VertexBuffer secondaryBuffer(device, secondaryDeclaration, 6, BufferUsage::None);
+        primaryBuffer.SetData(primary.data(), 6);
+        secondaryBuffer.SetData(secondary.data(), 6);
+
+        Texture2D texture(device, 2, 2);
+        const Color pixels[4] = {Color::Green, Color::Green, Color::Green, Color::Red};
+        texture.SetData(pixels, 4);
+        device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+        effect.setTextureEnabledProperty(true);
+        effect.setTextureProperty(&texture);
+        device.SetVertexBuffers({VertexBufferBinding(&primaryBuffer),
+                                 VertexBufferBinding(&secondaryBuffer)});
+        Prepare(device, effect);
+        try
+        {
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            CheckRed(device, "partial cross-stream usage collision retains unique TexCoord0");
+        }
+        catch (const std::exception& exception)
+        {
+            std::printf("[FAIL] partial cross-stream usage collision threw: %s\n",
+                        exception.what());
+            ++failed_;
+        }
+        device.SetVertexBuffers({});
+        effect.setTextureProperty(nullptr);
+        effect.setTextureEnabledProperty(false);
+    }
+
+    struct PositionTexture0Vertex
+    {
+        float position[3];
+        float textureCoordinate[2];
+    };
+
+    struct CollidingTextureVertex
+    {
+        float textureCoordinate[2];
+    };
+
+    void TestCompleteCrossStreamUsageCollision(GraphicsDevice& device)
+    {
+        std::array<PositionTexture0Vertex, 6> primary{};
+        std::array<CollidingTextureVertex, 6> secondary{};
+        for (std::size_t i = 0; i < kQuad.size(); ++i)
+        {
+            std::memcpy(primary[i].position, kQuad[i].data(), 12);
+            secondary[i].textureCoordinate[0] = 0.75f;
+            secondary[i].textureCoordinate[1] = 0.75f;
+        }
+
+        const VertexDeclaration primaryDeclaration(sizeof(PositionTexture0Vertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const VertexDeclaration secondaryDeclaration(sizeof(CollidingTextureVertex), {
+            VertexElement(0, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        VertexBuffer primaryBuffer(device, primaryDeclaration, 6, BufferUsage::None);
+        VertexBuffer secondaryBuffer(device, secondaryDeclaration, 6, BufferUsage::None);
+        primaryBuffer.SetData(primary.data(), 6);
+        secondaryBuffer.SetData(secondary.data(), 6);
+
+        Texture2D white(device, 1, 1);
+        const Color whitePixel = Color::White;
+        white.SetData(&whitePixel, 1);
+        Texture2D pattern(device, 2, 2);
+        const Color patternPixels[4] = {
+            Color::Green, Color::Green, Color::Green, Color::Red,
+        };
+        pattern.SetData(patternPixels, 4);
+
+        DualTextureEffect effect(device);
+        effect.setWorldProperty(Matrix::getIdentityProperty());
+        effect.setViewProperty(Matrix::getIdentityProperty());
+        effect.setProjectionProperty(Matrix::getIdentityProperty());
+        effect.setTextureProperty(&white);
+        effect.setTexture2Property(&pattern);
+        device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+        device.getSamplerStatesProperty()[1] = SamplerState::PointClamp;
+        device.SetVertexBuffers({VertexBufferBinding(&primaryBuffer),
+                                 VertexBufferBinding(&secondaryBuffer)});
+        device.Clear(Color::Green);
+        device.SetDepthTestEnabled(false);
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        effect.Apply();
+        try
+        {
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            CheckRed(device, "complete cross-stream collision remaps TexCoord0 to TexCoord1");
+        }
+        catch (const std::exception& exception)
+        {
+            std::printf("[FAIL] complete cross-stream usage collision threw: %s\n",
+                        exception.what());
+            ++failed_;
+        }
+        device.SetVertexBuffers({});
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -269,6 +411,8 @@ protected:
         TestUserIndexed<std::uint32_t>(device, effect,
                                        "reordered user-indexed declaration (32-bit)");
         TestMultipleStreams(device, effect);
+        TestPartialCrossStreamUsageCollision(device, effect);
+        TestCompleteCrossStreamUsageCollision(device);
         std::printf("=== %d/%d PASS ===\n", passed_, passed_ + failed_);
         Exit();
     }
