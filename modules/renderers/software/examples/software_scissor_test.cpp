@@ -48,6 +48,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/ArgumentException.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -114,6 +115,15 @@ class SoftwareScissorTest : public Game
         if (ok) ++passCount_;
     }
 
+    template <typename ExceptionT, typename Fn>
+    static bool Throws(Fn&& fn)
+    {
+        try { fn(); }
+        catch (const ExceptionT&) { return true; }
+        catch (...) { return false; }
+        return false;
+    }
+
     void SetVp(GraphicsDevice& dev, int x, int y, int w, int h)
     {
         dev.setViewportProperty(Viewport(x, y, w, h));
@@ -126,8 +136,10 @@ class SoftwareScissorTest : public Game
     // GraphicsDevice.RasterizerState directly) see the same state.
     void SetScissorEnabled(GraphicsDevice& dev, bool enable)
     {
-        scissorRS_.setCullModeProperty(CullMode::None);
-        scissorRS_.setScissorTestEnableProperty(enable);
+        RasterizerState next;
+        next.setCullModeProperty(CullMode::None);
+        next.setScissorTestEnableProperty(enable);
+        scissorRS_ = next;
         dev.setRasterizerStateProperty(scissorRS_);
     }
 
@@ -352,37 +364,23 @@ protected:
             check(Redish(At(pix, 40, 47)) && !Redish(At(pix, 40, 48)), "D5: bottom edge cut at y=47");
         }
 
-        // ---- E (Phase 13): scissor extending outside the framebuffer is intersected safely ------
+        // ---- E (Phase 13): XNA rejects scissors outside the active render surface ---------------
         {
             SetVp(dev, 0, 0, kBBW, kBBH);
             SetScissorEnabled(dev, true);
-            SetScissorRect(dev, -10, 5, 30, 20);   // left edge off-screen -> x[0,19] y[5,24]
-            dev.Clear(Color::Black);
-            DrawSprite(dev, Rectangle(0, 0, kBBW, kBBH), red);
-            const std::vector<Color> pix = ReadBackbuffer(dev);
-            const BBox b = Box(pix, Redish);
-            check(CloseTo(b.minX, 0, 0) && CloseTo(b.maxX, 19, 0) &&
-                  CloseTo(b.minY, 5, 0) && CloseTo(b.maxY, 24, 0),
-                  "E1: negative-origin scissor clamped to x[0,19] y[5,24]: " + b.str());
-
-            SetScissorRect(dev, 80, 60, 30, 30);   // extends past right/bottom -> x[80,95] y[60,71]
-            dev.Clear(Color::Black);
-            DrawSprite(dev, Rectangle(0, 0, kBBW, kBBH), red);
-            const BBox b2 = Box(ReadBackbuffer(dev), Redish);
-            check(CloseTo(b2.minX, 80, 0) && CloseTo(b2.maxX, 95, 0) &&
-                  CloseTo(b2.minY, 60, 0) && CloseTo(b2.maxY, 71, 0),
-                  "E2: over-right/bottom scissor clamped to x[80,95] y[60,71] (no OOB): " + b2.str());
+            check(Throws<System::ArgumentException>([&] { SetScissorRect(dev, -10, 5, 30, 20); }),
+                  "E1: a negative-origin scissor throws ArgumentException");
+            check(Throws<System::ArgumentException>([&] { SetScissorRect(dev, 80, 60, 30, 30); }),
+                  "E2: a scissor extending past the surface throws ArgumentException");
         }
 
         // ---- F (Phase 14): scissor entirely outside framebuffer / viewport -> zero pixels -------
         {
             SetVp(dev, 0, 0, kBBW, kBBH);
             SetScissorEnabled(dev, true);
-            SetScissorRect(dev, 120, 80, 10, 10);   // fully outside the 96x72 framebuffer
-            dev.Clear(Color::Black);
-            DrawSprite(dev, Rectangle(0, 0, kBBW, kBBH), red);
-            check(Box(ReadBackbuffer(dev), Redish).count == 0,
-                  "F1: scissor fully outside framebuffer -> zero pixels drawn");
+            check(Throws<System::ArgumentException>([&] {
+                      SetScissorRect(dev, 120, 80, 10, 10);
+                  }), "F1: a scissor fully outside the surface throws ArgumentException");
 
             SetVp(dev, 0, 0, 40, 40);
             SetScissorRect(dev, 60, 60, 10, 10);    // outside the (0,0,40,40) viewport
@@ -602,17 +600,13 @@ protected:
                   "P1: 3D scissor DISABLED -> entire framebuffer red (rect ignored): " + b.str());
         }
 
-        // ---- Q (Phase 33 UB-guard for 3D): negative / zero-size scissor on the 3D path ----------
+        // ---- Q (Phase 33): invalid and zero-area scissor validation on the 3D path --------------
         {
             SetVp(dev, 0, 0, kBBW, kBBH);
             SetScissorEnabled(dev, true);
-            SetScissorRect(dev, -8, -4, 40, 30);   // x[0,31] y[0,25]
-            dev.Clear(Color::Black);
-            DrawQuad(dev, -1.0f, 1.0f, -1.0f, 1.0f, 0.5f, red);
-            const BBox b = Box(ReadBackbuffer(dev), Redish);
-            check(CloseTo(b.minX, 0, 0) && CloseTo(b.maxX, 31, 0) &&
-                  CloseTo(b.minY, 0, 0) && CloseTo(b.maxY, 25, 0),
-                  "Q1: 3D negative-origin scissor clamped to x[0,31] y[0,25] (no OOB): " + b.str());
+            check(Throws<System::ArgumentException>([&] {
+                      SetScissorRect(dev, -8, -4, 40, 30);
+                  }), "Q1: a negative-origin 3D scissor throws ArgumentException");
 
             SetScissorRect(dev, 40, 30, 0, 0);     // zero-size on the 3D path
             dev.Clear(Color::Black);
@@ -629,13 +623,13 @@ protected:
                               RenderTargetUsage::DiscardContents);
             dev.SetRenderTarget(&rt);
             SetScissorEnabled(dev, true);
-            SetScissorRect(dev, 30, 20, 40, 30);   // x[30,47] y[20,39] on the 48x40 RT (clamped by RT)
+            SetScissorRect(dev, 30, 20, 18, 20);   // exact x[30,47] y[20,39] on the 48x40 RT
             dev.Clear(Color::Black);
             DrawSprite(dev, Rectangle(0, 0, rtW, rtH), red);   // covers the whole RT
 
             std::vector<Color> pix(static_cast<std::size_t>(rtW) * rtH, Color(0, 0, 0, 0));
-            const Rectangle whole(0, 0, rtW, rtH);
-            dev.GetBackBufferData(&whole, pix.data(), 0, static_cast<int>(pix.size()));
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            rt.GetData(pix.data(), 0, static_cast<int>(pix.size()));
 
             int minX = rtW, minY = rtH, maxX = -1, maxY = -1, count = 0, oob = 0;
             for (int y = 0; y < rtH; ++y)
@@ -649,7 +643,6 @@ protected:
                     }
             const std::string s = "x[" + std::to_string(minX) + "," + std::to_string(maxX) + "] y["
                 + std::to_string(minY) + "," + std::to_string(maxY) + "] n=" + std::to_string(count);
-            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             SetVp(dev, 0, 0, kBBW, kBBH);
             check(count > 0 && CloseTo(minX, 30, 0) && CloseTo(maxX, 47, 0) &&
                   CloseTo(minY, 20, 0) && CloseTo(maxY, 39, 0) && oob == 0,
@@ -697,6 +690,7 @@ public:
     SoftwareScissorTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
     }

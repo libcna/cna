@@ -54,6 +54,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <array>
 #include <cstdint>
@@ -169,6 +170,14 @@ class SoftwareIndexedAddressingTest : public Game
         return pix;
     }
 
+    std::vector<Color> ReadWhole(Texture2D& texture, int w, int h)
+    {
+        std::vector<Color> pix(static_cast<std::size_t>(w) * static_cast<std::size_t>(h),
+                               Color(0, 0, 0, 0));
+        texture.GetData(pix.data(), 0, static_cast<int>(pix.size()));
+        return pix;
+    }
+
     /// The pixel inside slot `slot`'s triangle: NDC (kSlotX[slot], -0.15) is always interior
     /// (the triangle is 0.12 wide there), so the probe never lands on an edge.
     static Color ProbeSlot(const std::vector<Color>& pix, int w, int h, std::size_t slot)
@@ -182,9 +191,12 @@ class SoftwareIndexedAddressingTest : public Game
     /// Asserts the exact RGBA of all four slots at once. `expected[i]` is the colour slot i must
     /// show; Color::Black means "no geometry may reach this slot".
     void CheckScene(GraphicsDevice& dev, int w, int h,
-                    const std::array<Color, 4>& expected, const std::string& label)
+                    const std::array<Color, 4>& expected, const std::string& label,
+                    Texture2D* texture = nullptr)
     {
-        const std::vector<Color> pix = ReadWhole(dev, w, h);
+        const std::vector<Color> pix = texture == nullptr
+                                           ? ReadWhole(dev, w, h)
+                                           : ReadWhole(*texture, w, h);
         bool ok = true;
         std::string detail;
         for (std::size_t slot = 0; slot < 4; ++slot)
@@ -490,10 +502,10 @@ protected:
             ResetState(dev);
             dev.Clear(Color::Black);
             DrawRange(dev, fx, vbA, ib16, 3, 0, 9, 3, 1);
-            CheckScene(dev, rtW, rtH, Lit(colorsA, {2}),
-                       "J1: RenderTarget2D honors startIndex=3 + baseVertex=3");
-
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            CheckScene(dev, rtW, rtH, Lit(colorsA, {2}),
+                       "J1: RenderTarget2D honors startIndex=3 + baseVertex=3", &target);
+
             dev.setViewportProperty(Viewport(0, 0, kBBW, kBBH));
             ResetState(dev);
             CheckScene(dev, kBBW, kBBH, Lit(colorsA, {0}),
@@ -542,7 +554,7 @@ protected:
                 int baseVertex, minVertexIndex, numVertices, startIndex, primitiveCount;
                 const char* name;
             };
-            const std::array<RangeCase, 12> cases{{
+            const std::array<RangeCase, 11> cases{{
                 {0, 0, 12, -1, 1, "negative startIndex"},
                 {-1, 0, 12, 0, 1, "negative baseVertex underflows the declared range"},
                 {0, -1, 12, 0, 1, "negative minVertexIndex"},
@@ -554,7 +566,6 @@ protected:
                 {0, 0, 12, 10, 1, "startIndex + consumed count past the index buffer"},
                 {13, 0, 1, 0, 1, "baseVertex past the vertex buffer"},
                 {6, 0, 7, 0, 1, "hint range past the vertex buffer"},
-                {0, 0, 12, 0, std::numeric_limits<int>::max(), "overflowing primitiveCount"},
             }};
             bool allRejected = true;
             std::string failing;
@@ -572,6 +583,12 @@ protected:
             check(allRejected,
                   "L1: every invalid indexed range throws ArgumentOutOfRangeException;"
                   " unrejected:" + (failing.empty() ? std::string(" <none>") : failing));
+            check(Throws<System::NotSupportedException>([&] {
+                      dev.DrawIndexedPrimitives(
+                          PrimitiveType::TriangleList, 0, 0, 12, 0,
+                          std::numeric_limits<int>::max());
+                  }),
+                  "L2: an over-profile primitiveCount throws NotSupportedException before range arithmetic");
         }
 
         // ---- M: a decoded vertex address outside the bound vertex buffer is rejected ----------
@@ -651,6 +668,7 @@ public:
     SoftwareIndexedAddressingTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
     }

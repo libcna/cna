@@ -8,11 +8,9 @@
 //     transfers to `AddrOfPinnedObject() + startIndex * elementSizeInBytes`; the archived XNA
 //     reference documents it as "Index of the first element to get", i.e. an index into `data`.
 //     It is an ELEMENT index, never a byte offset, and never a source-texel offset.
-//   * `elementCount` is the number of DESTINATION ELEMENTS AVAILABLE from `startIndex`. FNA hands
-//     it to the native transfer as `elementCount * elementSizeInBytes`, a capacity; the transfer
-//     size itself comes from the REQUESTED SOURCE REGION. `GetData<T>(T[] data)` passes
-//     `data.Length`, which may exceed the region, so excess capacity is legal and must be left
-//     untouched; a capacity SMALLER than the region must be rejected before any transfer.
+//   * XNA requires `elementCount * sizeof(T)` to equal the requested region size exactly. Both a
+//     smaller and a larger count are rejected before transfer; unused destination capacity remains
+//     legal because it is not part of `elementCount`.
 //   * The requested region of the whole-level overloads is the COMPLETE level 0 (width x height),
 //     never `elementCount` and never a previous request.
 //   * Written destination range on success: exactly [startIndex, startIndex + regionPixels).
@@ -77,6 +75,9 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <cstdint>
@@ -450,6 +451,12 @@ class Texture2DGetDataTransferRangeTest : public Game
         try { fn(); }
         catch (const System::NotSupportedException& e)
         { o.threw = true; o.type = "NotSupportedException"; o.what = e.what(); }
+        catch (const System::ArgumentNullException& e)
+        { o.threw = true; o.type = "ArgumentNullException"; o.what = e.what(); }
+        catch (const System::ArgumentOutOfRangeException& e)
+        { o.threw = true; o.type = "ArgumentOutOfRangeException"; o.what = e.what(); }
+        catch (const System::ArgumentException& e)
+        { o.threw = true; o.type = "ArgumentException"; o.what = e.what(); }
         catch (const std::out_of_range& e)
         { o.threw = true; o.type = "out_of_range"; o.what = e.what(); }
         catch (const std::invalid_argument& e)
@@ -526,22 +533,20 @@ class Texture2DGetDataTransferRangeTest : public Game
                            "T4 oversized destination: still only [5,96) written");
         }
 
-        // T5: EXCESS elementCount. FNA's own GetData<T>(T[] data) passes data.Length, which may
-        //     exceed the region, so this is a legal call -- and only the region may be written.
+        // T5: XNA rejects an elementCount larger than the requested region's exact byte size.
         {
             auto got = GuardedBuffer(kPrefix + kTexN + 120);
             const Outcome o = Attempt([&] { tex.GetData(got.data(), kPrefix, kTexN + 100); });
-            checkSucceeded(o, "T5 excess elementCount (191 for a 91-pixel region) is accepted");
-            if (!o.threw)
-                CheckRange(got, kPrefix, pattern,
-                           "T5 excess capacity is IGNORED, not written: only [5,96) changes");
+            checkThrew(o, "ArgumentException",
+                       "T5 excess elementCount (191 for a 91-pixel region) is rejected");
+            CheckUntouched(got, "T5 rejected excess elementCount touched nothing");
         }
 
         // T6: capacity one element short of the region -- rejected before any transfer.
         {
             auto got = GuardedBuffer(kPrefix + kTexN + kSuffix);
             const Outcome o = Attempt([&] { tex.GetData(got.data(), kPrefix, kTexN - 1); });
-            checkThrew(o, "out_of_range", "T6 elementCount one element too small is rejected");
+            checkThrew(o, "ArgumentException", "T6 elementCount one element too small is rejected");
             CheckUntouched(got, "T6 rejected undersized elementCount touched nothing");
         }
 
@@ -550,7 +555,7 @@ class Texture2DGetDataTransferRangeTest : public Game
         {
             auto got = GuardedBuffer(kPrefix + kTexN + kSuffix);
             const Outcome o = Attempt([&] { tex.GetData(got.data(), kPrefix, 1); });
-            checkThrew(o, "out_of_range", "T7 elementCount=1 for a 91-pixel region is rejected");
+            checkThrew(o, "ArgumentException", "T7 elementCount=1 for a 91-pixel region is rejected");
             CheckUntouched(got, "T7 no partial frame was returned");
         }
 
@@ -607,7 +612,7 @@ class Texture2DGetDataTransferRangeTest : public Game
             const Outcome o = Attempt([&] {
                 tex.GetData(got.data(), std::numeric_limits<int>::max() - 2, kTexN);
             });
-            checkThrew(o, "out_of_range", "T10 overflow-shaped startIndex+elementCount is rejected");
+            checkThrew(o, "ArgumentOutOfRangeException", "T10 overflow-shaped startIndex+elementCount is rejected");
             CheckUntouched(got, "T10 overflow-shaped request touched nothing");
         }
         {
@@ -615,31 +620,31 @@ class Texture2DGetDataTransferRangeTest : public Game
             const Outcome o = Attempt([&] {
                 tex.GetData(got.data(), 1, std::numeric_limits<int>::max());
             });
-            checkThrew(o, "out_of_range", "T11 overflow-shaped elementCount is rejected");
+            checkThrew(o, "ArgumentOutOfRangeException", "T11 overflow-shaped elementCount is rejected");
             CheckUntouched(got, "T11 overflow-shaped elementCount touched nothing");
         }
 
         // T12-T15: the remaining argument guards, each with its exact type.
         {
             auto got = GuardedBuffer(kTexN + kSuffix);
-            checkThrew(Attempt([&] { tex.GetData(got.data(), -1, kTexN); }), "out_of_range",
+            checkThrew(Attempt([&] { tex.GetData(got.data(), -1, kTexN); }), "ArgumentOutOfRangeException",
                        "T12 negative startIndex is rejected");
             CheckUntouched(got, "T12 negative startIndex touched nothing");
         }
         {
             auto got = GuardedBuffer(kTexN + kSuffix);
-            checkThrew(Attempt([&] { tex.GetData(got.data(), 0, -1); }), "invalid_argument",
+            checkThrew(Attempt([&] { tex.GetData(got.data(), 0, -1); }), "ArgumentOutOfRangeException",
                        "T13 negative elementCount is rejected");
             CheckUntouched(got, "T13 negative elementCount touched nothing");
         }
         {
             auto got = GuardedBuffer(kTexN + kSuffix);
-            checkThrew(Attempt([&] { tex.GetData(got.data(), 0, 0); }), "invalid_argument",
+            checkThrew(Attempt([&] { tex.GetData(got.data(), 0, 0); }), "ArgumentOutOfRangeException",
                        "T14 zero elementCount is rejected");
             CheckUntouched(got, "T14 zero elementCount touched nothing");
         }
         checkThrew(Attempt([&] { tex.GetData(static_cast<Color*>(nullptr), 0, kTexN); }),
-                   "invalid_argument", "T15 null destination is rejected");
+                   "ArgumentNullException", "T15 null destination is rejected");
 
         // T16: startIndex is measured in ELEMENTS, not bytes. A byte-scaled startIndex would begin
         //      at 4*startIndex; an element-scaled one begins exactly at startIndex. Both the first
@@ -748,20 +753,20 @@ class Texture2DGetDataTransferRangeTest : public Game
         {
             const Rectangle r(3, 2, 5, 3);
             auto got = GuardedBuffer(kPrefix + 15 + kSuffix);
-            checkThrew(Attempt([&] { tex.GetData(0, &r, got.data(), kPrefix, 14); }), "out_of_range",
+            checkThrew(Attempt([&] { tex.GetData(0, &r, got.data(), kPrefix, 14); }), "ArgumentException",
                        "R9 elementCount one short of the rectangle is rejected");
             CheckUntouched(got, "R9 rejected rectangle request touched nothing");
         }
 
-        // R10: excess capacity on a rectangle read leaves the tail untouched.
+        // R10: excess elementCount on a rectangle read is rejected.
         {
             const Rectangle r(3, 2, 5, 3);
             const std::vector<Color> want = expectRect(3, 2, 5, 3);
             auto got = GuardedBuffer(kPrefix + 60);
             const Outcome o = Attempt([&] { tex.GetData(0, &r, got.data(), kPrefix, 50); });
-            checkSucceeded(o, "R10 excess capacity on a rectangle read is accepted");
-            if (!o.threw)
-                CheckRange(got, kPrefix, want, "R10 excess capacity leaves the tail untouched");
+            checkThrew(o, "ArgumentException",
+                       "R10 excess elementCount on a rectangle read is rejected");
+            CheckUntouched(got, "R10 rejected excess rectangle request touched nothing");
         }
 
         // R11: overflow-shaped arguments on the rectangle overload reject the same way.
@@ -770,7 +775,7 @@ class Texture2DGetDataTransferRangeTest : public Game
             auto got = GuardedBuffer(kPrefix + 15 + kSuffix);
             checkThrew(Attempt([&] {
                            tex.GetData(0, &r, got.data(), std::numeric_limits<int>::max() - 2, 15);
-                       }), "out_of_range",
+                       }), "ArgumentOutOfRangeException",
                        "R11 overflow-shaped startIndex+elementCount is rejected (rectangle)");
             CheckUntouched(got, "R11 overflow-shaped rectangle request touched nothing");
         }
@@ -835,7 +840,7 @@ class Texture2DGetDataTransferRangeTest : public Game
             checkThrew(Attempt([&] {
                            mipTex.GetData(1, nullptr, small.data(), kPrefix,
                                           static_cast<int>(mip.size()) - 1);
-                       }), "out_of_range",
+                       }), "ArgumentException",
                        "R13 elementCount one short of level 1's 18 elements is rejected");
             CheckUntouched(small, "R13 rejected mip request touched nothing");
         }
@@ -944,26 +949,13 @@ class Texture2DGetDataTransferRangeTest : public Game
             }
         }
 
-        // G3: excess capacity on a render-target read. Pre-fix the `elementCount == total` half of
-        //     the same gate rejects this too.
+        // G3: exact XNA byte-size validation rejects excess elementCount before capability.
         {
             auto got = GuardedBuffer(kPrefix + kRtN + 40);
             const Outcome o = Attempt([&] { target.GetData(got.data(), kPrefix, kRtN + 30); });
-            if (kRtContract == RtContract::Unsupported)
-            {
-                checkThrew(o, "NotSupportedException",
-                           "G3 non-rasterizing renderer rejects the excess-capacity read");
-                CheckUntouched(got, "G3 rejected excess-capacity read touched nothing");
-            }
-            else
-            {
-                checkSucceeded(o,
-                    "G3 excess elementCount on a render target is accepted (pre-fix: the "
-                    "elementCount == total gate threw runtime_error)");
-                if (!o.threw)
-                    CheckRange(got, kPrefix, reference,
-                               "G3 excess capacity is ignored: only the 55-pixel region is written");
-            }
+            checkThrew(o, "ArgumentException",
+                       "G3 excess render-target elementCount is rejected before capability");
+            CheckUntouched(got, "G3 rejected excess render-target request touched nothing");
         }
 
         // G4: an undersized capacity must be rejected with the ARGUMENT error, on every renderer --
@@ -971,7 +963,7 @@ class Texture2DGetDataTransferRangeTest : public Game
         //     rejection. This is REMED-GFX-162's precedence, asserted from the texture side.
         {
             auto got = GuardedBuffer(kPrefix + kRtN + kSuffix);
-            checkThrew(Attempt([&] { target.GetData(got.data(), kPrefix, kRtN - 1); }), "out_of_range",
+            checkThrew(Attempt([&] { target.GetData(got.data(), kPrefix, kRtN - 1); }), "ArgumentException",
                        "G4 undersized elementCount is an ARGUMENT error before any capability "
                        "decision");
             CheckUntouched(got, "G4 rejected undersized render-target read touched nothing");
@@ -980,13 +972,13 @@ class Texture2DGetDataTransferRangeTest : public Game
         // G5: the same argument precedence for a negative startIndex and a zero elementCount.
         {
             auto got = GuardedBuffer(kRtN + kSuffix);
-            checkThrew(Attempt([&] { target.GetData(got.data(), -1, kRtN); }), "out_of_range",
+            checkThrew(Attempt([&] { target.GetData(got.data(), -1, kRtN); }), "ArgumentOutOfRangeException",
                        "G5 negative startIndex precedes the capability decision");
-            checkThrew(Attempt([&] { target.GetData(got.data(), 0, 0); }), "invalid_argument",
+            checkThrew(Attempt([&] { target.GetData(got.data(), 0, 0); }), "ArgumentOutOfRangeException",
                        "G5 zero elementCount precedes the capability decision");
             checkThrew(Attempt([&] {
                            target.GetData(got.data(), std::numeric_limits<int>::max() - 2, kRtN);
-                       }), "out_of_range",
+                       }), "ArgumentOutOfRangeException",
                        "G5 overflow-shaped request precedes the capability decision");
             CheckUntouched(got, "G5 none of the three argument rejections wrote anything");
         }
@@ -1028,6 +1020,7 @@ public:
     Texture2DGetDataTransferRangeTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
     }

@@ -176,7 +176,7 @@ namespace
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", true, true, true, false, false,
                                  true, true, false,
-                                 true, true, true, true, false, true, false};
+                                 true, true, true, true, false, true, true};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // SDL_gpu delivers a clear colour only through SDL_GPUColorTargetInfo.load_op, and a render pass
     // has exactly one. REMED-GFX-156 made the LOGICAL SEGMENT the unit that owns a load action

@@ -65,6 +65,9 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -141,7 +144,7 @@ namespace
     // cube mip level.
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
-                                 Support::Exact, false};
+                                 Support::Exact, true};
 #elif defined(CNA_RENDERER_EASYGL)
     // EasyGL uploads into the shared GL cube texture and normalizes its differing row convention.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
@@ -737,7 +740,7 @@ class CubeVolumeSetDataContractTest : public Game
                        "window -- the Poison() elements on both sides of it must never appear");
         }
 
-        // ---- C14: elementCount larger than the region uploads the region only --------------
+        // ---- C14: elementCount larger than the region is rejected without mutation ---------
         if (kContract.cubeLevel0 == Support::Exact)
         {
             const Rectangle r(0, 0, 2, 2);
@@ -748,11 +751,14 @@ class CubeVolumeSetDataContractTest : public Game
                                     static_cast<std::uint8_t>(77 + i * 5),
                                     static_cast<std::uint8_t>(211 - i * 9)));
             for (int i = 0; i < 3; ++i) src.push_back(Poison());   // beyond the 2x2 region
-            const WriteProbe w = WriteCube(cube, 0, 0, &r, src, 0, 7);
+            const bool rejected = Throws<System::ArgumentException>([&] {
+                cube.SetData(CubeMapFace::PositiveX, 0, &r, src.data(), 0, 7);
+            });
             const ReadProbe  got = ReadCube(cube, 0, 0, &r, 2, 2);
-            const std::vector<Color> want(src.begin(), src.begin() + 4);
-            JudgeWrite(w, got, want, Support::Exact,
-                       "C14 cube: elementCount above the requested region stores the region only");
+            const Compare unchanged = CompareContent(got.data, ExpectedCubeRect(0, 0, 0, 0, 2, 2));
+            check(rejected && got.read && unchanged.exact == unchanged.total,
+                  "C14 cube: elementCount above the requested region throws ArgumentException and "
+                  "stores nothing" + CompareFacts(unchanged));
             UploadCubeLevel(cube, 0);
         }
         else
@@ -880,10 +886,10 @@ class CubeVolumeSetDataContractTest : public Game
                       cube.SetData(CubeMapFace::PositiveX, 0, &bad, src.data(), 0, 16);
                   }),
                   "C24 cube: a rectangle crossing the face edge throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+            check(Throws<System::ArgumentException>([&] {
                       cube.SetData(CubeMapFace::PositiveX, 0, nullptr, src.data(), 0, 4);
                   }),
-                  "C25 cube: elementCount below the requested region throws std::out_of_range");
+                  "C25 cube: elementCount below the requested region throws ArgumentException");
             check(Throws<std::out_of_range>([&] {
                       cube.SetData(static_cast<CubeMapFace>(9), src.data(), kCube * kCube);
                   }),
@@ -1220,33 +1226,33 @@ class CubeVolumeSetDataContractTest : public Game
         // ---- V12..V18: argument validation ------------------------------------------------------
         {
             const std::vector<Color> src = VolumePattern(0);
-            check(Throws<std::invalid_argument>([&] {
+            check(Throws<System::ArgumentNullException>([&] {
                       vol.SetData(nullptr, kVolW * kVolH * kVolD);
                   }),
-                  "V12 volume: null source throws std::invalid_argument");
-            check(Throws<std::out_of_range>([&] { vol.SetData(src.data(), 0); }),
-                  "V13 volume: elementCount of 0 throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "V12 volume: null source throws ArgumentNullException");
+            check(Throws<System::ArgumentOutOfRangeException>([&] { vol.SetData(src.data(), 0); }),
+                  "V13 volume: elementCount of 0 throws ArgumentOutOfRangeException");
+            check(Throws<System::ArgumentOutOfRangeException>([&] {
                       vol.SetData(src.data(), -1, kVolW * kVolH * kVolD);
                   }),
-                  "V14 volume: negative startIndex throws std::out_of_range");
+                  "V14 volume: negative startIndex throws ArgumentOutOfRangeException");
             check(Throws<std::out_of_range>([&] {
                       vol.SetData(-1, 0, 0, kVolW, kVolH, 0, kVolD, src.data(), 0,
                                   static_cast<int>(src.size()));
                   }),
                   "V15 volume: negative mip level throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+            check(Throws<System::ArgumentException>([&] {
                       vol.SetData(0, 2, 0, 2, kVolH, 0, kVolD, src.data(), 0, 4);
                   }),
-                  "V16 volume: left == right throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "V16 volume: left == right throws ArgumentException");
+            check(Throws<System::ArgumentException>([&] {
                       vol.SetData(0, 0, 0, kVolW, kVolH, 2, 1, src.data(), 0, 4);
                   }),
-                  "V17 volume: back < front throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "V17 volume: back < front throws ArgumentException");
+            check(Throws<System::ArgumentException>([&] {
                       vol.SetData(0, 0, 0, kVolW, kVolH, 0, kVolD, src.data(), 0, 2);
                   }),
-                  "V18 volume: elementCount below the requested box throws std::out_of_range");
+                  "V18 volume: elementCount below the requested box throws ArgumentException");
 
             if (kContract.volumeLevel0 == Support::Exact)
             {
@@ -1270,7 +1276,7 @@ class CubeVolumeSetDataContractTest : public Game
                                               static_cast<int>(a.size()));
             bool rejectedB = false;
             try { vol.SetData(0, 0, 0, kVolW, kVolH, 3, 2, a.data(), 0, 4); }
-            catch (const std::out_of_range&) { rejectedB = true; }
+            catch (const System::ArgumentException&) { rejectedB = true; }
             catch (...) {}
             const ReadProbe afterB = ReadVolume(vol, 0, 0, 0, kVolW, kVolH, 0, kVolD);
             const Compare   cb = CompareContent(afterB.data, a);

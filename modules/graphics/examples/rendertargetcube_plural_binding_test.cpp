@@ -7,6 +7,7 @@
 // TextureCube consumer path. Only NegativeZ may change.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -31,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/ArgumentException.hpp"
 
 #include <array>
 #include <cmath>
@@ -402,6 +404,7 @@ protected:
         // Minimal source-proven reproducer and one-binding public-state check.
         for (int i = 0; i < 6; ++i)
             DrawFace(cube, kFaces[i], i, false);
+        device.SetRenderTargets({});
 
         device.setViewportProperty(Viewport(3, 4, 7, 8));
         device.setScissorRectangleProperty(Rectangle(2, 3, 5, 6));
@@ -536,7 +539,7 @@ protected:
         bool nullRejected = false;
         try {
             device.SetRenderTargets({RenderTargetBinding()});
-        } catch (const std::invalid_argument&) {
+        } catch (const System::ArgumentException&) {
             nullRejected = true;
         }
         Check(nullRejected, "default/null RenderTargetBinding is rejected deterministically");
@@ -544,6 +547,8 @@ protected:
         bool plainTextureRejected = false;
         try {
             device.SetRenderTargets({RenderTargetBinding(white_.get())});
+        } catch (const System::ArgumentException&) {
+            plainTextureRejected = true;
         } catch (const std::invalid_argument&) {
             plainTextureRejected = true;
         }
@@ -573,6 +578,8 @@ public:
 int main()
 {
     RenderTargetCubePluralBindingTest game;
+    GraphicsDeviceManager testGraphicsDeviceManager(&game);
+    testGraphicsDeviceManager.setGraphicsProfileProperty(GraphicsProfile::HiDef);
     game.Run();
     return game.Result();
 }

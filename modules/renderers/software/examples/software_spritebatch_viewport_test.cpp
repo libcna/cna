@@ -317,8 +317,7 @@ protected:
         }
 
         // ---- Check H: custom Viewport is relative to the bound RenderTarget2D (a different-size
-        //      framebuffer), not cached backbuffer dims. Read the RT via GetBackBufferData while it
-        //      is still bound (Software GetBackBufferData reads the current target). --------------
+        //      framebuffer), not cached backbuffer dims. ------------------------------------------
         {
             const int rtW = 48, rtH = 40;
             const int vpX = 8, vpY = 6, vpW = 28, vpH = 22;
@@ -331,8 +330,8 @@ protected:
             DrawSprite(dev, Rectangle(lx, ly, lw, lh), red);
 
             std::vector<Color> pix(static_cast<std::size_t>(rtW) * rtH, Color(0, 0, 0, 0));
-            const Rectangle whole(0, 0, rtW, rtH);
-            dev.GetBackBufferData(&whole, pix.data(), 0, static_cast<int>(pix.size()));
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            rt.GetData(pix.data(), 0, static_cast<int>(pix.size()));
 
             int minX = rtW, minY = rtH, maxX = -1, maxY = -1, count = 0, outside = 0;
             for (int y = 0; y < rtH; ++y)
@@ -347,7 +346,6 @@ protected:
             const std::string s = "x[" + std::to_string(minX) + "," + std::to_string(maxX) + "] y["
                 + std::to_string(minY) + "," + std::to_string(maxY) + "] n=" + std::to_string(count);
 
-            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             SetVp(dev, 0, 0, kBBW, kBBH);
 
             check(count > 0 && CloseTo(maxX - minX + 1, lw, 1) && CloseTo(maxY - minY + 1, lh, 1) &&
@@ -365,6 +363,7 @@ public:
     SoftwareSpriteBatchViewportTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
     }

@@ -12,8 +12,8 @@
 //     leaves the caller's destination COMPLETELY untouched (prefix, requested range and suffix all
 //     hold their distinct guard values);
 //   * an INVALID request keeps the authoritative validation precedence -- a null destination throws
-//     std::invalid_argument, an out-of-bounds rectangle throws std::out_of_range and an undersized
-//     element count throws std::runtime_error -- i.e. capability rejection stays LAST, after every
+//     System::ArgumentNullException and all malformed ranges throw System::ArgumentException --
+//     i.e. capability rejection stays LAST, after every
 //     argument check, the same order the Texture path uses;
 //   * on a rasterizing renderer the same public calls SUCCEED and write the whole requested range,
 //     so the rejection is specific to the non-rasterizing renderer, not a universal break.
@@ -36,6 +36,8 @@
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <climits>
@@ -132,7 +134,7 @@ namespace
     }
 
     // The classified outcome of one GetBackBufferData call.
-    enum class Outcome { Success, NotSupported, InvalidArgument, OutOfRange, RuntimeError, OtherStd, OtherUnknown };
+    enum class Outcome { Success, NotSupported, ArgumentNull, Argument, OtherStd, OtherUnknown };
 
     const char* OutcomeName(Outcome o)
     {
@@ -140,9 +142,8 @@ namespace
         {
             case Outcome::Success:         return "success";
             case Outcome::NotSupported:    return "System::NotSupportedException";
-            case Outcome::InvalidArgument: return "std::invalid_argument";
-            case Outcome::OutOfRange:      return "std::out_of_range";
-            case Outcome::RuntimeError:    return "std::runtime_error";
+            case Outcome::ArgumentNull:    return "System::ArgumentNullException";
+            case Outcome::Argument:        return "System::ArgumentException";
             case Outcome::OtherStd:        return "std::exception (other)";
             case Outcome::OtherUnknown:    return "non-std exception";
         }
@@ -211,9 +212,8 @@ class BackbufferHeadlessRejectTest : public Game
                 dev.GetBackBufferData(r.buf.data(), startIndex, count);
         }
         catch (const System::NotSupportedException&) { r.outcome = Outcome::NotSupported; }
-        catch (const std::invalid_argument& e)       { r.outcome = Outcome::InvalidArgument; r.what = e.what(); }
-        catch (const std::out_of_range& e)           { r.outcome = Outcome::OutOfRange;      r.what = e.what(); }
-        catch (const std::runtime_error& e)          { r.outcome = Outcome::RuntimeError;    r.what = e.what(); }
+        catch (const System::ArgumentNullException& e) { r.outcome = Outcome::ArgumentNull; r.what = e.what(); }
+        catch (const System::ArgumentException& e)   { r.outcome = Outcome::Argument;     r.what = e.what(); }
         catch (const std::exception& e)              { r.outcome = Outcome::OtherStd;        r.what = e.what(); }
         catch (...)                                  { r.outcome = Outcome::OtherUnknown; }
         return r;
@@ -407,22 +407,21 @@ class BackbufferHeadlessRejectTest : public Game
 
     // ------------------------------------------------------------------ legs (validation precedence)
 
-    /// P1 -- null destination -> std::invalid_argument on every renderer (before capability).
+    /// P1 -- null destination -> System::ArgumentNullException on every renderer.
     void LegNull(GraphicsDevice& dev)
     {
         PrepareFrame(dev);
         ReadResult r;
         try { dev.GetBackBufferData(nullptr, kW * kH); r.outcome = Outcome::Success; }
         catch (const System::NotSupportedException&) { r.outcome = Outcome::NotSupported; }
-        catch (const std::invalid_argument& e) { r.outcome = Outcome::InvalidArgument; r.what = e.what(); }
-        catch (const std::out_of_range& e)     { r.outcome = Outcome::OutOfRange;      r.what = e.what(); }
-        catch (const std::runtime_error& e)    { r.outcome = Outcome::RuntimeError;    r.what = e.what(); }
+        catch (const System::ArgumentNullException& e) { r.outcome = Outcome::ArgumentNull; r.what = e.what(); }
+        catch (const System::ArgumentException& e) { r.outcome = Outcome::Argument; r.what = e.what(); }
         catch (const std::exception& e)        { r.outcome = Outcome::OtherStd;        r.what = e.what(); }
         catch (...)                            { r.outcome = Outcome::OtherUnknown; }
-        AssertPrecedence(r, Outcome::InvalidArgument, "P1 null destination");
+        AssertPrecedence(r, Outcome::ArgumentNull, "P1 null destination");
     }
 
-    /// P2 -- undersized element count (one element too small for a full read) -> std::runtime_error.
+    /// P2 -- undersized element count -> System::ArgumentException.
     void LegUndersized(GraphicsDevice& dev)
     {
         PrepareFrame(dev);
@@ -433,39 +432,38 @@ class BackbufferHeadlessRejectTest : public Game
         ReadResult r;
         try { dev.GetBackBufferData(buf.data(), count - 1); r.outcome = Outcome::Success; }
         catch (const System::NotSupportedException&) { r.outcome = Outcome::NotSupported; }
-        catch (const std::invalid_argument& e) { r.outcome = Outcome::InvalidArgument; r.what = e.what(); }
-        catch (const std::out_of_range& e)     { r.outcome = Outcome::OutOfRange;      r.what = e.what(); }
-        catch (const std::runtime_error& e)    { r.outcome = Outcome::RuntimeError;    r.what = e.what(); }
+        catch (const System::ArgumentNullException& e) { r.outcome = Outcome::ArgumentNull; r.what = e.what(); }
+        catch (const System::ArgumentException& e) { r.outcome = Outcome::Argument; r.what = e.what(); }
         catch (const std::exception& e)        { r.outcome = Outcome::OtherStd;        r.what = e.what(); }
         catch (...)                            { r.outcome = Outcome::OtherUnknown; }
         r.buf = std::move(buf);
-        AssertPrecedence(r, Outcome::RuntimeError, "P2 undersized element count");
+        AssertPrecedence(r, Outcome::Argument, "P2 undersized element count");
         check(WindowIntact(r, 0, static_cast<std::size_t>(count), "P2 buf"),
               "P2 undersized request leaves the destination untouched");
     }
 
-    /// P3 -- negative rectangle origin -> std::out_of_range (before capability).
+    /// P3 -- negative rectangle origin -> System::ArgumentException (before capability).
     void LegNegativeRect(GraphicsDevice& dev)
     {
         PrepareFrame(dev);
         Rectangle bad(-1, 0, kW, kH);
         ReadResult r = Read(dev, &bad, 0, kW * kH, static_cast<std::size_t>(kW) * kH);
-        AssertPrecedence(r, Outcome::OutOfRange, "P3 negative rectangle origin");
+        AssertPrecedence(r, Outcome::Argument, "P3 negative rectangle origin");
         check(WindowIntact(r, 0, static_cast<std::size_t>(kW) * kH, "P3 buf"),
               "P3 out-of-range request leaves the destination untouched");
     }
 
-    /// P4 -- rectangle extending beyond the backbuffer -> std::out_of_range.
+    /// P4 -- rectangle extending beyond the backbuffer -> System::ArgumentException.
     void LegBeyondRect(GraphicsDevice& dev)
     {
         PrepareFrame(dev);
         Rectangle bad(0, 0, kW + 4, kH + 4);
         ReadResult r = Read(dev, &bad, 0, (kW + 4) * (kH + 4),
                         static_cast<std::size_t>(kW + 4) * (kH + 4));
-        AssertPrecedence(r, Outcome::OutOfRange, "P4 rectangle beyond backbuffer");
+        AssertPrecedence(r, Outcome::Argument, "P4 rectangle beyond backbuffer");
     }
 
-    /// P5 -- overflow-SHAPED rectangle (INT_MAX extent) -> deterministic std::out_of_range, no crash.
+    /// P5 -- overflow-shaped rectangle -> deterministic System::ArgumentException, no crash.
     /// x=0 keeps x+w == INT_MAX (no signed overflow in the bounds test) so the request is cleanly
     /// rejected as out-of-range rather than reaching w*h or the renderer.
     void LegOverflowShaped(GraphicsDevice& dev)
@@ -473,10 +471,10 @@ class BackbufferHeadlessRejectTest : public Game
         PrepareFrame(dev);
         Rectangle huge(0, 0, INT_MAX, 1);
         ReadResult r = Read(dev, &huge, 0, 1, 1);   // element count is irrelevant; bounds reject first
-        AssertPrecedence(r, Outcome::OutOfRange, "P5 INT_MAX-width rectangle");
+        AssertPrecedence(r, Outcome::Argument, "P5 INT_MAX-width rectangle");
         Rectangle huge2(0, 0, 1, INT_MAX);
         ReadResult r2 = Read(dev, &huge2, 0, 1, 1);
-        AssertPrecedence(r2, Outcome::OutOfRange, "P5 INT_MAX-height rectangle");
+        AssertPrecedence(r2, Outcome::Argument, "P5 INT_MAX-height rectangle");
     }
 
     // ------------------------------------------------------------------ driver
@@ -520,6 +518,7 @@ public:
     explicit BackbufferHeadlessRejectTest(std::string onlyLeg) : onlyLeg_(std::move(onlyLeg))
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kW);
         gdm_->setPreferredBackBufferHeightProperty(kH);
     }

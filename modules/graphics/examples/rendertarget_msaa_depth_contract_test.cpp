@@ -1078,6 +1078,7 @@ public:
     explicit RenderTargetMsaaDepthContractTest(std::string onlyLeg) : onlyLeg_(std::move(onlyLeg))
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);

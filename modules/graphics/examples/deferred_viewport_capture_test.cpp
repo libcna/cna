@@ -159,7 +159,7 @@ namespace
     // `depthRangeApplies` true: measured, not assumed. The software rasterizer's depth COMPARE is a
     // fixed LessEqual (REMED-GFX-083's documented boundary), but it does remap the interpolated
     // depth through Viewport.MinDepth/MaxDepth, so checks E1/E2 assert the honoured outcome here.
-    constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true, true, true, false};
+    constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true, true, true, true};
 #elif defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing and its readback is REMED-GFX-127/130's deterministic refusal.
     // Every sequence must still be legal and must not throw.

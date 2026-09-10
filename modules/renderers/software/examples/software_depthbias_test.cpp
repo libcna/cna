@@ -204,6 +204,13 @@ class SoftwareDepthBiasTest : public Game
         dev.GetBackBufferData(&whole, pix.data(), 0, static_cast<int>(pix.size()));
         return pix;
     }
+
+    std::vector<Color> Read(Texture2D& texture, int w, int h)
+    {
+        std::vector<Color> pix(static_cast<std::size_t>(w) * h, Color(0, 0, 0, 0));
+        texture.GetData(pix.data(), 0, static_cast<int>(pix.size()));
+        return pix;
+    }
     static const Color& At(const std::vector<Color>& pix, int x, int y, int w = kBBW)
     {
         return pix[static_cast<std::size_t>(y) * w + x];
@@ -427,16 +434,18 @@ class SoftwareDepthBiasTest : public Game
             dev.Clear(Color::Black);
             FlatQuadColored(dev, 0.5f, red);
             FlatQuadColored(dev, 0.5f, green);
-            const bool rtBaseGreen = isGreen(At(Read(dev, rtW, rtH), rtW / 2, rtH / 2, rtW));
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const bool rtBaseGreen = isGreen(At(Read(rt, rtW, rtH), rtW / 2, rtH / 2, rtW));
 
+            dev.SetRenderTarget(&rt);
+            SetVp(dev, 0, 0, rtW, rtH);
             SetRaster(dev, FillMode::Solid, 0.0f, 0.0f);
             dev.Clear(Color::Black);
             FlatQuadColored(dev, 0.5f, red);
             SetRaster(dev, FillMode::Solid, kBias, 0.0f);
             FlatQuadColored(dev, 0.5f, green);
-            const bool rtBiasedRed = isRed(At(Read(dev, rtW, rtH), rtW / 2, rtH / 2, rtW));
-
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const bool rtBiasedRed = isRed(At(Read(rt, rtW, rtH), rtW / 2, rtH / 2, rtW));
             SetVp(dev, 0, 0, kBBW, kBBH);
             check(rtBaseGreen, "I0: RenderTarget2D baseline coplanar (bias 0) -> later (green) wins");
             check(rtBiasedRed, "I1: RenderTarget2D POSITIVE DepthBias -> green LOSES (red wins) [FAILS pre-fix]");
@@ -451,6 +460,7 @@ public:
     SoftwareDepthBiasTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
     }

@@ -172,6 +172,7 @@ class SkinnedEffectLightingConformanceTest : public Game
             dev.setBlendStateProperty(BlendState::Opaque);
             dev.SetVertexBuffer(&vb);
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            dev.SetVertexBuffer(nullptr);
             got = readCenter(dev);
             // Cases B/C/F/I legitimately render black on a buggy renderer; accept the frame once the
             // clear/draw cycle has settled (2 warm-up frames), do not spin waiting for non-black.
@@ -209,6 +210,7 @@ public:
     SkinnedEffectLightingConformanceTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

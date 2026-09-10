@@ -243,12 +243,12 @@ protected:
                          std::string("independent alpha function ") + kFunctionNames[i]);
         }
 
-        // FNA3D's GL and D3D11 drivers derive BlendEnable from the four blend factors only.
-        // One/Zero on both colour and alpha therefore bypasses the equation completely, even for
-        // ReverseSubtract or Min. This is an observable XNA/FNA fixed-function quirk, not the
-        // mathematical result of applying the selected function to source and zero.
+        // One/Zero on both colour and alpha bypasses Add/Subtract/ReverseSubtract. Min/Max are
+        // excluded because Microsoft's XNA validation requires One/One factors for those functions.
         for (std::size_t i = 0; i < kFunctions.size(); ++i)
         {
+            if (kFunctions[i] == BlendFunction::Min || kFunctions[i] == BlendFunction::Max)
+                continue;
             BlendState state;
             state.setColorSourceBlendProperty(Blend::One);
             state.setColorDestinationBlendProperty(Blend::Zero);
@@ -263,16 +263,15 @@ protected:
                          std::string("opaque-factor alpha bypasses ") + kFunctionNames[i]);
         }
 
-        // D3D9/11 and OpenGL ignore both factors for MIN/MAX and compare the raw source and
-        // destination components. Zero factors make this impossible to pass by accidentally
-        // applying the ordinary factor-then-equation formula.
+        // XNA exposes MIN/MAX only with One/One factors. The native equations compare the raw
+        // source and destination components, which the legal factors preserve exactly.
         for (const BlendFunction function : {BlendFunction::Max, BlendFunction::Min})
         {
             BlendState state;
-            state.setColorSourceBlendProperty(Blend::Zero);
-            state.setColorDestinationBlendProperty(Blend::Zero);
-            state.setAlphaSourceBlendProperty(Blend::Zero);
-            state.setAlphaDestinationBlendProperty(Blend::Zero);
+            state.setColorSourceBlendProperty(Blend::One);
+            state.setColorDestinationBlendProperty(Blend::One);
+            state.setAlphaSourceBlendProperty(Blend::One);
+            state.setAlphaDestinationBlendProperty(Blend::One);
             state.setColorBlendFunctionProperty(function);
             state.setAlphaBlendFunctionProperty(function);
             const Color actual = Render(device, state);
@@ -281,11 +280,11 @@ protected:
             CheckChannel(actual.getRProperty(),
                          maximum ? std::max(kSource.getRProperty(), kDestination.getRProperty())
                                  : std::min(kSource.getRProperty(), kDestination.getRProperty()),
-                         std::string(name) + " ignores zero RGB factors");
+                         std::string(name) + " compares raw RGB components");
             CheckChannel(actual.getAProperty(),
                          maximum ? std::max(kSource.getAProperty(), kDestination.getAProperty())
                                  : std::min(kSource.getAProperty(), kDestination.getAProperty()),
-                         std::string(name) + " ignores zero alpha factors");
+                         std::string(name) + " compares raw alpha components");
         }
 
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
@@ -297,6 +296,7 @@ public:
     BlendStateMatrixContractTest()
     {
         graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphics_->setPreferredBackBufferWidthProperty(32);
         graphics_->setPreferredBackBufferHeightProperty(32);
     }

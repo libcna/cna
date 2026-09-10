@@ -50,6 +50,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/ArgumentException.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -106,6 +107,15 @@ class Software3DViewportTest : public Game
         std::fflush(stdout);
         ++totalCount_;
         if (ok) ++passCount_;
+    }
+
+    template <typename ExceptionT, typename Fn>
+    static bool Throws(Fn&& fn)
+    {
+        try { fn(); }
+        catch (const ExceptionT&) { return true; }
+        catch (...) { return false; }
+        return false;
     }
 
     void SetVp(GraphicsDevice& dev, int x, int y, int w, int h)
@@ -214,6 +224,13 @@ class Software3DViewportTest : public Game
         std::vector<Color> pix(static_cast<std::size_t>(w) * h, Color(0, 0, 0, 0));
         const Rectangle whole(0, 0, w, h);
         dev.GetBackBufferData(&whole, pix.data(), 0, static_cast<int>(pix.size()));
+        return pix;
+    }
+
+    std::vector<Color> ReadWhole(Texture2D& texture, int w, int h)
+    {
+        std::vector<Color> pix(static_cast<std::size_t>(w) * h, Color(0, 0, 0, 0));
+        texture.GetData(pix.data(), 0, static_cast<int>(pix.size()));
         return pix;
     }
 
@@ -383,10 +400,10 @@ protected:
             SetVp(dev, vpX, vpY, vpW, vpH);
             dev.Clear(Color::Black);
             DrawQuad(dev, -1.0f, 1.0f, -1.0f, 1.0f, 0.5f, red);
-            const std::vector<Color> pix = ReadWhole(dev, rtW, rtH);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const std::vector<Color> pix = ReadWhole(rt, rtW, rtH);
             const BBox b = Box(pix, rtW, rtH, Redish);
             const int outside = CountOutside(pix, rtW, rtH, Redish, vpX, vpY, vpW, vpH);
-            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             SetVp(dev, 0, 0, kBBW, kBBH);
             // x[-1,1] -> [7,34) = pixels [7,33]; y[1,-1] -> [5,26) = pixels [5,25], relative to the RT.
             check(!b.empty() && CloseTo(b.minX, vpX, 1) && CloseTo(b.minY, vpY, 1) &&
@@ -516,28 +533,17 @@ protected:
                   "M1: textured 3D quad confined to the viewport rect x[19,59] y[11,39]: " + b.str());
         }
 
-        // ---- N: partially-offscreen viewport clips safely to the framebuffer (no OOB) -------------
+        // ---- N: XNA rejects a viewport that extends beyond the active surface -------------------
         {
             const int vpX = 80, vpY = 60, vpW = 40, vpH = 30;  // extends to (120,90), past 96x72
-            SetVp(dev, vpX, vpY, vpW, vpH);
-            dev.Clear(Color::Black);
-            DrawQuad(dev, -1.0f, 1.0f, -1.0f, 1.0f, 0.5f, red);
-            SetVp(dev, 0, 0, kBBW, kBBH);
-            const std::vector<Color> pix = ReadWhole(dev, kBBW, kBBH);
-            const BBox b = Box(pix, kBBW, kBBH, Redish);
-            // Clipped to framebuffer ∩ viewport = x[80,95] y[60,71].
-            check(!b.empty() && b.minX >= vpX && b.minY >= vpY && b.maxX <= kBBW - 1 && b.maxY <= kBBH - 1,
-                  "N1: partially-offscreen viewport clips inside the framebuffer, no OOB: " + b.str());
+            check(Throws<System::ArgumentException>([&] { SetVp(dev, vpX, vpY, vpW, vpH); }),
+                  "N1: a viewport extending beyond the active surface throws ArgumentException");
         }
 
-        // ---- O: zero-size viewport draws nothing and does not crash -------------------------------
+        // ---- O: XNA requires positive viewport dimensions ---------------------------------------
         {
-            SetVp(dev, 10, 10, 0, 20);
-            dev.Clear(Color::Black);
-            DrawQuad(dev, -1.0f, 1.0f, -1.0f, 1.0f, 0.5f, red);
-            SetVp(dev, 0, 0, kBBW, kBBH);
-            const BBox b = Box(ReadWhole(dev, kBBW, kBBH), kBBW, kBBH, Redish);
-            check(b.empty(), "O1: zero-width viewport rasterizes nothing (no crash, no NaN): " + b.str());
+            check(Throws<System::ArgumentException>([&] { SetVp(dev, 10, 10, 0, 20); }),
+                  "O1: a zero-width viewport throws ArgumentException");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, totalCount_);
@@ -549,6 +555,7 @@ public:
     Software3DViewportTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
     }

@@ -99,9 +99,8 @@ protected:
 
             const Rectangle rtRegion(0, 0, 2, 2);
             std::vector<Color> rtPixels(2 * 2, Color(0, 0, 0, 0));
-            dev.GetBackBufferData(&rtRegion, rtPixels.data(), 0, static_cast<int>(rtPixels.size()));
-
             dev.SetRenderTarget(nullptr);
+            rt.GetData(0, &rtRegion, rtPixels.data(), 0, static_cast<int>(rtPixels.size()));
             const Rectangle backRegion(0, 0, 2, 2);
             std::vector<Color> backPixels(2 * 2, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&backRegion, backPixels.data(), 0, static_cast<int>(backPixels.size()));
@@ -169,6 +168,7 @@ public:
     SoftwareSmokeTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(64);
         gdm_->setPreferredBackBufferHeightProperty(64);
     }

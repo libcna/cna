@@ -137,6 +137,7 @@ public:
     XnaPixelCenterTest()
     {
         graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphics_->setPreferredBackBufferWidthProperty(kSize);
         graphics_->setPreferredBackBufferHeightProperty(kSize);
     }

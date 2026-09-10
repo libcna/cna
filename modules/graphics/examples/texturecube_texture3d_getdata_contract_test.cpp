@@ -59,6 +59,9 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -118,7 +121,7 @@ namespace
 #elif defined(CNA_RENDERER_SOFTWARE)
     // SOFTWARE-82/118 provide exact CPU storage for every declared cube and volume mip level.
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, Support::Exact,
-                                 true, Support::Exact, Support::Exact, false};
+                                 true, Support::Exact, Support::Exact, true};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, false};
@@ -724,11 +727,11 @@ class CubeVolumeGetDataContractTest : public Game
                       cube.GetData(CubeMapFace::PositiveX, 0, &outside, buf.data(), 0, 16);
                   }),
                   "C25 cube: a rectangle outside the face throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+            check(Throws<System::ArgumentException>([&] {
                       const Rectangle r(0, 0, 4, 4);
                       cube.GetData(CubeMapFace::PositiveX, 0, &r, buf.data(), 0, 4);
                   }),
-                  "C26 cube: elementCount below the requested region throws std::out_of_range");
+                  "C26 cube: elementCount below the requested region throws ArgumentException");
             check(Throws<std::out_of_range>([&] {
                       cube.GetData(CubeMapFace::PositiveX, buf.data(), -1, 4);
                   }),
@@ -971,35 +974,35 @@ class CubeVolumeGetDataContractTest : public Game
         // ---- V14..V20: argument validation ------------------------------------------------------
         {
             std::vector<Color> buf(static_cast<std::size_t>(kVolW) * kVolH * kVolD, SentinelCD());
-            check(Throws<std::invalid_argument>([&] {
+            check(Throws<System::ArgumentNullException>([&] {
                       vol.GetData(nullptr, static_cast<int>(buf.size()));
                   }),
-                  "V14 volume: null destination throws std::invalid_argument");
-            check(Throws<std::out_of_range>([&] {
+                  "V14 volume: null destination throws ArgumentNullException");
+            check(Throws<System::ArgumentOutOfRangeException>([&] {
                       vol.GetData(buf.data(), 0);
                   }),
-                  "V15 volume: elementCount of 0 throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "V15 volume: elementCount of 0 throws ArgumentOutOfRangeException");
+            check(Throws<System::ArgumentOutOfRangeException>([&] {
                       vol.GetData(buf.data(), -1, 4);
                   }),
-                  "V16 volume: negative startIndex throws std::out_of_range");
+                  "V16 volume: negative startIndex throws ArgumentOutOfRangeException");
             check(Throws<std::out_of_range>([&] {
                       vol.GetData(-1, 0, 0, kVolW, kVolH, 0, kVolD, buf.data(), 0,
                                   static_cast<int>(buf.size()));
                   }),
                   "V17 volume: negative mip level throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+            check(Throws<System::ArgumentException>([&] {
                       vol.GetData(0, 2, 0, 2, kVolH, 0, kVolD, buf.data(), 0, 4);
                   }),
-                  "V18 volume: left == right throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "V18 volume: left == right throws ArgumentException");
+            check(Throws<System::ArgumentException>([&] {
                       vol.GetData(0, 0, 0, kVolW, kVolH, 2, 1, buf.data(), 0, 4);
                   }),
-                  "V19 volume: back < front throws std::out_of_range");
-            check(Throws<std::out_of_range>([&] {
+                  "V19 volume: back < front throws ArgumentException");
+            check(Throws<System::ArgumentException>([&] {
                       vol.GetData(0, 0, 0, kVolW, kVolH, 0, kVolD, buf.data(), 0, 2);
                   }),
-                  "V20 volume: elementCount below the requested box throws std::out_of_range");
+                  "V20 volume: elementCount below the requested box throws ArgumentException");
 
             std::size_t intact = 0;
             for (const Color& c : buf) if (Same(c, SentinelCD())) ++intact;

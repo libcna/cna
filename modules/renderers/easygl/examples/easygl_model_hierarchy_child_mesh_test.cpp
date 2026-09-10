@@ -23,6 +23,7 @@
 // Exit code 0 = all PASS, 1 = at least one FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -174,6 +175,8 @@ public:
 int main()
 {
     ModelHierarchyChildMeshTest game;
+    GraphicsDeviceManager testGraphicsDeviceManager(&game);
+    testGraphicsDeviceManager.setGraphicsProfileProperty(GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();
 }

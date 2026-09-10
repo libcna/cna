@@ -579,6 +579,7 @@ public:
         if (onlyLeg_ == "A2") { startW_ = kW2; startH_ = kH2; }
         else if (onlyLeg_ == "G2") { startW_ = 50; startH_ = 40; }
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(startW_);
         gdm_->setPreferredBackBufferHeightProperty(startH_);
     }

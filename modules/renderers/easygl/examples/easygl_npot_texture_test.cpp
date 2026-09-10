@@ -9,6 +9,7 @@
 // alignment for a non-power-of-two width. Exit code 0 = PASS, 1 = FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -119,6 +120,8 @@ public:
 int main()
 {
     NpotTextureTest game;
+    GraphicsDeviceManager testGraphicsDeviceManager(&game);
+    testGraphicsDeviceManager.setGraphicsProfileProperty(GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();
 }

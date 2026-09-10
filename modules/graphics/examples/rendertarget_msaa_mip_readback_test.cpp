@@ -1042,7 +1042,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
         ReadLevelRect(*rt, 1, 1, 1, 3, 5, kRT, kRT, "F5 odd 3x5 region of level 1");
     }
 
-    /** @brief F6 -- a nonzero `startIndex` with a larger-than-needed destination. */
+    /** @brief F6 -- a nonzero `startIndex` with an exact count in a larger destination. */
     void LegF6()
     {
         auto& dev = getGraphicsDeviceProperty();
@@ -1057,14 +1057,12 @@ class RenderTargetMsaaMipReadbackTest : public Game
         }
         const int lw = kRT / 2, lh = kRT / 2;
         const int count = lw * lh;
-        // Deliberately oversized: REMED-GFX-149's contract says a capacity larger than the region
-        // is legal and the surplus must be left untouched.
-        const int capacity = count + 37;
-        std::vector<Color> buf(static_cast<std::size_t>(kGuard + capacity + kGuard), kSentinel);
+        const int tail = 37;
+        std::vector<Color> buf(static_cast<std::size_t>(kGuard + count + tail + kGuard), kSentinel);
         const Rectangle r(0, 0, lw, lh);
         step("F6: GetData(level=1, full rect, startIndex=" + std::to_string(kGuard) +
-             ", elementCount=" + std::to_string(capacity) + ") into an OVERSIZED destination");
-        if (!IssueRead([&] { rt->GetData(1, &r, buf.data(), kGuard, capacity); }, buf, "F6"))
+             ", elementCount=" + std::to_string(count) + ") into an OVERSIZED destination");
+        if (!IssueRead([&] { rt->GetData(1, &r, buf.data(), kGuard, count); }, buf, "F6"))
             return;
 
         int untouched = 0;
@@ -1074,7 +1072,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
                                   " region elements was written from startIndex " +
                                   std::to_string(kGuard));
         bool tailIntact = true;
-        for (int i = count; i < capacity + kGuard; ++i)
+        for (int i = count; i < count + tail + kGuard; ++i)
             if (!Exact(buf[static_cast<std::size_t>(kGuard + i)], kSentinel)) { tailIntact = false; break; }
         check(tailIntact, "F6: the surplus capacity beyond the region is left untouched");
         bool prefixIntact = true;
@@ -1632,6 +1630,7 @@ public:
     explicit RenderTargetMsaaMipReadbackTest(std::string onlyLeg) : onlyLeg_(std::move(onlyLeg))
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);

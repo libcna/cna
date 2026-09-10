@@ -170,6 +170,7 @@ public:
     SoftwarePresentationResetContractTest()
     {
         graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphics_->setPreferredBackBufferWidthProperty(64);
         graphics_->setPreferredBackBufferHeightProperty(48);
         graphics_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24);

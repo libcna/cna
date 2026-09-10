@@ -266,6 +266,13 @@ class SoftwareWireframeTest : public Game
         return pix;
     }
 
+    std::vector<Color> Read(Texture2D& texture, int w, int h)
+    {
+        std::vector<Color> pix(static_cast<std::size_t>(w) * h, Color(0, 0, 0, 0));
+        texture.GetData(pix.data(), 0, static_cast<int>(pix.size()));
+        return pix;
+    }
+
     static const Color& At(const std::vector<Color>& pix, int x, int y, int w = kBBW)
     {
         return pix[static_cast<std::size_t>(y) * w + x];
@@ -647,8 +654,8 @@ protected:
             SetRaster(dev, CullMode::None, FillMode::WireFrame);
             dev.Clear(Color::Black);
             TriEx(dev, green);   // big triangle mapped over the 64x48 RT
-            std::vector<Color> pix = Read(dev, rtW, rtH);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            std::vector<Color> pix = Read(rt, rtW, rtH);
             SetVp(dev, 0, 0, kBBW, kBBH);
             const BBox b = Box(pix, isGreen, rtW, rtH);
             // RT centroid ~ (32,29); interior must be empty, edges present, all within the RT.
@@ -669,8 +676,8 @@ protected:
             dev.setScissorRectangleProperty(Rectangle(14, 10, 24, 18));   // fb-space x[14,37] y[10,27]
             dev.Clear(Color::Black);
             TriEx(dev, green);
-            std::vector<Color> pix = Read(dev, rtW, rtH);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            std::vector<Color> pix = Read(rt, rtW, rtH);
             SetVp(dev, 0, 0, kBBW, kBBH);
             // Effective clip = RT INTERSECT Viewport INTERSECT Scissor = x[14,37] y[10,27].
             const int outside = OutsideRect(pix, anyLit, 14, 10, 37, 27, rtW, rtH);
@@ -688,6 +695,7 @@ public:
     SoftwareWireframeTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
     }

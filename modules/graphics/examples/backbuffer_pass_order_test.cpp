@@ -172,7 +172,7 @@ namespace
                                  true, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", Support::Exact, true, Support::Exact,
-                                 false, true, true, true, true, true, true, true, true, false};
+                                 false, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};

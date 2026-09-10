@@ -135,6 +135,13 @@ class SoftwareColorWriteChannelsTest : public Game
         return pix[static_cast<std::size_t>(h / 2) * w + (w / 2)];
     }
 
+    Color CenterPixel(Texture2D& texture, int w, int h)
+    {
+        std::vector<Color> pix(static_cast<std::size_t>(w) * h, Color(0, 0, 0, 0));
+        texture.GetData(pix.data(), 0, static_cast<int>(pix.size()));
+        return pix[static_cast<std::size_t>(h / 2) * w + (w / 2)];
+    }
+
     static std::string Str(const Color& c)
     {
         return "(" + std::to_string(c.getRProperty()) + "," + std::to_string(c.getGProperty()) + "," +
@@ -285,8 +292,8 @@ protected:
             dev.setBlendStateProperty(MakeBlend(ColorWriteChannels::Red | ColorWriteChannels::Blue));
             dev.Clear(D);
             DrawColorSprite(dev, S, MakeBlend(ColorWriteChannels::Red | ColorWriteChannels::Blue));
-            const Color px = CenterPixel(dev, rtW, rtH);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const Color px = CenterPixel(rt, rtW, rtH);
             check(Eq(px, 200, 20, 50, 40), "Phase40 RenderTarget2D Red|Blue -> (200,20,50,40): " + Str(px));
         }
 
@@ -299,6 +306,7 @@ public:
     SoftwareColorWriteChannelsTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kW);
         gdm_->setPreferredBackBufferHeightProperty(kH);
     }

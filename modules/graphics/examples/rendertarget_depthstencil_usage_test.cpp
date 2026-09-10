@@ -266,7 +266,7 @@ namespace
     // cube colour/sample planes backed by the one depth/stencil state XNA shares across all faces.
     constexpr Contract kContract{"SOFTWARE", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
-                                 true, true, true, true, true, true, false, false};
+                                 true, true, true, true, true, true, false, true};
 #elif defined(CNA_RENDERER_EASYGL)
     // A real depth renderbuffer per target, attached once at construction and never re-attached;
     // no glInvalidateFramebuffer and no clear-on-bind anywhere, so an FBO's depth/stencil simply

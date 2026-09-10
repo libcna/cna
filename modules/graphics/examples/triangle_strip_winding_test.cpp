@@ -929,6 +929,7 @@ public:
     TriangleStripWindingTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kW);
         gdm_->setPreferredBackBufferHeightProperty(kH);
     }

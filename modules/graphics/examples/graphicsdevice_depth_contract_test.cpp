@@ -147,6 +147,7 @@ public:
     GraphicsDeviceDepthContractTest()
     {
         graphicsDeviceManager_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphicsDeviceManager_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphicsDeviceManager_->setPreferredBackBufferWidthProperty(kSize);
         graphicsDeviceManager_->setPreferredBackBufferHeightProperty(kSize);
         graphicsDeviceManager_->setPreferredDepthStencilFormatProperty(

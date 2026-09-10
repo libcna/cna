@@ -143,6 +143,7 @@ public:
     RenderTargetCubeSampleTest()
     {
         manager_ = std::make_unique<GraphicsDeviceManager>(this);
+        manager_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         manager_->setPreferredBackBufferWidthProperty(64);
         manager_->setPreferredBackBufferHeightProperty(64);
     }

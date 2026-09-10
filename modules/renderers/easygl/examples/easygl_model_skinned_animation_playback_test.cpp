@@ -314,6 +314,7 @@ public:
     ModelSkinnedAnimationPlaybackTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
     }
 
     int getResult() const { return result_; }
