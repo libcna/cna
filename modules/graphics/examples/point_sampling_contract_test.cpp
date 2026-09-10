@@ -98,6 +98,8 @@
 //   Z  extreme texture coordinates                a source rectangle far outside the texture, and
 //                                                UVs large enough to overflow, must address a real
 //                                                texel deterministically rather than crash
+//   AA linear addressing over negative coordinates all three address modes, NPOT reduction and
+//                                                mixed axes must reach the bilinear path too
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -618,6 +620,106 @@ class PointSamplingContractTest : public Game
                         std::to_string(bad) + ")");
     }
 
+    static int LinearChannel(const Color& c00, const Color& c10, const Color& c01,
+                             const Color& c11, double fx, double fy, int channel)
+    {
+        const auto component = [channel](const Color& c) {
+            switch (channel)
+            {
+            case 0: return static_cast<double>(c.getRProperty());
+            case 1: return static_cast<double>(c.getGProperty());
+            case 2: return static_cast<double>(c.getBProperty());
+            default: return static_cast<double>(c.getAProperty());
+            }
+        };
+        const double top = component(c00) + (component(c10) - component(c00)) * fx;
+        const double bottom = component(c01) + (component(c11) - component(c01)) * fx;
+        return static_cast<int>(std::lround(top + (bottom - top) * fy));
+    }
+
+    static Color LinearSample(const Pattern& pat, double sx, double sy,
+                              TextureAddressMode addrU, TextureAddressMode addrV)
+    {
+        const double tx = sx - 0.5;
+        const double ty = sy - 0.5;
+        const long long x0raw = static_cast<long long>(std::floor(tx));
+        const long long y0raw = static_cast<long long>(std::floor(ty));
+        const int x0 = AddressTexel(x0raw, pat.w, addrU);
+        const int x1 = AddressTexel(x0raw + 1, pat.w, addrU);
+        const int y0 = AddressTexel(y0raw, pat.h, addrV);
+        const int y1 = AddressTexel(y0raw + 1, pat.h, addrV);
+        const double fx = tx - std::floor(tx);
+        const double fy = ty - std::floor(ty);
+        const Color& c00 = pat.At(x0, y0);
+        const Color& c10 = pat.At(x1, y0);
+        const Color& c01 = pat.At(x0, y1);
+        const Color& c11 = pat.At(x1, y1);
+        return Color(
+            static_cast<std::uint8_t>(LinearChannel(c00, c10, c01, c11, fx, fy, 0)),
+            static_cast<std::uint8_t>(LinearChannel(c00, c10, c01, c11, fx, fy, 1)),
+            static_cast<std::uint8_t>(LinearChannel(c00, c10, c01, c11, fx, fy, 2)),
+            static_cast<std::uint8_t>(LinearChannel(c00, c10, c01, c11, fx, fy, 3)));
+    }
+
+    static int LinearColorDelta(const Color& actual, const Color& expected)
+    {
+        const auto delta = [](std::uint8_t a, std::uint8_t b) {
+            return std::abs(static_cast<int>(a) - static_cast<int>(b));
+        };
+        int result = delta(actual.getRProperty(), expected.getRProperty());
+        result = std::max(result, delta(actual.getGProperty(), expected.getGProperty()));
+        result = std::max(result, delta(actual.getBProperty(), expected.getBProperty()));
+        return std::max(result, delta(actual.getAProperty(), expected.getAProperty()));
+    }
+
+    void LinearAddressLeg(GraphicsDevice& dev, const std::string& label, const Pattern& pat,
+                          const Texture2D& tex, int rtW, int rtH, const SpriteGeom& g,
+                          TextureAddressMode addrU, TextureAddressMode addrV)
+    {
+        RenderTarget2D rt(dev, rtW, rtH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                          RenderTargetUsage::DiscardContents);
+        const std::vector<Color> pix = RenderSprite(
+            dev, rt, rtW, rtH, tex, g, MakeSampler(TextureFilter::Linear, addrU, addrV),
+            Color(255, 255, 255, 255));
+
+        int covered = 0;
+        int mismatches = 0;
+        int reported = 0;
+        int maxChannelDelta = 0;
+        for (int y = 0; y < rtH; ++y)
+        {
+            for (int x = 0; x < rtW; ++x)
+            {
+                const std::size_t offset = static_cast<std::size_t>(y) * rtW + x;
+                const SourceCoord sc = SpriteSourceCoord(g, x, y);
+                const Color expected = sc.covered
+                    ? LinearSample(pat, sc.sx, sc.sy, addrU, addrV)
+                    : kSentinel;
+                const int delta = sc.covered ? LinearColorDelta(pix[offset], expected) : 0;
+                if (delta > maxChannelDelta) maxChannelDelta = delta;
+                const bool matches = sc.covered ? delta <= 2 : SameColor(pix[offset], expected);
+                if (sc.covered) ++covered;
+                if (!matches)
+                {
+                    ++mismatches;
+                    if (reported < 6)
+                    {
+                        ++reported;
+                        std::printf("        %s dest(%d,%d) s=(%.4f,%.4f) expected %s actual %s\n",
+                                    label.c_str(), x, y, sc.sx, sc.sy, Str(expected).c_str(),
+                                    Str(pix[offset]).c_str());
+                    }
+                }
+            }
+        }
+        check(covered > 0, label + ": geometry covers destination pixels (covered=" +
+                           std::to_string(covered) + ")");
+        check(mismatches == 0,
+              label + ": every pixel matches the addressed bilinear sample within two bytes "
+                      "(mismatches=" + std::to_string(mismatches) +
+                      ", max channel delta=" + std::to_string(maxChannelDelta) + ")");
+    }
+
     /// Draws a full-viewport textured 3D quad (BasicEffect + VertexPositionTexture), so the device
     /// SamplerStates[0] path is measured instead of SpriteBatch's own sampler.
     std::vector<Color> Render3DQuad(GraphicsDevice& dev, RenderTarget2D& rt, int rtW, int rtH,
@@ -812,6 +914,7 @@ protected:
         RunX_DefaultSamplerIsLinearWrap(dev);
         RunY_FilterOrdinals(dev);
         RunZ_ExtremeCoordinates(dev);
+        RunAA_LinearAddressModes(dev);
 
         std::printf("=== %d/%d PASS ===\n", passCount_, totalCount_);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
@@ -1641,6 +1744,24 @@ private:
                   "Z3: a texture coordinate large enough to overflow the texel index is handled "
                   "deterministically instead of crashing or throwing");
         }
+    }
+
+    // AA ----------------------------------------------------------------------------------------
+    void RunAA_LinearAddressModes(GraphicsDevice& dev)
+    {
+        // Earlier coverage proved negative Wrap/Mirror only for point filtering. This NPOT source
+        // spans two periods on either side of zero, so both neighbours of many bilinear samples
+        // cross a negative tile boundary and the address operation cannot be optimized away.
+        const SpriteGeom g =
+            Geom(Rectangle(0, 0, 24, 24), Rectangle(-6, -6, 12, 12));
+        LinearAddressLeg(dev, "AA1 NPOT LinearClamp across negative coordinates", p3x3_, t3x3_,
+                         24, 24, g, TextureAddressMode::Clamp, TextureAddressMode::Clamp);
+        LinearAddressLeg(dev, "AA2 NPOT LinearWrap across negative coordinates", p3x3_, t3x3_,
+                         24, 24, g, TextureAddressMode::Wrap, TextureAddressMode::Wrap);
+        LinearAddressLeg(dev, "AA3 NPOT LinearMirror across negative coordinates", p3x3_, t3x3_,
+                         24, 24, g, TextureAddressMode::Mirror, TextureAddressMode::Mirror);
+        LinearAddressLeg(dev, "AA4 NPOT mixed LinearMirror-U/Wrap-V", p3x3_, t3x3_,
+                         24, 24, g, TextureAddressMode::Mirror, TextureAddressMode::Wrap);
     }
 
 public:

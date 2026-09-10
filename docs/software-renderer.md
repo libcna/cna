@@ -380,8 +380,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   Software/desktop-EasyGL MSAA contract.
 - **Classic 2D/cube sampler state is applied.** Point/linear minification and magnification,
   point/linear mip selection, independent U/V Wrap/Clamp/Mirror and per-slot state are covered by
-  shared contracts. `TextureFilter::Anisotropic` computes the directional texel footprint, selects
-  mip LOD from its minor axis and averages up to 16 taps along its major axis; `MaxAnisotropy`,
+  shared contracts. `SOFTWARE-308` strengthens that evidence with an analytic whole-image matrix
+  for negative/NPOT LinearClamp, LinearWrap, LinearMirror and mixed Mirror-U/Wrap-V; the 162/162
+  contract passes on Software and both EasyGL profiles. `TextureFilter::Anisotropic` computes the
+  directional texel footprint, selects mip LOD from its minor axis and averages up to 16 taps along
+  its major axis; `MaxAnisotropy`,
   per-slot independence, SpriteBatch forwarding and address interaction are shared-tested against
   EasyGL by `SOFTWARE-117`. `SOFTWARE-158` additionally proves that
   `MipMapLevelOfDetailBias` shifts the computed LOD and `MaxMipLevel` applies afterward as the
