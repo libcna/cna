@@ -139,6 +139,11 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_ImageBasedLighting COMMAND cna_test_cnaext_ibl
         TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # MOD-2236: constant-map receiver oracle, independent of ShaderEffect caster support.
+    cna_graphics_ext_test(cna_test_cnaext_shadow_receiver cnaext_shadow_receiver_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_ShadowReceiver COMMAND cna_test_cnaext_shadow_receiver
+        TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_graphics_ext_test(cna_test_cnaext_instancing_lod cnaext_instancing_lod_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_InstancingAndLod COMMAND cna_test_cnaext_instancing_lod
         TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")

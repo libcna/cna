@@ -1947,7 +1947,7 @@ as a method change rather than a rediscovered bug.
 **The census — four categories: as `VULKAN-027` first measured it on 2026-09-05, as `VULKAN-474`
 re-measured it on 2026-09-06, as `VULKAN-207` re-measured it on 2026-09-07 at the end of the
 campaign, and after `VULKAN-240`/`VULKAN-241` corrected the compressed-content omissions on
-2026-09-08, followed by the current modern-plan implementation through `MOD-2235`/`MOD-2251`.
+2026-09-08, followed by the current modern-plan implementation through `MOD-2236`/`MOD-2251`.
 The movement is accounted for
 exactly at every step. The interface itself grew from 186 virtuals to 189 before the compressed
 overrides moved categories, then to 202 through the detailed format/limit contract, and to 207
@@ -1956,8 +1956,8 @@ the language and base-instance queries.**
 
 | Group | 2026-09-05 | 2026-09-06 | 2026-09-07 | `VULKAN-241` | Current | Meaning |
 |---|---|---|---|---|---|---|
-| Both override | 102 | 106 | **114** | **117** | **143** | Vulkan implements what EasyGL implements. |
-| **EasyGL overrides, Vulkan does not** | **54** | **50** | **44** | **41** | **21** | The live survivor set — table A.1. |
+| Both override | 102 | 106 | **114** | **117** | **144** | Vulkan implements what EasyGL implements. |
+| **EasyGL overrides, Vulkan does not** | **54** | **50** | **44** | **41** | **20** | The live survivor set — table A.1. |
 | Vulkan overrides, EasyGL does not | 3 | 7 | **8** | **8** | **24** | Renderer-specific answers and modern rollout queries. |
 | Neither overrides | 27 | 23 | **23** | **23** | **21** | Both take the shared default, so there is no Vulkan-specific divergence. |
 | *total virtuals* | *186* | *186* | ***189*** | ***189*** | ***209*** | |
@@ -2009,7 +2009,7 @@ changed. `MOD-2225`–`MOD-2229` subsequently added five false-by-default facade
 live tool output at that point was **207 / 127 both / 31 EasyGL-only / 28 Vulkan-only / 21
 neither**.
 
-The current rerun reports **209 / 143 both / 21 EasyGL-only / 24 Vulkan-only / 21 neither**.
+The current rerun reports **209 / 144 both / 20 EasyGL-only / 24 Vulkan-only / 21 neither**.
 Two new counted virtuals explain the total: `MOD-2210` added
 `SupportsShaderLanguageEXT` with both overrides, while `MOD-2232` added the Vulkan-only
 `SupportsBaseInstanceDrawingEXT`. Fifteen movements into *both* are also explicit: the six older
@@ -2021,7 +2021,9 @@ moved compute-image support, and the modern shared-buffer/language work moved
 `MOD-2234` moved `CreateRenderTargetCubeEXT` out of EasyGL-only after the format-dropping forwarding
 default was replaced by Vulkan's exact-format factory. `MOD-2235` accounts for the latest move:
 `SupportsImageBasedLightingEXT` now reports the stock rigid/skinned PBR path that the two-driver
-shared IBL oracle executes.
+shared IBL oracle executes. `MOD-2236` makes the final one-step movement:
+`SupportsShadowSamplingEXT` leaves EasyGL-only for both after a shared 11-check receiver oracle
+matched EasyGL on RADV and llvmpipe.
 
 The census tool intentionally retains its original eleven classic interface boundaries. The new
 `IComputeShaderRenderer::BindConstantBufferEXT` seam from `MOD-2230` is therefore outside the 209;
@@ -2039,7 +2041,7 @@ because the deferred draw model copies vertex and index bytes at draw time; and
 `CreateRenderTarget2DEXT` looks like a dropped `SurfaceFormat` but cannot be, because Vulkan's
 `Defer` verdict reduces to *Color only* and a non-`Color` render target is refused one layer above.
 
-### A.1 EasyGL overrides, Vulkan does not (21 current; 41 at `VULKAN-241`)
+### A.1 EasyGL overrides, Vulkan does not (20 current; 41 at `VULKAN-241`)
 
 The table below still has **50** rows. Twenty-nine of them are struck through in their Classification
 cell and marked **NO LONGER IN A.1**: those virtuals moved into A.2 when the rows named in §31's
@@ -2080,7 +2082,7 @@ deleting the row would leave the count smaller with no account of why.
 | `IGraphicsRenderer` | `DispatchCompute` | default | no-op | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2242` snapshots bindings/uniforms and records a real Vulkan dispatch. |
 | `IGraphicsRenderer` | `MemoryBarrierEXT` | default | no-op | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2242` implements the storage-buffer visibility barrier used by the compute path. |
 | `IGraphicsRenderer` | `ExecutesShaderEffectSourceEXT` | default | `return false` | DEFAULT_CORRECT | Truthful and load-bearing: Vulkan's `ShaderEffect` consumes SPIR-V against a fixed push-constant layout and never executes the GLSL source the engine layer writes. `CLAUDE.md` tells callers to ask exactly this query. |
-| `IGraphicsRenderer` | `SupportsShadowSamplingEXT` | default | `return false` | CNAEXT_OUT_OF_SCOPE | Honest absence. |
+| `IGraphicsRenderer` | `SupportsShadowSamplingEXT` | default | `return false` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2236` implements directional, cascade, point and spot sampling in all four stock receiver families and proves it against EasyGL on RADV and llvmpipe. Source-authored caster execution remains a separate limitation. |
 | `IGraphicsRenderer` | `SupportsImageBasedLightingEXT` | default | `return false` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2235` implements the three-texture split-sum path in both stock PBR families and proves it on RADV and llvmpipe. |
 | `IGraphicsRenderer` | `SupportsComputeShadersEXT` | default | `return false` | ~~CNAEXT_OUT_OF_SCOPE~~ → **NO LONGER IN A.1** | `MOD-2240`/`MOD-2242` answer from the selected queue family, implemented resource path and device limits. |
 | `IGraphicsRenderer` | `SupportsIndirectDrawEXT` | default | `return false` | ~~UNSUPPORTED_HONEST~~ → **NO LONGER IN A.1** | It was an honest absence at `VULKAN-470`; `MOD-2245` now overrides it from enabled `drawIndirectFirstInstance` and proves native execution on two devices. |
@@ -2100,7 +2102,7 @@ deleting the row would leave the count smaller with no account of why.
 | `IGraphicsRenderer` | `DebugSimulateContextLoss` | default | no-op | OWNED_ELSEWHERE | Owned by `VULKAN-334`. |
 | `IGraphicsRenderer` | `DebugRestoreContext` | default | no-op | OWNED_ELSEWHERE | Owned by `VULKAN-334`. |
 
-### A.2 Both renderers override (143 current; 114 at `VULKAN-207`)
+### A.2 Both renderers override (144 current; 114 at `VULKAN-207`)
 
 Listed for completeness; no divergence to classify.
 
@@ -2133,6 +2135,7 @@ Listed for completeness; no divergence to classify.
 | `IGraphicsRenderer` | `CreateRenderTargetCubeEXT` | default | *(Vulkan override by `MOD-2234`)* |
 | `IGraphicsRenderer` | `SupportsHalfFloatTextureLinearFilteringEXT` | default | *(Vulkan override by `MOD-2223`)* |
 | `IGraphicsRenderer` | `SupportsImageBasedLightingEXT` | default | *(Vulkan override by `MOD-2235`)* |
+| `IGraphicsRenderer` | `SupportsShadowSamplingEXT` | default | *(Vulkan override by `MOD-2236`)* |
 | `IGraphicsRenderer` | `CreateComputeShader` | default | *(Vulkan override by `MOD-2242`)* |
 | `IGraphicsRenderer` | `CreateStorageBuffer` | default | *(Vulkan override by `MOD-2241`)* |
 | `IGraphicsRenderer` | `DispatchCompute` | default | *(Vulkan override by `MOD-2242`)* |

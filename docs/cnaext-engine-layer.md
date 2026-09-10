@@ -9,8 +9,9 @@ pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compu
 **The engine layer is implemented on its EasyGL reference path and is being rolled out to other
 renderers capability by capability.** Its HDR/post-process pipeline, shadows, skybox, image-based
 lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
-now implements exact HDR targets, stock-PBR IBL, instancing and the modern compute/resource paths,
-while source-authored post-process, skybox and shadow shaders remain unavailable there. The design is
+now implements exact HDR targets, stock-PBR IBL, stock-effect shadow reception, instancing and the
+modern compute/resource paths, while source-authored post-process, skybox and shadow-caster shaders
+remain unavailable there. The design is
 [`../CNAEXT.md`](../misc/CNAEXT.md); the task backlog and its evidence trail are
 [`../plans/plan_modern.md`](../plans/plan_modern.md).
 
@@ -201,10 +202,10 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
 | Float/HDR render targets | ✅ exact 2D/cube targets, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D` and `RenderTargetCube`, device-probed (`MOD-2223`/`MOD-2234`) | ⬜ | ⬜ — each reports `false` and the target constructor refuses the format rather than substituting `Color` |
 | `RenderPipeline` + post-process passes | ✅ | 🟨 runs and copies through — measured, frame identical to no pipeline | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
-| Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ⬜ `SupportsShadowSamplingEXT()` false | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
-| Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
+| Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | 🟨 stock reception complete (`MOD-2236`); source-authored caster unavailable | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
+| Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | 🟨 reception complete; generation unavailable | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Contact shadows | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `ContactShadowPass::isSupported()` is false and the pass copies its input through, so the frame keeps the shadow map it already had |
-| Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
+| Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | 🟨 stock reception complete; cube/spot caster unavailable | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Skybox | ✅ one fullscreen pass; needs `CustomEffects` | ⬜ | ⬜ | ⬜ — where the shader will not compile the sky is skipped and logged once |
 | Image-based lighting | ✅ CPU precompute + split-sum shading | ✅ stock `PbrEffect` and `SkinnedPbrEffect`, same three-product split sum (`MOD-2235`) | ⬜ | ⬜ — precompute additionally requires working cube/2D texture storage; shading needs a renderer-specific stock PBR path |
 | Materials (`PbrMaterial` ↔ `PbrEffect`) | ✅ | ✅ | ✅ | ✅ — no renderer code at all: it moves values between two existing objects |
@@ -236,10 +237,10 @@ same question:
 | `SupportsShadowSamplingEXT()` | whether its lit shaders really *sample* the shadow state every effect accepts |
 | `SupportsImageBasedLightingEXT()` | whether its PBR shader really shades from a bound environment |
 
-The distinction is not academic: the Vulkan renderer answers **true** to the first and **false** to
-the last two, while its language query accepts SPIR-V and refuses GLSL, because its `ShaderEffect`
-takes SPIR-V bytecode while this layer's passes and
-shadow casters hand it GLSL source. Before those two queries existed, the shadow example on Vulkan
+The distinction is not academic: the Vulkan renderer now answers **true** to the first, shadow
+sampling and IBL questions, while its language query accepts SPIR-V and refuses GLSL. Its stock
+SPIR-V programs consume the latter two states, but this layer's passes and shadow casters hand a
+`ShaderEffect` GLSL source. Before those semantic queries existed, the shadow example on Vulkan
 did not fail — it crashed, because the caster's effect failed to compile and the draw proceeded with
 no effect applied. Portable packages use the language/stage query to select a payload; subsystems
 still ask their own semantic capability before promising a visible result.
@@ -277,7 +278,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, compute/storage resources, indirect draws and GPU timers work. Source-authored post-process, skybox and shadow paths remain unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; shadow sampling is still reported false. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, stock directional/cascade/point/spot reception, compute/storage resources, indirect draws and GPU timers work. Source-authored post-process, skybox and shadow-caster paths remain unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -1993,9 +1994,9 @@ pbrEffect.setImageBasedLightEXT(environment);   // SkinnedPbrEffect has the same
   of those two profiles rather than a silent one.
 - **Vulkan uses the same split sum.** `MOD-2235` binds the three products to both rigid and skinned
   stock PBR programs, keeps the established 512-byte uniform stride, and tracks every sampled view
-  through deferred execution. The shared oracle passes 7/7 applicable checks on both RADV and
-  llvmpipe with validation; EasyGL passes 8/8 because it can additionally exercise the
-  shadow-plus-IBL interaction that Vulkan truthfully gates off.
+  through deferred execution. Since `MOD-2236`, the shared oracle passes all 8/8 checks on RADV,
+  llvmpipe and EasyGL, including the rule that a directional shadow removes direct light but leaves
+  the environment term.
 - **White furnace** (`cnaext_ibl_test`, environment at half intensity, albedo 1, no lights;
   128/255 would be exact energy conservation): roughness 0.1 → **159**, 0.4 → **139**, 0.7 → **129**,
   1.0 → **155**. The split sum with 8-bit products and an 8-sample irradiance sweep gains a little

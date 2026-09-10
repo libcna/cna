@@ -2,7 +2,7 @@
 
 ## Status of this document
 
-**Complete as of 2026-09-10 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2235`, `MOD-2240`–`MOD-2244`), and written after the re-audits it depends on**
+**Complete as of 2026-09-10 (`VULKAN-480`, updated by `REMED-GFX-203`, `MOD-2222`–`MOD-2236`, `MOD-2240`–`MOD-2244`), and written after the re-audits it depends on**
 (`VULKAN-470`–`VULKAN-474`) so that what it claims was checked rather than remembered. Every
 section names the row that put it there and the test that keeps it true; a claim with no test named
 beside it is not in here.
@@ -52,7 +52,7 @@ measures on (§*Environment* below).
 | XNA `Texture2D` / `RenderTarget2D` compute-image binding | supported when that exact allocation is storage-capable | device |
 | Float32 / Float16 `RenderTarget2D`, half-float linear filtering | supported | device |
 | GPU timers | supported when the selected graphics queue exposes timestamps | device |
-| Shadow sampling | **unsupported** | fixed |
+| Stock-effect shadow sampling | supported | fixed |
 | Stock PBR image-based lighting | supported | fixed |
 
 Two entries need their sentence rather than a cell:
@@ -674,12 +674,40 @@ Deferred draws retain all ten sampled-image identities and dependencies, includi
 cube producers, so replacing or destroying an IBL product cannot leave a descriptor set pointing
 at a stale view.
 
-**Test:** the shared `CNAEXT_ImageBasedLighting` binary passes **7/7 applicable checks** on RADV
-and llvmpipe with Khronos validation: rigid/skinned agreement, flat-vs-IBL, roughness-selected
-reflection, occlusion and four white-furnace points. EasyGL passes **8/8**; its extra check combines
-IBL with shadow sampling, which Vulkan continues to report unsupported. The Vulkan capability
+**Test:** the shared `CNAEXT_ImageBasedLighting` binary passes **8/8 checks** on RADV, llvmpipe and
+EasyGL with Khronos validation on the Vulkan runs: rigid/skinned agreement, flat-vs-IBL,
+roughness-selected reflection, occlusion, four white-furnace points and direct-only shadow
+attenuation. The Vulkan capability
 snapshot, both PBR golden suites, hand-derived oracle, texture-slot oracle and descriptor-cache
 oracle also pass on both devices without validation messages.
+
+### Stock shadow reception (`MOD-2236`, 2026-09-10)
+
+The per-pixel BasicEffect, SkinnedEffect, PbrEffect and SkinnedPbrEffect fragment programs consume
+the same directional, cascaded, point and spot state as EasyGL. One common descriptor set holds the
+three maps and a dynamic std140 record, while each family's material and lighting set stays
+unchanged. Disabled or missing maps bind valid white 2D/cube fallbacks. Deferred render-target
+producers are recorded as dependencies, dying image views evict their shadow snapshots, and sampler
+eviction clears the cache before retiring the native sampler.
+
+The equations match EasyGL: directional PCF has radius 0–2, cascades select and optionally blend
+2–4 atlas slices, the point path compares one cube distance sample, and the spot path takes a 3x3
+projected filter. Directional visibility multiplies direct diffuse and specular only, never ambient,
+emissive or IBL. A directional map forces BasicEffect and SkinnedEffect onto their per-pixel sibling
+even when `PreferPerPixelLighting` is false; punctual-only behavior retains EasyGL's existing
+selection rule.
+
+**Test:** `CNAEXT_ShadowReceiver` is a caster-independent constant-map pixel oracle and passes
+**11/11** on EasyGL/llvmpipe, Vulkan/RADV and Vulkan/llvmpipe. It covers all four families,
+disabled-state isolation, forced per-pixel reception, cascade state/debug tint and point/spot
+sampling. `CNAEXT_ImageBasedLighting` additionally proves the direct-only interaction, and the four
+stock-family regressions plus `Vulkan_EffectDescriptorCacheIdentity` stay green with Khronos
+validation.
+
+This is reception parity, not generation parity. `ShadowMap`, `CascadedShadowMap`, `CubeShadowMap`
+and `SpotShadowMap` still author their caster as GLSL `ShaderEffect` source. Vulkan deliberately
+reports `ExecutesShaderEffectSourceEXT() == false` because it consumes packaged SPIR-V, so those
+helpers remain unsupported until portable caster payloads exist.
 
 ### Instancing (`plans/plan_vulkan.md` VULKAN-217…VULKAN-234, 2026-09-08)
 
@@ -810,13 +838,11 @@ short form a reader needs before opening it.
 | `SpriteSortMode::Immediate` honoured at the renderer boundary | EasyGL does not override `SetImmediateMode` at all. |
 | Precise occlusion counts on real hardware | `VK_QUERY_CONTROL_PRECISE_BIT` with the feature enabled, answered honestly through `PixelCountIsPreciseEXT` (`VULKAN-370`). |
 
-**Difference that is still a gap, and is owned:** shadow sampling remains `false` here and is
-implemented on EasyGL. Image-based lighting reached stock-PBR parity in `MOD-2235`, and GPU timing
-did so in `MOD-2246`. The remaining shadow gap is outside this classic-XNA campaign and is owned by
-`plans/plan_modern.md`; the capability profile reports it `false` rather than accepting the call
-and doing nothing. `ExecutesShaderEffectSourceEXT()` likewise stays false because the renderer
-executes packaged SPIR-V, not caller-provided source text. Indirect execution is the additional
-device-gated path described above.
+**Difference that is still a gap, and is owned:** stock shadow reception reached parity in
+`MOD-2236`, but the engine layer's source-authored caster programs still cannot run here.
+`plans/plan_modern.md` owns that generation half. `ExecutesShaderEffectSourceEXT()` stays false
+because the renderer executes packaged SPIR-V, not caller-provided source text. Indirect execution
+is the additional device-gated path described above.
 
 ---
 

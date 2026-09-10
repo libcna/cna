@@ -137,8 +137,8 @@ the detailed query by `MOD-2260`; it consumes desktop GLSL vertex and fragment p
 | Compute sampling of `Texture2D` / `RenderTarget2D` | S | S | U |
 | Indirect drawing | S | S | U |
 | GPU timers | S | S | U |
-| Shadow sampling | S | U | U |
-| Image-based lighting | S | U | U |
+| Shadow sampling | S | S | U |
+| Image-based lighting | S | S | U |
 | Texture3D sampling | S | S | U |
 | Payload dialect query | `GlslEs` | `SpirV` | `GlslDesktop` |
 
@@ -303,6 +303,7 @@ tree, not about native API potential.
 | MOD-2233 | Supplied | The typed matrix above defines every legal XNA/new-resource bridge and explicit non-alias. One generated compute package proves Texture2D and deferred RenderTarget2D sampling, retained lifetime, automatic ordering and deterministic validation on EasyGL plus Vulkan/RADV/llvmpipe. Vulkan compute snapshots retain native identities, not shared resource ownership; dying buffers/views evict and fence-retire matching sets so resource lifetime ends after accepted work without stale-handle reuse. |
 | MOD-2234 | Supplied | Vulkan's exact nine-format render-target table now reaches `RenderTargetCube`: cube-compatible allocation, face views, passes, framebuffer keys, mips and MSAA preserve the requested format. The live oracle constructs every advertised format and reads six distinct unclamped RGBA16F faces exactly on RADV and llvmpipe. |
 | MOD-2235 | Supplied | Vulkan's stock rigid and skinned PBR paths consume the existing three-product IBL bundle with EasyGL-equivalent split-sum shading, roughness-selected cube mips, ambient-only occlusion and descriptor-safe deferred lifetime. The shared oracle passes on RADV and llvmpipe with validation. |
+| MOD-2236 | Supplied | Vulkan's four stock receiver families use EasyGL-equivalent directional/cascade/point/spot equations through one common descriptor/UBO layout. A caster-independent pixel oracle passes 11/11 on EasyGL, RADV and llvmpipe; source-authored shadow-map generation remains independently unavailable on Vulkan. |
 | MOD-2240 | Supplied | Vulkan discovery separates supported and enabled facts and records its ordered queue. |
 | MOD-2241 | Supplied | Vulkan implements the existing compute/storage-buffer baseline. |
 | MOD-2242 | Supplied | Vulkan reflects bounded SSBO/push-constant bindings and reuses descriptors. |

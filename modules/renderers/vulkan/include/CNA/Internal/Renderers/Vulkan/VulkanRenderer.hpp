@@ -2608,6 +2608,14 @@ namespace CNA::Internal::Renderers::Vulkan
         [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
 
         /**
+         * @brief Reports that Vulkan's per-pixel Basic, Skinned and PBR stock shaders consume
+         *        directional, cascaded and punctual shadow state.
+         *
+         * @return `true`.
+         */
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
+
+        /**
          * @brief CNAEXT. A `Texture3D` bound to a `ShaderEffect` is sampled by that shader here.
          *
          * plan_vulkan.md VULKAN-164. `VulkanEffectRenderer::BindTexture3D` writes the volume into
@@ -4616,7 +4624,7 @@ namespace CNA::Internal::Renderers::Vulkan
         float xnaPixelCenterScale_ = 63.0f / 64.0f;
 
         // REMED-GFX-076: a cached effect descriptor set together with the sampled VkImageViews it
-        // was written against. The seven per-frame effect descriptor caches below key on a *hash* of
+        // was written against. The per-frame effect descriptor caches below key on a *hash* of
         // raw VkImageView handle values and persist across frames with no per-view free path. A view
         // handle is recyclable once its view is destroyed (GFX-075 retirement only *defers* the free
         // past the consuming frame's fence -- it does not keep the value reserved forever), so a
@@ -4854,6 +4862,22 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> pbrSkinnedUBOPtr_ = {};
 
+        // MOD-2236: one set-1 shadow bundle shared by every stock family that EasyGL makes a
+        // receiver (BasicEffect, SkinnedEffect, PbrEffect and SkinnedPbrEffect). Keeping it out of
+        // each family's set 0 prevents four copies of the same directional/cascade/punctual
+        // descriptors and makes their shader math consume one byte-identical UBO layout.
+        VkDescriptorSetLayout descriptorSetLayoutShadow_ = VK_NULL_HANDLE;
+        VkDescriptorPool      descriptorPoolShadow_      = VK_NULL_HANDLE;
+        std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
+                   MaxFramesInFlight>                        shadowDescSets_;
+        // 132 floats (528 bytes) are used. The 768-byte stride preserves the existing 256-byte
+        // dynamic-offset alignment contract used by every stock UBO ring in this renderer.
+        static constexpr uint32_t kShadowUBOStride   = 768;
+        static constexpr uint32_t kShadowUBOMaxDraws = 512;
+        std::array<VkBuffer,       MaxFramesInFlight> shadowUBO_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> shadowUBOMem_ = {};
+        std::array<void*,          MaxFramesInFlight> shadowUBOPtr_ = {};
+
         // Default 1×1 white texture used when DrawPrimitivesEx has no texture bound.
         VkImage               defaultWhiteImage_     = VK_NULL_HANDLE;
         VkDeviceMemory        defaultWhiteMemory_    = VK_NULL_HANDLE;
@@ -5060,6 +5084,10 @@ namespace CNA::Internal::Renderers::Vulkan
             // [60..63]=fogVector. 256 bytes total.
             float                   litUboData[64]    = {};
             VkDescriptorSet         litTexturedDescSet = VK_NULL_HANDLE;
+            // MOD-2236: common set 1 for the four EasyGL-equivalent stock receiver families.
+            // ShadowParams is 132 floats; see shadow_sampling.glsl for the matching std140 order.
+            VkDescriptorSet         shadowDescSet    = VK_NULL_HANDLE;
+            float                   shadowUboData[132] = {};
             int32_t                 baseVertex        = 0;     // vertexOffset for vkCmdDrawIndexed
             /// plan_vulkan.md VULKAN-233: this draw came in through DrawInstancedPrimitives. It
             /// is no longer a family selector -- every stock family's own flag decides which
@@ -5499,7 +5527,7 @@ namespace CNA::Internal::Renderers::Vulkan
         void EvictViewFromEffectCache(EffectDescSetCache& caches, VkDescriptorPool /*unusedSinceVulkan181*/,
                                       VkImageView view, RetiredResources& into);
     public:
-        // REMED-GFX-076: read-only test introspection -- total live entries across all seven
+        // REMED-GFX-076: read-only test introspection -- total live entries across all
         // per-frame effect descriptor-set caches. The resource-identity regression uses it to prove
         // a destroyed sampled resource's cached sets are evicted (count returns to baseline). No
         // effect on rendering.
@@ -5858,6 +5886,14 @@ namespace CNA::Internal::Renderers::Vulkan
         // weightsPerVertex is only meaningful for the pbr+skinned combo (stride 68); pass 0 for
         // the unskinned PbrEffect path (stride 48), where it's unused.
         void       FillPbrUboData(float (&out)[128], const GpuDrawParams& p, float weightsPerVertex);
+        // MOD-2236: shared shadow receiver descriptor/UBO bundle (set 1 in all four families).
+        void       EnsureShadowResources();
+        VkDescriptorSet GetOrCreateShadowDescSet(uint32_t frameIdx,
+                                                  VkImageView directional,
+                                                  VkImageView point,
+                                                  VkImageView spot,
+                                                  const VkSampler (&samplers)[3]);
+        void       FillShadowRecordEXT(Pending3DDraw& d, const GpuDrawParams& p);
         // BasicEffect lit-textured path (Task 897) — DirectionalLight1/2 + EmissiveColor,
         // forwarded via a small UBO (set=0,binding=1) alongside the unchanged 128-byte PC
         // (set=0,binding=0 stays the texture sampler; PC content unchanged from FillExtPushConst).

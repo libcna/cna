@@ -123,6 +123,14 @@ def with_defines(source: str, defines: tuple[str, ...]) -> str:
     return source[:version_end] + "".join(f"#define {name} 1\n" for name in defines) + source[version_end:]
 
 
+def expand_local_includes(source: str, script_dir: Path) -> str:
+    """Expand the checked-in GLSL snippet shared by the stock receiver families."""
+    marker = '#include "shadow_sampling.glsl"'
+    if marker not in source:
+        return source
+    return source.replace(marker, (script_dir / "shadow_sampling.glsl").read_text())
+
+
 # plans/plan_vulkan.md VULKAN-227: the per-instance world matrix, as an OPTIONAL input to every
 # stock 3D vertex shader rather than a program family of its own. This is the Vulkan counterpart of
 # EasyGL's CNA_GL_INSTANCE_TRANSFORM_DECL (EasyGLRenderer.cpp) -- the same four columns, at the same
@@ -362,7 +370,7 @@ def main():
         if not glsl_path.exists():
             print(f"ERROR: {glsl_path} not found", file=sys.stderr)
             sys.exit(1)
-        source = glsl_path.read_text()
+        source = expand_local_includes(glsl_path.read_text(), script_dir)
         defines = ("CNA_PBR_DUAL_UV",) if "DualUv" in cname else ()
         if cname in VERTEX_COLOR_VARIANTS:
             defines += ("CNA_PBR_VERTEX_COLOR",)

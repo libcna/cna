@@ -31,6 +31,8 @@ layout(set = 0, binding = 8) uniform samplerCube uIblIrradiance;
 layout(set = 0, binding = 9) uniform samplerCube uIblSpecular;
 layout(set = 0, binding = 10) uniform sampler2D uIblBrdfLut;
 
+#include "shadow_sampling.glsl"
+
 layout(push_constant) uniform PC {
     mat4  mvp;
     vec4  diffuseColor;
@@ -179,6 +181,8 @@ void main() {
     Lo += PbrLight(finalNormal, V, normalize(-pc.light0Dir), pc.light0Diffuse, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-pbr.light1Dir_pad.xyz), pbr.light1Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-pbr.light2Dir_pad.xyz), pbr.light2Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
+    Lo *= CnaShadowFactor(vWorldPos);
+    Lo += CnaPunctualLight(vWorldPos, finalNormal) * albedo;
     float occlusionSample = texture(uOcclusionMap, CnaPbrTransformUV(CNA_PBR_UV(4), 4)).r;
     float occlusion = 1.0 + pbr.pbrMapScales.y * (occlusionSample - 1.0);
     vec3 ambient = pc.ambientColor * albedo * occlusion
@@ -187,6 +191,7 @@ void main() {
     emissiveSample = mix(emissiveSample, CnaSrgbToLinear(emissiveSample), pbr.srgbFlags.y);
     vec3 emissive = pbr.emissive_roughness.xyz * emissiveSample;
     outColor = vec4(ambient + Lo + emissive, alpha);
+    outColor.rgb *= CnaCascadeDebugTint(vWorldPos);
     vec3 fogLinear = mix(pbr.fogColorEnabled.xyz,
                          CnaSrgbToLinear(pbr.fogColorEnabled.xyz), pbr.srgbFlags.z);
     outColor.rgb = mix(fogLinear, outColor.rgb, vFogFactor);

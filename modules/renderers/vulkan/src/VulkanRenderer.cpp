@@ -3835,6 +3835,11 @@ namespace CNA::Internal::Renderers::Vulkan
             if (pbrSkinnedUBO_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, pbrSkinnedUBO_[i], nullptr);    pbrSkinnedUBO_[i]    = VK_NULL_HANDLE; }
             if (pbrSkinnedUBOMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, pbrSkinnedUBOMem_[i], nullptr);   pbrSkinnedUBOMem_[i] = VK_NULL_HANDLE; }
         }
+        for (auto& cache : shadowDescSets_) cache.clear();
+        for (uint32_t i = 0; i < MaxFramesInFlight; ++i) {
+            if (shadowUBO_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, shadowUBO_[i], nullptr);    shadowUBO_[i]    = VK_NULL_HANDLE; }
+            if (shadowUBOMem_[i] != VK_NULL_HANDLE) { vkFreeMemory(device_, shadowUBOMem_[i], nullptr);   shadowUBOMem_[i] = VK_NULL_HANDLE; }
+        }
         // Default flat-normal fallback texture (no free of descriptorSet -- it's never bound as
         // its own standalone set, only as one of several samplers in a shared PBR descriptor set).
         if (defaultFlatNormalView_   != VK_NULL_HANDLE) { vkDestroyImageView(device_, defaultFlatNormalView_, nullptr);  defaultFlatNormalView_   = VK_NULL_HANDLE; }
@@ -3876,6 +3881,8 @@ namespace CNA::Internal::Renderers::Vulkan
         if (pipelineLayoutLitTextured3D_    != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayoutLitTextured3D_, nullptr);    pipelineLayoutLitTextured3D_    = VK_NULL_HANDLE; }
         if (descriptorPoolLitTextured_      != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device_, descriptorPoolLitTextured_, nullptr);      descriptorPoolLitTextured_      = VK_NULL_HANDLE; }
         if (descriptorSetLayoutLitTextured_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayoutLitTextured_, nullptr); descriptorSetLayoutLitTextured_ = VK_NULL_HANDLE; }
+        if (descriptorPoolShadow_      != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device_, descriptorPoolShadow_, nullptr);      descriptorPoolShadow_      = VK_NULL_HANDLE; }
+        if (descriptorSetLayoutShadow_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayoutShadow_, nullptr); descriptorSetLayoutShadow_ = VK_NULL_HANDLE; }
         if (pipelineLayoutFogTex3D_    != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayoutFogTex3D_, nullptr);    pipelineLayoutFogTex3D_    = VK_NULL_HANDLE; }
         if (descriptorPoolFogTex3D_      != VK_NULL_HANDLE) { vkDestroyDescriptorPool(device_, descriptorPoolFogTex3D_, nullptr);      descriptorPoolFogTex3D_      = VK_NULL_HANDLE; }
         if (descriptorSetLayoutFogTex3D_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayoutFogTex3D_, nullptr); descriptorSetLayoutFogTex3D_ = VK_NULL_HANDLE; }
@@ -9842,6 +9849,124 @@ namespace CNA::Internal::Renderers::Vulkan
         return ds;
     }
 
+    // ---- Shared stock-effect shadow receiver resources (MOD-2236) ----
+
+    void VulkanRenderer::EnsureShadowResources()
+    {
+        // Every statically declared sampler must have a valid descriptor even when its feature is
+        // disabled. Reuse the renderer's neutral 2D/cube images rather than creating shadow-only
+        // duplicates; EnvMap owns the cube allocation today.
+        EnsureDefaultWhiteTexture();
+        EnsureEnvMapResources();
+        if (descriptorSetLayoutShadow_ != VK_NULL_HANDLE) return;
+
+        VkDescriptorSetLayoutBinding bindings[4]{};
+        for (uint32_t i = 0; i < 3; ++i) {
+            bindings[i].binding         = i;
+            bindings[i].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            bindings[i].descriptorCount = 1;
+            bindings[i].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+        }
+        bindings[3].binding         = 3;
+        bindings[3].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        bindings[3].descriptorCount = 1;
+        bindings[3].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutCreateInfo li{};
+        li.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        li.bindingCount = 4;
+        li.pBindings    = bindings;
+        if (vkCreateDescriptorSetLayout(device_, &li, nullptr, &descriptorSetLayoutShadow_) !=
+            VK_SUCCESS)
+            throw std::runtime_error("vkCreateDescriptorSetLayout (StockShadow) failed");
+
+        const uint32_t maxSets = 128u * MaxFramesInFlight;
+        VkDescriptorPoolSize ps[2]{};
+        ps[0] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxSets * 3 };
+        ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets };
+        VkDescriptorPoolCreateInfo pi{};
+        pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        pi.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        pi.maxSets       = maxSets;
+        pi.poolSizeCount = 2;
+        pi.pPoolSizes    = ps;
+        if (vkCreateDescriptorPool(device_, &pi, nullptr, &descriptorPoolShadow_) != VK_SUCCESS)
+            throw std::runtime_error("vkCreateDescriptorPool (StockShadow) failed");
+
+        const VkDeviceSize uboSize = kShadowUBOStride * kShadowUBOMaxDraws;
+        for (uint32_t i = 0; i < MaxFramesInFlight; ++i) {
+            if (shadowUBO_[i] == VK_NULL_HANDLE) {
+                CreateBuffer(uboSize,
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    shadowUBO_[i], shadowUBOMem_[i], &shadowUBOPtr_[i]);
+            }
+        }
+    }
+
+    VkDescriptorSet VulkanRenderer::GetOrCreateShadowDescSet(
+        uint32_t frameIdx, VkImageView directional, VkImageView point, VkImageView spot,
+        const VkSampler (&samplers)[3])
+    {
+        EnsureShadowResources();
+        if (directional == VK_NULL_HANDLE) directional = defaultWhiteView_;
+        if (point       == VK_NULL_HANDLE) point       = defaultWhiteCubeView_;
+        if (spot        == VK_NULL_HANDLE) spot        = defaultWhiteView_;
+
+        uint64_t key = 1469598103934665603ull;
+        for (VkImageView view : { directional, point, spot })
+            key = (key ^ reinterpret_cast<uint64_t>(view)) * 1099511628211ull;
+        for (VkSampler sampler : samplers)
+            key = (key ^ reinterpret_cast<uint64_t>(sampler)) * 1099511628211ull;
+        auto& cache = shadowDescSets_[frameIdx];
+        if (const auto found = cache.find(key); found != cache.end()) return found->second.set;
+
+        VkDescriptorSet ds = VK_NULL_HANDLE;
+        VkDescriptorPool dsPool = VK_NULL_HANDLE;
+        {
+            const VkDescriptorPoolSize sizes[] = {
+                { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kEffectPoolMaxSets * 3 },
+                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, kEffectPoolMaxSets },
+            };
+            AllocateFromGrowingPoolEXT(descriptorPoolShadow_, descriptorSetLayoutShadow_,
+                                       sizes, 2u, kEffectPoolMaxSets, ds, dsPool);
+        }
+        if (ds == VK_NULL_HANDLE)
+            throw std::runtime_error(
+                "The Vulkan renderer: the stock-shadow descriptor pool is full and the device "
+                "refused another set. Refused rather than binding a null descriptor set.");
+
+        VkDescriptorImageInfo images[3]{};
+        images[0] = { samplers[0], directional, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        images[1] = { samplers[1], point,       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        images[2] = { samplers[2], spot,        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        VkDescriptorBufferInfo buffer{};
+        buffer.buffer = shadowUBO_[frameIdx];
+        buffer.offset = 0;
+        buffer.range  = sizeof(Pending3DDraw::shadowUboData);
+
+        VkWriteDescriptorSet writes[4]{};
+        for (uint32_t i = 0; i < 3; ++i) {
+            writes[i].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[i].dstSet          = ds;
+            writes[i].dstBinding      = i;
+            writes[i].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[i].descriptorCount = 1;
+            writes[i].pImageInfo      = &images[i];
+        }
+        writes[3].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[3].dstSet          = ds;
+        writes[3].dstBinding      = 3;
+        writes[3].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        writes[3].descriptorCount = 1;
+        writes[3].pBufferInfo     = &buffer;
+        vkUpdateDescriptorSets(device_, 4, writes, 0, nullptr);
+
+        cache[key] = EffectDescSetEntry{
+            ds, dsPool, { directional, point, spot, VK_NULL_HANDLE, VK_NULL_HANDLE }};
+        return ds;
+    }
+
     VkPipeline VulkanRenderer::GetOrCreatePipelineEnvMap3D(
         std::size_t stride,
         VkPrimitiveTopology topo,
@@ -10018,6 +10143,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
     void VulkanRenderer::EnsureLitTexturedResources()
     {
+        EnsureShadowResources();
         if (descriptorSetLayoutLitTextured_ != VK_NULL_HANDLE) return;
 
         // binding=0: sampler2D (fragment), binding=1: light1/2+emissive+world+specular UBO
@@ -10059,7 +10185,9 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPipelineLayoutCreateInfo pli{};
         pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pcRange;
-        pli.setLayoutCount = 1; pli.pSetLayouts = &descriptorSetLayoutLitTextured_;
+        const VkDescriptorSetLayout setLayouts[] = {
+            descriptorSetLayoutLitTextured_, descriptorSetLayoutShadow_ };
+        pli.setLayoutCount = 2; pli.pSetLayouts = setLayouts;
         if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayoutLitTextured3D_) != VK_SUCCESS)
             throw std::runtime_error("vkCreatePipelineLayout (LitTextured3D) failed");
 
@@ -11672,6 +11800,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
     void VulkanRenderer::EnsureSkinnedResources()
     {
+        EnsureShadowResources();
         if (descriptorSetLayoutSkinned_ != VK_NULL_HANDLE) return;
 
         // binding=0: sampler2D (fragment), binding=1: bone UBO dynamic (vertex),
@@ -11716,7 +11845,9 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPipelineLayoutCreateInfo pli{};
         pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pcRange;
-        pli.setLayoutCount = 1; pli.pSetLayouts = &descriptorSetLayoutSkinned_;
+        const VkDescriptorSetLayout setLayouts[] = {
+            descriptorSetLayoutSkinned_, descriptorSetLayoutShadow_ };
+        pli.setLayoutCount = 2; pli.pSetLayouts = setLayouts;
         if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayoutSkinned3D_) != VK_SUCCESS)
             throw std::runtime_error("vkCreatePipelineLayout (Skinned3D) failed");
 
@@ -12229,6 +12360,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // The disabled path still needs valid descriptors for the statically declared cube
         // samplers. EnvironmentMapEffect owns the renderer's one neutral cube allocation.
         EnsureEnvMapResources();
+        EnsureShadowResources();
         if (descriptorSetLayoutPbr_ != VK_NULL_HANDLE) return;
 
         VkDescriptorSetLayoutBinding bindings[11]{};
@@ -12279,7 +12411,9 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPipelineLayoutCreateInfo pli{};
         pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pcRange;
-        pli.setLayoutCount = 1; pli.pSetLayouts = &descriptorSetLayoutPbr_;
+        const VkDescriptorSetLayout setLayouts[] = {
+            descriptorSetLayoutPbr_, descriptorSetLayoutShadow_ };
+        pli.setLayoutCount = 2; pli.pSetLayouts = setLayouts;
         if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayoutPbr3D_) != VK_SUCCESS)
             throw std::runtime_error("vkCreatePipelineLayout (Pbr3D) failed");
 
@@ -12596,6 +12730,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // The disabled path still needs valid descriptors for the statically declared cube
         // samplers. EnvironmentMapEffect owns the renderer's one neutral cube allocation.
         EnsureEnvMapResources();
+        EnsureShadowResources();
         if (descriptorSetLayoutPbrSkinned_ != VK_NULL_HANDLE) return;
 
         // Bindings 0-4: core samplers; binding 5: bone palette dynamic UBO; binding 6: PbrParams
@@ -12652,7 +12787,9 @@ namespace CNA::Internal::Renderers::Vulkan
         VkPipelineLayoutCreateInfo pli{};
         pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pcRange;
-        pli.setLayoutCount = 1; pli.pSetLayouts = &descriptorSetLayoutPbrSkinned_;
+        const VkDescriptorSetLayout setLayouts[] = {
+            descriptorSetLayoutPbrSkinned_, descriptorSetLayoutShadow_ };
+        pli.setLayoutCount = 2; pli.pSetLayouts = setLayouts;
         if (vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayoutPbrSkinned3D_) != VK_SUCCESS)
             throw std::runtime_error("vkCreatePipelineLayout (PbrSkinned3D) failed");
 
@@ -13685,6 +13822,7 @@ namespace CNA::Internal::Renderers::Vulkan
         uint32_t pbrUBOSlot         = 0; // PbrEffect (unskinned)
         uint32_t pbrSkinnedBoneUBOSlot = 0; // SkinnedPbrEffect bone palette
         uint32_t pbrSkinnedUBOSlot  = 0; // SkinnedPbrEffect PbrParams
+        uint32_t shadowUBOSlot      = 0; // MOD-2236: shared by all stock receiver families
 
         // Helper: draw all pending 3D draws for a specific RT into the current render pass.
         VkDeviceSize frame3DVbCursor     = 0;
@@ -14173,6 +14311,27 @@ namespace CNA::Internal::Renderers::Vulkan
                     // already holds diffuseColor/vertexColorEnabled at the same float offsets
                     // FillExtPushConst() uses, filled by DrawPrimitivesEx for stride==16 draws.
                     vkCmdPushConstants(cb, pipelineLayout3D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 128, draw.pushConst);
+                }
+                // MOD-2236: set 1 has the same layout for BasicEffect, SkinnedEffect, PbrEffect
+                // and SkinnedPbrEffect. Bind it after the family's own set 0 so the material UBO's
+                // dynamic offsets and this one cannot be confused.
+                VkPipelineLayout shadowLayout = VK_NULL_HANDLE;
+                if (draw.usePbrSkinned)     shadowLayout = pipelineLayoutPbrSkinned3D_;
+                else if (draw.usePbr)       shadowLayout = pipelineLayoutPbr3D_;
+                else if (draw.useSkinned)   shadowLayout = pipelineLayoutSkinned3D_;
+                else if (draw.useLitTextured) shadowLayout = pipelineLayoutLitTextured3D_;
+                if (shadowLayout != VK_NULL_HANDLE && draw.shadowDescSet != VK_NULL_HANDLE &&
+                    shadowUBOPtr_[currentFrame_] != nullptr) {
+                    const uint32_t slot = shadowUBOSlot++;
+                    const uint32_t shadowOff = slot * kShadowUBOStride;
+                    if (shadowOff + sizeof(draw.shadowUboData) <=
+                        kShadowUBOStride * kShadowUBOMaxDraws) {
+                        std::memcpy(static_cast<uint8_t*>(shadowUBOPtr_[currentFrame_]) + shadowOff,
+                                    draw.shadowUboData, sizeof(draw.shadowUboData));
+                        vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                                shadowLayout, 1, 1, &draw.shadowDescSet,
+                                                1, &shadowOff);
+                    }
                 }
                 VkLifetimeTraceEXT("record.draw3D    order=%llu family=%s rt=%p seg=%llu "
                                    "boundSet=0x%llx count=%u instances=%u",
@@ -18137,7 +18296,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 ++it;
             }
         }
-        // REMED-GFX-076: the seven per-frame effect caches are hash-keyed, so they carry each entry's
+        // REMED-GFX-076: the per-frame effect caches are hash-keyed, so they carry each entry's
         // referencing views for reverse lookup here. Evict every entry this dying view participates
         // in; the freed set is fence-retired to its own pool (see ProcessRetiredResources).
         EvictViewFromEffectCache(dualTexDescSets_,     descriptorPool2Tex_,        view, into);
@@ -18147,6 +18306,7 @@ namespace CNA::Internal::Renderers::Vulkan
         EvictViewFromEffectCache(skinnedDescSets_,     descriptorPoolSkinned_,     view, into);
         EvictViewFromEffectCache(pbrDescSets_,         descriptorPoolPbr_,         view, into);
         EvictViewFromEffectCache(pbrSkinnedDescSets_,  descriptorPoolPbrSkinned_,  view, into);
+        EvictViewFromEffectCache(shadowDescSets_,      descriptorPoolShadow_,      view, into);
         for (auto* shader : liveComputeShaders_)
             if (shader != nullptr)
                 shader->EvictDescriptorSetsReferencingEXT(
@@ -18177,7 +18337,7 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         // VULKAN-181: the pool comes from the ENTRY now, not from the caller. These caches used to
         // have exactly one pool each; they can chain further ones, and a set freed from the wrong
-        // pool is undefined behaviour rather than a leak. The parameter is kept so the seven call
+        // pool is undefined behaviour rather than a leak. The parameter is kept so the call
         // sites do not have to change shape, and is deliberately unused.
         for (auto& cache : caches)
         {
@@ -18196,7 +18356,7 @@ namespace CNA::Internal::Renderers::Vulkan
         }
     }
 
-    // REMED-GFX-076: read-only test introspection (see header). Sum of live entries over all seven
+    // REMED-GFX-076: read-only test introspection (see header). Sum of live entries over all
     // per-frame effect descriptor-set caches. Not part of the render path.
     std::size_t VulkanRenderer::TotalEffectDescSetEntriesForTests() const
     {
@@ -18204,7 +18364,7 @@ namespace CNA::Internal::Renderers::Vulkan
         auto add = [&n](const EffectDescSetCache& c) { for (const auto& m : c) n += m.size(); };
         add(dualTexDescSets_);     add(envMapDescSets_);   add(litTexturedDescSets_);
         add(fogTex3DDescSets_);    add(skinnedDescSets_);  add(pbrDescSets_);
-        add(pbrSkinnedDescSets_);
+        add(pbrSkinnedDescSets_);  add(shadowDescSets_);
         return n;
     }
 
@@ -18223,7 +18383,7 @@ namespace CNA::Internal::Renderers::Vulkan
         };
         scan(dualTexDescSets_);     scan(envMapDescSets_);   scan(litTexturedDescSets_);
         scan(fogTex3DDescSets_);    scan(skinnedDescSets_);  scan(pbrDescSets_);
-        scan(pbrSkinnedDescSets_);
+        scan(pbrSkinnedDescSets_);  scan(shadowDescSets_);
         return n;
     }
 
@@ -18286,9 +18446,9 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         if (into.samplers.empty()) return;
 
-        // The seven per-frame EFFECT caches are the one place a reverse lookup is impossible:
+        // The per-frame EFFECT caches are the one place a reverse lookup is impossible:
         // `EffectDescSetEntry` records the views an entry references (REMED-GFX-076) but not the
-        // samplers, and the samplers are only hashed into the key. Rather than widen seven caches
+        // samplers, and the samplers are only hashed into the key. Rather than widen every cache
         // and their insert sites for a path that runs only in the pathological case, every entry is
         // dropped when any sampler is evicted. It costs one frame of re-population, and only for a
         // game that has already exceeded a 256-sampler bound.
@@ -18307,6 +18467,7 @@ namespace CNA::Internal::Renderers::Vulkan
         flush(skinnedDescSets_,     descriptorPoolSkinned_);
         flush(pbrDescSets_,         descriptorPoolPbr_);
         flush(pbrSkinnedDescSets_,  descriptorPoolPbrSkinned_);
+        flush(shadowDescSets_,      descriptorPoolShadow_);
 
         VkLifetimeTraceEXT("cache.trimSampler evicted=%zu remaining=%zu sets=%zu gen=%llu",
                            into.samplers.size(), samplerCache_.size(),
@@ -18511,7 +18672,8 @@ namespace CNA::Internal::Renderers::Vulkan
         const ITextureRenderer* const slots[] = {
             params.texture0, params.texture1, params.pbrNormalMap,
             params.pbrMetallicRoughnessMap, params.pbrEmissiveMap, params.pbrOcclusionMap,
-            params.pbrSpecularMap, params.pbrSpecularColorMap, params.iblBrdfLut
+            params.pbrSpecularMap, params.pbrSpecularColorMap, params.iblBrdfLut,
+            params.shadowMap, params.punctualShadowMap
         };
         for (const ITextureRenderer* t : slots)
             NoteSampledTextureEXT(currentSegment_, t);
@@ -18520,6 +18682,8 @@ namespace CNA::Internal::Renderers::Vulkan
             currentSegment_, SampledRenderTargetGroupEXT(params.iblIrradiance));
         NoteSampledRenderTargetGroupEXT(
             currentSegment_, SampledRenderTargetGroupEXT(params.iblPrefilteredSpecular));
+        NoteSampledRenderTargetGroupEXT(
+            currentSegment_, SampledRenderTargetGroupEXT(params.punctualShadowCube));
     }
 
     // REMED-GFX-074: record + submit the off-screen passes a GetData readback of `rt` depends on
@@ -19110,6 +19274,64 @@ namespace CNA::Internal::Renderers::Vulkan
         PushPending3DDraw(std::move(d));
     }
 
+    void VulkanRenderer::FillShadowRecordEXT(Pending3DDraw& d, const GpuDrawParams& params)
+    {
+        EnsureShadowResources();
+        const bool haveDirectional = params.shadowsEnabled && params.shadowMap != nullptr;
+        const int cascadeCount = haveDirectional && params.cascadeCount > 0
+            ? std::min(params.cascadeCount, 4) : 0;
+        const int punctualKind = params.punctualKind >= 1 && params.punctualKind <= 2
+            ? params.punctualKind : 0;
+        const bool havePoint = punctualKind == 1 && params.punctualShadowCube != nullptr;
+        const bool haveSpot  = punctualKind == 2 && params.punctualShadowMap != nullptr;
+
+        const auto* directional = haveDirectional
+            ? dynamic_cast<const IVulkanSamplable*>(params.shadowMap) : nullptr;
+        const auto* point = havePoint
+            ? dynamic_cast<const IVulkanCubeSamplable*>(params.punctualShadowCube) : nullptr;
+        const auto* spot = haveSpot
+            ? dynamic_cast<const IVulkanSamplable*>(params.punctualShadowMap) : nullptr;
+        const VkSampler samplers[3] = {
+            slotSamplers_[7] != VK_NULL_HANDLE ? slotSamplers_[7] : defaultSampler_,
+            slotSamplers_[8] != VK_NULL_HANDLE ? slotSamplers_[8] : defaultSampler_,
+            slotSamplers_[9] != VK_NULL_HANDLE ? slotSamplers_[9] : defaultSampler_,
+        };
+        d.shadowDescSet = GetOrCreateShadowDescSet(
+            currentFrame_,
+            directional ? directional->GetVkImageView() : defaultWhiteView_,
+            point ? point->GetVkCubeImageView() : defaultWhiteCubeView_,
+            spot ? spot->GetVkImageView() : defaultWhiteView_, samplers);
+
+        std::copy_n(params.lightViewProjColMajor, 16, d.shadowUboData);
+        std::copy_n(params.cascadeMatricesColMajor, 64, d.shadowUboData + 16);
+        std::copy_n(params.punctualViewProjColMajor, 16, d.shadowUboData + 80);
+        d.shadowUboData[96] = haveDirectional ? 1.0f : 0.0f;
+        d.shadowUboData[97] = params.shadowDepthBias;
+        d.shadowUboData[98] = static_cast<float>(std::clamp(params.shadowPcfRadius, 0, 2));
+        d.shadowUboData[99] = static_cast<float>(cascadeCount);
+        const int shadowWidth  = haveDirectional ? params.shadowMap->GetWidth() : 1;
+        const int shadowHeight = haveDirectional ? params.shadowMap->GetHeight() : 1;
+        d.shadowUboData[100] = shadowWidth > 0 ? 1.0f / static_cast<float>(shadowWidth) : 0.0f;
+        d.shadowUboData[101] = shadowHeight > 0 ? 1.0f / static_cast<float>(shadowHeight) : 0.0f;
+        d.shadowUboData[102] = params.cascadeBlendBand;
+        d.shadowUboData[103] = params.cascadeDebugTint ? 1.0f : 0.0f;
+        std::copy_n(params.cascadeSplits, 4, d.shadowUboData + 104);
+        std::copy_n(params.cascadeViewZRow, 4, d.shadowUboData + 108);
+        std::copy_n(params.punctualPosition, 3, d.shadowUboData + 112);
+        d.shadowUboData[115] = params.punctualRange > 0.0f ? params.punctualRange : 1.0f;
+        std::copy_n(params.punctualDirection, 3, d.shadowUboData + 116);
+        d.shadowUboData[119] = static_cast<float>(punctualKind);
+        std::copy_n(params.punctualDiffuse, 3, d.shadowUboData + 120);
+        d.shadowUboData[123] = (havePoint || haveSpot) ? 1.0f : 0.0f;
+        d.shadowUboData[124] = params.punctualCosInner;
+        d.shadowUboData[125] = params.punctualCosOuter;
+        d.shadowUboData[126] = params.punctualShadowBias;
+        const int spotWidth  = haveSpot ? params.punctualShadowMap->GetWidth() : 1;
+        const int spotHeight = haveSpot ? params.punctualShadowMap->GetHeight() : 1;
+        d.shadowUboData[127] = spotWidth > 0 ? 1.0f / static_cast<float>(spotWidth) : 0.0f;
+        d.shadowUboData[128] = spotHeight > 0 ? 1.0f / static_cast<float>(spotHeight) : 0.0f;
+    }
+
     // plan_vulkan.md VULKAN-223: the stock-effect family dispatch, extracted from the TWO ordinary
     // draw routes that carried copies of it. `DrawPrimitivesEx` and `DrawIndexedPrimitivesEx`
     // differed by exactly ONE statement out of 165 -- a redundant `EnsureDualTexResources()` that
@@ -19328,6 +19550,12 @@ namespace CNA::Internal::Renderers::Vulkan
                     d.fogTex3DUboData[6] = params.fogVector[2]; d.fogTex3DUboData[7] = params.fogVector[3];
                 }
             }
+
+            // MOD-2236: exactly the four families that EasyGL's receiver macros are compiled
+            // into. EnvironmentMapEffect is lit but EasyGL does not expose shadow sampling in its
+            // program, so including it here would be a new divergence rather than parity.
+            if (needsPbr || needsSkinned || needsLitTextured || needsLitUntextured || needsLitColored)
+                FillShadowRecordEXT(d, params);
     }
 
 
@@ -19535,7 +19763,8 @@ namespace CNA::Internal::Renderers::Vulkan
         d.basicShape   = basicShape;
         // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/
         // Gouraud lighting) -- only meaningful while lighting is actually enabled.
-        d.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+        d.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting &&
+                            !(params.shadowsEnabled && params.shadowMap != nullptr);
         // VULKAN-223: the family dispatch both ordinary routes used to inline, verbatim.
         FillStockFamilyRecordEXT(d, params, needsPbr, needsSkinned, needsEnvMap, needsDualTex,
                                  needsLitTextured, needsLitUntextured, needsLitColored);
@@ -19768,7 +19997,8 @@ namespace CNA::Internal::Renderers::Vulkan
         d.basicShape   = basicShape;
         // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/
         // Gouraud lighting) -- only meaningful while lighting is actually enabled.
-        d.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+        d.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting &&
+                            !(params.shadowsEnabled && params.shadowMap != nullptr);
         // VULKAN-223: the family dispatch both ordinary routes used to inline, verbatim.
         FillStockFamilyRecordEXT(d, params, needsPbr, needsSkinned, needsEnvMap, needsDualTex,
                                  needsLitTextured, needsLitUntextured, needsLitColored);
@@ -20366,7 +20596,8 @@ namespace CNA::Internal::Renderers::Vulkan
             d.useSkinned   = true;
             // Task 1103: XNA's real default is PreferPerPixelLighting=false, and an instanced draw
             // must not silently move a game to the other variant.
-            d.preferVertexLit = !params.preferPerPixelLighting;
+            d.preferVertexLit = !params.preferPerPixelLighting &&
+                                !(params.shadowsEnabled && params.shadowMap != nullptr);
             // VULKAN-231: the same arm of the family dispatch the ordinary routes run, so the
             // bone palette, the 64-float fog/light UBO and the descriptor set are the family's own.
             FillStockFamilyRecordEXT(d, params, /*needsPbr=*/false, /*needsSkinned=*/true,
@@ -20383,7 +20614,8 @@ namespace CNA::Internal::Renderers::Vulkan
             d.litColored      = instancedLitColored;
             // Task 1103: XNA's real default is PreferPerPixelLighting=false, and an instanced draw
             // must not silently move a game to the other variant.
-            d.preferVertexLit = !params.preferPerPixelLighting;
+            d.preferVertexLit = !params.preferPerPixelLighting &&
+                                !(params.shadowsEnabled && params.shadowMap != nullptr);
             // VULKAN-228: the untextured and coloured shapes take the SAME arm of the family
             // dispatch as the textured one -- same descriptor set, same 64-float UBO, same
             // fragment stage. VULKAN-199 already made that arm accept all three.
