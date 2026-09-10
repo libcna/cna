@@ -314,6 +314,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   array-window validation; invalid mip levels report `InvalidOperationException`; then copy-window,
   element-width, rectangle and exact-total validation run in that order. Shared mixed-invalid tests
   cover both Software and EasyGL so a renderer fallback cannot accidentally choose the exception.
+- **`Texture2D.FromStream` preserves XNA/FNA stream position semantics** (`SOFTWARE-297`). Both
+  overloads decode from the current position, allowing an encoded image after a caller-owned
+  prefix, while a seekable stream positioned exactly at its end is rewound and reused from zero.
 - **Every XNA-permitted ordinary `TextureCube` format has the same exact storage and sampling**
   (`SOFTWARE-145`, `SOFTWARE-149`, `SOFTWARE-150`). Each of the six faces and every declared mip
   independently retains Color, DXT1/3/5, normalized-integer, binary32 or binary16 bytes. Typed

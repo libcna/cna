@@ -1835,6 +1835,25 @@ TEST_F(Texture2DFromStreamFormatTest, BmpDecodesCorrectSizeAndColor)
         EXPECT_TRUE(IsCloseTo(px[i], 0, 0, 255, 0)) << "pixel " << i; // BMP is uncompressed
 }
 
+TEST_F(Texture2DFromStreamFormatTest, DecodesFromTheCurrentStreamPosition)
+{
+    constexpr System::IO::intcs prefixSize = 7;
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(prefixSize), 0xA5);
+    const auto bmp = BuildSolidColorBmp(2, 2, 255, 0, 0);
+    bytes.insert(bytes.end(), bmp.begin(), bmp.end());
+
+    MemoryStream stream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    stream.setPositionProperty(prefixSize);
+    Texture2D loaded = Texture2D::FromStream(gd, stream);
+
+    std::vector<Color> pixels(4);
+    loaded.GetData(pixels.data(), 0, static_cast<int>(pixels.size()));
+    EXPECT_TRUE(std::all_of(pixels.begin(), pixels.end(), [](const Color& pixel)
+    {
+        return pixel == Color(255, 0, 0, 255);
+    }));
+}
+
 // -----------------------------------------------------------------------
 // FromStream(device, stream, width, height, zoom) — resize/crop overload (Task 262)
 //
@@ -1878,6 +1897,17 @@ TEST_F(Texture2DFromStreamResizeTest, ZoomFillsExactRequestedSize)
 
     EXPECT_EQ(loaded.getWidthProperty(), 4);
     EXPECT_EQ(loaded.getHeightProperty(), 4);
+}
+
+TEST_F(Texture2DFromStreamResizeTest, SeekableStreamAtEndRewindsBeforeDecode)
+{
+    MemoryStream stream(pngBytes.data(), static_cast<System::IO::intcs>(pngBytes.size()));
+    stream.setPositionProperty(stream.getLengthProperty());
+
+    Texture2D loaded = Texture2D::FromStream(gd, stream, 4, 4, false);
+
+    EXPECT_EQ(loaded.getWidthProperty(), 4);
+    EXPECT_EQ(loaded.getHeightProperty(), 2);
 }
 
 TEST_F(Texture2DFromStreamResizeTest, ZoomCropsTheHorizontalCenterBeforeScaling)

@@ -2412,6 +2412,27 @@ namespace Microsoft::Xna::Framework::Graphics
         using System::IO::bytecs;
 
         intcs len = stream.getLengthProperty();
+        if (stream.getCanSeekProperty())
+        {
+            intcs position = stream.getPositionProperty();
+            // FNA/XNA decode from the caller's current stream position, except for the common
+            // reusable-stream case where Position already equals Length: that exact state is
+            // rewound to the beginning before decoding. Allocate/read only the remaining range;
+            // asking for the stream's complete Length from a nonzero position necessarily
+            // over-reads at EOF and used to make both valid cases fail.
+            if (position == len)
+            {
+                position = stream.Seek(0, System::IO::SeekOrigin::Begin);
+            }
+            if (position < 0 || position > len)
+            {
+                len = 0;
+            }
+            else
+            {
+                len -= position;
+            }
+        }
         if (len <= 0)
             throw std::runtime_error("Texture2D::FromStream: stream is empty or length unknown");
 
