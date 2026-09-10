@@ -2001,7 +2001,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     std::string_view SdlGpuRenderer::GetAdditionalLimitationsTextEXT() const
     {
-        return "SDL GPU supports eight stock-effect vertex streams and four independently "
+        return "SDL GPU supports all sixteen XNA vertex-stream bindings and four independently "
                "writable, mixed-format color targets. CNAEXT ShaderEffect instancing is not "
                "implemented. OcclusionQuery is unavailable: vendored SDL_gpu 3.5.0 exposes no "
                "occlusion-query or query-pool commands; GPU fences report only command-buffer "

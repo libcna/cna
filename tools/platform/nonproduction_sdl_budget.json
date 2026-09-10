@@ -751,7 +751,7 @@
     },
     "modules/renderers/sdl-gpu/examples/sdlgpu_constructor_exception_safety_test.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 37
+      "max_references": 38
     },
     "modules/renderers/sdl-gpu/examples/sdlgpu_depth_bias_test.cpp": {
       "category": "renderer-integration-executable",

@@ -169,8 +169,8 @@ protected:
                       !dev.SupportsCapability(CNA::GraphicsCapability::IndirectDraw),
                   "out-of-scope modern capabilities are not inherited as true");
 
-            check(renderer.GetMaxVertexStreams() == 8,
-                  "numeric vertex-stream limit agrees with the stock semantic resolver");
+            check(renderer.GetMaxVertexStreams() == 16,
+                  "numeric vertex-stream limit agrees with the XNA public ceiling");
             const std::string_view limitations = renderer.GetAdditionalLimitationsTextEXT();
             check(limitations.find("WireFrame") == std::string_view::npos &&
                       limitations.find("OcclusionQuery") != std::string_view::npos,

@@ -2140,7 +2140,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             return SupportsDepthStencil();
         }
 
-        /** @brief Returns the eight streams the stock semantic resolver can consume faithfully. */
+        /** @brief Returns the full sixteen-stream XNA binding ceiling supported by SDL_gpu. */
         [[nodiscard]] int GetMaxVertexStreams() const override
         {
             return static_cast<int>(CNA::Internal::Graphics::kMaxStockVertexStreamsEXT);

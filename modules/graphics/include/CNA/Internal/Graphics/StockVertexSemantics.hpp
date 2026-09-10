@@ -180,8 +180,15 @@ namespace CNA::Internal::Graphics
         int instanceFrequency = 0;
     };
 
-    /** @brief The most streams one stock program's inputs can come from -- one per input. */
-    inline constexpr std::size_t kMaxStockVertexStreamsEXT = kMaxStockVertexAttributes;
+    /**
+     * @brief The XNA 4.0 ceiling for public vertex streams offered to a stock-program resolver.
+     *
+     * A stock shader consumes at most @ref kMaxStockVertexAttributes streams (one per input), but
+     * the consumed stream may be any one of the sixteen public `SetVertexBuffers` slots. Keeping
+     * the offered-stream ceiling separate prevents a valid semantic in slot 8..15 from being
+     * truncated merely because the selected stock shader has fewer inputs.
+     */
+    inline constexpr std::size_t kMaxStockVertexStreamsEXT = 16;
 
     /**
      * @brief A stream that survived resolution, in the order the native binding wants it.
