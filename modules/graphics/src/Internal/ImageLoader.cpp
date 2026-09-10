@@ -263,6 +263,36 @@ namespace CNA::Internal::Graphics
             targetWidth, targetHeight);
     }
 
+    ImageData ImageLoader::ResizeRgbaForXnaSave(
+        const uint8_t* pixels, const int width, const int height,
+        const int targetWidth, const int targetHeight)
+    {
+        ValidateRgba(pixels, width, height);
+        if (targetWidth <= 0 || targetHeight <= 0)
+            throw std::invalid_argument("ImageLoader: target dimensions must be positive");
+
+        ImageData result;
+        result.width = targetWidth;
+        result.height = targetHeight;
+        result.pixels.resize(PixelByteCount(targetWidth, targetHeight));
+        for (int y = 0; y < targetHeight; ++y)
+        {
+            const int sourceY = static_cast<int>(
+                static_cast<std::int64_t>(y) * height / targetHeight);
+            for (int x = 0; x < targetWidth; ++x)
+            {
+                const int sourceX = static_cast<int>(
+                    static_cast<std::int64_t>(x) * width / targetWidth);
+                const std::size_t sourceOffset =
+                    (static_cast<std::size_t>(sourceY) * width + sourceX) * 4u;
+                const std::size_t destinationOffset =
+                    (static_cast<std::size_t>(y) * targetWidth + x) * 4u;
+                std::copy_n(pixels + sourceOffset, 4u, result.pixels.data() + destinationOffset);
+            }
+        }
+        return result;
+    }
+
     std::vector<uint8_t> ImageLoader::EncodePng(
         const uint8_t* pixels, const int width, const int height,
         const int targetWidth, const int targetHeight)

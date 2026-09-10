@@ -31,6 +31,24 @@ TEST(ImageLoaderTests, BilinearResizeSamplesPixelCentres)
     EXPECT_EQ(resized.pixels, (std::vector<std::uint8_t>{50, 50, 50, 139}));
 }
 
+TEST(ImageLoaderTests, XnaSaveResizeUsesFloorMappedNearestTexelsOnBothAxes)
+{
+    constexpr std::array<std::uint8_t, 16> pixels{
+        1, 0, 0, 255, 2, 0, 0, 255,
+        3, 0, 0, 255, 4, 0, 0, 255,
+    };
+
+    const auto resized = ImageLoader::ResizeRgbaForXnaSave(pixels.data(), 2, 2, 3, 3);
+
+    EXPECT_EQ(resized.width, 3);
+    EXPECT_EQ(resized.height, 3);
+    EXPECT_EQ(resized.pixels, (std::vector<std::uint8_t>{
+        1, 0, 0, 255, 1, 0, 0, 255, 2, 0, 0, 255,
+        1, 0, 0, 255, 1, 0, 0, 255, 2, 0, 0, 255,
+        3, 0, 0, 255, 3, 0, 0, 255, 4, 0, 0, 255,
+    }));
+}
+
 TEST(ImageLoaderTests, RejectsMalformedBuffersAndDimensions)
 {
     constexpr std::array<std::uint8_t, 4> pixel{1, 2, 3, 4};
@@ -41,6 +59,12 @@ TEST(ImageLoaderTests, RejectsMalformedBuffersAndDimensions)
         (void)ImageLoader::ResizeRgba(nullptr, 1, 1, 1, 1, false), std::invalid_argument);
     EXPECT_THROW(
         (void)ImageLoader::ResizeRgba(pixel.data(), 1, 1, 0, 1, false),
+        std::invalid_argument);
+    EXPECT_THROW(
+        (void)ImageLoader::ResizeRgbaForXnaSave(nullptr, 1, 1, 1, 1),
+        std::invalid_argument);
+    EXPECT_THROW(
+        (void)ImageLoader::ResizeRgbaForXnaSave(pixel.data(), 1, 1, 1, 0),
         std::invalid_argument);
 }
 

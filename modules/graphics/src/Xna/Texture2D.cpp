@@ -2623,10 +2623,12 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!stream)
             throw std::invalid_argument("Texture2D::SaveAsPng: stream is null");
-        const std::vector<std::uint8_t> pixels = GetPixelsForSave("Texture2D::SaveAsPng");
+        const std::vector<std::uint8_t> source = GetPixelsForSave("Texture2D::SaveAsPng");
+        const ImageData pixels = ImageLoader::ResizeRgbaForXnaSave(
+            source.data(), width, height, targetWidth, targetHeight);
 
         const std::vector<uint8_t> encoded = ImageLoader::EncodePng(
-            pixels.data(), width, height, targetWidth, targetHeight);
+            pixels.pixels.data(), targetWidth, targetHeight, targetWidth, targetHeight);
         stream->Write(reinterpret_cast<const System::IO::bytecs*>(encoded.data()), 0,
                       static_cast<System::IO::intcs>(encoded.size()));
     }
@@ -2659,10 +2661,13 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!stream)
             throw std::invalid_argument("Texture2D::SaveAsJpeg: stream is null");
-        const std::vector<std::uint8_t> pixels = GetPixelsForSave("Texture2D::SaveAsJpeg");
+        const std::vector<std::uint8_t> source = GetPixelsForSave("Texture2D::SaveAsJpeg");
+        const ImageData pixels = ImageLoader::ResizeRgbaForXnaSave(
+            source.data(), width, height, targetWidth, targetHeight);
 
         const std::vector<uint8_t> encoded = ImageLoader::EncodeJpeg(
-            pixels.data(), width, height, targetWidth, targetHeight, GetJpegSaveQuality());
+            pixels.pixels.data(), targetWidth, targetHeight,
+            targetWidth, targetHeight, GetJpegSaveQuality());
         stream->Write(reinterpret_cast<const System::IO::bytecs*>(encoded.data()), 0,
                       static_cast<System::IO::intcs>(encoded.size()));
     }

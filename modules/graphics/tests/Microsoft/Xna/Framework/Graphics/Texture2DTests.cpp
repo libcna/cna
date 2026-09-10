@@ -2039,6 +2039,40 @@ TEST_F(SaveAsPngTest, SaveWithDifferentTargetSizeResizesOutput)
     EXPECT_EQ(loaded.getHeightProperty(), 4);
 }
 
+TEST_F(SaveAsPngTest, ResizeUsesXnaNearestNeighborTexelMapping)
+{
+    Texture2D source(gd, 4, 1);
+    const std::array<Color, 4> pixels{{Color::Red, Color::Green, Color::Blue, Color::White}};
+    source.SetData(pixels.data(), static_cast<int>(pixels.size()));
+
+    MemoryStream downsampled;
+    source.SaveAsPng(&downsampled, 2, 1);
+    const auto downsampledBytes = downsampled.GetBuffer();
+    MemoryStream downsampledStream(
+        downsampledBytes.data(), static_cast<System::IO::intcs>(downsampledBytes.size()));
+    Texture2D downsampledTexture = Texture2D::FromStream(gd, downsampledStream);
+    std::array<Color, 2> downsampledPixels{};
+    downsampledTexture.GetData(
+        downsampledPixels.data(), static_cast<int>(downsampledPixels.size()));
+    EXPECT_EQ(downsampledPixels[0], Color::Red);
+    EXPECT_EQ(downsampledPixels[1], Color::Blue);
+
+    Texture2D pair(gd, 2, 1);
+    const std::array<Color, 2> pairPixels{{Color::Red, Color::Blue}};
+    pair.SetData(pairPixels.data(), static_cast<int>(pairPixels.size()));
+    MemoryStream upsampled;
+    pair.SaveAsPng(&upsampled, 3, 1);
+    const auto upsampledBytes = upsampled.GetBuffer();
+    MemoryStream upsampledStream(
+        upsampledBytes.data(), static_cast<System::IO::intcs>(upsampledBytes.size()));
+    Texture2D upsampledTexture = Texture2D::FromStream(gd, upsampledStream);
+    std::array<Color, 3> upsampledPixels{};
+    upsampledTexture.GetData(upsampledPixels.data(), static_cast<int>(upsampledPixels.size()));
+    EXPECT_EQ(upsampledPixels[0], Color::Red);
+    EXPECT_EQ(upsampledPixels[1], Color::Red);
+    EXPECT_EQ(upsampledPixels[2], Color::Blue);
+}
+
 TEST_F(SaveAsPngTest, ResolvedRenderTargetSavesItsLivePixels)
 {
     RenderTarget2D target(gd, 2, 2);
@@ -2320,6 +2354,27 @@ TEST_F(SaveAsJpegTest, SaveWithDifferentTargetSizeResizesOutput)
 
     EXPECT_EQ(loaded.getWidthProperty(), 6);
     EXPECT_EQ(loaded.getHeightProperty(), 4);
+}
+
+TEST_F(SaveAsJpegTest, ResizeUsesXnaNearestNeighborBeforeEncoding)
+{
+    Texture2D source(gd, 2, 1);
+    const std::array<Color, 2> pixels{{Color::Red, Color::Blue}};
+    source.SetData(pixels.data(), static_cast<int>(pixels.size()));
+    MemoryStream encoded;
+    source.SaveAsJpeg(&encoded, 16, 8);
+    const auto bytes = encoded.GetBuffer();
+    MemoryStream stream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D decoded = Texture2D::FromStream(gd, stream);
+    std::array<Color, 128> actual{};
+    decoded.GetData(actual.data(), static_cast<int>(actual.size()));
+
+    const Color left = actual[4 * 16 + 6];
+    const Color right = actual[4 * 16 + 9];
+    EXPECT_GT(left.getRProperty(), 220);
+    EXPECT_LT(left.getBProperty(), 40);
+    EXPECT_LT(right.getRProperty(), 40);
+    EXPECT_GT(right.getBProperty(), 220);
 }
 
 TEST_F(SaveAsJpegTest, ResolvedRenderTargetSavesItsLivePixels)

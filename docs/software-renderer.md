@@ -324,6 +324,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   Measured Microsoft XNA behavior is reproduced for all 17 uncompressed formats and DXT1/3/5,
   including image-specific missing-channel expansion, float/half clamping, block decompression and
   clearing hidden RGB at exact zero alpha. This also removes the former narrow-texel buffer over-read.
+- **Classic PNG/JPEG target-size changes use XNA's texel mapping** (`SOFTWARE-300`). Both encoders
+  use floor-mapped nearest-neighbor source pixels for upscale and downscale, as pinned against the
+  Microsoft runtime; the general image/content resize path remains bilinear.
 - **Every XNA-permitted ordinary `TextureCube` format has the same exact storage and sampling**
   (`SOFTWARE-145`, `SOFTWARE-149`, `SOFTWARE-150`). Each of the six faces and every declared mip
   independently retains Color, DXT1/3/5, normalized-integer, binary32 or binary16 bytes. Typed
