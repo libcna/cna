@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-103 / SOFTWARE-204: public vertex-buffer capacity and zero-element transfer contract.
+// REMED-GFX-103 / SOFTWARE-204 / SOFTWARE-290: public vertex-buffer copy contract.
 //
-// XNA requires a positive logical capacity. Once the public transfer arguments have been
-// validated, an empty upload into that buffer remains a true no-op: it must not reach pointer
-// arithmetic, packing, shadow copies, or a graphics renderer, and must not replace the most
-// recent real upload.
+// XNA requires both a positive logical capacity and a positive classic-copy element count. A null
+// array is rejected even for count zero; a non-null zero-element classic copy is rejected as an
+// out-of-range elementCount. Raw CNAEXT transfers retain their explicit zero-count no-op contract.
 
 #include <algorithm>
 #include <array>
@@ -289,7 +288,7 @@ TEST_F(VertexBufferEmptyDataTest, ZeroCapacityConstructionThrowsForStaticAndDyna
                  System::ArgumentOutOfRangeException);
 }
 
-TEST_F(VertexBufferEmptyDataTest, ZeroCountAcceptsNullForStaticAndDynamicBuffers)
+TEST_F(VertexBufferEmptyDataTest, ClassicCopiesRejectNullEvenWhenCountIsZero)
 {
     RequireVertexBuffers();
 
@@ -297,18 +296,19 @@ TEST_F(VertexBufferEmptyDataTest, ZeroCountAcceptsNullForStaticAndDynamicBuffers
     DynamicVertexBuffer dynamicBuffer(
         device, PositionColorDeclaration(), 1, BufferUsage::None);
 
-    EXPECT_NO_THROW(
-        staticBuffer.SetData(static_cast<const VertexPositionColor*>(nullptr), 0));
-    EXPECT_NO_THROW(staticBuffer.SetData(
-        static_cast<const VertexPositionColor*>(nullptr), 0, 0));
-    EXPECT_NO_THROW(dynamicBuffer.SetData(
-        static_cast<const VertexPositionColor*>(nullptr),
-        0,
-        0,
-        SetDataOptions::Discard));
+    EXPECT_THROW(staticBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(staticBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0, 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0, 0,
+                     SetDataOptions::Discard),
+                 System::ArgumentNullException);
 }
 
-TEST_F(VertexBufferEmptyDataTest, EmptyVectorAndSourceEndSlicesAreTrueNoOps)
+TEST_F(VertexBufferEmptyDataTest, ClassicEmptyCopiesRejectAndRawEmptyCopyRemainsANoOp)
 {
     RequireVertexBuffers();
 
@@ -323,10 +323,13 @@ TEST_F(VertexBufferEmptyDataTest, EmptyVectorAndSourceEndSlicesAreTrueNoOps)
         device, PositionColorDeclaration(), 2, BufferUsage::None);
     VertexBuffer rawBuffer(device, PaddedStrideDeclaration(), 2, BufferUsage::None);
 
-    EXPECT_NO_THROW(typedBuffer.SetData(emptyTyped.data(), 0));
-    EXPECT_NO_THROW(typedBuffer.SetData(emptyTyped.data(), 0, 0));
-    EXPECT_NO_THROW(dynamicBuffer.SetData(
-        emptyTyped.data(), 0, 0, SetDataOptions::Discard));
+    EXPECT_THROW(typedBuffer.SetData(emptyTyped.data(), 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(typedBuffer.SetData(emptyTyped.data(), 0, 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     emptyTyped.data(), 0, 0, SetDataOptions::Discard),
+                 System::ArgumentNullException);
     EXPECT_NO_THROW(rawBuffer.SetDataRaw(emptyRaw.data(), 0, 16));
 
     typedBuffer.SetData(source.data(), static_cast<int>(source.size()));
@@ -335,13 +338,16 @@ TEST_F(VertexBufferEmptyDataTest, EmptyVectorAndSourceEndSlicesAreTrueNoOps)
     ASSERT_EQ(2, typedBuffer.GetRenderer().GetVertexCount());
     ASSERT_EQ(2, dynamicBuffer.GetRenderer().GetVertexCount());
 
-    // A zero-length slice whose source start is exactly one-past-the-source end is valid.
-    EXPECT_NO_THROW(typedBuffer.SetData(
-        source.data(), static_cast<int>(source.size()), 0));
-    EXPECT_NO_THROW(dynamicBuffer.SetData(
-        source.data(), static_cast<int>(source.size()), 0,
-        SetDataOptions::NoOverwrite));
-    EXPECT_NO_THROW(typedBuffer.SetData(static_cast<const VertexPositionColor*>(nullptr), 0));
+    EXPECT_THROW(typedBuffer.SetData(
+                     source.data(), static_cast<int>(source.size()), 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     source.data(), static_cast<int>(source.size()), 0,
+                     SetDataOptions::NoOverwrite),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(typedBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0),
+                 System::ArgumentNullException);
     EXPECT_EQ(2, typedBuffer.GetRenderer().GetVertexCount());
     EXPECT_EQ(2, dynamicBuffer.GetRenderer().GetVertexCount());
 
@@ -353,7 +359,7 @@ TEST_F(VertexBufferEmptyDataTest, EmptyVectorAndSourceEndSlicesAreTrueNoOps)
     EXPECT_EQ(source, dynamicResult);
 }
 
-TEST_F(VertexBufferEmptyDataTest, EmptyUploadBetweenAAndBDoesNotClearEitherBufferKind)
+TEST_F(VertexBufferEmptyDataTest, RejectedEmptyUploadDoesNotClearEitherBufferKind)
 {
     RequireVertexBuffers();
 
@@ -377,10 +383,12 @@ TEST_F(VertexBufferEmptyDataTest, EmptyUploadBetweenAAndBDoesNotClearEitherBuffe
 
     staticBuffer.SetData(uploadA.data(), 3);
     dynamicBuffer.SetData(uploadA.data(), 0, 3, SetDataOptions::Discard);
-    staticBuffer.SetData(uploadA.data(), 3, 0);
-    dynamicBuffer.SetData(
-        static_cast<const VertexPositionColor*>(nullptr), 0, 0,
-        SetDataOptions::NoOverwrite);
+    EXPECT_THROW(staticBuffer.SetData(uploadA.data(), 3, 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0, 0,
+                     SetDataOptions::NoOverwrite),
+                 System::ArgumentNullException);
 
     std::array<VertexPositionColor, 3> result{};
     staticBuffer.GetData(result.data(), 3);
@@ -400,7 +408,7 @@ TEST_F(VertexBufferEmptyDataTest, EmptyUploadBetweenAAndBDoesNotClearEitherBuffe
     EXPECT_EQ(3, dynamicBuffer.GetRenderer().GetVertexCount());
 }
 
-TEST_F(VertexBufferEmptyDataTest, NullIsLegalOnlyForEmptyUploads)
+TEST_F(VertexBufferEmptyDataTest, ClassicNullAndZeroCountsRejectButRawZeroIsANoOp)
 {
     RequireVertexBuffers();
 
@@ -422,14 +430,16 @@ TEST_F(VertexBufferEmptyDataTest, NullIsLegalOnlyForEmptyUploads)
         rawBuffer.SetDataRaw(nullptr, 1, 16),
         System::ArgumentNullException);
 
-    EXPECT_NO_THROW(staticBuffer.SetData(&vertex, 0));
-    EXPECT_NO_THROW(dynamicBuffer.SetData(
-        static_cast<const VertexPositionColor*>(nullptr), 1, 0,
-        SetDataOptions::Discard));
+    EXPECT_THROW(staticBuffer.SetData(&vertex, 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 1, 0,
+                     SetDataOptions::Discard),
+                 System::ArgumentNullException);
     EXPECT_NO_THROW(rawBuffer.SetDataRaw(nullptr, 0, 16));
 }
 
-TEST_F(VertexBufferEmptyDataTest, EmptyRangeAndBeyondCapacityRemainDistinct)
+TEST_F(VertexBufferEmptyDataTest, InvalidClassicCopyAndBeyondCapacityRemainDistinct)
 {
     RequireVertexBuffers();
 
@@ -439,13 +449,13 @@ TEST_F(VertexBufferEmptyDataTest, EmptyRangeAndBeyondCapacityRemainDistinct)
         device, PositionColorDeclaration(), 1, BufferUsage::None);
     VertexBuffer rawBuffer(device, PaddedStrideDeclaration(), 1, BufferUsage::None);
 
-    // These overloads have an implicit destination byte offset of zero, where an empty range is
-    // valid even though construction itself requires a positive logical capacity.
-    EXPECT_NO_THROW(staticBuffer.SetData(
-        static_cast<const VertexPositionColor*>(nullptr), 0));
-    EXPECT_NO_THROW(dynamicBuffer.SetData(
-        static_cast<const VertexPositionColor*>(nullptr), 0, 0,
-        SetDataOptions::Discard));
+    EXPECT_THROW(staticBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0, 0,
+                     SetDataOptions::Discard),
+                 System::ArgumentNullException);
     EXPECT_NO_THROW(rawBuffer.SetDataRaw(nullptr, 0, 16));
 
     // A real range extends beyond that logical end even if a native renderer pads its allocation.
@@ -462,7 +472,7 @@ TEST_F(VertexBufferEmptyDataTest, EmptyRangeAndBeyondCapacityRemainDistinct)
     EXPECT_EQ(1, rawBuffer.getVertexCountProperty());
 }
 
-TEST_F(VertexBufferEmptyDataTest, EmptyRangePreservesPublicValidationOrdering)
+TEST_F(VertexBufferEmptyDataTest, ZeroCountPreservesPublicValidationOrdering)
 {
     RequireVertexBuffers();
 
@@ -471,7 +481,7 @@ TEST_F(VertexBufferEmptyDataTest, EmptyRangePreservesPublicValidationOrdering)
     DynamicVertexBuffer dynamicBuffer(
         device, PositionColorDeclaration(), 1, BufferUsage::None);
 
-    // Source ranges and declarations are checked before the empty return.
+    // dataIndex is checked before elementCount, matching XNA's shared copy validator.
     EXPECT_THROW(buffer.SetData(&vertex, -1, 0),
                  System::ArgumentOutOfRangeException);
     EXPECT_THROW(buffer.SetData(&vertex, -1),
@@ -502,7 +512,7 @@ TEST_F(VertexBufferEmptyDataTest, EmptyRangePreservesPublicValidationOrdering)
                  System::NotSupportedException);
 }
 
-TEST_F(VertexBufferEmptyDataTest, DisposedBuffersRejectEmptyUploadsBeforeNoOp)
+TEST_F(VertexBufferEmptyDataTest, DisposedBuffersRejectCopiesBeforeArgumentValidation)
 {
     RequireVertexBuffers();
 
@@ -914,5 +924,7 @@ TEST_F(VertexBufferEmptyDataTest, WindowedIndexUploadRejectsAnUnusableWindow)
                  System::ArgumentOutOfRangeException);
     EXPECT_THROW(buffer.SetDataAtEXT(0, static_cast<const std::uint16_t*>(nullptr), 0, 1),
                  System::ArgumentNullException);
-    EXPECT_NO_THROW(buffer.SetDataAtEXT(0, static_cast<const std::uint16_t*>(nullptr), 0, 0));
+    EXPECT_THROW(buffer.SetDataAtEXT(
+                     0, static_cast<const std::uint16_t*>(nullptr), 0, 0),
+                 System::ArgumentNullException);
 }

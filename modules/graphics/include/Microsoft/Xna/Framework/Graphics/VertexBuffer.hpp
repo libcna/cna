@@ -30,8 +30,8 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief GPU vertex buffer for storing vertex data.
      *
      * Typed transfers support XNA's whole-array, array-slice, and strided buffer-window forms.
-     * A validated zero-element upload is a no-op and may use a null source pointer; a real upload
-     * requires a non-null source and must fit the buffer's logical byte capacity. Native
+     * Classic XNA transfers require a non-null source and a positive element count, and must fit
+     * the buffer's logical byte capacity. Native
      * allocation padding never changes that public capacity.
      */
     class VertexBuffer : public GraphicsResource
@@ -703,7 +703,9 @@ namespace Microsoft::Xna::Framework::Graphics
                                                 int elementCount,
                                                 std::size_t sourceElementSize,
                                                 std::size_t uploadStride,
-                                                bool rawUpload) const;
+                                                bool rawUpload,
+                                                SetDataOptions options,
+                                                bool useOptions) const;
         void UploadValidatedData(const void* data,
                                  int elementCount,
                                  std::size_t uploadStride,

@@ -17,7 +17,10 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector3;
@@ -34,6 +37,25 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 namespace
 {
+    template<typename TException, typename TCallable>
+    void ExpectExactNamedException(TCallable&& callable, const char* parameterName)
+    {
+        try
+        {
+            callable();
+            FAIL() << "expected " << typeid(TException).name();
+        }
+        catch (const TException& exception)
+        {
+            EXPECT_EQ(typeid(exception), typeid(TException));
+            EXPECT_EQ(exception.getParamNameProperty(), parameterName);
+        }
+        catch (...)
+        {
+            FAIL() << "unexpected exception type; expected " << typeid(TException).name();
+        }
+    }
+
     const std::array<VertexPositionColor, 3> kVertices{
         VertexPositionColor(Vector3(-1.0f, -1.0f, 0.0f), Color::Red),
         VertexPositionColor(Vector3(0.0f, 1.0f, 0.0f), Color::Green),
@@ -125,4 +147,95 @@ TEST(BufferDataBindingContractTest, BoundDynamicIndexBufferHonorsStreamingOption
                                    SetDataOptions::Discard));
     EXPECT_NO_THROW(buffer.SetData(initial.data(), 0, static_cast<int>(initial.size()),
                                    SetDataOptions::NoOverwrite));
+}
+
+TEST(BufferDataBindingContractTest, ClassicCopiesRejectNullAndZeroCountExactly)
+{
+    GraphicsDevice device;
+    VertexBuffer vertexBuffer(
+        device, VertexPositionColor::getVertexDeclarationStatic(), 1, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    DynamicVertexBuffer dynamicVertexBuffer(
+        device, VertexPositionColor::getVertexDeclarationStatic(), 1, BufferUsage::None);
+    DynamicIndexBuffer dynamicIndexBuffer(
+        device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    VertexPositionColor vertex(Vector3::Zero, Color::White);
+    std::uint16_t index = 0;
+
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { vertexBuffer.SetData(static_cast<const VertexPositionColor*>(nullptr), 0); },
+        "data");
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { indexBuffer.SetData(static_cast<const std::uint16_t*>(nullptr), 0); },
+        "data");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { vertexBuffer.SetData(&vertex, 0); }, "elementCount");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { indexBuffer.SetData(&index, 0); }, "elementCount");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] {
+            dynamicVertexBuffer.SetData(
+                &vertex, 0, 0, SetDataOptions::Discard);
+        },
+        "elementCount");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] {
+            dynamicIndexBuffer.SetData(
+                &index, 0, 0, SetDataOptions::NoOverwrite);
+        },
+        "elementCount");
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { vertexBuffer.GetData(static_cast<VertexPositionColor*>(nullptr), 0); },
+        "data");
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { indexBuffer.GetData(static_cast<std::uint16_t*>(nullptr), 0); },
+        "data");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { vertexBuffer.GetData(&vertex, 0); }, "elementCount");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { indexBuffer.GetData(&index, 0); }, "elementCount");
+}
+
+TEST(BufferDataBindingContractTest, ResourceStatePrecedesCopyWindowValidation)
+{
+    GraphicsDevice device;
+    VertexBuffer vertexBuffer(
+        device, VertexPositionColor::getVertexDeclarationStatic(), 1, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    VertexPositionColor vertex(Vector3::Zero, Color::White);
+    std::uint16_t index = 0;
+    vertexBuffer.SetData(&vertex, 1);
+    indexBuffer.SetData(&index, 1);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+
+    EXPECT_THROW(vertexBuffer.SetData(&vertex, -1, 0),
+                 System::InvalidOperationException);
+    EXPECT_THROW(indexBuffer.SetData(&index, -1, 0),
+                 System::InvalidOperationException);
+
+    device.SetVertexBuffer(nullptr);
+    device.SetIndexBuffer(nullptr);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { vertexBuffer.SetData(&vertex, -1, 1); }, "dataIndex");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { indexBuffer.SetData(&index, -1, 1); }, "dataIndex");
+
+    VertexBuffer writeOnlyVertex(
+        device, VertexPositionColor::getVertexDeclarationStatic(), 1,
+        BufferUsage::WriteOnly);
+    IndexBuffer writeOnlyIndex(
+        device, IndexElementSize::SixteenBits, 1, BufferUsage::WriteOnly);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { writeOnlyVertex.GetData(static_cast<VertexPositionColor*>(nullptr), -1, 0); },
+        "data");
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { writeOnlyIndex.GetData(static_cast<std::uint16_t*>(nullptr), -1, 0); },
+        "data");
+    EXPECT_THROW(writeOnlyVertex.GetData(&vertex, -1, 0),
+                 System::NotSupportedException);
+    EXPECT_THROW(writeOnlyIndex.GetData(&index, -1, 0),
+                 System::NotSupportedException);
 }

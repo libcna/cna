@@ -90,10 +90,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads 16-bit index data to the buffer (replaces previous content).
          *
-         * A zero @p count is a no-op and permits @p data to be null. A non-zero
-         * upload requires a non-null pointer and must fit the logical index capacity.
+         * The source pointer must be non-null, @p count must be positive, and the transfer must
+         * fit the logical index capacity.
          *
-         * @param data  Pointer to the source index array, or null when @p count is zero.
+         * @param data  Pointer to the source index array.
          * @param count Number of indices to upload.
          */
         void SetData(const std::uint16_t* data, int count);
@@ -101,11 +101,9 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads a slice of 16-bit index data to the buffer.
          *
-         * A zero @p elementCount is a no-op and permits @p data to be null.
-         * The caller must provide a source range containing at least
-         * `startIndex + elementCount` elements for a non-empty upload.
+         * The source pointer must be non-null and @p elementCount must be positive.
          *
-         * @param data         Pointer to the source index array, or null for an empty range.
+         * @param data         Pointer to the source index array.
          * @param startIndex   Index of the first element to read from @p data.
          * @param elementCount Number of indices to upload.
          */
@@ -129,10 +127,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads 32-bit index data to the buffer (replaces previous content).
          *
-         * A zero @p count is a no-op and permits @p data to be null. A non-zero
-         * upload requires a non-null pointer and must fit the logical index capacity.
+         * The source pointer must be non-null, @p count must be positive, and the transfer must
+         * fit the logical index capacity.
          *
-         * @param data  Pointer to the source index array, or null when @p count is zero.
+         * @param data  Pointer to the source index array.
          * @param count Number of indices to upload.
          */
         void SetData(const std::uint32_t* data, int count);
@@ -140,11 +138,9 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads a slice of 32-bit index data to the buffer.
          *
-         * A zero @p elementCount is a no-op and permits @p data to be null.
-         * The caller must provide a source range containing at least
-         * `startIndex + elementCount` elements for a non-empty upload.
+         * The source pointer must be non-null and @p elementCount must be positive.
          *
-         * @param data         Pointer to the source index array, or null for an empty range.
+         * @param data         Pointer to the source index array.
          * @param startIndex   Index of the first element to read from @p data.
          * @param elementCount Number of indices to upload.
          */
@@ -297,7 +293,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param offsetInBytes Byte offset into **this buffer**, a multiple of the element size.
          * @param data          Source indices, of this buffer's own element width.
          * @param startIndex    First element of @p data to read.
-         * @param elementCount  Number of indices to write; zero uploads nothing.
+         * @param elementCount  Positive number of indices to write.
          * @throws System::ArgumentException if the width does not match or the offset is unaligned.
          * @throws System::ArgumentOutOfRangeException if the window leaves this buffer's capacity.
          */

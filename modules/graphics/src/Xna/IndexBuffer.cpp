@@ -76,14 +76,22 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             if (startIndex < 0)
                 throw System::ArgumentOutOfRangeException(
-                    "startIndex", std::to_string(startIndex),
+                    "dataIndex", std::to_string(startIndex),
                     "The start index must be non-negative.");
             const auto unsignedStart = static_cast<std::size_t>(startIndex);
             if (unsignedStart > std::numeric_limits<std::size_t>::max() / elementSize)
                 throw System::ArgumentOutOfRangeException(
-                    "startIndex", std::to_string(startIndex),
+                    "dataIndex", std::to_string(startIndex),
                     "The requested byte offset is too large.");
             return unsignedStart * elementSize;
+        }
+
+        void ValidatePositiveElementCount(int elementCount)
+        {
+            if (elementCount <= 0)
+                throw System::ArgumentOutOfRangeException(
+                    "elementCount", std::to_string(elementCount),
+                    "The element count must be positive.");
         }
     }
 
@@ -260,19 +268,18 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("IndexBuffer");
+        if (data == nullptr)
+            throw System::ArgumentNullException("data");
+        ThrowIfSetDataResourceInUse(options, useOptions);
         if (offsetInBytes < 0)
             throw System::ArgumentOutOfRangeException(
                 "offsetInBytes", std::to_string(offsetInBytes),
                 "This parameter must not be negative.");
 
         const std::size_t sourceByteOffset = CheckedByteOffset(startIndex, elementSize);
+        ValidatePositiveElementCount(elementCount);
         const std::size_t byteCount =
             CheckedByteCount(elementCount, elementSize, "elementCount");
-        if (elementCount == 0)
-            return;
-        if (data == nullptr)
-            throw System::ArgumentNullException("data");
-        ThrowIfSetDataResourceInUse(options, useOptions);
 
         const std::size_t nativeElementSize =
             indexElementSize_ == IndexElementSize::ThirtyTwoBits
@@ -361,11 +368,6 @@ namespace Microsoft::Xna::Framework::Graphics
                                       int elementCount,
                                       IndexElementSize dataElementSize)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("IndexBuffer");
-        if (bufferUsage_ == BufferUsage::WriteOnly)
-            throw System::NotSupportedException(
-                "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
         const std::size_t elementSize =
             dataElementSize == IndexElementSize::ThirtyTwoBits
                 ? sizeof(std::uint32_t)
@@ -381,6 +383,8 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("IndexBuffer");
+        if (data == nullptr)
+            throw System::ArgumentNullException("data");
         if (bufferUsage_ == BufferUsage::WriteOnly)
             throw System::NotSupportedException(
                 "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
@@ -390,13 +394,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 "This parameter must not be negative.");
 
         const std::size_t destinationByteOffset = CheckedByteOffset(startIndex, elementSize);
+        ValidatePositiveElementCount(elementCount);
         const std::size_t byteCount =
             CheckedByteCount(elementCount, elementSize, "elementCount");
-
-        // Preserve the public null rule without allowing an empty operation to bypass range
-        // validation: null is legal exactly when the requested range is empty.
-        if (elementCount != 0 && data == nullptr)
-            throw System::ArgumentNullException("data");
         const std::size_t sourceByteOffset = static_cast<std::size_t>(offsetInBytes);
         if (sourceByteOffset > cpuShadow_.size() ||
             byteCount > cpuShadow_.size() - sourceByteOffset)
@@ -404,10 +404,6 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidOperationException(
                 "The data is not the correct size for this IndexBuffer.");
         }
-
-        // As with SetData, an empty range is valid with a null pointer and must not reach memcpy.
-        if (elementCount == 0)
-            return;
         std::memcpy(static_cast<std::uint8_t*>(data) + destinationByteOffset,
                     cpuShadow_.data() + sourceByteOffset, byteCount);
     }
