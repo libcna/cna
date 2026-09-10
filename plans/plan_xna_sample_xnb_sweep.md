@@ -300,6 +300,8 @@ final qualification.
 | `XNASWEEP-194` | SAMPLE-141's 112 references, and the asset name a runner is free to choose. | [x] **Done; `no-project` falls from 114 to 2 and the mapper reaches 7,010 of 7,726.** `XNASWEEP-186` left Riemers alone because its runner sets processor parameters as plain MSBuild metadata rather than `ProcessorParameters_`, and the row said that needed a measurement before a project could describe it. **The measurement makes the question moot**: every parameter it sets is the processor's own default, as this campaign's graphics oracle recorded them -- `ColorKeyColor` 255,0,255,255, `ColorKeyEnabled` True, `GenerateMipmaps` False, `PremultiplyAlpha` True, `ResizeToPowerOfTwo` False and `TextureFormat` Color for `TextureProcessor`, `Quality` Best for `SoundEffectProcessor` -- and `MakeSquare`, with the `FontDescriptionProcessor`'s `PremultiplyAlpha` and `TextureFormat`, are not XNA 4.0 properties at all. So whether `BuildContent` reads unprefixed metadata cannot change what was built, and the description writes no parameters for exactly that reason. **The runner's shape** is five series over five source roots, each a non-recursive `Directory.GetFiles` sorted ordinal-ignore-case and classified by extension, each with its own profile -- Reach for the 2D series, HiDef for the four 3D ones -- which is why it is five units rather than one. **What it needed from the synthesizer** is the one thing no earlier runner did: an asset name that is not its file's stem. This one gives every asset an `OutputDirectory` of its own, so `background.jpg` comes back as `background/background.xnb`, and that is also what makes each series its own output root rather than five projects fighting over one. `assetName` is that rule. **Two defects of the synthesizer itself came out with it**, both mine and both found by building rather than by mapping: it staged only the files that become items, so a model's own textures were not there and `skybox.x` failed on a primary source that is not a regular file -- the whole source root is staged now, because the runner gave `BuildContent` the whole directory as its `RootDirectory`; and its match rules were case-sensitive where the runner lowercases the extension, so the six `skybox_back.JPG` faces matched no rule at all on a Linux filesystem. |
 | `XNASWEEP-195` | A binary `.x` that declares its templates inline is refused. | [x] **Fixed, and it is two defects in the same switch.** The binary form spells `template` as a *token* rather than as the word, and the lexer mapped that token to a generic `<keyword>` name -- so the parser's own `SkipTemplate`, which recognises a template by the text `"template"`, never fired for a binary file and read the declaration as an **object**. The first `array` inside the body then ended the parse, because token 52 was missing from the keyword list outright, although the comment above that list already said "template, array, and the primitive type names". `D3DXFERR_PARSEERROR` was the only symptom. Token 31 now answers the word `template`, which makes the binary path take the same route the text path already took, and 52 joins the list. **Found by the corpus and only by the corpus**: SAMPLE-141's `target.x` and `xwing.x` are binary and declare all eleven of their templates inline, and the committed `binary_mesh.x` fixture declares none -- its whole token vocabulary is `NAME`, `INTEGER_LIST`, `FLOAT_LIST` and braces, so nothing in the suite could reach this. `ABinaryXFileMayDeclareItsTemplatesInline` builds the bytes it needs in the test rather than as a fixture, because what it measures is the reader's own token handling and not a file anybody authored. With it, the flight-sim series builds 16 of 16 where it built 14. |
 | `XNASWEEP-196` | A model's nested texture is written beside the output root, and XNA writes it beside the model. | [ ] **Open, measured, and narrow.** SAMPLE-141's `skybox.x` is the asset `skybox/skybox`, and it names six textures that sit beside it in the source root. XNA writes them `skybox/SkyBox_Back_0.xnb` and the rest, in the model's *own* directory; CNA writes `SkyBox_Back_0.xnb` at the output root. The rule CNA follows is the nested source's path relative to the content root, which is right wherever the two agree -- SAMPLE-028's `Car.x` sits at the root and both answer `Car_0`, and Spacewar's `asteroid1.x` names `..\textures\asteroid1.tga` and both answer `textures/asteroid1_0` -- and the corpus had no case that separated them until `XNASWEEP-194` made this one reachable. What separates it is an asset whose *name* carries a directory its source does not. Six references, all in this sample, and the shape of the answer is probably "the referring asset's name decides the directory, the nested source's own path decides the rest"; that is a guess and needs the same treatment every other rule here got -- a probe on the genuine `BuildContent` with an item whose `Name` and whose `Include` disagree about their directory. |
+| `XNASWEEP-197` | An 8-bit `.wav` is widened to 16, and XNA leaves it 8-bit. | [ ] **Open, measured, and deliberately not fixed here: the fix is a format change.** SAMPLE-141's `explosion.wav` is 8-bit mono at 22,050 Hz -- `blockAlign` 1, `byteRate` 22,050 -- and its genuine `.xnb` carries an average byte rate of **22,050**, the file's own. CNA answers 44,100, which is that file widened to sixteen bits. **Measured rather than inferred**: a new oracle case, `processors/SoundEffectProcessor_widths`, puts 8-bit mono, 16-bit mono and 8-bit stereo through the genuine `AudioContent.ConvertFormat(Pcm, Best)` that `SoundEffectProcessor` performs, and every one comes back at the width it went in with. XNA preserves the source's sample width; it does not normalise to 16. **Why this is not a one-line fix.** CNA's sound-effect data model is sixteen-bit by construction, not by choice at the seam: `CnbSourceImport` sets `CnbAudioFormat::Pcm16` unconditionally and `CnbSoundEffectCodec` refuses anything else with "schema 1 stores Pcm16 only". Following XNA here means widening the CNB schema to carry a sample width, which is a change to a shipped on-disk format and its version, and that is an owner's decision rather than a sweep's. Two references, both in this sample; recorded with the measurement so the decision can be taken on evidence. |
+| `XNASWEEP-198` | Two binary `.x` models answer a different triangle count. | [ ] **Open, and it is the first geometry difference this campaign has found that is not a precision one.** `XNASWEEP-195` made SAMPLE-141's binary models readable, and two of them come back with a different number of primitives in their first mesh part: `target.xnb` is XNA 170 against CNA 180, and `racer.xnb` differs in the same field at a much larger count. `xwing.xnb` differs in its vertex-buffer digest alone, which may be the same cause seen from the other end. Every other geometry rule this campaign closed -- `XNASWEEP-149`'s face order, `XNASWEEP-173`'s distinct positions, `XNASWEEP-178`'s float-valued vertex -- moved bytes without changing how many triangles there are, so a count that differs by ten is a different kind of finding and probably a different construct in the file: these are the only binary `.x` models in the corpus, and the only ones that declare their own templates. What it needs first is the genuine importer's own answer for `target.x` through `ModelImportOracle`, which will say whether the difference is already in the imported mesh or arrives in the processor. |
 | `XNASWEEP-163` | The 367 references the sweep has no route to, as a coverage task of its own. | [ ] **Open, and deliberately separate from every behaviour row above.** `XNASWEEP-158` audited the two gap classes and is closed on what it set out to check; what it *found* -- that nine samples had their references built by a hand-written runner rather than a `.contentproj`, so `map_sources.py` reaches none of them -- is a property of this campaign's harness, not of CNA, and it kept being read as unfinished behavioural work. It is this row now. The remedy the audit named is a synthesized build unit per runner: read the runner's own asset list and the processor parameters it sets, write a `.contentproj` that names them, and stage it the way a reconstructed project already is. Until that exists the 367 stay `CORPUS_GAP`, which is an honest label -- the reference is genuine and CNA has never been asked to match it -- and no conclusion in this file rests on them. |
 
 
@@ -345,41 +347,46 @@ first run of this campaign was invalidated by a mid-run relink.
 | genuine reference `.xnb` | **7,734** |
 | distinct contents | 5,285 |
 | samples represented | 129 |
-| build units (project x output root) | **333** |
-| references mapped to a project item | **6,930** |
-| references under a root but named by no item (model side outputs) | **631** |
-| references in a sample with no `.contentproj` | **114** |
+| build units (project x output root) | **343** |
+| references mapped to a project item | **7,022** |
+| references under a root but named by no item (model side outputs) | **651** |
+| references in a sample with no `.contentproj` | **2** |
 | references under no project's output root at all | 8 |
 | references whose item names a source the tree has not got | 43 |
 
-The last four moved at run 37 and none of them is a change to what CNA builds.
-`XNASWEEP-184` folded the two directories the reference tree's filesystem had as
-one, which is 115 references the project does name and the mapper had recorded as
-`no-item`; `XNASWEEP-186` wrote a content project for six samples that ship none,
-which is 245 references and five build units that had no route at all. The
-figures before that run were 328 units, 6,578 mapped, 746 `no-item` and 359 with
-no project.
+None of the movement here is a change to what CNA builds. `XNASWEEP-184` folded
+the two directories the reference tree's filesystem had as one, which is 115
+references the project does name and the mapper had recorded as `no-item`;
+`XNASWEEP-186` wrote a content project for six samples that ship none, 245
+references; and `XNASWEEP-194` did the same for the seventh and largest, SAMPLE-141
+at 112. The figures were 328 units, 6,578 mapped, 746 `no-item` and 359 with no
+project before any of it; 333, 6,930, 631 and 114 after `XNASWEEP-186`.
 
-### 11.2 The sweep, run 38 (2026-09-10)
+**The two left with no project are SAMPLE-108's**, which ships no runner at all
+-- not a hand-written one this campaign could read, none. They are the floor of
+that class rather than work anybody has left undone.
+
+### 11.2 The sweep, run 42 (2026-09-10)
 
 Run 3 is kept because it is what `XNASWEEP-104`--`110` were measured against,
 run 19 because it is the last one of the previous day, and the rest because each
 isolates one fix or one falsified attempt.
 
-| | run 1 | run 3 | run 19 | run 25 | run 27 | run 28 | run 29 | run 30 | run 31 | run 32 | run 33 | run 34 | run 35 | run 36 | run 37 | run 38 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| byte-identical | 922 | 3,619 | 3,777 | 3,879 | 3,893 | 3,900 | 3,900 | 3,886 | 3,916 | 3,918 | 3,918 | 3,919 | **3,919** | 3,906 | 4,150 | **4,156** |
-| differing | 343 | 1,547 | 1,633 | 1,531 | 1,517 | 1,510 | 1,510 | 1,524 | 1,494 | 1,492 | 1,492 | 1,489 | **1,491** | 1,486 | 1,576 | **1,576** |
-| missing (CNA produced nothing) | 6,102 | 2,201 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,951 | **1,949** | 1,946 | 1,857 | **1,851** |
-| build units that finished | -- | 156 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 154 | **155** | 155 | 159 | **160** |
-| `UNEXPLAINED` | -- | -- | 171 | 56 | 34 | 33 | 33 | 51 | 18 | 16 | 16 | 15 | **15** | 15 | 76 | **10** |
-| differing fields | -- | -- | 148,128 | 147,780 | 147,746 | 147,725 | 147,565 | 147,769 | 147,477 | 147,469 | 147,451 | 147,397 | **147,443** | 144,991 | 157,085 | **157,153** |
+| | run 1 | run 3 | run 19 | run 25 | run 27 | run 28 | run 29 | run 30 | run 31 | run 32 | run 33 | run 34 | run 35 | run 36 | run 37 | run 38 | run 40 | run 41 | run 42 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| byte-identical | 922 | 3,619 | 3,777 | 3,879 | 3,893 | 3,900 | 3,900 | 3,886 | 3,916 | 3,918 | 3,918 | 3,919 | **3,919** | 3,906 | 4,150 | **4,156** | 4,190 | 4,190 | **4,192** |
+| differing | 343 | 1,547 | 1,633 | 1,531 | 1,517 | 1,510 | 1,510 | 1,524 | 1,494 | 1,492 | 1,492 | 1,489 | **1,491** | 1,486 | 1,576 | **1,576** | 1,598 | 1,616 | **1,632** |
+| missing (CNA produced nothing) | 6,102 | 2,201 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,949 | 1,951 | **1,949** | 1,946 | 1,857 | **1,851** | 1,907 | 1,889 | **1,871** |
+| build units that finished | -- | 156 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 154 | **155** | 155 | 159 | **160** | 164 | 166 | **168** |
+| `UNEXPLAINED` | -- | -- | 171 | 56 | 34 | 33 | 33 | 51 | 18 | 16 | 16 | 15 | **15** | 15 | 76 | **10** | 36 | 36 | **20** | **20** |
+| differing fields | -- | -- | 148,128 | 147,780 | 147,746 | 147,725 | 147,565 | 147,769 | 147,477 | 147,469 | 147,451 | 147,397 | **147,443** | 144,991 | 157,085 | **157,153** | 158,201 | 158,235 | **158,283** |
 
 What each run isolates: 27 is `XNASWEEP-170`, 28 `XNASWEEP-168`, 29
 `XNASWEEP-172`, 31 `XNASWEEP-171`+`175`+`177` and the first half of `173`, 32
 the second half of `173`, 33 `XNASWEEP-178`, 35 `XNASWEEP-179`, 36
 `XNASWEEP-176`+`185`, 37 `XNASWEEP-174`+`184`+`186`+`188`+`189`, 38
-`XNASWEEP-191`+`192`.
+`XNASWEEP-191`+`192`, 40 `XNASWEEP-194`, 41 `XNASWEEP-195` and 42 the one
+source `XNASWEEP-194` had to skip by name.
 
 **Three of the columns need reading with their rows.** Run 36's byte-identical
 count *falls* by 13 and nothing regressed: the 21 references another session's
@@ -397,6 +404,17 @@ were real (`XNASWEEP-192`) -- and it is the run whose `UNEXPLAINED` is 10.
 reference rather than by the totals: no reference that was `IDENTICAL` at run 35
 is anything but `IDENTICAL` or `REFERENCE_REMOVED` at run 36, and none lost it
 at 37 or 38.
+
+**Runs 40 to 42 are `XNASWEEP-194` and what came out of it**, and their shape is
+the same as run 37's for the same reason: reaching references that had never been
+compared raises `differing` and `UNEXPLAINED` before it lowers them. Run 40 is the
+five synthesized Riemers projects -- `CORPUS_GAP` 195 to 115, 34 byte-identical at
+once, 26 differences nobody had seen. Run 41 is `XNASWEEP-195`, the binary `.x`
+templates, which took the flight-sim series from 14 built to 16. Run 42 is the
+stem collision the runner never saw, which took the hlsl-intro series from a unit
+that failed outright to 9 of 9, and it is where the 26 resolve: 14 to
+`ACCEPTED_DIFFERENCE`, 2 to `IDENTICAL` and 10 left, which are
+`XNASWEEP-196`, `197` and `198`. Zero references regressed at any of the three.
 
 **Run 39 has no column because it has no numbers of its own.** It isolates
 `XNASWEEP-189`'s correction -- the basis change's two sides are not the same
@@ -445,16 +463,16 @@ ship, so four units failed to build. `XNASWEEP-175` is what finally explained it
 
 `taxonomy.py` puts all 7,726 into one class each, with the reason beside it.
 
-| class | run 19 | run 25 | run 33 | run 36 | run 37 | run 38 | what it means |
-|---|---:|---:|---:|---:|---:|---:|---|
-| `IDENTICAL` | 3,777 | 3,879 | 3,918 | 3,906 | 4,150 | **4,156** | CNA's build is the reference, byte for byte. |
-| `SEMANTICALLY_IDENTICAL` | 728 | 759 | 764 | 764 | 761 | **761** | Everything a runtime reads is equal; the LZX stream is not. |
-| `ACCEPTED_DIFFERENCE` | 734 | 716 | 712 | 708 | 745 | **805** | Measured, understood, and not closable from here. |
-| `CUSTOM_PIPELINE_GAP` | 1,370 | 1,370 | 1,370 | 1,742 | 1,763 | **1,763** | The asset needs a component the *sample* defines, in a .NET assembly C++ cannot load. |
-| `ENVIRONMENT_GAP` | 15 | 15 | 15 | 15 | 15 | **15** | This machine's, not CNA's: 10 effects the June-2010 fxc refuses and XNA's own D3DX9 accepted, and 5 fonts Windows has and this machine has not. |
-| `CORPUS_GAP` | 931 | 931 | 931 | 555 | 195 | **195** | The reference is in the corpus and the sweep has no way to build it (`XNASWEEP-163`). |
-| `REFERENCE_REMOVED` | -- | -- | -- | 21 | 21 | **21** | The frozen reference is no longer in the read-only tree, and the bytes survive at a sibling that is itself a reference (`XNASWEEP-190`). |
-| `UNEXPLAINED` | 171 | 56 | 16 | 15 | 76 | **10** | Everything else. |
+| class | run 19 | run 25 | run 33 | run 36 | run 37 | run 38 | run 42 | what it means |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `IDENTICAL` | 3,777 | 3,879 | 3,918 | 3,906 | 4,150 | 4,156 | **4,192** | CNA's build is the reference, byte for byte. |
+| `SEMANTICALLY_IDENTICAL` | 728 | 759 | 764 | 764 | 761 | 761 | **761** | Everything a runtime reads is equal; the LZX stream is not. |
+| `ACCEPTED_DIFFERENCE` | 734 | 716 | 712 | 708 | 745 | 805 | **851** | Measured, understood, and not closable from here. |
+| `CUSTOM_PIPELINE_GAP` | 1,370 | 1,370 | 1,370 | 1,742 | 1,763 | 1,763 | **1,763** | The asset needs a component the *sample* defines, in a .NET assembly C++ cannot load. |
+| `ENVIRONMENT_GAP` | 15 | 15 | 15 | 15 | 15 | 15 | **15** | This machine's, not CNA's: 10 effects the June-2010 fxc refuses and XNA's own D3DX9 accepted, and 5 fonts Windows has and this machine has not. |
+| `CORPUS_GAP` | 931 | 931 | 931 | 555 | 195 | 195 | **103** | The reference is in the corpus and the sweep has no way to build it (`XNASWEEP-163`). |
+| `REFERENCE_REMOVED` | -- | -- | -- | 21 | 21 | 21 | **21** | The frozen reference is no longer in the read-only tree, and the bytes survive at a sibling that is itself a reference (`XNASWEEP-190`). |
+| `UNEXPLAINED` | 171 | 56 | 16 | 15 | 76 | 10 | **20** | Everything else. |
 
 `CUSTOM_PIPELINE_GAP` took 372 of `CORPUS_GAP`'s at run 36 (`XNASWEEP-185`) and
 `CORPUS_GAP` lost another 360 to reachability at run 37 (`XNASWEEP-184`,
@@ -482,32 +500,41 @@ that has never been *tested*, and §1 records the experiment it still owes.
 
 ### 11.3.1 What is still unexplained
 
-**Ten references, and they are one family.** Every one is a model, there is no
-unexplained reference outside `.fbx` and `.x`, and all ten are what
-`XNASWEEP-176` left: `XNASWEEP-193` owns them.
+**Twenty references, in two groups of ten.**
 
-| count | what differs |
-|---:|---|
-| 6 | A vertex buffer's digest alone -- SAMPLE-041's `terrain.xnb` and SAMPLE-055's `baseballbat.xnb`, three copies each, whose positions carry the residue through `TransformScene`. |
-| 3 | A bone transform, on RobotGame's `PhantomBoss`, `Yager` and `Kiev`. |
-| 1 | SAMPLE-074's `tank.xnb`: one bone translation, one ulp (`XNASWEEP-153`). |
+| count | what differs | row |
+|---:|---|---|
+| 6 | A vertex buffer's digest alone -- SAMPLE-041's `terrain.xnb` and SAMPLE-055's `baseballbat.xnb`, three copies each, whose positions carry the pivot residue through `TransformScene`. | `XNASWEEP-193` |
+| 3 | A bone transform, on RobotGame's `PhantomBoss`, `Yager` and `Kiev`. | `XNASWEEP-193` |
+| 1 | SAMPLE-074's `tank.xnb`: one bone translation, one ulp. | `XNASWEEP-193` |
+| 4 | SAMPLE-141's `target.xnb` and `racer.xnb`, two copies each: a different triangle count in the first mesh part. | `XNASWEEP-198` |
+| 2 | SAMPLE-141's `xwing.xnb`: a vertex buffer's digest, possibly `XNASWEEP-198` from the other end. | `XNASWEEP-198` |
+| 2 | SAMPLE-141's `skybox.xnb`: a nested texture named `..\SkyBox_Top_0` where XNA names it `SkyBox_Top_0`. | `XNASWEEP-196` |
+| 2 | SAMPLE-141's `explosion.xnb`: an 8-bit source widened to 16. | `XNASWEEP-197` |
 
-Unexplained field-level differences: **1,085**, of 157,153 over the whole corpus
-(1,915 of 147,443 at run 35). The six mechs of run 35 are three, and SAMPLE-028's
-two `Car.xnb` are gone: both roots are byte-identical.
+The first ten are what `XNASWEEP-176` left and were the whole list at run 38. The
+second ten are SAMPLE-141's, and every one of them is a difference nothing could
+see before `XNASWEEP-194` gave that sample a project: they are the price of
+reaching 112 references, and three of them are rows with a measurement already
+under them. There is still no unexplained reference outside `.fbx`, `.x` and one
+`.wav`.
+
+Unexplained field-level differences: **1,151**, of 158,283 over the whole corpus
+(1,915 of 147,443 at run 35).
 
 **What this session's rules did, in order.** `XNASWEEP-174` (a `.x`
 `EffectInstance` is an `EffectMaterialContent`) with `XNASWEEP-180` and
 `XNASWEEP-181` under it, `XNASWEEP-188` (a writer names the readers its own
 reader will need) and `XNASWEEP-189` (the basis change is two multiplications by
-two matrices) took SAMPLE-028's `Car.xnb` to byte-identical on both its roots --
-four rules on one file, and none of them visible until the one before it was
-right. `XNASWEEP-176` took three of the six mechs. `XNASWEEP-184`, `185` and
-`186` are the sweep's own reach rather than CNA's behaviour and moved 732
-references between classes. `XNASWEEP-192` took the last six that were failing to
-build at all. `XNASWEEP-182`, `183`, `187`, `190` and `191` are the instruments,
-and `XNASWEEP-191` is the one worth remembering: a rule that changes which files
-are compared has to reach every program that compares them.
+two matrices that differ in the signs of their zeros) took SAMPLE-028's `Car.xnb`
+to byte-identical on both its roots -- four rules on one file, and none of them
+visible until the one before it was right. `XNASWEEP-176` took three of the six
+mechs. `XNASWEEP-192` took the six WAVs that were failing to build outright, and
+`XNASWEEP-195` the two binary models that were. `XNASWEEP-184`, `185`, `186` and
+`194` are the sweep's own reach rather than CNA's behaviour and moved 828
+references between classes. `XNASWEEP-182`, `183`, `187`, `190` and `191` are the
+instruments, and `191` is the one worth remembering: a rule that changes which
+files are compared has to reach every program that compares them.
 
 ### 11.4 The read-only roots, re-audited 2026-09-09 (fourth pass)
 
@@ -605,25 +632,29 @@ sequence every time.
 
 ### 11.5 Next
 
-1. **`XNASWEEP-193`: what is left of `XNASWEEP-176`.** Ten references and 1,085
-   of the 1,085 unexplained fields -- three RobotGame mechs, the two vertex
-   buffers in three copies each, and `tank.xnb`'s one ulp. The row carries seven
-   falsified families rather than a hypothesis, and what it needs is a
-   measurement round: the 46 probe nodes that are wrong under both leading models
-   are the ones to build fixtures around, one property at a time.
+1. **`XNASWEEP-193`: what is left of `XNASWEEP-176`.** Ten references and 1,085 of
+   the 1,151 unexplained fields. The row carries seven falsified families rather
+   than a hypothesis, and what it needs is a measurement round: the 46 probe nodes
+   that are wrong under both leading models are the ones to build fixtures around,
+   one property at a time.
 
-2. **`XNASWEEP-163`'s 195.** The corpus-coverage row, down from 931: 372 went to
-   `CUSTOM_PIPELINE_GAP` where they belonged (`XNASWEEP-185`) and 360 became
-   reachable (`XNASWEEP-184`, `XNASWEEP-186`). What is left is SAMPLE-141's
-   Riemers (112 references, whose runner sets its texture parameters as plain
-   MSBuild metadata and needs a measurement before a project can describe it),
-   SAMPLE-108's WinFormsContentSample (2, which ships no runner at all), the 43
-   whose item names a source the tree has not got, the 36 nested outputs of items
-   that built, and 8 under no project root at all.
+2. **`XNASWEEP-198`, then `196` and `197`.** SAMPLE-141's ten. `198` is the only
+   geometry difference this campaign has found that is not a precision one -- a
+   triangle count, not a byte -- and it wants the genuine importer's own answer for
+   `target.x` first, which will say whether it is already in the imported mesh.
+   `196` wants a probe with an item whose `Name` and `Include` disagree about their
+   directory. `197` is measured and blocked on a decision rather than on evidence:
+   following XNA means widening the CNB schema to carry a sample width.
 
-3. **The one experiment the effect side owes.** 91 `.fx` references rest on a
-   reason that has never been tested; §1 says what the test is and it is one
-   blob's worth of work.
+3. **`XNASWEEP-163`'s 103.** Down from 931. What is left is 43 whose item names a
+   source the tree has not got, 36 nested outputs of items that built, 8 under no
+   project root at all, 14 in samples whose runners are still undescribed, and
+   SAMPLE-108's 2, which ships no runner to describe. The first three groups are
+   the floor: they are not projects anybody can write.
+
+4. **The one experiment the effect side owes.** 91 `.fx` references rest on a
+   reason that has never been tested; §1 says what the test is and it is one blob's
+   worth of work.
 
 The partial `OptimizeForCache` model is still deliberately **not** shipped -- what
 ships is Microsoft's own algorithm with the adjacency the corpus measured.

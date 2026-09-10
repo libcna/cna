@@ -605,6 +605,37 @@ namespace Cna.Xna40.AudioOracle
                 var processor = new SoundEffectProcessor();
                 return "Quality=" + processor.Quality;
             });
+            // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-197: what the processor does to a sample
+            // width it is given. SAMPLE-141's `explosion.wav` is 8-bit mono at 22,050 Hz and its
+            // genuine `.xnb` carries an average byte rate of 22,050 -- the file's own -- where CNA
+            // answers 44,100, which is that file widened to 16 bits. This measures the widths the
+            // processor is given against the width it answers.
+            Record("processors/SoundEffectProcessor_widths", () =>
+            {
+                var builder = new StringBuilder();
+                Action<string, string> probe = delegate(string label, string path)
+                {
+                    if (builder.Length > 0) builder.Append(' ');
+                    try
+                    {
+                        AudioContent audio = new WavImporter().Import(path, new ProbeImporterContext());
+                        string before = Describe(audio.Format);
+                        // What `SoundEffectProcessor` does to the content, without needing a
+                        // processor context: it converts to PCM at its own quality.
+                        audio.ConvertFormat(ConversionFormat.Pcm, ConversionQuality.Best, null);
+                        builder.Append(label + "=[before " + before + " | after " +
+                                       Describe(audio.Format) + "]");
+                    }
+                    catch (Exception error) { builder.Append(label + "=" + error.GetType().Name); }
+                };
+                probe("pcm8_mono_22050",
+                      WriteWavRaw(work, "p_pcm8.wav", 1, 1, 22050, 8, 1, 22050, null, Ramp(2205), 0, 0, 0));
+                probe("pcm16_mono_22050",
+                      WriteWavRaw(work, "p_pcm16.wav", 1, 1, 22050, 16, 2, 44100, null, Ramp(4410), 0, 0, 0));
+                probe("pcm8_stereo_22050",
+                      WriteWavRaw(work, "p_pcm8s.wav", 1, 2, 22050, 8, 2, 44100, null, Ramp(4410), 0, 0, 0));
+                return builder.ToString();
+            });
             Record("processors/SongProcessor", () =>
             {
                 var processor = new SongProcessor();
