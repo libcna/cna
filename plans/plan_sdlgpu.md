@@ -1252,6 +1252,37 @@ underlying API limitation proven after reasonable emulation analysis.
   invariants are the semantic oracle. The complete SDL GPU compiled-effect/sampler unit slice also
   passes **42/42** after the constructor-contract change.
 
+### SDLGPU-86 — refresh parity-obsoleted SDL regression oracles ✅
+
+- **Problem/public behavior:** the first freshly rebuilt 188-test sweep after the parity changes
+  passes 180 tests but leaves eight deterministic failures. Source and output triage identifies
+  stale test assumptions rather than eight renderer regressions: two PBR scenes put Z=-0.5 outside
+  the XNA 0..W clip volume; one pass-boundary depth fixture does the same; DualTexture supplies no
+  `TEXCOORD1` while attempting to test slot 1; two contract fixtures still call the now-exact
+  RenderTargetCube SetData path unsupported; and the render-target/effect-source fixture expects
+  semantically incomplete PositionTexture declarations to be accepted by EnvironmentMap and
+  skinned families. The remaining PBR fog oracle compares an arithmetic midpoint of stored sRGB
+  bytes even though the shader correctly performs fog in linear space before encoding.
+- **EasyGL/XNA evidence:** FNA/XNA depth clipping is 0..W; effect vertex declarations are matched
+  by semantic/index rather than stride; `DualTextureEffect` owns independent texture-coordinate
+  semantics; and the shared cube/volume contract now proves exact RenderTargetCube uploads. The
+  PBR-only color-space controls are CNAEXT diagnostics and must state whether their byte oracle is
+  linear or encoded.
+- **Location:** the eight failing SDL GPU regression fixtures only; no renderer implementation or
+  public API change.
+- **Acceptance/test:** preserve or strengthen every discriminator while correcting its inputs and
+  capability table; rebuild only the eight affected executables; make those eight CTests pass
+  serially with validation diagnostics fatal; then require the complete 188-test SDL GPU sweep to
+  pass before `SDLGPU-82` may close.
+- **Result (2026-09-10):** all eight affected executables were rebuilt incrementally and the exact
+  eight-test serial slice now passes **8/8**. The corrected PBR projections preserve the intended
+  world-space BRDF inputs while moving only clip Z; the pass-boundary test uses separated valid
+  depths 0.25/0.75; the DualTexture sampler check declares and feeds both independent UV channels;
+  both cube contracts now exercise exact uploads; incomplete effect declarations are truthfully
+  rejected; and the PBR fog diagnostic explicitly requests linear storage before comparing a
+  linear arithmetic mix. No renderer source or public API changed. The complete 188-test sweep
+  remains the closing gate owned by `SDLGPU-82`.
+
 ---
 
 ## Historical SDL GPU implementation plan (preserved evidence; paths/status may be stale)

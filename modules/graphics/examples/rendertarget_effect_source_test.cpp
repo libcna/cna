@@ -244,6 +244,7 @@ namespace
      */
     constexpr bool kSkinnedFamiliesAcceptPositionTexture =
 #if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_WEBGPU) || \
+    defined(CNA_RENDERER_SDL_GPU) || \
     defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
     defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_LLGL)
         false;
@@ -289,7 +290,8 @@ namespace
      * there, and its face-aliasing checks still run.
      */
     constexpr bool kEnvMapAcceptsPositionTexture =
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_SDL_GPU) || \
+    defined(CNA_RENDERER_DIRECTX9) || \
     defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12) || \
     defined(CNA_RENDERER_LLGL)
         false;

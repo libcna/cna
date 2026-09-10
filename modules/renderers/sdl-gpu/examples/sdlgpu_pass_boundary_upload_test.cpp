@@ -436,11 +436,11 @@ class SdlGpuPassBoundaryUploadTest : public Game
 
         dev.SetRenderTarget(rt.get());
         dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, kRed, 1.0f, 0);
-        DrawNonIndexed(dev, *nearFullVb_, true);  // right half, cyan, z = -0.5
+        DrawNonIndexed(dev, *nearFullVb_, true);  // right half, cyan, z = 0.25
         dev.SetRenderTarget(nullptr);
 
         dev.SetRenderTarget(rt.get());
-        DrawNonIndexed(dev, *farFullVb_, true);  // right half, blue, z = +0.5 -- must lose
+        DrawNonIndexed(dev, *farFullVb_, true);  // right half, blue, z = 0.75 -- must lose
         dev.SetRenderTarget(nullptr);
 
         CheckHalves(*rt, kRed, kCyan,
@@ -586,8 +586,10 @@ protected:
             rebasedIb_ = MakeIb(dev, {0, 1, 2, 0, 2, 3});
         }
         {
-            const auto near_ = Quad(0.0f, 1.0f, -0.5f, kCyan);
-            const auto far_ = Quad(0.0f, 1.0f, 0.5f, kBlue);
+            // XNA/Direct3D clips depth outside 0..W. Keep both probes inside that interval while
+            // retaining a wide separation that makes the LessEqual result unambiguous.
+            const auto near_ = Quad(0.0f, 1.0f, 0.25f, kCyan);
+            const auto far_ = Quad(0.0f, 1.0f, 0.75f, kBlue);
             nearFullVb_ = MakeVb(dev, std::vector<VertexPositionColor>(near_.begin(), near_.end()));
             farFullVb_ = MakeVb(dev, std::vector<VertexPositionColor>(far_.begin(), far_.end()));
         }

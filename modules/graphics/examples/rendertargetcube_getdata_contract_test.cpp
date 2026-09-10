@@ -198,7 +198,7 @@ namespace
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
-                                 true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     // 2D-only by design: CreateRenderTargetCube keeps IGraphicsRenderer's nullptr default.
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, Support::Unsupported,
