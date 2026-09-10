@@ -223,7 +223,7 @@ supported, throws · ⛔ BLOCKED, needs a project-owner decision.
 |---|---|---|
 | `Texture2D(GraphicsDevice&, int width, int height)` | ✅ | |
 | `Texture2D(GraphicsDevice&, int width, int height, bool mipMap, SurfaceFormat)` | ✅ | |
-| `FromStream(GraphicsDevice&, Stream&)` (2 overloads) | ✅ | Classic image formats are auto-detected; DDS is intentionally available only through the explicit `CNAEXT DDSFromStreamEXT` overloads, matching Microsoft XNA's rejection of DDS at the classic API boundary. |
+| `FromStream(GraphicsDevice&, Stream&)` (2 overloads) | ✅ | PNG/JPEG/GIF are detected by signature, matching measured Microsoft XNA behavior. DDS is available through explicit `CNAEXT DDSFromStreamEXT`; BMP/TGA/QOI/PSD/HDR/PNM remain outside the classic API. |
 | `SetData(Color* data, int elementCount)` | ✅ | |
 | `SetData(int level, Rectangle* rect, Color* data, int startIndex, int elementCount)` | ⚠️ | `level > 0` (mip levels) is a silent no-op on Vulkan/Bgfx (Task 867) and throws on SDL_Renderer by design (Task 681); `level == 0` is fully correct everywhere. |
 | `GetData` (3 overloads) | ✅ | Pure CPU-side cache read on every renderer — renderer-independent by construction. |

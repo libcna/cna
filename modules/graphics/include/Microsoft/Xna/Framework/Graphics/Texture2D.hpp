@@ -489,6 +489,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Creates a Texture2D by decoding image data from a stream.
+         *
+         * The classic XNA-compatible path accepts PNG, JPEG, and GIF containers.
+         *
          * @param graphicsDevice The device to create the texture on.
          * @param stream         The input stream containing encoded image data.
          * @return The decoded Texture2D.
@@ -498,6 +501,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Creates a Texture2D by decoding image data from a stream, resized or cropped
          *        to a requested size.
+         *
+         * The classic XNA-compatible path accepts PNG, JPEG, and GIF containers.
          *
          * When @p zoom is false, the decoded image is scaled down to fit within a
          * @p width x @p height box while preserving its aspect ratio (the resulting texture may

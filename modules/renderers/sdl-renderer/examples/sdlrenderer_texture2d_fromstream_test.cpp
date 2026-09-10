@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// Task 682: Verify Texture2D::FromStream (PNG/JPG/BMP) round-trip renders correctly
+// Task 682: Verify a Texture2D::FromStream PNG round-trip renders correctly
 // when drawn via SDL_Renderer.
 //
 // The existing renderer-agnostic Texture2DTests.cpp (Task 262) already thoroughly verifies
-// FromStream's DECODE correctness (PNG/JPEG/BMP byte layouts, resize/crop overload) via
+// FromStream's DECODE correctness (PNG/JPEG/GIF, resize/crop overload) via
 // SetData/SaveAsPng/SaveAsJpeg round trips read back through Texture2D::GetData -- a pure
 // CPU-side cache read (Task 678's finding), guaranteed correct on every renderer by
 // construction and already exercised on SDL_Renderer whenever CnaTests runs there.

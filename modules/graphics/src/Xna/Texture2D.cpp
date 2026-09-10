@@ -2404,6 +2404,22 @@ namespace Microsoft::Xna::Framework::Graphics
 
     // Reads the entire stream and routes either an explicitly requested DDS through DxtUtil or a
     // classic FromStream image through ImageLoader (see docs/texture-stream-formats.md).
+    [[nodiscard]] static bool IsClassicXnaImageContainer(
+        const uint8_t* data, const std::size_t size) noexcept
+    {
+        static constexpr uint8_t pngSignature[] = {
+            0x89u, 0x50u, 0x4Eu, 0x47u, 0x0Du, 0x0Au, 0x1Au, 0x0Au
+        };
+        const bool isPng = size >= sizeof(pngSignature)
+            && std::memcmp(data, pngSignature, sizeof(pngSignature)) == 0;
+        const bool isJpeg = size >= 3u
+            && data[0] == 0xFFu && data[1] == 0xD8u && data[2] == 0xFFu;
+        const bool isGif = size >= 6u
+            && (std::memcmp(data, "GIF87a", 6u) == 0
+                || std::memcmp(data, "GIF89a", 6u) == 0);
+        return isPng || isJpeg || isGif;
+    }
+
     static DecodedTexture2D DecodeStreamToImageData(
         System::IO::Stream& stream, int maximumTextureDimension,
         const GraphicsDevice* device, bool decodeDds, bool allowCompressed)
@@ -2460,6 +2476,9 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         else
         {
+            if (!IsClassicXnaImageContainer(raw, static_cast<std::size_t>(len)))
+                throw System::InvalidOperationException("Decoding image failed!");
+
             ImageData image;
             try
             {

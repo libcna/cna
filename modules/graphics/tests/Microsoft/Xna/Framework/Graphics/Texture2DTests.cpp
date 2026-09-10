@@ -19,9 +19,11 @@ using namespace CNA::Testing::Renderers;
 #include <string>
 #include <tuple>
 #include <typeinfo>
+#include <utility>
 #include <vector>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
@@ -1752,9 +1754,8 @@ TEST_F(ContextRecoveryTest, PartialUpdateNeverThrowsWithRecoveryEnabledByDefault
 // -----------------------------------------------------------------------
 // FromStream — format support verification (Task 262)
 //
-// Round-trips through Texture2D::SaveAsPng/SaveAsJpeg (PNG/JPEG) and a
-// hand-built minimal file (BMP) to empirically confirm which encoded
-// formats Texture2D::FromStream can decode via the vendored stb image backend.
+// Round-trips the supported PNG/JPEG containers and pins the classic XNA
+// container boundary separately from the broader internal stb decoder.
 // -----------------------------------------------------------------------
 
 namespace
@@ -1808,6 +1809,58 @@ namespace
             }
         }
         return buf;
+    }
+
+    std::vector<std::uint8_t> SolidGif()
+    {
+        return {
+            0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x02, 0x00, 0x02, 0x00, 0xF1, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0xC8, 0xA7, 0x11, 0xD1, 0xAE, 0x10, 0x00, 0x00,
+            0x00, 0x21, 0xF9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x21, 0xFF, 0x0B,
+            0x49, 0x6D, 0x61, 0x67, 0x65, 0x4D, 0x61, 0x67, 0x69, 0x63, 0x6B, 0x0D,
+            0x67, 0x61, 0x6D, 0x6D, 0x61, 0x3D, 0x30, 0x2E, 0x34, 0x35, 0x34, 0x35,
+            0x35, 0x00, 0x2C, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00,
+            0x02, 0x03, 0x04, 0x14, 0x05, 0x00, 0x3B
+        };
+    }
+
+    std::vector<std::pair<std::string, std::vector<std::uint8_t>>> DecoderOnlyImages()
+    {
+        std::vector<std::uint8_t> psd = {
+            0x38, 0x42, 0x50, 0x53, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08,
+            0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00
+        };
+        return {
+            {"BMP", BuildSolidColorBmp(2, 2, 0, 0, 255)},
+            {"TGA", {
+                0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x02, 0x00, 0x02, 0x00, 0x20, 0x28, 0x4A, 0xA2, 0xB3, 0x71, 0x49, 0x9E,
+                0xAD, 0x72, 0x10, 0xAE, 0xD1, 0xA6, 0x11, 0xA7, 0xC8, 0x92
+            }},
+            {"QOI", {
+                0x71, 0x6F, 0x69, 0x66, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02,
+                0x04, 0x00, 0xFF, 0xB3, 0xA2, 0x4A, 0x71, 0xFF, 0xAD, 0x9E, 0x49, 0x72,
+                0xFF, 0xD1, 0xAE, 0x10, 0xA6, 0xFF, 0xC8, 0xA7, 0x11, 0x92, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x01
+            }},
+            {"PSD", std::move(psd)},
+            {"HDR", {
+                0x23, 0x3F, 0x52, 0x41, 0x44, 0x49, 0x41, 0x4E, 0x43, 0x45, 0x0A, 0x47,
+                0x41, 0x4D, 0x4D, 0x41, 0x3D, 0x31, 0x0A, 0x50, 0x52, 0x49, 0x4D, 0x41,
+                0x52, 0x49, 0x45, 0x53, 0x3D, 0x30, 0x20, 0x30, 0x20, 0x30, 0x20, 0x30,
+                0x20, 0x30, 0x20, 0x30, 0x20, 0x30, 0x20, 0x30, 0x0A, 0x46, 0x4F, 0x52,
+                0x4D, 0x41, 0x54, 0x3D, 0x33, 0x32, 0x2D, 0x62, 0x69, 0x74, 0x5F, 0x72,
+                0x6C, 0x65, 0x5F, 0x72, 0x67, 0x62, 0x65, 0x0A, 0x0A, 0x2D, 0x59, 0x20,
+                0x32, 0x20, 0x2B, 0x58, 0x20, 0x32, 0x0A, 0xE7, 0xB9, 0x22, 0x7F, 0xD5,
+                0xAE, 0x22, 0x7F, 0xA3, 0x6C, 0x01, 0x80, 0x93, 0x62, 0x01, 0x80
+            }},
+            {"PPM", {
+                0x50, 0x36, 0x0A, 0x32, 0x20, 0x32, 0x0A, 0x32, 0x35, 0x35, 0x0A, 0xB3,
+                0xA2, 0x4A, 0xAD, 0x9E, 0x49, 0xD1, 0xAE, 0x10, 0xC8, 0xA7, 0x11
+            }}
+        };
     }
 }
 
@@ -1872,19 +1925,34 @@ TEST_F(Texture2DFromStreamFormatTest, JpegRoundTripDecodesCorrectSizeAndColor)
         EXPECT_TRUE(IsCloseTo(px[i], 0, 255, 0, 40)) << "pixel " << i; // JPEG is lossy
 }
 
-TEST_F(Texture2DFromStreamFormatTest, BmpDecodesCorrectSizeAndColor)
+TEST_F(Texture2DFromStreamFormatTest, GifDecodesLikeMicrosoftXna)
 {
-    auto bytes = BuildSolidColorBmp(2, 2, 0, 0, 255); // solid blue
+    const auto bytes = SolidGif();
     MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
     Texture2D loaded = Texture2D::FromStream(gd, readStream);
 
     EXPECT_EQ(loaded.getWidthProperty(), 2);
     EXPECT_EQ(loaded.getHeightProperty(), 2);
-    // REMED-GFX-149: whole level, not one pixel -- see the PNG round trip above.
-    std::vector<Color> px(4, Color(0, 0, 0, 0));
-    loaded.GetData(px.data(), 0, 4);
-    for (int i = 0; i < 4; ++i)
-        EXPECT_TRUE(IsCloseTo(px[i], 0, 0, 255, 0)) << "pixel " << i; // BMP is uncompressed
+}
+
+TEST_F(Texture2DFromStreamFormatTest, DecoderOnlyContainersAreRejectedLikeMicrosoftXna)
+{
+    for (const auto& [name, bytes] : DecoderOnlyImages())
+    {
+        SCOPED_TRACE(name);
+        const auto decoded = CNA::Internal::Graphics::ImageLoader::LoadFromMemory(
+            bytes.data(), bytes.size());
+        ASSERT_GT(decoded.width, 0);
+        ASSERT_GT(decoded.height, 0);
+
+        MemoryStream plain(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+        ExpectExactException<System::InvalidOperationException>(
+            [&] { (void) Texture2D::FromStream(gd, plain); });
+
+        MemoryStream resized(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+        ExpectExactException<System::InvalidOperationException>(
+            [&] { (void) Texture2D::FromStream(gd, resized, 8, 8, false); });
+    }
 }
 
 TEST_F(Texture2DFromStreamFormatTest, DdsIsRejectedLikeMicrosoftXna)
@@ -1930,8 +1998,13 @@ TEST_F(Texture2DFromStreamFormatTest, DecodesFromTheCurrentStreamPosition)
 {
     constexpr System::IO::intcs prefixSize = 7;
     std::vector<std::uint8_t> bytes(static_cast<std::size_t>(prefixSize), 0xA5);
-    const auto bmp = BuildSolidColorBmp(2, 2, 255, 0, 0);
-    bytes.insert(bytes.end(), bmp.begin(), bmp.end());
+    Texture2D source(gd, 2, 2);
+    std::array<Color, 4> red{Color::Red, Color::Red, Color::Red, Color::Red};
+    source.SetData(red.data(), static_cast<int>(red.size()));
+    MemoryStream encoded;
+    source.SaveAsPng(&encoded, 2, 2);
+    const auto png = encoded.GetBuffer();
+    bytes.insert(bytes.end(), png.begin(), png.end());
 
     MemoryStream stream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
     stream.setPositionProperty(prefixSize);
