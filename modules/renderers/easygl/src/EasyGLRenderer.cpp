@@ -8013,7 +8013,10 @@ if (!ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::SetScissorRect(int x, int y, int w, int h)
     {
         if (metagl::IsContextLost()) return;
-        if (w <= 0 || h <= 0) return; // invalid rect — leave scissor state unchanged
+        // SOFTWARE-310: zero width or height is a valid XNA scissor and must reach glScissor;
+        // its empty box rejects every fragment. GraphicsDevice already rejects negatives, so this
+        // is only a defensive guard for renderer-internal callers.
+        if (w < 0 || h < 0) return;
         // OpenGL scissor origin is bottom-left; convert from top-left XNA coordinates.
         // Use the render target's own height for the Y-flip when an RT is bound (mirrors
         // ReadBackbuffer's identical fbH pattern); fall back to the window's physical

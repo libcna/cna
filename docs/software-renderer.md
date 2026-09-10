@@ -446,7 +446,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   the GPU renderers' GFX-072 contract. The **3D** path also honors X/Y, Width/Height, raster clipping
   and `MinDepth/MaxDepth` (`REMED-GFX-079`, 25/25 focused checks), and an enabled
   `ScissorRectangle` intersects both paths in target space (`REMED-GFX-080`). The default
-  full-target viewport remains byte-identical to the earlier behavior.
+  full-target viewport remains byte-identical to the earlier behavior. The shared 50-check matrix
+  also requires a zero-width or zero-height scissor to reject every fragment; `SOFTWARE-310`
+  corrected EasyGL's former stale-rectangle behavior while Software remained conformant.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

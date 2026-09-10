@@ -164,20 +164,20 @@ namespace
     constexpr Contract kContract{"VULKAN", Support::Exact, Support::Exact, true,
                                  true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
-    // `emptyScissorDrawsNothing` false: measured here, by a DIFFERENT mechanism from Vulkan's.
-    // `EasyGLRenderer::SetScissorRect` returns early on `w <= 0 || h <= 0` and leaves the
-    // previously installed rectangle in place, so a degenerate rectangle is not merely unclipping,
-    // it never reaches the renderer at all. Same observable, recorded as its own finding.
+    // SOFTWARE-310: XNA permits a zero extent and FNA forwards it to glScissor, whose empty box
+    // rejects every fragment. The previous renderer-specific declaration pinned EasyGL's early-
+    // return bug as expected output and thereby hid the conformance failure.
     constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true,
-                                 true, true, true, false, true, true};
+                                 true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_BGFX)
-    // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and EasyGL.
+    // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan. EasyGL's
+    // formerly identical output was corrected by SOFTWARE-310.
     constexpr Contract kContract{"BGFX", Support::Exact, Support::Exact, true,
                                  true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // SdlGpu has no `ReadBackbuffer` override at all, so `GetBackBufferData` raises; its
     // render-target oracle still answers every render-target question in this file.
-    // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and EasyGL.
+    // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and bgfx.
     constexpr Contract kContract{"SDL_GPU", Support::Unsupported, Support::Exact, true,
                                  true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
@@ -742,13 +742,10 @@ class DeferredScissorCaptureTest : public Game
     /**
      * @brief E1 -- what a degenerate (zero-width or zero-height) rectangle does.
      *
-     * A measured cross-renderer divergence, declared per renderer rather than standardised away.
-     * WebGPU takes the natural hardware semantics -- a zero-extent scissor rejects every fragment.
-     * Vulkan's `computeScissor` returns the WHOLE framebuffer for `sw == 0 || sh == 0`, and
-     * EasyGL's `SetScissorRect` returns early on `w <= 0 || h <= 0` and leaves the previous
-     * rectangle installed; two different mechanisms, one shared observable -- the draw is not
-     * clipped away. Both outcomes are asserted EXACTLY here, so either declaration turns red the
-     * day its renderer changes.
+     * XNA accepts a zero extent and the resulting empty rasterizer rectangle rejects every
+     * fragment. FNA forwards the dimensions to its native renderer without treating them as an
+     * ignored state update. WebGPU and Software already implement that contract; SOFTWARE-310
+     * corrected EasyGL. Other renderer-specific deviations remain declared rather than concealed.
      *
      * The final real rectangle is a control on every renderer: whatever the degenerate ones do,
      * a genuine rectangle after them must still clip exactly, which rules out "the rectangle
