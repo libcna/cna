@@ -108,9 +108,17 @@ def write(description, root, out):
             shutil.copyfile(source, target)
             # `Minigun_S&WModel19.wav` is a real file in SoundLab: an unescaped `&` makes the
             # project unreadable, and the mapper then finds none at all.
+            stem = posixpath.splitext(posixpath.basename(relative))[0]
+            # A runner is free to give an asset a name that is not its file's stem, and one does:
+            # SAMPLE-141's writes every asset into a directory of its own, so `background.jpg`
+            # comes back as `background/background.xnb`. `assetName` is that rule, with `{stem}`
+            # and `{relative}` for the two things a runner has to work with; without it the name
+            # is the stem, which is what every other runner here does
+            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-194`).
+            name = rule.get("assetName", "{stem}").format(
+                stem=stem, relative=posixpath.splitext(relative)[0])
             text += '    <Compile Include="%s">\n' % saxutils.escape(relative.replace("/", "\\"))
-            text += "      <Name>%s</Name>\n" % saxutils.escape(
-                posixpath.splitext(posixpath.basename(relative))[0])
+            text += "      <Name>%s</Name>\n" % saxutils.escape(name)
             text += "      <Importer>%s</Importer>\n" % rule["importer"]
             text += "      <Processor>%s</Processor>\n" % rule["processor"]
             for name in sorted(rule.get("parameters", {})):
