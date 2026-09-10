@@ -350,6 +350,13 @@ order as clear, SpriteBatch and 3D work. `poll()` first checks the range's frame
 also prevents a new pool's pre-reset undefined payload from becoming a false first sample. It
 never requests a blocking result and timer creation/use/destruction adds no
 queue/device-wide idle. A submitted pool is retired on the consuming frame fence.
+When synchronous `RenderTarget2D::GetData` flushes only the target's dependency closure, it also
+records a complete timer pair that safely brackets only that selected work. The pair's endpoints
+may belong to otherwise-empty backbuffer segments around a scoped target bind; those timestamp
+commands are detached and replayed around the off-screen passes without acquiring, submitting or
+consuming the backbuffer. A range containing any omitted graphics or modern command remains pending
+after its beginning is recorded with the selected work, and closes only when the ordinary frame
+submission consumes the omitted work; it never returns a partial measurement.
 
 The same row discovers optional `VK_EXT_debug_utils` independently of validation so RenderDoc-style
 markers and per-pass regions remain useful in ordinary builds. Each recorded render-pass segment

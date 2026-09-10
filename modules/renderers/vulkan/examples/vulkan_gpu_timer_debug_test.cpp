@@ -156,6 +156,44 @@ int main()
                   " resets=" +
                   std::to_string(renderer->GetGpuTimerQueryResetCountEXT() - resetBaseline));
 
+        const std::uint64_t frameSubmitsBeforeReadback =
+            renderer->GetFrameSubmitCountEXT();
+        timer.begin();
+        drawWork(8, Color::Red);
+        timer.end();
+        std::vector<Color> readback(512u * 512u, Color::Transparent);
+        target.GetData(readback.data(), static_cast<int>(readback.size()));
+        const bool readbackCollected = timer.poll();
+        Check(readbackCollected && timer.getSampleCount() == 3 &&
+                  timer.getLastMilliseconds() > 0.0 &&
+                  renderer->GetFrameSubmitCountEXT() == frameSubmitsBeforeReadback,
+              "E a narrow target readback retains the complete surrounding timer range",
+              readbackCollected
+                  ? std::to_string(timer.getLastMilliseconds()) + " ms without frame submit"
+                  : "the synchronous readback left its timer unavailable");
+
+        const std::uint64_t frameSubmitsBeforeMixedReadback =
+            renderer->GetFrameSubmitCountEXT();
+        timer.begin();
+        drawWork(8, Color::Red);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        effect.Apply();
+        device.SetVertexBuffer(nullptr);
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+        timer.end();
+        target.GetData(readback.data(), static_cast<int>(readback.size()));
+        const bool partialRangeReported = timer.poll();
+        const bool mixedReadbackStayedNarrow =
+            renderer->GetFrameSubmitCountEXT() == frameSubmitsBeforeMixedReadback;
+        device.Present();
+        const bool mixedCollected = Collect(timer, device);
+        Check(!partialRangeReported && mixedReadbackStayedNarrow && mixedCollected &&
+                  timer.getSampleCount() == 4 && timer.getLastMilliseconds() > 0.0,
+              "F a mixed target/backbuffer range crosses the narrow and full submissions whole",
+              mixedCollected
+                  ? std::to_string(timer.getLastMilliseconds()) + " ms after full submit"
+                  : "the split range never completed");
+
         const bool labels = renderer->SupportsDebugUtilsLabelsEXT();
         const std::uint64_t markers =
             renderer->GetRecordedDebugMarkerCountEXT() - markerBaseline;
@@ -165,13 +203,13 @@ int main()
             renderer->GetRecordedDebugRegionEndCountEXT() - regionEndBaseline;
         Check(labels ? (markers == 1 && regionBegins > 0 && regionBegins == regionEnds)
                      : (markers == 0 && regionBegins == 0 && regionEnds == 0),
-              "E debug labels are structured and balanced, or honestly unavailable",
+              "G debug labels are structured and balanced, or honestly unavailable",
               std::string("supported=") + (labels ? "true" : "false") +
                   " markers=" + std::to_string(markers) +
                   " regions=" + std::to_string(regionBegins) + "/" +
                   std::to_string(regionEnds));
         Check(renderer->GetDeviceWaitIdleCountEXT() == waits,
-              "F timer measurement adds no full-device wait",
+              "H timer measurement adds no full-device wait",
               "waits=" + std::to_string(waits));
     }
 
@@ -202,14 +240,14 @@ int main()
         : !submitted && logged.empty() &&
               renderer->GetValidationMessagesEXT().size() == validationBaseline;
     Check(messageResult,
-          "G debug-utils messages use the CNA logger exactly once, or remain empty",
+          "I debug-utils messages use the CNA logger exactly once, or remain empty",
           std::string("supported=") + (messages ? "true" : "false") +
               " logged=" + std::to_string(logged.size()));
 
     const std::size_t expectedMessages =
         validationBaseline + (messages && submitted ? 1u : 0u);
     Check(renderer->GetValidationMessagesEXT().size() == expectedMessages,
-          "H timer and label commands emit no unexpected Vulkan validation message",
+          "J timer and label commands emit no unexpected Vulkan validation message",
           renderer->GetValidationMessagesEXT().size() == expectedMessages
               ? "none"
               : renderer->GetValidationMessagesEXT().back());

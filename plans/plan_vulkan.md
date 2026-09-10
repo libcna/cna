@@ -218,7 +218,8 @@ implementation tasks.**
 - compute shaders, storage buffers, storage textures, image bindings;
 - indirect drawing (`DrawPrimitivesIndirectEXT` / `DrawIndexedPrimitivesIndirectEXT`);
 - GPU timers (`IGpuTimerRenderer`, `SupportsGpuTimerEXT`) and debug-region APIs owned by the
-  engine layer;
+  engine layer. The Vulkan-specific correction that preserves complete timer pairs across a narrow
+  render-target dependency readback is recorded under `MOD-2246` in `plans/plan_modern.md`;
 - float/HDR render-target ownership remains in the modern plan. `MOD-2223` implements the
   `RenderTarget2D` half; `MOD-2224` permanently cross-checks all 27 format capabilities against
   odd-sized base/mip/MSAA construction (**11/11**, 9 accepted and 18 refused on llvmpipe) and runs

@@ -13555,16 +13555,65 @@ namespace CNA::Internal::Renderers::Vulkan
                    std::find(flushSegments->begin(), flushSegments->end(), segment)
                        != flushSegments->end();
         };
-        auto timestampRecordedByFlush = [&](const PendingTimestamp& event) {
-            if (!recordedByFlush(event.rt.get(), event.segment)) return false;
-            if (event.begin || (event.timer != nullptr && event.timer->beginRecorded_)) return true;
-            return std::any_of(
-                pendingTimestamps_.begin(), pendingTimestamps_.end(),
-                [&](const PendingTimestamp& candidate) {
-                    return candidate.timer == event.timer && candidate.serial == event.serial &&
-                           candidate.begin &&
-                           recordedByFlush(candidate.rt.get(), candidate.segment);
-                });
+        auto chooseTimestampForFlush = [&](const PendingTimestamp& event) {
+            const bool endpointSegmentRecorded =
+                recordedByFlush(event.rt.get(), event.segment);
+            // An open range may cross this flush boundary. Recording its selected Begin now and
+            // its End in a later queue submission preserves the whole interval; recording an End
+            // whose earlier Begin is not present here could silently truncate it.
+            if (event.begin && endpointSegmentRecorded) return true;
+
+            // A public timer may surround a temporary render-target bind: Begin is then attached
+            // to the empty backbuffer segment before the bind, and End to the empty backbuffer
+            // segment after it. A narrow target readback cannot record either backbuffer segment,
+            // but it must retain the two timestamp commands that bracket the selected off-screen
+            // work. Take the pair only when the complete range exists, contains selected graphics
+            // work, and contains no graphics or modern command the narrow flush will omit. This
+            // keeps the readback narrow instead of silently timing a partial range.
+            const PendingTimestamp* begin = nullptr;
+            const PendingTimestamp* end = nullptr;
+            for (const auto& candidate : pendingTimestamps_)
+            {
+                if (candidate.timer != event.timer || candidate.serial != event.serial) continue;
+                (candidate.begin ? begin : end) = &candidate;
+            }
+            if (begin == nullptr || end == nullptr || begin->order >= end->order)
+                return false;
+
+            bool containsSelectedWork = false;
+            bool containsOmittedWork = false;
+            const auto classifyGraphicsCommand = [&](const auto& command) {
+                if (command.order <= begin->order || command.order >= end->order) return;
+                if (recordedByFlush(command.rt.get(), command.segment))
+                    containsSelectedWork = true;
+                else
+                    containsOmittedWork = true;
+            };
+            for (const auto& batch : activeBatches_) classifyGraphicsCommand(batch);
+            for (const auto& draw : pending3D_) classifyGraphicsCommand(draw);
+            for (const auto& clear : pendingClears_) classifyGraphicsCommand(clear);
+            for (const auto& command : pendingModernCommands_)
+                if (command.order > begin->order && command.order < end->order)
+                    containsOmittedWork = true;
+            if (!containsSelectedWork) return false;
+            if (!containsOmittedWork) return true;
+
+            // Submit Begin before the selected work, but leave End for the later full submission
+            // that consumes the omitted work. The query then spans both submissions rather than
+            // reporting a deceptively short partial range.
+            return event.begin && event.timer != nullptr && !event.timer->beginRecorded_;
+        };
+        std::vector<std::uint64_t> timestampOrdersForFlush;
+        if (rtOnly)
+        {
+            for (const auto& event : pendingTimestamps_)
+                if (chooseTimestampForFlush(event))
+                    timestampOrdersForFlush.push_back(event.order);
+        }
+        const auto timestampRecordedByFlush = [&](const PendingTimestamp& event) {
+            return std::find(
+                       timestampOrdersForFlush.begin(), timestampOrdersForFlush.end(),
+                       event.order) != timestampOrdersForFlush.end();
         };
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -14482,6 +14531,43 @@ namespace CNA::Internal::Renderers::Vulkan
             // list now happens once per SEGMENT, in closeOpenQuery3D, not once per slice.
         };
 
+        std::vector<std::uint64_t> recordedTimestampOrders;
+        auto recordGpuTimestamp = [&](const PendingTimestamp& event)
+        {
+            if ((rtOnly && !timestampRecordedByFlush(event)) || event.timer == nullptr ||
+                event.pool == VK_NULL_HANDLE || event.timer->serial_ != event.serial)
+                return;
+            vkCmdWriteTimestamp(
+                cb,
+                event.begin ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+                            : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                event.pool, event.begin ? 0u : 1u);
+            recordedTimestampOrders.push_back(event.order);
+            if (event.begin)
+            {
+                event.timer->beginRecorded_ = true;
+                return;
+            }
+
+            event.timer->endRecorded_ = true;
+            // A new pool's result/availability contents are undefined until its first recorded
+            // reset executes. Associate this sample with the full-frame fence so poll cannot cache
+            // that pre-reset payload as result 0. A narrow target readback waits its submission
+            // before returning, so it may mark completion immediately from the caller's view.
+            if (rtOnly)
+            {
+                event.timer->completionFence_ = VK_NULL_HANDLE;
+                event.timer->submissionGeneration_ = 0;
+                event.timer->submissionComplete_ = true;
+            }
+            else
+            {
+                event.timer->completionFence_ = inFlightFences_[currentFrame_];
+                event.timer->submissionGeneration_ = frameGeneration_ + 1;
+                event.timer->submissionComplete_ = false;
+            }
+        };
+
         // REMED-GFX-157: replay ONE order slice of a segment with both draw families interleaved in
         // public order, instead of all of its sprites and then all of its 3D draws.
         //
@@ -14536,40 +14622,7 @@ namespace CNA::Internal::Renderers::Vulkan
             while (i < items.size()) {
                 if (items[i].kind == Kind::Timestamp)
                 {
-                    const PendingTimestamp& event = *items[i].timestamp;
-                    if ((!rtOnly || timestampRecordedByFlush(event)) &&
-                        event.timer != nullptr && event.pool != VK_NULL_HANDLE &&
-                        event.timer->serial_ == event.serial)
-                    {
-                        vkCmdWriteTimestamp(
-                            cb,
-                            event.begin ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-                                        : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                            event.pool, event.begin ? 0u : 1u);
-                        if (event.begin) event.timer->beginRecorded_ = true;
-                        else
-                        {
-                            event.timer->endRecorded_ = true;
-                            // A new pool's result/availability contents are undefined until its
-                            // first recorded reset executes. Associate this sample with the full
-                            // frame fence so poll cannot cache that pre-reset payload as result 0.
-                            // The RT-only path waits its narrow submission before returning, so it
-                            // may mark completion immediately from the caller's perspective.
-                            if (rtOnly)
-                            {
-                                event.timer->completionFence_ = VK_NULL_HANDLE;
-                                event.timer->submissionGeneration_ = 0;
-                                event.timer->submissionComplete_ = true;
-                            }
-                            else
-                            {
-                                event.timer->completionFence_ =
-                                    inFlightFences_[currentFrame_];
-                                event.timer->submissionGeneration_ = frameGeneration_ + 1;
-                                event.timer->submissionComplete_ = false;
-                            }
-                        }
-                    }
+                    recordGpuTimestamp(*items[i].timestamp);
                     ++i;
                     continue;
                 }
@@ -14616,6 +14669,8 @@ namespace CNA::Internal::Renderers::Vulkan
             std::vector<const PendingClear*> clears;
             /// Public-stream position of this segment's earliest draw; none = no draw at all.
             uint64_t        firstDrawOrder = std::numeric_limits<uint64_t>::max();
+            /// First command position of any kind, used to place detached timer endpoints.
+            uint64_t        firstOrder = std::numeric_limits<uint64_t>::max();
             /// Last command position in this segment, used by a narrow readback flush.
             uint64_t        lastOrder = 0;
         };
@@ -14639,16 +14694,19 @@ namespace CNA::Internal::Renderers::Vulkan
         for (const auto& c : pendingClears_) {
             PassSegment& seg = segmentFor(c.segment, c.rt.get());
             seg.clears.push_back(&c);
+            seg.firstOrder = std::min(seg.firstOrder, c.order);
             seg.lastOrder = std::max(seg.lastOrder, c.order);
         }
         for (const auto& entry : activeBatches_) {
             PassSegment& seg = segmentFor(entry.segment, entry.rt.get());
             seg.firstDrawOrder = std::min(seg.firstDrawOrder, entry.order);
+            seg.firstOrder = std::min(seg.firstOrder, entry.order);
             seg.lastOrder = std::max(seg.lastOrder, entry.order);
         }
         for (const auto& draw : pending3D_) {
             PassSegment& seg = segmentFor(draw.segment, draw.rt.get());
             seg.firstDrawOrder = std::min(seg.firstDrawOrder, draw.order);
+            seg.firstOrder = std::min(seg.firstOrder, draw.order);
             seg.lastOrder = std::max(seg.lastOrder, draw.order);
         }
         // MOD-2246: a timer range can legitimately surround a render-target bind cycle, so its
@@ -14656,6 +14714,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // those segments is what places the timestamps on opposite sides of the measured pass.
         for (const auto& event : pendingTimestamps_) {
             PassSegment& seg = segmentFor(event.segment, event.rt.get());
+            seg.firstOrder = std::min(seg.firstOrder, event.order);
             seg.lastOrder = std::max(seg.lastOrder, event.order);
         }
         std::sort(segments.begin(), segments.end(),
@@ -14755,10 +14814,40 @@ namespace CNA::Internal::Renderers::Vulkan
             }
         };
 
+        // A narrow readback omits backbuffer segments by design. Keep the eligible timestamp
+        // endpoints from those otherwise-empty segments in the same global command order around
+        // the off-screen segments they measure, without creating or acquiring a backbuffer pass.
+        std::vector<const PendingTimestamp*> detachedTimestamps;
+        if (rtOnly)
+        {
+            for (const auto& event : pendingTimestamps_)
+            {
+                if (timestampRecordedByFlush(event) &&
+                    !recordedByFlush(event.rt.get(), event.segment))
+                    detachedTimestamps.push_back(&event);
+            }
+            std::sort(
+                detachedTimestamps.begin(), detachedTimestamps.end(),
+                [](const PendingTimestamp* left, const PendingTimestamp* right) {
+                    return left->order < right->order;
+                });
+        }
+        std::size_t nextDetachedTimestamp = 0;
+        auto recordDetachedTimestampsBefore = [&](const std::uint64_t order)
+        {
+            while (nextDetachedTimestamp < detachedTimestamps.size() &&
+                   detachedTimestamps[nextDetachedTimestamp]->order < order)
+            {
+                recordGpuTimestamp(*detachedTimestamps[nextDetachedTimestamp]);
+                ++nextDetachedTimestamp;
+            }
+        };
+
         for (const auto& seg : segments) {
             // MOD-2247: a modern command closes its issuing graphics segment and precedes every
             // later segment. Record it outside both render passes, at that exact boundary.
             recordModernBeforeSegment(seg.id);
+            recordDetachedTimestampsBefore(seg.firstOrder);
             // MOD-2251: image descriptors declare SHADER_READ_ONLY_OPTIMAL. Apply the transition
             // after every earlier compute producer and before entering the consuming render pass.
             for (const auto& use : pendingSampledImages_)
@@ -15095,6 +15184,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // A modern command issued after the frame's final graphics command has no following
         // segment to pull it in, but it still precedes submission/presentation.
+        recordDetachedTimestampsBefore(std::numeric_limits<std::uint64_t>::max());
         recordModernBeforeSegment(std::numeric_limits<std::uint64_t>::max());
 
         // REMED-GFX-074: a RenderTargetsOnly readback flush stops here -- no backbuffer pass, no
@@ -15118,7 +15208,10 @@ namespace CNA::Internal::Renderers::Vulkan
                 std::remove_if(
                     pendingTimestamps_.begin(), pendingTimestamps_.end(),
                     [&](const PendingTimestamp& event) {
-                        return timestampRecordedByFlush(event);
+                        return std::find(
+                                   recordedTimestampOrders.begin(),
+                                   recordedTimestampOrders.end(), event.order) !=
+                               recordedTimestampOrders.end();
                     }),
                 pendingTimestamps_.end());
             std::vector<PendingModernCommand> unrecordedModernCommands;
