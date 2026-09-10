@@ -220,6 +220,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         set_tests_properties(PostProcessShaderPackageReproducibility PROPERTIES
             SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
 
+        add_test(NAME DepthNormalPrepassShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/depth_normal_prepass/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/depth_normal_prepass/DepthNormalPrepassShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(DepthNormalPrepassShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
         # plans/plan_binding.md CBIND-043: the C API coverage matrix is a GATE, not a report.
         #
         # The complete inventory is generated from every public Microsoft/** and CNA/** header.

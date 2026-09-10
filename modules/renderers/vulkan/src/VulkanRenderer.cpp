@@ -6216,24 +6216,31 @@ namespace CNA::Internal::Renderers::Vulkan
         std::memcpy(pushConst_ + 4, matrix, 64);
         matrixSetByGame_ = true;   // VULKAN-255: the game's matrix outranks the draw's own
 
-        // MOD-2237: the portable shadow-caster shaders need two matrices at once. Preserve the
-        // established one-matrix push contract for every custom effect, and additionally mirror
-        // only the engine caster's exact public names into its dedicated set-1 block. Both light
-        // spellings share the first field because a draw is either cube-face or 2D/cascade, never
-        // both; uWorld owns the second field and can still be changed by callers through the
-        // ShadowMap::getCasterEffect() API before each draw.
-        int shadowMatrix = -1;
+        // Engine geometry packages need several matrices at once. Preserve the established
+        // one-matrix push contract for arbitrary custom effects and additionally mirror only these
+        // exact engine-owned names into binding 19. Both light spellings share slot zero because a
+        // draw is either cube-face or 2D/cascade, never both; the prepass uses slots one through
+        // five. Existing shadow package layouts remain a two-matrix prefix of this block.
+        int engineMatrix = -1;
         if (name != nullptr &&
             (std::strcmp(name, "uLightViewProjection") == 0 ||
              std::strcmp(name, "uFaceViewProjection") == 0))
-            shadowMatrix = 0;
+            engineMatrix = 0;
         else if (name != nullptr && std::strcmp(name, "uWorld") == 0)
-            shadowMatrix = 1;
-        if (shadowMatrix >= 0)
+            engineMatrix = 1;
+        else if (name != nullptr && std::strcmp(name, "uView") == 0)
+            engineMatrix = 2;
+        else if (name != nullptr && std::strcmp(name, "uProjection") == 0)
+            engineMatrix = 3;
+        else if (name != nullptr && std::strcmp(name, "uPreviousWorld") == 0)
+            engineMatrix = 4;
+        else if (name != nullptr && std::strcmp(name, "uPreviousViewProjection") == 0)
+            engineMatrix = 5;
+        if (engineMatrix >= 0)
         {
             EnsureUniformArrayStorageEXT();
             const std::size_t base = static_cast<std::size_t>(
-                shadowMatrixOffset_ / sizeof(float)) + static_cast<std::size_t>(shadowMatrix * 16);
+                engineMatrixOffset_ / sizeof(float)) + static_cast<std::size_t>(engineMatrix * 16);
             std::memcpy(arrayBlock_.data() + base, matrix, 64);
             arraysDirty_ = true;
             boundSetDirty_ = true;
@@ -6298,7 +6305,7 @@ namespace CNA::Internal::Renderers::Vulkan
         for (int i = 0; i < kEffectBoundBindingCount; ++i) {
             const bool isUniformBuffer =
                 (i >= kEffectFloatArrayBinding && i < kEffectTextureArrayBindingBase) ||
-                i == kEffectShadowMatrixBinding;
+                i == kEffectEngineMatrixBinding;
             lb[static_cast<std::size_t>(i)].binding         = static_cast<uint32_t>(i);
             lb[static_cast<std::size_t>(i)].descriptorType  =
                 isUniformBuffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
@@ -6343,11 +6350,12 @@ namespace CNA::Internal::Renderers::Vulkan
             arrayOffsets_[static_cast<std::size_t>(i)] = at;
             at += ((sizes[i] + align - 1) / align) * align;
         }
-        shadowMatrixOffset_ = at;
-        constexpr VkDeviceSize shadowMatrixBytes = 2u * 16u * sizeof(float);
-        at += ((shadowMatrixBytes + align - 1) / align) * align;
+        engineMatrixOffset_ = at;
+        constexpr VkDeviceSize engineMatrixBytes =
+            static_cast<VkDeviceSize>(kEffectEngineMatrixCount) * 16u * sizeof(float);
+        at += ((engineMatrixBytes + align - 1) / align) * align;
         // Asked once, here, rather than discovered as a validation error at bind time. The whole
-        // block is 8704 bytes at the usual 256-byte alignment and every Vulkan device must allow
+        // block is 8960 bytes at the usual 256-byte alignment and every Vulkan device must allow
         // at least 16384, so this is a guard against an exotic device rather than a live limit.
         const VkDeviceSize largest = *std::max_element(std::begin(sizes), std::end(sizes));
         if (largest > owner_->GetDeviceLimitsEXT().maxUniformBufferRange)
@@ -6360,11 +6368,11 @@ namespace CNA::Internal::Renderers::Vulkan
 
         arrayBlockSize_ = at;
         arrayBlock_.assign(static_cast<std::size_t>(at / sizeof(float)), 0.0f);
-        const std::size_t shadowBase =
-            static_cast<std::size_t>(shadowMatrixOffset_ / sizeof(float));
-        for (int matrix = 0; matrix < 2; ++matrix)
+        const std::size_t engineBase =
+            static_cast<std::size_t>(engineMatrixOffset_ / sizeof(float));
+        for (int matrix = 0; matrix < kEffectEngineMatrixCount; ++matrix)
             for (int diagonal = 0; diagonal < 4; ++diagonal)
-                arrayBlock_[shadowBase + static_cast<std::size_t>(matrix * 16 + diagonal * 5)] =
+                arrayBlock_[engineBase + static_cast<std::size_t>(matrix * 16 + diagonal * 5)] =
                     1.0f;
     }
 
@@ -6553,7 +6561,7 @@ namespace CNA::Internal::Renderers::Vulkan
             const VkDeviceSize begin = arrayOffsets_[static_cast<std::size_t>(i)];
             const VkDeviceSize end = (i + 1 < kEffectArrayBindingCount)
                                          ? arrayOffsets_[static_cast<std::size_t>(i + 1)]
-                                         : shadowMatrixOffset_;
+                                         : engineMatrixOffset_;
             bufInfos[static_cast<std::size_t>(i)] = { uniformBuffer_, begin, end - begin };
             auto& w = writes[static_cast<std::size_t>(kEffectFloatArrayBinding + i)];
             w.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -6563,15 +6571,16 @@ namespace CNA::Internal::Renderers::Vulkan
             w.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             w.pBufferInfo     = &bufInfos[static_cast<std::size_t>(i)];
         }
-        auto& shadowInfo = bufInfos[static_cast<std::size_t>(kEffectArrayBindingCount)];
-        shadowInfo = {uniformBuffer_, shadowMatrixOffset_, 2u * 16u * sizeof(float)};
-        auto& shadowWrite = writes[static_cast<std::size_t>(kEffectShadowMatrixBinding)];
-        shadowWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        shadowWrite.dstSet = set;
-        shadowWrite.dstBinding = static_cast<std::uint32_t>(kEffectShadowMatrixBinding);
-        shadowWrite.descriptorCount = 1;
-        shadowWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        shadowWrite.pBufferInfo = &shadowInfo;
+        auto& engineInfo = bufInfos[static_cast<std::size_t>(kEffectArrayBindingCount)];
+        engineInfo = {uniformBuffer_, engineMatrixOffset_,
+                      static_cast<VkDeviceSize>(kEffectEngineMatrixCount) * 16u * sizeof(float)};
+        auto& engineWrite = writes[static_cast<std::size_t>(kEffectEngineMatrixBinding)];
+        engineWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        engineWrite.dstSet = set;
+        engineWrite.dstBinding = static_cast<std::uint32_t>(kEffectEngineMatrixBinding);
+        engineWrite.descriptorCount = 1;
+        engineWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        engineWrite.pBufferInfo = &engineInfo;
         // MOD-2226: sampler2DArray has its own bindings and its own dimensional filler. A 2D view
         // in one of these descriptors is invalid even if it refers to the same 1x1 image.
         for (int unit = 0; unit < kEffectTextureArrayBindingCount; ++unit) {
@@ -18822,12 +18831,17 @@ namespace CNA::Internal::Renderers::Vulkan
         // cycles are excluded: they need a swapchain image, REMED-GFX-144's one-acquire-one-submit-
         // one-present-per-frame must not change, and the backbuffer can never be a texture source,
         // so excluding them can never lose a producer.
-        struct PendingSegment { uint64_t id; const void* group; };
+        struct PendingSegment
+        {
+            uint64_t id;
+            const void* group;
+            const VulkanRTSource* source;
+        };
         std::vector<PendingSegment> pendingSegments;
         auto notePendingSegment = [&pendingSegments](const VulkanRTSource* source, uint64_t id) {
             if (source == nullptr) return;
             for (const auto& s : pendingSegments) if (s.id == id) return;
-            pendingSegments.push_back({ id, source->DepthStencilOwnerEXT() });
+            pendingSegments.push_back({id, source->DepthStencilOwnerEXT(), source});
         };
         for (const auto& p : activeBatches_)  notePendingSegment(p.rt.get(), p.segment);
         for (const auto& d : pending3D_)      notePendingSegment(d.rt.get(), d.segment);
@@ -18935,8 +18949,14 @@ namespace CNA::Internal::Renderers::Vulkan
                 {
                     if (sampled.first != consumer) continue;
                     for (const auto& pending : pendingSegments)
-                        if (pending.group == sampled.second && pending.id < consumer)
+                    {
+                        const auto* mrt = dynamic_cast<const VulkanMRTProxy*>(pending.source);
+                        const bool producesSampledGroup = pending.group == sampled.second ||
+                            (mrt != nullptr &&
+                             mrt->ProducesRenderTargetGroupEXT(sampled.second));
+                        if (producesSampledGroup && pending.id < consumer)
                             expanded = addFlushSegment(pending.id) || expanded;
+                    }
                 }
             }
             for (const auto& command : pendingModernCommands_)

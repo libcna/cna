@@ -16,23 +16,49 @@
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
+#include <array>
 #include <cmath>
-#include <vector>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
 using CNA::Graphics::DepthNormalPrepass;
 using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::BufferUsage;
+using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+using Microsoft::Xna::Framework::Graphics::RasterizerState;
+using Microsoft::Xna::Framework::Graphics::VertexBuffer;
+using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+using Microsoft::Xna::Framework::Graphics::VertexElement;
+using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture;
 
 constexpr int kSize = 32;
 
@@ -45,6 +71,28 @@ constexpr int kSize = 32;
 [[nodiscard]] Matrix Projection()
 {
     return Matrix::CreatePerspectiveFieldOfView(1.0f, 1.0f, 0.1f, 100.0f);
+}
+
+struct PrepassSkinnedVertex
+{
+    float x, y, z;
+    float nx, ny, nz;
+    float u, v;
+    float w0, w1, w2, w3;
+    std::uint8_t i0, i1, i2, i3;
+};
+static_assert(sizeof(PrepassSkinnedVertex) == 52);
+
+[[nodiscard]] VertexDeclaration PrepassSkinnedVertexDeclaration()
+{
+    return VertexDeclaration(52, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+        VertexElement(24, VertexElementFormat::Vector2,
+                      VertexElementUsage::TextureCoordinate, 0),
+        VertexElement(32, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
+        VertexElement(48, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0),
+    });
 }
 
 // =====================================================================================
@@ -244,6 +292,119 @@ TEST(DepthNormalPrepassTest, TheSkinnedEffectIsASecondProgramNotTheSameOne)
     EXPECT_NE(prepass.getPrepassEffect(), prepass.getSkinnedPrepassEffect());
     EXPECT_TRUE(prepass.getPrepassEffect()->IsEffectValid());
     EXPECT_TRUE(prepass.getSkinnedPrepassEffect()->IsEffectValid());
+}
+
+TEST(DepthNormalPrepassTest, TheSkinnedEffectWritesThePosedMeshRatherThanItsBindPose)
+{
+    GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    DepthNormalPrepass prepass(gd, kSize, kSize);
+    if (!prepass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the prepass shaders";
+
+    constexpr float halfExtent = 0.55f;
+    const std::array<PrepassSkinnedVertex, 6> quad{{
+        {-halfExtent, -halfExtent, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+         1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+        { halfExtent, -halfExtent, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+         1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+        { halfExtent,  halfExtent, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+         1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+        {-halfExtent, -halfExtent, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+         1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+        { halfExtent,  halfExtent, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+         1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+        {-halfExtent,  halfExtent, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+         1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+    }};
+    VertexBuffer buffer(gd, PrepassSkinnedVertexDeclaration(), 6, BufferUsage::None);
+    buffer.SetDataRaw(quad.data(), 6, static_cast<int>(sizeof(PrepassSkinnedVertex)));
+    const std::array bones{Matrix::CreateTranslation(1.0f, 0.0f, 0.0f)};
+
+    gd.setRasterizerStateProperty(RasterizerState::CullNone);
+    gd.setDepthStencilStateProperty(DepthStencilState::Default);
+    gd.setBlendStateProperty(BlendState::Opaque);
+    for (int pass = 0; pass < prepass.getPassCount(); ++pass)
+    {
+        prepass.begin(pass, View(), Projection(), 0.1f, 100.0f);
+        auto* effect = prepass.getSkinnedPrepassEffect();
+        ASSERT_NE(effect, nullptr);
+        effect->Apply();
+        effect->SetUniformMat4Array("uBones", &bones[0].M11, 1);
+        effect->SetUniformInt("uWeightsPerVertex", 1);
+        gd.SetVertexBuffer(&buffer);
+        gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        gd.SetVertexBuffer(nullptr);
+        prepass.end();
+    }
+
+    std::vector<Microsoft::Xna::Framework::Color> depth(
+        static_cast<std::size_t>(kSize) * kSize, Microsoft::Xna::Framework::Color::White);
+    prepass.getDepthTexture()->GetData(depth.data(), static_cast<int>(depth.size()));
+    double xSum = 0.0;
+    int covered = 0;
+    for (int y = 0; y < kSize; ++y)
+        for (int x = 0; x < kSize; ++x)
+        {
+            const auto& texel = depth[static_cast<std::size_t>(y) * kSize + x];
+            const float value = DepthNormalPrepass::unpackDepth(
+                static_cast<float>(texel.getRProperty()) / 255.0f,
+                static_cast<float>(texel.getGProperty()) / 255.0f,
+                static_cast<float>(texel.getBProperty()) / 255.0f,
+                static_cast<float>(texel.getAProperty()) / 255.0f);
+            if (value >= 0.99f) continue;
+            xSum += x;
+            ++covered;
+        }
+
+    ASSERT_GT(covered, 8) << "the posed skinned mesh wrote no depth";
+    const double centroidX = xSum / covered;
+    EXPECT_GT(centroidX, static_cast<double>(kSize) * 0.57)
+        << "the depth silhouette stayed near the bind-pose centre instead of following bone 0";
+}
+
+TEST(DepthNormalPrepassTest, RoughnessChangedInsideThePassReachesTheNormalTarget)
+{
+    GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    DepthNormalPrepass prepass(gd, kSize, kSize);
+    if (!prepass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the prepass shaders";
+
+    constexpr float halfExtent = 0.7f;
+    const std::array<VertexPositionNormalTexture, 6> quad{{
+        {{-halfExtent, -halfExtent, 0.0f}, Vector3::Backward, Vector2::Zero},
+        {{ halfExtent, -halfExtent, 0.0f}, Vector3::Backward, Vector2::Zero},
+        {{ halfExtent,  halfExtent, 0.0f}, Vector3::Backward, Vector2::Zero},
+        {{-halfExtent, -halfExtent, 0.0f}, Vector3::Backward, Vector2::Zero},
+        {{ halfExtent,  halfExtent, 0.0f}, Vector3::Backward, Vector2::Zero},
+        {{-halfExtent,  halfExtent, 0.0f}, Vector3::Backward, Vector2::Zero},
+    }};
+
+    gd.setRasterizerStateProperty(RasterizerState::CullNone);
+    gd.setDepthStencilStateProperty(DepthStencilState::Default);
+    gd.setBlendStateProperty(BlendState::Opaque);
+    for (int pass = 0; pass < prepass.getPassCount(); ++pass)
+    {
+        prepass.begin(pass, View(), Projection(), 0.1f, 100.0f);
+        prepass.setRoughness(0.75f);
+        auto* effect = prepass.getPrepassEffect();
+        ASSERT_NE(effect, nullptr);
+        effect->Apply();
+        gd.SetVertexBuffer(nullptr);
+        gd.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
+        prepass.end();
+    }
+
+    std::vector<Microsoft::Xna::Framework::Color> normals(
+        static_cast<std::size_t>(kSize) * kSize, Microsoft::Xna::Framework::Color::White);
+    prepass.getNormalTexture()->GetData(normals.data(), static_cast<int>(normals.size()));
+    int matching = 0;
+    for (const auto& texel : normals)
+        if (std::abs(static_cast<int>(texel.getAProperty()) - 191) <= 1)
+            ++matching;
+    EXPECT_GT(matching, 16)
+        << "the post-begin roughness upload did not reach the pixels written by the prepass";
 }
 
 TEST(DepthNormalPrepassTest, AnUnsupportedRendererIsReportedRatherThanFailing)

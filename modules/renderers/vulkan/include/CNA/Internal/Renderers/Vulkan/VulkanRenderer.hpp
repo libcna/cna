@@ -970,19 +970,20 @@ namespace CNA::Internal::Renderers::Vulkan
         /// fragment-stage pipeline-layout total at Vulkan's guaranteed minimum of sixteen.
         static constexpr int kEffectTextureArrayBindingBase = kEffectMat4ArrayBinding + 1;
         static constexpr int kEffectTextureArrayBindingCount = kMaxEffectBoundTextures - 1;
-        /// MOD-2237: the two named matrices used by the engine shadow casters. General scalar
-        /// ShaderEffect uniforms retain the fixed push-constant contract; this separate block is
-        /// what lets `uLightViewProjection`/`uFaceViewProjection` and `uWorld` coexist instead of
-        /// overwriting the same push-constant matrix slot.
-        static constexpr int kEffectShadowMatrixBinding =
+        /// MOD-2237/MOD-2239l: named matrices used by engine-owned geometry packages. General
+        /// scalar ShaderEffect uniforms retain the fixed push-constant contract; this separate
+        /// block lets shadow casters and the depth/normal prepass carry every independent matrix
+        /// they require instead of overwriting the single push-constant matrix slot.
+        static constexpr int kEffectEngineMatrixBinding =
             kEffectTextureArrayBindingBase + kEffectTextureArrayBindingCount;
+        static constexpr int kEffectEngineMatrixCount = 6;
         static constexpr int kEffectBoundBindingCount =
-            kEffectShadowMatrixBinding + 1;
+            kEffectEngineMatrixBinding + 1;
         static constexpr int kEffectUniformBufferBindingCount = kEffectArrayBindingCount + 1;
         /// VULKAN-252: elements per array, all four kinds. 72 is XNA's own `SkinnedEffect.MaxBones`,
         /// so the array a custom effect most plausibly wants -- a bone palette -- fits exactly, and
-        /// the four arrays occupy 8448 bytes at the usual alignment; the two caster matrices make
-        /// the complete allocation 8704 bytes, still below the 16384 every device must allow.
+        /// the four arrays occupy 8448 bytes at the usual alignment; six engine matrices make the
+        /// complete allocation 8960 bytes, still below the 16384 every device must allow.
         static constexpr int kEffectUniformArrayCapacity = 72;
         /**
          * @brief Returns the set-1 descriptor snapshot for this effect's resources.
@@ -1067,8 +1068,8 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDescriptorPool drawStoragePool_ = VK_NULL_HANDLE;
         VkDescriptorSet drawStorageSet_ = VK_NULL_HANDLE;
         std::vector<std::weak_ptr<VulkanStorageBufferRenderer>> drawStorageSetBuffers_;
-        /// VULKAN-252/MOD-2237: the CPU-side copy of the four arrays followed by the two shadow
-        /// caster matrices, in the layout the buffer holds. Each
+        /// VULKAN-252/MOD-2237/MOD-2239l: the CPU-side copy of the four arrays followed by six
+        /// engine matrices, in the layout the buffer holds. Each
         /// element occupies 16 bytes for `float`, `vec2` and `vec3` alike, which is what std140
         /// does to an array of any of them -- so a shader declaring `float uFloats[72]` reads
         /// element `i` at offset `16 * i`, exactly where this writes it.
@@ -1076,8 +1077,8 @@ namespace CNA::Internal::Renderers::Vulkan
         /// VULKAN-252: byte offsets of the four sub-ranges inside `uniformBuffer_`, each aligned up
         /// to the device's `minUniformBufferOffsetAlignment`.
         std::array<VkDeviceSize, 4> arrayOffsets_{};
-        /// MOD-2237: byte offset of `{ light-or-face view-projection, world }`.
-        VkDeviceSize          shadowMatrixOffset_ = 0;
+        /// MOD-2237/MOD-2239l: byte offset of the engine-owned named matrix block.
+        VkDeviceSize          engineMatrixOffset_ = 0;
         VkDeviceSize          arrayBlockSize_  = 0;
         bool                  arraysDirty_     = false;
         VkBuffer              uniformBuffer_   = VK_NULL_HANDLE;
@@ -2386,6 +2387,20 @@ namespace CNA::Internal::Renderers::Vulkan
                 if (colorTargetPasses_[i].get() == &targetPass)
                     return static_cast<int>(i);
             return -1;
+        }
+        /**
+         * @brief Reports whether this MRT pass writes a render-target dependency group.
+         *
+         * @param group Stable render-target group identity recorded for a sampled texture.
+         * @return True when one of this proxy's colour attachments belongs to @p group.
+         */
+        [[nodiscard]] bool ProducesRenderTargetGroupEXT(const void* group) const
+        {
+            if (group == nullptr) return false;
+            for (const auto& targetPass : colorTargetPasses_)
+                if (targetPass != nullptr && targetPass->DepthStencilOwnerEXT() == group)
+                    return true;
+            return false;
         }
 
     private:

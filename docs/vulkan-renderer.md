@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239k`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239l`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -888,6 +888,18 @@ EasyGL remains **18/18**. The three remaining Vulkan skips require the still sou
 `DepthNormalPrepass`, while all standalone SSAO image and half-resolution paths now execute. The
 complete portable post-process regression set is now **152/152** on all three paths, with no
 Khronos validation messages.
+
+`DepthNormalPrepass` completes the shared producer side of those consumers with packaged rigid and
+72-bone skinned depth/normal/optional-velocity shaders. Vulkan reuses the existing scalar and bone
+array blocks and expands engine binding 19 from the shadow packages' two-matrix prefix to six named
+matrices. Separate two- and three-output fragment payloads keep the shader output declaration equal
+to the attachment count. A real-prepass SSAO test exposed a separate deferred-ordering hole: an MRT
+proxy was recorded as one source, but dependency closure did not recognize its individual colour
+attachments as products. The closure now expands through every constituent without an artificial
+readback. The resulting portable prepass/velocity/SSAO core is **27/27** on EasyGL, RADV and
+llvmpipe; the full 33-case diagnostic matrix is **33/33** on EasyGL and **27 passed / 6 intentional
+source-GLSL diagnostic skips** on both Vulkan drivers. The binding expansion leaves the complete
+Vulkan shadow regression **81/81** on both drivers, with no validation message.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.
