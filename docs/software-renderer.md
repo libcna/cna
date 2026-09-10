@@ -431,6 +431,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Classic `Model` failures retain XNA exception identity** (`SOFTWARE-295`) — undersized local or
   absolute bone-transform arrays report `ArgumentOutOfRangeException` with the public array name,
   and `Model.Draw` rejects an Effect without `IEffectMatrices` as `InvalidOperationException`.
+- **Unresolved SpriteFont glyphs retain XNA exception identity** (`SOFTWARE-296`) — both
+  `MeasureString` overloads and `SpriteBatch.DrawString` report `ArgumentException("text")` when
+  neither the requested character nor a default glyph can be resolved.
 - **Effect integer indexers retain XNA's nullable object semantics** (`SOFTWARE-255`) — annotation,
   parameter, pass and technique collections return a stable object pointer for a valid index and
   null for either invalid direction. This intentionally follows recovered Microsoft XNA over

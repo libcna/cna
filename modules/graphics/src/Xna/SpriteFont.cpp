@@ -3,8 +3,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <stdexcept>
-
 #include "CNA/Internal/Utf8Decode.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/Collections/Generic/KeyNotFoundException.hpp"
@@ -160,8 +158,9 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 if (!defaultCharacter_.has_value())
                 {
-                    throw std::invalid_argument(
-                        "Text contains characters that cannot be resolved by this SpriteFont.");
+                    throw System::ArgumentException(
+                        "Text contains characters that cannot be resolved by this SpriteFont.",
+                        "text");
                 }
                 it = characterIndexMap_.find(defaultCharacter_.value());
                 // REMED-GFX-002: defaultCharacter is validated on construction/set, so this

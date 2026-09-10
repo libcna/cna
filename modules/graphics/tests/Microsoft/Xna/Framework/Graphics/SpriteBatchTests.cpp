@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -1270,6 +1271,41 @@ namespace
             FAIL() << "Expected System::ArgumentOutOfRangeException for " << parameterName;
         }
     }
+
+    template<typename TAction>
+    void expectTextArgumentException(TAction&& action)
+    {
+        try
+        {
+            action();
+            FAIL() << "Expected System::ArgumentException for text";
+        }
+        catch (const System::ArgumentException& exception)
+        {
+            EXPECT_EQ(exception.getParamNameProperty(), "text");
+        }
+        catch (...)
+        {
+            FAIL() << "Expected System::ArgumentException for text";
+        }
+    }
+}
+
+TEST(SpriteBatchTest, DrawStringUnknownCharWithNoDefaultThrowsArgumentException)
+{
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    SpriteBatch batch(std::move(renderer));
+    DummyTextureRenderer textureRendererRaw(16, 16);
+    auto textureRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &textureRendererRaw, [](auto*) {});
+    const SpriteFont font = makeSingleGlyphFontWithRenderer(textureRenderer);
+
+    batch.Begin();
+    expectTextArgumentException([&]
+    {
+        batch.DrawString(font, std::string("B"), Vector2::Zero, Color::White);
+    });
+    batch.End();
 }
 
 // -----------------------------------------------------------------------

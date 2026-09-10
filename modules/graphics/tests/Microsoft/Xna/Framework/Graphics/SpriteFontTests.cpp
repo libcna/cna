@@ -56,6 +56,24 @@ static SpriteFont makeFontAB(float spacing = 0.0f)
                       /*lineSpacing=*/16, spacing, kern, std::nullopt);
 }
 
+template<typename TAction>
+static void expectTextArgumentException(TAction&& action)
+{
+    try
+    {
+        action();
+        FAIL() << "Expected System::ArgumentException for text";
+    }
+    catch (const System::ArgumentException& exception)
+    {
+        EXPECT_EQ(exception.getParamNameProperty(), "text");
+    }
+    catch (...)
+    {
+        FAIL() << "Expected System::ArgumentException for text";
+    }
+}
+
 // Three glyphs from cna-go's Foundation 69 measurement, whose 'B' carries a NEGATIVE right
 // side bearing -- the case where XNA and FNA disagree and every glyph above hides it.
 //   '?' kern (1, 4, 2), 'A' kern (0, 5, 0), 'B' kern (-3, 6, -2), lineSpacing 10, spacing 1.
@@ -460,9 +478,10 @@ TEST(SpriteFontTest, TrailingNewlineAddsAnEmptyLastLine)
 TEST(SpriteFontTest, UnknownCharWithNoDefaultThrows)
 {
     SpriteFont font = makeFontA();   // no default character
-    EXPECT_THROW(
-        { [[maybe_unused]] auto r = font.MeasureString(std::string("B")); },
-        std::invalid_argument);
+    expectTextArgumentException([&]
+    {
+        [[maybe_unused]] auto result = font.MeasureString(std::string("B"));
+    });
 }
 
 TEST(SpriteFontTest, UnknownCharWithDefaultFallsBackToDefault)
@@ -519,9 +538,10 @@ TEST(SpriteFontTest, MeasureStringBuilderMatchesStringOverloadForMultiLineAppend
 TEST(SpriteFontTest, MeasureStringBuilderUnknownCharWithNoDefaultThrows)
 {
     SpriteFont font = makeFontA();   // no default character
-    EXPECT_THROW(
-        { [[maybe_unused]] auto r = font.MeasureString(StringBuilder("B")); },
-        std::invalid_argument);
+    expectTextArgumentException([&]
+    {
+        [[maybe_unused]] auto result = font.MeasureString(StringBuilder("B"));
+    });
 }
 
 TEST(SpriteFontTest, MeasureStringBuilderUnknownCharWithDefaultFallsBackToDefault)
