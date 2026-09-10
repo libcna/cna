@@ -23,8 +23,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         "SDL_VIDEODRIVER=${CNA_SDLGPU_TEST_VIDEO_DRIVER};DISPLAY=${CNA_TEST_DISPLAY}")
     if(WIN32)
         set(CNA_SDLGPU_HEADLESS_TEST_DRIVER "direct3d12")
-        set(CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT
-            "SDL_VIDEODRIVER=dummy;DISPLAY=;WAYLAND_DISPLAY=")
+        if(CMAKE_CROSSCOMPILING)
+            # SDLGPU-104: the emulator wrapper supplies a fresh Xvfb DISPLAY. Do not leak the
+            # host-display cache value into a cross-compiled test even transiently; SDL itself is
+            # always dummy/headless and D3D12 is selected explicitly.
+            set(CNA_SDLGPU_TEST_ENVIRONMENT
+                "SDL_VIDEODRIVER=dummy;WAYLAND_DISPLAY=;SDL_GPU_DRIVER=direct3d12;CNA_SDLGPU_TEST_FORCE_HEADLESS=1")
+            set(CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        else()
+            set(CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT
+                "SDL_VIDEODRIVER=dummy;DISPLAY=;WAYLAND_DISPLAY=")
+        endif()
     else()
         set(CNA_SDLGPU_HEADLESS_TEST_DRIVER "vulkan")
         set(CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -41,6 +50,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         endif()
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+        # SDLGPU-104: make every cross-compiled Windows integration executable directly runnable
+        # by CTest. The wrapper owns a fresh Xvfb server, SDL dummy video, the renderer's virtual
+        # backbuffer opt-in and vkd3d-proton's positive engagement gate, so neither a host display
+        # nor an accidental WineD3D/non-D3D12 fallback can count as Windows evidence.
+        if(CMAKE_CROSSCOMPILING AND WIN32)
+            set_target_properties(${target} PROPERTIES CROSSCOMPILING_EMULATOR
+                "${CMAKE_COMMAND};-E;env;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d-headless.sh")
         endif()
     endmacro()
 
