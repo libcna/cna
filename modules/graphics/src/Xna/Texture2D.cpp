@@ -2435,7 +2435,7 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
         if (len <= 0)
-            throw std::runtime_error("Texture2D::FromStream: stream is empty or length unknown");
+            throw System::InvalidOperationException("Decoding image failed!");
 
         std::vector<bytecs> buf(static_cast<std::size_t>(len));
         intcs bytesRead = 0;
@@ -2443,7 +2443,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             const intcs count = stream.Read(buf.data(), bytesRead, len - bytesRead);
             if (count <= 0)
-                throw std::runtime_error("Texture2D::FromStream: stream ended before its declared length");
+                throw System::InvalidOperationException("Decoding image failed!");
             bytesRead += count;
         }
 
@@ -2453,7 +2453,19 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!TryDecodeDds(raw, static_cast<std::size_t>(len), maximumTextureDimension,
                           device, allowCompressed, decoded))
         {
-            ImageData image = ImageLoader::LoadFromMemory(raw, static_cast<std::size_t>(len));
+            ImageData image;
+            try
+            {
+                image = ImageLoader::LoadFromMemory(raw, static_cast<std::size_t>(len));
+            }
+            catch (const std::runtime_error&)
+            {
+                throw System::InvalidOperationException("Decoding image failed!");
+            }
+            catch (const std::invalid_argument&)
+            {
+                throw System::InvalidOperationException("Decoding image failed!");
+            }
             decoded.width = image.width;
             decoded.height = image.height;
             decoded.rgbaLevels.push_back(std::move(image.pixels));
@@ -2569,6 +2581,12 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream,
                                     int width, int height, bool zoom)
     {
+        // Microsoft XNA validates the requested dimensions before consulting the stream. Besides
+        // preserving the public exception names, this makes width win when both are invalid and
+        // prevents a malformed stream from hiding the argument error.
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
+
         // The resize overload must resample RGBA pixels, so it never keeps compressed blocks.
         DecodedTexture2D decoded = DecodeStreamToImageData(
             stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice, /*allowCompressed=*/false);

@@ -60,3 +60,10 @@ Implemented behind `ImageLoader::ResizeRgba` with pixel-centre bilinear sampling
 clamping. Verified via `Texture2DFromStreamResizeTest` for both `zoom` values against an 8x4
 landscape source, including a patterned centre-crop regression, and by `ImageLoaderTests` with an
 exact four-texel interpolation assertion.
+
+Microsoft XNA 4.0 validates this overload's requested `width` and then `height` before it reads the
+stream. Zero and negative values throw `ArgumentOutOfRangeException` naming the corresponding
+parameter; `width` wins when both are invalid. For either public overload, empty or otherwise
+undecodable non-DDS image data throws `InvalidOperationException`. `SOFTWARE-304` pins those types
+and the validation order on both Software and EasyGL. DDS-specific parser diagnostics remain CNA's
+documented extension rather than being collapsed into the generic image-decode failure.

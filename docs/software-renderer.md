@@ -321,6 +321,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **`Texture2D.FromStream` preserves XNA/FNA stream position semantics** (`SOFTWARE-297`). Both
   overloads decode from the current position, allowing an encoded image after a caller-owned
   prefix, while a seekable stream positioned exactly at its end is rewound and reused from zero.
+- **`Texture2D.FromStream` exposes XNA validation and decode failures** (`SOFTWARE-304`). The resize
+  overload rejects non-positive `width` and then `height` with named
+  `ArgumentOutOfRangeException`s before reading the stream. Empty or corrupt non-DDS image input
+  reports `InvalidOperationException` in both overloads; CNA's explicit DDS parser keeps its more
+  precise extension diagnostics.
 - **Resolved render targets can be saved through the classic image APIs** (`SOFTWARE-298`).
   `SaveAsPng` and `SaveAsJpeg` obtain live level-zero Color pixels through renderer readback rather
   than requiring an upload shadow that rendered targets deliberately do not own.

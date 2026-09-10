@@ -1912,6 +1912,49 @@ TEST_F(Texture2DFromStreamResizeTest, SeekableStreamAtEndRewindsBeforeDecode)
     EXPECT_EQ(loaded.getHeightProperty(), 2);
 }
 
+TEST_F(Texture2DFromStreamResizeTest,
+       InvalidDimensionsUseNamedArgumentOutOfRangeBeforeDecoding)
+{
+    const auto expectDimensionFailure = [this](int width, int height, bool zoom,
+                                               const char* parameterName)
+    {
+        MemoryStream stream(pngBytes.data(), static_cast<System::IO::intcs>(pngBytes.size()));
+        ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+            [&] { (void) Texture2D::FromStream(gd, stream, width, height, zoom); },
+            parameterName);
+    };
+
+    expectDimensionFailure(0, 4, false, "width");
+    expectDimensionFailure(-1, 4, true, "width");
+    expectDimensionFailure(4, 0, false, "height");
+    expectDimensionFailure(4, -1, true, "height");
+    expectDimensionFailure(-1, -1, false, "width");
+
+    MemoryStream empty;
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { (void) Texture2D::FromStream(gd, empty, 0, 4, false); }, "width");
+}
+
+TEST_F(Texture2DFromStreamResizeTest, DecodeFailureUsesInvalidOperationException)
+{
+    MemoryStream plain;
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { (void) Texture2D::FromStream(gd, plain); });
+
+    MemoryStream resized;
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { (void) Texture2D::FromStream(gd, resized, 4, 4, false); });
+
+    const std::array<std::uint8_t, 7> garbage = {1, 2, 3, 4, 5, 6, 7};
+    MemoryStream corruptPlain(garbage.data(), static_cast<System::IO::intcs>(garbage.size()));
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { (void) Texture2D::FromStream(gd, corruptPlain); });
+
+    MemoryStream corruptResized(garbage.data(), static_cast<System::IO::intcs>(garbage.size()));
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { (void) Texture2D::FromStream(gd, corruptResized, 4, 4, true); });
+}
+
 TEST_F(Texture2DFromStreamResizeTest, ZoomCropsTheHorizontalCenterBeforeScaling)
 {
     Texture2D striped(gd, 8, 4);
