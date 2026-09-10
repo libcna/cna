@@ -20,6 +20,7 @@
     {"symbol":"kHeightFogEsFragmentSource","source":"height_fog.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kLensFlareEsFragmentSource","source":"lens_flare.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kLightShaftEsFragmentSource","source":"light_shaft.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kMotionBlurEsFragmentSource","source":"motion_blur.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kSpatialUpscaleEsFragmentSource","source":"spatial_upscale.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kTonemapEsFragmentSource","source":"tonemap.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kFullscreenDesktopVertexSource","source":"fullscreen.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
@@ -38,6 +39,7 @@
     {"symbol":"kHeightFogDesktopFragmentSource","source":"height_fog.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kLensFlareDesktopFragmentSource","source":"lens_flare.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kLightShaftDesktopFragmentSource","source":"light_shaft.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kMotionBlurDesktopFragmentSource","source":"motion_blur.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kSpatialUpscaleDesktopFragmentSource","source":"spatial_upscale.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kTonemapDesktopFragmentSource","source":"tonemap.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
     {"symbol":"kFullscreenVulkanVertexSpirV","source":"fullscreen.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
@@ -56,6 +58,7 @@
     {"symbol":"kHeightFogVulkanFragmentSpirV","source":"height_fog.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
     {"symbol":"kLensFlareVulkanFragmentSpirV","source":"lens_flare.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
     {"symbol":"kLightShaftVulkanFragmentSpirV","source":"light_shaft.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
+    {"symbol":"kMotionBlurVulkanFragmentSpirV","source":"motion_blur.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
     {"symbol":"kSpatialUpscaleVulkanFragmentSpirV","source":"spatial_upscale.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
     {"symbol":"kTonemapVulkanFragmentSpirV","source":"tonemap.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"}
   ]

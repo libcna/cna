@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239i`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239j`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -865,6 +865,17 @@ become **14/14** on RADV and llvmpipe, matching EasyGL. Its image oracles move t
 depth layers, retain the sharp layer's contrast, suppress focused-subject bleed and agree with the
 public CPU optics reference. The complete portable post-process regression set is now **130/130**
 on all three paths, with no Khronos validation messages.
+
+`MotionBlurPass` is the thirteenth consumer. Its inverse projection/view and previous
+view-projection matrices reuse the typed mat4-array descriptor at set 1 binding 15; six float-array
+entries at binding 12 carry velocity presence, far plane, strength, distance cap, sample count and
+depth policy. Depth remains set 1 binding 1 and the optional per-object velocity image uses binding
+2. The former six-case Vulkan run's 2 passes and 4 source-execution skips become an expanded **7/7**
+on RADV and llvmpipe, matching EasyGL. The added prepass-independent oracle supplies unwritten then
+written velocity under a stationary camera, proving the optional descriptor, inverted alpha flag,
+camera fallback and visible object smear even while `DepthNormalPrepass` itself remains source-only
+on Vulkan. The complete portable post-process regression set is now **137/137** on all three paths,
+with no Khronos validation messages.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.

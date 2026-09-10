@@ -286,6 +286,26 @@ namespace CNA::Graphics::detail
                 CNA::ShaderStageEXT::Fragment)});
     }
 
+    ShaderPackageEXT CreateMotionBlurShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kMotionBlurEsFragmentSource, "post_process/motion_blur.es.frag.glsl"},
+            {kMotionBlurDesktopFragmentSource,
+             "post_process/motion_blur.desktop.frag.glsl"},
+            {kMotionBlurVulkanFragmentSpirV,
+             kMotionBlurVulkanFragmentSpirVByteSize,
+             "post_process/motion_blur.vulkan.frag.spv"},
+            {
+                ShaderBindingRequirementEXT(
+                    "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Fragment),
+                ShaderBindingRequirementEXT(
+                    "uVelocitySampler", 2, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Fragment),
+            });
+    }
+
     ShaderPackageEXT CreateSpatialUpscaleShaderPackage()
     {
         using namespace CNA::Graphics::detail::PostProcessGenerated;

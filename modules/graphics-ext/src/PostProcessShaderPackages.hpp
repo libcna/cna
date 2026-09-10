@@ -52,6 +52,9 @@ namespace CNA::Graphics::detail
     /** @brief Creates the portable depth-of-field fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateDepthOfFieldShaderPackage();
 
+    /** @brief Creates the portable camera/object motion-blur fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateMotionBlurShaderPackage();
+
     /** @brief Creates the portable spatial-upscale fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateSpatialUpscaleShaderPackage();
 
