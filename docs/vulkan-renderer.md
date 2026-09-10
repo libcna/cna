@@ -730,6 +730,25 @@ detected by the directional centroid oracle.
 `Vulkan_ShaderEffect_3D` passes **11/11**, and the generated package passes its reproducibility
 check. All Vulkan runs use Khronos validation and emit no validation messages.
 
+### Portable skybox (`MOD-2238`, 2026-09-10)
+
+`CNA::Graphics::Skybox` selects a reproducibly generated GLSL ES/desktop GLSL/SPIR-V package. The
+Vulkan variant reuses the custom SpriteBatch contract: its dummy source remains set 0 binding 0,
+cube texture unit 1 is set 1 binding 5, and the inverse view-projection, combined tint/intensity and
+yaw occupy the existing matrix, `vec4` and scalar push slots. It does not add a descriptor layout or
+claim that Vulkan executes source GLSL.
+
+Sampler-unit selection is deliberately set before yaw. Vulkan's legacy custom-effect scalar slot
+is name-independent, so the GLSL-only `SetUniformInt("uEnvironment", 1)` would otherwise overwrite
+the later sky value. The selected shader also consumes SpriteBatch's white vertex colour, keeping
+the compiled SPIR-V input signature aligned with the submitted declaration.
+
+**Test:** the shared skybox suites pass **15/15** on RADV, Vulkan llvmpipe and EasyGL, including six
+named cube faces, yaw, tint/intensity, HDR output above one and foreground visibility. The
+application orbit/yaw oracle passes **3/3** on all three paths with identical measurements. Both
+Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
+its write-free reproducibility check.
+
 ### Instancing (`plans/plan_vulkan.md` VULKAN-217…VULKAN-234, 2026-09-08)
 
 `DrawInstancedPrimitives` adds an **optional per-instance world matrix to every stock 3D program**,
@@ -859,8 +878,9 @@ short form a reader needs before opening it.
 | `SpriteSortMode::Immediate` honoured at the renderer boundary | EasyGL does not override `SetImmediateMode` at all. |
 | Precise occlusion counts on real hardware | `VK_QUERY_CONTROL_PRECISE_BIT` with the feature enabled, answered honestly through `PixelCountIsPreciseEXT` (`VULKAN-370`). |
 
-**Former shadow gap now closed:** `MOD-2236` supplies stock-effect reception and `MOD-2237` supplies
-portable directional, cascade, point and spot generation without changing Vulkan's shader dialect.
+**Former shadow and skybox gaps now closed:** `MOD-2236` supplies stock-effect reception,
+`MOD-2237` supplies portable directional, cascade, point and spot generation and `MOD-2238`
+supplies the portable skybox without changing Vulkan's shader dialect.
 `ExecutesShaderEffectSourceEXT()` stays false because the renderer executes packaged SPIR-V, not
 caller-provided source text. Indirect execution is the additional device-gated path described above.
 

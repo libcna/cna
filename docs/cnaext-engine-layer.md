@@ -10,8 +10,9 @@ pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compu
 renderers capability by capability.** Its HDR/post-process pipeline, shadows, skybox, image-based
 lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
 now implements exact HDR targets, stock-PBR IBL, portable directional/cascade/point/spot shadow
-generation and stock-effect reception, instancing and the modern compute/resource paths. Its
-remaining engine-layer shader gaps are the source-authored post-process and skybox paths. The design is
+generation and stock-effect reception, a portable skybox, instancing and the modern
+compute/resource paths. Its remaining engine-layer shader gap is the source-authored post-process
+path. The design is
 [`../CNAEXT.md`](../misc/CNAEXT.md); the task backlog and its evidence trail are
 [`../plans/plan_modern.md`](../plans/plan_modern.md).
 
@@ -206,7 +207,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ✅ portable atlas generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Contact shadows | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `ContactShadowPass::isSupported()` is false and the pass copies its input through, so the frame keeps the shadow map it already had |
 | Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | ✅ portable cube/spot generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
-| Skybox | ✅ one fullscreen pass; needs `CustomEffects` | ⬜ | ⬜ | ⬜ — where the shader will not compile the sky is skipped and logged once |
+| Skybox | ✅ one fullscreen pass; needs `CustomEffects` | ✅ GLSL/SPIR-V package (`MOD-2238`) | ⬜ | ⬜ — where no package variant will compile the sky is skipped and logged once |
 | Image-based lighting | ✅ CPU precompute + split-sum shading | ✅ stock `PbrEffect` and `SkinnedPbrEffect`, same three-product split sum (`MOD-2235`) | ⬜ | ⬜ — precompute additionally requires working cube/2D texture storage; shading needs a renderer-specific stock PBR path |
 | Materials (`PbrMaterial` ↔ `PbrEffect`) | ✅ | ✅ | ✅ | ✅ — no renderer code at all: it moves values between two existing objects |
 | Instancing / LOD / culling | ✅ | ✅ measured — `cnaext_instancing_lod_test` passes 5/5 on a real Vulkan device | ⬜ | ⬜ — `LodGroupEXT` and `FrustumCullerEXT` are renderer-free and run everywhere; `InstancedRendererEXT` needs `GraphicsCapability::Instancing` and otherwise refuses (or falls back, on request) |
@@ -241,8 +242,8 @@ The distinction is not academic: the Vulkan renderer now answers **true** to the
 sampling and IBL questions, while its language query accepts SPIR-V and refuses GLSL. Its stock
 SPIR-V programs consume the latter two states. Since `MOD-2237`, every shadow caster selects a
 portable package containing GLSL ES, desktop GLSL and SPIR-V instead of handing only GLSL source to
-the renderer. The post-process and skybox paths still provide source alone and therefore remain
-unavailable on Vulkan. Portable packages use the language/stage query to select a payload;
+the renderer; `MOD-2238` does the same for `Skybox`. The post-process paths still provide source
+alone and therefore remain unavailable on Vulkan. Portable packages use the language/stage query to select a payload;
 subsystems still ask their own semantic capability before promising a visible result.
 
 **Explicit code values.** `ShaderCodeEXT` is the owned input atom for portable shader packages. It
@@ -278,7 +279,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Source-authored post-process and skybox paths remain unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable skybox, directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Source-authored post-process paths remain unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -1764,6 +1765,10 @@ pipeline.setSkyboxCamera(view, projection);  // the pipeline has no camera of it
   down, and `directionToEquirectangular` is its counterpart: longitude across, latitude down, with
   **−Z at the centre of the panorama** — where a camera at its default orientation looks. The two
   are tested as inverses, so the converter cannot disagree with itself.
+- **Portable shader package.** The same `Skybox` selects GLSL ES on EasyGL and checked-in SPIR-V
+  on Vulkan. Its six-face, yaw, tint/intensity, HDR and foreground-visibility oracle passes 15/15
+  on EasyGL, Vulkan/RADV and Vulkan/llvmpipe; the application-level orbit/yaw check passes 3/3 on
+  all three paths (`MOD-2238`).
 - **Cost** (`cnaext_skybox_test --benchmark`, 128×128, Mesa llvmpipe): 0.020 ms per frame against
   0.005 ms for a clear alone — one fullscreen pass, which is what it should be.
 

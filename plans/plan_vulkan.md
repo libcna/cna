@@ -239,6 +239,9 @@ implementation tasks.**
   cascade, point and spot reception in all four stock-effect families; `MOD-2237` completes
   portable rigid/skinned directional, cascade, point-cube and spot generation through generated
   GLSL ES/desktop GLSL/SPIR-V packages, verified on RADV and llvmpipe;
+- the engine-layer skybox remains owned by the modern plan. `MOD-2238` supplies one generated
+  GLSL ES/desktop GLSL/SPIR-V package and verifies the same six-face, yaw, tint/intensity, HDR and
+  foreground-visibility contract on RADV, Vulkan llvmpipe and EasyGL;
 - the renderer-neutral immutable storage-buffer descriptor, exact range transfers/copy and tracked
   facade are complete (`MOD-2229`). Vulkan translates every declared role into exact
   `VkBufferUsageFlags`, keeps CPU-none buffers device-local and unmapped, and has byte-exact
@@ -1951,7 +1954,7 @@ as a method change rather than a rediscovered bug.
 **The census — four categories: as `VULKAN-027` first measured it on 2026-09-05, as `VULKAN-474`
 re-measured it on 2026-09-06, as `VULKAN-207` re-measured it on 2026-09-07 at the end of the
 campaign, and after `VULKAN-240`/`VULKAN-241` corrected the compressed-content omissions on
-2026-09-08, followed by the current modern-plan implementation through `MOD-2237`/`MOD-2251`.
+2026-09-08, followed by the current modern-plan implementation through `MOD-2238`/`MOD-2251`.
 The movement is accounted for
 exactly at every step. The interface itself grew from 186 virtuals to 189 before the compressed
 overrides moved categories, then to 202 through the detailed format/limit contract, and to 207
