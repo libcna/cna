@@ -292,16 +292,19 @@ paths, with zero validation messages.
 `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4` and `HdrBlendable`. The table feeds
 classification and allocation together, and each native format is carried through image/view
 creation, format-aware render-pass and pipeline cache keys, mixed-format MRT, sampling, mip
-generation and byte-width-correct readback. An MSAA request above one is admitted only when the
-exact colour format and selected depth format share a supported sample count; unsupported pairs
-throw instead of becoming single-sampled or `Color`. `Vulkan_FloatRenderTarget` proves the live
+generation and byte-width-correct readback. Exact colour and depth formats are never substituted,
+but `preferredMultiSampleCount` follows FNA's preference contract: Vulkan chooses the highest
+supported count no greater than the request and falls back to a single sample when there is no
+multisample match (`VULKAN-267`). `Vulkan_FloatRenderTarget` proves the live
 clear/draw/sample/readback path, values above 1.0, mixed MRT, MSAA resolve and mips. Its MSAA and
-mip pixel legs use odd dimensions, including the complete `7×5 → 3×2 → 1×1` chain, so
-the constructor contract is backed by rendered contents rather than allocation alone.
+mip pixel legs use odd dimensions, including the complete `7×5 → 3×2 → 1×1` chain, and separately
+pin the preferred-count fallback for both 2D and cube targets, so the constructor contract is
+backed by rendered contents and negotiated results rather than allocation alone.
 
 `MOD-2234` carries that same table into `CreateRenderTargetCubeEXT`. The factory additionally asks
-the selected physical device about the exact cube-compatible six-layer image, complete mip chain
-and requested colour/depth/MSAA combination before allocation. Image and face views, render passes,
+the selected physical device about the exact cube-compatible six-layer image and complete mip
+chain before allocation; its constructor negotiates the preferred colour/depth MSAA count with the
+same downgrade rule as 2D. Image and face views, render passes,
 framebuffers, resolve storage and pipeline metadata all retain the requested format; `Color` cubes
 use canonical `R8G8B8A8_UNORM` storage rather than inheriting the swapchain's possibly BGRA format.
 `Vulkan_FloatRenderTarget` constructs every advertised format and reads six independently rendered

@@ -17675,51 +17675,9 @@ namespace CNA::Internal::Renderers::Vulkan
             }
         }
 
-        // XNA/FNA treat both zero and one as single-sampled requests. Only a request above one
-        // promises a multisample pair and therefore needs the exact colour/depth compatibility
-        // check below.
-        if (multiSampleCount > 1)
-        {
-            VkImageFormatProperties colorProperties{};
-            VkSampleCountFlags available = 0;
-            if (vkGetPhysicalDeviceImageFormatProperties(
-                    physicalDevice_, storage.format, VK_IMAGE_TYPE_2D,
-                    VK_IMAGE_TILING_OPTIMAL,
-                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                        VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
-                    0, &colorProperties) == VK_SUCCESS)
-            {
-                available = colorProperties.sampleCounts &
-                            physicalDeviceProperties_.limits.framebufferColorSampleCounts;
-            }
-
-            if (static_cast<DepthFormat>(depthFormat) != DepthFormat::None)
-            {
-                const VkFormat depthVkFormat = PickDepthFormat(
-                    physicalDevice_, static_cast<DepthFormat>(depthFormat));
-                VkImageFormatProperties depthProperties{};
-                if (vkGetPhysicalDeviceImageFormatProperties(
-                        physicalDevice_, depthVkFormat, VK_IMAGE_TYPE_2D,
-                        VK_IMAGE_TILING_OPTIMAL,
-                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                        0, &depthProperties) != VK_SUCCESS)
-                {
-                    available = 0;
-                }
-                else
-                {
-                    available &= depthProperties.sampleCounts &
-                                 physicalDeviceProperties_.limits.framebufferDepthSampleCounts;
-                }
-            }
-            if (PickSampleCountFromFlags(available, multiSampleCount) ==
-                VK_SAMPLE_COUNT_1_BIT)
-            {
-                throw std::runtime_error(
-                    "Vulkan: requested RenderTarget2D format/depth/sample-count combination "
-                    "has no multisample support");
-            }
-        }
+        // VULKAN-267: preferredMultiSampleCount is a preference, not a construction gate.
+        // The target constructor intersects the exact colour/depth formats and chooses the
+        // highest supported count no greater than the request, including single-sample fallback.
 
         return std::make_unique<VulkanRenderTargetRenderer>(
             w, h, depthFormat, preserveContents, this, multiSampleCount, mipMap, surfaceFormat);
@@ -21317,47 +21275,8 @@ namespace CNA::Internal::Renderers::Vulkan
             }
         }
 
-        if (multiSampleCount > 1)
-        {
-            VkImageFormatProperties colorProperties{};
-            const VkImageUsageFlags colorUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                (preserveContents ? 0u : VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT);
-            VkSampleCountFlags available = 0;
-            if (vkGetPhysicalDeviceImageFormatProperties(
-                    physicalDevice_, storage.format, VK_IMAGE_TYPE_2D,
-                    VK_IMAGE_TILING_OPTIMAL, colorUsage, 0,
-                    &colorProperties) == VK_SUCCESS && colorProperties.maxArrayLayers >= 6)
-            {
-                available = colorProperties.sampleCounts &
-                            physicalDeviceProperties_.limits.framebufferColorSampleCounts;
-            }
-            if (static_cast<DepthFormat>(depthFormat) != DepthFormat::None)
-            {
-                const VkFormat depthVkFormat = PickDepthFormat(
-                    physicalDevice_, static_cast<DepthFormat>(depthFormat));
-                VkImageFormatProperties depthProperties{};
-                if (vkGetPhysicalDeviceImageFormatProperties(
-                        physicalDevice_, depthVkFormat, VK_IMAGE_TYPE_2D,
-                        VK_IMAGE_TILING_OPTIMAL,
-                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                        0, &depthProperties) != VK_SUCCESS)
-                {
-                    available = 0;
-                }
-                else
-                {
-                    available &= depthProperties.sampleCounts &
-                                 physicalDeviceProperties_.limits.framebufferDepthSampleCounts;
-                }
-            }
-            if (PickSampleCountFromFlags(available, multiSampleCount) ==
-                VK_SAMPLE_COUNT_1_BIT)
-            {
-                throw std::runtime_error(
-                    "Vulkan: requested RenderTargetCube format/depth/sample-count combination "
-                    "has no multisample support");
-            }
-        }
+        // VULKAN-267: mirror RenderTarget2D's preferred-count negotiation. Exact formats remain
+        // mandatory, while an unavailable multisample count may legally fall back to one sample.
 
         return std::make_unique<VulkanRenderTargetCubeRenderer>(
             this, size, depthFormat, preserveContents, mipMap, multiSampleCount, surfaceFormat);

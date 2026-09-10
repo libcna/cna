@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_modern.md MOD-2223/MOD-2234: real Vulkan float/HDR RenderTarget2D and
-// RenderTargetCube storage must preserve exact native formats and values above 1.0.
+// plans/plan_modern.md MOD-2223/MOD-2234 and plans/plan_vulkan.md VULKAN-267:
+// real Vulkan float/HDR RenderTarget2D and RenderTargetCube storage must preserve exact native
+// formats and values above 1.0, while unsupported preferred MSAA counts downgrade without
+// preventing either target type from being constructed.
 
 #include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -377,6 +379,48 @@ protected:
         Check(!hasHdr || cubePreserved,
               "M HdrBlendable cube preserves six distinct unclamped HDR faces",
               cubeDetail);
+
+        const auto isLegalTwoSampleResult = [](const int applied)
+        {
+            return applied == 0 || applied == 2;
+        };
+        bool preferred2DConstructed = false;
+        int preferred2DApplied = -1;
+        std::string preferred2DDetail;
+        try
+        {
+            RenderTarget2D preferred(
+                device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None, 2);
+            preferred2DApplied = preferred.getMultiSampleCountProperty();
+            preferred2DConstructed = isLegalTwoSampleResult(preferred2DApplied);
+            preferred2DDetail = "applied=" + std::to_string(preferred2DApplied);
+        }
+        catch (const std::exception& error)
+        {
+            preferred2DDetail = error.what();
+        }
+        Check(preferred2DConstructed,
+              "N unavailable preferred 2x count does not refuse RenderTarget2D",
+              preferred2DDetail);
+
+        bool preferredCubeConstructed = false;
+        int preferredCubeApplied = -1;
+        std::string preferredCubeDetail;
+        try
+        {
+            RenderTargetCube preferred(
+                device, kSize, false, SurfaceFormat::Color, DepthFormat::None, 2);
+            preferredCubeApplied = preferred.getMultiSampleCountProperty();
+            preferredCubeConstructed = isLegalTwoSampleResult(preferredCubeApplied);
+            preferredCubeDetail = "applied=" + std::to_string(preferredCubeApplied);
+        }
+        catch (const std::exception& error)
+        {
+            preferredCubeDetail = error.what();
+        }
+        Check(preferredCubeConstructed,
+              "O unavailable preferred 2x count does not refuse RenderTargetCube",
+              preferredCubeDetail);
 
         std::printf("RESULT: %d passed, %d failed\n", pass_, fail_);
         Exit();
