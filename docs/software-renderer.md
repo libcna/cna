@@ -323,9 +323,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   prefix, while a seekable stream positioned exactly at its end is rewound and reused from zero.
 - **`Texture2D.FromStream` exposes XNA validation and decode failures** (`SOFTWARE-304`). The resize
   overload rejects non-positive `width` and then `height` with named
-  `ArgumentOutOfRangeException`s before reading the stream. Empty or corrupt non-DDS image input
-  reports `InvalidOperationException` in both overloads; CNA's explicit DDS parser keeps its more
-  precise extension diagnostics.
+  `ArgumentOutOfRangeException`s after seekability validation but before reading encoded data.
+  Empty or corrupt non-DDS image input reports `InvalidOperationException` in both overloads;
+  CNA's explicit DDS parser keeps its more precise extension diagnostics.
+- **`Texture2D.FromStream` requires a seekable stream like Microsoft XNA** (`SOFTWARE-305`). Both
+  overloads reject `CanSeek == false` with `ArgumentException("stream")` before querying any other
+  stream property or data, including before resize-dimension validation.
 - **Resolved render targets can be saved through the classic image APIs** (`SOFTWARE-298`).
   `SaveAsPng` and `SaveAsJpeg` obtain live level-zero Color pixels through renderer readback rather
   than requiring an upload shadow that rendered targets deliberately do not own.

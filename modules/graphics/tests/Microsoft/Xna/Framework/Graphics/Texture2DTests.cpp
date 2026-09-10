@@ -136,6 +136,30 @@ namespace
         int height_;
     };
 
+    class NonSeekableImageStream final : public System::IO::Stream
+    {
+    public:
+        int Read(System::IO::bytecs[], System::IO::intcs,
+                 System::IO::intcs) override
+        {
+            ++readCalls;
+            return 0;
+        }
+
+        void Close() override {}
+
+        [[nodiscard]] System::IO::intcs getLengthProperty() const override
+        {
+            ++lengthCalls;
+            throw System::NotSupportedException("Length");
+        }
+
+        [[nodiscard]] bool getCanSeekProperty() const override { return false; }
+
+        mutable int lengthCalls = 0;
+        int readCalls = 0;
+    };
+
     int TestMipDimension(int base, int level)
     {
         return std::max(1, base >> level);
@@ -1953,6 +1977,28 @@ TEST_F(Texture2DFromStreamResizeTest, DecodeFailureUsesInvalidOperationException
     MemoryStream corruptResized(garbage.data(), static_cast<System::IO::intcs>(garbage.size()));
     ExpectExactException<System::InvalidOperationException>(
         [&] { (void) Texture2D::FromStream(gd, corruptResized, 4, 4, true); });
+}
+
+TEST_F(Texture2DFromStreamResizeTest,
+       NonSeekableStreamUsesNamedArgumentExceptionBeforeLengthOrRead)
+{
+    NonSeekableImageStream plain;
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { (void) Texture2D::FromStream(gd, plain); }, "stream");
+    EXPECT_EQ(plain.lengthCalls, 0);
+    EXPECT_EQ(plain.readCalls, 0);
+
+    NonSeekableImageStream resized;
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { (void) Texture2D::FromStream(gd, resized, 4, 4, false); }, "stream");
+    EXPECT_EQ(resized.lengthCalls, 0);
+    EXPECT_EQ(resized.readCalls, 0);
+
+    NonSeekableImageStream invalidDimensions;
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { (void) Texture2D::FromStream(gd, invalidDimensions, 0, 0, false); }, "stream");
+    EXPECT_EQ(invalidDimensions.lengthCalls, 0);
+    EXPECT_EQ(invalidDimensions.readCalls, 0);
 }
 
 TEST_F(Texture2DFromStreamResizeTest, ZoomCropsTheHorizontalCenterBeforeScaling)

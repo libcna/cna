@@ -2473,6 +2473,15 @@ namespace Microsoft::Xna::Framework::Graphics
         return decoded;
     }
 
+    static void ValidateImageStream(const System::IO::Stream& stream)
+    {
+        if (!stream.getCanSeekProperty())
+        {
+            throw System::ArgumentException(
+                "The stream is required to be seekable.", "stream");
+        }
+    }
+
     Texture2D Texture2D::MakeTextureFromPixels(GraphicsDevice& device, int w, int h,
                                                std::vector<std::uint8_t>&& rgba)
     {
@@ -2568,6 +2577,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream)
     {
+        ValidateImageStream(stream);
         DecodedTexture2D decoded = DecodeStreamToImageData(
             stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice, /*allowCompressed=*/true);
         if (decoded.compressed)
@@ -2581,9 +2591,11 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream,
                                     int width, int height, bool zoom)
     {
-        // Microsoft XNA validates the requested dimensions before consulting the stream. Besides
-        // preserving the public exception names, this makes width win when both are invalid and
-        // prevents a malformed stream from hiding the argument error.
+        ValidateImageStream(stream);
+        // After its separate seekability guard, Microsoft XNA validates the requested dimensions
+        // before querying the position/length or reading encoded data. This preserves the public
+        // exception names, makes width win when both dimensions are invalid, and prevents malformed
+        // image data from hiding the argument error.
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
 
