@@ -1381,9 +1381,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         const auto build = [&](const std::int64_t identity, const Rows& parentGeometricInverse,
                                const Rows& parentWorld, const Triple& parentWorldScale,
                                const Rows& parentGlobalRotation, const bool hasParent,
+                               const bool parentComposesRotation,
                                auto&& self) -> std::shared_ptr<NodeContent>
         {
             const Object& object = objects.at(identity);
+            // `RotationActive` alone, not the pre- and post-rotations being non-zero: SAMPLE-037's
+            // `head.fbx` sets the flag with both angles at zero and the genuine importer still
+            // leaves the residue -- four entries of 1.2246e-16 where a node without the flag has
+            // clean zeros -- so what the flag turns on is the *decomposition*, whatever the angles
+            // it composes are (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-213`).
+            const bool ownComposesRotation = object.rotationActive;
             std::shared_ptr<NodeContent> node;
             const Canon::FbxNode* geometry = object.node;
             for (const std::int64_t child : object.children)
@@ -2064,13 +2071,33 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // it off each node's own rotation doubles it -- measured, `fbx_pivot_residue_chain.fbx`
             // answers -1.4647386e-06 at the grandchild and doubling gives -2.9294772e-06
             // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-176`).
+            // The residue exists only where an ancestor's rotation was *composed* -- where a
+            // `PreRotation` or `PostRotation` counted, so the matrix is not the Euler triple the
+            // file wrote and XNA has to express it as one again. A chain of plain `Lcl Rotation`
+            // needs no decomposition and carries no residue, and taking one there is what put a
+            // float ulp at the top of every skeleton in the corpus
+            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-213`).
+            // The residue is the *parent's* own, and only where the parent's rotation was
+            // composed from more than the Euler triple its file wrote: a `PreRotation` or a
+            // `PostRotation` that `RotationActive` turned on. A chain of plain `Lcl Rotation`
+            // needs no decomposition and carries no residue, and taking one there put a float ulp
+            // at the top of every skeleton in the corpus. It does not reach a grandchild either.
+            //
+            // Measured as a policy against three independent sets, where this one is the only
+            // choice that is best on all three: the 54 committed FBX fixtures (1,382 of 1,392 bone
+            // elements bit-identical, against 1,361 with no residue at all and 1,365 when the
+            // node's own composition decides), 60 purpose-built chains of eight nodes each (8,833
+            // of 9,600, against 8,171 for the rule this replaces) and SAMPLE-142's `PhantomBoss`
+            // (351 differing elements, against 412 and 373)
+            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-213`).
             const Rows rotated =
-                hasParent
+                hasParent && parentComposesRotation
                     ? ConjugateByScale(
                           Multiply(RotationRows(object),
                                    RotationResidue(parentGlobalRotation).compensation),
                           parentWorldScale)
-                    : RotationRows(object);
+                    : (hasParent ? ConjugateByScale(RotationRows(object), parentWorldScale)
+                                 : RotationRows(object));
             const Rows localRows = LocalRows(object, parentGeometricInverse, rotated);
             const Rows world = hasParent ? Multiply(localRows, parentWorld) : localRows;
             node->setTransformProperty(QuotientTransform(world, parentWorld, hasParent));
@@ -2087,7 +2114,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                     continue;
                 }
                 node->getChildrenProperty().Add(
-                    self(child, geometricInverse, world, worldScale, globalRotation, true, self));
+                    self(child, geometricInverse, world, worldScale, globalRotation, true,
+                         ownComposesRotation, self));
             }
             return node;
         };
@@ -2166,7 +2194,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // One top-level model answers as the root itself, as the .x route's single frame does.
             return PromoteSkeletonRoot(
                 build(roots.front(), IdentityRows(), IdentityRows(), Triple{1.0, 1.0, 1.0},
-                      IdentityRows(), false, build), context);
+                      IdentityRows(), false, false, build), context);
         }
         auto root = std::make_shared<NodeContent>();
         root->setNameProperty("RootNode");
@@ -2174,7 +2202,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         {
             root->getChildrenProperty().Add(
                 build(identity, IdentityRows(), IdentityRows(), Triple{1.0, 1.0, 1.0},
-                          IdentityRows(), false, build));
+                          IdentityRows(), false, false, build));
         }
         return PromoteSkeletonRoot(root, context);
     }

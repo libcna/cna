@@ -1138,6 +1138,52 @@ TEST(XnaFbxImporter, ThePivotResidueStopsAtTheNodeThatInheritsIt)
     EXPECT_NE(grandchild->getTransformProperty().M11, -2.9294772e-06f);
 }
 
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-213: a chain of plain `Lcl Rotation` takes no pivot
+// residue, and used to take one.
+//
+// `fbx_rotation_chain.fbx` is three nodes under an identity root, each carrying the same three-axis
+// rotation and translation and no `PreRotation` at all. The Euler decomposition of the accumulated
+// rotation is lossy from the second node down -- which is what the old rule keyed on -- but the
+// genuine importer takes no residue here, because nothing was ever decomposed: the file wrote the
+// Euler triple and the importer used it.
+//
+// The five basis entries below are the genuine importer's own bits for the second node. Under the
+// rule this replaces, four of them came back one to two ulps away. The node's `M42` is one ulp out
+// and is what the row still owes; asserting the basis is what separates the two rules.
+TEST(XnaFbxImporter, APlainRotationChainTakesNoPivotResidue)
+{
+    ImporterContext context;
+    Xna::FbxImporter importer;
+    const std::shared_ptr<Graphics::NodeContent> root =
+        importer.Import(Fixture("fbx_rotation_chain.fbx").string(), context);
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ(root->getChildrenProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::NodeContent> first = root->getChildrenProperty()[0];
+    ASSERT_NE(first, nullptr);
+    ASSERT_EQ(first->getChildrenProperty().getCountProperty(), 1);
+    const std::shared_ptr<Graphics::NodeContent> second = first->getChildrenProperty()[0];
+    ASSERT_NE(second, nullptr);
+
+    const auto asBits = [](const float value)
+    {
+        std::uint32_t out = 0;
+        std::memcpy(&out, &value, sizeof out);
+        return out;
+    };
+    const Matrix transform = second->getTransformProperty();
+    EXPECT_EQ(asBits(transform.M11), 0x3F4710E9u);
+    EXPECT_EQ(asBits(transform.M13), 0xBEBFCC71u);
+    EXPECT_EQ(asBits(transform.M31), 0x3ED31BC8u);
+    EXPECT_EQ(asBits(transform.M32), 0x3D24DE37u);
+    EXPECT_EQ(asBits(transform.M33), 0x3F68FF84u);
+
+    // The first node is the same either way -- the root's rotation is the identity and its
+    // decomposition is exact -- so it is the second that says which rule is in force.
+    const Matrix top = first->getTransformProperty();
+    EXPECT_EQ(asBits(top.M11), 0x3F4710EAu);
+    EXPECT_EQ(asBits(top.M41), 0x3FC00000u);
+}
+
 TEST(XnaFbxImporter, RefusalsMatchXna)
 {
     for (const std::string& fixture : {"fbx_empty.fbx", "fbx_not_fbx.fbx", "fbx_not_fbx_large.fbx"})

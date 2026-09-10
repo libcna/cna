@@ -684,6 +684,13 @@
    "origin": "generated",
    "generator": "tools/xna-pipeline-oracle/model/make-model-fixtures.py",
    "thirdParty": false
+  },
+  {
+   "file": "fbx_rotation_chain.fbx",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_bone_chain_probes.py",
+   "note": "Three nodes under an identity root carrying the same three-axis Lcl Rotation and no PreRotation: the shape that takes no pivot residue (XNASWEEP-213).",
+   "thirdParty": false
   }
  ]
 }
