@@ -105,6 +105,27 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_HeadlessGraphicsDevice PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # SDLGPU-112: keep the complete compiled-XNA-effect runtime independently runnable.  The
+    # canonical source normally belongs to the renderer-focused unit-test aggregate, whose link
+    # graph includes every renderer unit test; compiling this one source directly avoids that
+    # unrelated relink while preserving all 39 reflection, state, draw, SpriteBatch, sampler,
+    # texture-lifetime and malformed-bytecode checks verbatim.  The cross-compile emulator set by
+    # cna_sdlgpu_test supplies the isolated dummy/Xvfb D3D12 environment.
+    if(CNA_SDL_GPU_COMPILED_EFFECTS)
+        cna_sdlgpu_test(cna_test_sdlgpu_compiled_effect_runtime
+            ${CMAKE_SOURCE_DIR}/modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectTests.cpp)
+        target_link_libraries(cna_test_sdlgpu_compiled_effect_runtime PRIVATE gtest_main)
+        target_include_directories(cna_test_sdlgpu_compiled_effect_runtime PRIVATE
+            "${CMAKE_SOURCE_DIR}/tests/support")
+        cna_register_renderer_test(NAME SdlGpu_CompiledEffectRuntime
+            COMMAND cna_test_sdlgpu_compiled_effect_runtime
+            TIMEOUT 600 LABELS "SdlGpu;Parity"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_CompiledEffectRuntime PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endif()
+
     # SDLGPU-80: SDL_gpu exposes command-completion fences but no occlusion-query/query-pool
     # command. Lock the public contract to a truthful false capability and deterministic
     # construction refusal; never let the inherited nullptr turn Begin/End into silent no-ops.
