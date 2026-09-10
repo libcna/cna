@@ -345,7 +345,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     class SdlGpuTexture3DRenderer final : public ITexture3DRenderer
     {
     public:
-        SdlGpuTexture3DRenderer(SdlGpuRenderer& owner, int width, int height, int depth, bool mipMap);
+        SdlGpuTexture3DRenderer(SdlGpuRenderer& owner, int width, int height, int depth,
+                                bool mipMap, int surfaceFormat);
         ~SdlGpuTexture3DRenderer() override;
 
         SdlGpuTexture3DRenderer(const SdlGpuTexture3DRenderer&) = delete;
@@ -366,12 +367,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
                                    void* data, int dataLength) const override;
 
+        /**
+         * @brief Returns the SurfaceFormat ordinal used to create this volume. Test-only CNAEXT.
+         *
+         * @return The exact format ordinal forwarded by the public Texture3D constructor.
+         */
+        CNAEXT [[nodiscard]] int GetSurfaceFormatEXT() const noexcept { return surfaceFormat_; }
+
     private:
         SdlGpuRenderer* owner_ = nullptr;
         SDL_GPUTexture* texture_ = nullptr;
         int width_ = 0, height_ = 0, depth_ = 0;
         /// Mip levels SDL really allocated for this volume (REMED-GFX-135).
         int levelCount_ = 1;
+        int surfaceFormat_ = 0;
     };
 
     // Real architectural fix for a render-target-destroyed-before-flush use-after-free: this
@@ -2027,6 +2036,15 @@ namespace CNA::Internal::Renderers::SdlGpu
          *         Defer for CNAEXT formats.
          */
         [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+        /**
+         * @brief Classifies the classic formats implemented by the Texture3D transfer path.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to classify.
+         * @return Supported for Color, Unsupported for other classic formats, or Defer for
+         *         CNAEXT formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
             int surfaceFormat) const override;
         /**
          * @brief Classifies whether Color-shaped transfers preserve the requested format.

@@ -127,6 +127,13 @@ VERIFIED_DIRECT = {
     "easygl_texturecube_faces_test.cpp": ("SDLGPU-70", "same six-face source passes SDL GPU"),
     "easygl_texturecube_mip_test.cpp": ("SDLGPU-70", "same authored-mip source passes SDL GPU"),
     "easygl_texturecube_partial_rect_test.cpp": ("SDLGPU-70", "same partial-rectangle source passes SDL GPU"),
+    "easygl_texture3d_mip_test.cpp": ("SDLGPU-71", "same authored-volume-mip source passes SDL GPU"),
+    "easygl_texture3d_partial_box_readback_test.cpp":
+        ("SDLGPU-71", "same asymmetric volume-readback source passes SDL GPU"),
+    "easygl_texture3d_partial_box_test.cpp":
+        ("SDLGPU-71", "same asymmetric volume-upload source passes SDL GPU"),
+    "easygl_texture3d_slices_test.cpp":
+        ("SDLGPU-71", "same independent-z-slice source passes SDL GPU"),
     "easygl_viewport_state_test.cpp": ("SDLGPU-67", "same source passes SDL GPU"),
     "easygl_viewport_subregion_test.cpp": ("SDLGPU-67", "same source passes SDL GPU"),
 }

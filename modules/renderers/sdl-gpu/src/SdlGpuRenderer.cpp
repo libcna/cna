@@ -3075,6 +3075,44 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
     }
 
+    RendererFormatVerdict SdlGpuRenderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            // The ordinary CNA Texture3D surface currently exposes Color-shaped transfers only,
+            // and both EasyGL's real storage path and this one allocate RGBA8 volumes.
+            case SurfaceFormat::Color:
+                return RendererFormatVerdict::Supported;
+
+            // Do not inherit Texture2D's packed/BC/SNORM verdict: a format with no corresponding
+            // public volume transfer and no verified 3D storage path must be refused at creation,
+            // never accepted and silently represented as RGBA8.
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
     bool SdlGpuRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
     {
         return IsClassicDxtFormat(
@@ -3475,9 +3513,10 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     std::unique_ptr<ITexture3DRenderer> SdlGpuRenderer::CreateTexture3D(
-        int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
     {
-        return std::make_unique<SdlGpuTexture3DRenderer>(*this, w, h, depth, mipMap);
+        return std::make_unique<SdlGpuTexture3DRenderer>(
+            *this, w, h, depth, mipMap, surfaceFormat);
     }
 
     std::unique_ptr<ITextureCubeRenderer> SdlGpuRenderer::CreateTextureCube(
@@ -8147,11 +8186,20 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     // ---- SdlGpuTexture3DRenderer (Phase SDLGPU-9, SDLGPU-40/SDLGPU-41) ----
 
-    SdlGpuTexture3DRenderer::SdlGpuTexture3DRenderer(SdlGpuRenderer& owner, int width, int height,
-                                                    int depth, bool mipMap)
+    SdlGpuTexture3DRenderer::SdlGpuTexture3DRenderer(
+        SdlGpuRenderer& owner, int width, int height, int depth,
+        bool mipMap, int surfaceFormat)
         : owner_(&owner), width_(width), height_(height), depth_(depth)
         , levelCount_(mipMap ? CalculateMipLevels(width, height) : 1)
+        , surfaceFormat_(surfaceFormat)
     {
+        if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+        {
+            throw std::invalid_argument(
+                "CNA SDL_GPU: Texture3D received unsupported SurfaceFormat ordinal " +
+                std::to_string(surfaceFormat_));
+        }
+
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_3D;
         createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;

@@ -251,6 +251,23 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         FAIL_REGULAR_EXPRESSION
             "VUID-(VkImageViewCreateInfo-image-02724|VkImageViewCreateInfo-subresourceRange-02725|vkCmdBlitImage-dstOffset-00251|vkCmdBlitImage-pRegions-00216|vkCmdBlitImage-srcOffset-00246|vkCmdBlitImage-pRegions-00215);Validation (Error|Warning)")
 
+    # SDLGPU-71: compile the exact renderer-neutral EasyGL volume-transfer oracles under SDL GPU.
+    # Together they prove independent z slices, asymmetric partial boxes and readback, non-zero
+    # destination startIndex, far-edge bounds, and independently authored mip levels.
+    foreach(texture3d_oracle_test IN ITEMS
+            texture3d_slices
+            texture3d_partial_box
+            texture3d_partial_box_readback
+            texture3d_mip)
+        cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${texture3d_oracle_test}
+            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${texture3d_oracle_test}_test.cpp)
+        cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${texture3d_oracle_test}
+            COMMAND cna_test_sdlgpu_easygl_oracle_${texture3d_oracle_test}
+            TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_EasyGLOracle_${texture3d_oracle_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
     # plans/plan_sdlgpu.md SDLGPU-51: plain, non-render-target TextureCube.
     cna_sdlgpu_test(cna_test_sdlgpu_texturecube sdlgpu_texturecube_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_TextureCube COMMAND cna_test_sdlgpu_texturecube

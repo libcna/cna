@@ -216,10 +216,10 @@ easygl_surface_format_throws_test.cpp,classic-xna-direct-parity,SDLGPU-69,same s
 easygl_texture2d_anisotropic_singlelevel_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-64,one-level anisotropic sampling is covered by the complete sampler suite
 easygl_texture2d_mip_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_texture2d_partial_rect_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_texture3d_mip_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_texture3d_partial_box_readback_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_texture3d_partial_box_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
-easygl_texture3d_slices_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
+easygl_texture3d_mip_test.cpp,classic-xna-direct-parity,SDLGPU-71,same authored-volume-mip source passes SDL GPU
+easygl_texture3d_partial_box_readback_test.cpp,classic-xna-direct-parity,SDLGPU-71,same asymmetric volume-readback source passes SDL GPU
+easygl_texture3d_partial_box_test.cpp,classic-xna-direct-parity,SDLGPU-71,same asymmetric volume-upload source passes SDL GPU
+easygl_texture3d_slices_test.cpp,classic-xna-direct-parity,SDLGPU-71,same independent-z-slice source passes SDL GPU
 easygl_texture_address_mode_clamp_effect_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog
 easygl_texture_address_mode_mirror_effect_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-64,stock mirror addressing passes the shared sampler suite
 easygl_texture_address_mode_mirror_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,-,covered by the 85-test SDL_GPU baseline and/or a shared graphics oracle; family re-audited by listed backlog

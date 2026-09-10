@@ -2118,6 +2118,25 @@ namespace CNA::Internal::Renderers
         }
 
         /**
+         * @brief Whether a `Texture3D` may be created with the given surface format.
+         *
+         * Volume storage and transfer support is independent of both 2D and cube support. The
+         * default deliberately defers to the framework's historical rule instead of delegating to
+         * @ref ClassifySurfaceFormatEXT: most renderers currently implement RGBA8 volumes only,
+         * even where their Texture2D path supports packed or compressed storage. This preserves
+         * their existing Color-only behavior until a renderer supplies an explicit volume answer.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's verdict for a volume texture, or Defer to the framework rule.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifyTexture3DFormatEXT(
+            int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return RendererFormatVerdict::Defer;
+        }
+
+        /**
          * @brief Whether a RenderTarget2D may be created with the given surface format.
          *
          * Deliberately separate from ClassifySurfaceFormatEXT: renderability is a strictly narrower
