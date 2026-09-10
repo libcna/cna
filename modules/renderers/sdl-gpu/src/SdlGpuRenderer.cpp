@@ -1621,7 +1621,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             out[39] = static_cast<float>(p.weightsPerVertex);
         }
 
-        // skinned3d.vert.glsl's BoneBlock: 72 mat4 = 1152 floats (4608 bytes), column-major,
+        // skinned3d.vert.glsl's bone palette: 72 mat4 = 1152 floats (4608 bytes), column-major,
         // straight from GpuDrawParams::boneTransforms (already column-major per
         // SkinnedEffect::FillGpuDrawParams()).
         void FillSkinnedBoneUniforms(std::array<float, 72 * 16>& out, const GpuDrawParams& p)
@@ -6322,8 +6322,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         vsInfo.entrypoint = "main";
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        vsInfo.num_samplers = 1;  // 288x1 RGBA32F bone palette
         vsInfo.num_uniform_buffers = 3;  // PC, SkinnedLightParams + FogParams (REMED-GFX-009)
-        vsInfo.num_storage_buffers = 1;  // BoneBlock (4608 bytes) -- see SkinnedDrawCommand's doc comment
         resources.CreateShader(
             ConstructionShader::SkinnedVertex,
             SdlGpuFailurePointEXT::SkinnedVertexShaderCreation, vsInfo,
@@ -6335,8 +6335,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         colVsInfo.entrypoint = "main";
         colVsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         colVsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        colVsInfo.num_samplers = 1;  // 288x1 RGBA32F bone palette
         colVsInfo.num_uniform_buffers = 3;  // PC, SkinnedLightParams + FogParams (REMED-GFX-009)
-        colVsInfo.num_storage_buffers = 1;  // BoneBlock
         resources.CreateShader(
             ConstructionShader::SkinnedColoredVertex,
             SdlGpuFailurePointEXT::SkinnedColoredVertexShaderCreation, colVsInfo,
@@ -6504,8 +6504,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         skinnedVsInfo.entrypoint = "main";
         skinnedVsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         skinnedVsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        skinnedVsInfo.num_samplers = 1;  // 288x1 RGBA32F bone palette
         skinnedVsInfo.num_uniform_buffers = 3;  // PC, SkinnedLightParams + FogParams (REMED-GFX-009)
-        skinnedVsInfo.num_storage_buffers = 1;  // BoneBlock
         resources.CreateShader(
             ConstructionShader::PbrSkinnedVertex,
             SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation, skinnedVsInfo,
@@ -7817,9 +7817,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
-        // The 72-bone palette -- a real storage buffer, not a uniform push (see
-        // SkinnedDrawCommand's own doc comment for why).
-        SDL_BindGPUVertexStorageBuffers(pass, 0, &command.uploadedBoneBuffer, 1);
+        SDL_GPUTextureSamplerBinding boneBinding{};
+        boneBinding.texture = command.uploadedBoneTexture;
+        boneBinding.sampler = GetOrCreateSampler(
+            /*Point=*/1, /*Clamp=*/1, /*Clamp=*/1, 1, "Skinned3D.Bones");
+        SDL_BindGPUVertexSamplers(pass, 0, &boneBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
         // plans/plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
@@ -7871,11 +7873,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
-        // The unskinned pbrVertexShader_ declares zero storage buffers -- only bind the bone
-        // palette for the skinned variant (pbrSkinnedVertexShader_), mirroring
-        // SkinnedDrawCommand's own storage-buffer-over-uniform-push rationale.
+        // The unskinned pbrVertexShader_ declares no vertex samplers. The skinned variant reads
+        // the same exact 288x1 RGBA32F bone palette as SkinnedEffect.
         if (command.skinned)
-            SDL_BindGPUVertexStorageBuffers(pass, 0, &command.uploadedBoneBuffer, 1);
+        {
+            SDL_GPUTextureSamplerBinding boneBinding{};
+            boneBinding.texture = command.uploadedBoneTexture;
+            boneBinding.sampler = GetOrCreateSampler(
+                /*Point=*/1, /*Clamp=*/1, /*Clamp=*/1, 1, "Pbr3D.Bones");
+            SDL_BindGPUVertexSamplers(pass, 0, &boneBinding, 1);
+        }
 
         // 7 samplers: the core five plus KHR_materials_specular strength and colour. Optional maps
         // fall back to the lazily-created default textures (EnsureDefaultPbrTextures(), already
@@ -8059,6 +8066,67 @@ namespace CNA::Internal::Renderers::SdlGpu
             return buffer;
         };
 
+        auto uploadBonePalette = [&](const std::array<float, 72 * 16>& bones) -> SDL_GPUTexture*
+        {
+            constexpr Uint32 width = 72 * 4;
+            constexpr Uint32 sizeBytes = sizeof(bones);
+            if (!SDL_GPUTextureSupportsFormat(
+                    device_, SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,
+                    SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_SAMPLER))
+            {
+                throw std::runtime_error(
+                    "CNA SDL_GPU: the active driver cannot sample the RGBA32F bone palette");
+            }
+
+            SDL_GPUTextureCreateInfo textureInfo{};
+            textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
+            textureInfo.format = SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT;
+            textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+            textureInfo.width = width;
+            textureInfo.height = 1;
+            textureInfo.layer_count_or_depth = 1;
+            textureInfo.num_levels = 1;
+            textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+            SDL_GPUTexture* texture = SDL_CreateGPUTexture(device_, &textureInfo);
+            if (texture == nullptr)
+                throw std::runtime_error(std::string(
+                    "CNA SDL_GPU: failed to create bone-palette texture: ") + SDL_GetError());
+
+            SDL_GPUTransferBufferCreateInfo transferInfo{};
+            transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+            transferInfo.size = sizeBytes;
+            SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(device_, &transferInfo);
+            if (transfer == nullptr)
+            {
+                SDL_ReleaseGPUTexture(device_, texture);
+                throw std::runtime_error(std::string(
+                    "CNA SDL_GPU: failed to create bone-palette transfer buffer: ") + SDL_GetError());
+            }
+            void* mapped = SDL_MapGPUTransferBuffer(device_, transfer, false);
+            if (mapped == nullptr)
+            {
+                SDL_ReleaseGPUTransferBuffer(device_, transfer);
+                SDL_ReleaseGPUTexture(device_, texture);
+                throw std::runtime_error(std::string(
+                    "CNA SDL_GPU: failed to map bone-palette transfer buffer: ") + SDL_GetError());
+            }
+            std::memcpy(mapped, bones.data(), sizeBytes);
+            SDL_UnmapGPUTransferBuffer(device_, transfer);
+
+            SDL_GPUTextureTransferInfo source{};
+            source.transfer_buffer = transfer;
+            source.pixels_per_row = width;
+            source.rows_per_layer = 1;
+            SDL_GPUTextureRegion destination{};
+            destination.texture = texture;
+            destination.w = width;
+            destination.h = 1;
+            destination.d = 1;
+            SDL_UploadToGPUTexture(copyPass, &source, &destination, false);
+            SDL_ReleaseGPUTransferBuffer(device_, transfer);
+            return texture;
+        };
+
         const auto* neutralBegin = reinterpret_cast<const std::uint8_t*>(
             CNA::Internal::Graphics::kNeutralVertexRecordEXT.data());
         const std::vector<std::uint8_t> neutralData(
@@ -8154,11 +8222,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
-            // Uploaded as a storage buffer, not pushed via SDL_PushGPUVertexUniformData -- see
-            // SkinnedDrawCommand's own doc comment for why.
-            const auto* boneBytes = reinterpret_cast<const std::uint8_t*>(command.boneUniforms.data());
-            const std::vector<std::uint8_t> boneData(boneBytes, boneBytes + sizeof(command.boneUniforms));
-            command.uploadedBoneBuffer = uploadOne(boneData, SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ);
+            command.uploadedBoneTexture = uploadBonePalette(command.boneUniforms);
         }
         for (PbrDrawCommand& command : pbrDrawCommands_)
         {
@@ -8168,11 +8232,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
             if (command.skinned)
-            {
-                const auto* boneBytes = reinterpret_cast<const std::uint8_t*>(command.boneUniforms.data());
-                const std::vector<std::uint8_t> boneData(boneBytes, boneBytes + sizeof(command.boneUniforms));
-                command.uploadedBoneBuffer = uploadOne(boneData, SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ);
-            }
+                command.uploadedBoneTexture = uploadBonePalette(command.boneUniforms);
         }
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         for (CompiledEffectDrawCommand& command : compiledEffectDrawCommands_)
@@ -8441,7 +8501,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 case DrawKind::Skinned:
                 {
                     const SkinnedDrawCommand& c = skinnedDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.uploadedBoneBuffer != nullptr && c.target == target)
+                    if (c.uploadedVertexBuffer != nullptr && c.uploadedBoneTexture != nullptr && c.target == target)
                         IssueSkinnedDraw(pass, cmd, c, colorFormat, sampleCount,
                                          depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -8450,7 +8510,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 {
                     const PbrDrawCommand& c = pbrDrawCommands_[ref.index];
                     if (c.uploadedVertexBuffer != nullptr && c.texture
-                        && (!c.skinned || c.uploadedBoneBuffer != nullptr) && c.target == target)
+                        && (!c.skinned || c.uploadedBoneTexture != nullptr) && c.target == target)
                         IssuePbrDraw(pass, cmd, c, colorFormat, sampleCount,
                                      depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -8496,6 +8556,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             {
                 SDL_ReleaseGPUBuffer(device_, buffer);
                 buffer = nullptr;
+            }
+        };
+        auto releaseTexture = [&](SDL_GPUTexture*& texture)
+        {
+            if (texture != nullptr)
+            {
+                SDL_ReleaseGPUTexture(device_, texture);
+                texture = nullptr;
             }
         };
         const auto releaseExtraStreams = [&](auto& command)
@@ -8564,14 +8632,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             release(command.uploadedVertexBuffer);
             release(command.uploadedIndexBuffer);
-            release(command.uploadedBoneBuffer);
+            releaseTexture(command.uploadedBoneTexture);
         }
         if (clearCommands) skinnedDrawCommands_.clear();
         for (PbrDrawCommand& command : pbrDrawCommands_)
         {
             release(command.uploadedVertexBuffer);
             release(command.uploadedIndexBuffer);
-            release(command.uploadedBoneBuffer);
+            releaseTexture(command.uploadedBoneTexture);
         }
         if (clearCommands) pbrDrawCommands_.clear();
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)

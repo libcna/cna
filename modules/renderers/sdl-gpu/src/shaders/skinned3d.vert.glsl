@@ -19,17 +19,12 @@ layout(location = 4) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-
 layout(location = 5) out vec3 fragVertexLit;
 layout(location = 6) out vec3 fragVertexSpecular;
 
-// 72 * mat4 = 4608 bytes -- empirically found (via this shader's own real skinning-math test,
-// SdlGpu_Skinned, binary-searching bone indices) that SDL_gpu's push-uniform-data mechanism has a
-// real 4096-byte cap per slot on this Vulkan-backed environment (data past that offset silently
-// did not update, unlike a graceful error) -- NOT documented in SDL_gpu.h, and well past what a
-// hardware push-constant register file would allow anyway. A storage buffer
-// (SDL_BindGPUVertexStorageBuffers) has no such size constraint, so the full 72-bone palette lives
-// there instead of a uniform-buffer push. Per SDL_CreateGPUShader's binding convention, vertex-stage
-// storage buffers are set 0 (after any sampled/storage textures, of which this shader has none).
-layout(std430, set = 0, binding = 0) readonly buffer BoneBlock {
-    mat4 bones[72];
-} bb;
+// 72 * mat4 = 4608 bytes -- too large for SDL_gpu's measured 4096-byte pushed-uniform limit.
+// A 288x1 RGBA32F texture stores the same column-major palette as four adjacent texels per matrix.
+// Unlike the former graphics-storage buffer route, this is accepted by SDL_gpu's D3D12 backend as
+// well as Vulkan and is expressible on Metal. The 4608-byte row is also naturally 256-byte aligned,
+// avoiding D3D12's slow unaligned texture-upload fallback.
+layout(set = 0, binding = 0) uniform sampler2D bonePalette;
 
 layout(set = 1, binding = 0) uniform PC {
     mat4  mvp;
@@ -73,14 +68,23 @@ vec3 safeNormalize(vec3 v) {
     return len2 > 0.0 ? v * inversesqrt(len2) : vec3(0.0);
 }
 
+mat4 loadBone(uint index) {
+    int firstTexel = int(index) * 4;
+    return mat4(
+        texelFetch(bonePalette, ivec2(firstTexel + 0, 0), 0),
+        texelFetch(bonePalette, ivec2(firstTexel + 1, 0), 0),
+        texelFetch(bonePalette, ivec2(firstTexel + 2, 0), 0),
+        texelFetch(bonePalette, ivec2(firstTexel + 3, 0), 0));
+}
+
 void main() {
     // Matches VulkanRenderer's own skinned3d.vert.glsl: FNA's real Skin(vin, boneCount)
     // only sums the first WeightsPerVertex (1, 2, or 4) weight/index pairs.
     float weightsPerVertex = lp.eyePos_weightsPerVertex.w;
-    mat4 skinMat = bb.bones[inBoneIndices.x] * inBoneWeights.x;
-    if (weightsPerVertex >= 2.0) skinMat += bb.bones[inBoneIndices.y] * inBoneWeights.y;
-    if (weightsPerVertex >= 4.0) skinMat += bb.bones[inBoneIndices.z] * inBoneWeights.z
-                                          + bb.bones[inBoneIndices.w] * inBoneWeights.w;
+    mat4 skinMat = loadBone(inBoneIndices.x) * inBoneWeights.x;
+    if (weightsPerVertex >= 2.0) skinMat += loadBone(inBoneIndices.y) * inBoneWeights.y;
+    if (weightsPerVertex >= 4.0) skinMat += loadBone(inBoneIndices.z) * inBoneWeights.z
+                                          + loadBone(inBoneIndices.w) * inBoneWeights.w;
     vec4 skinnedPos = skinMat * vec4(inPos, 1.0);
     gl_Position = pc.mvp * skinnedPos;
     fragUV = inUV;

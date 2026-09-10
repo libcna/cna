@@ -1939,11 +1939,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         // dedicated skinnedColoredVertexShader_/skinnedColoredFragmentShader_ pair instead (see
         // skinned_colored3d.frag.glsl's own doc comment for why vertex color needs its own
         // fragment shader rather than folding into fragTint). The 72-bone palette (4608 bytes) is
-        // uploaded as a real SDL_GPUBuffer (GRAPHICS_STORAGE_READ) and bound via
-        // SDL_BindGPUVertexStorageBuffers, NOT pushed via SDL_PushGPUVertexUniformData --
-        // empirically found (SdlGpu_Skinned) that this renderer's push-uniform-data mechanism has a
-        // real ~4096-byte cap per slot on this Vulkan-backed environment, well under the full
-        // 4608-byte palette.
+        // uploaded as a 288x1 RGBA32F sampler texture and bound to the vertex stage. This avoids
+        // the uniform limit, preserves each column exactly, and is representable by SDL_gpu's
+        // Vulkan, D3D12 and Metal shader models; the former storage-buffer route made D3D12 reject
+        // the otherwise-valid graphics pipeline.
         struct SkinnedDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
@@ -1956,7 +1955,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};        ///< PC: same 32-float layout FillExtUniforms already fills
-            std::array<float, 72 * 16> boneUniforms{}; ///< BoneBlock: 72 mat4 = 1152 floats (4608 bytes), uploaded as a storage buffer
+            std::array<float, 72 * 16> boneUniforms{}; ///< 72 column-major mat4 values uploaded as a 288x1 RGBA32F vertex texture
             std::array<float, 56> lightUniforms{};   ///< SkinnedLightParams: byte-identical to LitLightParams
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
@@ -1977,14 +1976,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
-            SDL_GPUBuffer* uploadedBoneBuffer = nullptr;
+            SDL_GPUTexture* uploadedBoneTexture = nullptr;
         };
 
         // PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF) -- stride 48
         // (VertexPositionNormalTangentTexture, unskinned) or stride 68
         // (VertexPositionNormalTangentTextureSkinned), `skinned` selects the vertex shader/pipeline
         // (pbrVertexShader_/pbrSkinnedVertexShader_) and whether boneUniforms is uploaded/bound as
-        // a storage buffer -- both variants share pbrFragmentShader_ unchanged (see
+        // a vertex-stage RGBA32F sampler texture -- both variants share pbrFragmentShader_ unchanged (see
         // pbr_skinned3d.vert.glsl's own doc comment). uniforms/lightUniforms reuse FillExtUniforms/
         // FillLitLightUniforms's/FillSkinnedLightUniforms's existing layouts unchanged; pbrParams
         // is the one genuinely new uniform block (MetallicFactor/RoughnessFactor + alpha coverage).
@@ -2032,7 +2031,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
-            SDL_GPUBuffer* uploadedBoneBuffer = nullptr;  ///< only set when skinned == true
+            SDL_GPUTexture* uploadedBoneTexture = nullptr;  ///< only set when skinned == true
         };
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)

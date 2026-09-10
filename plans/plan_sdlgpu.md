@@ -18,7 +18,10 @@
 > and `RenderTarget2D` clear/readback through that same D3D12 driver. `SDLGPU-102` additionally
 > runs the canonical, unchanged Game-based `Texture2D`/`SpriteBatch` scene for 120 frames through
 > the public lifecycle and real D3D12 driver while replacing only presentation with the virtual
-> backbuffer.
+> backbuffer. The expanded stock-effect sweep then exposed a real D3D12 `SkinnedEffect` pipeline
+> rejection; `SDLGPU-103` replaces its vertex storage-buffer bone palette with an exact RGBA32F
+> sampler-texture representation and now passes the complete shared skinned-term oracle plus four
+> focused skinned/PBR regressions on both Vulkan and D3D12.
 > `SDLGPU-94`–`SDLGPU-96`
 > remain open because D3D12 presentation plus the rest of the comprehensive public corpus, Metal and Android/Vulkan still
 > require native runtime evidence. Seven EasyGL defect findings (six distinct
@@ -48,9 +51,9 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Item | Current evidence |
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
-| Newly created tasks | 12 (`SDLGPU-91`–`SDLGPU-102`) |
-| Completed / open | 9 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`102` complete; `SDLGPU-94`–`96` open) |
-| Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, and the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames. There are now 190 registered SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline, and the D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3. |
+| Newly created tasks | 13 (`SDLGPU-91`–`SDLGPU-103`) |
+| Completed / open | 10 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`103` complete; `SDLGPU-94`–`96` open) |
+| Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, and all eight shared classic stock-effect term/option fixtures. There are now 190 registered SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. |
 | Available local cross tools | MinGW-w64 and Wine are present; no Apple SDK/device, Android SDK/device, `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
 
@@ -163,8 +166,11 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   without a window, `SDLGPU-100` proves a real stock pipeline/upload/render/download sequence with
   byte-exact pixels, and `SDLGPU-101` proves public `GraphicsDevice` construction plus exact
   backbuffer and `RenderTarget2D` clears/readbacks. `SDLGPU-102` also runs the canonical public
-  Game/Texture2D/SpriteBatch scene for 120 frames. Comprehensive effect/texture-format/RT/state/
-  readback coverage and real presentation remain open here;
+  Game/Texture2D/SpriteBatch scene for 120 frames. The first comprehensive stock-effect pass found
+  a real `SkinnedEffect` graphics-pipeline rejection (`E_INVALIDARG`); `SDLGPU-103` fixes it and
+  all eight shared classic effect term/option fixtures now execute through D3D12, with the skinned path adding
+  25/25 focused assertions. Comprehensive texture-format/RT/state/readback coverage and real
+  presentation remain open here;
   presentation still requires a presentation-capable isolated compositor or real Windows runner.
 
 ### SDLGPU-95 — validate ordinary parity on Apple Metal ⬜
@@ -368,6 +374,48 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   evidence. The added driver guard and isolated CTest environment prevent that configuration from
   being accepted as a headless test.
 
+### SDLGPU-103 — make the full SkinnedEffect bone palette portable to D3D12 ✅
+
+- **Problem/public behavior:** the first expanded D3D12 stock-effect sweep passed BasicEffect,
+  AlphaTestEffect, DualTextureEffect and EnvironmentMapEffect, but both the shared
+  `parity_skinned_terms` fixture and the older minimal `SdlGpu_Skinned` executable failed before
+  drawing: `SDL_CreateGPUGraphicsPipeline` rejected the production skinned pipeline with
+  `E_INVALIDARG`. Ordinary XNA `SkinnedEffect` therefore could not render at all on this backend.
+- **EasyGL/SDL evidence:** EasyGL uploads all 72 matrices and its bone/lighting corpus is green.
+  SDL GPU's Vulkan route also passed, including a translation at bone index 71, but its vertex
+  shader represented the 4608-byte palette as a graphics storage buffer. ShaderCross produced a
+  valid DXBC shader object, then SDL_gpu's D3D12 PSO creation rejected that storage-buffer variant;
+  the failure reproduced with both triangle strip and triangle list, ruling out the fixture's
+  topology. Pushed uniform data is not a correct fallback because the existing Vulkan binary-search
+  test measured a real 4096-byte per-slot limit.
+- **Location:** the three SDL GPU skinned vertex shaders, their construction resource counts,
+  deferred bone-palette upload/bind/lifetime code and generated SPIR-V header. The existing PBR
+  skinned variants share the representation and are changed only to preserve their already-shipped
+  behavior; this does not expand modern CNAEXT scope.
+- **Acceptance/test:** retain all 72 exact column-major matrices without truncation; make both
+  colored and uncolored `SkinnedEffect` pipelines create and draw through D3D12; preserve
+  weighted bones, last-slot access, Vector4/Byte4 blend indices, lighting, specular, vertex color
+  and nonidentity world-normal behavior; keep Vulkan validation clean; retain skinned PBR pixels.
+  Reuse the same renderer-neutral oracle rather than cloning it.
+- **Result (2026-09-10):** each deferred draw now uploads its issue-time palette to a 288x1
+  `R32G32B32A32_FLOAT` sampler texture—four adjacent column texels per matrix—and binds it at the
+  vertex stage. The single 4608-byte row is naturally 256-byte aligned for D3D12 transfer rules,
+  `texelFetch`/ShaderCross preserves exact values, and the transient texture is released with the
+  command's other uploaded resources. Shader reflection now truthfully declares one vertex
+  sampler and zero storage buffers for all classic and PBR skinned variants.
+
+  Native offscreen Vulkan passes the shared skinned-term fixture plus minimal, PBR, vertex-color,
+  world-normal and fog regressions (**6 executables, all green**) with no validation diagnostic.
+  The incrementally rebuilt MinGW binaries pass the shared 13-assertion fixture, minimal **3/3**,
+  PBR **3/3**, vertex-color **2/2** and world-normal **4/4** through real `direct3d12`: **25/25**
+  discriminating assertions across five executables. In particular bone 71, 50/50 blending,
+  distinct one/three-light output, specular, both blend-index declarations and nonuniform normal
+  transforms are observed in pixels. Every Windows run used SDL `dummy`, forced virtual
+  backbuffer mode and a fresh isolated Xvfb display with `WAYLAND_DISPLAY` cleared; no swapchain or
+  host display was used. D3D12 debug-layer validation is unavailable under this Wine/vkd3d setup,
+  so the result records clean SDL debug output and exact pixels, not an invented native-validation
+  claim.
+
 ## 2026-09-10 parity audit final status
 
 | Item | Current evidence |
@@ -382,8 +430,8 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | SDL GPU registered integration tests | 190 CTests (85 baseline plus 105 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 32 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 32/32 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
-| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform re-audit creates twelve more (`SDLGPU-91`–`102`) |
-| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 45 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
+| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform re-audit creates thirteen more (`SDLGPU-91`–`103`) |
+| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 46 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
@@ -474,7 +522,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | SpriteBatch geometry/sort/state | Broad 2D corpus | Real deferred/immediate sprite renderer with target-local state snapshots | `=` — identical shared geometry/state/font frames, disposed-source policy, exact source/flip matrix, compiled Effect texture/pass behavior and 2D/3D/backbuffer ordering pass; `SDLGPU-76/79` |
 | BasicEffect | broad lighting/fog/option corpus | real per-vertex/per-pixel shader paths with complete light/material snapshots | `=` — shared term/transform/fog fixtures and the identical EasyGL per-pixel source distinguish every classic option family; `SDLGPU-77` |
 | AlphaTest/DualTexture effects | broad compare/source/UV corpus | real shaders; independent TEXCOORD0/1 and null-texture white fallbacks | `=` — compare/source/fog/UV/transform/material fixtures pass byte-identically or within their narrow pixel tolerance; `SDLGPU-59/77` |
-| EnvironmentMap/Skinned effects | broad light/specular/fresnel/bones corpus | real shaders; semantic skinned-stream normalization accepts Byte4 and Vector4 indices | `=` — shared term/fresnel/transform/bone fixtures plus identical EasyGL per-pixel and weights sources pass; the complete corpus found and corrected EnvironmentMapEffect's per-fragment Fresnel divergence so its fanned-normal frame is now byte-identical; `SDLGPU-77/81` |
+| EnvironmentMap/Skinned effects | broad light/specular/fresnel/bones corpus | real shaders; semantic skinned-stream normalization accepts Byte4 and Vector4 indices; full bone palette uses a cross-backend vertex sampler | `=` — shared term/fresnel/transform/bone fixtures plus identical EasyGL per-pixel and weights sources pass; the complete corpus found and corrected EnvironmentMapEffect's per-fragment Fresnel divergence so its fanned-normal frame is now byte-identical; D3D12 also passes the full shared skinned-term oracle after its storage-buffer PSO defect was removed; `SDLGPU-77/81/103` |
 | Ordinary compiled effects | real compiled runtime; explicitly refuses vertex-stage texture sampling renderer-wide | real deferred MojoShader runtime and draw routes; explicitly refuses the same vertex-stage sampling boundary | `=` — 34/34 shared/reflection/state/pixel/resource tests cover techniques, passes, clone values, multi-stream/instancing, SpriteBatch, RT/cube/volume pixel samplers and deferred lifetime; the shared vertex-stage boundary is source-verified; `SDLGPU-79/90` |
 | Models where renderer participates | hierarchy/multi-mesh/skinning corpus | stock draw paths and ordinary content pipeline | `=` — five exact EasyGL sources prove Model.Draw, 32-bit indices, child transforms, per-mesh effects and skinned playback; `SDLGPU-79` |
 | Deferred resource/state lifetime | immediate GL plus registries | shared-state command snapshots and retained native resources/pipelines | `=` — source textures/volumes/cubes/RTs, bound RT2D/cube/MRT, vertex/index data, full render state, samplers, viewports/scissors, stock/compiled/custom effects and render ordering have destruction or A→B→A issue-time tests; `SDLGPU-81` |
