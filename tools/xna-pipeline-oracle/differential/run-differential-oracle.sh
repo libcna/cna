@@ -62,9 +62,11 @@ fi
 }
 cp "$media_helper" "$build/run/"
 
-# The corpus's sources, copied where a Wine path can name them.
+# The corpus's sources, copied where a Wine path can name them. A manifest that brings its own
+# source tree -- an investigation measuring a shape the committed assets have not got -- says so
+# with CNA_DIFFERENTIAL_SOURCES rather than by adding files nothing else uses.
 mkdir -p "$build/run/sources"
-cp -a "$repo/tests/assets/xna40/." "$build/run/sources/"
+cp -a "${CNA_DIFFERENTIAL_SOURCES:-$repo/tests/assets/xna40}/." "$build/run/sources/"
 
 # XNA resolves a font by asking Windows for an installed *family*, so a .spritefont case needs the
 # face where that lookup can see it. Wine already exposes the host's fonts, and Liberation Mono is

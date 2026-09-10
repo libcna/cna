@@ -250,7 +250,11 @@ internal static class Program
             Directory.CreateDirectory(output);
 
             var item = new TaskItem(Path.Combine(sourceRoot, source.Replace('/', '\\')));
-            item.SetMetadata("Name", Path.GetFileNameWithoutExtension(source));
+            // An item's logical asset name is its own metadata and need not be its file's stem: a
+            // runner that gives every asset an OutputDirectory of its own writes a Name carrying a
+            // directory the Include has not got, which is what SAMPLE-141's does. A case may say
+            // so (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-196`).
+            item.SetMetadata("Name", Text(row, "name", Path.GetFileNameWithoutExtension(source)));
             string importer = Text(row, "importer", string.Empty);
             string processor = Text(row, "processor", string.Empty);
             if (importer.Length > 0) item.SetMetadata("Importer", importer);
