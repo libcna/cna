@@ -18,7 +18,10 @@
 #include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
 #include "RecordingSpriteBatchRenderer.hpp"
 
@@ -141,6 +144,64 @@ TEST(SpriteBatchTest, BeginAcceptsConstPresetStates)
                                 &SamplerState::LinearWrap,
                                 &DepthStencilState::None,
                                 &RasterizerState::CullNone));
+    batch.End();
+}
+
+TEST(SpriteBatchTest, BeginPublishesLinearClampWhenSamplerIsNull)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+    GraphicsDevice device;
+    device.getSamplerStatesProperty()[0] = SamplerState::PointWrap;
+    SpriteBatch batch(device);
+
+    batch.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend, nullptr, nullptr, nullptr);
+
+    const SamplerState& actual = device.getSamplerStatesProperty()[0];
+    EXPECT_EQ(actual.getFilterProperty(), SamplerState::LinearClamp.getFilterProperty());
+    EXPECT_EQ(actual.getAddressUProperty(), SamplerState::LinearClamp.getAddressUProperty());
+    EXPECT_EQ(actual.getAddressVProperty(), SamplerState::LinearClamp.getAddressVProperty());
+    EXPECT_EQ(actual.getAddressWProperty(), SamplerState::LinearClamp.getAddressWProperty());
+    EXPECT_EQ(actual.getMaxAnisotropyProperty(),
+              SamplerState::LinearClamp.getMaxAnisotropyProperty());
+    EXPECT_EQ(actual.getMaxMipLevelProperty(),
+              SamplerState::LinearClamp.getMaxMipLevelProperty());
+    EXPECT_FLOAT_EQ(actual.getMipMapLevelOfDetailBiasProperty(),
+                    SamplerState::LinearClamp.getMipMapLevelOfDetailBiasProperty());
+    batch.End();
+}
+
+TEST(SpriteBatchTest, BeginPublishesExplicitSamplerStateToDeviceSlotZero)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+    using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
+    using Microsoft::Xna::Framework::Graphics::TextureFilter;
+    GraphicsDevice device;
+    SamplerState requested;
+    requested.setFilterProperty(TextureFilter::MinLinearMagPointMipLinear);
+    requested.setAddressUProperty(TextureAddressMode::Mirror);
+    requested.setAddressVProperty(TextureAddressMode::Wrap);
+    requested.setAddressWProperty(TextureAddressMode::Clamp);
+    requested.setMaxAnisotropyProperty(7);
+    requested.setMaxMipLevelProperty(3);
+    requested.setMipMapLevelOfDetailBiasProperty(-0.75f);
+    SpriteBatch batch(device);
+
+    batch.Begin(SpriteSortMode::Immediate, static_cast<const BlendState*>(nullptr),
+                &requested, nullptr, nullptr);
+
+    const SamplerState& actual = device.getSamplerStatesProperty()[0];
+    EXPECT_EQ(actual.getFilterProperty(), requested.getFilterProperty());
+    EXPECT_EQ(actual.getAddressUProperty(), requested.getAddressUProperty());
+    EXPECT_EQ(actual.getAddressVProperty(), requested.getAddressVProperty());
+    EXPECT_EQ(actual.getAddressWProperty(), requested.getAddressWProperty());
+    EXPECT_EQ(actual.getMaxAnisotropyProperty(), requested.getMaxAnisotropyProperty());
+    EXPECT_EQ(actual.getMaxMipLevelProperty(), requested.getMaxMipLevelProperty());
+    EXPECT_FLOAT_EQ(actual.getMipMapLevelOfDetailBiasProperty(),
+                    requested.getMipMapLevelOfDetailBiasProperty());
     batch.End();
 }
 
