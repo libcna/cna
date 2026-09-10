@@ -257,7 +257,8 @@ implementation tasks.**
   depth/normal/velocity prepass and corrects Vulkan's deferred MRT constituent dependency, and
   `MOD-2239m` packages screen-space reflections, `MOD-2239n` packages screen-space contact
   shadows, `MOD-2239o` packages projected decals, `MOD-2239p` packages aerial perspective, and
-  `MOD-2239r` packages the shadow-aware volumetric-fog atlas and resolve, all with an explicit
+  `MOD-2239r` packages the shadow-aware volumetric-fog atlas and resolve, and `MOD-2239s` packages
+  the older `CRTEffect` used through `EffectPass`, all with an explicit
   texture-UV/XNA-camera-NDC bridge where reconstruction needs it. The
   bloom work also fixes secondary
   `RenderTarget2D` sampling through Vulkan `ShaderEffect`, which previously substituted the white

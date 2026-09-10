@@ -979,6 +979,14 @@ skips** is now an expanded **7/7** on RADV and llvmpipe, matching EasyGL. It inc
 directional-shadow generation and sampling, anisotropic scattering and exact disabled/missing-input
 fallbacks, with no Vulkan validation message.
 
+`CRTEffect`, the older effect adapted through `EffectPass`, now selects the same shared fullscreen
+package's GLSL or SPIR-V pair. Its four float settings use one `vec4`, while mask type uses the
+scalar slot; issuing the former five scalar setters would collapse them because Vulkan's scalar
+uniform contract is deliberately name-independent. Vulkan converts upper-left fragment coordinates
+to EasyGL's physical row convention before scanline and shadow-mask indexing. The suite expands
+from nine structural checks to **15/15** on EasyGL, RADV and llvmpipe, including exact disabled
+output and separate pixel oracles for all five settings, with no validation message.
+
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.
 

@@ -25,6 +25,9 @@ namespace CNA::Graphics::detail
     /** @brief Creates the portable screen-space contact-shadow shader package. */
     [[nodiscard]] ShaderPackageEXT CreateContactShadowShaderPackage();
 
+    /** @brief Creates the portable CRT fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateCrtShaderPackage();
+
     /** @brief Creates the portable screen-space decal shader package. */
     [[nodiscard]] ShaderPackageEXT CreateDecalShaderPackage();
 

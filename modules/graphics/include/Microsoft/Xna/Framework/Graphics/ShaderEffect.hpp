@@ -337,6 +337,25 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const override;
 
     protected:
+#ifdef CNA_CNAEXT
+        /**
+         * @brief Selects a portable package when available, otherwise compiles legacy sources.
+         *
+         * This overload is for built-in derived effects being migrated incrementally. A renderer
+         * with a package variant records that explicit language and uses it; every other renderer
+         * retains the legacy constructor's non-throwing compile/invalid-effect behaviour.
+         *
+         * @param device GraphicsDevice that owns this effect.
+         * @param package Portable vertex/fragment variants preferred by the live renderer.
+         * @param fallbackVertexSource Legacy vertex source used when no variant is selectable.
+         * @param fallbackFragmentSource Legacy fragment source used when no variant is selectable.
+         */
+        CNAEXT ShaderEffect(
+            GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package,
+            const std::string& fallbackVertexSource,
+            const std::string& fallbackFragmentSource);
+#endif
+
         /**
          * @brief Applies the GLSL shaders to the graphics device before drawing.
          */
@@ -374,6 +393,10 @@ namespace Microsoft::Xna::Framework::Graphics
             const CNA::Graphics::ShaderCodeEXT& fragmentCode);
         static PreparedPortablePayload PreparePortablePayload(
             GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package);
+        static PreparedPortablePayload PreparePortablePayloadOrFallback(
+            GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package,
+            const std::string& fallbackVertexSource,
+            const std::string& fallbackFragmentSource);
 #endif
 
         std::string vertSrc_;

@@ -15,10 +15,11 @@ namespace CNA::Graphics {
     /**
      * @brief Full-screen CRT display emulation post-process effect.
      *
-     * A `ShaderEffect` (GLSL, EasyGL renderer) that emulates a period CRT monitor: darkened
-     * alternating scanlines, an RGB sub-pixel mask (aperture grille or shadow mask), mild
-     * barrel-distortion curvature of the screen edges, and a corner vignette. Every parameter
-     * is independently tunable and defaults to a moderate, generally-flattering combination.
+     * A portable `ShaderEffect` that emulates a period CRT monitor: darkened alternating
+     * scanlines, an RGB sub-pixel mask (aperture grille or shadow mask), mild barrel-distortion
+     * curvature of the screen edges, and a corner vignette. The built-in package selects GLSL on
+     * OpenGL-family renderers and SPIR-V on Vulkan. Every parameter is independently tunable and
+     * defaults to a moderate, generally-flattering combination.
      *
      * @note Requires a single full-screen source, unlike `DepthEffect`. `getCurvature()`/
      * `getVignetteIntensity()` measure position from the drawn quad's own texture coordinate
@@ -28,10 +29,10 @@ namespace CNA::Graphics {
      * vignette warped around its own local rect instead of one shared curved screen. Render the
      * scene into an offscreen `RenderTarget2D` first (with no `CRTEffect` bound), then redraw
      * that single composited texture full-screen through `CRTEffect` — see
-     * `modules/graphics-ext/examples/crt_effect_demo_test.cpp`'s `RenderSceneToTexture()`/`DrawCrtPass()` for the
-     * exact pattern, including the `SpriteEffects::FlipVertically` needed to compensate for
-     * `RenderTarget2D` content being stored bottom-up. Scanlines and the RGB mask do not have
-     * this restriction (they index by `gl_FragCoord`, real screen pixels), but the single-pass
+     * `modules/graphics-ext/examples/crt_effect_demo_test.cpp`'s `RenderSceneToTexture()`/
+     * `DrawCrtPass()` for the exact pattern. The renderer normalizes render-target sampling
+     * orientation, so the draw itself needs no backend-specific sprite flip. Scanlines and the
+     * RGB mask do not have this restriction (they index real screen pixels), but the single-pass
      * requirement is documented as applying to the whole effect for simplicity.
      *
      * Deliberately a separate class from `DepthEffect` rather than folded-in options — CRT
@@ -48,7 +49,7 @@ namespace CNA::Graphics {
     {
     public:
         /**
-         * @brief Constructs a CRTEffect, compiling its built-in GLSL shader.
+         * @brief Constructs a CRTEffect, selecting and compiling its built-in shader package.
          *
          * @param device GraphicsDevice that owns this effect.
          */

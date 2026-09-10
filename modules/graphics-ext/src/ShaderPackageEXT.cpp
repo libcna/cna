@@ -451,6 +451,16 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     }
 
+    ShaderEffect::ShaderEffect(
+        GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package,
+        const std::string& fallbackVertexSource,
+        const std::string& fallbackFragmentSource)
+        : ShaderEffect(
+            device, PreparePortablePayloadOrFallback(
+                device, package, fallbackVertexSource, fallbackFragmentSource))
+    {
+    }
+
     ShaderEffect::ShaderEffect(GraphicsDevice& device, PreparedPortablePayload payload)
         : ShaderEffect(device, payload.vertexSource, payload.fragmentSource)
     {
@@ -510,6 +520,27 @@ namespace Microsoft::Xna::Framework::Graphics
             PortablePayloadBytes(*vertex), PortablePayloadBytes(*fragment),
             vertex->getSourceLabel(), fragment->getSourceLabel(),
             selection.getLanguage()};
+    }
+
+    ShaderEffect::PreparedPortablePayload ShaderEffect::PreparePortablePayloadOrFallback(
+        GraphicsDevice& device, const CNA::Graphics::ShaderPackageEXT& package,
+        const std::string& fallbackVertexSource,
+        const std::string& fallbackFragmentSource)
+    {
+        if (package.getRequiredStages().size() != 2
+            || !package.requiresStage(CNA::ShaderStageEXT::Vertex)
+            || !package.requiresStage(CNA::ShaderStageEXT::Fragment))
+        {
+            throw std::invalid_argument(
+                "ShaderEffect: package must require exactly Vertex and Fragment");
+        }
+        if (!package.selectFor(device).isUsable())
+        {
+            return PreparedPortablePayload{
+                fallbackVertexSource, fallbackFragmentSource, {}, {},
+                CNA::ShaderLanguageEXT::Unknown};
+        }
+        return PreparePortablePayload(device, package);
     }
 
 }

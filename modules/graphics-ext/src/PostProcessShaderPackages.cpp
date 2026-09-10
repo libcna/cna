@@ -184,6 +184,16 @@ namespace CNA::Graphics::detail
                 CNA::ShaderStageEXT::Fragment)});
     }
 
+    ShaderPackageEXT CreateCrtShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kCrtEsFragmentSource, "post_process/crt.es.frag.glsl"},
+            {kCrtDesktopFragmentSource, "post_process/crt.desktop.frag.glsl"},
+            {kCrtVulkanFragmentSpirV, kCrtVulkanFragmentSpirVByteSize,
+             "post_process/crt.vulkan.frag.spv"});
+    }
+
     ShaderPackageEXT CreateDecalShaderPackage()
     {
         using namespace CNA::Graphics::detail::PostProcessGenerated;

@@ -26,7 +26,6 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
-#include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
@@ -159,17 +158,14 @@ class CRTEffectDemo : public Game
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
     }
 
-    // Redraws sceneRT_ as a single full-screen quad through CRTEffect. FlipVertically
-    // compensates for RenderTarget2D content being stored bottom-up in GL versus a normally
-    // top-down-loaded texture -- without it the composited frame comes out upside down.
+    // Redraws sceneRT_ as a single full-screen quad through CRTEffect. Render-target sampling is
+    // already normalized by each renderer, so this stays the same on OpenGL and Vulkan.
     void DrawCrtPass()
     {
         SamplerState pointClamp = SamplerState::PointClamp;
         spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque,
                             &pointClamp, nullptr, nullptr, crtFx_.get());
-        spriteBatch_->Draw(*sceneRT_, Rectangle(0, 0, kWidth, kHeight),
-                           Rectangle(0, 0, kWidth, kHeight), Color::White,
-                           0.0f, Vector2::Zero, SpriteEffects::FlipVertically, 0.0f);
+        spriteBatch_->Draw(*sceneRT_, Rectangle(0, 0, kWidth, kHeight), Color::White);
         spriteBatch_->End();
     }
 

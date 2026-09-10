@@ -173,6 +173,15 @@ uniform sampler2D texture1;
 void main() { FragColor = texture(texture1, TexCoord); }
 )";
 
+class FallbackShaderEffect final : public ShaderEffect
+{
+public:
+    FallbackShaderEffect(GraphicsDevice& device, const ShaderPackageEXT& package)
+        : ShaderEffect(device, package, kVertex, kFragment)
+    {
+    }
+};
+
 /// Not GLSL at all. Every compiler rejects it, which is the point: MOD-219 is about what happens
 /// when a shader fails, and a subtly-wrong shader might compile on some driver.
 constexpr const char* kBroken = "this is not a shader; it is a sentence.";
@@ -767,6 +776,51 @@ TEST(ShaderPackageOverloadTest, LegacyShaderEffectReportsNoExplicitSelectedLangu
     GraphicsDevice device;
     ShaderEffect effect(device, kVertex, kFragment);
     EXPECT_EQ(effect.GetSelectedShaderLanguageEXT(), CNA::ShaderLanguageEXT::Unknown);
+}
+
+TEST(ShaderPackageOverloadTest, DerivedEffectCanRetainLegacyFallbackWhenNoVariantExists)
+{
+    GraphicsDevice device;
+    CNA::ShaderLanguageEXT unsupported = CNA::ShaderLanguageEXT::Unknown;
+    for (const auto candidate : {CNA::ShaderLanguageEXT::GlslDesktop,
+                                 CNA::ShaderLanguageEXT::GlslEs,
+                                 CNA::ShaderLanguageEXT::GlslVulkan,
+                                 CNA::ShaderLanguageEXT::Hlsl,
+                                 CNA::ShaderLanguageEXT::Msl,
+                                 CNA::ShaderLanguageEXT::Wgsl,
+                                 CNA::ShaderLanguageEXT::SpirV,
+                                 CNA::ShaderLanguageEXT::Dxil})
+    {
+        if (!device.SupportsShaderLanguageEXT(candidate, CNA::ShaderStageEXT::Vertex)
+            && !device.SupportsShaderLanguageEXT(candidate, CNA::ShaderStageEXT::Fragment))
+        {
+            unsupported = candidate;
+            break;
+        }
+    }
+    if (unsupported == CNA::ShaderLanguageEXT::Unknown)
+        GTEST_SKIP() << "this renderer accepts every declared graphics shader language";
+
+    const auto makeCode = [unsupported](const CNA::ShaderStageEXT stage) {
+        if (unsupported == CNA::ShaderLanguageEXT::SpirV
+            || unsupported == CNA::ShaderLanguageEXT::Dxil)
+        {
+            return ShaderCodeEXT(
+                unsupported, stage, "main", "unsupported.bin",
+                std::vector<std::uint8_t>{1, 2, 3, 4});
+        }
+        return ShaderCodeEXT(
+            unsupported, stage, "main", "unsupported.txt", "unsupported source");
+    };
+    const ShaderPackageEXT package(
+        {makeCode(CNA::ShaderStageEXT::Vertex),
+         makeCode(CNA::ShaderStageEXT::Fragment)},
+        {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
+
+    std::unique_ptr<FallbackShaderEffect> effect;
+    EXPECT_NO_THROW(effect = std::make_unique<FallbackShaderEffect>(device, package));
+    ASSERT_NE(effect, nullptr);
+    EXPECT_EQ(effect->GetSelectedShaderLanguageEXT(), CNA::ShaderLanguageEXT::Unknown);
 }
 
 // =====================================================================================
