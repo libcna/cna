@@ -602,6 +602,42 @@
    "thirdParty": false
   },
   {
+   "file": "x_face_degenerate.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_degenerate_face_fixtures.py",
+   "thirdParty": false
+  },
+  {
+   "file": "x_face_degenerate_all.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_degenerate_face_fixtures.py",
+   "thirdParty": false
+  },
+  {
+   "file": "x_face_degenerate_materials.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_degenerate_face_fixtures.py",
+   "thirdParty": false
+  },
+  {
+   "file": "x_face_degenerate_normals.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_degenerate_face_fixtures.py",
+   "thirdParty": false
+  },
+  {
+   "file": "x_face_degenerate_quad.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_degenerate_face_fixtures.py",
+   "thirdParty": false
+  },
+  {
+   "file": "x_no_faces.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_degenerate_face_fixtures.py",
+   "thirdParty": false
+  },
+  {
    "file": "x_normal_rules.x",
    "origin": "generated",
    "generator": "tools/xna-pipeline-oracle/model/make_normal_rule_fixture.py",
@@ -629,6 +665,18 @@
    "file": "x_type_name_case.x",
    "origin": "generated",
    "generator": "tools/xna-pipeline-oracle/model/make_type_case_fixture.py",
+   "thirdParty": false
+  },
+  {
+   "file": "x_vertex_duplication.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_degenerate_face_fixtures.py",
+   "thirdParty": false
+  },
+  {
+   "file": "x_vertex_duplication_identity.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_degenerate_face_fixtures.py",
    "thirdParty": false
   },
   {
