@@ -10,7 +10,7 @@ pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compu
 renderers capability by capability.** Its HDR/post-process pipeline, shadows, skybox, image-based
 lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
 now implements exact HDR targets, stock-PBR IBL, portable directional/cascade/point/spot shadow
-generation and stock-effect reception, a portable skybox, fourteen portable post-process consumers,
+generation and stock-effect reception, a portable skybox, fifteen portable post-process consumers,
 a portable depth/normal/velocity producer, instancing and the modern compute/resource paths. The
 remaining post-process effects are still
 source-authored shader gaps. The design is
@@ -203,7 +203,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 |---|---|---|---|---|
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
 | Float/HDR render targets | ✅ exact 2D/cube targets, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D` and `RenderTargetCube`, device-probed (`MOD-2223`/`MOD-2234`) | ⬜ | ⬜ — each reports `false` and the target constructor refuses the format rather than substituting `Color` |
-| `RenderPipeline` + post-process passes | ✅ | 🟨 fourteen portable pass consumers now run, including SSAO, Bloom, colour grading, depth of field, motion blur, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
+| `RenderPipeline` + post-process passes | ✅ | 🟨 fifteen portable pass consumers now run, including SSR, SSAO, Bloom, colour grading, depth of field, motion blur, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Depth/normal/velocity prepass | ✅ rigid/skinned producer | ✅ portable rigid/skinned GLSL/SPIR-V package (`MOD-2239l`) | ⬜ | ⬜ — consumers needing these scene images remain unsupported unless this producer or equivalent application inputs run |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ✅ portable rigid/skinned generation (`MOD-2237`) + stock reception (`MOD-2236`) | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ✅ portable atlas generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
@@ -254,8 +254,8 @@ occlusion-aware light-shaft radial walk; `MOD-2239f` adds Bloom's extract, separ
 progressive pyramid upsample and final composite; `MOD-2239g` adds filtered/tetrahedral strip and
 true 3D-LUT colour grading; `MOD-2239h` adds analytic height fog from depth and camera state; and
 `MOD-2239i` adds thin-lens depth of field, `MOD-2239j` adds camera/object motion blur, and
-`MOD-2239k` adds the SSAO estimate plus blur/composite, and `MOD-2239l` adds the shared rigid/skinned
-depth/normal/velocity producer. The remaining
+`MOD-2239k` adds the SSAO estimate plus blur/composite, `MOD-2239l` adds the shared rigid/skinned
+depth/normal/velocity producer, and `MOD-2239m` adds screen-space reflections. The remaining
 post-process paths still provide source alone and remain unavailable on Vulkan. Portable packages
 use the language/stage query to select a payload;
 subsystems still ask their own semantic capability before promising a visible result.
@@ -293,7 +293,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable skybox, fourteen portable post-process consumers plus their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable skybox, fifteen portable post-process consumers plus their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -652,6 +652,13 @@ real cone asks for.
 in front of the surface and the first behind it — and six bisections close it, so raising the step
 count sharpens what is found rather than shifting where it is found. Without that, a coarse march
 stair-steps every reflected edge and halving the step moves the whole reflection.
+
+Since `MOD-2239m`, `SsrPass` selects generated GLSL ES/desktop GLSL on EasyGL or SPIR-V on Vulkan.
+Source, depth and normals use the established three sampled-image slots; projection matrices, depth
+dimensions and all nine controls reuse the typed uniform arrays. Vulkan converts its top-left
+texture UV into XNA camera NDC for view reconstruction and back again after projection, while the
+GLSL render-target convention supplies that inversion implicitly. The same **22/22** SSR cases pass
+on EasyGL, RADV and llvmpipe, and the complete portable post-process set is **174/174** on all three.
 
 ### Depth of field, in the units a photographer uses
 

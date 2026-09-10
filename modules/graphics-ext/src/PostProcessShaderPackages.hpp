@@ -61,6 +61,9 @@ namespace CNA::Graphics::detail
     /** @brief Creates the portable SSAO blur/composition fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateSsaoComposeShaderPackage();
 
+    /** @brief Creates the portable screen-space-reflection fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateSsrShaderPackage();
+
     /** @brief Creates the portable spatial-upscale fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateSpatialUpscaleShaderPackage();
 

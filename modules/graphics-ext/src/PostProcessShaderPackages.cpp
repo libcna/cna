@@ -342,6 +342,24 @@ namespace CNA::Graphics::detail
                 CNA::ShaderStageEXT::Fragment)});
     }
 
+    ShaderPackageEXT CreateSsrShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kSsrEsFragmentSource, "post_process/ssr.es.frag.glsl"},
+            {kSsrDesktopFragmentSource, "post_process/ssr.desktop.frag.glsl"},
+            {kSsrVulkanFragmentSpirV, kSsrVulkanFragmentSpirVByteSize,
+             "post_process/ssr.vulkan.frag.spv"},
+            {
+                ShaderBindingRequirementEXT(
+                    "uDepthSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Fragment),
+                ShaderBindingRequirementEXT(
+                    "uNormalSampler", 2, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Fragment),
+            });
+    }
+
     ShaderPackageEXT CreateSpatialUpscaleShaderPackage()
     {
         using namespace CNA::Graphics::detail::PostProcessGenerated;

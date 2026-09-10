@@ -251,8 +251,9 @@ implementation tasks.**
   true 3D-LUT colour grading, `MOD-2239h` adds analytic depth/camera-based height fog, and
   `MOD-2239i` adds thin-lens depth of field with its depth-aware bleed guard. `MOD-2239j` adds
   camera reprojection and optional per-object velocity motion blur, `MOD-2239k` adds the
-  64-sample SSAO estimate plus its blur/composite, and `MOD-2239l` packages the shared rigid/skinned
-  depth/normal/velocity prepass and corrects Vulkan's deferred MRT constituent dependency. The
+  64-sample SSAO estimate plus its blur/composite, `MOD-2239l` packages the shared rigid/skinned
+  depth/normal/velocity prepass and corrects Vulkan's deferred MRT constituent dependency, and
+  `MOD-2239m` packages screen-space reflections with the Vulkan texture-UV/XNA-camera-NDC bridge. The
   bloom work also fixes secondary
   `RenderTarget2D` sampling through Vulkan `ShaderEffect`, which previously substituted the white
   fallback because the binding accepted only the uploaded-texture concrete type.

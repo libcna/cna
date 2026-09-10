@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239l`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239m`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -900,6 +900,16 @@ readback. The resulting portable prepass/velocity/SSAO core is **27/27** on Easy
 llvmpipe; the full 33-case diagnostic matrix is **33/33** on EasyGL and **27 passed / 6 intentional
 source-GLSL diagnostic skips** on both Vulkan drivers. The binding expansion leaves the complete
 Vulkan shadow regression **81/81** on both drivers, with no validation message.
+
+`SsrPass` is the fifteenth consumer. Source, depth and normal images occupy bindings 0, 1 and 2;
+projection and inverse projection, depth dimensions and nine scalar controls reuse the typed mat4,
+vec2 and float arrays. Every shader keeps the same texel-snapped depth/normal reads, far-plane-scaled
+view-space march, six bisections, back-face rejection, edge fade and roughness gather. Vulkan's
+top-left texture UV is explicitly converted to XNA camera NDC for reconstruction and converted back
+after projection; four positive-reflection cases failed before that bridge while rejection cases
+continued to pass. The former Vulkan baseline's 6 passes and 16 source-execution skips become
+**22/22** on RADV and llvmpipe, matching EasyGL. The complete portable post-process regression set is
+now **174/174** on all three paths, with no Khronos validation messages.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.
