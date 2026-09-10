@@ -48,6 +48,7 @@ trap 'rm -rf "$WORK"' EXIT
 # --- the policy table -------------------------------------------------------------------------
 # Anything not named here is `strict`.
 declare -A POLICY=(
+  [backbuffer_msaa]="allow:520:the triangle's three coverage boundaries; MSAA sample locations are implementation-defined, while both fixtures assert a resolved partial-coverage pixel and opaque interior -- measured EasyGL vs SDL_GPU: 506 pixels, all on those boundaries"
   [compressed_cube]="internal:a reflection's cube FACE depends on the pixel-centre convention (WEBGPU-187); this fixture's oracle is a BC cube against an RGBA8 cube WITHIN one renderer"
   [sampler_filters]="internal:magnification lands a linear gradient half a texel apart under the two pixel-centre conventions (WEBGPU-187); the claims are point-vs-linear A/Bs within one renderer"
   [rasterizer_viewport]="allow:400:the triangle hypotenuses, rasterized under the two pixel-centre conventions (WEBGPU-187) -- measured 276 of 12800, all in the four triangle cells and none in the quad cells"
@@ -63,6 +64,7 @@ declare -A POLICY=(
 # reflection/filter pictures and the two coverage-rule cases remain exceptions.
 if [[ "$COMPARISON_RENDERER" == "sdlgpu" ]]; then
     POLICY=()
+    POLICY[backbuffer_msaa]="allow:520:the triangle's three coverage boundaries; MSAA sample locations are implementation-defined -- measured 506 pixels, all on those boundaries"
     POLICY[compressed_cube]="internal:a reflection's cube FACE is not a cross-renderer invariant; this fixture compares BC and RGBA8 cube results WITHIN each renderer"
     POLICY[sampler_filters]="internal:linear magnification depends on the rasterizer's sample centres; the fixture's point-vs-linear assertions are renderer-local invariants"
     POLICY[sprite_geometry]="allow:64:the single half-pixel-destination cell's top/left coverage edges -- measured 32 pixels, all in that cell"

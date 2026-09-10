@@ -90,6 +90,11 @@ EASYGL_SPECIFIC = {
     "easygl_unknown_stride_rejection_test.cpp",
 }
 
+EASYGL_DEFECT = {
+    "easygl_msaa_change_test.cpp":
+        ("SDLGPU-85", "asserts EasyGL's inability to apply construction-only MSAA during Reset; SDL GPU implements the XNA/FNA reset contract"),
+}
+
 # CPU/API-only programs do not discriminate the active renderer. They remain relevant XNA tests,
 # but compiling another renderer-specific copy would add no parity evidence.
 DIRECT = {
@@ -117,7 +122,6 @@ VERIFIED_DIRECT = {
     "easygl_dxt_format_test.cpp": ("SDLGPU-69", "same source passes SDL GPU with native-or-decoded BC storage"),
     "easygl_graphicsdevice_reference_stencil_test.cpp": ("SDLGPU-58", "same source passes SDL GPU"),
     "easygl_graphicsdevicemanager_vsync_test.cpp": ("SDLGPU-68", "same source passes SDL GPU"),
-    "easygl_msaa_change_test.cpp": ("SDLGPU-68", "same source passes SDL GPU"),
     "easygl_packed16_format_test.cpp": ("SDLGPU-69", "same source passes SDL GPU with native packed storage"),
     "easygl_presentation_parameters_test.cpp": ("SDLGPU-68", "same source passes SDL GPU"),
     "easygl_real_window_resize_test.cpp": ("SDLGPU-68", "same source passes SDL GPU"),
@@ -173,6 +177,9 @@ def classify(name: str) -> tuple[str, str, str]:
     if name in NEEDS_TEST:
         task, note = NEEDS_TEST[name]
         return "classic-xna-new-sdlgpu-test-needed", task, note
+    if name in EASYGL_DEFECT:
+        task, note = EASYGL_DEFECT[name]
+        return "easygl-defect", task, note
     if name in EASYGL_SPECIFIC:
         return "easygl-specific", "-", "OpenGL/EasyGL harness or native-resource diagnostic"
     if name in DIRECT:

@@ -2050,16 +2050,19 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param virtualHeight Initial virtual (game-logic) resolution height.
          * @param presentationMode Initial presentation/scaling policy.
          * @param swapInterval Initial swap interval (0=immediate, 1=VSync, 2=half-rate).
+         * @param multiSampleCount Requested backbuffer sample count; clamped to device support.
          */
         SdlGpuRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                              CnaPresentationMode presentationMode, int swapInterval);
+                       CnaPresentationMode presentationMode, int swapInterval,
+                       int multiSampleCount = 0);
         /**
          * @brief Test-only constructor with scoped failure injection and destruction callbacks.
          * CNAEXT. Public renderer selection APIs continue to use the ordinary overload above.
          */
         CNAEXT SdlGpuRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                    CnaPresentationMode presentationMode, int swapInterval,
-                                    const SdlGpuTestHooksEXT& testHooks);
+                              CnaPresentationMode presentationMode, int swapInterval,
+                              const SdlGpuTestHooksEXT& testHooks,
+                              int multiSampleCount = 0);
         /** @brief Releases the window from the `SDL_GPUDevice` and destroys the device. */
         ~SdlGpuRenderer() override;
 
@@ -2146,6 +2149,34 @@ namespace CNA::Internal::Renderers::SdlGpu
         void SetPresentationMode(int mode) override;
         /** @brief Updates the swap interval, reconfiguring the swapchain present mode. */
         void SetSwapInterval(int interval) override;
+        /**
+         * @brief Applies a device-supported backbuffer multisample count for subsequent frames.
+         *
+         * @param requestedMultiSampleCount Requested XNA sample count.
+         * @return The applied count, or zero when multisampling is disabled/unavailable.
+         */
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        /**
+         * @brief Returns the backbuffer's actual device-clamped sample count.
+         *
+         * @return The applied count, or zero when multisampling is disabled.
+         */
+        [[nodiscard]] int GetMultiSampleCount() const override
+        {
+            return backbufferMultiSampleCount_;
+        }
+        /**
+         * @brief Maps a requested count to the count actually selected during construction/reset.
+         *
+         * @param requestedMultiSampleCount The public request; retained for the common contract.
+         * @return The renderer's actual applied count.
+         */
+        CNAEXT [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override
+        {
+            (void)requestedMultiSampleCount;
+            return backbufferMultiSampleCount_;
+        }
         /** @brief Returns the swap interval most recently requested by the XNA presentation path. */
         CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
         /**
@@ -2579,6 +2610,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         // depthStencilFormat_ itself is queried once in the constructor (QueryDepthStencilFormat),
         // not here, since pipeline creation needs a stable answer before any frame has rendered.
         void EnsureDepthStencilTexture(Uint32 width, Uint32 height);
+        // (Re)creates the multisample colour attachment selected for the backbuffer. A sample count
+        // of one needs no intermediate attachment and therefore returns true without allocation.
+        bool EnsureBackbufferMsaaTexture(Uint32 width, Uint32 height);
         // Queries the best available combined depth+stencil format once, at construction time.
         static SDL_GPUTextureFormat QueryDepthStencilFormat(SDL_GPUDevice* device);
         [[nodiscard]] static int ConfigureSwapchain(
@@ -3182,6 +3216,17 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool registeredForWindow_ = false;
         SDL_GPUTexture* depthStencilTexture_ = nullptr;
         SDL_GPUTextureFormat depthStencilFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+        SDL_GPUSampleCount depthStencilSampleCount_ = SDL_GPU_SAMPLECOUNT_1;
+
+        // SDLGPU-85: SDL_gpu swapchain textures themselves are single-sample. A requested
+        // backbuffer MSAA mode renders into this matching multisample colour target, then each
+        // backbuffer pass resolves into the acquired swapchain or the readable proxy below.
+        SDL_GPUTexture* backbufferMsaaTexture_ = nullptr;
+        int backbufferMsaaWidth_ = 0;
+        int backbufferMsaaHeight_ = 0;
+        SDL_GPUTextureFormat backbufferMsaaFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+        SDL_GPUSampleCount backbufferSampleCount_ = SDL_GPU_SAMPLECOUNT_1;
+        int backbufferMultiSampleCount_ = 0;
 
         // REMED-GFX-165: the swapchain texture is write-only by permanent SDL contract
         // (SDL_WaitAndAcquireGPUSwapchainTexture cannot be a sampler/copy/blit SOURCE), so the

@@ -1652,6 +1652,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         int physicalWidth = 0;
         int physicalHeight = 0;
         SDL_GPUTextureFormat depthStencilFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+        SDL_GPUSampleCount backbufferSampleCount = SDL_GPU_SAMPLECOUNT_1;
+        int backbufferMultiSampleCount = 0;
         SdlGpuTestHooksEXT hooks{};
         std::array<SDL_GPUShader*, static_cast<std::size_t>(ConstructionShader::Count)> shaders{};
 
@@ -1720,6 +1722,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             owner.physicalWidth_ = physicalWidth;
             owner.physicalHeight_ = physicalHeight;
             owner.depthStencilFormat_ = depthStencilFormat;
+            owner.backbufferSampleCount_ = backbufferSampleCount;
+            owner.backbufferMultiSampleCount_ = backbufferMultiSampleCount;
             owner.testHooks_ = hooks;
             owner.testFailureInjected_ = failureInjected;
             owner.registeredForWindow_ = rendererRegistered;
@@ -1773,19 +1777,21 @@ namespace CNA::Internal::Renderers::SdlGpu
     };
 
     SdlGpuRenderer::SdlGpuRenderer(SDL_Window* window, int virtualWidth,
-                                                  int virtualHeight,
-                                                  CnaPresentationMode presentationMode,
-                                                  int swapInterval)
+                                   int virtualHeight,
+                                   CnaPresentationMode presentationMode,
+                                   int swapInterval,
+                                   int multiSampleCount)
         : SdlGpuRenderer(window, virtualWidth, virtualHeight, presentationMode,
-                                swapInterval, SdlGpuTestHooksEXT{})
+                         swapInterval, SdlGpuTestHooksEXT{}, multiSampleCount)
     {
     }
 
     SdlGpuRenderer::SdlGpuRenderer(SDL_Window* window, int virtualWidth,
-                                                  int virtualHeight,
-                                                  CnaPresentationMode presentationMode,
-                                                  int swapInterval,
-                                                  const SdlGpuTestHooksEXT& testHooks)
+                                   int virtualHeight,
+                                   CnaPresentationMode presentationMode,
+                                   int swapInterval,
+                                   const SdlGpuTestHooksEXT& testHooks,
+                                   int multiSampleCount)
         : window_(window),
           virtualWidth_(virtualWidth),
           virtualHeight_(virtualHeight),
@@ -1837,6 +1843,12 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         resources.FailAt(SdlGpuFailurePointEXT::DepthStencilFormatQuery);
         resources.depthStencilFormat = QueryDepthStencilFormat(resources.device);
+        resources.backbufferSampleCount = ClampSampleCount(
+            resources.device,
+            SDL_GetGPUSwapchainTextureFormat(resources.device, window_),
+            resources.depthStencilFormat, multiSampleCount);
+        resources.backbufferMultiSampleCount =
+            SampleCountToInt(resources.backbufferSampleCount);
 
         CreateSpriteResources(resources);
         CreateColoredResources(resources);
@@ -1931,6 +1943,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         pendingGraphicsPipelineReleases_.clear();
         if (depthStencilTexture_ != nullptr)
             SDL_ReleaseGPUTexture(device_, depthStencilTexture_);
+        if (backbufferMsaaTexture_ != nullptr)
+            SDL_ReleaseGPUTexture(device_, backbufferMsaaTexture_);
         if (backbufferProxy_ != nullptr)
             SDL_ReleaseGPUTexture(device_, backbufferProxy_);   // REMED-GFX-165 readback proxy
         if (device_ != nullptr)
@@ -1962,13 +1976,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             case CNA::GraphicsCapability::StencilBuffer:
                 return depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID;
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
-                return device_ != nullptr &&
-                       SDL_GPUTextureSupportsSampleCount(
-                           device_, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-                           SDL_GPU_SAMPLECOUNT_2) &&
-                       (depthStencilFormat_ == SDL_GPU_TEXTUREFORMAT_INVALID ||
-                        SDL_GPUTextureSupportsSampleCount(
-                            device_, depthStencilFormat_, SDL_GPU_SAMPLECOUNT_2));
+                // Sample-count support is not required to be monotonic. Ask the same clamping
+                // routine resource creation uses whether ANY ordinary 2/4/8x mode survives,
+                // rather than treating lack of exactly 2x as lack of multisampling altogether.
+                return device_ != nullptr && SampleCountToInt(ClampSampleCount(
+                    device_, SDL_GetGPUSwapchainTextureFormat(device_, window_),
+                    depthStencilFormat_, 8)) > 1;
             case CNA::GraphicsCapability::CompiledEffects:
                 return SupportsCompiledEffects();
             case CNA::GraphicsCapability::WireFrame:
@@ -2038,7 +2051,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (width == 0 || height == 0 || depthStencilFormat_ == SDL_GPU_TEXTUREFORMAT_INVALID)
             return;
 
-        if (depthStencilTexture_ != nullptr && depthStencilWidth_ == width && depthStencilHeight_ == height)
+        if (depthStencilTexture_ != nullptr && depthStencilWidth_ == width &&
+            depthStencilHeight_ == height &&
+            depthStencilSampleCount_ == backbufferSampleCount_)
             return;
 
         if (depthStencilTexture_ != nullptr)
@@ -2046,6 +2061,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_ReleaseGPUTexture(device_, depthStencilTexture_);
             depthStencilTexture_ = nullptr;
         }
+        depthStencilSampleCount_ = SDL_GPU_SAMPLECOUNT_1;
 
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_2D;
@@ -2055,7 +2071,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         createInfo.height = height;
         createInfo.layer_count_or_depth = 1;
         createInfo.num_levels = 1;
-        createInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        createInfo.sample_count = backbufferSampleCount_;
 
         depthStencilTexture_ = SDL_CreateGPUTexture(device_, &createInfo);
         if (depthStencilTexture_ == nullptr)
@@ -2069,6 +2085,56 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
         depthStencilWidth_ = width;
         depthStencilHeight_ = height;
+        depthStencilSampleCount_ = backbufferSampleCount_;
+    }
+
+    bool SdlGpuRenderer::EnsureBackbufferMsaaTexture(Uint32 width, Uint32 height)
+    {
+        if (backbufferSampleCount_ == SDL_GPU_SAMPLECOUNT_1)
+            return true;
+        if (width == 0 || height == 0)
+            return false;
+
+        const SDL_GPUTextureFormat format =
+            SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        if (backbufferMsaaTexture_ != nullptr &&
+            backbufferMsaaWidth_ == static_cast<int>(width) &&
+            backbufferMsaaHeight_ == static_cast<int>(height) &&
+            backbufferMsaaFormat_ == format)
+        {
+            return true;
+        }
+
+        if (backbufferMsaaTexture_ != nullptr)
+        {
+            SDL_ReleaseGPUTexture(device_, backbufferMsaaTexture_);
+            backbufferMsaaTexture_ = nullptr;
+        }
+
+        SDL_GPUTextureCreateInfo info{};
+        info.type = SDL_GPU_TEXTURETYPE_2D;
+        info.format = format;
+        info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+        info.width = width;
+        info.height = height;
+        info.layer_count_or_depth = 1;
+        info.num_levels = 1;
+        info.sample_count = backbufferSampleCount_;
+        backbufferMsaaTexture_ = SDL_CreateGPUTexture(device_, &info);
+        if (backbufferMsaaTexture_ == nullptr)
+        {
+            backbufferMsaaWidth_ = 0;
+            backbufferMsaaHeight_ = 0;
+            backbufferMsaaFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: failed to create multisample backbuffer: ") +
+                SDL_GetError());
+        }
+
+        backbufferMsaaWidth_ = static_cast<int>(width);
+        backbufferMsaaHeight_ = static_cast<int>(height);
+        backbufferMsaaFormat_ = format;
+        return true;
     }
 
     bool SdlGpuRenderer::EnsureFrameRendered()
@@ -2115,6 +2181,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         physicalWidth_ = static_cast<int>(swapchainWidth);
         physicalHeight_ = static_cast<int>(swapchainHeight);
+        EnsureBackbufferMsaaTexture(swapchainWidth, swapchainHeight);
         EnsureDepthStencilTexture(swapchainWidth, swapchainHeight);
 
         // REMED-GFX-165: once the backbuffer has been read at least once, render every backbuffer pass
@@ -2314,18 +2381,30 @@ namespace CNA::Internal::Renderers::SdlGpu
     // cycle is opened) and is consumed by the frame's FIRST backbuffer pass, which is where a
     // pre-segment clear request logically belongs.
     void SdlGpuRenderer::RenderToSwapchain(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,
-                                                  SDL_GPUTexture* swapchainTexture,
-                                                  bool isFirstBackbuffer)
+                                           SDL_GPUTexture* resolvedTexture,
+                                           bool isFirstBackbuffer)
     {
         const bool clearColor   = segment.clearColorRequested   || (isFirstBackbuffer && clearColorPending_);
         const bool clearDepth   = segment.clearDepthRequested   || (isFirstBackbuffer && clearDepthPending_);
         const bool clearStencil = segment.clearStencilRequested || (isFirstBackbuffer && clearStencilPending_);
 
         SDL_GPUColorTargetInfo colorTarget{};
-        colorTarget.texture = swapchainTexture;
+        colorTarget.texture = backbufferMsaaTexture_ != nullptr
+            ? backbufferMsaaTexture_
+            : resolvedTexture;
         colorTarget.clear_color = segment.clearColorRequested ? segment.clearColor : clearColor_;
         colorTarget.load_op = clearColor ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
-        colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+        if (backbufferMsaaTexture_ != nullptr)
+        {
+            colorTarget.resolve_texture = resolvedTexture;
+            // A later backbuffer segment LOADs the multisample attachment, so preserve its samples
+            // as well as resolving this segment for presentation/readback.
+            colorTarget.store_op = SDL_GPU_STOREOP_RESOLVE_AND_STORE;
+        }
+        else
+        {
+            colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+        }
 
         SDL_GPUDepthStencilTargetInfo depthStencilTarget{};
         if (depthStencilTexture_ != nullptr)
@@ -2348,7 +2427,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             cmd, &colorTarget, 1, depthStencilTexture_ != nullptr ? &depthStencilTarget : nullptr);
         RenderPassOwner passOwner(pass);
         TracePassSegment(nativePassIndex_++, segment,
-                         clearColor ? "clear" : "load", "store",
+                         clearColor ? "clear" : "load",
+                         backbufferMsaaTexture_ != nullptr ? "resolve+store" : "store",
                          depthStencilTexture_ == nullptr ? "none" : (clearDepth ? "clear" : "load"),
                          depthStencilTexture_ == nullptr ? "none" : (clearStencil ? "clear" : "load"),
                          std::count_if(drawOrder_.begin(), drawOrder_.end(),
@@ -2361,8 +2441,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Real chronological draw order (adversarial-review finding #4) -- see drawOrder_'s own
         // doc comment; replaces the old fixed "all 3D families, then all sprites" sequence.
         const DrawTarget swapchainTarget{};
-        // The swapchain surface is never MSAA in this renderer -- SDL_GPU_SAMPLECOUNT_1 always.
-        RenderQueuedDraws(pass, cmd, swapchainTarget, swapchainFormat, SDL_GPU_SAMPLECOUNT_1,
+        RenderQueuedDraws(pass, cmd, swapchainTarget, swapchainFormat, backbufferSampleCount_,
                           depthStencilTexture_ != nullptr
                               ? depthStencilFormat_
                               : SDL_GPU_TEXTUREFORMAT_INVALID,
@@ -3138,6 +3217,43 @@ namespace CNA::Internal::Renderers::SdlGpu
             appliedSwapInterval_ = appliedInterval;
     }
 
+    int SdlGpuRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        const SDL_GPUSampleCount applied = ClampSampleCount(
+            device_, SDL_GetGPUSwapchainTextureFormat(device_, window_),
+            depthStencilFormat_, requestedMultiSampleCount);
+        if (applied == backbufferSampleCount_)
+            return backbufferMultiSampleCount_;
+
+        // Reset is not expected in the middle of a public draw sequence, but flushing here makes
+        // the transition transactional even for a caller that queued a frame first: those commands
+        // retain the sample count/pixel-centre convention they captured before the reset.
+        if (framePending_ && !EnsureFrameRendered())
+            return backbufferMultiSampleCount_;
+
+        if (depthStencilTexture_ != nullptr)
+        {
+            SDL_ReleaseGPUTexture(device_, depthStencilTexture_);
+            depthStencilTexture_ = nullptr;
+        }
+        depthStencilWidth_ = 0;
+        depthStencilHeight_ = 0;
+        depthStencilSampleCount_ = SDL_GPU_SAMPLECOUNT_1;
+
+        if (backbufferMsaaTexture_ != nullptr)
+        {
+            SDL_ReleaseGPUTexture(device_, backbufferMsaaTexture_);
+            backbufferMsaaTexture_ = nullptr;
+        }
+        backbufferMsaaWidth_ = 0;
+        backbufferMsaaHeight_ = 0;
+        backbufferMsaaFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+
+        backbufferSampleCount_ = applied;
+        backbufferMultiSampleCount_ = SampleCountToInt(applied);
+        return backbufferMultiSampleCount_;
+    }
+
     void SdlGpuRenderer::MaybeFailForTest(SdlGpuFailurePointEXT point)
     {
         InjectFailure(testHooks_, testFailureInjected_, point);
@@ -3764,7 +3880,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     Matrix SdlGpuRenderer::ApplyXnaPixelCenter(const Matrix& wvp) const
     {
-        bool multisampledDestination = false;
+        bool multisampledDestination =
+            currentRenderTarget_ == nullptr && currentRenderTargetCube_ == nullptr &&
+            backbufferSampleCount_ != SDL_GPU_SAMPLECOUNT_1;
         if (currentRenderTarget_ != nullptr)
             multisampledDestination =
                 currentRenderTarget_->State()->sampleCount != SDL_GPU_SAMPLECOUNT_1;
@@ -10833,6 +10951,7 @@ namespace CNA::Internal::Renderers
     {
         return std::make_unique<SdlGpu::SdlGpuRenderer>(
             CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
-            args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval);
+            args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval,
+            args.multiSampleCount);
     }
 }

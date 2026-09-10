@@ -50,6 +50,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}"
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # SDLGPU-85: the shared fixture proves construction-time EasyGL parity. SDL GPU also supports
+    # the XNA/FNA Reset contract which EasyGL still lacks, so run the exact same source in its
+    # optional A (4x) -> B (0x) -> A (4x) mode as a second, renderer-specific invocation.
+    cna_register_renderer_test(NAME SdlGpu_Parity_backbuffer_msaa_Reset
+        COMMAND cna_test_sdlgpu_parity_backbuffer_msaa --reset
+        TIMEOUT 180 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_Parity_backbuffer_msaa_Reset PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     cna_sdlgpu_test(cna_test_sdlgpu_smoke sdlgpu_smoke_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_Smoke COMMAND cna_test_sdlgpu_smoke
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
@@ -471,13 +480,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
     # SDLGPU-68: compile the exact renderer-neutral EasyGL presentation/lifecycle oracles against
-    # SDL_GPU. Together they cover public resize/reset events, requested VSync forwarding, zero
-    # backbuffer MSAA, PresentationParameters behavior, and a real window-system resize.
+    # SDL_GPU. Together they cover public resize/reset events, requested VSync forwarding,
+    # PresentationParameters behavior, and a real window-system resize. The EasyGL MSAA-change
+    # source is intentionally excluded: it asserts EasyGL's known inability to change backbuffer
+    # MSAA after construction, while SDLGPU-85 implements the ordinary XNA/FNA Reset semantics.
     foreach(presentation_oracle_test IN ITEMS
             backbuffer_resize
             device_reset_events
             graphicsdevicemanager_vsync
-            msaa_change
             presentation_parameters
             real_window_resize)
         cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${presentation_oracle_test}

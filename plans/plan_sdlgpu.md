@@ -7,7 +7,8 @@
 > closed by `SDLGPU-60/78`; independent MRT outputs, SpriteBatch, all five classic stock-effect
 > families, Models and ordinary compiled Effects were closed by `SDLGPU-75/76/77/79`;
 > `SDLGPU-80` rigorously classifies OcclusionQuery as an underlying SDL_gpu limitation; and
-> `SDLGPU-81` closes the shared corpus plus deferred resource/effect lifetime. This verdict
+> `SDLGPU-81` closes deferred resource/effect lifetime while `SDLGPU-85` adds real backbuffer
+> MSAA. This verdict
 > supersedes historical completion banners below; those remain as implementation history, not
 > current truth.
 
@@ -22,17 +23,17 @@
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
 | EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files at audit start; 246 / 45 now (source count, not capability count) |
 | EasyGL / SDL GPU renderer unit-test sources | 2 / 2 `.cpp` files |
-| SDL GPU registered integration tests | 187 CTests (85 baseline plus 102 parity/remediation registrations) |
-| Shared EasyGL parity fixtures available | 31 renderer-neutral sources in `modules/graphics/examples/parity` |
-| Shared parity fixtures registered for SDL GPU | 31/31 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
-| Tasks created by this audit | 30 (`SDLGPU-55`–`SDLGPU-84`) |
-| Completed / open / proven unavoidable | 29 / 1 tasks; 3 capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
+| SDL GPU registered integration tests | 188 CTests (85 baseline plus 103 parity/remediation registrations) |
+| Shared EasyGL parity fixtures available | 32 renderer-neutral sources in `modules/graphics/examples/parity` |
+| Shared parity fixtures registered for SDL GPU | 32/32 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
+| Tasks created by this audit | 31 (`SDLGPU-55`–`SDLGPU-85`) |
+| Completed / open / proven unavoidable | 30 / 1 tasks; 3 capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
 | Display constraint | Sandboxed tests cannot access host `:0`; SDL `offscreen` successfully creates the real Vulkan GPU device. Escalated preservation checks can use host `:0` (WebGPU), while EasyGL uses Xvfb `:179`. The SDL GPU test-driver cache setting defaults to `x11` and is locally set to `offscreen`. |
-| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline and every completed task slice through SDLGPU-75 emitted no captured `VUID`, `Validation Error`, or `Validation Warning`. SDLGPU-76's validation-fatal eight-test SpriteBatch/lifetime/order slice, SDLGPU-77's twelve-test stock-effect slice, SDLGPU-78's fourteen-test buffer/draw slice, SDLGPU-79's 34 compiled-effect unit tests plus five model CTests, SDLGPU-80's five-check limitation CTest, and SDLGPU-81's 31 shared fixtures plus eleven lifetime/state regressions are also clean; every shared SDL parity CTest makes both the descriptive diagnostics and bare `VUID-` fatal. |
-| Focused EasyGL oracle baseline | 68/68 selected tests pass on Xvfb/llvmpipe: the prior 49 stock-effect/state/format/RT/texture/MRT/instancing/query/presentation/sprite tests, thirteen exact buffer/draw sources, the shared line-topology oracle and five exact model sources. SDLGPU-81 additionally executes all 31 shared sources under both EasyGL and SDL GPU: 27 frames satisfy the strict byte/tolerance policy, two use renderer-local discriminating invariants, and two have narrow measured line/edge coverage budgets. The VSync program's three CNA-forwarding checks pass; its real-vblank half is correctly skipped because raw GL cannot enable VSync under Xvfb. |
+| Validation | Debug mode is enabled in current source. The offscreen 85-test baseline and every completed task slice through SDLGPU-75 emitted no captured `VUID`, `Validation Error`, or `Validation Warning`. SDLGPU-76's validation-fatal eight-test SpriteBatch/lifetime/order slice, SDLGPU-77's twelve-test stock-effect slice, SDLGPU-78's fourteen-test buffer/draw slice, SDLGPU-79's 34 compiled-effect unit tests plus five model CTests, SDLGPU-80's five-check limitation CTest, SDLGPU-81's lifetime/state regressions, and SDLGPU-85's construction/reset backbuffer-MSAA CTests are also clean; every shared SDL parity CTest makes both the descriptive diagnostics and bare `VUID-` fatal. |
+| Focused EasyGL oracle baseline | 69/69 selected tests pass on Xvfb/llvmpipe: the prior 68 stock-effect/state/format/RT/texture/MRT/instancing/query/presentation/sprite/buffer/draw/model controls plus the new construction-time backbuffer-MSAA source. The current corpus executes all 32 shared sources under both EasyGL and SDL GPU: 27 frames satisfy the strict byte/tolerance policy, two use renderer-local discriminating invariants, and three have narrow measured line/edge coverage budgets. The VSync program's three CNA-forwarding checks pass; its real-vblank half is correctly skipped because raw GL cannot enable VSync under Xvfb. |
 
 The first attempted baseline used the suite's historical hard-coded `SDL_VIDEODRIVER=x11` and
 could not reach the inaccessible host display: early programs skipped and 47 tests failed for the
@@ -86,6 +87,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Clear color/depth/stencil overloads | Direct GL clears; ordered-clear corpus | Deferred clear commands and all combinations | `=` — ordered clear/draw/cube-target tests and state suites pass; `SDLGPU-58/66` |
 | Present, interval and modes | Runtime swap interval; resize examples | SDL claim/present modes and proxy copy | `=` for Immediate/One/default forwarding, reset, resize and minimize retry; exact half-rate `PresentInterval::Two` is `⛔` because SDL exposes only VSYNC/IMMEDIATE/MAILBOX and no vblank timing primitive; `SDLGPU-68` |
 | Backbuffer size/readback/channel order | Direct readback, RGBA contract | Real `backbufferProxy_` download, contrary to old SDLGPU-39 text | `=` — dimension/first-read/range plus reset/resize/minimize-retained readback pass; `SDLGPU-68` |
+| Backbuffer MSAA | Construction-time multisample colour/depth FBO, resolved before present | Device-clamped multisample colour/depth attachments resolve into the swapchain/readback proxy; public reports and Reset track the applied count | `=` — identical public source proves 4x applied state, intermediate edge coverage, opaque interior and segment preservation on both renderers; SDL-only A→B→A reset adds the XNA/FNA behavior EasyGL lacks; `SDLGPU-85` |
 | Logical resolution/transforms/letterbox | Explicit default viewport and transforms | Explicit physical/logical transforms | `=` — physical rectangle, all modes, HiDPI transforms, zero-size safety, SpriteBatch projection and real resize pass; `SDLGPU-68` |
 | Blend factors/functions/BlendFactor | Full separate RGB/A state | Complete immutable pipeline state and per-draw dynamic factor | `=` — all 13 factors in all four roles, all five equations for RGB/A, separate fields and A→B→A are pixel-verified; `SDLGPU-58` |
 | ColorWriteChannels | Four slot-aligned masks | Four slot-aligned immutable pipeline masks | `=` — every slot-0 mask value plus distinct four-MRT-slot masks and cache restoration pass; `SDLGPU-58` |
@@ -205,25 +207,25 @@ filesystem, rejects duplicates/unknown categories/missing evidence, and currentl
 | Category | Count |
 |---|---:|
 | `classic-xna-covered-by-existing-sdlgpu-test` | 129 |
-| `classic-xna-direct-parity` | 53 |
+| `classic-xna-direct-parity` | 52 |
 | `classic-xna-new-sdlgpu-test-needed` | 0 |
 | `classic-xna-feature-missing` | 2 |
 | `modern-cnaext-out` | 52 |
 | `easygl-specific` | 9 |
 | `duplicate` | 0 |
-| `easygl-defect` | 1 |
+| `easygl-defect` | 2 |
 | `unclassified` | **0** |
 
-The `easygl-defect` row is the historical EasyGL usage example which calls `GetBackBufferData`
-while a target is bound and therefore measures EasyGL's current-FBO bug instead of XNA backbuffer
-semantics (`EASYGL-PARITY-4`). The other defects below were exposed by shared renderer-neutral
-evidence and mechanical audits, so they remain ledger entries without falsely reclassifying an
-unrelated EasyGL example source.
+The two `easygl-defect` rows are the historical target-usage example which reads the current FBO
+instead of the XNA backbuffer (`EASYGL-PARITY-4`) and the MSAA-change example which explicitly
+asserts EasyGL's inability to apply the reset request (`EASYGL-PARITY-6`). The other defects below
+were exposed by shared renderer-neutral evidence and mechanical audits, so they remain ledger
+entries without falsely reclassifying an unrelated EasyGL example source.
 
 Classification is a triage statement, not proof of parity. The 129 “covered” programs map to
-existing SDL GPU family tests or shared graphics regressions; all 31 renderer-neutral parity
+existing SDL GPU family tests or shared graphics regressions; all 32 renderer-neutral parity
 sources are now registered, while `SDLGPU-81` still owns the exhaustive deferred-lifetime sweep.
-The 53 direct rows now
+The 52 direct rows now
 include exact EasyGL presentation/lifecycle sources compiled under SDL GPU by `SDLGPU-68`, the
 packed/DXT/format-refusal sources from `SDLGPU-69`, cube and volume sources from `SDLGPU-70/71`,
 the exact RenderTarget2D properties source from `SDLGPU-72`, and both cube property/depth sources
@@ -243,6 +245,7 @@ whenever implementation evidence disproves its classification.
 | `EASYGL-PARITY-3` | `EasyGLRenderTargetRenderer::GetData` calls `glReadPixels` without setting `GL_PACK_ALIGNMENT=1`, then treats the destination as tightly packed. An exact 5×3 `HalfSingle` readback therefore asks GL to write 12 physical bytes per 10-byte logical row into the public 30-byte buffer; the first row comparison fails and the overwrite can corrupt the following test. The same oracle passes at a 6-pixel alignment-safe width, while SDL GPU also passes the original 5×3 transfer exactly. SDL retains tight format-sized staging rather than copying this EasyGL defect; a future EasyGL-local fix must save, set and restore pack alignment. |
 | `EASYGL-PARITY-4` | `easygl_render_target_usage_test.cpp` calls public `GraphicsDevice::GetBackBufferData` while a `RenderTarget2D` is bound and expects the target's pixel. Current EasyGL obliges because `ReadBackbuffer` leaves the bound FBO as its read source; the source passes 3/3 and returns its green target. FNA `GraphicsDevice.GetBackBufferData` unconditionally calls `FNA3D_ReadBackbuffer`, whose OpenGL backend binds the actual backbuffer (or its resolve) before `glReadPixels`, and whose SDL_gpu backend downloads `fauxBackbufferColorTexture`. SDL GPU correctly keeps backbuffer and target readback separate. The valid usage oracle is the renderer-neutral `RenderTargetSemantics` pair using `RenderTarget2D::GetData`; a future EasyGL-local fix should make `ReadBackbuffer` select the real backbuffer and update/remove the defective example. |
 | `EASYGL-PARITY-5` | Public `RenderTarget2D` inherits all `Texture2D::SetData` overloads, exactly as FNA does: FNA forwards them to `FNA3D_SetTextureData2D` even when the texture is a render target. CNA's shared target path likewise calls its existing `ITextureRenderer`, but `EasyGLRenderTargetRenderer` inherits the empty `UpdatePixels`/`UpdatePixelsLevel` defaults, so every accepted target upload is silently discarded. SDL GPU had the same 2D defect and fixed it in `SDLGPU-74`; its byte-exact regression covers full/partial level zero, authored/generated mip preservation and 2/4/8/16-byte target texels. This is intentionally not hidden to imitate EasyGL: a future EasyGL-local task must implement format-aware uploads into `colorTex_` without replacing the FBO-owned renderer. |
+| `EASYGL-PARITY-6` | `EasyGLRenderer` consumes and clamps construction-time backbuffer MSAA correctly, but inherits `ApplyMultiSampleCount`, so `GraphicsDevice::Reset`/`GraphicsDeviceManager.PreferMultiSampling` cannot change it after construction. `easygl_msaa_change_test.cpp` explicitly treats that inability as its expected result. FNA resets and writes back the device-clamped count; SDL GPU now implements that XNA/FNA contract in `SDLGPU-85`, so the EasyGL-specific expectation is classified as a defect rather than compiled under SDL GPU. The shared standalone fixture still uses the exact same ordinary construction source for both renderers. |
 
 ## Executable EasyGL-parity backlog
 
@@ -1197,6 +1200,57 @@ underlying API limitation proven after reasonable emulation analysis.
   XNA/Direct3D clip volume while retaining a large discriminating separation. The ordinary target
   passes 7/7 and the 4x-MSAA resolve target passes 9/9; both CTests now make Vulkan validation
   diagnostics fatal.
+
+### SDLGPU-85 — implement ordinary backbuffer MSAA and truthful applied-count reporting ✅
+
+- **Problem/public behavior:** the ordinary `GraphicsDevice` construction path forwards
+  `PresentationParameters.MultiSampleCount` in `GraphicsRendererCreateArgs`, but the SDL GPU
+  factory drops that argument. The swapchain pass, its depth attachment and every selected
+  pipeline are consequently forced to one sample while the inherited applied-count mapper echoes
+  the unfulfilled request.
+- **EasyGL evidence:** `EasyGLRenderer` consumes the construction argument, clamps it to
+  `GL_MAX_SAMPLES`, renders into multisampled colour/depth renderbuffers, resolves before present
+  and reports the applied count. Its inability to change the count after construction is a
+  separate reference defect rather than justification for discarding the initial request.
+- **SDL GPU evidence:** the factory's five-argument construction omits `args.multiSampleCount`;
+  `EnsureDepthStencilTexture` and `RenderToSwapchain` hard-code `SDL_GPU_SAMPLECOUNT_1`; the main
+  renderer inherits `GetMultiSampleCount()==0` and identity `GetAppliedMultiSampleCountEXT`.
+- **Likely location:** `SdlGpuRenderer` construction/factory, backbuffer colour/depth resource
+  lifecycle, swapchain pass resolve metadata, pixel-centre selection and the shared parity corpus.
+- **Acceptance/test:** clamp against the actual swapchain and depth formats; allocate matching
+  multisample colour/depth attachments; resolve each backbuffer segment to either the acquired
+  swapchain or the readback proxy while preserving A→B→A segment contents; use the applied sample
+  count in every pipeline and public report; support `GraphicsDevice::Reset` without stale
+  attachments; and prove through ordinary public calls that the applied count is honest and
+  sloped opaque geometry contains resolved partial-coverage pixels. The same source must exercise
+  EasyGL and SDL GPU, with validation diagnostics fatal.
+- **Result (2026-09-10):** the SDL GPU factory now forwards the public construction request and
+  clamps it against the actual swapchain colour format and selected combined depth/stencil format.
+  A lazily sized multisample colour texture and same-count depth texture back every backbuffer
+  pass; `SDL_GPU_STOREOP_RESOLVE_AND_STORE` resolves to either the acquired swapchain or the
+  existing readable proxy while retaining samples for a later A→RT→A backbuffer segment. Pipeline
+  selection receives the real count, and the XNA half-pixel correction is disabled for the
+  multisampled destination exactly as it already was for multisampled render targets.
+
+  `GetMultiSampleCount` and the construction-time applied mapper now expose the actual clamped
+  value. `ApplyMultiSampleCount` flushes pending work transactionally, releases only the stale
+  backbuffer colour/depth attachments, and recreates them lazily; sample count already participates
+  in every immutable pipeline key, so no unrelated pipeline rebuild is needed. The capability
+  query now uses the same clamping routine instead of falsely requiring exactly 2x support; this
+  device supports the exercised 4x colour/depth pair and the smoke profile consequently improves
+  from its recorded 29/30 to **30/30**.
+
+  The new renderer-neutral `parity_backbuffer_msaa.cpp` uses only ordinary public XNA calls and
+  passes on both EasyGL/llvmpipe and SDL GPU/RADV: request 4 reports 4, the identical opaque
+  diagonal contains one genuinely intermediate resolved pixel, an interior pixel is opaque white,
+  and an untouched pixel retains the first backbuffer segment's black clear across an intervening
+  target pass. The SDL-only second invocation runs 4x→0x→4x through `GraphicsDevice::Reset` and
+  passes all **8/8** checks, including hard versus blended edge signatures. Both SDL CTests make
+  validation diagnostics fatal and emit none. The full direct corpus now passes **32/32** on both
+  renderers: the MSAA frame differs at 506 pixels, all confined to the three implementation-defined
+  coverage boundaries and within the fixed 520-pixel policy; its programmatic coverage/interior
+  invariants are the semantic oracle. The complete SDL GPU compiled-effect/sampler unit slice also
+  passes **42/42** after the constructor-contract change.
 
 ---
 

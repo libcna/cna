@@ -14,6 +14,9 @@ set(CNA_PARITY_FIXTURE_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
 # The fixture names, without the `parity_` prefix or the `.cpp` suffix.
 set(CNA_PARITY_FIXTURES
+    # SDLGPU-85: construction-time PresentationParameters.MultiSampleCount produces a real
+    # multisample backbuffer resolve, proved by partially covered pixels on an opaque diagonal.
+    backbuffer_msaa
     # WEBGPU-155: the same mesh through declarations that differ only in element order/offset,
     # plus the semantic cases WEBGPU-156/157/158/159 each add their own leg to.
     vertex_semantics
