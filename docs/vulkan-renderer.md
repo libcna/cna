@@ -749,6 +749,22 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
+### Portable atmospheric sky (`MOD-2239q`, 2026-09-10)
+
+`CNA::Graphics::AtmosphericSky` now selects a standalone generated GLSL ES/desktop GLSL/SPIR-V
+package instead of handing every renderer its former GLSL ES string. SpriteBatch's one-texel dummy
+source remains set 0 binding 0; inverse view-projection, sun direction, turbidity and intensity use
+one matrix, one vec3 and two floats in the existing typed custom-effect blocks. The Vulkan fragment
+retains the same Rayleigh/Mie coefficients, Kasten–Young air mass and separated view-path/sun-path
+extinction as the public CPU model, and maps top-left texture UV to XNA camera NDC.
+
+The old Vulkan baseline was **8 passed / 1 source-execution skip** and logged an invalid-SPIR-V
+diagnostic on every constructed sky. It is now **10/10** on RADV and llvmpipe, matching EasyGL. The
+new non-symmetric test reconstructs the exact upper and lower world rays on the CPU and compares all
+six resulting channel values with `AtmosphericSky::radiance`, so a flat or vertically mirrored sky
+cannot satisfy it. Both Vulkan runs emit no validation message, and the standalone package has its
+own write-free reproducibility gate.
+
 ### Portable engine-effect rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239p`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its

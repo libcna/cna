@@ -10,7 +10,7 @@ pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compu
 renderers capability by capability.** Its HDR/post-process pipeline, shadows, skybox, image-based
 lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
 now implements exact HDR targets, stock-PBR IBL, portable directional/cascade/point/spot shadow
-generation and stock-effect reception, a portable skybox, seventeen portable post-process consumers,
+generation and stock-effect reception, portable cube and atmospheric skies, seventeen portable post-process consumers,
 a portable decal projector, a portable depth/normal/velocity producer, instancing and the modern
 compute/resource paths. The
 remaining post-process effects are still
@@ -211,6 +211,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Contact shadows | ✅ needs the prepass depth and a selected package | ✅ GLSL/SPIR-V package (`MOD-2239n`) | ⬜ | ⬜ — `ContactShadowPass::isSupported()` is false and the pass copies its input through, so the frame keeps the shadow map it already had |
 | Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | ✅ portable cube/spot generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Skybox | ✅ one fullscreen pass; needs `CustomEffects` | ✅ GLSL/SPIR-V package (`MOD-2238`) | ⬜ | ⬜ — where no package variant will compile the sky is skipped and logged once |
+| Atmospheric sky | ✅ per-ray Rayleigh/Mie model | ✅ GLSL/SPIR-V package (`MOD-2239q`) | ⬜ | ⬜ — where no package variant will compile the procedural sky is skipped |
 | Image-based lighting | ✅ CPU precompute + split-sum shading | ✅ stock `PbrEffect` and `SkinnedPbrEffect`, same three-product split sum (`MOD-2235`) | ⬜ | ⬜ — precompute additionally requires working cube/2D texture storage; shading needs a renderer-specific stock PBR path |
 | Materials (`PbrMaterial` ↔ `PbrEffect`) | ✅ | ✅ | ✅ | ✅ — no renderer code at all: it moves values between two existing objects |
 | Instancing / LOD / culling | ✅ | ✅ measured — `cnaext_instancing_lod_test` passes 5/5 on a real Vulkan device | ⬜ | ⬜ — `LodGroupEXT` and `FrustumCullerEXT` are renderer-free and run everywhere; `InstancedRendererEXT` needs `GraphicsCapability::Instancing` and otherwise refuses (or falls back, on request) |
@@ -245,8 +246,9 @@ The distinction is not academic: the Vulkan renderer now answers **true** to the
 sampling and IBL questions, while its language query accepts SPIR-V and refuses GLSL. Its stock
 SPIR-V programs consume the latter two states. Since `MOD-2237`, every shadow caster selects a
 portable package containing GLSL ES, desktop GLSL and SPIR-V instead of handing only GLSL source to
-the renderer; `MOD-2238` does the same for `Skybox`, `MOD-2239` starts the post-process rollout
-with chromatic aberration, `MOD-2218`/`MOD-2219` add FXAA and film grain, and `MOD-2239a` adds the
+the renderer; `MOD-2238` does the same for cube `Skybox`, `MOD-2239q` for `AtmosphericSky`, and
+`MOD-2239` starts the post-process rollout with chromatic aberration. `MOD-2218`/`MOD-2219` add
+FXAA and film grain, and `MOD-2239a` adds the
 main HDR tonemap/deband step; `MOD-2239b` adds the implemented lens-flare ghost path and
 `MOD-2239c` adds sRGB/scRGB/HDR10 texture/file encoding. The last path does not alter the
 swap-chain capability: Vulkan still truthfully advertises sRGB presentation only. `MOD-2239d`
@@ -296,7 +298,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable skybox, seventeen portable post-process consumers plus their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable cube and atmospheric skies, seventeen portable post-process consumers plus their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -1890,6 +1892,10 @@ sky.draw(view, projection, width, height);           // before the scene's geome
   it to ask what colour the sky is for an ambient or fog term without drawing one -- and it is what
   lets the physics be tested as ratios between channels and directions rather than against a
   screenshot.
+- **Portable shader package.** Since `MOD-2239q`, the procedural sky selects generated GLSL ES,
+  desktop GLSL or checked-in SPIR-V. A non-symmetric upper/lower image test reconstructs both world
+  rays on the CPU and compares every channel with `radiance()`; the suite passes **10/10** on
+  EasyGL, RADV and llvmpipe.
 - **Two lengths, doing opposite jobs.** The view path is how much lit air is being looked through,
   so a longer one is *brighter*; the sun path is what the light lost getting in, so a longer one is
   *dimmer and redder*. They must not be summed into one extinction term -- that saturates, and the

@@ -239,9 +239,10 @@ implementation tasks.**
   cascade, point and spot reception in all four stock-effect families; `MOD-2237` completes
   portable rigid/skinned directional, cascade, point-cube and spot generation through generated
   GLSL ES/desktop GLSL/SPIR-V packages, verified on RADV and llvmpipe;
-- the engine-layer skybox remains owned by the modern plan. `MOD-2238` supplies one generated
-  GLSL ES/desktop GLSL/SPIR-V package and verifies the same six-face, yaw, tint/intensity, HDR and
-  foreground-visibility contract on RADV, Vulkan llvmpipe and EasyGL;
+- the engine-layer skies remain owned by the modern plan. `MOD-2238` supplies the cube `Skybox`
+  package and verifies the same six-face, yaw, tint/intensity, HDR and foreground-visibility
+  contract on RADV, Vulkan llvmpipe and EasyGL; `MOD-2239q` packages `AtmosphericSky` and verifies
+  its per-ray scattering directly against the CPU model on all three paths;
 - engine-layer post-processing remains owned by the modern plan. `MOD-2239` begins its portable
   package rollout with chromatic aberration, `MOD-2218` adds FXAA and `MOD-2219` adds film grain,
   while `MOD-2239a` adds tonemapping/debanding, `MOD-2239b` adds lens-flare ghosts and
