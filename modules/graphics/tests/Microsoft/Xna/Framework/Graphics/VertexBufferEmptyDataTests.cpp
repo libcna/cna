@@ -23,6 +23,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
@@ -79,6 +80,7 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
+using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
@@ -286,6 +288,43 @@ TEST_F(VertexBufferEmptyDataTest, ZeroCapacityConstructionThrowsForStaticAndDyna
     EXPECT_THROW((DynamicVertexBuffer(
                      device, PositionColorDeclaration(), 0, BufferUsage::None)),
                  System::ArgumentOutOfRangeException);
+}
+
+TEST_F(VertexBufferEmptyDataTest, FreshBuffersExposeTheirAllocatedStorageBeforeFirstUpload)
+{
+    // SOFTWARE-294: XNA and FNA allocate the complete fixed-size native resource in the
+    // constructor. GetData therefore reads that allocated (content-undefined) storage rather than
+    // rejecting the buffer as "empty", and a draw is range-valid before the first SetData call.
+    VertexBuffer staticVertices(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    DynamicVertexBuffer dynamicVertices(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    IndexBuffer staticIndices(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    DynamicIndexBuffer dynamicIndices(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+
+    std::array<VertexPositionColor, 3> staticVertexReadback{};
+    std::array<VertexPositionColor, 3> dynamicVertexReadback{};
+    std::array<std::uint16_t, 3> staticIndexReadback{};
+    std::array<std::uint16_t, 3> dynamicIndexReadback{};
+    EXPECT_NO_THROW(staticVertices.GetData(staticVertexReadback.data(), 3));
+    EXPECT_NO_THROW(dynamicVertices.GetData(dynamicVertexReadback.data(), 3));
+    EXPECT_NO_THROW(staticIndices.GetData(staticIndexReadback.data(), 3));
+    EXPECT_NO_THROW(dynamicIndices.GetData(dynamicIndexReadback.data(), 3));
+
+    EXPECT_EQ(3, staticVertices.GetRenderer().GetVertexCount());
+    EXPECT_EQ(3, dynamicVertices.GetRenderer().GetVertexCount());
+    EXPECT_EQ(3, staticIndices.GetRenderer().GetIndexCount());
+    EXPECT_EQ(3, dynamicIndices.GetRenderer().GetIndexCount());
+
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    effect.Apply();
+    device.SetVertexBuffer(&staticVertices);
+    device.SetIndexBuffer(&staticIndices);
+    EXPECT_NO_THROW(device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, 3, 0, 1));
 }
 
 TEST_F(VertexBufferEmptyDataTest, ClassicCopiesRejectNullEvenWhenCountIsZero)
@@ -712,13 +751,13 @@ TEST_F(VertexBufferEmptyDataTest, WebGpuNativeScopesCoverEmptyPaddedAndFullUploa
         dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPUVertexBufferRenderer*>(
             &emptyBuffer.GetRenderer());
     ASSERT_NE(nullptr, emptyRenderer);
-    ASSERT_EQ(nullptr, emptyRenderer->Buffer());
-    ASSERT_TRUE(emptyRenderer->ShadowData().empty());
+    ASSERT_NE(nullptr, emptyRenderer->Buffer());
+    ASSERT_EQ(16u, emptyRenderer->ShadowData().size());
     emptyBuffer.SetDataRaw(nullptr, 0, 16);
-    EXPECT_EQ(nullptr, emptyRenderer->Buffer());
-    EXPECT_TRUE(emptyRenderer->ShadowData().empty());
-    EXPECT_EQ(0, emptyRenderer->GetVertexCount());
-    EXPECT_EQ(0u, emptyRenderer->Stride());
+    EXPECT_NE(nullptr, emptyRenderer->Buffer());
+    EXPECT_EQ(16u, emptyRenderer->ShadowData().size());
+    EXPECT_EQ(1, emptyRenderer->GetVertexCount());
+    EXPECT_EQ(16u, emptyRenderer->Stride());
 
     const std::array<std::uint8_t, 16> padded{
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};

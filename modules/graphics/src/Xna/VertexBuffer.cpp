@@ -144,6 +144,15 @@ namespace Microsoft::Xna::Framework::Graphics
         , bufferUsage_(bufferUsage)
         , vertexCount_(vertexCount)
     {
+        const int stride = vertexDeclaration_.getVertexStrideProperty();
+        if (stride > 0)
+        {
+            const std::size_t capacity =
+                CheckedByteCount(vertexCount_, static_cast<std::size_t>(stride), "vertexCount");
+            cpuShadow_.resize(capacity, 0U);
+            renderer_->SetVertexDeclaration(vertexDeclaration_);
+            renderer_->SetData(cpuShadow_.data(), vertexCount_, static_cast<std::size_t>(stride));
+        }
     }
 
     std::unique_ptr<CNA::Internal::Renderers::IVertexBufferRenderer>

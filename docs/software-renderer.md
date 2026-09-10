@@ -180,7 +180,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   arbitrary positive frequencies, dynamic updates, queued lifetime and ordinary/instanced state
   transitions share one renderer-neutral public test corpus. This is deterministic CPU expansion,
   not delegation to EasyGL or a GPU.
-- **Static and dynamic vertex/index buffers share EasyGL's public contract** (`SOFTWARE-109`).
+- **Static and dynamic vertex/index buffers share EasyGL's public contract** (`SOFTWARE-109`,
+  `SOFTWARE-294`). The complete fixed-size resource exists at construction, so readable buffers
+  support `GetData` and valid draw ranges before their first upload, matching XNA/FNA native
+  allocation; Software initializes the otherwise undefined bytes to zero deterministically.
   Source-window uploads, `None`/`Discard`/`NoOverwrite`, repeated mutation, typed readback,
   `BufferUsage`, missing bindings, disposed-resource guards and draw-range validation pass the same
   nine renderer-neutral fixtures on Software and EasyGL (122/122 checks each). Destination-window

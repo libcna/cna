@@ -129,6 +129,17 @@ namespace Microsoft::Xna::Framework::Graphics
         , bufferUsage_(bufferUsage)
         , indexCount_(indexCount)
     {
+        const std::size_t elementSize =
+            indexElementSize_ == IndexElementSize::ThirtyTwoBits
+                ? sizeof(std::uint32_t)
+                : sizeof(std::uint16_t);
+        const std::size_t capacity =
+            CheckedByteCount(indexCount_, elementSize, "indexCount");
+        cpuShadow_.resize(capacity, 0U);
+        if (indexElementSize_ == IndexElementSize::ThirtyTwoBits)
+            renderer_->SetData32(cpuShadow_.data(), indexCount_);
+        else
+            renderer_->SetData16(cpuShadow_.data(), indexCount_);
     }
 
     IndexBuffer::~IndexBuffer()
