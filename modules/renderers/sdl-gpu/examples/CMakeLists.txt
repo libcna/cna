@@ -203,6 +203,26 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
     endforeach()
 
+    # SDLGPU-79: exercise the ordinary public Model pipeline with the exact EasyGL oracle
+    # sources. These cover Model.Draw itself, 32-bit mesh indices, a child mesh's absolute
+    # parent-bone transform, independent effects on consecutive meshes, and the
+    # Content/AnimationPlayer/SkinnedEffect playback chain. Keeping one source per renderer
+    # prevents the model semantics from drifting.
+    foreach(model_oracle_test IN ITEMS
+            model_draw
+            model_hierarchy_child_mesh
+            model_json_reader_32bit_indices
+            model_two_meshes_effects
+            model_skinned_animation_playback)
+        cna_sdlgpu_test(cna_test_sdlgpu_easygl_oracle_${model_oracle_test}
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_${model_oracle_test}_test.cpp)
+        cna_register_renderer_test(NAME SdlGpu_EasyGLOracle_${model_oracle_test}
+            COMMAND cna_test_sdlgpu_easygl_oracle_${model_oracle_test}
+            TIMEOUT 300 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+        set_tests_properties(SdlGpu_EasyGLOracle_${model_oracle_test} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+
     # SDLGPU-78: compile the EasyGL buffer/draw corpus verbatim under SDL GPU. These programs cover
     # typed and declaration-driven user draws, nonzero vertex/index offsets, 16/32-bit indices,
     # every ordinary primitive topology, public range/resource guards, CPU readback, zero/partial

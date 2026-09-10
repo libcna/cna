@@ -120,16 +120,16 @@ easygl_graphicsdevice_clear_stencil_test.cpp,classic-xna-covered-by-existing-sdl
 easygl_graphicsdevice_reference_stencil_test.cpp,classic-xna-direct-parity,SDLGPU-58,same source passes SDL GPU
 easygl_graphicsdevicemanager_vsync_test.cpp,classic-xna-direct-parity,SDLGPU-68,same source passes SDL GPU
 easygl_handle_release_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
-easygl_instancedmodel_shader_test.cpp,classic-xna-feature-missing,SDLGPU-79,custom ShaderEffect instancing remains a named boundary; core XNA instance streams are covered by SDLGPU-60
-easygl_model_draw_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-79,Model.Draw renderer behavior
-easygl_model_hierarchy_child_mesh_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-79,model hierarchy transforms
-easygl_model_json_reader_32bit_indices_test.cpp,classic-xna-direct-parity,-,renderer-independent public API behavior
+easygl_instancedmodel_shader_test.cpp,modern-cnaext-out,-,ShaderEffect is explicitly CNAEXT; ordinary compiled Effect instancing is covered by SDLGPU-79
+easygl_model_draw_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-79,exact EasyGL Model.Draw source is registered under SDL GPU and passes
+easygl_model_hierarchy_child_mesh_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-79,exact EasyGL child-bone transform source is registered under SDL GPU and passes
+easygl_model_json_reader_32bit_indices_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-79,exact EasyGL 32-bit model-index source is registered under SDL GPU and passes
 easygl_model_json_reader_bone_hierarchy_test.cpp,classic-xna-direct-parity,-,renderer-independent public API behavior
 easygl_model_json_reader_skeleton_test.cpp,classic-xna-direct-parity,-,renderer-independent public API behavior
 easygl_model_json_reader_test.cpp,classic-xna-direct-parity,-,renderer-independent public API behavior
 easygl_model_json_reader_texture_test.cpp,classic-xna-direct-parity,-,renderer-independent public API behavior
-easygl_model_skinned_animation_playback_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-79,skinned model playback
-easygl_model_two_meshes_effects_test.cpp,classic-xna-new-sdlgpu-test-needed,SDLGPU-79,per-mesh effects
+easygl_model_skinned_animation_playback_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-79,exact EasyGL skinned playback source is registered under SDL GPU and passes
+easygl_model_two_meshes_effects_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-79,exact EasyGL per-mesh effect source is registered under SDL GPU and passes
 easygl_move_semantics_test.cpp,easygl-specific,-,OpenGL/EasyGL harness or native-resource diagnostic
 easygl_mrt_test.cpp,classic-xna-covered-by-existing-sdlgpu-test,SDLGPU-75,ordinary compiled Effect writes independent outputs to mixed-format MRTs with per-slot masks and cache transitions
 easygl_msaa_change_test.cpp,classic-xna-direct-parity,SDLGPU-68,same source passes SDL GPU

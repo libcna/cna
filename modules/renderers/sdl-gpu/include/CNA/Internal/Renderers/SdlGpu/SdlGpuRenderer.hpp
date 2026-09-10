@@ -5,6 +5,7 @@
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
 #include "mojoshader.h"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #endif
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/StockVertexSemantics.hpp"
@@ -219,7 +220,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] explicit operator bool() const noexcept { return texture != nullptr; }
     };
 
-    // The GPU handle of an ordinary uploaded texture (Texture2D, TextureCube) lives in this
+    // The GPU handle of an ordinary uploaded texture (Texture2D, Texture3D, TextureCube) lives in this
     // separately-owned struct rather than on the wrapper, for the same reason
     // SdlGpuRenderTarget2DState exists (see its own doc comment): draws are replayed at Present,
     // long after a short-lived public texture may have been destroyed, so the native handle has to
@@ -377,9 +378,15 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         CNAEXT [[nodiscard]] int GetSurfaceFormatEXT() const noexcept { return surfaceFormat_; }
 
+        /** @brief Returns this volume as a deferred-lifetime-safe sampled resource. CNAEXT. */
+        CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const
+        {
+            return {state_->texture, state_};
+        }
+
     private:
         SdlGpuRenderer* owner_ = nullptr;
-        SDL_GPUTexture* texture_ = nullptr;
+        std::shared_ptr<SdlGpuSampledTextureState> state_;
         int width_ = 0, height_ = 0, depth_ = 0;
         /// Mip levels SDL really allocated for this volume (REMED-GFX-135).
         int levelCount_ = 1;
@@ -928,6 +935,15 @@ namespace CNA::Internal::Renderers::SdlGpu
      */
     CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT ResolveSampledCubeEXT(const ITextureCubeRenderer* texture,
                                                                       const char* usage);
+
+    /**
+     * @brief Resolves a volume texture to its deferred-lifetime-safe sampled form. CNAEXT.
+     * @param texture Renderer volume texture to resolve; null yields an empty result.
+     * @param usage Public API name used in diagnostic text.
+     * @return The native volume handle plus a reference keeping its owner alive.
+     */
+    CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT ResolveSampledVolumeEXT(
+        const ITexture3DRenderer* texture, const char* usage);
 
     /** @brief `SDL_gpu`-backed vertex buffer. */
     class SdlGpuVertexBufferRenderer final : public IVertexBufferRenderer
@@ -1489,8 +1505,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             int maxMipLevel = 0;
             float lodBias = 0.0f;
             /// plans/plan_fx.md FX-091: the effect's own AddressW. Carried into the sampler cache key so
-            /// two passes differing only in W cannot share one native sampler, even though this
-            /// renderer's 2D-only compiled sampling never observes the axis itself.
+            /// two passes differing only in W cannot share one native sampler; volume compiled
+            /// samplers observe this axis directly.
             int addressW = 1;
         };
 
@@ -1508,6 +1524,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUShader* vertexShader = nullptr;
             SDL_GPUShader* pixelShader = nullptr;
             std::vector<SDL_GPUVertexAttribute> vertexAttributes;
+            std::vector<SDL_GPUVertexBufferDescription> vertexBuffers;
+            /// Dense native slot to offered source-stream index, used while capturing draw data.
+            std::vector<std::size_t> vertexStreamSourceIndices;
             std::vector<std::uint8_t> vertexUniformBytes;
             std::vector<std::uint8_t> pixelUniformBytes;
             /// MOJOSHADER_sdlGetSamplerSlots(pixelShaderData) entries -- see
@@ -1989,13 +2008,14 @@ namespace CNA::Internal::Renderers::SdlGpu
          * already-queued draw (mirrors `SpriteCommand::texture`'s own `SdlGpuSampledTextureEXT`
          * precedent).
          *
-         * First implementation scope: one vertex stream, pixel-stage 2D-texture sampling only. A
-         * compiled effect outside that scope is refused when queued (`QueueCompiledEffectDraw`)
-         * rather than silently drawing with an unbound or wrong-dimensionality sampler.
+         * All declared per-vertex/per-instance streams and pixel-stage 2D/cube/volume samplers are
+         * captured. Vertex-stage texture sampling remains explicitly refused when queued rather
+         * than silently drawing with an unbound sampler.
          */
         struct CompiledEffectDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;  ///< empty for a non-indexed draw
             bool indexed = false;
             bool index32 = false;
@@ -2005,6 +2025,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             Uint32 vertexStride = 0;
+            Uint32 instanceCount = 1;
             /// Everything BuildCompiledEffectBindingEXT captured from the applied pass -- shaders,
             /// vertex attributes, uniform bytes, sampler bindings. See its own doc comment for the
             /// unreflected-sampler-slot dummy-binding rule it applies.
@@ -2875,7 +2896,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // shader pair, vertex layout and render state, all captured at queue time (see
         // CompiledEffectDrawCommand's own doc comment for why).
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineCompiledEffect(
-            const CompiledEffectBinding& binding, Uint32 vertexStride,
+            const CompiledEffectBinding& binding,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             const RenderStateSnapshot& renderState,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
@@ -2885,16 +2906,17 @@ namespace CNA::Internal::Renderers::SdlGpu
         // resolving its sampler bindings. See CompiledEffectBinding's own doc comment.
         [[nodiscard]] CompiledEffectBinding BuildCompiledEffectBindingEXT(
             CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect& effect,
-            const std::vector<VertexElement>& declaredElements);
+            const std::vector<SdlGpuCompiledEffectVertexStreamEXT>& streams,
+            const SdlGpuSampledTextureEXT* spriteTextureOverride = nullptr);
         void QueueCompiledEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                      PrimitiveType primitive, int primitiveCount,
-                                     const GpuDrawParams& params);
+                                     const GpuDrawParams& params, int instanceCount = 1);
         // Binds the pipeline, uniforms and sampler bindings a compiled-effect draw needs -- shared
         // by IssueCompiledEffectDraw (ordinary 3D draws, its own vertex/index buffer) and
         // IssueSpriteDraw's compiled-effect branch (the shared packed sprite vertex buffer).
         void BindCompiledEffectForDrawEXT(
             SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-            const CompiledEffectBinding& binding, Uint32 vertexStride,
+            const CompiledEffectBinding& binding,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             const RenderStateSnapshot& renderState,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,

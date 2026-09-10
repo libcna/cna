@@ -349,6 +349,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
         SDL_GPUShader*& vertexShader, SDL_GPUShader*& pixelShader) const
     {
+        const std::vector<SdlGpuCompiledEffectVertexStreamEXT> streams{{
+            &declaredElements, 0, SDL_GPU_VERTEXINPUTRATE_VERTEX}};
+        return LinkAndGetShadersMultiEXT(streams, vertexShader, pixelShader).attributes;
+    }
+
+    SdlGpuCompiledEffectVertexLayoutEXT SdlGpuCompiledEffect::LinkAndGetShadersMultiEXT(
+        const std::vector<SdlGpuCompiledEffectVertexStreamEXT>& streams,
+        SDL_GPUShader*& vertexShader, SDL_GPUShader*& pixelShader) const
+    {
         vertexShader = nullptr;
         pixelShader = nullptr;
         if (context_ == nullptr)
@@ -370,8 +379,15 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "SDL_GPU compiled effect: the applied vertex shader has no reflection.");
         }
 
-        std::vector<SDL_GPUVertexAttribute> sdlAttributes =
-            BuildCompiledEffectVertexAttributes(*vertexParseData, declaredElements, /*bufferSlot=*/0);
+        SdlGpuCompiledEffectVertexLayoutEXT layout =
+            BuildCompiledEffectVertexLayoutEXT(*vertexParseData, streams);
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> declaredElements;
+        for (const SdlGpuCompiledEffectVertexStreamEXT& stream : streams)
+        {
+            if (stream.elements == nullptr) continue;
+            declaredElements.insert(
+                declaredElements.end(), stream.elements->begin(), stream.elements->end());
+        }
         std::vector<MOJOSHADER_vertexAttribute> mojoAttributes =
             BuildMojoShaderVertexAttributes(*vertexParseData, declaredElements);
 
@@ -395,7 +411,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "SDL_GPU compiled effect: the linked program has no native shader modules.");
         }
 
-        return sdlAttributes;
+        return layout;
     }
 
     void SdlGpuCompiledEffect::GetBoundShadersEXT(MOJOSHADER_sdlShaderData*& vertex,

@@ -24,24 +24,21 @@
  * both have run since FX-071, and the capability flipped with them. `SdlGpuCompiledEffectTests.cpp`
  * runs the shared suite and every drawing section of it.
  *
- * What is still refused, explicitly and by name rather than drawn with a stock shader (plans/plan_fx.md
- * section 10.5 classifies each):
+ * What is still refused, explicitly and by name rather than drawn incorrectly (plans/plan_fx.md
+ * section 10.5 classifies it):
  *
  * - a compiled effect's vertex shader sampling a texture -- renderer-wide, since no CNA renderer
  *   implements vertex-stage sampling through the public surface at all (FX-109);
- * - a 3D or cube texture bound to a compiled sampler -- compiled-Effect-specific, since this
- *   renderer samples both in its ordinary draw families (FX-110);
- * - more than one vertex stream -- renderer-wide, and `GraphicsDevice` refuses it before this
- *   layer is reached because `MultiStreamVertexInput` is false here.
  *
- * A `RenderTarget2D` IS accepted as a compiled sampler's source since FX-099; this renderer's
- * targets store rows the same way up as an uploaded texture, so nothing has to be corrected.
+ * Render targets, cube and volume textures are accepted as compiled pixel samplers. Multiple
+ * per-vertex/per-instance streams and ordinary compiled-effect instancing are supported as well.
  */
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
 #include "mojoshader.h"
@@ -211,6 +208,18 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         CNAEXT [[nodiscard]] std::vector<SDL_GPUVertexAttribute> LinkAndGetShadersEXT(
             const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+            SDL_GPUShader*& vertexShader, SDL_GPUShader*& pixelShader) const;
+
+        /**
+         * @brief Links the applied shader pair against several declared vertex streams. CNAEXT.
+         *
+         * @param streams Stream-local declarations, strides and input rates in public order.
+         * @param vertexShader Receives the linked vertex shader module.
+         * @param pixelShader Receives the linked pixel shader module.
+         * @return Native attributes, buffer descriptions and the consumed source-stream mapping.
+         */
+        CNAEXT [[nodiscard]] SdlGpuCompiledEffectVertexLayoutEXT LinkAndGetShadersMultiEXT(
+            const std::vector<SdlGpuCompiledEffectVertexStreamEXT>& streams,
             SDL_GPUShader*& vertexShader, SDL_GPUShader*& pixelShader) const;
 
     private:

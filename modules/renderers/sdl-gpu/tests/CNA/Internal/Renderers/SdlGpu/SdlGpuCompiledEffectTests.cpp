@@ -698,7 +698,8 @@ TEST(SdlGpuCompiledEffectDrawTest, DrawsASpriteWithACompiledEffect)
     EXPECT_NO_THROW(renderer->QueueSprite(
         white.GetRenderer(), nativeTexture, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White,
         0.0f, Vector2::Zero, SpriteEffects::None, 0.0f, Matrix::getIdentityProperty(),
-        /*textureFilter=*/0, /*addressU=*/1, /*addressV=*/1,
+        /*textureFilter=*/0, /*addressU=*/1, /*addressV=*/1, /*addressW=*/1,
+        /*maxAnisotropy=*/4, /*maxMipLevel=*/0, /*lodBias=*/0.0f,
         /*customEffect=*/nullptr, /*compiledEffect=*/sdlGpuEffect));
 
     EXPECT_NO_THROW(renderer->Present());
@@ -849,6 +850,64 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, QueuedVolumeSamplerRetainsTextureUntilReplay)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticSamplingEffect({
+        {Fx::SampMagFilter, Fx::FilterPoint},
+        {Fx::SampMinFilter, Fx::FilterPoint},
+        {Fx::SampMipFilter, Fx::FilterPoint},
+        {Fx::SampAddressU, Fx::AddressClamp},
+        {Fx::SampAddressV, Fx::AddressClamp},
+        {Fx::SampAddressW, Fx::AddressWrap},
+    }, 0, CNA::TestSupport::SyntheticSamplerKind::Sampler3D));
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+
+    auto volume = std::make_unique<Texture3D>(
+        device, 2, 2, 2, /*mipMap=*/false, SurfaceFormat::Color);
+    const Color texels[8] = {
+        Color(255, 0, 0, 255), Color(255, 0, 0, 255),
+        Color(255, 0, 0, 255), Color(255, 0, 0, 255),
+        Color(0, 0, 255, 255), Color(0, 0, 255, 255),
+        Color(0, 0, 255, 255), Color(0, 0, 255, 255),
+    };
+    volume->SetData(texels, 8);
+    effect.getParametersProperty()["FxTexture"]->SetValue(volume.get());
+
+    CNA::TestSupport::SamplingQuadVertexXYZ quad[6];
+    // W=1.25 must wrap to the first (red) slice. A dropped/hard-coded AddressW clamps to the
+    // second (blue) slice, so this is also the missing end-to-end AddressW discriminator.
+    CNA::TestSupport::FillSamplingQuadXYZ(quad, 0.5f, 0.5f, 1.25f);
+    const VertexDeclaration declaration = CNA::TestSupport::SamplingQuadDeclarationXYZ();
+    RenderTarget2D target(device, 8, 8);
+    device.SetRenderTarget(&target);
+    device.Clear(Color(9, 19, 29, 255));
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    device.DrawUserPrimitives(
+        PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
+
+    // SDL_GPU submits the draw only when the target is consumed below. Destroying the public
+    // object here therefore proves that the queued sampler binding, rather than the wrapper,
+    // owns the native volume until replay completes.
+    volume.reset();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    Color centre(0, 0, 0, 0);
+    const Rectangle probe(4, 4, 1, 1);
+    target.GetData(0, &probe, &centre, 0, 1);
+    EXPECT_NEAR(centre.getRProperty(), 255, 3);
+    EXPECT_NEAR(centre.getGProperty(), 0, 3);
+    EXPECT_NEAR(centre.getBProperty(), 0, 3);
 }
 
 TEST(SdlGpuCompiledEffectDrawTest, SharedManyDrawsContract)
