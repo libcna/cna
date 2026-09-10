@@ -10,7 +10,7 @@ pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compu
 renderers capability by capability.** Its HDR/post-process pipeline, shadows, skybox, image-based
 lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
 now implements exact HDR targets, stock-PBR IBL, portable directional/cascade/point/spot shadow
-generation and stock-effect reception, a portable skybox, eight portable post-process consumers,
+generation and stock-effect reception, a portable skybox, nine portable post-process consumers,
 instancing and the modern compute/resource paths. The remaining post-process effects are still
 source-authored shader gaps. The design is
 [`../CNAEXT.md`](../misc/CNAEXT.md); the task backlog and its evidence trail are
@@ -248,7 +248,8 @@ main HDR tonemap/deband step; `MOD-2239b` adds the implemented lens-flare ghost 
 `MOD-2239c` adds sRGB/scRGB/HDR10 texture/file encoding. The last path does not alter the
 swap-chain capability: Vulkan still truthfully advertises sRGB presentation only. `MOD-2239d`
 adds edge-adaptive spatial upscaling and neighbourhood-clamped sharpening; `MOD-2239e` adds the
-occlusion-aware light-shaft radial walk. The remaining
+occlusion-aware light-shaft radial walk; `MOD-2239f` adds Bloom's extract, separable blur,
+progressive pyramid upsample and final composite. The remaining
 post-process paths still provide source alone and remain unavailable on Vulkan. Portable packages
 use the language/stage query to select a payload;
 subsystems still ask their own semantic capability before promising a visible result.
@@ -286,7 +287,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable skybox, eight portable post-process consumers (including light shafts, texture/file HDR encoding and spatial upscaling), directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
+| `Vulkan` | 🟨 measured | Verified on RADV and llvmpipe: exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable skybox, nine portable post-process consumers (including Bloom, light shafts, texture/file HDR encoding and spatial upscaling), directional/cascade/point/spot shadow generation and reception, compute/storage resources, indirect draws and GPU timers work. Remaining source-authored post-process paths are unavailable because Vulkan consumes packaged SPIR-V rather than this layer's GLSL; presentation remains sRGB-only. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -716,6 +717,14 @@ so the result is slightly blockier — the alternative, a nearest sample, makes 
 stair-step. The pass asks `GraphicsCapability::HalfFloatTextureLinearFiltering` once at construction
 and takes the fallback silently; there is no setting for it, because there is no reason to prefer the
 worse path where the better one exists.
+
+Since `MOD-2239f`, all four stages select generated GLSL ES/desktop GLSL on EasyGL or SPIR-V on
+Vulkan. The two stages that read both the current level and a smaller bloom target declare the
+second image explicitly and clamp its sampler; the application's previous sampler slot is restored
+after the draws capture it. This detail is part of correctness, not only edge polish: wrapping a
+highlight across the frame makes a one-level pyramid appear to have maximum reach. The shared
+20-case pass/quality/pyramid oracle runs without shader skips on EasyGL, RADV and Vulkan llvmpipe,
+including HDR retention and a top/bottom-sensitive uploaded-source fixture.
 
 ### Volumetrics: air you can see, and three passes that do it differently
 

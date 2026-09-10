@@ -7,6 +7,18 @@
 
 namespace CNA::Graphics::detail
 {
+    /** @brief Creates the portable bloom-extraction fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateBloomExtractShaderPackage();
+
+    /** @brief Creates the portable bloom-blur fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateBloomBlurShaderPackage();
+
+    /** @brief Creates the portable bloom-upsample fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateBloomUpsampleShaderPackage();
+
+    /** @brief Creates the portable bloom-composite fullscreen shader package. */
+    [[nodiscard]] ShaderPackageEXT CreateBloomCombineShaderPackage();
+
     /** @brief Creates the portable chromatic-aberration fullscreen shader package. */
     [[nodiscard]] ShaderPackageEXT CreateChromaticAberrationShaderPackage();
 

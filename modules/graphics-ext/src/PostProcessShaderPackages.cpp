@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace CNA::Graphics::detail
@@ -38,10 +39,18 @@ namespace CNA::Graphics::detail
 
         [[nodiscard]] ShaderPackageEXT MakeFullscreenPackage(
             const TextStage& esFragment, const TextStage& desktopFragment,
-            const SpirVStage& vulkanFragment)
+            const SpirVStage& vulkanFragment,
+            std::vector<ShaderBindingRequirementEXT> additionalRequirements = {})
         {
             using ShaderCodeEXT = CNA::Graphics::ShaderCodeEXT;
             using namespace CNA::Graphics::detail::PostProcessGenerated;
+            std::vector<ShaderBindingRequirementEXT> requirements;
+            requirements.reserve(additionalRequirements.size() + 1);
+            requirements.emplace_back(
+                "texture1", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment);
+            for (ShaderBindingRequirementEXT& requirement : additionalRequirements)
+                requirements.push_back(std::move(requirement));
             return ShaderPackageEXT(
                 {
                     ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
@@ -71,10 +80,64 @@ namespace CNA::Graphics::detail
                                           vulkanFragment.byteSize)),
                 },
                 {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
-                {ShaderBindingRequirementEXT(
-                    "texture1", 0, ShaderBindingTypeEXT::SampledTexture2D,
-                    CNA::ShaderStageEXT::Fragment)});
+                std::move(requirements));
         }
+    }
+
+    ShaderPackageEXT CreateBloomExtractShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kBloomExtractEsFragmentSource, "post_process/bloom_extract.es.frag.glsl"},
+            {kBloomExtractDesktopFragmentSource,
+             "post_process/bloom_extract.desktop.frag.glsl"},
+            {kBloomExtractVulkanFragmentSpirV,
+             kBloomExtractVulkanFragmentSpirVByteSize,
+             "post_process/bloom_extract.vulkan.frag.spv"});
+    }
+
+    ShaderPackageEXT CreateBloomBlurShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kBloomBlurEsFragmentSource, "post_process/bloom_blur.es.frag.glsl"},
+            {kBloomBlurDesktopFragmentSource,
+             "post_process/bloom_blur.desktop.frag.glsl"},
+            {kBloomBlurVulkanFragmentSpirV,
+             kBloomBlurVulkanFragmentSpirVByteSize,
+             "post_process/bloom_blur.vulkan.frag.spv"});
+    }
+
+    ShaderPackageEXT CreateBloomUpsampleShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kBloomUpsampleEsFragmentSource,
+             "post_process/bloom_upsample.es.frag.glsl"},
+            {kBloomUpsampleDesktopFragmentSource,
+             "post_process/bloom_upsample.desktop.frag.glsl"},
+            {kBloomUpsampleVulkanFragmentSpirV,
+             kBloomUpsampleVulkanFragmentSpirVByteSize,
+             "post_process/bloom_upsample.vulkan.frag.spv"},
+            {ShaderBindingRequirementEXT(
+                "uSmallerSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)});
+    }
+
+    ShaderPackageEXT CreateBloomCombineShaderPackage()
+    {
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        return MakeFullscreenPackage(
+            {kBloomCombineEsFragmentSource,
+             "post_process/bloom_combine.es.frag.glsl"},
+            {kBloomCombineDesktopFragmentSource,
+             "post_process/bloom_combine.desktop.frag.glsl"},
+            {kBloomCombineVulkanFragmentSpirV,
+             kBloomCombineVulkanFragmentSpirVByteSize,
+             "post_process/bloom_combine.vulkan.frag.spv"},
+            {ShaderBindingRequirementEXT(
+                "uBloomSampler", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                CNA::ShaderStageEXT::Fragment)});
     }
 
     ShaderPackageEXT CreateChromaticAberrationShaderPackage()

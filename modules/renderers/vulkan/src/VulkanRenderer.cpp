@@ -6493,7 +6493,10 @@ namespace CNA::Internal::Renderers::Vulkan
                     }
                     view = storage->GetSampledImageViewEXT();
                 } else {
-                    auto* vk = dynamic_cast<VulkanTextureRenderer*>(
+                    // Texture2D and RenderTarget2D have different concrete renderer types but
+                    // both implement this sampled-view contract. Testing only the upload-texture
+                    // type silently substituted white whenever an effect bound a render target.
+                    auto* vk = dynamic_cast<IVulkanSamplable*>(
                         boundTextures_[static_cast<std::size_t>(unit)]);
                     view = (vk != nullptr) ? vk->GetVkImageView() : owner_->defaultWhiteView_;
                 }

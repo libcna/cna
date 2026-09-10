@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239e`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, `MOD-2219`, `MOD-2239a`–`MOD-2239f`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -819,6 +819,20 @@ top-left throughout. The suite changes from three Vulkan shader-execution skips 
 EasyGL, RADV and llvmpipe, proving clear-path accumulation, the occluder's dark shaft shape,
 off-screen falloff and exact disabled output. The complete portable post-process regression set is
 now **56/56** on all three paths, with no Khronos validation messages.
+
+`BloomPass` is the ninth consumer and uses four packages: soft-knee extraction, the horizontal and
+vertical use of one separable Gaussian blur, progressive upsample/add, and final scene composite.
+Every stage uses the existing `vec4` push slot; the two dual-input stages use the established set 1
+binding 1 sampled-texture route. The first Vulkan image was uniformly saturated and exposed a
+renderer defect: that route recognized only an uploaded `VulkanTextureRenderer`, so binding a
+`RenderTarget2D` silently selected the white fallback. It now consumes the common
+`IVulkanSamplable` view implemented by both resource kinds. The pass also explicitly clamp-addresses
+its secondary sampler and restores the application's prior slot after draw capture; GLSL maps the
+independent primary/secondary render-target row spaces while Vulkan remains top-left throughout.
+The previous Vulkan run's 10 passes and 9 shader-execution skips become **20/20** on RADV and
+llvmpipe, matching EasyGL and covering the real multi-level halo, HDR retention, exact zero
+intensity, resource reuse and an asymmetric uploaded-source orientation check. The complete portable
+post-process regression set is now **76/76** on all three paths, with no Khronos validation messages.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.
