@@ -704,6 +704,8 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<uint8_t>& getMipBuffer(int level);
         const std::vector<uint8_t>* getMipBufferConst(int level) const;
         [[nodiscard]] int getBytesPerTexel() const;
+        void ValidateCopyArgumentsEXT(const void* data, int startIndex,
+                                      int elementCount) const;
         void SetDataBytes(int level, const Rectangle* rect, const std::uint8_t* data,
                           int startIndex, int elementCount, int elementBytes);
         void GetDataBytes(int level, const Rectangle* rect, std::uint8_t* data,

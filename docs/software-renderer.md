@@ -300,6 +300,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   format. `elementCount * elementWidth` must equal the exact selected region storage, so neither a
   short nor a surplus count is silently accepted. Shared Software/EasyGL tests include a custom
   structure, nonzero array windows and four scalar floats composing one `Vector4` texel.
+- **Texture2D transfer failures expose XNA exception families** (`SOFTWARE-279`). Null data reports
+  `ArgumentNullException("data")`; negative source/destination indices and nonpositive or
+  overflowing element counts report named `ArgumentOutOfRangeException`; and invalid ordinary or
+  block-compressed rectangles report `ArgumentException("rect")`. This validation is shared by
+  Color, byte, packed, float/vector and application-defined value types and runs before caller
+  pointer arithmetic.
 - **Every XNA-permitted ordinary `TextureCube` format has the same exact storage and sampling**
   (`SOFTWARE-145`, `SOFTWARE-149`, `SOFTWARE-150`). Each of the six faces and every declared mip
   independently retains Color, DXT1/3/5, normalized-integer, binary32 or binary16 bytes. Typed

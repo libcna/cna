@@ -18,6 +18,7 @@ using namespace CNA::Testing::Renderers;
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <typeinfo>
 #include <vector>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -37,6 +38,7 @@ using namespace CNA::Testing::Renderers;
 #include "System/IO/MemoryStream.hpp"
 #include "System/Environment.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -55,6 +57,25 @@ using System::IO::MemoryStream;
 namespace
 {
     using CNA::Internal::Renderers::ITextureRenderer;
+
+    template <typename TException, typename TCallable>
+    void ExpectExactNamedException(TCallable&& callable, const char* parameterName)
+    {
+        try
+        {
+            callable();
+            FAIL() << "expected " << typeid(TException).name();
+        }
+        catch (const TException& exception)
+        {
+            EXPECT_EQ(typeid(exception), typeid(TException));
+            EXPECT_EQ(exception.getParamNameProperty(), parameterName);
+        }
+        catch (...)
+        {
+            FAIL() << "unexpected exception type; expected " << typeid(TException).name();
+        }
+    }
 
     class RecordingMipTextureRenderer final : public ITextureRenderer
     {
@@ -577,27 +598,14 @@ TEST(Texture2DMipLevelValidationTest, ExistingDataAndStartIndexValidationStillPr
     Texture2D texture = Texture2D::CreateWithRendererForTests(13, 7, renderer);
     Color value(1, 2, 3, 4);
 
-    EXPECT_THROW(texture.GetData(kLevelCount, nullptr, nullptr, -1, 0), std::invalid_argument);
-    EXPECT_THROW(texture.SetData(kLevelCount, nullptr, nullptr, -1, 0), std::invalid_argument);
-
-    try
-    {
-        texture.GetData(kLevelCount, nullptr, &value, -1, 1);
-        FAIL() << "GetData accepted a negative startIndex";
-    }
-    catch (const std::out_of_range& e)
-    {
-        EXPECT_NE(std::string(e.what()).find("startIndex"), std::string::npos);
-    }
-    try
-    {
-        texture.SetData(kLevelCount, nullptr, &value, -1, 1);
-        FAIL() << "SetData accepted a negative startIndex";
-    }
-    catch (const std::out_of_range& e)
-    {
-        EXPECT_NE(std::string(e.what()).find("startIndex"), std::string::npos);
-    }
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { texture.GetData(kLevelCount, nullptr, nullptr, -1, 0); }, "data");
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { texture.SetData(kLevelCount, nullptr, nullptr, -1, 0); }, "data");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { texture.GetData(kLevelCount, nullptr, &value, -1, 1); }, "dataIndex");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { texture.SetData(kLevelCount, nullptr, &value, -1, 1); }, "dataIndex");
     EXPECT_EQ(renderer->getDataCalls, 0);
     EXPECT_EQ(renderer->levelZeroUpdates, 0);
     EXPECT_TRUE(renderer->levelUpdates.empty());
@@ -691,10 +699,14 @@ TEST_F(UnsupportedFormatConstructionTest, CompressedRegionEndpointOverflowThrows
     const Rectangle overflowingX(std::numeric_limits<int>::max(), 0, 4, 4);
     const Rectangle overflowingY(0, std::numeric_limits<int>::max(), 4, 4);
 
-    EXPECT_THROW(texture.SetData(0, &overflowingX, bytes.data(), 0, 8), std::out_of_range);
-    EXPECT_THROW(texture.SetData(0, &overflowingY, bytes.data(), 0, 8), std::out_of_range);
-    EXPECT_THROW(texture.GetData(0, &overflowingX, bytes.data(), 0, 8), std::out_of_range);
-    EXPECT_THROW(texture.GetData(0, &overflowingY, bytes.data(), 0, 8), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { texture.SetData(0, &overflowingX, bytes.data(), 0, 8); }, "rect");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { texture.SetData(0, &overflowingY, bytes.data(), 0, 8); }, "rect");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { texture.GetData(0, &overflowingX, bytes.data(), 0, 8); }, "rect");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { texture.GetData(0, &overflowingY, bytes.data(), 0, 8); }, "rect");
 }
 
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
@@ -1191,17 +1203,19 @@ TEST(Texture2DTest, CopyAssignmentPreservesFormat)
 // GetData(Color*, int startIndex, int elementCount) — error guards
 // -----------------------------------------------------------------------
 
-TEST(Texture2DTest, GetDataNullPtrThrowsInvalidArgument)
+TEST(Texture2DTest, GetDataNullPtrThrowsNamedArgumentNullException)
 {
     Texture2D tex;
-    EXPECT_THROW(tex.GetData(nullptr, 0, 1), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.GetData(nullptr, 0, 1); }, "data");
 }
 
-TEST(Texture2DTest, GetDataZeroElementCountThrowsInvalidArgument)
+TEST(Texture2DTest, GetDataZeroElementCountThrowsNamedArgumentOutOfRangeException)
 {
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
-    EXPECT_THROW(tex.GetData(buf, 0, 0), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { tex.GetData(buf, 0, 0); }, "elementCount");
 }
 
 TEST(Texture2DTest, GetDataNoCpuPixelsThrowsRuntimeError)
@@ -1218,14 +1232,16 @@ TEST(Texture2DTest, GetDataNegativeStartIndexThrowsOutOfRange)
 {
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
-    EXPECT_THROW(tex.GetData(buf, -1, 1), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { tex.GetData(buf, -1, 1); }, "dataIndex");
 }
 
 // 2-param overload delegates to 3-param; same guards apply
-TEST(Texture2DTest, GetData2ParamNullPtrThrowsInvalidArgument)
+TEST(Texture2DTest, GetData2ParamNullPtrThrowsNamedArgumentNullException)
 {
     Texture2D tex;
-    EXPECT_THROW(tex.GetData(nullptr, 1), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.GetData(nullptr, 1); }, "data");
 }
 
 TEST(Texture2DTest, GetData2ParamNoCpuPixelsThrowsRuntimeError)
@@ -1239,17 +1255,19 @@ TEST(Texture2DTest, GetData2ParamNoCpuPixelsThrowsRuntimeError)
 // GetData(int level, const Rectangle*, Color*, int, int) — error guards
 // -----------------------------------------------------------------------
 
-TEST(Texture2DTest, GetDataLevelNullDataThrowsInvalidArgument)
+TEST(Texture2DTest, GetDataLevelNullDataThrowsNamedArgumentNullException)
 {
     Texture2D tex;
-    EXPECT_THROW(tex.GetData(0, nullptr, nullptr, 0, 1), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.GetData(0, nullptr, nullptr, 0, 1); }, "data");
 }
 
-TEST(Texture2DTest, GetDataLevelZeroElementCountThrowsInvalidArgument)
+TEST(Texture2DTest, GetDataLevelZeroElementCountThrowsNamedArgumentOutOfRangeException)
 {
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
-    EXPECT_THROW(tex.GetData(0, nullptr, buf, 0, 0), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { tex.GetData(0, nullptr, buf, 0, 0); }, "elementCount");
 }
 
 TEST(Texture2DTest, GetDataNegativeLevelThrowsOutOfRange)
@@ -1267,7 +1285,8 @@ TEST(Texture2DTest, GetDataLevelNegativeStartIndexThrowsOutOfRange)
 {
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
-    EXPECT_THROW(tex.GetData(0, nullptr, buf, -1, 1), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { tex.GetData(0, nullptr, buf, -1, 1); }, "dataIndex");
 }
 
 TEST(Texture2DTest, GetDataLevelNoCpuPixelsThrowsRuntimeError)
@@ -1283,19 +1302,21 @@ TEST(Texture2DTest, GetDataLevelNoCpuPixelsThrowsRuntimeError)
 // public argument contract as the full level/rectangle overload.
 // -----------------------------------------------------------------------
 
-TEST(Texture2DTest, SetDataSimpleWithNullDataThrowsInvalidArgument)
+TEST(Texture2DTest, SetDataSimpleWithNullDataThrowsNamedArgumentNullException)
 {
     GraphicsDevice device;
     Texture2D texture(device, 1, 1);
-    EXPECT_THROW(texture.SetData(nullptr, 1), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { texture.SetData(nullptr, 1); }, "data");
 }
 
-TEST(Texture2DTest, SetDataSimpleWithZeroCountThrowsInvalidArgument)
+TEST(Texture2DTest, SetDataSimpleWithZeroCountThrowsNamedArgumentOutOfRangeException)
 {
     GraphicsDevice device;
     Texture2D texture(device, 1, 1);
     Color value(0, 0, 0, 0);
-    EXPECT_THROW(texture.SetData(&value, 0), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { texture.SetData(&value, 0); }, "elementCount");
 }
 
 TEST(Texture2DTest, TransfersAfterDisposeThrowObjectDisposedException)
@@ -1321,24 +1342,27 @@ TEST(Texture2DTest, TransfersAfterDisposeThrowObjectDisposedException)
 // safe to test even on a default-constructed (zero-sized) Texture2D.
 // -----------------------------------------------------------------------
 
-TEST(Texture2DTest, SetDataLevelNullDataThrowsInvalidArgument)
+TEST(Texture2DTest, SetDataLevelNullDataThrowsNamedArgumentNullException)
 {
     Texture2D tex;
-    EXPECT_THROW(tex.SetData(0, nullptr, nullptr, 0, 1), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.SetData(0, nullptr, nullptr, 0, 1); }, "data");
 }
 
-TEST(Texture2DTest, SetDataLevelZeroElementCountThrowsInvalidArgument)
+TEST(Texture2DTest, SetDataLevelZeroElementCountThrowsNamedArgumentOutOfRangeException)
 {
     Texture2D tex;
     Color buf[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
-    EXPECT_THROW(tex.SetData(0, nullptr, buf, 0, 0), std::invalid_argument);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { tex.SetData(0, nullptr, buf, 0, 0); }, "elementCount");
 }
 
 TEST(Texture2DTest, SetDataLevelNegativeStartIndexThrowsOutOfRange)
 {
     Texture2D tex;
     Color buf[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
-    EXPECT_THROW(tex.SetData(0, nullptr, buf, -1, 1), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { tex.SetData(0, nullptr, buf, -1, 1); }, "dataIndex");
 }
 
 TEST(Texture2DTest, SetDataNegativeLevelThrowsOutOfRange)
@@ -1357,17 +1381,13 @@ TEST(Texture2DTest, SetDataLevelExtraElementsThrowsArgumentException)
     EXPECT_THROW(tex.SetData(0, nullptr, buf, 0, 2), System::ArgumentException);
 }
 
-TEST(Texture2DTest, SetDataLevelInsufficientElementsThrowsOutOfRange)
+TEST(Texture2DTest, SetDataLevelInvalidRectangleThrowsNamedArgumentException)
 {
-    // Default texture: mipDim(0,0)=1, effective region is 1×1 = 1 pixel.
-    // Providing elementCount=0 is rejected by the elementCount <= 0 guard above,
-    // but that already throws invalid_argument. Rectangle(0,0,2,1) also exceeds
-    // levelW=1 (x+w=2>1), so the rect-bounds guard fires first here — both guards
-    // throw std::out_of_range, so this still exercises the same failure mode.
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
     const Rectangle wide(0, 0, 2, 1);
-    EXPECT_THROW(tex.SetData(0, &wide, buf, 0, 1), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, &wide, buf, 0, 1); }, "rect");
 }
 
 // -----------------------------------------------------------------------
@@ -1379,40 +1399,44 @@ TEST(Texture2DTest, SetDataLevelInsufficientElementsThrowsOutOfRange)
 // the CPU-side mip buffer (found in the Task 261 Texture2D audit).
 // -----------------------------------------------------------------------
 
-TEST(Texture2DTest, SetDataLevelRectXOutOfBoundsThrowsOutOfRange)
+TEST(Texture2DTest, SetDataLevelRectXOutOfBoundsThrowsNamedArgumentException)
 {
     // Default texture: levelW=levelH=1 (mipDim clamp). x+w=1+1=2 > levelW=1.
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
     const Rectangle rect(1, 0, 1, 1);
-    EXPECT_THROW(tex.SetData(0, &rect, buf, 0, 1), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, &rect, buf, 0, 1); }, "rect");
 }
 
-TEST(Texture2DTest, SetDataLevelRectYOutOfBoundsThrowsOutOfRange)
+TEST(Texture2DTest, SetDataLevelRectYOutOfBoundsThrowsNamedArgumentException)
 {
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
     const Rectangle rect(0, 1, 1, 1);
-    EXPECT_THROW(tex.SetData(0, &rect, buf, 0, 1), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, &rect, buf, 0, 1); }, "rect");
 }
 
-TEST(Texture2DTest, SetDataLevelRectNegativeXThrowsOutOfRange)
+TEST(Texture2DTest, SetDataLevelRectNegativeXThrowsNamedArgumentException)
 {
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
     const Rectangle rect(-1, 0, 1, 1);
-    EXPECT_THROW(tex.SetData(0, &rect, buf, 0, 1), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, &rect, buf, 0, 1); }, "rect");
 }
 
-TEST(Texture2DTest, SetDataLevelRectNegativeYThrowsOutOfRange)
+TEST(Texture2DTest, SetDataLevelRectNegativeYThrowsNamedArgumentException)
 {
     Texture2D tex;
     Color buf[1] = { Color(0,0,0,0) };
     const Rectangle rect(0, -1, 1, 1);
-    EXPECT_THROW(tex.SetData(0, &rect, buf, 0, 1), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, &rect, buf, 0, 1); }, "rect");
 }
 
-TEST(Texture2DTest, SetDataLevelRectZeroExtentThrowsOutOfRange)
+TEST(Texture2DTest, SetDataLevelRectZeroExtentThrowsNamedArgumentException)
 {
     GraphicsDevice device;
     Texture2D texture(device, 2, 2);
@@ -1420,21 +1444,24 @@ TEST(Texture2DTest, SetDataLevelRectZeroExtentThrowsOutOfRange)
     const Rectangle zeroWidth(0, 0, 0, 1);
     const Rectangle zeroHeight(0, 0, 1, 0);
 
-    EXPECT_THROW(texture.SetData(0, &zeroWidth, &value, 0, 1), std::out_of_range);
-    EXPECT_THROW(texture.SetData(0, &zeroHeight, &value, 0, 1), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { texture.SetData(0, &zeroWidth, &value, 0, 1); }, "rect");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { texture.SetData(0, &zeroHeight, &value, 0, 1); }, "rect");
 }
 
-TEST(Texture2DTest, SetDataLevelRectNegativeExtentThrowsOutOfRange)
+TEST(Texture2DTest, SetDataLevelRectNegativeExtentThrowsNamedArgumentException)
 {
     GraphicsDevice device;
     Texture2D texture(device, 2, 2);
     Color value(1, 2, 3, 4);
     const Rectangle negativeExtents(1, 1, -1, -1);
 
-    EXPECT_THROW(texture.SetData(0, &negativeExtents, &value, 0, 1), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { texture.SetData(0, &negativeExtents, &value, 0, 1); }, "rect");
 }
 
-TEST(Texture2DTest, GetDataLevelRectNonPositiveExtentThrowsOutOfRange)
+TEST(Texture2DTest, GetDataLevelRectNonPositiveExtentThrowsNamedArgumentException)
 {
     GraphicsDevice device;
     Texture2D texture(device, 2, 2);
@@ -1444,9 +1471,60 @@ TEST(Texture2DTest, GetDataLevelRectNonPositiveExtentThrowsOutOfRange)
     const Rectangle zeroWidth(0, 0, 0, 1);
     const Rectangle negativeExtents(1, 1, -1, -1);
 
-    EXPECT_THROW(texture.GetData(0, &zeroWidth, &destination, 0, 1), std::out_of_range);
-    EXPECT_THROW(texture.GetData(0, &negativeExtents, &destination, 0, 1), std::out_of_range);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { texture.GetData(0, &zeroWidth, &destination, 0, 1); }, "rect");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { texture.GetData(0, &negativeExtents, &destination, 0, 1); }, "rect");
     EXPECT_EQ(destination, Color(9, 8, 7, 6));
+}
+
+TEST(Texture2DTest, EveryElementRouteUsesTheClassicNamedCopyArgumentExceptions)
+{
+    GraphicsDevice device;
+    Texture2D colorTexture(device, 1, 1, false, SurfaceFormat::Color);
+    Texture2D packedTexture(device, 1, 1, false, SurfaceFormat::Bgr565);
+    Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565 packed;
+
+    struct RawWord
+    {
+        std::uint32_t value;
+    };
+    static_assert(std::is_trivially_copyable_v<RawWord>);
+    RawWord raw{};
+    std::uint8_t byte = 0;
+
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { packedTexture.SetData(static_cast<const decltype(packed)*>(nullptr), 1); }, "data");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { packedTexture.SetData(0, nullptr, &packed, -1, 1); }, "dataIndex");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { packedTexture.GetData(&packed, 0, 0); }, "elementCount");
+
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { colorTexture.SetData(static_cast<const RawWord*>(nullptr), 1); }, "data");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { colorTexture.SetData(0, nullptr, &raw, -1, 1); }, "dataIndex");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { colorTexture.GetData(&raw, 0, 0); }, "elementCount");
+
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { colorTexture.SetData(static_cast<const std::uint8_t*>(nullptr), 4); }, "data");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { colorTexture.SetData(0, nullptr, &byte, -1, 4); }, "dataIndex");
+    ExpectExactNamedException<System::ArgumentOutOfRangeException>(
+        [&] { colorTexture.GetData(&byte, 0, 0); }, "elementCount");
+}
+
+TEST(Texture2DTest, NullDataPrecedesOtherInvalidCopyArgumentsAndRectangle)
+{
+    Texture2D texture;
+    const Rectangle invalid(-1, -1, 0, 0);
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { texture.SetData(0, &invalid, static_cast<const std::uint16_t*>(nullptr), -1, 0); },
+        "data");
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { texture.GetData(0, &invalid, static_cast<std::uint16_t*>(nullptr), -1, 0); },
+        "data");
 }
 
 TEST(Texture2DTest, SetDataLevelRectWithinBoundsDoesNotThrow)
