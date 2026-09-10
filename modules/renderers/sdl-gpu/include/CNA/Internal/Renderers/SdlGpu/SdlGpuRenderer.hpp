@@ -186,6 +186,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         void* context = nullptr;
         void (*resourceEvent)(void* context, SdlGpuResourceKindEXT resource,
                               SdlGpuResourceEventEXT event) noexcept = nullptr;
+        /** @brief Forces the device-unavailable depth/stencil branch for capability testing. */
+        bool forceNoDepthStencilFormat = false;
     };
 
     /**
@@ -2109,6 +2111,34 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @return True only when the corresponding public operation is implemented.
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        /**
+         * @brief Reports whether the default framebuffer has a usable combined depth/stencil format.
+         *
+         * @return True when the device exposed a format from which the backing attachment can be
+         *         created.
+         */
+        [[nodiscard]] bool SupportsDepthStencil() const override
+        {
+            return depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID;
+        }
+        /**
+         * @brief Reports whether the default framebuffer has a usable depth plane.
+         *
+         * @return True when the renderer can create its combined depth/stencil attachment.
+         */
+        [[nodiscard]] bool SupportsDepthBuffer() const override
+        {
+            return SupportsDepthStencil();
+        }
+        /**
+         * @brief Reports whether the default framebuffer has a usable stencil plane.
+         *
+         * @return True when the renderer can create its combined depth/stencil attachment.
+         */
+        [[nodiscard]] bool SupportsStencilBuffer() const override
+        {
+            return SupportsDepthStencil();
+        }
 
         /** @brief Returns the eight streams the stock semantic resolver can consume faithfully. */
         [[nodiscard]] int GetMaxVertexStreams() const override

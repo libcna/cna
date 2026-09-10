@@ -364,6 +364,48 @@ namespace
                   "multiple renderer teardown preserves both caller-owned windows");
         }
 
+        void ExerciseNoDepthStencilCapability(SDL_Window* window)
+        {
+            ResourceTracker tracker;
+            const SdlGpuTestHooksEXT hooks{
+                SdlGpuFailurePointEXT::None, &tracker, &ResourceTracker::OnResource,
+                /*forceNoDepthStencilFormat=*/true};
+            bool usable = false;
+            try
+            {
+                {
+                    SdlGpuRenderer renderer(
+                        window, 64, 64, CnaPresentationMode::FixedHeightDynamicWidth, 0,
+                        hooks);
+                    const IGraphicsRenderer& contract = renderer;
+                    Check(!contract.SupportsDepthStencil(),
+                          "missing native format makes the aggregate depth/stencil answer false");
+                    Check(!contract.SupportsDepthBuffer(),
+                          "missing native format makes the depth-plane answer false");
+                    Check(!contract.SupportsStencilBuffer(),
+                          "missing native format makes the stencil-plane answer false");
+                    Check(!renderer.SupportsCapability(CNA::GraphicsCapability::DepthStencilBuffer),
+                          "legacy depth/stencil capability agrees with the contract answer");
+                    Check(!renderer.SupportsCapability(CNA::GraphicsCapability::StencilBuffer),
+                          "legacy stencil capability agrees with the contract answer");
+
+                    renderer.ClearColorDepthAndStencil(
+                        0.05f, 0.10f, 0.15f, 1.0f, 0.25f, 7);
+                    renderer.Present();
+                    usable = true;
+                }
+            }
+            catch (const std::exception& exception)
+            {
+                std::printf("       unexpected depthless-device exception: %s\n",
+                            exception.what());
+            }
+            Check(usable,
+                  "depth/stencil-unavailable renderer remains usable for color presentation");
+            Check(tracker.Balanced(),
+                  "depth/stencil-unavailable renderer destroys every resource exactly once");
+        }
+
     private:
         int checks_ = 0;
         int failures_ = 0;
@@ -413,6 +455,7 @@ int main()
         firstWindow, SdlGpuFailurePointEXT::DefaultFlatNormalTextureCreation,
         "default flat-normal texture creation");
     test.ExerciseIndependentInstances(firstWindow, secondWindow);
+    test.ExerciseNoDepthStencilCapability(firstWindow);
 
     SDL_DestroyWindow(secondWindow);
     SDL_DestroyWindow(firstWindow);

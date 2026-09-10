@@ -15,7 +15,7 @@
 | Item | Current evidence |
 |---|---|
 | Starting branch / commit | `sdlgpu` / `3a44315fdffe974e02a664cacae4fd388c9728aa` |
-| Ending renderer/test commit | `24cb39f394d3e580a70c6ec83f596962f589fa25`; the documentation/checker closure is the commit containing this row |
+| Ending renderer/test commit | The commit containing the `SDLGPU-87` row; the documentation/checker closure follows separately |
 | Renderer contract | `modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp` |
 | Reference renderer | `modules/renderers/easygl/{include,src,examples}` |
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
@@ -24,8 +24,8 @@
 | SDL GPU registered integration tests | 188 CTests (85 baseline plus 103 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 32 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 32/32 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
-| Tasks created by this audit | 32 (`SDLGPU-55`–`SDLGPU-86`) |
-| Completed / open / proven unavoidable | 32 / 0 tasks; 3 capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
+| Tasks created by this audit | 33 (`SDLGPU-55`–`SDLGPU-87`) |
+| Completed / open / proven unavoidable | 33 / 0 tasks; 3 capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
@@ -192,7 +192,7 @@ were checked individually in the declarations and implementations.
 | blend/depth/raster/sampler applications; BlendFactor/reference/scissor/viewport | all explicit | all explicit | classic; immutable-key and propagation verification (`SDLGPU-58/63/65`) |
 | buffer factories and colored/extended primitive/indexed draw hooks | explicit | explicit | classic; semantic dispatch, native topology, all ordinary draw families and ranges are verified by `SDLGPU-59/78` |
 | `DrawInstancedPrimitivesEx`, `GetMaxVertexStreams`, multistream capability | explicit | explicit stock/compiled-effect draws, eight-stream limit and truthful capabilities | classic XNA 4.0 stock and ordinary compiled Effect semantics `=` (`SDLGPU-60/79`); CNAEXT `ShaderEffect` instancing is `out` |
-| `SupportsDepth*`, `Ensure3DSupported`, unsupported-call behavior, `CanBeginDrawEXT` | runtime-aware | depth/stencil availability is now exposed through explicit capability answers; other defaults retained where semantically applicable | classic capability/profile truthfulness (`SDLGPU-57`) |
+| `SupportsDepth*`, `Ensure3DSupported`, unsupported-call behavior, `CanBeginDrawEXT` | runtime-aware | all three default-framebuffer depth/stencil answers and the legacy capability switch use the same queried native-format fact; other defaults retained where semantically applicable | classic capability/profile truthfulness (`SDLGPU-57/87`) |
 | `SupportsCapability`, numeric texture/cube/volume/RT limits, limitations text | explicit runtime answers | explicit exhaustive capability switch, eight stock-effect streams and limitations text; format/device limits remain owned by their dedicated tasks | publicly observable; false promises removed by `SDLGPU-57`, stream claims verified by `SDLGPU-60` |
 | compiled-effect factory/runtime/support | explicit | explicit | ordinary Effect bytecode path `=` across reflection, state and all shared draw contracts (`SDLGPU-79`) |
 | ShaderEffect dialect/source execution | EasyGL explicit | runtime compile path exists, while `GetShaderDialectEXT` inherits the truthful `Unknown` default | existing CNAEXT, `out`; no classic XNA behavior depends on the source-dialect query |
@@ -1310,6 +1310,32 @@ underlying API limitation proven after reasonable emulation analysis.
   rejected; and the PBR fog diagnostic explicitly requests linear storage before comparing a
   linear arithmetic mix. No renderer source or public API changed. The complete 188-test sweep
   remains the closing gate owned by `SDLGPU-82`.
+
+### SDLGPU-87 — make default-framebuffer depth/stencil capability answers truthful ✅
+
+- **Problem/public behavior:** `SdlGpuRenderer::QueryDepthStencilFormat` explicitly allows
+  construction to continue when the device exposes neither supported combined depth/stencil
+  format, and the legacy `SupportsCapability` switch correctly reports that condition. The three
+  common contract hooks used by ordinary `GraphicsDevice::Clear`, however, were inherited as
+  unconditional `true`; a device without the format would therefore advertise real depth and
+  stencil planes to the public clear path while silently rendering without either attachment.
+- **EasyGL/SDL evidence:** EasyGL's default is valid for its mandatory GL framebuffer path. SDL
+  GPU's own `depthStencilFormat_` is the authoritative result of runtime
+  `SDL_GPUTextureSupportsFormat` probes, and already controls attachment creation, pipeline target
+  state and legacy capability reporting.
+- **Location:** `SdlGpuRenderer` capability overrides and its constructor exception/capability
+  regression fixture.
+- **Acceptance/test:** override all three answers from the queried native format; force the
+  no-format path without replacing SDL or mocking resource ownership; prove the aggregate, depth
+  and stencil contract answers and both legacy capability fields are false, then issue a combined
+  clear/present successfully with validation diagnostics fatal.
+- **Result (2026-09-10):** `SupportsDepthStencil`, `SupportsDepthBuffer` and
+  `SupportsStencilBuffer` now all derive from the same `depthStencilFormat_ != INVALID` fact as
+  native attachment/pipeline creation. A scoped test-only constructor hook forces the otherwise
+  hardware-dependent unavailable branch after the real device query. The expanded transactional
+  constructor fixture proves all five public/internal capability views agree, color presentation
+  remains usable without an attachment, and every native resource remains balanced. Its stable
+  incremental target rebuild succeeds and the validation-fatal CTest passes **295/295** checks.
 
 ---
 

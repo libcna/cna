@@ -1843,6 +1843,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         resources.FailAt(SdlGpuFailurePointEXT::DepthStencilFormatQuery);
         resources.depthStencilFormat = QueryDepthStencilFormat(resources.device);
+        if (testHooks.forceNoDepthStencilFormat)
+            resources.depthStencilFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
         resources.backbufferSampleCount = ClampSampleCount(
             resources.device,
             SDL_GetGPUSwapchainTextureFormat(resources.device, window_),
