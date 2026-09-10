@@ -11386,8 +11386,18 @@ CNA_GL_PUNCTUAL_DECL
         case StockProgramShape::Colored:
             break;
         }
+        std::array<StockProgramInput, 8> activeInputs{};
+        std::size_t activeCount = 0;
+        for (std::size_t inputIndex = 0; inputIndex < count; ++inputIndex)
+        {
+            if (StockEffectUsesVertexSemantic(
+                    params, inputs[inputIndex].usage, inputs[inputIndex].usageIndex))
+            {
+                activeInputs[activeCount++] = inputs[inputIndex];
+            }
+        }
         CNA::Internal::Graphics::RequireDeclarationMatchesStockProgram(
-            declaredElements, inputs, count, "EasyGL", name);
+            declaredElements, activeInputs.data(), activeCount, "EasyGL", name);
     }
 
     bool EasyGLRenderer::ConfigureDeclarationForStockProgramEXT(
@@ -11491,6 +11501,8 @@ CNA_GL_PUNCTUAL_DECL
             buffer.vao.set_attribute_divisor(static_cast<unsigned int>(location), 0);
 
             const StockProgramInput& input = inputs[location];
+            if (!StockEffectUsesVertexSemantic(params, input.usage, input.usageIndex))
+                continue;
             const EasyGLVertexBufferRenderer* sourceBuffer = nullptr;
             const VertexElement* sourceElement = nullptr;
             std::size_t sourceStride = buffer.GetStride();

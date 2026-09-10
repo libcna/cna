@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-108 / SOFTWARE-130 / SOFTWARE-320: renderer-independent public pixel contract for
+// SOFTWARE-108 / SOFTWARE-130 / SOFTWARE-320 / SOFTWARE-321: renderer-independent public pixel contract for
 // declaration-driven vertex input, compiled against both Software and EasyGL.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -396,6 +396,90 @@ class VertexDeclarationFormatContractTest final : public Game
         device.SetVertexBuffers({});
     }
 
+    void TestUnusedRemappedStreamDoesNotBoundDraw(GraphicsDevice& device, BasicEffect& effect)
+    {
+        std::array<PositionColorVertex, 6> primary{};
+        for (std::size_t i = 0; i < kQuad.size(); ++i)
+        {
+            std::memcpy(primary[i].position, kQuad[i].data(), 12);
+            primary[i].color[0] = 255;
+            primary[i].color[3] = 255;
+        }
+        const std::array<std::uint8_t, 4> unusedGreen{0, 255, 0, 255};
+
+        const VertexDeclaration primaryDeclaration(sizeof(PositionColorVertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+        });
+        const VertexDeclaration collidingDeclaration(4, {
+            VertexElement(0, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+        });
+        VertexBuffer primaryBuffer(device, primaryDeclaration, 6, BufferUsage::None);
+        VertexBuffer shortUnusedBuffer(device, collidingDeclaration, 1, BufferUsage::None);
+        primaryBuffer.SetData(primary.data(), 6);
+        shortUnusedBuffer.SetDataRaw(unusedGreen.data(), 1, 4);
+
+        device.SetVertexBuffers({VertexBufferBinding(&primaryBuffer),
+                                 VertexBufferBinding(&shortUnusedBuffer)});
+        Prepare(device, effect);
+        try
+        {
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            CheckRed(device, "unused remapped Color1 stream does not bound the draw");
+        }
+        catch (const std::exception& exception)
+        {
+            std::printf("[FAIL] unused remapped stream bounded the draw: %s\n",
+                        exception.what());
+            ++failed_;
+        }
+        device.SetVertexBuffers({});
+    }
+
+    void TestDisabledVertexColorStreamDoesNotBoundDraw(GraphicsDevice& device, BasicEffect& effect)
+    {
+        struct PositionVertex { float position[3]; };
+        std::array<PositionVertex, 6> positions{};
+        for (std::size_t i = 0; i < kQuad.size(); ++i)
+            std::memcpy(positions[i].position, kQuad[i].data(), 12);
+        const std::array<std::uint8_t, 4> unusedGreen{0, 255, 0, 255};
+
+        const VertexDeclaration positionDeclaration(sizeof(PositionVertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const VertexDeclaration colorDeclaration(4, {
+            VertexElement(0, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+        });
+        VertexBuffer positionBuffer(device, positionDeclaration, 6, BufferUsage::None);
+        VertexBuffer shortUnusedColor(device, colorDeclaration, 1, BufferUsage::None);
+        positionBuffer.SetData(positions.data(), 6);
+        shortUnusedColor.SetDataRaw(unusedGreen.data(), 1, 4);
+
+        device.SetVertexBuffers({VertexBufferBinding(&positionBuffer),
+                                 VertexBufferBinding(&shortUnusedColor)});
+        device.Clear(Color::Green);
+        device.SetDepthTestEnabled(false);
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        effect.setTextureEnabledProperty(false);
+        effect.setTextureProperty(nullptr);
+        effect.setVertexColorEnabledProperty(false);
+        effect.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+        effect.Apply();
+        try
+        {
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            CheckRed(device, "disabled Color0 stream does not bound the stock-effect draw");
+        }
+        catch (const std::exception& exception)
+        {
+            std::printf("[FAIL] disabled Color0 stream bounded the draw: %s\n",
+                        exception.what());
+            ++failed_;
+        }
+        device.SetVertexBuffers({});
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -413,6 +497,8 @@ protected:
         TestMultipleStreams(device, effect);
         TestPartialCrossStreamUsageCollision(device, effect);
         TestCompleteCrossStreamUsageCollision(device);
+        TestUnusedRemappedStreamDoesNotBoundDraw(device, effect);
+        TestDisabledVertexColorStreamDoesNotBoundDraw(device, effect);
         std::printf("=== %d/%d PASS ===\n", passed_, passed_ + failed_);
         Exit();
     }

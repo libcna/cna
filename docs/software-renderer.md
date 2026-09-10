@@ -168,10 +168,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   across one or multiple streams, and all 12 XNA `VertexElementFormat` values are decoded at their
   declared offsets. Reordered, padded, application-defined and non-canonical-stride layouts,
   binding offsets and 16/32-bit indexed user draws are covered by one deterministic public fixture
-  that passes 18/18 on Software and both EasyGL profiles. Bound-stream semantic collisions follow
+  that passes 20/20 on Software and both EasyGL profiles. Bound-stream semantic collisions follow
   FNA3D's slot-order rule: a repeated usage/index pair moves to the first free index of that usage,
   while every unique element beside it remains live. The fixture proves both a partially colliding
   stream and a fully colliding `TextureCoordinate0` stream remapped to `TextureCoordinate1`.
+  `SOFTWARE-321` additionally proves that a short stream whose remapped semantics are absent from
+  the selected stock vertex shader does not bound the draw or form a Software CPU fetch, while an
+  equally short shader-consumed stream still fails range validation as before.
   EasyGL's stock path now supplies the matching
   FNA3D-style native format conversion instead of requiring canonical byte formats or selecting an
   effect variant from an accidentally colliding stride. Only CNAEXT's old empty-declaration

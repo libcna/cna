@@ -2316,7 +2316,10 @@ TEST_F(InstancedDrawMultiStreamTest, ShortSecondaryPerVertexStreamIsRejected)
         VertexBufferBinding(&columnBuffer, 1, kColumnStreamFrequency),
     });
     device.SetIndexBuffer(&indexBuffer);
-    effect.Apply();
+    // SOFTWARE-321: this is an ACTIVE short-stream guard. BasicEffect's XNA default leaves
+    // vertex colour disabled, in which case the Color0 stream is not a shader input and must not
+    // bound the draw at all.
+    ApplyMeshEffect(effect);
 
     // The declared window is two groups: the position stream holds it, the colour stream does not.
     EXPECT_THROW(

@@ -1290,6 +1290,12 @@ namespace CNA::Internal::Renderers
         /// Vertex elements the stream's buffer holds, for renderers that must bound a native range.
         int vertexCount = 0;
 
+        /// SOFTWARE-321: whether the active vertex shader consumes at least one element from this
+        /// stream. XNA/FNA bind every public stream but native input reflection fetches only the
+        /// semantics declared by the current shader. An entirely unused stream therefore neither
+        /// bounds a draw nor permits a CPU renderer to form pointers past its storage.
+        bool vertexShaderInputUsed = true;
+
         /// SOFTWARE-320: effective usage index for each declaration element after XNA/FNA's
         /// binding-order collision remap. A repeated usage/index takes the first free index of the
         /// same usage; zero count means the declaration's own indices are already authoritative.
@@ -1676,6 +1682,50 @@ namespace CNA::Internal::Renderers
         /// environment brighter than 1.0 carries its brightness here instead of in its texels.
         float iblIntensity = 1.0f;
     };
+
+    /**
+     * @brief Reports whether a classic stock effect consumes one vertex semantic.
+     *
+     * @param params The active draw parameters filled by the effect.
+     * @param usage The declaration semantic to test.
+     * @param usageIndex The collision-remapped semantic index to test.
+     * @return True when the active classic stock vertex shader declares the semantic. Unknown,
+     *         compiled, source-shader, and CNAEXT PBR effects conservatively return true.
+     */
+    [[nodiscard]] inline bool StockEffectUsesVertexSemantic(
+        const GpuDrawParams& params,
+        Microsoft::Xna::Framework::Graphics::VertexElementUsage usage,
+        int usageIndex) noexcept
+    {
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        if (params.compiledEffectRuntime != nullptr ||
+            params.customEffectRenderer != nullptr || params.customEffectRequested || params.pbr)
+            return true;
+        if (usageIndex < 0)
+            return false;
+
+        switch (usage)
+        {
+            case VertexElementUsage::Position:
+                return usageIndex == 0;
+            case VertexElementUsage::Color:
+                return usageIndex == 0 && params.vertexColorEnabled;
+            case VertexElementUsage::Normal:
+                return usageIndex == 0 &&
+                    (params.lightingEnabled || params.envMapping || params.skinned);
+            case VertexElementUsage::TextureCoordinate:
+                if (usageIndex == 0)
+                    return params.textureEnabled || params.dualTexture ||
+                        params.envMapping || params.skinned;
+                return usageIndex == 1 && params.dualTexture;
+            case VertexElementUsage::BlendWeight:
+            case VertexElementUsage::BlendIndices:
+                return usageIndex == 0 && params.skinned;
+            default:
+                return false;
+        }
+    }
 
     /**
      * @brief REMED-GFX-201: where one element of the combined vertex layout actually lives.

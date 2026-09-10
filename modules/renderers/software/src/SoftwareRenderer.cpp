@@ -2538,7 +2538,7 @@ namespace CNA::Internal::Renderers::Software
                 for (int i = 0; i < params->vertexStreamCount; ++i)
                 {
                     const auto& stream = params->vertexStreams[static_cast<std::size_t>(i)];
-                    if (stream.instanceFrequency != 0)
+                    if (stream.instanceFrequency != 0 || !stream.vertexShaderInputUsed)
                         continue;
                     const auto* buffer =
                         static_cast<const SoftwareVertexBufferRenderer*>(stream.buffer);
@@ -3674,19 +3674,19 @@ namespace CNA::Internal::Renderers::Software
         /// invalid pointer into the CPU vertex storage. All arithmetic is 64-bit, so neither a
         /// large primitiveCount nor an index near UINT32_MAX can wrap into an apparently valid
         /// address. Throws the public CNA range exception rather than any implementation type.
-        /// REMED-GFX-201: the element count every bound per-vertex stream can satisfy, once each
-        /// stream's own binding offset is deducted. A multi-stream draw addresses every stream with
-        /// the same element number, so the shortest stream bounds the draw -- validating only the
-        /// one `vb` names would let a short secondary stream be read past its end.
+        /// REMED-GFX-201 / SOFTWARE-321: the element count every shader-consumed per-vertex stream
+        /// can satisfy once its own binding offset is deducted. A multi-stream draw addresses each
+        /// active stream with the same element number, so the shortest active stream bounds the
+        /// draw; an inactive stream is never fetched and therefore cannot bound it.
         int SmallestAddressableVertexCount(const GpuDrawParams& params, int fallback)
         {
             if (params.vertexStreamCount == 0)
                 return fallback;
-            int smallest = fallback;
+            int smallest = std::numeric_limits<int>::max();
             for (int i = 0; i < params.vertexStreamCount; ++i)
             {
                 const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
-                if (stream.instanceFrequency != 0)
+                if (stream.instanceFrequency != 0 || !stream.vertexShaderInputUsed)
                     continue;
                 smallest = std::min(smallest, stream.vertexCount - stream.vertexOffset);
             }
@@ -4742,6 +4742,8 @@ namespace CNA::Internal::Renderers::Software
             for (int s = 0; s < params.vertexStreamCount; ++s)
             {
                 const auto& stream = params.vertexStreams[static_cast<std::size_t>(s)];
+                if (!stream.vertexShaderInputUsed)
+                    continue;
                 const auto* streamVb =
                     static_cast<const SoftwareVertexBufferRenderer*>(stream.buffer);
                 reader.recordBase[static_cast<std::size_t>(s)] =
@@ -4920,6 +4922,8 @@ namespace CNA::Internal::Renderers::Software
             for (int s2 = 0; s2 < params.vertexStreamCount; ++s2)
             {
                 const auto& stream = params.vertexStreams[static_cast<std::size_t>(s2)];
+                if (!stream.vertexShaderInputUsed)
+                    continue;
                 const auto* streamVb =
                     static_cast<const SoftwareVertexBufferRenderer*>(stream.buffer);
                 const std::int64_t streamElement = stream.instanceFrequency > 0
