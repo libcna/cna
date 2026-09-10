@@ -749,7 +749,7 @@ application orbit/yaw oracle passes **3/3** on all three paths with identical me
 Vulkan paths run under Khronos validation and emit no validation messages; the package also passes
 its write-free reproducibility check.
 
-### Portable post-process start (`MOD-2239`, 2026-09-10)
+### Portable post-process rollout (`MOD-2239`, `MOD-2218`, 2026-09-10)
 
 `ChromaticAberrationPass` is the first engine post-process to use the portable package path. Its
 internal package shares one fullscreen vertex contract across GLSL ES, desktop GLSL and SPIR-V;
@@ -761,6 +761,15 @@ package: `CustomEffects` plus a successfully selected and compiled effect. Its s
 oracle passes **3/3** on EasyGL, RADV and Vulkan llvmpipe, covering optical-axis invariance, strong
 edge fringing, exact disabled output and settings. Both Vulkan runs emit no Khronos validation
 messages. `PostProcessShaderPackageReproducibility` permanently checks the generated payloads.
+
+`FxaaPass` is the second package consumer. Its Vulkan fragment uses the same sampled source at set 0
+binding 0, reciprocal target size in the established `vec4` push slot and the edge threshold in the
+scalar slot. The public/C fragment-source projection is emitted from the generated GLSL ES payload,
+so the separate float-target early-out audit still mutates the shader that the pass actually ships.
+The pass/quality suites are **11/11** on EasyGL, RADV and Vulkan llvmpipe; the EasyGL run is **12/12**
+with the four-format early-out audit. The application oracle is **8/8** on all three paths: disabled
+and flat-field output remain exact, aliased staircase contrast falls, and threshold presets remain
+observable. Both Vulkan runs emit no Khronos validation messages.
 
 Other engine post-process effects remain source-only and keep their exact copy-through fallback;
 the shared package/helper is the landing point for their subsequent fragment variants.

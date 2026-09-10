@@ -287,6 +287,7 @@ tree, not about native API potential.
 | MOD-2215 | Partial | Compile-error strings and one-shot logging exist; structured owned diagnostics do not. |
 | MOD-2216 | Absent | No declared reproducible package build tool. |
 | MOD-2217 | Absent | No one-package multi-backend selection oracle. |
+| MOD-2218 | Supplied | `FxaaPass` selects generated GLSL ES/desktop GLSL/SPIR-V variants from the shared fullscreen package. Its existing texel-size/vector and threshold/scalar contract runs the same pixel oracle on EasyGL, RADV and llvmpipe. |
 | MOD-2220 | Supplied | All 22 limit identities and immutable snapshot plumbing exist. |
 | MOD-2221 | Supplied | All 13 usage identities and known/supported masks exist. |
 | MOD-2222 | Supplied | Vulkan derives implemented format/limit promises from physical-device facts. |

@@ -202,7 +202,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 |---|---|---|---|---|
 | Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
 | Float/HDR render targets | ✅ exact 2D/cube targets, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D` and `RenderTargetCube`, device-probed (`MOD-2223`/`MOD-2234`) | ⬜ | ⬜ — each reports `false` and the target constructor refuses the format rather than substituting `Color` |
-| `RenderPipeline` + post-process passes | ✅ | 🟨 portable chromatic aberration runs; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
+| `RenderPipeline` + post-process passes | ✅ | 🟨 portable chromatic aberration and FXAA run; remaining source-only passes copy through | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ✅ portable rigid/skinned generation (`MOD-2237`) + stock reception (`MOD-2236`) | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ✅ portable atlas generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Contact shadows | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `ContactShadowPass::isSupported()` is false and the pass copies its input through, so the frame keeps the shadow map it already had |
@@ -242,9 +242,9 @@ The distinction is not academic: the Vulkan renderer now answers **true** to the
 sampling and IBL questions, while its language query accepts SPIR-V and refuses GLSL. Its stock
 SPIR-V programs consume the latter two states. Since `MOD-2237`, every shadow caster selects a
 portable package containing GLSL ES, desktop GLSL and SPIR-V instead of handing only GLSL source to
-the renderer; `MOD-2238` does the same for `Skybox`, and `MOD-2239` starts the post-process rollout
-with chromatic aberration. The remaining post-process paths still provide source alone and remain
-unavailable on Vulkan. Portable packages use the language/stage query to select a payload;
+the renderer; `MOD-2238` does the same for `Skybox`, `MOD-2239` starts the post-process rollout
+with chromatic aberration, and `MOD-2218` adds FXAA. The remaining post-process paths still provide
+source alone and remain unavailable on Vulkan. Portable packages use the language/stage query to select a payload;
 subsystems still ask their own semantic capability before promising a visible result.
 
 **Explicit code values.** `ShaderCodeEXT` is the owned input atom for portable shader packages. It
