@@ -1166,6 +1166,34 @@ TEST(EasyGLCompiledEffectTest, AcceptsConsistentShaderModel3AbsoluteFloatConstan
     }
 }
 
+TEST(EasyGLCompiledEffectTest, RejectsPixelSamplerRegister16)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeSampler = true;
+    options.includeDrawableProgram = true;
+    options.pixelShaderSamplesTexture = true;
+    options.samplerRegister = 16u;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsVertexSamplerRegister4)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeSampler = true;
+    options.includeDrawableProgram = true;
+    options.vertexShaderSamplesTexture = true;
+    options.samplerRegister = 4u;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;

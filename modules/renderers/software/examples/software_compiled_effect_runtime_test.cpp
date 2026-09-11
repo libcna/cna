@@ -3031,6 +3031,33 @@ namespace
         }
     }
 
+    void CheckCompiledSamplerRegisterRangeValidation(SoftwareRenderer& renderer)
+    {
+        const auto checkRejected = [&](bool vertexStage, std::uint32_t samplerRegister) {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeSampler = true;
+            options.includeDrawableProgram = true;
+            options.vertexShaderSamplesTexture = vertexStage;
+            options.pixelShaderSamplesTexture = !vertexStage;
+            options.samplerRegister = samplerRegister;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected, vertexStage
+                                ? "compiled Effect parser accepted vertex sampler s4"
+                                : "compiled Effect parser accepted pixel sampler s16");
+        };
+        checkRejected(false, 16u);
+        checkRejected(true, 4u);
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4820,6 +4847,7 @@ int main()
         CheckCompiledMatrixOperandValidation(renderer);
         CheckCompiledPreShaderModel3AbsoluteSourceValidation(renderer);
         CheckCompiledShaderModel3MixedConstantAbsoluteValidation(renderer);
+        CheckCompiledSamplerRegisterRangeValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();
