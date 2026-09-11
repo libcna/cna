@@ -964,6 +964,10 @@ TEST(XnaFbxImporter, EveryFileAnswersTheGraphXnaAnswers)
           // the shared edge for both, which rules area weighting out
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-156`).
           "fbx_generated_normals.fbx", "fbx_generated_normals_area.fbx",
+          // The three `InheritType` modes, which are three different answers for the same scene.
+          // Their bits are checked by `InheritTypeDecidesHowMuchOfTheParentsScalingReachesAChild`
+          // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-228`, `XNASWEEP-229`).
+          "fbx_inherit_rrss.fbx", "fbx_inherit_rsrs.fbx", "fbx_inherit_rrs.fbx",
           // A number written with too few digits to name a float: XNA rounds it to the nearest,
           // not toward zero (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-153`).
           "fbx_float_rounding.fbx",
@@ -1097,6 +1101,95 @@ TEST(XnaFbxImporter, AQuarterTurnIsComposedTheWayXnasIsAndNotInFloat)
     EXPECT_EQ(transform.M33, 1.555301383669155e-16f);
     // And not what a float `cos` answers, which is where this used to be.
     EXPECT_NE(transform.M22, 2.54f * std::cos(1.5707964f));
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-228, XNASWEEP-229: FBX writes three inheritance
+// modes and they are three different answers.
+//
+// The three fixtures differ in one property and nothing else: a root scaled (2, 3, 5) carries a
+// child that turns 37 degrees about Z -- whose rotation itself has +/-0.602 -- and scales
+// (1.5, 0.5, 2.5), and that child carries a grandchild. The bits below are the genuine importer's
+// own, read with the oracle's `CNA_MODEL_ORACLE_BITS=1` mode.
+//
+// `eInheritRSrs`'s *grandchild* is the second rule: its parent's world is a rotation composed onto
+// a non-uniform scaling, which is a basis whose rows are not orthogonal, and FBX's translation /
+// rotation / scaling form cannot carry that shear. The grandchild composes onto what is left of it
+// once it is re-expressed -- which is why 0.412 comes back as 0.406 rather than unchanged.
+TEST(XnaFbxImporter, InheritTypeDecidesHowMuchOfTheParentsScalingReachesAChild)
+{
+    const auto asBits = [](const float value)
+    {
+        std::uint32_t out = 0;
+        std::memcpy(&out, &value, sizeof out);
+        return out;
+    };
+    const auto midOf = [](const std::shared_ptr<Graphics::NodeContent>& root)
+    {
+        return std::shared_ptr<Graphics::NodeContent>(root->getChildrenProperty()[0]);
+    };
+
+    ImporterContext context;
+    Xna::FbxImporter importer;
+
+    // `InheritType 0`, `eInheritRrSs`: the parent's scaling is applied after the child's own
+    // rotation, so the answered rotation is the conjugate `S . R . S^-1` and the 0.602 comes back
+    // as 0.601815045 and -0.451361269 -- the child's own scaling times the conjugation.
+    const std::shared_ptr<Graphics::NodeContent> rrss =
+        importer.Import(Fixture("fbx_inherit_rrss.fbx").string(), context);
+    ASSERT_NE(rrss, nullptr);
+    const Matrix conjugated = midOf(rrss)->getTransformProperty();
+    EXPECT_EQ(asBits(conjugated.M11), 0x3F995688u);
+    EXPECT_EQ(asBits(conjugated.M12), 0x3F1A108Du);
+    EXPECT_EQ(asBits(conjugated.M21), 0xBEE718D3u);
+    EXPECT_EQ(asBits(conjugated.M22), 0x3ECC7360u);
+    EXPECT_EQ(asBits(conjugated.M33), 0x40200000u);
+
+    // `InheritType 1`, `eInheritRSrs`: the scaling belongs to the parent's world and the child's
+    // rotation comes back untouched -- 0.902722538 and -0.300907522 are 0.602 times the child's
+    // own scaling and nothing else.
+    const std::shared_ptr<Graphics::NodeContent> rsrs =
+        importer.Import(Fixture("fbx_inherit_rsrs.fbx").string(), context);
+    ASSERT_NE(rsrs, nullptr);
+    const Matrix plain = midOf(rsrs)->getTransformProperty();
+    EXPECT_EQ(asBits(plain.M11), 0x3F995688u);
+    EXPECT_EQ(asBits(plain.M12), 0x3F6718D3u);
+    EXPECT_EQ(asBits(plain.M21), 0xBE9A108Du);
+    EXPECT_EQ(asBits(plain.M22), 0x3ECC7360u);
+    EXPECT_EQ(asBits(plain.M33), 0x40200000u);
+
+    // `InheritType 2`, `eInheritRrs`: the child does not inherit it at all and the quotient
+    // divides it out of the columns -- every entry of the two above, over (2, 3, 5).
+    const std::shared_ptr<Graphics::NodeContent> rrs =
+        importer.Import(Fixture("fbx_inherit_rrs.fbx").string(), context);
+    ASSERT_NE(rrs, nullptr);
+    const Matrix divided = midOf(rrs)->getTransformProperty();
+    EXPECT_EQ(asBits(divided.M11), 0x3F195688u);
+    EXPECT_EQ(asBits(divided.M12), 0x3E9A108Du);
+    EXPECT_EQ(asBits(divided.M21), 0xBE1A108Du);
+    EXPECT_EQ(asBits(divided.M22), 0x3E084CEBu);
+    EXPECT_EQ(asBits(divided.M33), 0x3F000000u);
+    // ...and the scaling a grandchild sees is then the node's own rather than the product, which
+    // is what leaves the grandchild's own rotation divided by (1.5, 0.5, 2.5) and by nothing else.
+    const Matrix rrsTip =
+        std::shared_ptr<Graphics::NodeContent>(midOf(rrs)->getChildrenProperty()[0])
+            ->getTransformProperty();
+    EXPECT_EQ(asBits(rrsTip.M11), 0x3F04B5F1u);
+    EXPECT_EQ(asBits(rrsTip.M13), 0xBE197059u);
+    EXPECT_EQ(asBits(rrsTip.M31), 0x3E8CBD30u);
+
+    // XNASWEEP-229: the shear the `eInheritRSrs` world carries is not in the form FBX holds a
+    // transform in, and the grandchild composes onto the re-expressed one.
+    const Matrix rsrsTip =
+        std::shared_ptr<Graphics::NodeContent>(midOf(rsrs)->getChildrenProperty()[0])
+            ->getTransformProperty();
+    EXPECT_EQ(asBits(rsrsTip.M11), 0x3F33DE6Bu);
+    EXPECT_EQ(asBits(rsrsTip.M12), 0x3F0B4239u);
+    EXPECT_EQ(asBits(rsrsTip.M13), 0xBEBFCC70u);
+    EXPECT_EQ(asBits(rsrsTip.M31), 0x3ED00C56u);
+    EXPECT_EQ(asBits(rsrsTip.M32), 0x3D3199B6u);
+    EXPECT_EQ(asBits(rsrsTip.M33), 0x3F68FF85u);
+    // The grandchild's own rotation, which is what it would answer if the shear survived.
+    EXPECT_NE(asBits(rsrsTip.M31), 0x3ED31BC9u);
 }
 
 // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-176: the pivot residue stops at the node that

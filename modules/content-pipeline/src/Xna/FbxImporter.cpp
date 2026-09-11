@@ -185,6 +185,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             /** @brief `RotationActive`, which is what decides whether `PreRotation` counts. */
             bool rotationActive = false;
             /**
+             * @brief FBX's `InheritType`: how much of the parent's world scaling reaches this node.
+             *
+             * `0` (`eInheritRrSs`, and the default a file that names none gets) applies the
+             * parent's scaling *after* the child's own rotation, which is what makes the answered
+             * rotation the conjugate `S . R . S^-1`; `1` (`eInheritRSrs`) applies it in the
+             * parent's world, where the child's rotation comes back untouched; `2`
+             * (`eInheritRrs`) does not inherit it at all, and the quotient divides it out of the
+             * columns. Measured on eight purpose-built probes, four nodes each, bit-exact
+             * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-228`).
+             */
+            int inheritType = 0;
+            /**
              * @brief Whether this object is an FBX 7 `Geometry`, the mesh data of the model it is
              *        connected to rather than a node of its own.
              *
@@ -321,6 +333,44 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             }
             const Matrix absolute = bone->getAbsoluteTransformProperty();
             const Matrix into = Matrix::Invert(root->getAbsoluteTransformProperty());
+            // The product is accumulated the way the rest of this importer composes -- one dot
+            // product summed left to right in `double` and narrowed when the entry is stored --
+            // rather than through `Matrix::operator*`, whose own accumulation pairs the terms.
+            // The two agree on every entry that is not a cancellation; the root's translation is
+            // one, and `Yager.FBX` and `Kiev.FBX` are the two models in the corpus whose root
+            // carries a translation small enough for it to show: 2.7888802e-13 against
+            // 2.7890093e-13, which is the whole of what those two references still differed by
+            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-232`).
+            const auto composeWide = [](const Matrix& left, const Matrix& right)
+            {
+                const double a[16] = {left.M11, left.M12, left.M13, left.M14,
+                                      left.M21, left.M22, left.M23, left.M24,
+                                      left.M31, left.M32, left.M33, left.M34,
+                                      left.M41, left.M42, left.M43, left.M44};
+                const double b[16] = {right.M11, right.M12, right.M13, right.M14,
+                                      right.M21, right.M22, right.M23, right.M24,
+                                      right.M31, right.M32, right.M33, right.M34,
+                                      right.M41, right.M42, right.M43, right.M44};
+                float entries[16] = {};
+                for (std::size_t row = 0; row < 4u; ++row)
+                {
+                    for (std::size_t column = 0; column < 4u; ++column)
+                    {
+                        double sum = 0.0;
+                        for (std::size_t k = 0; k < 4u; ++k)
+                        {
+                            sum += a[(row * 4u) + k] * b[(k * 4u) + column];
+                        }
+                        entries[(row * 4u) + column] = static_cast<float>(sum);
+                    }
+                }
+                Matrix out;
+                out.M11 = entries[0];  out.M12 = entries[1];  out.M13 = entries[2];  out.M14 = entries[3];
+                out.M21 = entries[4];  out.M22 = entries[5];  out.M23 = entries[6];  out.M24 = entries[7];
+                out.M31 = entries[8];  out.M32 = entries[9];  out.M33 = entries[10]; out.M34 = entries[11];
+                out.M41 = entries[12]; out.M42 = entries[13]; out.M43 = entries[14]; out.M44 = entries[15];
+                return out;
+            };
             if (bone != root)
             {
                 if (NodeContent* parent = bone->getParentProperty(); parent != nullptr)
@@ -329,7 +379,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
                 root->getChildrenProperty().Add(bone);
             }
-            bone->setTransformProperty(absolute * into);
+            bone->setTransformProperty(composeWide(absolute, into));
             return root;
         }
 
@@ -687,22 +737,37 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
 
         /**
-         * @brief A rotation seen from a frame the parent's world scaling has stretched.
+         * @brief A rotation seen from a frame the parent's world scaling has stretched, as much of
+         *        it as the node's `InheritType` lets through.
          *
-         * With a non-uniform parent scaling the child's answered rotation is not its own: XNA's is
-         * `S . R . S^-1` for the parent's accumulated world scale `S`, so a Z turn of 37 degrees
-         * under a parent scaled (2, 3, 5) comes back with 0.401 and -0.903 where the rotation
-         * itself has +/-0.602. Measured on `E parent scaling nonuni / child rotation` and its
-         * held-out twin (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-193`).
+         * FBX writes three inheritance modes and they are three different answers, measured on
+         * eight probes that differ in nothing else -- a parent scaled (2, 3, 5) over a child that
+         * turns 37 degrees about Z, whose rotation itself carries +/-0.602:
+         *
+         * * `0`, `eInheritRrSs`, which is also what a file that names no `InheritType` gets: the
+         *   parent's scaling is applied *after* the child's own rotation, so the answer is the
+         *   conjugate `S . R . S^-1` and the 0.602 comes back as 0.401 and -0.903;
+         * * `1`, `eInheritRSrs`: the parent's scaling belongs to the parent's world, and the
+         *   child's rotation comes back untouched at +/-0.602;
+         * * `2`, `eInheritRrs`: the child does not inherit it at all, and the quotient divides it
+         *   out of the columns -- `R[r][c] / S[c]`.
+         *
+         * Every RobotGame mech names `1`, and three of SAMPLE-142's files name both `0` and `1`
+         * in the same scene (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-228`).
          *
          * @param rotation The node's own rotation.
          * @param scale The parent's accumulated world scaling.
-         * @return The conjugated rotation, or the rotation itself when the scale is uniform.
+         * @param inheritType FBX's `InheritType` for this node.
+         * @return The rotation as the parent's scaling leaves it.
          */
-        [[nodiscard]] Rows ConjugateByScale(const Rows& rotation, const Triple& scale)
+        [[nodiscard]] Rows InheritedRotation(const Rows& rotation, const Triple& scale,
+                                             const int inheritType)
         {
-            if ((scale[0] == scale[1] && scale[1] == scale[2]) ||
-                scale[0] == 0.0 || scale[1] == 0.0 || scale[2] == 0.0)
+            if (inheritType == 1 || scale[0] == 0.0 || scale[1] == 0.0 || scale[2] == 0.0)
+            {
+                return rotation;
+            }
+            if (inheritType == 0 && scale[0] == scale[1] && scale[1] == scale[2])
             {
                 return rotation;
             }
@@ -711,10 +776,53 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             {
                 for (std::size_t column = 0; column < 3u; ++column)
                 {
-                    out[row][column] = rotation[row][column] * scale[row] / scale[column];
+                    out[row][column] = inheritType == 2
+                                           ? rotation[row][column] / scale[column]
+                                           : rotation[row][column] * scale[row] / scale[column];
                 }
             }
             return out;
+        }
+
+        /**
+         * @brief Whether a world transform's basis rows are not orthogonal to each other.
+         *
+         * FBX holds a transform as a translation, a rotation and an axis scaling, and that form
+         * cannot carry a shear: a basis whose rows are orthogonal *is* `R . S` and survives being
+         * re-expressed, one whose rows are not loses what it cannot hold. A parent scaled
+         * non-uniformly under `eInheritRSrs` is where the shear comes from -- the world becomes
+         * `R . S` composed onto another rotation -- and it is the only place the corpus has one.
+         *
+         * The test is relative to the rows' own lengths, and the two classes it separates are six
+         * orders of magnitude apart: every threshold from 1e-16 to 1e-10 answers the same for the
+         * 4,992 bone elements of SAMPLE-142's thirteen models, and 1e-8 upward stops seeing the
+         * shear that is there (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-229`).
+         *
+         * @param world The transform to test.
+         * @return Whether its basis carries a shear.
+         */
+        [[nodiscard]] bool HasShear(const Rows& world)
+        {
+            double lengths[3] = {0.0, 0.0, 0.0};
+            for (std::size_t row = 0; row < 3u; ++row)
+            {
+                lengths[row] = std::sqrt(world[row][0] * world[row][0] +
+                                         world[row][1] * world[row][1] +
+                                         world[row][2] * world[row][2]);
+            }
+            const std::size_t pairs[3][2] = {{0u, 1u}, {0u, 2u}, {1u, 2u}};
+            for (const auto& pair : pairs)
+            {
+                const double dot = world[pair[0]][0] * world[pair[1]][0] +
+                                   world[pair[0]][1] * world[pair[1]][1] +
+                                   world[pair[0]][2] * world[pair[1]][2];
+                if (lengths[pair[0]] == 0.0 || lengths[pair[1]] == 0.0) { continue; }
+                if (std::abs(dot) > 1.0e-12 * lengths[pair[0]] * lengths[pair[1]])
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /**
@@ -750,6 +858,51 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 x = std::atan2(-rows[1][0], rows[1][1]);
             }
             return Triple{x * toDegrees, y * toDegrees, z * toDegrees};
+        }
+
+        /**
+         * @brief A world transform re-expressed the way FBX holds one: a translation, a rotation
+         *        that is an Euler triple, and a scaling along the three axes.
+         *
+         * The scaling is the length of each basis row, the rotation is what is left after dividing
+         * them out, decomposed to an Euler triple and composed again -- and what a shear cannot
+         * survive is exactly that round trip. A child whose parent's world carries a shear does
+         * not compose onto that world, it composes onto this (`HasShear`,
+         * plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-229`).
+         *
+         * @param world The transform to re-express.
+         * @return The same translation, with the basis rebuilt from its rotation and its scaling.
+         */
+        [[nodiscard]] Rows RecomposeWorld(const Rows& world)
+        {
+            Rows normalized = IdentityRows();
+            double scale[3] = {0.0, 0.0, 0.0};
+            for (std::size_t row = 0; row < 3u; ++row)
+            {
+                scale[row] = std::sqrt(world[row][0] * world[row][0] +
+                                       world[row][1] * world[row][1] +
+                                       world[row][2] * world[row][2]);
+                for (std::size_t column = 0; column < 3u; ++column)
+                {
+                    normalized[row][column] = scale[row] == 0.0
+                                                  ? (row == column ? 1.0 : 0.0)
+                                                  : world[row][column] / scale[row];
+                }
+            }
+            const Rows rotation = EulerRows(DecomposeEulerXYZ(normalized));
+            Rows out = IdentityRows();
+            for (std::size_t row = 0; row < 3u; ++row)
+            {
+                for (std::size_t column = 0; column < 3u; ++column)
+                {
+                    out[row][column] = scale[row] * rotation[row][column];
+                }
+            }
+            for (std::size_t column = 0; column < 3u; ++column)
+            {
+                out[3][column] = world[3][column];
+            }
+            return out;
         }
 
         /** @brief What a rotation leaves behind when it is decomposed, and whether it does. */
@@ -793,19 +946,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
             }
             if (!residue.lossy) { return residue; }
-            // Both sides narrowed, and the inverse taken as the transpose a rotation's inverse is.
-            // The difference this carries is a *float* difference -- it is what `sin` rounding to
-            // `1.0f` produced -- and multiplying a float-derived `E` by a double `P` leaves 1-ulp
-            // residues in the entries a quarter turn nearly zeroes (`XNASWEEP-176`).
-            Rows inverse = IdentityRows();
-            for (std::size_t row = 0; row < 3u; ++row)
-            {
-                for (std::size_t column = 0; column < 3u; ++column)
-                {
-                    inverse[row][column] = narrowedComposed[column][row];
-                }
-            }
-            residue.compensation = Multiply(narrowedRecomposed, inverse);
+            // Both sides narrowed, and the composed rotation *inverted* rather than transposed:
+            // it is a float matrix and a float matrix is not exactly orthogonal, so its transpose
+            // is not exactly its inverse. Scored over the 32 forms this expression has -- the
+            // rotation narrowed or not, the recomposition narrowed or not, four inverses, the
+            // product narrowed or not -- against the committed fixtures, eight `InheritType`
+            // probes and SAMPLE-142's thirteen models: this one is best on all three, and takes
+            // the models from 691 differing bone elements to 559
+            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-230`).
+            residue.compensation =
+                NarrowAll(Multiply(narrowedRecomposed, AffineInverse(narrowedComposed)));
             return residue;
         }
 
@@ -891,8 +1041,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                                const bool hasParent)
         {
             if (!hasParent) { return ToMatrix(world); }
-            return ToMatrix(Multiply(NarrowAll(world),
-                                     NarrowAll(AffineInverse(NarrowAll(parentWorld)))));
+            // XNA's own `Matrix.Invert` rather than the affine shortcut. The two agree to a float
+            // ulp on a well-conditioned basis and disagree exactly where this campaign looks: the
+            // affine form's translation row is three products and a negation, the cofactor form's
+            // is a determinant away, and the entries a quarter turn nearly zeroes carry the
+            // difference. Measured over SAMPLE-142's thirteen models: 2,654 differing bone
+            // elements become 1,558 with this alone (plans/plan_xna_sample_xnb_sweep.md
+            // `XNASWEEP-230`).
+            const Matrix inverse = Matrix::Invert(ToMatrix(parentWorld));
+            Rows inverseRows{{{inverse.M11, inverse.M12, inverse.M13, inverse.M14},
+                              {inverse.M21, inverse.M22, inverse.M23, inverse.M24},
+                              {inverse.M31, inverse.M32, inverse.M33, inverse.M34},
+                              {inverse.M41, inverse.M42, inverse.M43, inverse.M44}}};
+            return ToMatrix(Multiply(NarrowAll(world), inverseRows));
         }
 
         /** @brief Whatever a layer element holds, resolved through its mapping and reference. */
@@ -1116,6 +1277,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 object.scalingPivot =
                     PropertyTriple(node, "ScalingPivot", Triple{0.0, 0.0, 0.0});
                 object.rotationActive = PropertyNumber(node, "RotationActive", 0.0) != 0.0;
+                object.inheritType =
+                    static_cast<int>(PropertyNumber(node, "InheritType", 0.0));
                 object.geometricTranslation =
                     PropertyTriple(node, "GeometricTranslation", Triple{0.0, 0.0, 0.0});
                 object.geometricRotation =
@@ -2064,7 +2227,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             node->setNameProperty(object.name);
             // A node's rotation is seen from the frame its parent's world scaling stretched, its
             // world is that local composed onto the parent's, and what it *answers* is the
-            // quotient of the two -- see `QuotientTransform` and `ConjugateByScale`.
+            // quotient of the two -- see `QuotientTransform` and `InheritedRotation`.
             // The residue is taken from the parent's *global* rotation rather than its own,
             // which is what makes it appear once on each path: the child's global already carries
             // it, so the child's own decomposition is exact and the grandchild gets none. Reading
@@ -2092,20 +2255,39 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-213`).
             const Rows rotated =
                 hasParent && parentComposesRotation
-                    ? ConjugateByScale(
+                    ? InheritedRotation(
                           Multiply(RotationRows(object),
                                    RotationResidue(parentGlobalRotation).compensation),
-                          parentWorldScale)
-                    : (hasParent ? ConjugateByScale(RotationRows(object), parentWorldScale)
+                          parentWorldScale, object.inheritType)
+                    : (hasParent ? InheritedRotation(RotationRows(object), parentWorldScale,
+                                                     object.inheritType)
                                  : RotationRows(object));
             const Rows localRows = LocalRows(object, parentGeometricInverse, rotated);
-            const Rows world = hasParent ? Multiply(localRows, parentWorld) : localRows;
+            // A world that carries a shear is not a world FBX can hold, so a child composes onto
+            // what is left of it once it is re-expressed -- but only its *basis* does. The
+            // translation still goes through the parent's own world, which is what a child under a
+            // sheared parent answers as its own `Lcl Translation` rather than a turned one
+            // (`RecomposeWorld`, plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-229`).
+            Rows world = localRows;
+            if (hasParent)
+            {
+                const Rows composedWorld = Multiply(localRows, parentWorld);
+                world = HasShear(parentWorld)
+                            ? Multiply(localRows, RecomposeWorld(parentWorld))
+                            : composedWorld;
+                world[3] = composedWorld[3];
+            }
             node->setTransformProperty(QuotientTransform(world, parentWorld, hasParent));
             const Rows geometricInverse = InverseGeometricRows(object);
             const Rows globalRotation = Multiply(rotated, parentGlobalRotation);
-            const Triple worldScale{parentWorldScale[0] * object.scaling[0],
-                                    parentWorldScale[1] * object.scaling[1],
-                                    parentWorldScale[2] * object.scaling[2]};
+            // `eInheritRrs` does not inherit the parent's scaling, so the scale a *grandchild*
+            // sees is this node's own (`InheritedRotation`, `XNASWEEP-228`).
+            const Triple worldScale =
+                object.inheritType == 2
+                    ? Triple{object.scaling[0], object.scaling[1], object.scaling[2]}
+                    : Triple{parentWorldScale[0] * object.scaling[0],
+                             parentWorldScale[1] * object.scaling[1],
+                             parentWorldScale[2] * object.scaling[2]};
             for (const std::int64_t child : object.children)
             {
                 if (objects.count(child) == 0 || objects.at(child).isGeometryData ||
