@@ -363,6 +363,25 @@ namespace CNA::TestSupport
         VertexAbsoluteNegate,
     };
 
+    /** @brief Shader-stage pattern for SM3 absolute float-constant consistency tests. */
+    enum class SyntheticInvalidShaderModel3MixedConstantAbsolute
+    {
+        /** @brief Emit no deliberately mixed Shader Model 3 constant reads. */
+        None,
+        /** @brief Emit an ordinary then absolute pixel constant read. */
+        PixelPlainThenAbsolute,
+        /** @brief Emit an absolute then ordinary pixel constant read. */
+        PixelAbsoluteThenPlain,
+        /** @brief Emit only absolute pixel constant reads as a valid control. */
+        PixelAllAbsolute,
+        /** @brief Emit an ordinary then absolute vertex constant read. */
+        VertexPlainThenAbsolute,
+        /** @brief Emit an absolute then ordinary vertex constant read. */
+        VertexAbsoluteThenPlain,
+        /** @brief Emit only absolute vertex constant reads as a valid control. */
+        VertexAllAbsolute,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -565,6 +584,10 @@ namespace CNA::TestSupport
         /** @brief Emits an absolute source modifier in the selected pre-SM3 shader stage. */
         SyntheticInvalidPreShaderModel3AbsoluteSource invalidPreShaderModel3AbsoluteSource =
             SyntheticInvalidPreShaderModel3AbsoluteSource::None;
+        /** @brief Selects the SM3 float-constant absolute-read validation pattern. */
+        SyntheticInvalidShaderModel3MixedConstantAbsolute
+            invalidShaderModel3MixedConstantAbsolute =
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -653,12 +676,20 @@ namespace CNA::TestSupport
         SyntheticInvalidMatrixOperands invalidMatrixOperands =
             SyntheticInvalidMatrixOperands::None,
         SyntheticInvalidPreShaderModel3AbsoluteSource invalidAbsoluteSource =
-            SyntheticInvalidPreShaderModel3AbsoluteSource::None)
+            SyntheticInvalidPreShaderModel3AbsoluteSource::None,
+        SyntheticInvalidShaderModel3MixedConstantAbsolute invalidMixedConstantAbsolute =
+            SyntheticInvalidShaderModel3MixedConstantAbsolute::None)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
-            usesDependentTemporaryTextureCoordinate || swizzlesSampleResult;
+            usesDependentTemporaryTextureCoordinate || swizzlesSampleResult ||
+            invalidMixedConstantAbsolute ==
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelPlainThenAbsolute ||
+            invalidMixedConstantAbsolute ==
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelAbsoluteThenPlain ||
+            invalidMixedConstantAbsolute ==
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelAllAbsolute;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -1040,6 +1071,31 @@ namespace CNA::TestSupport
                                SyntheticInvalidPreShaderModel3AbsoluteSource::PixelAbsolute
                            ? 11u
                            : 12u));
+        }
+
+        if (invalidMixedConstantAbsolute ==
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelPlainThenAbsolute ||
+            invalidMixedConstantAbsolute ==
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelAbsoluteThenPlain ||
+            invalidMixedConstantAbsolute ==
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelAllAbsolute)
+        {
+            const bool absoluteFirst =
+                invalidMixedConstantAbsolute ==
+                    SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelAbsoluteThenPlain ||
+                invalidMixedConstantAbsolute ==
+                    SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelAllAbsolute;
+            const bool absoluteSecond =
+                invalidMixedConstantAbsolute ==
+                    SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelPlainThenAbsolute ||
+                invalidMixedConstantAbsolute ==
+                    SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelAllAbsolute;
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, c0/abs(c0)
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 0, 0xE4u, absoluteFirst ? 11u : 0u));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, abs(c1)/c1
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 1, 0xE4u, absoluteSecond ? 11u : 0u));
         }
 
         if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic)
@@ -1756,7 +1812,12 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u | (2u << 24));
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regConst, 0,
-                                        swizzleTint ? swizzleYzxw : swizzleIdentity));
+                                        swizzleTint ? swizzleYzxw : swizzleIdentity,
+                                        invalidMixedConstantAbsolute ==
+                                                SyntheticInvalidShaderModel3MixedConstantAbsolute::
+                                                    PixelAllAbsolute
+                                            ? 11u
+                                            : 0u));
         }
         AppendUInt32(shader, 0x0000FFFFu);
         return shader;
@@ -1809,16 +1870,26 @@ namespace CNA::TestSupport
                                                                         SyntheticInvalidShaderModel20DynamicFeature::None,
                                                                 SyntheticInvalidPreShaderModel3AbsoluteSource
                                                                     invalidAbsoluteSource =
-                                                                        SyntheticInvalidPreShaderModel3AbsoluteSource::None)
+                                                                        SyntheticInvalidPreShaderModel3AbsoluteSource::None,
+                                                                SyntheticInvalidShaderModel3MixedConstantAbsolute
+                                                                    invalidMixedConstantAbsolute =
+                                                                        SyntheticInvalidShaderModel3MixedConstantAbsolute::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
                                        shaderModel1InvalidOpcode !=
                                            SyntheticInvalidVertexShaderModel1Opcode::None;
+        const bool usesShaderModel3 =
+            usesPredication || samplesTexture ||
+            invalidMixedConstantAbsolute ==
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexPlainThenAbsolute ||
+            invalidMixedConstantAbsolute ==
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAbsoluteThenPlain ||
+            invalidMixedConstantAbsolute ==
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAllAbsolute;
         const std::uint32_t versionToken = usesShaderModel11
                                                ? 0xFFFE0101u
-                                               : usesPredication || samplesTexture ? 0xFFFE0300u
-                                                                                  : 0xFFFE0200u;
+                                               : usesShaderModel3 ? 0xFFFE0300u : 0xFFFE0200u;
         const std::uint32_t constantCount =
             1u + (readsSecondStream ? 1u : 0u) + (samplesTexture ? 1u : 0u);
 
@@ -1885,7 +1956,7 @@ namespace CNA::TestSupport
         const std::uint32_t samplerName = appendCtabString("FxSampler");
         const std::uint32_t target = appendCtabString(
             usesShaderModel11 ? "vs_1_1"
-                              : usesPredication || samplesTexture ? "vs_3_0" : "vs_2_0");
+                              : usesShaderModel3 ? "vs_3_0" : "vs_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
         while ((ctab.size() & 3u) != 0) ctab.push_back(0);
 
@@ -2066,7 +2137,7 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x80000000u | 0u);        // D3DDECLUSAGE_POSITION, index 0
             AppendUInt32(shader, destination(regInput, 0));
         }
-        if (usesPredication || samplesTexture)
+        if (usesShaderModel3)
         {
             // Shader Model 3 uses generic o# outputs, each with an explicit semantic declaration.
             AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_position0 o0
@@ -2261,6 +2332,30 @@ namespace CNA::TestSupport
                            ? 11u
                            : 12u));
         }
+        if (invalidMixedConstantAbsolute ==
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexPlainThenAbsolute ||
+            invalidMixedConstantAbsolute ==
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAbsoluteThenPlain ||
+            invalidMixedConstantAbsolute ==
+                SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAllAbsolute)
+        {
+            const bool absoluteFirst =
+                invalidMixedConstantAbsolute ==
+                    SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAbsoluteThenPlain ||
+                invalidMixedConstantAbsolute ==
+                    SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAllAbsolute;
+            const bool absoluteSecond =
+                invalidMixedConstantAbsolute ==
+                    SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexPlainThenAbsolute ||
+                invalidMixedConstantAbsolute ==
+                    SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAllAbsolute;
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, c0/abs(c0)
+            AppendUInt32(shader, destination(regTemp, 1));
+            AppendUInt32(shader, source(regConst, 0, 0xE4u, absoluteFirst ? 11u : 0u));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, abs(c1)/c1
+            AppendUInt32(shader, destination(regTemp, 1));
+            AppendUInt32(shader, source(regConst, 1, 0xE4u, absoluteSecond ? 11u : 0u));
+        }
         if (readsSecondStream)
         {
             // mad r0, v1, c4, v0
@@ -2329,13 +2424,26 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regInput, 0));
             AppendUInt32(shader, source(regConst, 0));
         }
+        else if (invalidMixedConstantAbsolute ==
+                 SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAllAbsolute)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov o0, abs(c0)
+            AppendUInt32(shader, destination(regTexCoordOut, 0));
+            AppendUInt32(shader, source(regConst, 0, 0xE4u, 11u));
+        }
         else
         {
             // m4x4 oPos, <r0|v0>, c0
             AppendUInt32(shader, 0x00000014u | (3u << 24));
-            AppendUInt32(shader, destination(usesPredication ? regTexCoordOut : regRastOut, 0));
+            AppendUInt32(shader, destination(usesShaderModel3 ? regTexCoordOut : regRastOut, 0));
             AppendUInt32(shader, readsSecondStream ? source(regTemp, 0) : source(regInput, 0));
-            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(
+                shader,
+                source(regConst, 0, 0xE4u,
+                       invalidMixedConstantAbsolute ==
+                               SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAllAbsolute
+                           ? 11u
+                           : 0u));
         }
         if (usesPredication)
         {
@@ -2843,7 +2951,8 @@ namespace CNA::TestSupport
             options.shaderModel20InvalidDynamicFeature,
             options.pixelShaderModel2xUsesInvalidLoop,
             options.pixelShaderInvalidMatrixOperands,
-            options.invalidPreShaderModel3AbsoluteSource);
+            options.invalidPreShaderModel3AbsoluteSource,
+            options.invalidShaderModel3MixedConstantAbsolute);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -2921,7 +3030,8 @@ namespace CNA::TestSupport
                 options.vertexShaderUsesInvalidExpSwizzle,
                 options.vertexShaderModel1InvalidOpcode,
                 options.shaderModel20InvalidDynamicFeature,
-                options.invalidPreShaderModel3AbsoluteSource);
+                options.invalidPreShaderModel3AbsoluteSource,
+                options.invalidShaderModel3MixedConstantAbsolute);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

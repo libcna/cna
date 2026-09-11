@@ -1118,6 +1118,54 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource::VertexAbsolute,
         CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource::VertexAbsoluteNegate));
 
+class EasyGLCompiledEffectShaderModel3MixedConstantAbsoluteTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute>
+{
+};
+
+TEST_P(EasyGLCompiledEffectShaderModel3MixedConstantAbsoluteTest,
+       RejectsMixedAbsoluteAndOrdinaryFloatConstantReads)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.invalidShaderModel3MixedConstantAbsolute = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    MixedConstantAbsolute,
+    EasyGLCompiledEffectShaderModel3MixedConstantAbsoluteTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute::
+            PixelPlainThenAbsolute,
+        CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute::
+            PixelAbsoluteThenPlain,
+        CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute::
+            VertexPlainThenAbsolute,
+        CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute::
+            VertexAbsoluteThenPlain));
+
+TEST(EasyGLCompiledEffectTest, AcceptsConsistentShaderModel3AbsoluteFloatConstantReads)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Source = CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute;
+    for (const Source source : {Source::PixelAllAbsolute, Source::VertexAllAbsolute})
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.invalidShaderModel3MixedConstantAbsolute = source;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;

@@ -2980,6 +2980,57 @@ namespace
         }
     }
 
+    void CheckCompiledShaderModel3MixedConstantAbsoluteValidation(SoftwareRenderer& renderer)
+    {
+        using Source = CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute;
+        constexpr std::array invalidSources{
+            Source::PixelPlainThenAbsolute,
+            Source::PixelAbsoluteThenPlain,
+            Source::VertexPlainThenAbsolute,
+            Source::VertexAbsoluteThenPlain,
+        };
+        for (const Source source : invalidSources)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.invalidShaderModel3MixedConstantAbsolute = source;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected,
+                  "compiled Shader Model 3 Effect mixed absolute and ordinary constant reads");
+        }
+        constexpr std::array validSources{
+            Source::PixelAllAbsolute,
+            Source::VertexAllAbsolute,
+        };
+        for (const Source source : validSources)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.invalidShaderModel3MixedConstantAbsolute = source;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Shader Model 3 Effect rejected consistent absolute constant reads");
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4768,6 +4819,7 @@ int main()
         CheckCompiledPixelShaderModel2xOpcodeValidation(renderer);
         CheckCompiledMatrixOperandValidation(renderer);
         CheckCompiledPreShaderModel3AbsoluteSourceValidation(renderer);
+        CheckCompiledShaderModel3MixedConstantAbsoluteValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();
