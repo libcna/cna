@@ -219,6 +219,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   four-byte value type, null/width/total validation and unchanged Color-object unpacking on
   Software and EasyGL. Both audited renderers normalize their applied backbuffer format to Color;
   a renderer retaining a wider native backbuffer still needs a declared-format native read seam.
+- **The current `GraphicsDevice` surface was re-audited against FNA** (`SOFTWARE-329`). Explicit
+  `VertexDeclaration` user-draw shapes are present; the contrary older audit entries were stale.
+  CNA's headless constructor, pointer Reset and index/vertex convenience aliases are now visibly
+  `CNAEXT`. The remaining rectangle/foreign-window `Present` overload is a physical window/swapchain
+  API unsupported by EasyGL too and explicitly outside the Software renderer target; no no-op stub
+  is counted as parity.
 - **Static and dynamic vertex/index buffers share EasyGL's public contract** (`SOFTWARE-109`,
   `SOFTWARE-294`). The complete fixed-size resource exists at construction, so readable buffers
   support `GetData` and valid draw ranges before their first upload, matching XNA/FNA native

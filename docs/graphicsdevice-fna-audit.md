@@ -1,8 +1,8 @@
 # GraphicsDevice FNA Audit
 
-**Date:** 2026-06-26  
+**Date:** 2026-09-11 (adversarial refresh, `SOFTWARE-329`)
 **FNA reference:** `FNA/src/Graphics/GraphicsDevice.cs` (1820 lines)  
-**CNA implementation:** `include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp` (664 lines)
+**CNA implementation:** `modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`
 
 This document compares CNA's `GraphicsDevice` against FNA's public XNA 4.0 API surface.
 
@@ -13,7 +13,7 @@ This document compares CNA's `GraphicsDevice` against FNA's public XNA 4.0 API s
 | FNA signature | CNA status |
 |---|---|
 | `GraphicsDevice(GraphicsAdapter, GraphicsProfile, PresentationParameters)` | ✅ Present |
-| `GraphicsDevice()` (default, for headless use) | ✅ Present (CNAEXT) |
+| `GraphicsDevice()` (default, for headless use) | ✅ Present and marked CNAEXT (`SOFTWARE-329`) |
 
 FNA has exactly one public constructor. CNA's no-arg constructor is a legitimate CNAEXT addition.
 
@@ -69,9 +69,14 @@ All 19 properties present.
 | FNA signature | CNA status |
 |---|---|
 | `Present()` | ✅ |
-| `Present(Rectangle? src, Rectangle? dst, IntPtr windowHandle)` | ❌ Missing |
+| `Present(Rectangle? src, Rectangle? dst, IntPtr windowHandle)` | N/A to Software parity; absent on every CNA renderer |
 
-The three-argument `Present` allows rendering into a sub-rectangle of a foreign window handle. Rarely used on desktop but is part of the XNA 4.0 public API. Stub needed.
+The three-argument overload is classic XNA and remains a repository-wide public-surface omission.
+It presents into a foreign physical window and optionally scales between source/destination
+rectangles; neither EasyGL nor another CNA renderer exposes the required renderer contract. A stub
+that merely called `Present()` would silently discard all three observable arguments and is not an
+implementation. Foreign-window/swapchain behavior is explicitly outside the headless Software
+parity target, so this audit records it without claiming support.
 
 ### Reset
 
@@ -148,13 +153,14 @@ the currently RGBA8-only renderer readback seam.
 | `SetVertexBuffers(params VertexBufferBinding[])` | ✅ |
 | `GetVertexBuffers()` | ✅ |
 
-CNA adds three non-XNA helpers that are **missing the `CNAEXT` tag**:
+CNA adds three non-XNA helpers, explicitly marked `CNAEXT` by `SOFTWARE-329`:
 
 - `SetIndexBuffer(const IndexBuffer*)` — XNA uses the `Indices` property setter; this is an alias
 - `GetIndexBuffer()` — XNA uses the `Indices` property getter; this is an alias
 - `GetVertexBuffer()` — returns only the first bound buffer; not in FNA API
 
-CNA also exposes `Indices()` / `Indices(const IndexBuffer*)` as named methods alongside `getIndicesProperty/setIndicesProperty`. The method forms are non-convention duplicates and should be marked `CNAEXT`.
+CNA also exposes `Indices()` / `Indices(const IndexBuffer*)` as named methods alongside
+`getIndicesProperty/setIndicesProperty`; these non-convention duplicates are marked `CNAEXT`.
 
 ---
 
@@ -175,7 +181,7 @@ FNA has two generic overloads. CNA replaces them with concrete typed overloads p
 | FNA overload | CNA coverage |
 |---|---|
 | `DrawUserPrimitives<T>(...) where T : IVertexType` | ✅ 4 typed overloads (VPC, VPCT, VPT, VPNT) + raw `void*` |
-| `DrawUserPrimitives<T>(..., VertexDeclaration) where T : struct` | ⚠️ No `VertexDeclaration` variant — callers with custom vertex structs must use the raw `void*` overload |
+| `DrawUserPrimitives<T>(..., VertexDeclaration) where T : struct` | ✅ Raw `void*` plus all built-in typed declaration overloads |
 
 ### User-array draw (indexed)
 
@@ -184,9 +190,9 @@ FNA has four generic overloads (short/int index × with/without VertexDeclaratio
 | FNA overload | CNA coverage |
 |---|---|
 | `DrawUserIndexedPrimitives<T>(..., short[], ...) where T : IVertexType` | ✅ 4 typed overloads (uint16_t indices) |
-| `DrawUserIndexedPrimitives<T>(..., short[], ..., VertexDeclaration) where T : struct` | ⚠️ No VertexDeclaration variant |
+| `DrawUserIndexedPrimitives<T>(..., short[], ..., VertexDeclaration) where T : struct` | ✅ Raw `void*` plus all built-in typed declaration overloads |
 | `DrawUserIndexedPrimitives<T>(..., int[], ...) where T : IVertexType` | ✅ 4 typed overloads (uint32_t indices) |
-| `DrawUserIndexedPrimitives<T>(..., int[], ..., VertexDeclaration) where T : struct` | ⚠️ No VertexDeclaration variant |
+| `DrawUserIndexedPrimitives<T>(..., int[], ..., VertexDeclaration) where T : struct` | ✅ Raw `void*` plus all built-in typed declaration overloads |
 
 The `VertexDeclaration` variants allow callers to pass a custom vertex layout with a non-`IVertexType` struct. The raw `void*` overloads in CNA serve as a substitute.
 
@@ -203,33 +209,34 @@ The `VertexDeclaration` variants allow callers to pass a custom vertex layout wi
 
 ## 10. Summary of Gaps
 
-### Missing XNA 4.0 API (must add for compliance)
+### Missing API outside the Software parity target
 
 | Priority | Item | Notes |
 |---|---|---|
-| Medium | `Present(Rectangle?, Rectangle?, IntPtr)` | Rarely used; stub that calls the no-arg Present is sufficient |
-| Low | `GetRenderTargetsNoAllocEXT(RenderTargetBinding[])` | FNA extension; low priority |
+| Repository-wide | `Present(Rectangle?, Rectangle?, IntPtr)` | Classic XNA physical foreign-window/swapchain operation; no CNA renderer seam; explicitly outside headless Software parity |
+| FNA extension | `GetRenderTargetsNoAllocEXT(RenderTargetBinding[])` | Not XNA/Core and therefore outside this campaign |
 
-### Incorrect visibility / missing CNAEXT tags (should fix)
+### Resolved visibility / CNAEXT marking defects
 
 | Item | Issue |
 |---|---|
 | `Clear(float, float, float, float)` | Fixed by SOFTWARE-327 — tagged `CNAEXT` |
 | `Clear(const Color&, float)` | Fixed by SOFTWARE-327 — tagged `CNAEXT` |
-| `Reset(const PresentationParameters&, GraphicsAdapter*)` | Pointer overload not in XNA — add `CNAEXT` |
-| `SetIndexBuffer(const IndexBuffer*)` | Alias for `setIndicesProperty` — add `CNAEXT` |
-| `GetIndexBuffer()` | Alias for `getIndicesProperty` — add `CNAEXT` |
-| `GetVertexBuffer()` | Not in FNA API — add `CNAEXT` |
-| `Indices()` / `Indices(const IndexBuffer*)` | Duplicate of property methods — add `CNAEXT` |
+| `GraphicsDevice()` | Fixed by SOFTWARE-329 — tagged `CNAEXT` |
+| `Reset(const PresentationParameters&, GraphicsAdapter*)` | Fixed by SOFTWARE-329 — tagged `CNAEXT` |
+| `SetIndexBuffer(const IndexBuffer*)` | Fixed by SOFTWARE-329 — tagged `CNAEXT` |
+| `GetIndexBuffer()` | Fixed by SOFTWARE-329 — tagged `CNAEXT` |
+| `GetVertexBuffer()` | Fixed by SOFTWARE-329 — tagged `CNAEXT` |
+| `Indices()` / `Indices(const IndexBuffer*)` | Fixed by SOFTWARE-329 — tagged `CNAEXT` |
 
 ### Intentional C++ deviations (acceptable)
 
 | Item | Reason |
 |---|---|
-| `GetBackBufferData` uses `Color*` instead of `T[]` | C++ lacks runtime generics; Color covers primary use case |
+| `GetBackBufferData` uses constrained `T*` plus a Color specialization instead of `T[]` | C++ pointer/count mapping; restored by SOFTWARE-328 |
 | `DrawUserPrimitives` / `DrawUserIndexedPrimitives` use concrete typed overloads | C++ adaptation of C# generics |
 | `SetRenderTargets` takes `std::vector` instead of `params` array | Idiomatic C++ |
 | `SetVertexBuffers` takes `std::vector` instead of `params` array | Idiomatic C++ |
 | `GetRenderTargets` returns `std::vector` instead of allocating a new array | Idiomatic C++ |
 | `GetVertexBuffers` returns `std::vector` | Idiomatic C++ |
-| No `DrawUserPrimitives`/`DrawUserIndexedPrimitives` VertexDeclaration variants | Use raw `void*` overload as substitute |
+| Generic user draws use constrained raw-stream and built-in typed overloads | C++ adaptation retains both inferred and explicit-VertexDeclaration shapes |

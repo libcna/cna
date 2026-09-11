@@ -108,7 +108,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // --- Constructors ---
         /** @brief Initializes a GraphicsDevice with no window (headless mode). */
-        GraphicsDevice();
+        CNAEXT GraphicsDevice();
 
         /**
          * @brief Initializes a new GraphicsDevice for the given adapter and presentation settings.
@@ -296,7 +296,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param presentationParameters The new presentation parameters.
          * @param adapter                Pointer to the graphics adapter, or nullptr to keep the current one.
          */
-        void Reset(const PresentationParameters& presentationParameters, GraphicsAdapter* adapter);
+        CNAEXT void Reset(const PresentationParameters& presentationParameters, GraphicsAdapter* adapter);
 
         /** @brief Releases all resources held by this device. */
         void Dispose() override;
@@ -435,17 +435,17 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Binds an index buffer.
          * @param indexBuffer The index buffer to bind, or nullptr to unbind.
          */
-        void SetIndexBuffer(const IndexBuffer* indexBuffer);
+        CNAEXT void SetIndexBuffer(const IndexBuffer* indexBuffer);
         /**
          * @brief Returns the currently bound vertex buffer (first slot).
          * @return Pointer to the bound vertex buffer, or nullptr.
          */
-        [[nodiscard]] const VertexBuffer* GetVertexBuffer() const;
+        CNAEXT [[nodiscard]] const VertexBuffer* GetVertexBuffer() const;
         /**
          * @brief Returns the currently bound index buffer.
          * @return Pointer to the bound index buffer, or nullptr.
          */
-        [[nodiscard]] const IndexBuffer* GetIndexBuffer() const;
+        CNAEXT [[nodiscard]] const IndexBuffer* GetIndexBuffer() const;
 
         // --- Draw ---
         /**
@@ -1405,12 +1405,12 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void SetCurrentEffect(Effect* effect);
 
         /** @brief Returns the currently bound index buffer. */
-        [[nodiscard]] const IndexBuffer* Indices() const;
+        CNAEXT [[nodiscard]] const IndexBuffer* Indices() const;
         /**
          * @brief Binds an index buffer.
          * @param indexBuffer The index buffer to bind.
          */
-        void Indices(const IndexBuffer* indexBuffer);
+        CNAEXT void Indices(const IndexBuffer* indexBuffer);
 
         /** @brief Returns the fully qualified .NET type name of this class. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
