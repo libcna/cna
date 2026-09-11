@@ -246,30 +246,46 @@ TEST(GraphicsDeviceDefaultStateTest, DisposedStatesAreRejectedBeforeBinding)
     EXPECT_THROW(gd.setRasterizerStateProperty(rasterizer), System::ObjectDisposedException);
 }
 
-TEST(GraphicsDeviceDefaultStateTest, DisposalAfterBindingInvalidatesAssignedPayload)
+// SOFTWARE-350: Microsoft XNA compares the incoming managed reference with its cached state before
+// calling Apply(), whose disposed check is therefore bypassed for an unchanged active object.
+// BlendFactor/MultiSampleMask and ReferenceStencil deliberately mark their parent state caches
+// dirty even when assigned the current value; the same-reference setter must then call Apply and
+// observe disposal. CNA's shared state payload is the safe C++ representation of that identity.
+TEST(GraphicsDeviceDefaultStateTest, DisposedActiveStateReassignmentIsNoOpUnlessDeviceStateIsDirty)
 {
     GraphicsDevice gd;
 
     BlendState blend;
     gd.setBlendStateProperty(blend);
     blend.Dispose();
-    EXPECT_THROW(gd.setBlendStateProperty(gd.getBlendStateProperty()),
-                 System::ObjectDisposedException);
+    EXPECT_NO_THROW(gd.setBlendStateProperty(blend));
+    EXPECT_NO_THROW(gd.setBlendStateProperty(gd.getBlendStateProperty()));
+    gd.setBlendFactorProperty(gd.getBlendFactorProperty());
+    EXPECT_THROW(gd.setBlendStateProperty(blend), System::ObjectDisposedException);
+
+    BlendState maskedBlend;
+    gd.setBlendStateProperty(maskedBlend);
+    maskedBlend.Dispose();
+    EXPECT_NO_THROW(gd.setBlendStateProperty(maskedBlend));
+    gd.setMultiSampleMaskProperty(gd.getMultiSampleMaskProperty());
+    EXPECT_THROW(gd.setBlendStateProperty(maskedBlend), System::ObjectDisposedException);
 
     DepthStencilState depth;
     gd.setDepthStencilStateProperty(depth);
     depth.Dispose();
-    EXPECT_THROW(gd.setDepthStencilStateProperty(gd.getDepthStencilStateProperty()),
-                 System::ObjectDisposedException);
+    EXPECT_NO_THROW(gd.setDepthStencilStateProperty(depth));
+    EXPECT_NO_THROW(gd.setDepthStencilStateProperty(gd.getDepthStencilStateProperty()));
+    gd.setReferenceStencilProperty(gd.getReferenceStencilProperty());
+    EXPECT_THROW(gd.setDepthStencilStateProperty(depth), System::ObjectDisposedException);
 
     RasterizerState rasterizer;
     gd.setRasterizerStateProperty(rasterizer);
     rasterizer.Dispose();
-    EXPECT_THROW(gd.setRasterizerStateProperty(gd.getRasterizerStateProperty()),
-                 System::ObjectDisposedException);
+    EXPECT_NO_THROW(gd.setRasterizerStateProperty(rasterizer));
+    EXPECT_NO_THROW(gd.setRasterizerStateProperty(gd.getRasterizerStateProperty()));
 }
 
-TEST(GraphicsDeviceDefaultStateTest, CustomStatesCanBeReappliedAcrossDevices)
+TEST(GraphicsDeviceDefaultStateTest, CustomStatesCanBeSharedAcrossDevicesAndCachedIdentityIsNoOp)
 {
     GraphicsDevice first;
     GraphicsDevice second;
@@ -277,23 +293,34 @@ TEST(GraphicsDeviceDefaultStateTest, CustomStatesCanBeReappliedAcrossDevices)
     BlendState blend;
     blend.setColorWriteChannelsProperty(ColorWriteChannels::None);
     EXPECT_NO_THROW(first.setBlendStateProperty(blend));
+    EXPECT_EQ(blend.getGraphicsDeviceProperty(), &first);
     EXPECT_NO_THROW(second.setBlendStateProperty(blend));
+    EXPECT_EQ(blend.getGraphicsDeviceProperty(), &second);
     EXPECT_NO_THROW(first.setBlendStateProperty(blend));
+    // The first device already caches this exact managed identity, so XNA does not call Apply
+    // again merely because another device most recently became its GraphicsResource parent.
+    EXPECT_EQ(blend.getGraphicsDeviceProperty(), &second);
     EXPECT_EQ(second.getBlendStateProperty().getColorWriteChannelsProperty(),
               ColorWriteChannels::None);
 
     DepthStencilState depth;
     depth.setDepthBufferEnableProperty(false);
     EXPECT_NO_THROW(first.setDepthStencilStateProperty(depth));
+    EXPECT_EQ(depth.getGraphicsDeviceProperty(), &first);
     EXPECT_NO_THROW(second.setDepthStencilStateProperty(depth));
+    EXPECT_EQ(depth.getGraphicsDeviceProperty(), &second);
     EXPECT_NO_THROW(first.setDepthStencilStateProperty(depth));
+    EXPECT_EQ(depth.getGraphicsDeviceProperty(), &second);
     EXPECT_FALSE(second.getDepthStencilStateProperty().getDepthBufferEnableProperty());
 
     RasterizerState rasterizer;
     rasterizer.setCullModeProperty(CullMode::None);
     EXPECT_NO_THROW(first.setRasterizerStateProperty(rasterizer));
+    EXPECT_EQ(rasterizer.getGraphicsDeviceProperty(), &first);
     EXPECT_NO_THROW(second.setRasterizerStateProperty(rasterizer));
+    EXPECT_EQ(rasterizer.getGraphicsDeviceProperty(), &second);
     EXPECT_NO_THROW(first.setRasterizerStateProperty(rasterizer));
+    EXPECT_EQ(rasterizer.getGraphicsDeviceProperty(), &second);
     EXPECT_EQ(second.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
 }
 

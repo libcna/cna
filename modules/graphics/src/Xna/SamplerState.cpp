@@ -29,7 +29,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
     SamplerState& SamplerState::operator=(const SamplerState& other)
     {
-        if (this == &other)
+        // Collection assignment retains the managed SamplerState reference in XNA. Its setter
+        // compares that reference before Apply(), so a shared active identity is a no-op even if
+        // it has since been disposed; a different slot still reaches BindForUse and rejects it.
+        if (this == &other || state_ == other.state_)
             return *this;
 
         if (bindOnAssignment_)

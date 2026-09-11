@@ -113,6 +113,21 @@ TEST(SamplerStateCollectionTest, DisposalAfterAssignmentInvalidatesSharedPayload
     EXPECT_EQ(coll[4].getNameProperty(), "SamplerState.LinearWrap");
 }
 
+// SOFTWARE-350: XNA's collection setter compares the incoming SamplerState reference with the
+// slot before Apply(), so an already-active disposed sampler is a no-op. A different slot above
+// still invokes Apply and must reject the exact same disposed object.
+TEST(SamplerStateCollectionTest, ReassigningSameDisposedSamplerIdentityIsNoOp)
+{
+    SamplerStateCollection coll;
+    SamplerState custom;
+    coll[3] = custom;
+    custom.Dispose();
+
+    EXPECT_NO_THROW(coll[3] = custom);
+    EXPECT_NO_THROW(coll[3] = coll[3]);
+    EXPECT_TRUE(coll[3].getIsDisposedProperty());
+}
+
 TEST(GraphicsDeviceSamplerStatesTest, CustomSamplerCanBeReappliedAcrossDevices)
 {
     GraphicsDevice first;
@@ -121,8 +136,14 @@ TEST(GraphicsDeviceSamplerStatesTest, CustomSamplerCanBeReappliedAcrossDevices)
     sampler.setAddressUProperty(TextureAddressMode::Mirror);
 
     EXPECT_NO_THROW(first.getSamplerStatesProperty()[3] = sampler);
+    EXPECT_EQ(sampler.getGraphicsDeviceProperty(), &first);
     EXPECT_NO_THROW(second.getSamplerStatesProperty()[3] = sampler);
+    EXPECT_EQ(sampler.getGraphicsDeviceProperty(), &second);
+    EXPECT_NO_THROW(first.getSamplerStatesProperty()[3] = sampler);
+    EXPECT_EQ(sampler.getGraphicsDeviceProperty(), &second);
+    // A different first-device slot does not cache this identity yet and therefore calls Apply.
     EXPECT_NO_THROW(first.getSamplerStatesProperty()[4] = sampler);
+    EXPECT_EQ(sampler.getGraphicsDeviceProperty(), &first);
     EXPECT_EQ(second.getSamplerStatesProperty()[3].getAddressUProperty(),
               TextureAddressMode::Mirror);
 }

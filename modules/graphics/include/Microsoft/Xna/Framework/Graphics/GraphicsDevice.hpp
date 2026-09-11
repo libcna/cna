@@ -1523,6 +1523,8 @@ namespace Microsoft::Xna::Framework::Graphics
         Color blendFactor_;
         int multiSampleMask_ = -1;
         int referenceStencil_ = 0;
+        bool blendStateDirty_ = false;
+        bool depthStencilStateDirty_ = false;
 
         TextureCollection textures_;
         SamplerStateCollection samplerStates_;

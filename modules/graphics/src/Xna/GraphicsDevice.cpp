@@ -4263,6 +4263,12 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setBlendStateProperty(const BlendState& value)
     {
         ThrowIfDisposed();
+        // Microsoft XNA compares the managed state reference before Apply(), so assigning the
+        // already-active object is a no-op even after that object has been disposed. The two
+        // standalone device properties deliberately dirty this cache and force the same object
+        // through Apply again; preserve that distinction with CNA's shared payload identity.
+        if (value.state_ == blendState_.state_ && !blendStateDirty_)
+            return;
         ValidateBlendStateForProfile(graphicsProfile_, value);
         value.BindForUse(this);
         if (renderer_)
@@ -4300,6 +4306,7 @@ namespace Microsoft::Xna::Framework::Graphics
         blendState_ = value;
         blendFactor_ = value.getBlendFactorProperty();
         multiSampleMask_ = value.getMultiSampleMaskProperty();
+        blendStateDirty_ = false;
     }
 
     DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() { return depthStencilState_; }
@@ -4307,6 +4314,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setDepthStencilStateProperty(const DepthStencilState& value)
     {
         ThrowIfDisposed();
+        if (value.state_ == depthStencilState_.state_ && !depthStencilStateDirty_)
+            return;
         value.BindForUse(this);
         if (renderer_)
         {
@@ -4345,6 +4354,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // depth/stencil configuration that a failed renderer update did not install.
         depthStencilState_ = value;
         referenceStencil_ = value.getReferenceStencilProperty();
+        depthStencilStateDirty_ = false;
     }
 
     RasterizerState& GraphicsDevice::getRasterizerStateProperty() { return rasterizerState_; }
@@ -4352,6 +4362,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setRasterizerStateProperty(const RasterizerState& value)
     {
         ThrowIfDisposed();
+        if (value.state_ == rasterizerState_.state_)
+            return;
         value.BindForUse(this);
         if (renderer_)
         {
@@ -4407,13 +4419,14 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setBlendFactorProperty(const Color& value)
     {
         ThrowIfDisposed();
-        blendFactor_ = value;
         if (renderer_)
             renderer_->SetBlendFactor(
                 value.getRProperty() / 255.0f,
                 value.getGProperty() / 255.0f,
                 value.getBProperty() / 255.0f,
                 value.getAProperty() / 255.0f);
+        blendFactor_ = value;
+        blendStateDirty_ = true;
     }
 
     int GraphicsDevice::getMultiSampleMaskProperty() const { return multiSampleMask_; }
@@ -4454,6 +4467,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // Preserve transactional state application: an incapable renderer may reject a
         // non-default mask, in which case the public cache continues to describe installed state.
         multiSampleMask_ = value;
+        blendStateDirty_ = true;
     }
 
     int GraphicsDevice::getReferenceStencilProperty() const { return referenceStencil_; }
@@ -4466,6 +4480,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // Match the other state setters: a renderer rejection must not leave the public cache
         // describing state that was never installed.
         referenceStencil_ = value;
+        depthStencilStateDirty_ = true;
     }
 
     void GraphicsDevice::Reset()

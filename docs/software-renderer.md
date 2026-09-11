@@ -610,6 +610,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   stack source leaves scope. Device defaults also retain the three named preset identities, and
   untouched sampler slots share `SamplerState.LinearWrap` as XNA/FNA do. Only literal C++ wrapper
   address and event-token identity remain under `SOFTWARE-198`.
+- **Active state reassignment follows XNA reference and dirty-cache rules** (`SOFTWARE-350`). A
+  disposed state that is already active remains cached and may still be drawn with; assigning that
+  same Blend/DepthStencil/Rasterizer/Sampler identity again is a no-op before `Apply`. Assigning
+  `BlendFactor`, `MultiSampleMask`, or `ReferenceStencil` marks the corresponding device cache
+  dirty, so the next same-identity whole-state assignment does re-enter `Apply` and observes
+  disposal. A different disposed object or sampler slot is still rejected.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared
