@@ -194,6 +194,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   now runs all fourteen renderer-neutral positive `PointListEXT` cases, including the exact
   nonzero `vertexStart`/count pixel discriminator. This is extension regression evidence and is not
   counted toward classic-XNA parity.
+- **Unknown state enum values follow Microsoft XNA's native conversion defaults**
+  (`SOFTWARE-325`). Public state wrappers retain the cast value exactly, while the shared renderer
+  boundary supplies Zero/Add for blend factors/functions, Always for comparisons, Keep for stencil
+  operations, None/Solid for cull/fill and Linear/Wrap for sampler filter/addressing. Exact pixel
+  tests cover blend, opposite windings, depth, two-sided stencil and SpriteBatch filtering/wrap on
+  Software and EasyGL; a recording test also protects SpriteBatch's private sampler channel.
 - **Static and dynamic vertex/index buffers share EasyGL's public contract** (`SOFTWARE-109`,
   `SOFTWARE-294`). The complete fixed-size resource exists at construction, so readable buffers
   support `GetData` and valid draw ranges before their first upload, matching XNA/FNA native

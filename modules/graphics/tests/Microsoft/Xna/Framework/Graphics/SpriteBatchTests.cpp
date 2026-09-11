@@ -380,6 +380,32 @@ TEST(SpriteBatchTest, DeferredSamplerReadsEveryPropertyAtEndBoundary)
     EXPECT_FLOAT_EQ(recording->lodBias, -0.75f);
 }
 
+TEST(SpriteBatchTest, InvalidSamplerEnumsUseXnaFallbacksOnPrivateRendererChannel)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+    using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
+    using Microsoft::Xna::Framework::Graphics::TextureFilter;
+
+    auto renderer = std::make_unique<RecordingSamplerSpriteBatchRenderer>();
+    RecordingSamplerSpriteBatchRenderer* const recording = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+    SamplerState sampler;
+    sampler.setFilterProperty(static_cast<TextureFilter>(12345));
+    sampler.setAddressUProperty(static_cast<TextureAddressMode>(12345));
+    sampler.setAddressVProperty(static_cast<TextureAddressMode>(12345));
+
+    batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &sampler, nullptr, nullptr);
+    EXPECT_EQ(recording->filter, static_cast<int>(TextureFilter::Linear));
+    EXPECT_EQ(recording->addressU, static_cast<int>(TextureAddressMode::Wrap));
+    EXPECT_EQ(recording->addressV, static_cast<int>(TextureAddressMode::Wrap));
+    batch.End();
+
+    EXPECT_EQ(recording->filter, static_cast<int>(TextureFilter::Linear));
+    EXPECT_EQ(recording->addressU, static_cast<int>(TextureAddressMode::Wrap));
+    EXPECT_EQ(recording->addressV, static_cast<int>(TextureAddressMode::Wrap));
+}
+
 TEST(SpriteBatchTest, DeferredEndReadsLateMutationsFromEveryStatePayload)
 {
     using Microsoft::Xna::Framework::Graphics::BlendState;

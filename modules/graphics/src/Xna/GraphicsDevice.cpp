@@ -6,6 +6,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
+#include "CNA/Internal/Renderers/Common/XnaStateConversion.hpp"
 #include "CNA/GraphicsRendererSelection.hpp"
 #include "CNA/IndirectDrawArguments.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
@@ -4138,8 +4139,10 @@ namespace Microsoft::Xna::Framework::Graphics
         // configuration. This method is the common pre-draw state flush for every draw overload.
         const RasterizerState& rs = rasterizerState_;
         renderer_->ApplyRasterizerState(
-            (int)rs.getCullModeProperty(),
-            (int)rs.getFillModeProperty(),
+            CNA::Internal::Renderers::NormalizeXnaCullModeOrdinal(
+                static_cast<int>(rs.getCullModeProperty())),
+            CNA::Internal::Renderers::NormalizeXnaFillModeOrdinal(
+                static_cast<int>(rs.getFillModeProperty())),
             rs.getScissorTestEnableProperty(),
             rs.getDepthBiasProperty(),
             rs.getSlopeScaleDepthBiasProperty());
@@ -4150,13 +4153,18 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             const SamplerState& ss = samplerStates_[i];
             renderer_->ApplySamplerState(i,
-                (int)ss.getFilterProperty(),
-                (int)ss.getAddressUProperty(),
-                (int)ss.getAddressVProperty(),
+                CNA::Internal::Renderers::NormalizeXnaTextureFilterOrdinal(
+                    static_cast<int>(ss.getFilterProperty())),
+                CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                    static_cast<int>(ss.getAddressUProperty())),
+                CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                    static_cast<int>(ss.getAddressVProperty())),
                 ss.getMaxAnisotropyProperty());
             renderer_->ApplySamplerMipState(i, ss.getMaxMipLevelProperty(),
                                            ss.getMipMapLevelOfDetailBiasProperty());
-            renderer_->ApplySamplerAddressW(i, (int)ss.getAddressWProperty());
+            renderer_->ApplySamplerAddressW(
+                i, CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                       static_cast<int>(ss.getAddressWProperty())));
         }
     }
 
@@ -4246,12 +4254,18 @@ namespace Microsoft::Xna::Framework::Graphics
             writeState.colorWriteChannels[3] = (int)value.getColorWriteChannels3Property();
             writeState.multiSampleMask = static_cast<unsigned int>(value.getMultiSampleMaskProperty());
             renderer_->ApplyBlendState(
-                (int)value.getColorSourceBlendProperty(),
-                (int)value.getAlphaSourceBlendProperty(),
-                (int)value.getColorDestinationBlendProperty(),
-                (int)value.getAlphaDestinationBlendProperty(),
-                (int)value.getColorBlendFunctionProperty(),
-                (int)value.getAlphaBlendFunctionProperty(),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(value.getColorSourceBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(value.getAlphaSourceBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(value.getColorDestinationBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(value.getAlphaDestinationBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendFunctionOrdinal(
+                    static_cast<int>(value.getColorBlendFunctionProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendFunctionOrdinal(
+                    static_cast<int>(value.getAlphaBlendFunctionProperty())),
                 writeState);
             renderer_->SetBlendFactor(
                 value.getBlendFactorProperty().getRProperty() / 255.0f,
@@ -4277,20 +4291,29 @@ namespace Microsoft::Xna::Framework::Graphics
             renderer_->ApplyDepthStencilState(
                 value.getDepthBufferEnableProperty(),
                 value.getDepthBufferWriteEnableProperty(),
-                (int)value.getDepthBufferFunctionProperty(),
+                CNA::Internal::Renderers::NormalizeXnaCompareFunctionOrdinal(
+                    static_cast<int>(value.getDepthBufferFunctionProperty())),
                 value.getStencilEnableProperty(),
-                (int)value.getStencilFunctionProperty(),
-                (int)value.getStencilPassProperty(),
-                (int)value.getStencilFailProperty(),
-                (int)value.getStencilDepthBufferFailProperty(),
+                CNA::Internal::Renderers::NormalizeXnaCompareFunctionOrdinal(
+                    static_cast<int>(value.getStencilFunctionProperty())),
+                CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
+                    static_cast<int>(value.getStencilPassProperty())),
+                CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
+                    static_cast<int>(value.getStencilFailProperty())),
+                CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
+                    static_cast<int>(value.getStencilDepthBufferFailProperty())),
                 value.getStencilMaskProperty(),
                 value.getStencilWriteMaskProperty(),
                 value.getReferenceStencilProperty(),
                 value.getTwoSidedStencilModeProperty(),
-                (int)value.getCounterClockwiseStencilFunctionProperty(),
-                (int)value.getCounterClockwiseStencilPassProperty(),
-                (int)value.getCounterClockwiseStencilFailProperty(),
-                (int)value.getCounterClockwiseStencilDepthBufferFailProperty());
+                CNA::Internal::Renderers::NormalizeXnaCompareFunctionOrdinal(
+                    static_cast<int>(value.getCounterClockwiseStencilFunctionProperty())),
+                CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
+                    static_cast<int>(value.getCounterClockwiseStencilPassProperty())),
+                CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
+                    static_cast<int>(value.getCounterClockwiseStencilFailProperty())),
+                CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
+                    static_cast<int>(value.getCounterClockwiseStencilDepthBufferFailProperty())));
             renderer_->SetReferenceStencil(value.getReferenceStencilProperty());
         }
         // Commit only after both native operations succeed, so the public cache never describes a
@@ -4308,8 +4331,10 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderer_)
         {
             renderer_->ApplyRasterizerState(
-                (int)value.getCullModeProperty(),
-                (int)value.getFillModeProperty(),
+                CNA::Internal::Renderers::NormalizeXnaCullModeOrdinal(
+                    static_cast<int>(value.getCullModeProperty())),
+                CNA::Internal::Renderers::NormalizeXnaFillModeOrdinal(
+                    static_cast<int>(value.getFillModeProperty())),
                 value.getScissorTestEnableProperty(),
                 value.getDepthBiasProperty(),
                 value.getSlopeScaleDepthBiasProperty());
@@ -4387,12 +4412,18 @@ namespace Microsoft::Xna::Framework::Graphics
                 static_cast<int>(blendState_.getColorWriteChannels3Property());
             writeState.multiSampleMask = static_cast<unsigned int>(value);
             renderer_->ApplyBlendState(
-                static_cast<int>(blendState_.getColorSourceBlendProperty()),
-                static_cast<int>(blendState_.getAlphaSourceBlendProperty()),
-                static_cast<int>(blendState_.getColorDestinationBlendProperty()),
-                static_cast<int>(blendState_.getAlphaDestinationBlendProperty()),
-                static_cast<int>(blendState_.getColorBlendFunctionProperty()),
-                static_cast<int>(blendState_.getAlphaBlendFunctionProperty()),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(blendState_.getColorSourceBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(blendState_.getAlphaSourceBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(blendState_.getColorDestinationBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(blendState_.getAlphaDestinationBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendFunctionOrdinal(
+                    static_cast<int>(blendState_.getColorBlendFunctionProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendFunctionOrdinal(
+                    static_cast<int>(blendState_.getAlphaBlendFunctionProperty())),
                 writeState);
         }
         // Preserve transactional state application: an incapable renderer may reject a

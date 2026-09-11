@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/XnaStateConversion.hpp"
 #include "CNA/Internal/Utf8Decode.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -143,13 +144,16 @@ namespace Microsoft::Xna::Framework::Graphics
         // SpriteBatch sampler channel from the retained payload immediately before drawing.
         if (renderer_ != nullptr)
         {
-            renderer_->SetSamplerFilter(static_cast<int>(samplerState_.getFilterProperty()));
+            renderer_->SetSamplerFilter(NormalizeXnaTextureFilterOrdinal(
+                static_cast<int>(samplerState_.getFilterProperty())));
             renderer_->SetSamplerMaxAnisotropy(samplerState_.getMaxAnisotropyProperty());
             renderer_->SetSamplerMipState(samplerState_.getMaxMipLevelProperty(),
                                           samplerState_.getMipMapLevelOfDetailBiasProperty());
             renderer_->SetSamplerAddressMode(
-                static_cast<int>(samplerState_.getAddressUProperty()),
-                static_cast<int>(samplerState_.getAddressVProperty()));
+                NormalizeXnaTextureAddressModeOrdinal(
+                    static_cast<int>(samplerState_.getAddressUProperty())),
+                NormalizeXnaTextureAddressModeOrdinal(
+                    static_cast<int>(samplerState_.getAddressVProperty())));
         }
     }
 
@@ -259,12 +263,16 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderer_->SetTransformMatrix(transformMatrix_);
                 // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
                 // resolved state is always (re-)applied — never left over from a previous Begin().
-                renderer_->SetSamplerFilter(static_cast<int>(samplerState_.getFilterProperty()));
+                renderer_->SetSamplerFilter(NormalizeXnaTextureFilterOrdinal(
+                    static_cast<int>(samplerState_.getFilterProperty())));
                 renderer_->SetSamplerMaxAnisotropy(samplerState_.getMaxAnisotropyProperty());
                 renderer_->SetSamplerMipState(samplerState_.getMaxMipLevelProperty(),
                                               samplerState_.getMipMapLevelOfDetailBiasProperty());
-                renderer_->SetSamplerAddressMode(static_cast<int>(samplerState_.getAddressUProperty()),
-                                                static_cast<int>(samplerState_.getAddressVProperty()));
+                renderer_->SetSamplerAddressMode(
+                    NormalizeXnaTextureAddressModeOrdinal(
+                        static_cast<int>(samplerState_.getAddressUProperty())),
+                    NormalizeXnaTextureAddressModeOrdinal(
+                        static_cast<int>(samplerState_.getAddressVProperty())));
                 renderer_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
                 renderer_->Begin();
             }
