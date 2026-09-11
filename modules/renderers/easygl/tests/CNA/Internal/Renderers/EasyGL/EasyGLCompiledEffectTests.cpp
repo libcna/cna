@@ -593,6 +593,14 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9LoopUsesIterationCountNotAddressLimit)
     CNA::TestSupport::RunCompiledEffectLoopContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9LogIgnoresSignAndReturnsFiniteValueForZero)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSignedLogContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9RelativeConstantTextureCoordinates)
 {
     GraphicsDevice device;

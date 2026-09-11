@@ -1717,10 +1717,14 @@ private:
         result[i] = std::exp2(source0[i]);
       break;
     case 15:
-    case 79:
-      for (int i = 0; i < 4; ++i)
-        result[i] = std::log2(source0[i]);
+    case 79: {
+      const float magnitude = std::abs(source0[0]);
+      const float logarithm = magnitude == 0.0f
+                                  ? -std::numeric_limits<float>::max()
+                                  : std::log2(magnitude);
+      result.fill(logarithm);
       break;
+    }
     case 16: {
       const float power = std::clamp(source0[3], -127.9961f, 127.9961f);
       result = {1.0f, 0.0f, 0.0f, 1.0f};

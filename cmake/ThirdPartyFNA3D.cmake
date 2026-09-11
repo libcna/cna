@@ -58,6 +58,7 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-predicated-destinations.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-predicated-texkill.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-projective-source-modifiers.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-log-semantics.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-shader-model-14-texld.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texm3x3-without-sampler.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-texreg2.patch"

@@ -964,6 +964,61 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Draws the signed/zero D3D9 LOG discriminator through an already parsed Effect.
+     *
+     * @param device Device used for the draw.
+     * @param effect Effect whose pixel shader executes the LOG sequence.
+     * @return Centre target pixel; correct D3D9 behavior is opaque yellow.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectSignedLog(GraphicsDevice& device,
+                                                            Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(-2.0f, 0.0f, 0.0f, 1.0f));
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        return centre;
+    }
+
+    /**
+     * @brief Contract: D3D9 LOG ignores sign and maps zero to finite negative FLT_MAX.
+     *
+     * The red channel evaluates LOG(-2), which must equal one. The green channel evaluates
+     * LOG(0), multiplies it by zero, then compares it with zero: the specified finite result
+     * produces true, whereas a host `log2(0)` infinity produces NaN and false.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectSignedLogContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesSignedLog = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        EXPECT_EQ(DrawCompiledEffectSignedLog(device, effect), Color::Yellow);
+    }
+
+    /**
      * @brief Draws an SM3 texture load whose coordinate is the relatively addressed `c0[aL]`.
      *
      * `aL` is zero for the fixture's single loop iteration, so the lookup must use the reflected

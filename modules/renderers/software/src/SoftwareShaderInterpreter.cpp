@@ -1108,9 +1108,14 @@ namespace CNA::Internal::Renderers::Software
                     break;
                 case 15:
                 case 79: // LOGP is the lower-precision LOG form; EasyGL keeps full precision.
-                    for (int i = 0; i < 4; ++i)
-                        result[i] = std::log2(source0[i]);
+                {
+                    const float magnitude = std::abs(source0[0]);
+                    const float logarithm = magnitude == 0.0f
+                                                ? -std::numeric_limits<float>::max()
+                                                : std::log2(magnitude);
+                    result.fill(logarithm);
                     break;
+                }
                 case 94:
                     for (int i = 0; i < 4; ++i)
                     {

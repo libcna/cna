@@ -355,6 +355,9 @@ namespace CNA::TestSupport
         /// Emits the sampling program as Shader Model 3 and reads its sampler operand as `.bgra`.
         /// D3D9 applies that source swizzle to the sampled texel before the destination write.
         bool pixelShaderSwizzlesSampleResult = false;
+        /// Emits a Shader Model 2 program that makes LOG's sign-ignore and zero-result rules
+        /// visible as exact red/green output channels.
+        bool pixelShaderUsesSignedLog = false;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -420,7 +423,8 @@ namespace CNA::TestSupport
         bool duplicatesShaderModel14Phase = false,
         bool usesRelativeTextureCoordinate = false,
         bool usesDependentTemporaryTextureCoordinate = false,
-        bool swizzlesSampleResult = false)
+        bool swizzlesSampleResult = false,
+        bool usesSignedLog = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -1140,6 +1144,36 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 1, 0x00u));
             AppendUInt32(shader, 0x0000001Du); // endloop
             AppendUInt32(shader, 0x00000001u | (2u << 24));
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+        }
+        else if (usesSignedLog)
+        {
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c1, 0, 0, 0, 0
+            AppendUInt32(shader, destination(regConst, 1, 0xFu));
+            for (int i = 0; i < 4; ++i) AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c2, 0, 0, 0, 1
+            AppendUInt32(shader, destination(regConst, 2, 0xFu));
+            for (int i = 0; i < 3; ++i) AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, 0x0000000Fu | (2u << 24)); // log r0.x, c0.x
+            AppendUInt32(shader, destination(regTemp, 0, 0x1u));
+            AppendUInt32(shader, source(regConst, 0, 0x00u));
+            AppendUInt32(shader, 0x0000000Fu | (2u << 24)); // log r0.y, c0.y
+            AppendUInt32(shader, destination(regTemp, 0, 0x2u));
+            AppendUInt32(shader, source(regConst, 0, 0x55u));
+            AppendUInt32(shader, 0x00000005u | (3u << 24)); // mul r0.y, r0.y, c1.y
+            AppendUInt32(shader, destination(regTemp, 0, 0x2u));
+            AppendUInt32(shader, source(regTemp, 0, 0x55u));
+            AppendUInt32(shader, source(regConst, 1, 0x55u));
+            AppendUInt32(shader, 0x0000000Du | (3u << 24)); // sge r0.y, r0.y, c1.y
+            AppendUInt32(shader, destination(regTemp, 0, 0x2u));
+            AppendUInt32(shader, source(regTemp, 0, 0x55u));
+            AppendUInt32(shader, source(regConst, 1, 0x55u));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.zw, c2.zw
+            AppendUInt32(shader, destination(regTemp, 0, 0xCu));
+            AppendUInt32(shader, source(regConst, 2));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
         }
@@ -2020,7 +2054,8 @@ namespace CNA::TestSupport
             options.pixelShaderDuplicatesShaderModel14Phase,
             options.pixelShaderUsesRelativeTextureCoordinate,
             options.pixelShaderUsesDependentTemporaryTextureCoordinate,
-            options.pixelShaderSwizzlesSampleResult);
+            options.pixelShaderSwizzlesSampleResult,
+            options.pixelShaderUsesSignedLog);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

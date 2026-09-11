@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -414,7 +415,7 @@ namespace
         add(1, {1u, destination(textureOutput, 4),
                 source(constant, 20, 0xE4u, 0u, true), source(address, 0, 0u)});
         add(14, {14u, destination(temporary, 0), source(constant, 15)});
-        add(15, {15u, destination(textureOutput, 5), source(temporary, 0)});
+        add(15, {15u, destination(textureOutput, 5), source(temporary, 0, 0x00u)});
         add(10, {10u, destination(temporary, 1), source(constant, 16), source(constant, 17)});
         add(11, {11u, destination(temporary, 2), source(temporary, 1), source(constant, 18)});
         add(13, {13u, destination(textureOutput, 6), source(temporary, 2), source(constant, 19)});
@@ -486,9 +487,8 @@ namespace
               "NRM write-mask dimensionality differs");
         Check(varying(4) == std::array<float, 4>{22.0f, 23.0f, 24.0f, 25.0f},
               "MOVA/relative constant result differs");
-        for (std::size_t component = 0; component < 4; ++component)
-            Check(std::abs(varying(5)[component] - floats[15u * 4u + component]) < 0.00001f,
-                  "EXP/LOG round trip differs");
+        Check(varying(5) == std::array<float, 4>{1.0f, 1.0f, 1.0f, 1.0f},
+              "EXP/LOG scalar replication differs");
         Check(varying(6) == std::array<float, 4>{1.0f, 0.0f, 1.0f, 1.0f},
               "MIN/MAX/SGE result differs");
         Check(std::abs(varying(7)[0] - std::cos(0.5f)) < 0.00001f &&
@@ -504,6 +504,40 @@ namespace
         Check(color != result.varyings.end() &&
                   color->value == std::array<float, 4>{0.0f, 0.5f, 1.0f, 1.0f},
               "D3D COLOR output saturation differs");
+
+        setConstant(35u, {-2.0f, 0.0f, 0.0f, 1.0f});
+        setConstant(36u, {0.0f, 0.0f, 0.0f, 1.0f});
+        SoftwareShaderProgramEXT logProgram;
+        logProgram.stage = SoftwareShaderStageEXT::Vertex;
+        logProgram.majorVersion = 3u;
+        logProgram.outputSemantics = {
+            {MOJOSHADER_USAGE_POSITION, 0u, 0u, textureOutput},
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, 1u, textureOutput},
+        };
+        const auto addLog = [&](std::uint16_t opcode,
+                                std::initializer_list<std::uint32_t> tokens)
+        {
+            SoftwareShaderInstructionEXT instruction;
+            instruction.opcode = opcode;
+            instruction.tokens.assign(tokens);
+            logProgram.instructions.push_back(std::move(instruction));
+        };
+        addLog(1u, {1u, destination(textureOutput, 0u), source(constant, 36u)});
+        addLog(15u, {15u, destination(textureOutput, 1u, 0x1u),
+                     source(constant, 35u, 0x00u)});
+        addLog(15u, {15u, destination(temporary, 0u, 0x2u),
+                     source(constant, 35u, 0x55u)});
+        addLog(5u, {5u, destination(temporary, 0u, 0x2u),
+                    source(temporary, 0u, 0x55u), source(constant, 36u, 0x00u)});
+        addLog(13u, {13u, destination(textureOutput, 1u, 0x2u),
+                     source(temporary, 0u, 0x55u), source(constant, 36u, 0x00u)});
+        addLog(1u, {1u, destination(textureOutput, 1u, 0xCu), source(constant, 36u)});
+        const auto logResult = ExecuteSoftwareVertexShaderEXT(
+            logProgram, floats, integers, booleans, {});
+        Check(logResult.varyings.size() == 1u &&
+                  logResult.varyings[0].value ==
+                      std::array<float, 4>{1.0f, 1.0f, 0.0f, 1.0f},
+              "vertex LOG did not ignore sign or return finite -FLT_MAX for zero");
 
         SoftwareShaderProgramEXT textureProgram;
         textureProgram.stage = SoftwareShaderStageEXT::Vertex;
@@ -630,6 +664,7 @@ namespace
         setConstant(32, {0.5f, 0.5001f, 0.2f, 1.0f});
         setConstant(33, {1.0f, 2.0f, 3.0f, 4.0f});
         setConstant(34, {5.0f, 6.0f, 7.0f, 8.0f});
+        setConstant(35, {-2.0f, 0.0f, 0.0f, 0.0f});
         const auto executeArithmetic = [&](std::uint16_t opcode, std::uint32_t writeMask,
                                            std::initializer_list<std::uint32_t> sources,
                                            const std::string& label,
@@ -703,6 +738,20 @@ namespace
                         {8.0f, 8.0f, 8.0f, 8.0f}, "pixel Shader Model 1 EXPP", 1u);
         checkArithmetic(79u, 0xFu, {source(constant, 31, 0x00u)},
                         {3.0f, 3.0f, 3.0f, 3.0f}, "pixel Shader Model 1 LOGP", 1u);
+        checkArithmetic(79u, 0xFu, {source(constant, 35, 0x00u)},
+                        {1.0f, 1.0f, 1.0f, 1.0f}, "pixel LOGP ignores the source sign", 1u);
+        checkArithmetic(
+            79u, 0xFu, {source(constant, 35, 0x55u)},
+            {-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(),
+             -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max()},
+            "pixel LOGP zero result is finite -FLT_MAX", 1u);
+        checkArithmetic(15u, 0xFu, {source(constant, 35, 0x00u)},
+                        {1.0f, 1.0f, 1.0f, 1.0f}, "pixel LOG ignores the source sign");
+        checkArithmetic(
+            15u, 0xFu, {source(constant, 35, 0x55u)},
+            {-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(),
+             -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max()},
+            "pixel LOG zero result is finite -FLT_MAX");
         checkArithmetic(80u, 0xFu,
                         {source(constant, 32), source(constant, 33), source(constant, 34)},
                         {5.0f, 2.0f, 7.0f, 4.0f}, "pixel Shader Model 1 CND", 1u);
@@ -1676,6 +1725,28 @@ namespace
         Check(result.colorWriteMask == 1u &&
                   result.colors[0] == std::array<float, 4>{0.25f, 0.25f, 0.25f, 1.0f},
               "parsed pixel CALL/CALLNZ/LABEL/RET program produced the wrong result");
+    }
+
+    void CheckParsedSignedLogEffect(SoftwareRenderer& renderer)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesSignedLog = true;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        auto runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+        const float tint[4] = {-2.0f, 0.0f, 0.0f, 1.0f};
+        runtime->SetParameterValue(FindParameter(*runtime, "Tint"), tint, sizeof(tint));
+        runtime->SetTechnique(0u);
+        CompiledEffectPassStateChanges changes;
+        runtime->ApplyPass(1u, {}, changes);
+        auto* software = dynamic_cast<SoftwareCompiledEffect*>(runtime.get());
+        Check(software != nullptr, "parsed signed-LOG Effect has the wrong backend type");
+        if (software == nullptr)
+            return;
+        const auto result = software->ExecutePixelEXT({});
+        Check(result.colorWriteMask == 1u &&
+                  result.colors[0] == std::array<float, 4>{1.0f, 1.0f, 0.0f, 1.0f},
+              "parsed pixel LOG did not ignore sign or keep its zero result finite");
     }
 
     void CheckCompiledRelativeTextureCoordinate()
@@ -4179,6 +4250,7 @@ int main()
         CheckPixelSubroutineSemantics();
         CheckSubroutineValidation();
         CheckParsedSubroutineEffect(renderer);
+        CheckParsedSignedLogEffect(renderer);
         CheckCompiledRelativeTextureCoordinate();
         CheckCompiledDependentTemporaryTextureCoordinate();
         CheckCompiledDependentTemporaryCubeCoordinate();
