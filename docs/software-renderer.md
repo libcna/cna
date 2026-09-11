@@ -44,8 +44,8 @@ Those are real parser, vertex and sampled-pixel phases, not complete execution p
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
 continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
 is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163/355/356/357` are complete: the opt-in runtime now includes compiled MRT,
-render-target/cube sampling and SpriteBatch custom-effect routing. `SOFTWARE-164/165` remain the
+`SOFTWARE-162/163/355/356/357/358` are complete: the opt-in runtime now includes compiled MRT,
+render-target/cube sampling, SpriteBatch custom-effect routing and classic line/wireframe rasterization. `SOFTWARE-164/165` remain the
 encompassing shader-profile, lifecycle and content-conformance backlog.
 
 The same challenge also confirmed a renderer-wide public-API hole: CNA stores
@@ -186,8 +186,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   TEXLDL forms. SOFTWARE-357 adds four distinct COLOR outputs through MRT blend/write masks,
   sampling from rendered 2D and cube targets, and SpriteBatch custom effects in pass-major order.
   SpriteBatch uses the original embedded XNA SpriteEffect vertex stage when a custom pass supplies
-  only a pixel program, matching FNA's retained-stage behavior. Line/wireframe and full SM1-3
-  shader-profile, lifecycle and content closure still remain. Software therefore advertises
+  only a pixel program, matching FNA's retained-stage behavior. SOFTWARE-358 routes compiled
+  `LineList`, `LineStrip` and wireframe triangles through the same shader/output pipeline, including
+  perspective varyings, sampling, depth bias and per-sample MSAA tests. Full SM1-3 shader-profile,
+  lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.
 - **Public vertex-stage texture/sampler collections are inert renderer-wide** (`SOFTWARE-167`).
@@ -779,7 +781,7 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   directly; EasyGL maps them to matching native volume images and uses an exact byte mirror for
   readback. Reach still refuses volume textures entirely. The opt-in compiled runtime samples these
   Software volumes under SOFTWARE-356, while public compiled-effect enablement remains the separate
-  `SOFTWARE-164/165` backlog. SOFTWARE-357 already closes target/MRT/SpriteBatch routing.
+  `SOFTWARE-164/165` backlog. SOFTWARE-357/358 close target/MRT/SpriteBatch and line/wireframe routing.
 - **Texture3D accepts Microsoft's generic value-type transfer surface** (`SOFTWARE-278`) —
   application-defined trivially copyable types, packed vectors, scalar/vector floats, Color and
   byte elements all pass through the same exact-total and divisible-width validation. Their raw

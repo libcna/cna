@@ -3041,6 +3041,81 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
+        void RasterizeLineCompiled(
+            const std::array<SoftwareFramebuffer*, 4>& colorTargets, int colorTargetCount,
+            const RasterDepthState& depthState, const RasterStencilState& stencilState,
+            const SoftwareBlendState& blendState, const std::array<float, 4>& blendFactor,
+            const RasterClipRect& clip, const RasterVertex& a, const RasterVertex& b,
+            const std::array<int, 4>& colorWriteMasks, unsigned int multiSampleMask,
+            SoftwareOcclusionQueryRenderer* occlusionQuery, SoftwareCompiledEffect& runtime,
+            bool multiSampleAntiAlias, const CompiledPixelSampler& sampler,
+            float depthBiasOffset = 0.0f)
+        {
+            if (a.compiledVaryingCount != b.compiledVaryingCount)
+            {
+                throw std::runtime_error(
+                    "SoftwareRenderer: compiled varying counts disagree within a line.");
+            }
+            for (std::size_t varying = 0; varying < a.compiledVaryingCount; ++varying)
+            {
+                if (a.compiledVaryings[varying].usage != b.compiledVaryings[varying].usage ||
+                    a.compiledVaryings[varying].usageIndex !=
+                        b.compiledVaryings[varying].usageIndex)
+                {
+                    throw std::runtime_error(
+                        "SoftwareRenderer: compiled varying semantics disagree within a line.");
+                }
+            }
+
+            SoftwareFramebuffer& primary = *colorTargets[0];
+            WalkRasterLine(primary, multiSampleAntiAlias, clip, a, b,
+                           [&](int x, int y, float t, unsigned int coverageMask,
+                               const std::array<float, 4>* sampleTs)
+            {
+                const float invW = a.invW + t * (b.invW - a.invW);
+                float depth = a.depth + t * (b.depth - a.depth);
+                if (depthBiasOffset != 0.0f)
+                    depth = std::clamp(depth + depthBiasOffset, 0.0f, 1.0f);
+                std::array<float, 4> sampleDepths{};
+                if (sampleTs != nullptr)
+                {
+                    for (int sampleIndex = 0; sampleIndex < 4; ++sampleIndex)
+                    {
+                        float sampleDepth = a.depth +
+                            (*sampleTs)[static_cast<std::size_t>(sampleIndex)] *
+                                (b.depth - a.depth);
+                        if (depthBiasOffset != 0.0f)
+                        {
+                            sampleDepth = std::clamp(
+                                sampleDepth + depthBiasOffset, 0.0f, 1.0f);
+                        }
+                        sampleDepths[static_cast<std::size_t>(sampleIndex)] = sampleDepth;
+                    }
+                }
+
+                std::array<SoftwareShaderSemanticValueEXT, 16> inputs{};
+                for (std::size_t varying = 0; varying < a.compiledVaryingCount; ++varying)
+                {
+                    const auto& first = a.compiledVaryings[varying];
+                    const auto& second = b.compiledVaryings[varying];
+                    inputs[varying].usage = first.usage;
+                    inputs[varying].usageIndex = first.usageIndex;
+                    for (std::size_t component = 0; component < 4; ++component)
+                    {
+                        inputs[varying].value[component] =
+                            (first.value[component] +
+                             t * (second.value[component] - first.value[component])) / invW;
+                    }
+                }
+                WriteCompiledFragment(
+                    colorTargets, colorTargetCount, depthState, stencilState, blendState,
+                    blendFactor, colorWriteMasks, multiSampleMask, occlusionQuery, runtime,
+                    x, y, depth, coverageMask,
+                    sampleTs != nullptr ? &sampleDepths : nullptr,
+                    std::span(inputs.data(), a.compiledVaryingCount), &sampler);
+            });
+        }
+
         void RasterizeTriangleCompiled(
             const std::array<SoftwareFramebuffer*, 4>& colorTargets, int colorTargetCount,
             const RasterDepthState& depthState, const RasterStencilState& stencilState,
@@ -3050,7 +3125,8 @@ namespace CNA::Internal::Renderers::Software
             const RasterVertex& v2, const std::array<int, 4>& colorWriteMasks,
             unsigned int multiSampleMask, SoftwareOcclusionQueryRenderer* occlusionQuery,
             SoftwareCompiledEffect& runtime, bool multiSampleAntiAlias,
-            const SoftwareRenderer& renderer, const GpuDrawParams& params)
+            const SoftwareRenderer& renderer, const GpuDrawParams& params,
+            bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f || ShouldCullTriangle(area, cullMode))
@@ -3076,6 +3152,20 @@ namespace CNA::Internal::Renderers::Software
                     "SoftwareRenderer: compiled triangle has no selected pixel program.");
             const CompiledPixelSampler sampler(
                 renderer, params, *pixelProgram, v0, v1, v2);
+            if (wireframe)
+            {
+                const auto drawEdge = [&](const RasterVertex& a, const RasterVertex& b)
+                {
+                    RasterizeLineCompiled(
+                        colorTargets, colorTargetCount, depthState, faceStencil, blendState,
+                        blendFactor, clip, a, b, colorWriteMasks, multiSampleMask,
+                        occlusionQuery, runtime, multiSampleAntiAlias, sampler, biasOffset);
+                };
+                if ((edgeMask & kEdgeV0V1) != 0u) drawEdge(v0, v1);
+                if ((edgeMask & kEdgeV1V2) != 0u) drawEdge(v1, v2);
+                if ((edgeMask & kEdgeV2V0) != 0u) drawEdge(v2, v0);
+                return;
+            }
             for (int y = minY; y <= maxY; ++y)
             {
                 for (int x = minX; x <= maxX; ++x)
@@ -5750,12 +5840,10 @@ namespace CNA::Internal::Renderers::Software
         if (compiledEffectDraw)
         {
             compiledRuntime = &RequireCompiledEffectDraw(swVb, params);
-            if (primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip ||
-                primitive == PrimitiveType::PointListEXT || fillMode_ == 1)
+            if (primitive == PrimitiveType::PointListEXT)
             {
                 throw System::NotSupportedException(
-                    "Software compiled-effect line, point and wireframe execution requires "
-                    "SOFTWARE-165.");
+                    "Software compiled-effect PointListEXT execution is not implemented.");
             }
         }
 #else
@@ -5872,7 +5960,27 @@ namespace CNA::Internal::Renderers::Software
                 {
                     const RasterVertex firstVertex = ClipVertexToRasterVertex(a, vpT);
                     const RasterVertex secondVertex = ClipVertexToRasterVertex(b, vpT);
-                    if (!compiledEffectDraw)
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+                    if (compiledEffectDraw)
+                    {
+                        const SoftwareShaderProgramEXT* pixelProgram =
+                            compiledRuntime->GetPixelProgramEXT();
+                        if (pixelProgram == nullptr)
+                        {
+                            throw std::runtime_error(
+                                "SoftwareRenderer: compiled line has no selected pixel program.");
+                        }
+                        const CompiledPixelSampler sampler(
+                            *this, params, *pixelProgram,
+                            firstVertex, secondVertex, firstVertex);
+                        RasterizeLineCompiled(
+                            compiledColorTargets, compiledColorTargetCount, depthState,
+                            stencilState, blendState, blendFactor, clip,
+                            firstVertex, secondVertex, colorWriteMasks_, multiSampleMask_,
+                            activeOcclusionQuery_, *compiledRuntime, multiSampleAntiAlias_, sampler);
+                    }
+                    else
+#endif
                         RasterizeLineShaded(
                             fb, depthState, stencilState, blendState, blendFactor, params, clip,
                             firstVertex, secondVertex, colorWriteMasks_[0], multiSampleMask_,
@@ -5919,7 +6027,7 @@ namespace CNA::Internal::Renderers::Software
                         rv[0], rv[static_cast<std::size_t>(fan)],
                         rv[static_cast<std::size_t>(fan + 1)], colorWriteMasks_, multiSampleMask_,
                         activeOcclusionQuery_, *compiledRuntime, multiSampleAntiAlias_,
-                        *this, params);
+                        *this, params, wire, edgeMask);
                     continue;
                 }
 #endif
@@ -5967,12 +6075,10 @@ namespace CNA::Internal::Renderers::Software
         if (compiledEffectDraw)
         {
             compiledRuntime = &RequireCompiledEffectDraw(swVb, params);
-            if (primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip ||
-                primitive == PrimitiveType::PointListEXT || fillMode_ == 1)
+            if (primitive == PrimitiveType::PointListEXT)
             {
                 throw System::NotSupportedException(
-                    "Software compiled-effect line, point and wireframe execution requires "
-                    "SOFTWARE-165.");
+                    "Software compiled-effect PointListEXT execution is not implemented.");
             }
         }
 #else
@@ -6116,7 +6222,27 @@ namespace CNA::Internal::Renderers::Software
                 {
                     const RasterVertex firstVertex = ClipVertexToRasterVertex(a, vpT);
                     const RasterVertex secondVertex = ClipVertexToRasterVertex(b, vpT);
-                    if (!compiledEffectDraw)
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+                    if (compiledEffectDraw)
+                    {
+                        const SoftwareShaderProgramEXT* pixelProgram =
+                            compiledRuntime->GetPixelProgramEXT();
+                        if (pixelProgram == nullptr)
+                        {
+                            throw std::runtime_error(
+                                "SoftwareRenderer: compiled line has no selected pixel program.");
+                        }
+                        const CompiledPixelSampler sampler(
+                            *this, params, *pixelProgram,
+                            firstVertex, secondVertex, firstVertex);
+                        RasterizeLineCompiled(
+                            compiledColorTargets, compiledColorTargetCount, depthState,
+                            stencilState, blendState, blendFactor, clip,
+                            firstVertex, secondVertex, colorWriteMasks_, multiSampleMask_,
+                            activeOcclusionQuery_, *compiledRuntime, multiSampleAntiAlias_, sampler);
+                    }
+                    else
+#endif
                         RasterizeLineShaded(
                             fb, depthState, stencilState, blendState, blendFactor, params, clip,
                             firstVertex, secondVertex, colorWriteMasks_[0], multiSampleMask_,
@@ -6163,7 +6289,7 @@ namespace CNA::Internal::Renderers::Software
                         rv[0], rv[static_cast<std::size_t>(fan)],
                         rv[static_cast<std::size_t>(fan + 1)], colorWriteMasks_, multiSampleMask_,
                         activeOcclusionQuery_, *compiledRuntime, multiSampleAntiAlias_,
-                        *this, params);
+                        *this, params, wire, edgeMask);
                     continue;
                 }
 #endif

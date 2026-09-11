@@ -348,6 +348,14 @@ namespace
         return count;
     }
 
+    std::array<std::uint8_t, 16u * 16u * 4u> ReadBackbufferPixels(
+        SoftwareRenderer& renderer)
+    {
+        std::array<std::uint8_t, 16u * 16u * 4u> pixels{};
+        renderer.ReadBackbuffer(0, 0, 16, 16, pixels.data());
+        return pixels;
+    }
+
     void CheckVertexInstructionSemantics()
     {
         constexpr std::uint32_t temporary = 0u;
@@ -784,6 +792,28 @@ namespace
         expectBackbuffer({191u, 0u, 64u, 255u},
                          "compiled sampler did not apply linear filtering");
 
+        applySampler(0, static_cast<int>(TextureFilter::Point),
+                     static_cast<int>(TextureAddressMode::Clamp),
+                     static_cast<int>(TextureAddressMode::Clamp),
+                     static_cast<int>(TextureAddressMode::Clamp), 0, 0.0f);
+        const SamplingVertex lineVertices[2] = {
+            {{-0.75f, 0.0f, 0.5f, 1.0f}, {0.25f, 0.5f, 0.0f, 1.0f}},
+            {{0.75f, 0.0f, 0.5f, 1.0f}, {0.75f, 0.5f, 0.0f, 1.0f}},
+        };
+        auto lineBuffer = renderer.CreateVertexBuffer(2);
+        lineBuffer->SetVertexDeclaration(declaration);
+        lineBuffer->SetData(lineVertices, 2, sizeof(SamplingVertex));
+        GpuDrawParams lineParams;
+        lineParams.compiledEffectRuntime = addressRuntime.get();
+        lineParams.compiledDeviceTextures = &textureDevice.getTexturesProperty();
+        lineParams.compiledDeviceSamplerStates = &textureDevice.getSamplerStatesProperty();
+        renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+        renderer.DrawPrimitivesEx(*lineBuffer, identity, identity, identity,
+                                  PrimitiveType::LineList, 1, lineParams);
+        Check(CountBackbufferColor(renderer, {255u, 0u, 0u, 255u}) > 0 &&
+                  CountBackbufferColor(renderer, {0u, 0u, 255u, 255u}) > 0,
+              "compiled line did not perspective-interpolate and sample its TEXCOORD varying");
+
         Texture2D mipped(textureDevice, 2, 2, true, SurfaceFormat::Color);
         const Microsoft::Xna::Framework::Color level0[4] = {
             redPixel[0], redPixel[0], redPixel[0], redPixel[0]};
@@ -997,6 +1027,180 @@ namespace
             false, 0, 0, 0, 0);
     }
 
+    void CheckCompiledLineAndWireframeRasterization(SoftwareRenderer& renderer)
+    {
+        const auto bytes = CNA::TestSupport::BuildSyntheticDrawableEffect();
+        auto runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+        const float tint[4] = {1.0f, 128.0f / 255.0f, 0.0f, 1.0f};
+        runtime->SetParameterValue(FindParameter(*runtime, "Tint"), tint, sizeof(tint));
+        const Matrix identity = Matrix::getIdentityProperty();
+        const float matrix[16] = {
+            identity.M11, identity.M21, identity.M31, identity.M41,
+            identity.M12, identity.M22, identity.M32, identity.M42,
+            identity.M13, identity.M23, identity.M33, identity.M43,
+            identity.M14, identity.M24, identity.M34, identity.M44,
+        };
+        runtime->SetParameterValue(
+            FindParameter(*runtime, "Transform"), matrix, sizeof(matrix));
+        runtime->SetTechnique(0);
+        CompiledEffectPassStateChanges changes;
+        runtime->ApplyPass(1, {}, changes);
+
+        struct CompiledPosition
+        {
+            float value[4];
+        };
+        const CompiledPosition compiledVertices[3] = {
+            {{-0.75f, 0.75f, 0.5f, 1.0f}},
+            {{-0.75f, -0.75f, 0.5f, 1.0f}},
+            {{0.75f, 0.0f, 0.5f, 1.0f}},
+        };
+        const VertexDeclaration compiledDeclaration(
+            sizeof(CompiledPosition),
+            {VertexElement(0, VertexElementFormat::Vector4,
+                           VertexElementUsage::Position, 0)});
+        auto compiledBuffer = renderer.CreateVertexBuffer(3);
+        compiledBuffer->SetVertexDeclaration(compiledDeclaration);
+        compiledBuffer->SetData(compiledVertices, 3, sizeof(CompiledPosition));
+
+        struct StockPositionColor
+        {
+            float position[3];
+            std::uint8_t color[4];
+        };
+        const StockPositionColor stockVertices[3] = {
+            {{-0.75f, 0.75f, 0.5f}, {255u, 128u, 0u, 255u}},
+            {{-0.75f, -0.75f, 0.5f}, {255u, 128u, 0u, 255u}},
+            {{0.75f, 0.0f, 0.5f}, {255u, 128u, 0u, 255u}},
+        };
+        auto stockBuffer = renderer.CreateVertexBuffer(3);
+        stockBuffer->SetData(stockVertices, 3, sizeof(StockPositionColor));
+
+        GpuDrawParams params;
+        params.compiledEffectRuntime = runtime.get();
+        GpuDrawParams stockParams;
+        stockParams.vertexColorEnabled = true;
+        const auto clear = [&]
+        {
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+        };
+        const auto requireExactStockMatch = [&](PrimitiveType primitive, int primitiveCount,
+                                                 const std::string& label)
+        {
+            clear();
+            renderer.DrawPrimitivesEx(*compiledBuffer, identity, identity, identity,
+                                      primitive, primitiveCount, params);
+            const auto compiled = ReadBackbufferPixels(renderer);
+            clear();
+            renderer.DrawPrimitivesEx(*stockBuffer, identity, identity, identity,
+                                      primitive, primitiveCount, stockParams);
+            const auto stock = ReadBackbufferPixels(renderer);
+            Check(compiled == stock, label + " compiled coverage/output differs from stock");
+            Check(CountBackbufferColor(renderer, {255u, 128u, 0u, 255u}) > 0,
+                  label + " produced no visible pixels");
+        };
+
+        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, BlendWriteState{});
+        renderer.ApplyDepthStencilState(
+            true, true, 3, false, 0, 0, 0, 0, 0xFF, 0xFF, 0,
+            false, 0, 0, 0, 0);
+        renderer.ApplyRasterizerState(static_cast<int>(CullMode::None), 0, false);
+        requireExactStockMatch(PrimitiveType::LineList, 1, "LineList");
+        requireExactStockMatch(PrimitiveType::LineStrip, 2, "LineStrip");
+
+        const std::uint16_t indices[3] = {2u, 1u, 0u};
+        auto indexBuffer = renderer.CreateIndexBuffer16(3);
+        indexBuffer->SetData16(indices, 3);
+        clear();
+        renderer.DrawIndexedPrimitivesEx(
+            *compiledBuffer, *indexBuffer, identity, identity, identity,
+            PrimitiveType::LineStrip, 2, params);
+        const auto compiledIndexed = ReadBackbufferPixels(renderer);
+        clear();
+        renderer.DrawIndexedPrimitivesEx(
+            *stockBuffer, *indexBuffer, identity, identity, identity,
+            PrimitiveType::LineStrip, 2, stockParams);
+        Check(compiledIndexed == ReadBackbufferPixels(renderer),
+              "indexed compiled LineStrip coverage/output differs from stock");
+        Check(CountBackbufferColor(renderer, {255u, 128u, 0u, 255u}) > 0,
+              "indexed compiled LineStrip produced no visible pixels");
+
+        renderer.ApplyRasterizerState(static_cast<int>(CullMode::None), 1, false);
+        requireExactStockMatch(PrimitiveType::TriangleList, 1, "wireframe TriangleList");
+
+        renderer.ApplyRasterizerState(
+            static_cast<int>(CullMode::None), 1, false, 0.02f, 0.0f);
+        renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 0.51f);
+        renderer.DrawPrimitivesEx(*compiledBuffer, identity, identity, identity,
+                                  PrimitiveType::TriangleList, 1, params);
+        Check(CountBackbufferColor(renderer, {255u, 128u, 0u, 255u}) == 0,
+              "compiled wireframe bypassed positive triangle depth bias");
+        renderer.ApplyRasterizerState(
+            static_cast<int>(CullMode::None), 1, false, -0.02f, 0.0f);
+        renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 0.49f);
+        renderer.DrawPrimitivesEx(*compiledBuffer, identity, identity, identity,
+                                  PrimitiveType::TriangleList, 1, params);
+        Check(CountBackbufferColor(renderer, {255u, 128u, 0u, 255u}) > 0,
+              "compiled wireframe did not apply negative triangle depth bias");
+
+        auto msaaTarget = renderer.CreateRenderTarget2DEXT(
+            16, 16, 0, false, false, 4, static_cast<int>(SurfaceFormat::Color));
+        auto* softwareMsaaTarget =
+            dynamic_cast<SoftwareRenderTargetRenderer*>(msaaTarget.get());
+        Check(softwareMsaaTarget != nullptr,
+              "compiled line MSAA target did not use Software storage");
+        const RenderTargetBindingDescriptor msaaBinding =
+            RenderTargetBindingDescriptor::ForRenderTarget2D(
+                msaaTarget.get(), 0, 16, 16, 4);
+        renderer.SetRenderTargets(&msaaBinding, 1);
+        renderer.ApplyRasterizerState(static_cast<int>(CullMode::None), 0, false);
+        renderer.ApplyRasterizerMultiSampleState(true);
+        clear();
+        renderer.DrawPrimitivesEx(*compiledBuffer, identity, identity, identity,
+                                  PrimitiveType::LineList, 1, params);
+        bool foundPartialCoverage = false;
+        for (std::size_t pixel = 0; pixel < 16u * 16u; ++pixel)
+        {
+            int coveredSamples = 0;
+            for (int sample = 0; sample < 4; ++sample)
+            {
+                const auto value = softwareMsaaTarget->Framebuffer().ReadColor(pixel, sample);
+                if (value[0] > 0.99f && value[1] > 0.49f && value[2] < 0.01f)
+                    ++coveredSamples;
+            }
+            foundPartialCoverage = foundPartialCoverage ||
+                (coveredSamples > 0 && coveredSamples < 4);
+        }
+        Check(foundPartialCoverage,
+              "compiled LineList did not preserve independent 4x MSAA coverage");
+
+        renderer.ApplyRasterizerMultiSampleState(false);
+        clear();
+        renderer.DrawPrimitivesEx(*compiledBuffer, identity, identity, identity,
+                                  PrimitiveType::LineList, 1, params);
+        bool foundReplicatedCoverage = false;
+        bool foundPartialWhenDisabled = false;
+        for (std::size_t pixel = 0; pixel < 16u * 16u; ++pixel)
+        {
+            int coveredSamples = 0;
+            for (int sample = 0; sample < 4; ++sample)
+            {
+                const auto value = softwareMsaaTarget->Framebuffer().ReadColor(pixel, sample);
+                if (value[0] > 0.99f && value[1] > 0.49f && value[2] < 0.01f)
+                    ++coveredSamples;
+            }
+            foundReplicatedCoverage = foundReplicatedCoverage || coveredSamples == 4;
+            foundPartialWhenDisabled = foundPartialWhenDisabled ||
+                (coveredSamples > 0 && coveredSamples < 4);
+        }
+        Check(foundReplicatedCoverage && !foundPartialWhenDisabled,
+              "compiled LineList did not replicate disabled-MSAA coverage to all samples");
+
+        renderer.SetRenderTargets(nullptr, 0);
+        renderer.ApplyRasterizerMultiSampleState(true);
+        renderer.ApplyRasterizerState(static_cast<int>(CullMode::None), 0, false);
+    }
+
     void CheckCompiledSpriteBatchRouting()
     {
         constexpr int size = 8;
@@ -1155,6 +1359,7 @@ int main()
         CheckPixelInstructionSemantics();
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
+        CheckCompiledLineAndWireframeRasterization(renderer);
         CheckCompiledSpriteBatchRouting();
         Check(!renderer.SupportsCompiledEffects(),
               "incomplete SOFTWARE-164/165 path must not advertise compiled effects");
