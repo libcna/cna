@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <optional>
@@ -1157,7 +1158,7 @@ TEST(SpriteBatchSortModeTest, DeferredRetainsTextureRendererThroughEnd)
 //
 // FNA/XNA's contract for the default SpriteSortMode::Deferred is: no sort at all, sprites are
 // delivered to the renderer in exactly their original Draw() submission order. flushBatch() only
-// applies std::stable_sort for BackToFront/FrontToBack/Texture -- Deferred deliberately skips
+// applies XNA's Array.Sort-equivalent path for BackToFront/FrontToBack/Texture -- Deferred skips
 // straight to iterating spriteQueue_ in insertion order. Task 412's DeferredDoesNotFlushBeforeEnd
 // already covers the "not flushed before End()" half of Deferred's contract; this covers the
 // "preserves submission order" half.
@@ -1195,17 +1196,12 @@ TEST(SpriteBatchSortModeTest, DeferredPreservesSubmissionOrder)
 // -----------------------------------------------------------------------
 // Task 414: complete tests for SpriteSortMode::Texture (Task 163 dependency)
 //
-// FNA/XNA's contract for SpriteSortMode::Texture is: sprites are grouped by texture (to minimize
-// GPU texture-bind state changes), sorted by raw texture reference. flushBatch() implements this
-// as std::stable_sort(..., [](a,b){ return a.texture < b.texture; }) -- a *pointer* comparison,
-// so which texture ends up "first" depends on runtime addresses, not something a test can predict
-// in advance. The test below only asserts the 2 properties that are actually part of the
-// contract and don't depend on address ordering: (1) all draws sharing a texture end up adjacent
-// (grouped, no interleaving with the other texture), and (2) draws sharing the same texture keep
-// their original relative submission order (stable_sort's stability, not a plain sort).
+// Microsoft XNA sorts an index array with .NET Framework 4's Array.Sort<T>. That implementation
+// is deliberately not stable: for three entries it reverses the two outer equal keys while still
+// grouping them. Which texture group comes first remains pointer-identity dependent.
 // -----------------------------------------------------------------------
 
-TEST(SpriteBatchSortModeTest, TextureGroupsDrawsByTextureAndPreservesGroupOrder)
+TEST(SpriteBatchSortModeTest, TextureGroupsDrawsAndMatchesXnaEqualKeyOrdering)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -1241,18 +1237,17 @@ TEST(SpriteBatchSortModeTest, TextureGroupsDrawsByTextureAndPreservesGroupOrder)
     // (that depends on runtime pointer addresses, not something this test can or should assume).
     EXPECT_EQ(aIndices[1], aIndices[0] + 1);
 
-    // Stable within the group: the draw submitted first (dest X=1) must still precede the draw
-    // submitted second (dest X=3) among the 2 A entries.
-    EXPECT_EQ(rec->drawCalls[aIndices[0]].destinationRectangle.X, 1);
-    EXPECT_EQ(rec->drawCalls[aIndices[1]].destinationRectangle.X, 3);
+    // Array.Sort's three-element quicksort reverses the two equal A entries. This exact behavior
+    // is visible in Microsoft XNA when overlapping equal-key sprites use distinct colors.
+    EXPECT_EQ(rec->drawCalls[aIndices[0]].destinationRectangle.X, 3);
+    EXPECT_EQ(rec->drawCalls[aIndices[1]].destinationRectangle.X, 1);
 }
 
 // -----------------------------------------------------------------------
 // Task 415: complete tests for SpriteSortMode::FrontToBack (Task 164 dependency)
 //
-// FNA/XNA's contract for SpriteSortMode::FrontToBack is: sprites are sorted by ASCENDING
-// layerDepth (smaller depth == closer to the camera == drawn first). flushBatch() implements
-// this as std::stable_sort(..., [](a,b){ return a.layerDepth < b.layerDepth; }).
+// XNA's contract for SpriteSortMode::FrontToBack is: sprites are sorted by ASCENDING layerDepth
+// (smaller depth == closer to the camera == drawn first). Equal/unordered cases are pinned below.
 // -----------------------------------------------------------------------
 
 TEST(SpriteBatchSortModeTest, FrontToBackSortsByAscendingLayerDepth)
@@ -1291,13 +1286,10 @@ TEST(SpriteBatchSortModeTest, FrontToBackSortsByAscendingLayerDepth)
 // -----------------------------------------------------------------------
 // Task 416: complete tests for SpriteSortMode::BackToFront (Task 165 dependency)
 //
-// FNA/XNA's contract for SpriteSortMode::BackToFront is: sprites are sorted by DESCENDING
+// XNA's contract for SpriteSortMode::BackToFront is: sprites are sorted by DESCENDING
 // layerDepth (larger depth == farther from the camera == drawn first, so nearer sprites composite
-// on top). flushBatch() implements this as
-// std::stable_sort(..., [](a,b){ return a.layerDepth > b.layerDepth; }) -- the mirror image of
-// Task 415's FrontToBack. Reuses Task 415's exact same 3 draws (same plans/plan_graphics.md Task 164/165
-// example depths) with only the sort mode and expected order reversed, per plans/plan_graphics.md's own
-// Task 165 note ("same 3 draws -- assert reverse delivery order").
+// on top). This reuses Task 415's three distinct depths with the expected order reversed;
+// equal/unordered cases are pinned separately below.
 // -----------------------------------------------------------------------
 
 TEST(SpriteBatchSortModeTest, BackToFrontSortsByDescendingLayerDepth)
@@ -1328,6 +1320,37 @@ TEST(SpriteBatchSortModeTest, BackToFrontSortsByDescendingLayerDepth)
     EXPECT_EQ(rec->drawCalls[1].destinationRectangle.X, 50);
     EXPECT_FLOAT_EQ(rec->drawCalls[2].layerDepth, 0.1f);
     EXPECT_EQ(rec->drawCalls[2].destinationRectangle.X, 10);
+}
+
+TEST(SpriteBatchSortModeTest, EqualDepthsMatchXnaArraySortOrdering)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+
+    for (const SpriteSortMode mode : {SpriteSortMode::FrontToBack, SpriteSortMode::BackToFront})
+    {
+        auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+        RecordingSpriteBatchRenderer* rec = renderer.get();
+        SpriteBatch batch(std::move(renderer));
+
+        DummyTextureRenderer texRenderer(1, 1);
+        Texture2D texture = Texture2D::CreateWithRendererForTests(
+            1, 1,
+            std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+                &texRenderer, [](auto*) {}));
+
+        batch.Begin(mode, BlendState::AlphaBlend);
+        for (int marker = 1; marker <= 3; ++marker)
+        {
+            batch.Draw(texture, Rectangle(marker, 0, 1, 1), Rectangle(0, 0, 1, 1),
+                       Color::White, 0.0f, Vector2::Zero, SpriteEffects::None, 0.5f);
+        }
+        batch.End();
+
+        ASSERT_EQ(rec->drawCalls.size(), 3u);
+        EXPECT_EQ(rec->drawCalls[0].destinationRectangle.X, 3);
+        EXPECT_EQ(rec->drawCalls[1].destinationRectangle.X, 2);
+        EXPECT_EQ(rec->drawCalls[2].destinationRectangle.X, 1);
+    }
 }
 
 TEST(SpriteBatchSortModeTest, InvalidNonzeroModeThrowsNotSupportedBeforeDrawing)
@@ -1984,21 +2007,10 @@ TEST(SpriteBatchNumericInputTest, DrawStringCarriesFiniteValuesOutsideInt32)
     EXPECT_FLOAT_EQ(rec->drawCalls[5].layerDepth, 0.75f);
 }
 
-// CABI-38: a NaN layer depth must sort, not corrupt.
-//
-// This is the reason CNA could not simply accept non-finite values before. Both depth sorts used a
-// bare `<` on layerDepth, and NaN compares false against everything: `a < b` and `b < a` are both
-// false, which violates the strict weak ordering std::stable_sort requires. That is undefined
-// behaviour -- libstdc++ can walk off the end of the range -- not merely a surprising order.
-//
-// The order asserted below is FNA's, whose depth comparers are p2->depth.CompareTo(p1->depth)
-// (SpriteBatch.cs:1602) and so put NaN below everything. XNA's own comparers differ: a bare > / <
-// pair returning 0 when neither holds, which makes a NaN depth compare equal to every other depth.
-// Copying that shape would keep the undefined behaviour, since equivalence would not be transitive,
-// so CNA follows the behavioural reference here and this test pins that choice: enough sprites to
-// take stable_sort's real (non-insertion) path, with NaN depths scattered among finite ones, in
-// both sort modes.
-TEST(SpriteBatchNumericInputTest, NonFiniteLayerDepthsSortWithoutCorruptingTheQueue)
+// Microsoft XNA's depth comparer returns equality whenever either input is NaN, then passes that
+// comparer to .NET Framework 4's Array.Sort<int>. Reproducing the framework quicksort explicitly
+// is defined in C++ even though passing this non-transitive comparison to std::sort would not be.
+TEST(SpriteBatchNumericInputTest, NonFiniteLayerDepthsMatchXnaArraySort)
 {
     using Microsoft::Xna::Framework::Graphics::BlendState;
     const float nan = std::numeric_limits<float>::quiet_NaN();
@@ -2006,42 +2018,70 @@ TEST(SpriteBatchNumericInputTest, NonFiniteLayerDepthsSortWithoutCorruptingTheQu
 
     for (const SpriteSortMode mode : {SpriteSortMode::BackToFront, SpriteSortMode::FrontToBack})
     {
-        auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
-        RecordingSpriteBatchRenderer* rec = renderer.get();
-        SpriteBatch batch(std::move(renderer));
-
         DummyTextureRenderer texRendererRaw(16, 16);
         auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
             &texRendererRaw, [](auto*) {});
         Texture2D texture = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
 
-        // Well past stable_sort's insertion-sort threshold, so the merge path really runs.
-        constexpr int kCount = 64;
-        batch.Begin(mode, BlendState::AlphaBlend);
-        for (int index = 0; index < kCount; ++index)
         {
-            const float depth = (index % 4 == 0) ? nan
-                              : (index % 4 == 1) ? -inf
-                              : (index % 4 == 2) ? inf
-                                                 : static_cast<float>(index) / kCount;
-            batch.Draw(texture, Vector2(static_cast<float>(index), 0.0f), std::nullopt,
-                       Color::White, 0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, depth);
+            auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+            RecordingSpriteBatchRenderer* rec = renderer.get();
+            SpriteBatch batch(std::move(renderer));
+
+            batch.Begin(mode, BlendState::AlphaBlend);
+            batch.Draw(texture, Vector2(0.0f, 0.0f), std::nullopt, Color::White,
+                       0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f);
+            batch.Draw(texture, Vector2(1.0f, 0.0f), std::nullopt, Color::White,
+                       0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, nan);
+            batch.Draw(texture, Vector2(2.0f, 0.0f), std::nullopt, Color::White,
+                       0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 1.0f);
+            batch.End();
+
+            ASSERT_EQ(rec->drawCalls.size(), 3u);
+            if (mode == SpriteSortMode::FrontToBack)
+            {
+                EXPECT_EQ(rec->drawCalls[0].destinationRectangle.X, 2);
+                EXPECT_EQ(rec->drawCalls[1].destinationRectangle.X, 1);
+                EXPECT_EQ(rec->drawCalls[2].destinationRectangle.X, 0);
+            }
+            else
+            {
+                EXPECT_EQ(rec->drawCalls[0].destinationRectangle.X, 0);
+                EXPECT_EQ(rec->drawCalls[1].destinationRectangle.X, 1);
+                EXPECT_EQ(rec->drawCalls[2].destinationRectangle.X, 2);
+            }
         }
-        batch.End();
 
-        // Nothing lost, nothing duplicated: the queue survived the sort.
-        ASSERT_EQ(rec->drawCalls.size(), static_cast<std::size_t>(kCount));
-
-        // Every NaN depth is at one end -- the total order puts NaN below everything, so they lead
-        // in FrontToBack and trail in BackToFront.
-        const std::size_t nanCount = static_cast<std::size_t>((kCount + 3) / 4);
-        for (std::size_t index = 0; index < nanCount; ++index)
         {
-            const std::size_t at = (mode == SpriteSortMode::FrontToBack)
-                                 ? index
-                                 : rec->drawCalls.size() - 1 - index;
-            EXPECT_TRUE(std::isnan(rec->drawCalls[at].layerDepth))
-                << "NaN depths must gather at one end, index " << at;
+            auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+            RecordingSpriteBatchRenderer* rec = renderer.get();
+            SpriteBatch batch(std::move(renderer));
+
+            constexpr int kCount = 64;
+            batch.Begin(mode, BlendState::AlphaBlend);
+            for (int index = 0; index < kCount; ++index)
+            {
+                const float depth = (index % 4 == 0) ? nan
+                                  : (index % 4 == 1) ? -inf
+                                  : (index % 4 == 2) ? inf
+                                                     : static_cast<float>(index) / kCount;
+                batch.Draw(texture, Vector2(static_cast<float>(index), 0.0f), std::nullopt,
+                           Color::White, 0.0f, Vector2::Zero, 1.0f,
+                           SpriteEffects::None, depth);
+            }
+            batch.End();
+
+            ASSERT_EQ(rec->drawCalls.size(), static_cast<std::size_t>(kCount));
+            std::uint64_t orderHash = UINT64_C(1469598103934665603);
+            for (const auto& call : rec->drawCalls)
+            {
+                orderHash = orderHash * UINT64_C(1099511628211)
+                          + static_cast<std::uint64_t>(call.destinationRectangle.X);
+            }
+            const std::uint64_t expected = mode == SpriteSortMode::FrontToBack
+                ? UINT64_C(0x692c1bd1416b6e1f)
+                : UINT64_C(0xba5f51bfe446e58d);
+            EXPECT_EQ(orderHash, expected);
         }
     }
 }

@@ -633,6 +633,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   missing from the glyph map; the public setter rejects that same value without changing the old
   property. Failed lookup through MeasureString or DrawString reports `ArgumentException` for
   `character`. Software and EasyGL share this renderer-neutral resolver.
+- **Sorted SpriteBatch modes reproduce Microsoft XNA's framework quicksort** (`SOFTWARE-354`).
+  Texture, FrontToBack and BackToFront queues are intentionally unstable just like XNA's
+  `.NET Framework 4 Array.Sort<int>` path. Equal keys therefore need not preserve submission order,
+  and `NaN` depths compare equal to every value. CNA implements the original partitioning directly
+  so that unordered comparisons remain defined in C++ on both Software and EasyGL.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

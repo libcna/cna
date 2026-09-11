@@ -7,9 +7,9 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief Defines sprite sort rendering options for SpriteBatch::Begin.
      *
      * The underlying type is fixed because the XNA enum is int-backed and callers may cast an
-     * arbitrary int into it. XNA stores whatever it is given and only ever compares against the
-     * named members, so an unnamed value sorts like Deferred rather than being rejected; a fixed
-     * underlying type is what makes holding such a value defined behaviour here too.
+     * arbitrary int into it. XNA stores an unnamed value at Begin; End accepts it while the queue
+     * is empty but throws NotSupportedException when sorting queued sprites. A fixed underlying
+     * type makes holding such a value defined behaviour here too.
      */
     enum class SpriteSortMode : int
     {

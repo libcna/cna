@@ -26,33 +26,100 @@ namespace Microsoft::Xna::Framework::Graphics
 
     namespace
     {
-        /**
-         * Total order over float, matching FNA's own depth comparers, which are
-         * `p2->depth.CompareTo(p1->depth)` (`SpriteBatch.cs:1602`): NaN sorts below everything,
-         * including negative infinity, and NaN compares equal to NaN.
-         *
-         * FNA is the behavioural reference, and here it and XNA genuinely differ. XNA's comparers
-         * are a bare `>` / `<` pair returning 0 when neither holds, so a NaN depth compares
-         * **equal to every other depth**. That is not merely a different order: equivalence stops
-         * being transitive (NaN ~ 1 and NaN ~ 2 while 1 !~ 2), which is exactly what
-         * `std::stable_sort` forbids. Copying XNA's shape here would leave the undefined behaviour
-         * in place, so FNA's total order is both the reference answer and the only safe one --
-         * and it is what let CNA start accepting non-finite depths at all.
-         */
-        [[nodiscard]] int CompareOrdered(float a, float b) noexcept
+        // XNA delegates to .NET Framework 4's unstable Array.Sort<T> quicksort. Its depth
+        // comparer also treats NaN as equal to every value, so a standard C++ sort would have
+        // undefined behavior; reproducing the original partition loop keeps both cases defined.
+        template <typename T, typename Compare>
+        void XnaArraySort(std::vector<T>& items, Compare compare)
         {
-            const bool aNaN = std::isnan(a);
-            const bool bNaN = std::isnan(b);
-            if (aNaN || bNaN)
+            if (items.size() < 2)
             {
-                if (aNaN && bNaN) return 0;
-                return aNaN ? -1 : 1;
+                return;
             }
-            if (a < b) return -1;
-            if (a > b) return 1;
-            return 0;
+
+            const auto swapIfGreater = [&](std::ptrdiff_t first, std::ptrdiff_t second)
+            {
+                if (first != second && compare(items[static_cast<std::size_t>(first)],
+                                               items[static_cast<std::size_t>(second)]) > 0)
+                {
+                    std::swap(items[static_cast<std::size_t>(first)],
+                              items[static_cast<std::size_t>(second)]);
+                }
+            };
+
+            const auto quickSort = [&](auto&& self, std::ptrdiff_t left, std::ptrdiff_t right) -> void
+            {
+                do
+                {
+                    std::ptrdiff_t first = left;
+                    std::ptrdiff_t last = right;
+                    const std::ptrdiff_t middle = first + ((last - first) >> 1);
+
+                    swapIfGreater(first, middle);
+                    swapIfGreater(first, last);
+                    swapIfGreater(middle, last);
+
+                    const T pivot = items[static_cast<std::size_t>(middle)];
+                    do
+                    {
+                        while (compare(items[static_cast<std::size_t>(first)], pivot) < 0)
+                        {
+                            ++first;
+                        }
+                        while (compare(pivot, items[static_cast<std::size_t>(last)]) < 0)
+                        {
+                            --last;
+                        }
+                        if (first > last)
+                        {
+                            break;
+                        }
+                        if (first < last)
+                        {
+                            std::swap(items[static_cast<std::size_t>(first)],
+                                      items[static_cast<std::size_t>(last)]);
+                        }
+                        ++first;
+                        --last;
+                    }
+                    while (first <= last);
+
+                    if (last - left <= right - first)
+                    {
+                        if (left < last)
+                        {
+                            self(self, left, last);
+                        }
+                        left = first;
+                    }
+                    else
+                    {
+                        if (first < right)
+                        {
+                            self(self, first, right);
+                        }
+                        right = last;
+                    }
+                }
+                while (left < right);
+            };
+
+            quickSort(quickSort, 0, static_cast<std::ptrdiff_t>(items.size() - 1));
         }
 
+        [[nodiscard]] int CompareXnaDepth(float first, float second,
+                                          bool frontToBack) noexcept
+        {
+            if (first > second)
+            {
+                return frontToBack ? 1 : -1;
+            }
+            if (first < second)
+            {
+                return frontToBack ? -1 : 1;
+            }
+            return 0;
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -445,23 +512,26 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (sortMode_ == SpriteSortMode::BackToFront)
         {
-            std::stable_sort(spriteQueue_.begin(), spriteQueue_.end(),
+            XnaArraySort(spriteQueue_,
                 [](const SpriteInfo& a, const SpriteInfo& b) {
-                    return CompareOrdered(a.layerDepth, b.layerDepth) > 0;
+                    return CompareXnaDepth(a.layerDepth, b.layerDepth, false);
                 });
         }
         else if (sortMode_ == SpriteSortMode::FrontToBack)
         {
-            std::stable_sort(spriteQueue_.begin(), spriteQueue_.end(),
+            XnaArraySort(spriteQueue_,
                 [](const SpriteInfo& a, const SpriteInfo& b) {
-                    return CompareOrdered(a.layerDepth, b.layerDepth) < 0;
+                    return CompareXnaDepth(a.layerDepth, b.layerDepth, true);
                 });
         }
         else if (sortMode_ == SpriteSortMode::Texture)
         {
-            std::stable_sort(spriteQueue_.begin(), spriteQueue_.end(),
+            XnaArraySort(spriteQueue_,
                 [](const SpriteInfo& a, const SpriteInfo& b) {
-                    return std::less<const ITextureRenderer*>{}(a.texture.get(), b.texture.get());
+                    const auto less = std::less<const ITextureRenderer*>{};
+                    if (less(b.texture.get(), a.texture.get())) return -1;
+                    if (less(a.texture.get(), b.texture.get())) return 1;
+                    return 0;
                 });
         }
         else if (sortMode_ != SpriteSortMode::Deferred)
@@ -691,10 +761,8 @@ namespace Microsoft::Xna::Framework::Graphics
         const Texture2D& texture = spriteFont.textureValue_;
         if (texture.getWidthProperty() == 0) return;
 
-        // CABI-7b: layerDepth was the one float every DrawString overload let through, while every
-        // Draw overload refused it. It is also the value flushBatch's BackToFront/FrontToBack
-        // comparators order by, and a NaN there breaks the strict weak ordering std::stable_sort
-        // requires -- undefined behaviour, not a wrong sort.
+        // Keep layerDepth in the original Single domain. The sorted modes reproduce XNA's
+        // Array.Sort partitioning explicitly, including its unordered NaN comparisons.
 
         const float sinR = std::sin(rotation);
         const float cosR = std::cos(rotation);
