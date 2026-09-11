@@ -545,6 +545,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   coordinates perspective-correctly and maps depth through `Viewport.MinDepth/MaxDepth`. Exact
   tests distinguish transformed Z acceptance, transformed-W coverage, near clipping and viewport
   depth range on both renderers.
+- **Unknown nonzero `SpriteSortMode` values fail at the XNA flush boundary** (`SOFTWARE-339`).
+  Recovered Microsoft XNA 4.0 calls its sorter only for a nonempty queue and throws
+  `NotSupportedException` when that sorter's switch receives anything other than Texture,
+  BackToFront or FrontToBack. CNA no longer silently treats such a value as Deferred or submits a
+  queued sprite before reporting the error; an empty batch still performs no sort and succeeds.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

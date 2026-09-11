@@ -17,6 +17,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -1227,6 +1228,37 @@ TEST(SpriteBatchSortModeTest, BackToFrontSortsByDescendingLayerDepth)
     EXPECT_EQ(rec->drawCalls[1].destinationRectangle.X, 50);
     EXPECT_FLOAT_EQ(rec->drawCalls[2].layerDepth, 0.1f);
     EXPECT_EQ(rec->drawCalls[2].destinationRectangle.X, 10);
+}
+
+TEST(SpriteBatchSortModeTest, InvalidNonzeroModeThrowsNotSupportedBeforeDrawing)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+
+    DummyTextureRenderer texRenderer(4, 4);
+    Texture2D tex = Texture2D::CreateWithRendererForTests(
+        4, 4,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&texRenderer, [](auto*) {}));
+
+    batch.Begin(static_cast<SpriteSortMode>(5), BlendState::AlphaBlend);
+    batch.Draw(tex, 0.0f, 0.0f);
+
+    EXPECT_THROW(batch.End(), System::NotSupportedException);
+    EXPECT_TRUE(rec->drawCalls.empty());
+}
+
+TEST(SpriteBatchSortModeTest, InvalidNonzeroModeWithEmptyQueueDoesNotSort)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    SpriteBatch batch(std::move(renderer));
+
+    batch.Begin(static_cast<SpriteSortMode>(5), BlendState::AlphaBlend);
+    EXPECT_NO_THROW(batch.End());
 }
 
 // -----------------------------------------------------------------------

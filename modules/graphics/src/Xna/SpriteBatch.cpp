@@ -20,6 +20,7 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/Collections/Generic/KeyNotFoundException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -460,7 +461,11 @@ namespace Microsoft::Xna::Framework::Graphics
                     return std::less<const ITextureRenderer*>{}(a.texture.get(), b.texture.get());
                 });
         }
-        // Deferred: no sort, submission order
+        else if (sortMode_ != SpriteSortMode::Deferred)
+        {
+            throw System::NotSupportedException();
+        }
+        // Deferred: no sort, submission order.
 
         for (const SpriteInfo& s : spriteQueue_)
             flushSingle(s);
