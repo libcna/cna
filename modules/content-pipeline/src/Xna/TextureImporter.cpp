@@ -157,33 +157,82 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 content = std::make_shared<Graphics::Texture2DContent>();
             }
             content->setIdentityProperty(ContentIdentity(filename, tool.substr(tool.rfind('.') + 1)));
+            // A block-compressed surface whose dimensions are not a whole number of blocks is
+            // answered at the size its blocks cover, and only the *declared* image is inside it:
+            // a 5x5 DXT1 is a 2x2 block grid, and the genuine importer answers an 8x8 bitmap
+            // whose first five rows and columns are the file's image and whose remaining pixels
+            // are black. A mip chain's lower levels are that rounded level 0 halved rather than
+            // each level rounded on its own -- a 6x10 chain answers 8x12, 4x6, 2x3, 1x1, where
+            // rounding each level would give 4x8 at level 1. Measured over eleven committed
+            // fixtures, `tests/reference/xna40/texture/dds-block-oracle.json`
+            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-224`).
+            const bool compressed =
+                surfaces.format != CNA::Internal::Graphics::DdsSurfaceFormat::Color;
+            const auto blockRound = [](const std::uint32_t pixels)
+            { return ((pixels + 3u) / 4u) * 4u; };
+            const std::uint32_t baseWidth = compressed ? blockRound(surfaces.width) : surfaces.width;
+            const std::uint32_t baseHeight =
+                compressed ? blockRound(surfaces.height) : surfaces.height;
+            const auto makeBitmap = [&surfaces](const SharpRuntime::intcs width,
+                                                const SharpRuntime::intcs height)
+                -> std::shared_ptr<Graphics::BitmapContent>
+            {
+                switch (surfaces.format)
+                {
+                    case CNA::Internal::Graphics::DdsSurfaceFormat::Color:
+                        return std::make_shared<Graphics::PixelBitmapContent<Color>>(width, height);
+                    case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt1:
+                        return std::make_shared<Graphics::Dxt1BitmapContent>(width, height);
+                    case CNA::Internal::Graphics::DdsSurfaceFormat::Dxt3:
+                        return std::make_shared<Graphics::Dxt3BitmapContent>(width, height);
+                    default:
+                        return std::make_shared<Graphics::Dxt5BitmapContent>(width, height);
+                }
+            };
             for (std::size_t face = 0; face < surfaces.surfaces.size(); ++face)
             {
                 for (std::size_t level = 0; level < surfaces.surfaces[face].size(); ++level)
                 {
-                    const auto width = static_cast<SharpRuntime::intcs>(
+                    const auto width =
+                        static_cast<SharpRuntime::intcs>(std::max<std::uint32_t>(1u, baseWidth >> level));
+                    const auto height =
+                        static_cast<SharpRuntime::intcs>(std::max<std::uint32_t>(1u, baseHeight >> level));
+                    // What the file itself declares at this level, which is what the blocks hold.
+                    const auto declaredWidth = static_cast<SharpRuntime::intcs>(
                         std::max<std::uint32_t>(1u, surfaces.width >> level));
-                    const auto height = static_cast<SharpRuntime::intcs>(
+                    const auto declaredHeight = static_cast<SharpRuntime::intcs>(
                         std::max<std::uint32_t>(1u, surfaces.height >> level));
-                    std::shared_ptr<Graphics::BitmapContent> bitmap;
-                    if (surfaces.format == CNA::Internal::Graphics::DdsSurfaceFormat::Color)
-                    {
-                        bitmap = std::make_shared<Graphics::PixelBitmapContent<Color>>(width, height);
-                    }
-                    else if (surfaces.format == CNA::Internal::Graphics::DdsSurfaceFormat::Dxt1)
-                    {
-                        bitmap = std::make_shared<Graphics::Dxt1BitmapContent>(width, height);
-                    }
-                    else if (surfaces.format == CNA::Internal::Graphics::DdsSurfaceFormat::Dxt3)
-                    {
-                        bitmap = std::make_shared<Graphics::Dxt3BitmapContent>(width, height);
-                    }
-                    else
-                    {
-                        bitmap = std::make_shared<Graphics::Dxt5BitmapContent>(width, height);
-                    }
+                    const auto storedWidth = static_cast<SharpRuntime::intcs>(
+                        compressed ? blockRound(static_cast<std::uint32_t>(declaredWidth))
+                                   : static_cast<std::uint32_t>(declaredWidth));
+                    const auto storedHeight = static_cast<SharpRuntime::intcs>(
+                        compressed ? blockRound(static_cast<std::uint32_t>(declaredHeight))
+                                   : static_cast<std::uint32_t>(declaredHeight));
+                    std::shared_ptr<Graphics::BitmapContent> stored =
+                        makeBitmap(storedWidth, storedHeight);
                     const std::vector<std::uint8_t>& payload = surfaces.surfaces[face][level];
-                    bitmap->SetPixelData(std::vector<SharpRuntime::bytecs>(payload.begin(), payload.end()));
+                    stored->SetPixelData(std::vector<SharpRuntime::bytecs>(payload.begin(), payload.end()));
+                    std::shared_ptr<Graphics::BitmapContent> bitmap = stored;
+                    if (compressed &&
+                        (storedWidth != width || storedHeight != height ||
+                         declaredWidth != storedWidth || declaredHeight != storedHeight))
+                    {
+                        // The declared image in the corner of a black bitmap of the answered size,
+                        // re-encoded. The blocks this writes are CNA's compressor's rather than
+                        // XNA's, which is the difference 263 of the corpus's references already
+                        // carry.
+                        auto surface = std::make_shared<Graphics::PixelBitmapContent<Color>>(width, height);
+                        const SharpRuntime::intcs keepWidth = std::min(declaredWidth, width);
+                        const SharpRuntime::intcs keepHeight = std::min(declaredHeight, height);
+                        if (keepWidth > 0 && keepHeight > 0)
+                        {
+                            Graphics::BitmapContent::Copy(
+                                stored, Rectangle(0, 0, keepWidth, keepHeight), surface,
+                                Rectangle(0, 0, keepWidth, keepHeight));
+                        }
+                        bitmap = makeBitmap(width, height);
+                        Graphics::BitmapContent::Copy(surface, bitmap);
+                    }
                     const std::shared_ptr<Graphics::MipmapChain>& chain =
                         content->getFacesProperty()[static_cast<SharpRuntime::intcs>(face)];
                     chain->Add(std::move(bitmap));
