@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-208: make `SamplerState.MipMapLevelOfDetailBias` reach a compiled XNA
-// Effect's texture sampling.
+// plans/plan_webgpu.md WEBGPU-208 and plans/plan_sdlgpu.md SDLGPU-122: make
+// `SamplerState.MipMapLevelOfDetailBias` reach a compiled XNA Effect's texture sampling.
 //
 // XNA applies the bias to the level of detail an implicit sample computes. Direct3D 9 carried it as
 // sampler state (`D3DSAMP_MIPMAPLODBIAS`), so a compiled effect's `sampler_state` block can set it
 // per register and MojoShader publishes it -- but MojoShader emits an ordinary implicit sample, and
 // no WebGPU sampler descriptor can hold the value: `WGPUSamplerDescriptor` has `lodMinClamp` and
-// `lodMaxClamp` and no bias field at all. The value has to reach the SHADER.
+// `lodMaxClamp` and no bias field at all. Another native sampler API exposes the field but leaves
+// it ineffective on one driver. In both cases the value has to reach the SHADER.
 //
-// It reaches it here, once, BEFORE the native and browser routes diverge. Both targets consume the
-// SPIR-V this file produces -- natively through `WGPUShaderSourceSPIRV`, in a browser through
-// `SpirvToWgsl` -- so the XNA semantic cannot differ between them by construction. `WEBGPU-205`
-// made the same choice for the stock effects and put the value in a per-draw uniform; this is that
-// idea applied to a shader CNA does not author.
+// It reaches it here, once, before a renderer translates the SPIR-V into its backend's native
+// shader language. WebGPU consumes it through `WGPUShaderSourceSPIRV` or `SpirvToWgsl`; SDL_GPU
+// consumes it directly or through ShaderCross. The XNA semantic therefore cannot vary with the
+// downstream driver by construction. `WEBGPU-205` and `SDLGPU-121` made the same choice for stock
+// effects and put the value in a per-draw uniform; this is that idea applied to a shader CNA does
+// not author.
 //
 // The rewrite is bounded, and every id it needs is already in the module:
 //
@@ -80,17 +82,24 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
      * Samples whose sampler register cannot be identified are left exactly as they were, so a
      * module this transformation does not fully understand still renders what it rendered before.
      *
-     * @param words SPIR-V words, already through `SplitCombinedImageSamplers`.
+     * Accepts both MojoShader's original combined image samplers (`binding == register`) and the
+     * separate image/sampler pairs produced by `SplitCombinedImageSamplers`
+     * (`bindings == 2*register, 2*register + 1`).
+     *
+     * @param words SPIR-V words, either in MojoShader's original combined-sampler form or already
+     *        through `SplitCombinedImageSamplers`.
      * @param wordCount Number of 32-bit words at @p words.
-     * @param descriptorSet Descriptor set to put the bias block in; use the stage's own sampler set
-     *        so no new bind group is needed (WebGPU allows only four).
-     * @param binding Binding within that set. Must not collide with the split's doubled sampler
-     *        bindings, which occupy `2*register` and `2*register + 1`.
+     * @param samplerDescriptorSet Descriptor set containing the stage's samplers.
+     * @param uniformDescriptorSet Descriptor set to put the bias block in. WebGPU uses the sampler
+     *        set to avoid adding a fifth bind group; native targets can use the stage's uniform set.
+     * @param binding Binding within @p uniformDescriptorSet. It must not collide with an existing
+     *        resource binding.
      * @return The rewritten module and the registers it biased. On a malformed module `error` is
      *         set and the input is returned unchanged.
      */
     [[nodiscard]] SpirvLodBiasResult InjectSamplerLodBias(const std::uint32_t* words,
                                                           std::size_t wordCount,
-                                                          std::uint32_t descriptorSet,
+                                                          std::uint32_t samplerDescriptorSet,
+                                                          std::uint32_t uniformDescriptorSet,
                                                           std::uint32_t binding);
 }

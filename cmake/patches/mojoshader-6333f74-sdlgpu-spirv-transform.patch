@@ -1,0 +1,159 @@
+diff --git a/mojoshader.h b/mojoshader.h
+--- a/mojoshader.h
++++ b/mojoshader.h
+@@ -2030,6 +2030,16 @@ typedef struct MOJOSHADER_sdlContext MOJOSHADER_sdlContext;
+ typedef struct MOJOSHADER_sdlShaderData MOJOSHADER_sdlShaderData;
+ typedef struct MOJOSHADER_sdlProgram MOJOSHADER_sdlProgram;
+ 
++/*
++ * Optional CNA integration hook for transforming linked fragment SPIR-V before SDL_gpu creates
++ * its native shader. Return NULL on success or a stable error string on failure. A successful
++ * rewrite allocates (*output) with (m); the adapter frees it with its paired allocator.
++ */
++typedef const char *(MOJOSHADERCALL *MOJOSHADER_sdlSpirvTransform)(
++    const unsigned char *input, unsigned int input_len,
++    unsigned char **output, unsigned int *output_len,
++    MOJOSHADER_malloc m, void *malloc_d, void *userdata);
++
+ #ifndef SDL_GPU_H
+ typedef struct SDL_GPUDevice SDL_GPUDevice;
+ typedef struct SDL_GPUShader SDL_GPUShader;
+@@ -2079,6 +2089,11 @@ DECLSPEC MOJOSHADER_sdlContext *MOJOSHADER_sdlCreateContext(SDL_GPUDevice *devic
+                                                             MOJOSHADER_free f,
+                                                             void *malloc_d);
+ 
++/* Install a fragment SPIR-V transform before the first program is linked. */
++DECLSPEC int MOJOSHADER_sdlSetSpirvTransform(MOJOSHADER_sdlContext *context,
++                                             MOJOSHADER_sdlSpirvTransform transform,
++                                             void *userdata);
++
+ /* CNA test hook: force an available ShaderCross path on a SPIR-V-capable device. */
+ DECLSPEC int MOJOSHADER_sdlSetShaderCrossTestMode(MOJOSHADER_sdlContext *context,
+                                                   int enabled);
+@@ -2192,6 +2207,9 @@ DECLSPEC MOJOSHADER_sdlProgram *MOJOSHADER_sdlLinkProgram(MOJOSHADER_sdlContext
+                                                           MOJOSHADER_vertexAttribute *vertexAttributes,
+                                                           int vertexAttributeCount);
+ 
++/* Returns non-zero when the currently linked program's fragment module was transformed. */
++DECLSPEC int MOJOSHADER_sdlGetPixelSpirvTransformApplied(MOJOSHADER_sdlContext *context);
++
+ /*
+  * This binds the program to the active context, and does nothing particularly
+  * special until you start working with uniform buffers or shader modules.
+diff --git a/mojoshader_sdlgpu.c b/mojoshader_sdlgpu.c
+--- a/mojoshader_sdlgpu.c
++++ b/mojoshader_sdlgpu.c
+@@ -70,7 +70,9 @@ static PFN_SDL_ShaderCross_CompileGraphicsShaderFromSPIRV SDL_ShaderCross_Compil
+ 
+ /* The destination shader format to use */
+ static SDL_GPUShaderFormat shader_format =
+-#ifdef __APPLE__
++#if defined(CNA_MOJOSHADER_SDL_GPU_SHADERCROSS_STATIC)
++    SDL_GPU_SHADERFORMAT_SPIRV;
++#elif defined(__APPLE__)
+     SDL_GPU_SHADERFORMAT_MSL;
+ #else
+     SDL_GPU_SHADERFORMAT_SPIRV;
+@@ -119,6 +121,8 @@ struct MOJOSHADER_sdlContext
+     MOJOSHADER_sdlShaderData *bound_pshader_data;
+     MOJOSHADER_sdlProgram *bound_program;
+     HashTable *linker_cache;
++    MOJOSHADER_sdlSpirvTransform spirv_transform;
++    void *spirv_transform_data;
+ };
+ 
+ struct MOJOSHADER_sdlShaderData
+@@ -138,6 +142,7 @@ struct MOJOSHADER_sdlProgram
+     SDL_GPUShader *pixelShader;
+     MOJOSHADER_sdlShaderData *vertexShaderData;
+     MOJOSHADER_sdlShaderData *pixelShaderData;
++    int pixelSpirvTransformApplied;
+ };
+ 
+ /* Error state... */
+@@ -394,6 +399,18 @@ init_fail:
+     return NULL;
+ } // MOJOSHADER_sdlCreateContext
+ 
++int MOJOSHADER_sdlSetSpirvTransform(
++    MOJOSHADER_sdlContext *ctx,
++    MOJOSHADER_sdlSpirvTransform transform,
++    void *userdata
++) {
++    if (ctx == NULL || ctx->linker_cache != NULL)
++        return 0;
++    ctx->spirv_transform = transform;
++    ctx->spirv_transform_data = userdata;
++    return 1;
++} // MOJOSHADER_sdlSetSpirvTransform
++
+ const char *MOJOSHADER_sdlGetError(
+     MOJOSHADER_sdlContext *ctx
+ ) {
+@@ -551,12 +568,44 @@ static MOJOSHADER_sdlProgram *compile_program(
+     char *pshaderSource = (char*) pshader->parseData->output;
+     size_t vshaderCodeSize = vshader->parseData->output_len;
+     size_t pshaderCodeSize = pshader->parseData->output_len;
++    int pixelUniformBufferCount = 1;
++    program->pixelSpirvTransformApplied = 0;
+ 
+     // Last-minute fixups before we actually invoke the compiler
+     if (shader_format == SDL_GPU_SHADERFORMAT_SPIRV)
+     {
+         vshaderCodeSize -= sizeof(SpirvPatchTable);
+         pshaderCodeSize -= sizeof(SpirvPatchTable);
++
++        if (ctx->spirv_transform != NULL)
++        {
++            unsigned char *transformed = NULL;
++            unsigned int transformed_len = 0;
++            const char *transform_error = ctx->spirv_transform(
++                (const unsigned char *) pshaderSource,
++                (unsigned int) pshaderCodeSize,
++                &transformed,
++                &transformed_len,
++                ctx->malloc_fn,
++                ctx->malloc_data,
++                ctx->spirv_transform_data
++            );
++            if (transform_error != NULL)
++            {
++                set_error(transform_error);
++                if (transformed != NULL)
++                    ctx->free_fn(transformed, ctx->malloc_data);
++                ctx->free_fn(program, ctx->malloc_data);
++                return NULL;
++            } // if
++            if (transformed != NULL)
++            {
++                pshaderSource = (char *) transformed;
++                pshaderCodeSize = transformed_len;
++                pixelUniformBufferCount = 2;
++                program->pixelSpirvTransformApplied = 1;
++            } // if
++        } // if
+     } // if
+     else if (shader_format == SDL_GPU_SHADERFORMAT_MSL)
+     {
+@@ -726,6 +775,7 @@ static MOJOSHADER_sdlProgram *compile_program(
+         createInfo.format = shader_format;
+         createInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+         createInfo.num_samplers = pshader->samplerSlots;
++        createInfo.num_uniform_buffers = pixelUniformBufferCount;
+ 
+         program->pixelShader = SDL_CreateGPUShader(
+             ctx->device,
+@@ -826,6 +876,13 @@ MOJOSHADER_sdlProgram *MOJOSHADER_sdlLinkProgram(
+     return program;
+ } // MOJOSHADER_sdlLinkProgram
+ 
++int MOJOSHADER_sdlGetPixelSpirvTransformApplied(MOJOSHADER_sdlContext *ctx)
++{
++    if (ctx == NULL || ctx->bound_program == NULL)
++        return 0;
++    return ctx->bound_program->pixelSpirvTransformApplied;
++} // MOJOSHADER_sdlGetPixelSpirvTransformApplied
++
+ void MOJOSHADER_sdlShaderAddRef(MOJOSHADER_sdlShaderData *shader)
+ {
+     if (shader != NULL)

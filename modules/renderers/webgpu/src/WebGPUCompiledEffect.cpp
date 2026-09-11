@@ -742,7 +742,7 @@ namespace CNA::Internal::Renderers::WebGPU
             if (lodBiasOut != nullptr)
             {
                 MojoShaderEffect::SpirvLodBiasResult biased = MojoShaderEffect::InjectSamplerLodBias(
-                    stageWords.data(), stageWords.size(), expectedSet,
+                    stageWords.data(), stageWords.size(), expectedSet, expectedSet,
                     kWebGPUCompiledEffectLodBiasBinding);
                 if (!biased.error.empty())
                 {

@@ -15,6 +15,7 @@
 #include "System/NotSupportedException.hpp"
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -7339,6 +7340,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         CompiledEffectBinding binding;
         SdlGpuCompiledEffectVertexLayoutEXT vertexLayout =
             effect.LinkAndGetShadersMultiEXT(streams, binding.vertexShader, binding.pixelShader);
+        binding.pixelUsesLodBias = effect.LinkedPixelShaderUsesLodBiasEXT();
         binding.vertexAttributes = std::move(vertexLayout.attributes);
         binding.vertexBuffers = std::move(vertexLayout.buffers);
         binding.vertexStreamSourceIndices = std::move(vertexLayout.sourceIndices);
@@ -7486,6 +7488,21 @@ namespace CNA::Internal::Renderers::SdlGpu
                 samplerBinding.maxMipLevel = deviceSlot.maxMipLevel;
                 samplerBinding.lodBias = deviceSlot.lodBias;
                 samplerBinding.addressW = deviceSlot.addressW;
+            }
+        }
+
+        if (binding.pixelUsesLodBias)
+        {
+            binding.pixelLodBiasBytes.assign(
+                MojoShaderEffect::kSpirvLodBiasBlockBytes, std::uint8_t{0});
+            for (std::size_t slot = 0;
+                 slot < binding.pixelSamplers.size() &&
+                 slot < MojoShaderEffect::kSpirvLodBiasSlotCount;
+                 ++slot)
+            {
+                const float value = binding.pixelSamplers[slot].lodBias;
+                std::memcpy(binding.pixelLodBiasBytes.data() + slot * 16u,
+                            &value, sizeof(value));
             }
         }
 
@@ -7654,6 +7671,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_PushGPUFragmentUniformData(cmd, 0, binding.pixelUniformBytes.data(),
                                            static_cast<Uint32>(binding.pixelUniformBytes.size()));
         }
+        if (binding.pixelUsesLodBias)
+        {
+            SDL_PushGPUFragmentUniformData(
+                cmd, 1, binding.pixelLodBiasBytes.data(),
+                static_cast<Uint32>(binding.pixelLodBiasBytes.size()));
+        }
 
         if (binding.vertexDummySamplerCount > 0)
         {
@@ -7678,7 +7701,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                 gpuSamplerBinding.sampler = GetOrCreateSampler(
                     samplerBinding.filter, samplerBinding.addressU, samplerBinding.addressV,
                     samplerBinding.maxAnisotropy, "CompiledEffect",
-                    samplerBinding.maxMipLevel, samplerBinding.lodBias, samplerBinding.addressW);
+                    samplerBinding.maxMipLevel,
+                    binding.pixelUsesLodBias ? 0.0f : samplerBinding.lodBias,
+                    samplerBinding.addressW);
                 samplerBindings.push_back(gpuSamplerBinding);
             }
             SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings.data(),

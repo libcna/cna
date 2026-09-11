@@ -9,6 +9,7 @@
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
 
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
+#include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
@@ -27,6 +28,64 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         /// Same ceiling the shared translation applies to reflected tables.
         constexpr std::size_t kMaximumReflectedItems = 64u * 1024u;
+
+        /// Adds XNA's per-register sampler LOD bias before SDL_gpu/ShaderCross create the native
+        /// fragment module. SDL documents the native sampler field as a no-op on Metal, so the
+        /// compiled route uses the same bounded SPIR-V rewrite as WebGPU while keeping
+        /// MojoShader's original combined samplers intact.
+        const char* MOJOSHADERCALL TransformPixelSamplerLodBias(
+            const unsigned char* input, unsigned int inputLength,
+            unsigned char** output, unsigned int* outputLength,
+            MOJOSHADER_malloc allocate, void* allocatorData, void*)
+        {
+            static thread_local std::string error;
+            error.clear();
+            if (output == nullptr || outputLength == nullptr || allocate == nullptr)
+            {
+                error = "CNA SDL_GPU: invalid MojoShader SPIR-V transform arguments";
+                return error.c_str();
+            }
+            *output = nullptr;
+            *outputLength = 0;
+            if (input == nullptr || inputLength % sizeof(std::uint32_t) != 0)
+            {
+                error = "CNA SDL_GPU: compiled effect produced misaligned SPIR-V";
+                return error.c_str();
+            }
+
+            MojoShaderEffect::SpirvLodBiasResult transformed =
+                MojoShaderEffect::InjectSamplerLodBias(
+                    reinterpret_cast<const std::uint32_t*>(input),
+                    inputLength / sizeof(std::uint32_t),
+                    /*samplerDescriptorSet=*/2u, /*uniformDescriptorSet=*/3u,
+                    /*binding=*/1u);
+            if (!transformed.error.empty())
+            {
+                error = "CNA SDL_GPU: could not inject compiled-effect sampler LOD bias: " +
+                        transformed.error;
+                return error.c_str();
+            }
+            if (!transformed.changed) return nullptr;
+
+            const std::size_t byteCount = transformed.words.size() * sizeof(std::uint32_t);
+            if (byteCount > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
+                byteCount > static_cast<std::size_t>(std::numeric_limits<unsigned int>::max()))
+            {
+                error = "CNA SDL_GPU: transformed compiled-effect SPIR-V is too large";
+                return error.c_str();
+            }
+            auto* bytes = static_cast<unsigned char*>(
+                allocate(static_cast<int>(byteCount), allocatorData));
+            if (bytes == nullptr)
+            {
+                error = "CNA SDL_GPU: could not allocate transformed compiled-effect SPIR-V";
+                return error.c_str();
+            }
+            std::memcpy(bytes, transformed.words.data(), byteCount);
+            *output = bytes;
+            *outputLength = static_cast<unsigned int>(byteCount);
+            return nullptr;
+        }
 
         /// Resolves a public texture to the SDL_GPU resource behind it, or null if it is not one.
         /// plans/plan_fx.md FX-099: a `RenderTarget2D` is a `Texture2D` whose renderer is an
@@ -414,6 +473,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         return layout;
     }
 
+    bool SdlGpuCompiledEffect::LinkedPixelShaderUsesLodBiasEXT() const
+    {
+        return context_ != nullptr &&
+               MOJOSHADER_sdlGetPixelSpirvTransformApplied(context_) != 0;
+    }
+
     void SdlGpuCompiledEffect::GetBoundShadersEXT(MOJOSHADER_sdlShaderData*& vertex,
                                                   MOJOSHADER_sdlShaderData*& pixel) const
     {
@@ -510,8 +575,16 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (mojoShaderContext_ == nullptr && device_ != nullptr)
         {
-            mojoShaderContext_ =
-                MOJOSHADER_sdlCreateContext(device_, nullptr, nullptr, nullptr);
+            mojoShaderContext_ = MOJOSHADER_sdlCreateContext(device_, nullptr, nullptr, nullptr);
+            if (mojoShaderContext_ != nullptr &&
+                !MOJOSHADER_sdlSetSpirvTransform(
+                    mojoShaderContext_, TransformPixelSamplerLodBias, nullptr))
+            {
+                MOJOSHADER_sdlDestroyContext(mojoShaderContext_);
+                mojoShaderContext_ = nullptr;
+                throw std::runtime_error(
+                    "CNA SDL_GPU: could not install the compiled-effect SPIR-V transform.");
+            }
         }
         return mojoShaderContext_;
     }

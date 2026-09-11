@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-208: the SPIR-V half of compiled-effect LOD bias, measured on the
-// committed compiled-effect corpus rather than on one hand-built module.
+// plans/plan_webgpu.md WEBGPU-208 / plans/plan_sdlgpu.md SDLGPU-122: the SPIR-V half of
+// compiled-effect LOD bias, measured on the committed compiled-effect corpus rather than on one
+// hand-built module.
 //
 // The transformation this guards is small but easy to get subtly wrong in a way no pixel test
 // notices, because a wrong bias index still renders A picture:
@@ -12,13 +13,13 @@
 //   * a module whose id bound no longer covers the ids the rewrite introduced;
 //   * an operand appended without widening the instruction's own word count.
 //
-// So the assertions here are structural and per-sample: every implicit sample that names a split
-// sampler must gain exactly one Bias operand, and the float that operand loads must come from the
-// array element whose index is that sample's OWN register.
+// So the assertions here are structural and per-sample: every implicit sample that names an
+// original combined or split sampler must gain exactly one Bias operand, and the float that operand
+// loads must come from the array element whose index is that sample's OWN register.
 //
-// This lives in the shared MojoShader half rather than in the WebGPU renderer for the same reason
-// the entry-point suite does: the SPIR-V is shared, so a change to it should be checked wherever
-// compiled effects are built, not only where they are currently consumed this way.
+// This lives in the shared MojoShader half rather than in either renderer for the same reason the
+// entry-point suite does: the SPIR-V is shared, so a change to it must be checked for every shape in
+// which CNA consumes it.
 
 #if __has_include(<mojoshader.h>)
 
@@ -207,7 +208,11 @@ namespace
     };
 
     /// Walks @p words and resolves every implicit sample to its register and its bias index.
-    ModuleFacts ReadModule(const std::vector<std::uint32_t>& words, std::uint32_t descriptorSet)
+    ModuleFacts ReadModule(const std::vector<std::uint32_t>& words,
+                           std::uint32_t samplerDescriptorSet,
+                           std::uint32_t uniformDescriptorSet,
+                           std::uint32_t biasBinding,
+                           bool splitSamplerBindings)
     {
         ModuleFacts facts;
         if (words.size() < 5 || words[0] != kSpirvMagic) return facts;
@@ -247,17 +252,18 @@ namespace
                     if (length >= 4)
                     {
                         const auto decoration = setBinding.find(w[2]);
-                        if (decoration != setBinding.end() &&
-                            decoration->second.first == descriptorSet)
+                        if (decoration != setBinding.end())
                         {
-                            if (decoration->second.second ==
-                                /* the WebGPU renderer's reserved bias binding */ 32u)
+                            if (decoration->second.first == uniformDescriptorSet &&
+                                decoration->second.second == biasBinding)
                             {
                                 facts.biasBlockVariables.insert(w[2]);
                             }
-                            else
+                            else if (decoration->second.first == samplerDescriptorSet)
                             {
-                                variableSlot[w[2]] = decoration->second.second / 2u;
+                                variableSlot[w[2]] = splitSamplerBindings
+                                    ? decoration->second.second / 2u
+                                    : decoration->second.second;
                             }
                         }
                     }
@@ -323,6 +329,8 @@ namespace
         int passes = 0;
         int biasedSamples = 0;
         int passesWithTwoOrMoreRegisters = 0;
+        int combinedBiasedSamples = 0;
+        int combinedPassesWithTwoOrMoreRegisters = 0;
         int vertexStagesLeftAlone = 0;
     };
 
@@ -378,11 +386,64 @@ namespace
                     const std::size_t pixelWords =
                         (static_cast<std::size_t>(pixelData->output_len) -
                          static_cast<std::size_t>(patchTableSize)) / sizeof(std::uint32_t);
+
+                    // --- SDL_GPU shape: MojoShader's original combined samplers -------------
+                    const auto* pixelWordData =
+                        reinterpret_cast<const std::uint32_t*>(pixelData->output);
+                    const std::vector<std::uint32_t> combinedWords(
+                        pixelWordData, pixelWordData + pixelWords);
+                    const ModuleFacts combinedBefore = ReadModule(
+                        combinedWords, /*samplerDescriptorSet=*/2u,
+                        /*uniformDescriptorSet=*/3u, /*biasBinding=*/1u,
+                        /*splitSamplerBindings=*/false);
+                    ASSERT_TRUE(combinedBefore.walkable)
+                        << where << ": the COMBINED module does not walk";
+                    SpirvLodBiasResult combinedBiased = InjectSamplerLodBias(
+                        combinedWords.data(), combinedWords.size(),
+                        /*samplerDescriptorSet=*/2u, /*uniformDescriptorSet=*/3u,
+                        /*binding=*/1u);
+                    ASSERT_TRUE(combinedBiased.error.empty())
+                        << where << ": " << combinedBiased.error;
+                    const ModuleFacts combinedAfter = ReadModule(
+                        combinedBiased.words, /*samplerDescriptorSet=*/2u,
+                        /*uniformDescriptorSet=*/3u, /*biasBinding=*/1u,
+                        /*splitSamplerBindings=*/false);
+                    ASSERT_TRUE(combinedAfter.walkable)
+                        << where << ": the injected COMBINED module does not walk";
+                    EXPECT_GT(combinedAfter.bound, combinedAfter.highestId)
+                        << where << ": the combined rewrite's id bound is stale";
+                    std::set<std::uint32_t> combinedRegisters;
+                    for (const SampleFacts& sample : combinedAfter.samples)
+                    {
+                        if (sample.samplerRegister == UINT32_MAX)
+                        {
+                            EXPECT_FALSE(sample.hasBias)
+                                << where << ": an unattributable combined sample gained a bias";
+                            continue;
+                        }
+                        combinedRegisters.insert(sample.samplerRegister);
+                        EXPECT_TRUE(sample.hasBias)
+                            << where << ": combined s" << sample.samplerRegister
+                            << " kept its unbiased form";
+                        EXPECT_EQ(sample.biasIndex, sample.samplerRegister)
+                            << where << ": combined s" << sample.samplerRegister
+                            << " reads bias index " << sample.biasIndex;
+                        ++tally.combinedBiasedSamples;
+                    }
+                    if (combinedRegisters.size() >= 2)
+                        ++tally.combinedPassesWithTwoOrMoreRegisters;
+                    EXPECT_EQ(combinedBiased.changed,
+                              !combinedAfter.samples.empty() && !combinedRegisters.empty())
+                        << where << ": combined `changed` disagrees with the rewrite";
+
                     SpirvSplitResult split = SplitCombinedImageSamplers(
-                        reinterpret_cast<const std::uint32_t*>(pixelData->output), pixelWords);
+                        pixelWordData, pixelWords);
                     ASSERT_TRUE(split.error.empty()) << where << ": " << split.error;
 
-                    const ModuleFacts before = ReadModule(split.words, /*descriptorSet=*/2u);
+                    const ModuleFacts before = ReadModule(
+                        split.words, /*samplerDescriptorSet=*/2u,
+                        /*uniformDescriptorSet=*/2u, /*biasBinding=*/32u,
+                        /*splitSamplerBindings=*/true);
                     ASSERT_TRUE(before.walkable) << where << ": the SPLIT module does not walk";
                     for (const SampleFacts& sample : before.samples)
                     {
@@ -391,11 +452,15 @@ namespace
                     }
 
                     SpirvLodBiasResult biased = InjectSamplerLodBias(
-                        split.words.data(), split.words.size(), /*descriptorSet=*/2u,
+                        split.words.data(), split.words.size(), /*samplerDescriptorSet=*/2u,
+                        /*uniformDescriptorSet=*/2u,
                         /*binding=*/32u);
                     ASSERT_TRUE(biased.error.empty()) << where << ": " << biased.error;
 
-                    const ModuleFacts after = ReadModule(biased.words, /*descriptorSet=*/2u);
+                    const ModuleFacts after = ReadModule(
+                        biased.words, /*samplerDescriptorSet=*/2u,
+                        /*uniformDescriptorSet=*/2u, /*biasBinding=*/32u,
+                        /*splitSamplerBindings=*/true);
                     ASSERT_TRUE(after.walkable)
                         << where << ": the INJECTED module does not walk -- a rewritten "
                                     "instruction's word count is wrong";
@@ -442,7 +507,8 @@ namespace
                     ASSERT_TRUE(vertexSplit.error.empty()) << where;
                     SpirvLodBiasResult vertexBiased =
                         InjectSamplerLodBias(vertexSplit.words.data(), vertexSplit.words.size(),
-                                             /*descriptorSet=*/0u, /*binding=*/32u);
+                                             /*samplerDescriptorSet=*/0u,
+                                             /*uniformDescriptorSet=*/0u, /*binding=*/32u);
                     ASSERT_TRUE(vertexBiased.error.empty()) << where;
                     EXPECT_FALSE(vertexBiased.changed)
                         << where << ": a stage that samples nothing gained a bias block";
@@ -489,12 +555,17 @@ TEST(MojoShaderSpirvSamplerLodBiasTest, EverySampledRegisterReadsItsOwnBiasAcros
     EXPECT_EQ(tally.passes, 27);
     EXPECT_EQ(tally.vertexStagesLeftAlone, 27);
     EXPECT_GT(tally.biasedSamples, 0) << "no pass in the corpus samples a texture at all";
+    EXPECT_EQ(tally.combinedBiasedSamples, tally.biasedSamples)
+        << "combined and split modules did not rewrite the same samples";
 
     // Two samplers in ONE shader is the case that separates a per-register implementation from a
     // per-shader one, so the corpus has to contain it for the assertion above to mean anything.
     EXPECT_GT(tally.passesWithTwoOrMoreRegisters, 0)
         << "no committed pass samples two different registers, so the corpus cannot show that two "
            "biases stay apart -- add such a fixture rather than deleting this expectation";
+    EXPECT_EQ(tally.combinedPassesWithTwoOrMoreRegisters,
+              tally.passesWithTwoOrMoreRegisters)
+        << "the combined-sampler route lost a multi-register pass";
 }
 
 // plans/plan_webgpu.md WEBGPU-208. The translator's three cases, built from real modules rather
@@ -567,7 +638,7 @@ TEST(MojoShaderSpirvSamplerLodBiasTest, TheTranslatorSpellsEachImageOperandCaseD
 
                 // Case 2 -- a Bias operand, which is the only one this subset accepts.
                 SpirvLodBiasResult biased = InjectSamplerLodBias(
-                    split.words.data(), split.words.size(), 2u, 32u);
+                    split.words.data(), split.words.size(), 2u, 2u, 32u);
                 ASSERT_TRUE(biased.error.empty()) << biased.error;
                 ASSERT_TRUE(biased.changed);
                 SpirvToWgslResult withBias =

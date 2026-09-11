@@ -222,6 +222,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             const std::vector<SdlGpuCompiledEffectVertexStreamEXT>& streams,
             SDL_GPUShader*& vertexShader, SDL_GPUShader*& pixelShader) const;
 
+        /**
+         * @brief Reports whether the last linked pixel module consumes the injected LOD-bias UBO.
+         * @return True when the SDL_GPU MojoShader transform rewrote at least one implicit sample.
+         */
+        CNAEXT [[nodiscard]] bool LinkedPixelShaderUsesLodBiasEXT() const;
+
     private:
         SdlGpuCompiledEffect(SdlGpuRenderer& renderer, const SdlGpuCompiledEffect& cloneSource);
 

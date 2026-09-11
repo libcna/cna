@@ -1559,8 +1559,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// plans/plan_fx.md FX-083: the effect's own MaxMipLevel/MipMapLevelOfDetailBias, which
             /// SDL_GPU expresses through min_lod plus a native or shader-side bias. Before this
             /// they were published on GraphicsDevice.SamplerStates and then dropped on the way to
-            /// the GPU. Compiled effects still use the native bias and therefore need SDLGPU-122's
-            /// Metal-specific shader rewrite.
+            /// the GPU. SDLGPU-122 snapshots the compiled value into its own per-register fragment
+            /// uniform and uses zero in the native descriptor so Vulkan/D3D12 cannot apply it twice.
             int maxMipLevel = 0;
             float lodBias = 0.0f;
             /// plans/plan_fx.md FX-091: the effect's own AddressW. Carried into the sampler cache key so
@@ -1606,6 +1606,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::vector<std::size_t> vertexStreamSourceIndices;
             std::vector<std::uint8_t> vertexUniformBytes;
             std::vector<std::uint8_t> pixelUniformBytes;
+            /// SDLGPU-122: one vec4 per D3D9 sampler register, pushed at fragment UBO slot 1 when
+            /// the linked module's implicit samples were rewritten to consume it.
+            std::vector<std::uint8_t> pixelLodBiasBytes;
+            bool pixelUsesLodBias = false;
             /// MOJOSHADER_sdlGetSamplerSlots(pixelShaderData) entries -- see
             /// CompiledEffectDrawCommand::binding's own doc comment for the unreflected-slot
             /// dummy-binding rule this follows.
@@ -2525,9 +2529,9 @@ namespace CNA::Internal::Renderers::SdlGpu
          * plans/plan_fx.md FX-083 and plans/plan_sdlgpu.md SDLGPU-121. `MaxMipLevel` maps to
          * `SDL_GPUSamplerCreateInfo::min_lod`. Stock 3D and stock SpriteBatch carry the bias in a
          * fragment uniform and apply the SPIR-V Bias image operand because SDL's Metal driver
-         * documents native `mip_lod_bias` as a no-op. Compiled effects retain the native descriptor
-         * route on Vulkan/D3D12 while their Metal rewrite is tracked by SDLGPU-122. Every command
-         * captures both fields at public draw time.
+         * documents native `mip_lod_bias` as a no-op. SDLGPU-122 applies the same shader-side rule
+         * to compiled XNA effects after MojoShader linking. Every command captures both fields at
+         * public draw time.
          *
          * @param slot Sampler slot.
          * @param maxMipLevel Most detailed mip level the sampler may use.
@@ -2836,14 +2840,11 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param family Public draw family, for `CNA_SDLGPU_SAMPLER_TRACE` only.
          * @param maxMipLevel Public `SamplerState.MaxMipLevel`; becomes `min_lod` (plans/plan_fx.md
          *        FX-083), the same mapping FNA3D's own SDL_GPU driver makes.
-         * @param lodBias Native `SDL_GPUSamplerCreateInfo::mip_lod_bias`. Stock shaders pass zero
-         *        here and carry the public value in their per-draw Bias uniform instead; compiled
-         *        and custom routes pass the public value until they provide equivalent shader
-         *        emulation.
-         * @param addressW Raw `TextureAddressMode` ordinal for W. SDL_GPU's compiled-effect route
-         *        samples 2D textures only, so this axis never reaches the hardware today -- it is
-         *        part of the key regardless, so adopting it later cannot be served a sampler built
-         *        for a different W mode.
+         * @param lodBias Native `SDL_GPUSamplerCreateInfo::mip_lod_bias`. Stock and compiled-XNA
+         *        shaders pass zero here and carry the public value in Bias uniforms instead; the
+         *        CNAEXT custom-shader route still passes its caller-supplied native value.
+         * @param addressW Raw `TextureAddressMode` ordinal for W. Ordinary compiled effects observe
+         *        it through volume sampling; it remains part of every sampler cache identity.
          * @return The cached or newly created native sampler; never null.
          */
         [[nodiscard]] SDL_GPUSampler* GetOrCreateSampler(int textureFilter, int addressU,

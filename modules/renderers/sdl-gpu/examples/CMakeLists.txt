@@ -137,7 +137,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     # SDLGPU-112: keep the complete compiled-XNA-effect runtime independently runnable.  The
     # canonical source normally belongs to the renderer-focused unit-test aggregate, whose link
     # graph includes every renderer unit test; compiling this one source directly avoids that
-    # unrelated relink while preserving all 39 reflection, state, draw, SpriteBatch, sampler,
+    # unrelated relink while preserving all reflection, state, draw, SpriteBatch, sampler,
     # texture-lifetime and malformed-bytecode checks verbatim.  The cross-compile emulator set by
     # cna_sdlgpu_test supplies the isolated dummy/Xvfb D3D12 environment.
     if(CNA_SDL_GPU_COMPILED_EFFECTS)
@@ -153,6 +153,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
             ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
         set_tests_properties(SdlGpu_CompiledEffectRuntime PROPERTIES
             FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+        # SDLGPU-122: Vulkan and D3D12 have a working native sampler-bias field, so the shared
+        # pixel contract could pass without exercising the Metal-required SPIR-V rewrite. Reject
+        # every nonzero native bias in this exact executable: the +1 mip selection can then pass
+        # only through fragment UBO slot 1 and the injected Bias image operand.
+        set_property(TEST SdlGpu_CompiledEffectRuntime APPEND PROPERTY ENVIRONMENT
+            "CNA_SDLGPU_TEST_REJECT_NATIVE_LOD_BIAS=1")
     endif()
 
     # SDLGPU-80: SDL_gpu exposes command-completion fences but no occlusion-query/query-pool

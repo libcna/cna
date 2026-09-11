@@ -119,7 +119,7 @@ change what the GPU samples. That was true of **every** renderer except FNA3D un
 | Renderer | `MaxMipLevel` | `MipMapLevelOfDetailBias` |
 |---|---|---|
 | FNA3D | `GL_TEXTURE_BASE_LEVEL` / SDL_GPU `min_lod`, whichever driver is active | desktop GL only; FNA3D's own GL driver skips it under ES |
-| SDL_GPU | **implemented** — `SDL_GPUSamplerCreateInfo::min_lod`, and part of the sampler cache key | **stock XNA effects/SpriteBatch implemented on every SDL_gpu driver** — SDLGPU-121 uses SPIR-V's Bias operand because SDL documents native `mip_lod_bias` as a Metal no-op; compiled effects remain native on Vulkan/D3D12 and their Metal rewrite is tracked by SDLGPU-122 |
+| SDL_GPU | **implemented** — `SDL_GPUSamplerCreateInfo::min_lod`, and part of the sampler cache key | **implemented on every ordinary stock/SpriteBatch and compiled-XNA-effect route** — SDLGPU-121/122 use SPIR-V's Bias operand because SDL documents native `mip_lod_bias` as a Metal no-op; Vulkan and D3D12 run the same shader emulation so the proof cannot pass through their working descriptor field |
 | EasyGL, ES 3 profiles (`OPENGLES3`, `WEBGL2`) | **implemented** — sampler-object `GL_TEXTURE_MIN_LOD` | **not representable**: OpenGL ES has no `GL_TEXTURE_LOD_BIAS` at all |
 | EasyGL, `OPENGL33` | **implemented** — `GL_TEXTURE_MIN_LOD` | **implemented** — `GL_TEXTURE_LOD_BIAS` |
 | EasyGL, ES 2 profiles (`OPENGLES2`, `WEBGL1`) | **not representable**: no sampler objects and no `GL_TEXTURE_MIN_LOD` | not representable |
@@ -187,9 +187,20 @@ an eight-slot per-draw fragment uniform, while its native sampler bias is zero t
 application on Vulkan/D3D12. The same exact mip-colour fixture passes on real Vulkan and cross-
 compiled D3D12, and the SpriteBatch variant verifies its independent state path. AddressW reaches
 `SDL_GPUSamplerCreateInfo::address_mode_w`; its volume-pixel proof remains coupled to the separate
-Texture3D/compiled-effect volume work tracked by `SDLGPU-71`/`SDLGPU-79`. Compiled XNA effects use
-their own MojoShader-produced sampling instructions; Metal emulation for that path is SDLGPU-122,
-not silently included in the stock claim.
+Texture3D/compiled-effect volume work tracked by `SDLGPU-71`/`SDLGPU-79`.
+
+**Compiled XNA Effects are complete since SDLGPU-122 (2026-09-11).** The pinned MojoShader adapter
+now exposes one bounded callback after SPIR-V linking and before native shader creation. CNA uses it
+to apply the shared `InjectSamplerLodBias` rewrite directly to MojoShader's combined samplers,
+placing one vec4 per D3D9 sampler register in SDL_GPU fragment-uniform set 3/binding 1. Replay
+snapshots and pushes those values at fragment UBO slot 1 and deliberately zeros the corresponding
+native sampler bias, preventing double application on Vulkan/D3D12. On Apple, the statically linked
+ShaderCross configuration now consumes the same transformed SPIR-V and translates it to Metal's
+native shader format rather than bypassing the transform through MojoShader's direct MSL profile.
+The shared authored-mip pixel contract passes on Vulkan and headless D3D12 while a test hook rejects
+every nonzero native bias; a 27-pass structural corpus additionally proves each combined and split
+sample reads its own register. A real Metal execution remains platform-validation work, not an
+unimplemented sampler semantic.
 
 ### 6b.1 Sampler identity and state lifetime (plans/plan_fx.md FX-091, FX-092, 2026-08-18)
 

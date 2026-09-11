@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plans/plan_webgpu.md WEBGPU-208. See the header for what this does and why it does it here rather
-// than in either target's own route.
+// plans/plan_webgpu.md WEBGPU-208 / plans/plan_sdlgpu.md SDLGPU-122. See the header for what this
+// does and why it belongs in the shared MojoShader layer.
 
 #include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
 
@@ -89,7 +89,9 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
     }
 
     SpirvLodBiasResult InjectSamplerLodBias(const std::uint32_t* wordData, std::size_t wordCount,
-                                            std::uint32_t descriptorSet, std::uint32_t binding)
+                                            std::uint32_t samplerDescriptorSet,
+                                            std::uint32_t uniformDescriptorSet,
+                                            std::uint32_t binding)
     {
         const std::vector<std::uint32_t> input(wordData, wordData + wordCount);
         SpirvLodBiasResult result;
@@ -131,6 +133,7 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
         std::map<std::uint32_t, std::uint32_t> variableStorage;  // %var -> storage class
         std::set<std::uint32_t> imageTypes;
         std::set<std::uint32_t> samplerTypes;
+        std::set<std::uint32_t> sampledImageTypes;
         std::map<std::uint32_t, std::pair<std::uint32_t, std::uint32_t>> setBinding;  // %var -> set,binding
         std::map<std::uint32_t, std::uint32_t> constantValue;  // %const -> literal (32-bit)
         std::map<std::uint32_t, std::uint32_t> constantType;   // %const -> type
@@ -159,6 +162,9 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                     break;
                 case kOpTypeSampler:
                     if (w.size() >= 2) samplerTypes.insert(w[1]);
+                    break;
+                case kOpTypeSampledImage:
+                    if (w.size() >= 2) sampledImageTypes.insert(w[1]);
                     break;
                 case kOpTypePointer:
                     if (w.size() >= 4)
@@ -206,9 +212,10 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
             return result;
         }
 
-        // A texture or sampler variable in the target set, mapped to the D3D9 register it came
-        // from. `SplitCombinedImageSamplers` puts the texture half at 2*register and the sampler
-        // half at 2*register + 1, which is the whole of the convention this reads back.
+        // A combined sampler, split texture or split sampler variable in the target set, mapped
+        // to the D3D9 register it came from. MojoShader's original combined variable uses the
+        // register as its binding. `SplitCombinedImageSamplers` puts the texture half at
+        // 2*register and the sampler half at 2*register + 1.
         const auto slotOfVariable = [&](std::uint32_t var) -> std::uint32_t {
             const auto ptr = variablePointer.find(var);
             if (ptr == variablePointer.end()) return UINT32_MAX;
@@ -217,12 +224,14 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                 return UINT32_MAX;
             const auto pointee = pointerPointee.find(ptr->second);
             if (pointee == pointerPointee.end()) return UINT32_MAX;
-            if (imageTypes.count(pointee->second) == 0 && samplerTypes.count(pointee->second) == 0)
+            const bool combined = sampledImageTypes.count(pointee->second) != 0;
+            if (!combined && imageTypes.count(pointee->second) == 0 &&
+                samplerTypes.count(pointee->second) == 0)
                 return UINT32_MAX;
             const auto decoration = setBinding.find(var);
             if (decoration == setBinding.end()) return UINT32_MAX;
-            if (decoration->second.first != descriptorSet) return UINT32_MAX;
-            return decoration->second.second / 2u;
+            if (decoration->second.first != samplerDescriptorSet) return UINT32_MAX;
+            return combined ? decoration->second.second : decoration->second.second / 2u;
         };
 
         // Pass 2 -- follow each OpImageSampleImplicitLod back to its register.
@@ -345,7 +354,7 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
         newDecorations.push_back(Make(kOpDecorate, {blockType, kDecorationBlock}));
         newDecorations.push_back(Make(kOpMemberDecorate, {blockType, 0u, kDecorationOffset, 0u}));
         newDecorations.push_back(
-            Make(kOpDecorate, {biasVariable, kDecorationDescriptorSet, descriptorSet}));
+            Make(kOpDecorate, {biasVariable, kDecorationDescriptorSet, uniformDescriptorSet}));
         newDecorations.push_back(Make(kOpDecorate, {biasVariable, kDecorationBinding, binding}));
 
         // Pass 4 -- rebuild. Decorations join the annotation section, types and the variable join
