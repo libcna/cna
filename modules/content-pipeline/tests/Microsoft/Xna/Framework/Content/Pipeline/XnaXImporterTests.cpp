@@ -548,6 +548,10 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
           // template defines, which is accepted and ignored
           // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-180`).
           "x_type_name_case.x",
+          // The two stage probes `XNASWEEP-231` measured the generated-normal rule on: the first
+          // leaves only the normalization rounding, the second only the cross product's products.
+          // Their bits are checked by `AGeneratedNormalIsTheUnitFaceNormalSummedByPosition`.
+          "x_generated_normals_exact.x", "x_generated_normals_wide.x",
           // A `Material` carrying an `EffectInstance` is an `EffectMaterialContent`: the opaque
           // data is the effect reference and the instance's parameters in file order, an
           // `EffectParamFloats` is typed by its count, and an `EffectParamString` is a *texture*
@@ -568,6 +572,102 @@ TEST(XnaXImporter, EveryFileAnswersTheGraphXnaAnswers)
         ExpectSame(SortAnimations(Import(fixture, context)),
                    SortAnimations(Expected("x/" + fixture)), fixture);
     }
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-231: what a `.x` mesh with no `MeshNormals` answers,
+// stage by stage. The committed probes leave exactly one stage rounding at a time --
+// `x_generated_normals_exact.x` is triangles of the origin and two small integer vectors, so the
+// subtraction and the cross product are exact and only the normalization rounds;
+// `x_generated_normals_wide.x` is integer coordinates up to 20,000, so the differences are still
+// exact and every product in the cross rounds. The bits below are the genuine importer's own.
+//
+// The first file also shares one position -- the origin -- between all 24 of its triangles, so its
+// normal is the accumulation rather than one face's.
+TEST(XnaXImporter, AGeneratedNormalIsTheUnitFaceNormalSummedByPosition)
+{
+    const auto asBits = [](const float value)
+    {
+        std::uint32_t out = 0;
+        std::memcpy(&out, &value, sizeof out);
+        return out;
+    };
+    const auto normalsOf = [](const std::shared_ptr<Graphics::NodeContent>& root)
+    {
+        std::map<int, std::array<std::uint32_t, 3>> found;
+        const auto mesh = std::dynamic_pointer_cast<Graphics::MeshContent>(
+            std::shared_ptr<Graphics::NodeContent>(root->getChildrenProperty()[0]));
+        EXPECT_NE(mesh, nullptr);
+        for (SharpRuntime::intcs batch = 0;
+             batch < mesh->getGeometryProperty().getCountProperty(); ++batch)
+        {
+            const std::shared_ptr<Graphics::GeometryContent> geometry =
+                mesh->getGeometryProperty()[batch];
+            const auto& channels = geometry->getVerticesProperty().getChannelsProperty();
+            std::shared_ptr<Graphics::VertexChannelBase> normals;
+            for (SharpRuntime::intcs at = 0; at < channels.getCountProperty(); ++at)
+            {
+                const std::shared_ptr<Graphics::VertexChannelBase>& channel = channels[at];
+                if (channel != nullptr && channel->getNameProperty() == "Normal0")
+                {
+                    normals = channel;
+                }
+            }
+            if (normals == nullptr) { continue; }
+            const auto& mapped = geometry->getVerticesProperty().getPositionIndicesProperty();
+            for (SharpRuntime::intcs index = 0; index < normals->getCountProperty(); ++index)
+            {
+                const Xna::ContentObject boxed = (*normals)[index];
+                if (!Xna::Holds<Vector3>(boxed)) { continue; }
+                const Vector3 normal = Xna::Unbox<Vector3>(boxed);
+                std::array<std::uint32_t, 3> raw{};
+                std::memcpy(&raw[0], &normal.X, sizeof(float));
+                std::memcpy(&raw[1], &normal.Y, sizeof(float));
+                std::memcpy(&raw[2], &normal.Z, sizeof(float));
+                found[static_cast<int>(Xna::Unbox<SharpRuntime::intcs>(mapped[index]))] = raw;
+            }
+        }
+        return found;
+    };
+
+    ImporterContext context;
+    XImporter importer;
+
+    // Twenty-four unit face normals summed into one position and normalized: what the origin of
+    // every triangle answers. A sum in double, or one normalization rather than the three the
+    // pipeline applies, answers different bits here.
+    const std::shared_ptr<Graphics::NodeContent> exact =
+        importer.Import(Fixture("x_generated_normals_exact.x").string(), context);
+    ASSERT_NE(exact, nullptr);
+    const auto exactNormals = normalsOf(exact);
+    ASSERT_TRUE(exactNormals.count(0) == 1);
+    EXPECT_EQ(exactNormals.at(0)[0], 0xBE8B4A60u);
+    EXPECT_EQ(exactNormals.at(0)[1], 0x3ECA4AE6u);
+    EXPECT_EQ(exactNormals.at(0)[2], 0x3F609F30u);
+    // ...and a vertex of one face alone, where the accumulation adds nothing.
+    ASSERT_TRUE(exactNormals.count(1) == 1);
+    EXPECT_EQ(exactNormals.at(1)[0], 0x3F19A0D7u);
+    EXPECT_EQ(exactNormals.at(1)[1], 0x3E682E28u);
+    EXPECT_EQ(exactNormals.at(1)[2], 0x3F44614Au);
+
+    // The cross product's own rounding: each component is one wide expression narrowed when it is
+    // stored, which is the x87 shape XNA 4.0 is compiled to. A `float` product answers differently
+    // on 78 of these 24 triangles' 72 vertices.
+    const std::shared_ptr<Graphics::NodeContent> wide =
+        importer.Import(Fixture("x_generated_normals_wide.x").string(), context);
+    ASSERT_NE(wide, nullptr);
+    const auto wideNormals = normalsOf(wide);
+    ASSERT_TRUE(wideNormals.count(0) == 1);
+    EXPECT_EQ(wideNormals.at(0)[0], 0x3F630382u);
+    EXPECT_EQ(wideNormals.at(0)[1], 0x3EA51050u);
+    EXPECT_EQ(wideNormals.at(0)[2], 0xBEA99442u);
+    ASSERT_TRUE(wideNormals.count(3) == 1);
+    EXPECT_EQ(wideNormals.at(3)[0], 0x3EFC858Au);
+    EXPECT_EQ(wideNormals.at(3)[1], 0x3E4337EEu);
+    EXPECT_EQ(wideNormals.at(3)[2], 0xBF5948B1u);
+    ASSERT_TRUE(wideNormals.count(6) == 1);
+    EXPECT_EQ(wideNormals.at(6)[0], 0x3F1F0B22u);
+    EXPECT_EQ(wideNormals.at(6)[1], 0x3BBBE41Fu);
+    EXPECT_EQ(wideNormals.at(6)[2], 0xBF4898BEu);
 }
 
 // plans/plan_xna_sample_xnb_sweep.md XNASWEEP-181: the sign of a zero in a `.x` normal, which the

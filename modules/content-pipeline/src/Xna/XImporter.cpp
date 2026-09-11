@@ -479,64 +479,132 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             }
 
             /**
+             * @brief One step of the normalization the genuine importer applies.
+             *
+             * The sum of squares is accumulated wider than `float` and the square root is narrowed
+             * when it is stored; each component is then *divided* by that length rather than
+             * multiplied by its reciprocal. Over 120 triangles whose cross product is exact by
+             * construction -- an origin and two small integer vectors, so the only rounding left
+             * is here -- this form answers all 120 and a `float` sum answers 101, a `double`
+             * square root 53 and a reciprocal multiply 48
+             * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-231`).
+             */
+            const auto normalizeStep = [](const Vector3 value)
+            {
+                const double square = static_cast<double>(value.X) * value.X +
+                                      static_cast<double>(value.Y) * value.Y +
+                                      static_cast<double>(value.Z) * value.Z;
+                if (square == 0.0) { return Vector3(0.0f, 0.0f, 0.0f); }
+                const float length = static_cast<float>(std::sqrt(square));
+                if (length == 0.0f) { return Vector3(0.0f, 0.0f, 0.0f); }
+                return Vector3(value.X / length, value.Y / length, value.Z / length);
+            };
+
+            /** @brief The same step until it stops moving, at most `times` of them. */
+            const auto normalizeTimes = [&normalizeStep](Vector3 value, const int times)
+            {
+                for (int pass = 0; pass < times; ++pass)
+                {
+                    const Vector3 stepped = normalizeStep(value);
+                    if (stepped.X == value.X && stepped.Y == value.Y && stepped.Z == value.Z)
+                    {
+                        return stepped;
+                    }
+                    value = stepped;
+                }
+                return value;
+            };
+
+            /**
              * @brief The normal a mesh with no `MeshNormals` block answers, per vertex.
              *
-             * Measured (`x/generated_normals.x`): a vertex's normal is the **average of the unit
-             * normals of the faces that use it**, and a face's normal is the opposite of its own
-             * winding's -- `-normalize(cross(p1 - p0, p2 - p0))` over the positions as imported,
-             * which is to say after the Z negation. Two triangles sharing an edge, in planes at
-             * right angles and with areas of 8 and 2, answer `(0,-0.707107,-0.707107)` at the
-             * shared vertices: the unit average, not the area-weighted sum, which would be
-             * `(0,-0.2425,-0.9701)`.
+             * **The face normal.** A polygon is a fan of triangles from its first corner, and a
+             * triangle's normal is `cross(p0 - p1, p2 - p1)` -- the edges are taken from the
+             * *second* corner, not the first, which is what separates this from every other
+             * pairing: over 72 isolated triangles with arbitrary coordinates it answers all 72
+             * and the `p1 - p0` / `p2 - p0` pairing answers 20. Each component is one wide
+             * expression narrowed when it is stored, which is the x87 shape XNA 4.0 is compiled
+             * to: over 120 triangles whose edges are exact and whose products are not, that
+             * answers all 120 against 42 for a `float` product and 50 for a `double` one.
+             * The face normal is then normalized once.
              *
-             * The only fixture that covered this before was a single triangle in the XY plane,
-             * which answers `(0,0,-1)` under every candidate rule -- so that constant was what CNA
-             * emitted for every unnormalled `.x`, and the ReachGraphicsDemo sample's ground plane,
-             * four vertices in the XZ plane, came out with its normal pointing along -Z instead of
-             * +Y (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-107`).
+             * **The accumulation.** Every triangle adds its unit normal to each of its three
+             * vertices, in `float`, in the file's own face order, and the buckets are *positions*
+             * rather than vertices: a mesh that names the same position twice accumulates into it
+             * once. The vertex normal is that sum normalized, twice.
+             *
+             * Measured against the genuine importer over 432 purpose-built triangles, the 39
+             * committed `.x` fixtures and SAMPLE-141's `xwing.x`, whose 1,293 positions it answers
+             * bit for bit (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-231`).
+             *
+             * **What is left.** Thirteen of those 1,291 probe normals and one of the 76 fixture
+             * ones differ in the *sign of a zero* and in nothing else -- the genuine importer
+             * answers `-0` in Z where a sum that starts at `+0` cannot. No corpus reference
+             * carries one.
              *
              * @param positions The mesh's positions, as imported.
              * @param faces The mesh's faces, as vertex indices.
-             * @return One normal per position.
+             * @return One normal per vertex.
              */
             const auto generateNormals =
-                [](const std::vector<Vector3>& positions,
-                   const std::vector<std::vector<std::size_t>>& faces)
+                [&normalizeStep, &normalizeTimes](
+                    const std::vector<Vector3>& positions,
+                    const std::vector<std::vector<std::size_t>>& faces)
             {
-                std::vector<Vector3> generated(positions.size(), Vector3(0.0f, 0.0f, 0.0f));
+                // The bucket a vertex accumulates into is its *position*, by the same exact-bits
+                // identity the position merge uses.
+                const auto keyOf = [&positions](const std::size_t vertex)
+                {
+                    std::array<std::uint32_t, 3> key{};
+                    const float components[3] = {positions[vertex].X, positions[vertex].Y,
+                                                 positions[vertex].Z};
+                    for (std::size_t axis = 0; axis < 3u; ++axis)
+                    {
+                        std::memcpy(&key[axis], &components[axis], sizeof(std::uint32_t));
+                    }
+                    return key;
+                };
+                std::map<std::array<std::uint32_t, 3>, Vector3> accumulated;
                 for (const std::vector<std::size_t>& face : faces)
                 {
-                    // Newell's method, which is the polygon's own plane normal and equals
-                    // cross(p1 - p0, p2 - p0) for a triangle.
-                    Vector3 plane(0.0f, 0.0f, 0.0f);
-                    for (std::size_t corner = 0; corner < face.size(); ++corner)
+                    for (std::size_t corner = 1u; corner + 1u < face.size(); ++corner)
                     {
-                        const Vector3& a = positions[face[corner]];
-                        const Vector3& b = positions[face[(corner + 1u) % face.size()]];
-                        plane.X += (a.Y - b.Y) * (a.Z + b.Z);
-                        plane.Y += (a.Z - b.Z) * (a.X + b.X);
-                        plane.Z += (a.X - b.X) * (a.Y + b.Y);
-                    }
-                    const float length = std::sqrt(plane.X * plane.X + plane.Y * plane.Y +
-                                                   plane.Z * plane.Z);
-                    if (length <= 0.0f) { continue; }
-                    const Vector3 unit(-plane.X / length, -plane.Y / length, -plane.Z / length);
-                    for (const std::size_t vertex : face)
-                    {
-                        generated[vertex].X += unit.X;
-                        generated[vertex].Y += unit.Y;
-                        generated[vertex].Z += unit.Z;
+                        const std::size_t triangle[3] = {face[0], face[corner], face[corner + 1u]};
+                        const Vector3& p0 = positions[triangle[0]];
+                        const Vector3& p1 = positions[triangle[1]];
+                        const Vector3& p2 = positions[triangle[2]];
+                        const float ux = p0.X - p1.X, uy = p0.Y - p1.Y, uz = p0.Z - p1.Z;
+                        const float wx = p2.X - p1.X, wy = p2.Y - p1.Y, wz = p2.Z - p1.Z;
+                        const Vector3 face_normal(
+                            static_cast<float>(static_cast<double>(uy) * wz -
+                                               static_cast<double>(uz) * wy),
+                            static_cast<float>(static_cast<double>(uz) * wx -
+                                               static_cast<double>(ux) * wz),
+                            static_cast<float>(static_cast<double>(ux) * wy -
+                                               static_cast<double>(uy) * wx));
+                        const Vector3 unit = normalizeStep(face_normal);
+                        for (const std::size_t vertex : triangle)
+                        {
+                            Vector3& bucket = accumulated[keyOf(vertex)];
+                            bucket.X += unit.X;
+                            bucket.Y += unit.Y;
+                            bucket.Z += unit.Z;
+                        }
                     }
                 }
-                for (Vector3& normal : generated)
+                std::vector<Vector3> generated(positions.size(), Vector3(0.0f, 0.0f, 0.0f));
+                for (std::size_t vertex = 0; vertex < positions.size(); ++vertex)
                 {
-                    const float length = std::sqrt(normal.X * normal.X + normal.Y * normal.Y +
-                                                   normal.Z * normal.Z);
+                    const auto found = accumulated.find(keyOf(vertex));
+                    const Vector3 sum =
+                        found == accumulated.end() ? Vector3(0.0f, 0.0f, 0.0f) : found->second;
+                    const Vector3 answer = normalizeTimes(sum, 2);
                     // A vertex whose faces cancel out has no answer this has measured; the
                     // constant is what CNA answered everywhere before and is kept for it alone.
-                    normal = length > 0.0f
-                                 ? Vector3(normal.X / length, normal.Y / length, normal.Z / length)
-                                 : Vector3(0.0f, 0.0f, -1.0f);
+                    generated[vertex] =
+                        (answer.X == 0.0f && answer.Y == 0.0f && answer.Z == 0.0f)
+                            ? Vector3(0.0f, 0.0f, -1.0f)
+                            : answer;
                 }
                 return generated;
             };
@@ -906,9 +974,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                         {
                             normalIndex = normalFaces[face][corner];
                         }
-                        const std::size_t normalKey = normalIndex < canonicalNormal.size()
-                                                          ? canonicalNormal[normalIndex]
-                                                          : normalIndex;
+                        // A *generated* normal belongs to the position rather than to the corner,
+                        // because that is what it is accumulated into -- so two file vertices at
+                        // the same position are one vertex, where two that name the same position
+                        // and different declared normals are two. `x_generated_normals_exact.x` is
+                        // twenty-four triangles sharing an origin: the genuine importer answers 49
+                        // vertices for its 49 positions, and keying on the corner answers 72
+                        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-233`).
+                        const std::size_t normalKey =
+                            normals.empty()
+                                ? positionOf[vertex]
+                                : (normalIndex < canonicalNormal.size() ? canonicalNormal[normalIndex]
+                                                                        : normalIndex);
                         const std::tuple<std::size_t, std::size_t, std::size_t> key{
                             positionOf[vertex], normalKey, channelClassOf[vertex]};
                         const auto found = local.find(key);
