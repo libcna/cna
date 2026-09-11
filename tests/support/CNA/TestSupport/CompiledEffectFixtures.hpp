@@ -251,6 +251,8 @@ namespace CNA::TestSupport
         bool pixelShaderUsesProjectiveModifiers = false;
         /// Emits a Shader Model 1.4 pixel program whose destination selects the sampler stage.
         bool pixelShaderUsesShaderModel14TextureLoad = false;
+        /// Emits a two-phase Shader Model 1.4 pixel program and carries temporary RGB across it.
+        bool pixelShaderUsesShaderModel14Phase = false;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -305,13 +307,14 @@ namespace CNA::TestSupport
         bool usesPredication = false,
         bool usesPredicatedTexkill = false,
         bool usesProjectiveModifiers = false,
-        bool usesShaderModel14TextureLoad = false)
+        bool usesShaderModel14TextureLoad = false,
+        bool usesShaderModel14Phase = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill;
         const bool usesShaderModel14 =
-            usesProjectiveModifiers || usesShaderModel14TextureLoad;
+            usesProjectiveModifiers || usesShaderModel14TextureLoad || usesShaderModel14Phase;
         const std::uint32_t versionToken = usesShaderModel14
                                                ? 0xFFFF0104u
                                                : usesShaderModel3 ? 0xFFFF0300u : 0xFFFF0200u;
@@ -427,7 +430,22 @@ namespace CNA::TestSupport
                    (modifier << 24);
         };
 
-        if (usesShaderModel14TextureLoad)
+        if (usesShaderModel14Phase)
+        {
+            // RGB temporary components persist across the ps_1_4 phase transition. Alpha does not,
+            // so the valid phase-2 program initializes the output's z/w channels independently.
+            AppendUInt32(shader, 0x00000040u); // texcrd r1.xy, t0
+            AppendUInt32(shader, destination(regTemp, 1, 0x3u));
+            AppendUInt32(shader, source(regTexture, 0));
+            AppendUInt32(shader, 0x0000FFFDu); // phase
+            AppendUInt32(shader, 0x00000001u); // mov r0.xy, r1
+            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+            AppendUInt32(shader, source(regTemp, 1));
+            AppendUInt32(shader, 0x00000001u); // mov r0.zw, c0
+            AppendUInt32(shader, destination(regTemp, 0, 0xCu));
+            AppendUInt32(shader, source(regConst, 0));
+        }
+        else if (usesShaderModel14TextureLoad)
         {
             // ps_1_4 selects the texture stage from the destination register number while the
             // source independently selects the coordinate set: sample stage 1 at TEXCOORD0.
@@ -1345,7 +1363,8 @@ namespace CNA::TestSupport
             options.pixelShaderUsesRasterInputs, options.shadersUsePredication,
             options.pixelShaderUsesPredicatedTexkill,
             options.pixelShaderUsesProjectiveModifiers,
-            options.pixelShaderUsesShaderModel14TextureLoad);
+            options.pixelShaderUsesShaderModel14TextureLoad,
+            options.pixelShaderUsesShaderModel14Phase);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -1356,11 +1375,13 @@ namespace CNA::TestSupport
                 options.vertexShaderReadsSecondStream,
                 options.pixelShaderSamplesTexture || options.pixelShaderUsesDerivatives ||
                     options.pixelShaderUsesProjectiveModifiers ||
-                    options.pixelShaderUsesShaderModel14TextureLoad,
+                    options.pixelShaderUsesShaderModel14TextureLoad ||
+                    options.pixelShaderUsesShaderModel14Phase,
                 options.samplerKind != SyntheticSamplerKind::Sampler2D,
                 options.shadersUsePredication,
                 options.pixelShaderUsesProjectiveModifiers ||
-                    options.pixelShaderUsesShaderModel14TextureLoad);
+                    options.pixelShaderUsesShaderModel14TextureLoad ||
+                    options.pixelShaderUsesShaderModel14Phase);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

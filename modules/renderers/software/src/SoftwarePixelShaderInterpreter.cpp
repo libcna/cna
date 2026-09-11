@@ -1070,7 +1070,7 @@ private:
     if (tokens.empty())
       throw std::runtime_error("Software pixel shader: empty instruction.");
     if (instruction.opcode == 0u || instruction.opcode == 31u ||
-        instruction.opcode == 0xFFFEu)
+        instruction.opcode == 0xFFFEu || instruction.opcode == 0xFFFDu)
       return;
     PrepareInstructionPredicate(instruction);
     if (instruction.opcode == 81u) {

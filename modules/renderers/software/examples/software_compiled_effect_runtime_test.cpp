@@ -1964,6 +1964,46 @@ namespace
               "compiled ps_1_4 TEXLD _dw did not map a zero divisor to x/y=1");
     }
 
+    void CheckCompiledShaderModel14Phase()
+    {
+        GraphicsDevice device;
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = false;
+        options.pixelShaderUsesShaderModel14Phase = true;
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect->getParametersProperty()["Tint"]->SetValue(Vector4(0.0f, 0.0f, 0.25f, 1.0f));
+
+        struct Vertex { float x, y, z, u, v, q, w; };
+        const Vertex quad[6] = {
+            {-1,  1, 0, .25f, .5f, 0, 1}, {-1, -1, 0, .25f, .5f, 0, 1},
+            { 1, -1, 0, .25f, .5f, 0, 1}, {-1,  1, 0, .25f, .5f, 0, 1},
+            { 1, -1, 0, .25f, .5f, 0, 1}, { 1,  1, 0, .25f, .5f, 0, 1},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre;
+        const Rectangle centreRectangle(2, 2, 1, 1);
+        target.GetData(0, &centreRectangle, &centre, 0, 1);
+        Check(centre == Color(64, 128, 64, 255),
+              "compiled ps_1_4 PHASE did not preserve temporary RGB into phase 2");
+    }
+
     void CheckCompiledSamplerRasterization(SoftwareRenderer& renderer)
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
@@ -2775,6 +2815,7 @@ int main()
         CheckCompiledPredicatedTexkill();
         CheckCompiledProjectiveSourceModifiers();
         CheckCompiledShaderModel14TextureLoad();
+        CheckCompiledShaderModel14Phase();
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
         CheckCompiledLineAndWireframeRasterization(renderer);
