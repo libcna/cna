@@ -49,7 +49,7 @@ render-target/cube sampling, SpriteBatch custom-effect routing and classic line/
 encompassing shader-profile, lifecycle and content-conformance backlog.
 The independent EasyGL challenge in `SOFTWARE-367` also repaired MojoShader's invalid writemask-
 suffixed label identifiers and missing prototypes for legal nested forward subroutine calls;
-`SOFTWARE-366` tracks the matching CPU executor slice.
+`SOFTWARE-366` completes the matching bounded CPU executor in both shader stages.
 
 The same challenge also confirmed a renderer-wide public-API hole: CNA stores
 `GraphicsDevice.VertexTextures` and `VertexSamplerStates`, but no renderer contract consumes them.
@@ -198,7 +198,8 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   its declared count for positive, negative and zero address steps instead of terminating on `aL`.
   SOFTWARE-367 repairs the same translator's subroutine output: label operands no longer inherit a
   stale destination writemask, and prototypes precede definitions so nested forward calls compile.
-  SOFTWARE-366 is the corresponding in-progress Software `CALL`/`CALLNZ`/`LABEL`/`RET` phase.
+  SOFTWARE-366 executes the corresponding Software `CALL`/`CALLNZ`/`LABEL`/`RET` programs with
+  forward-label validation, Shader Model call-depth limits, conditional returns and inherited `aL`.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.

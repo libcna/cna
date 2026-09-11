@@ -12,6 +12,8 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace CNA::Internal::Renderers::Software
 {
@@ -208,8 +210,16 @@ namespace CNA::Internal::Renderers::Software
                     int previousLoopRegister;
                     std::uint16_t endOpcode;
                 };
+                struct CallFrame
+                {
+                    std::size_t returnAddress;
+                    std::size_t conditionalDepth;
+                    std::size_t loopDepth;
+                };
                 std::vector<ConditionalFrame> conditionals;
                 std::vector<LoopFrame> loops;
+                std::vector<CallFrame> calls;
+                const auto labels = CollectLabels();
                 bool active = true;
                 std::size_t pc = 0u;
                 while (pc < program_.instructions.size())
@@ -325,6 +335,73 @@ namespace CNA::Internal::Renderers::Software
                         loops.pop_back();
                         pc = frame.end + 1u;
                     }
+                    else if (instruction.opcode == 25u || instruction.opcode == 26u)
+                    {
+                        if (!active)
+                        {
+                            ++pc;
+                            continue;
+                        }
+                        std::size_t cursor = 1u;
+                        const int label = ReadLabel(instruction.tokens, cursor);
+                        bool takeCall = true;
+                        if (instruction.opcode == 26u)
+                            takeCall = ReadSource(instruction.tokens, cursor)[0] != 0.0f;
+                        if (cursor != instruction.tokens.size())
+                            throw std::runtime_error(
+                                "Software vertex shader: malformed CALL instruction.");
+                        if (!takeCall)
+                        {
+                            ++pc;
+                            continue;
+                        }
+                        const auto target = std::find_if(
+                            labels.begin(), labels.end(),
+                            [label](const auto& candidate) { return candidate.first == label; });
+                        if (target == labels.end())
+                            throw std::runtime_error(
+                                "Software vertex shader: CALL names an undefined label.");
+                        if (target->second <= pc)
+                            throw std::runtime_error(
+                                "Software vertex shader: only forward CALL targets are legal.");
+                        const std::size_t maxCallDepth =
+                            program_.majorVersion >= 3u || program_.minorVersion == 0xFFu ? 4u : 1u;
+                        if (calls.size() >= maxCallDepth)
+                            throw std::runtime_error(
+                                "Software vertex shader: call nesting exceeds the D3D limit.");
+                        calls.push_back({pc + 1u, conditionals.size(), loops.size()});
+                        pc = target->second + 1u;
+                    }
+                    else if (instruction.opcode == 28u)
+                    {
+                        if (!active)
+                        {
+                            ++pc;
+                            continue;
+                        }
+                        if (calls.empty())
+                        {
+                            if (!conditionals.empty() || !loops.empty())
+                                throw std::runtime_error(
+                                    "Software vertex shader: main RET crosses a flow boundary.");
+                            pc = program_.instructions.size();
+                            continue;
+                        }
+                        const CallFrame frame = calls.back();
+                        if (conditionals.size() != frame.conditionalDepth ||
+                            loops.size() != frame.loopDepth)
+                        {
+                            throw std::runtime_error(
+                                "Software vertex shader: RET crosses a subroutine flow boundary.");
+                        }
+                        calls.pop_back();
+                        pc = frame.returnAddress;
+                    }
+                    else if (instruction.opcode == 30u)
+                    {
+                        throw std::runtime_error(
+                            "Software vertex shader: LABEL reached without a CALL.");
+                    }
                     else if (active)
                     {
                         ExecuteInstruction(instruction);
@@ -339,6 +416,9 @@ namespace CNA::Internal::Renderers::Software
                 if (!loops.empty())
                     throw std::runtime_error(
                         "Software vertex shader: loop without a matching terminator.");
+                if (!calls.empty())
+                    throw std::runtime_error(
+                        "Software vertex shader: subroutine ended without RET.");
                 return BuildResult();
             }
 
@@ -545,6 +625,47 @@ namespace CNA::Internal::Renderers::Software
                     return source0[0] != 0.0f;
                 const Vector source1 = ReadSource(instruction.tokens, cursor);
                 return Compare(source0[0], source1[0], instruction.controls);
+            }
+
+            [[nodiscard]] int ReadLabel(const std::vector<std::uint32_t>& tokens,
+                                        std::size_t& cursor) const
+            {
+                RegisterType relativeType;
+                int relativeComponent = 0;
+                const Operand operand = DecodeSource(tokens, cursor, program_.majorVersion,
+                                                     relativeType, relativeComponent);
+                if (operand.type != RegisterType::Label || operand.relative ||
+                    operand.sourceModifier != 0u)
+                {
+                    throw std::runtime_error(
+                        "Software vertex shader: CALL/LABEL requires a direct label register.");
+                }
+                return operand.number;
+            }
+
+            [[nodiscard]] std::vector<std::pair<int, std::size_t>> CollectLabels() const
+            {
+                std::vector<std::pair<int, std::size_t>> labels;
+                for (std::size_t index = 0u; index < program_.instructions.size(); ++index)
+                {
+                    const auto& instruction = program_.instructions[index];
+                    if (instruction.opcode != 30u)
+                        continue;
+                    std::size_t cursor = 1u;
+                    const int label = ReadLabel(instruction.tokens, cursor);
+                    if (cursor != instruction.tokens.size())
+                        throw std::runtime_error(
+                            "Software vertex shader: malformed LABEL instruction.");
+                    if (std::find_if(labels.begin(), labels.end(),
+                                     [label](const auto& candidate)
+                                     { return candidate.first == label; }) != labels.end())
+                    {
+                        throw std::runtime_error(
+                            "Software vertex shader: duplicate LABEL instruction.");
+                    }
+                    labels.emplace_back(label, index);
+                }
+                return labels;
             }
 
             [[nodiscard]] std::size_t FindMatchingLoop(std::size_t start) const

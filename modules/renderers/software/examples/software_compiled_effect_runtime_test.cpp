@@ -1201,6 +1201,340 @@ namespace
               "pixel LOOP/REP/BREAKC/BREAKP result differs");
     }
 
+    void CheckVertexSubroutineSemantics()
+    {
+        constexpr std::uint32_t constant = 2u;
+        constexpr std::uint32_t outputRegister = 6u;
+        constexpr std::uint32_t integerConstant = 7u;
+        constexpr std::uint32_t booleanConstant = 14u;
+        constexpr std::uint32_t loop = 15u;
+        constexpr std::uint32_t label = 18u;
+        constexpr std::uint32_t predicate = 19u;
+        const auto registerBits = [](std::uint32_t type)
+        {
+            return ((type & 0x7u) << 28u) | ((type >> 3u) << 11u);
+        };
+        const auto destination = [&](std::uint32_t type, std::uint32_t number,
+                                     std::uint32_t mask = 0xFu)
+        {
+            return 0x80000000u | registerBits(type) | number | (mask << 16u);
+        };
+        const auto source = [&](std::uint32_t type, std::uint32_t number,
+                                std::uint32_t swizzle = 0xE4u)
+        {
+            return 0x80000000u | registerBits(type) | number | (swizzle << 16u);
+        };
+        SoftwareShaderProgramEXT program;
+        program.stage = SoftwareShaderStageEXT::Vertex;
+        program.majorVersion = 3;
+        program.outputSemantics = {
+            {MOJOSHADER_USAGE_POSITION, 0u, 0u, outputRegister},
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, 1u, outputRegister},
+        };
+        const auto add = [&](std::uint16_t opcode, std::initializer_list<std::uint32_t> tokens,
+                             std::uint8_t controls = 0u)
+        {
+            SoftwareShaderInstructionEXT instruction;
+            instruction.opcode = opcode;
+            instruction.controls = controls;
+            instruction.tokens.assign(tokens);
+            program.instructions.push_back(std::move(instruction));
+        };
+
+        add(1u, {1u, destination(outputRegister, 0u), source(constant, 0u)});
+        add(1u, {1u, destination(outputRegister, 1u), source(constant, 1u)});
+        add(25u, {25u, source(label, 0u)});
+        add(26u, {26u, source(label, 2u), source(booleanConstant, 0u, 0x00u)});
+        add(26u, {26u, source(label, 2u), source(booleanConstant, 1u, 0x00u)});
+        add(94u, {94u, destination(predicate, 0u, 0x1u), source(constant, 5u, 0x00u),
+                  source(constant, 1u, 0x00u)}, 1u);
+        add(40u, {40u, source(booleanConstant, 0u, 0x00u)});
+        add(26u, {26u, source(label, 2u), source(predicate, 0u, 0x00u)});
+        add(43u, {43u});
+        add(27u, {27u, source(loop, 0u, 0x00u), source(integerConstant, 0u)});
+        add(25u, {25u, source(label, 3u)});
+        add(29u, {29u});
+        add(28u, {28u});
+        add(30u, {30u, source(label, 0u)});
+        add(2u, {2u, destination(outputRegister, 1u, 0x1u),
+                 source(outputRegister, 1u), source(constant, 2u)});
+        add(25u, {25u, source(label, 1u)});
+        add(28u, {28u});
+        add(30u, {30u, source(label, 1u)});
+        add(2u, {2u, destination(outputRegister, 1u, 0x2u),
+                 source(outputRegister, 1u), source(constant, 3u)});
+        add(28u, {28u});
+        add(30u, {30u, source(label, 2u)});
+        add(2u, {2u, destination(outputRegister, 1u, 0x4u),
+                 source(outputRegister, 1u), source(constant, 4u)});
+        add(28u, {28u});
+        add(30u, {30u, source(label, 3u)});
+        add(2u, {2u, destination(outputRegister, 1u, 0x8u),
+                 source(outputRegister, 1u), source(loop, 0u, 0x00u)});
+        add(28u, {28u});
+        add(30u, {30u, source(label, 4u)});
+        add(2u, {2u, destination(outputRegister, 1u),
+                 source(outputRegister, 1u), source(constant, 6u)});
+        add(28u, {28u});
+
+        std::array<float, 256u * 4u> floats{};
+        const auto setConstant = [&](std::size_t index, std::array<float, 4> value)
+        {
+            std::copy(value.begin(), value.end(),
+                      floats.begin() + static_cast<std::ptrdiff_t>(index * 4u));
+        };
+        setConstant(0u, {0.0f, 0.0f, 0.0f, 1.0f});
+        setConstant(1u, {0.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(2u, {1.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(3u, {0.0f, 2.0f, 0.0f, 0.0f});
+        setConstant(4u, {0.0f, 0.0f, 3.0f, 0.0f});
+        setConstant(5u, {1.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(6u, {100.0f, 100.0f, 100.0f, 100.0f});
+        std::array<int, 16u * 4u> integers{};
+        integers[0] = 2;
+        integers[1] = 3;
+        integers[2] = 4;
+        std::array<unsigned char, 16> booleans{};
+        booleans[0] = 1u;
+        const auto result = ExecuteSoftwareVertexShaderEXT(
+            program, floats, integers, booleans, {});
+        const auto varying = std::find_if(result.varyings.begin(), result.varyings.end(),
+                                          [](const auto& value)
+                                          {
+                                              return value.usage == MOJOSHADER_USAGE_TEXCOORD &&
+                                                     value.usageIndex == 0u;
+                                          });
+        Check(varying != result.varyings.end() &&
+                  varying->value == std::array<float, 4>{1.0f, 2.0f, 6.0f, 10.0f},
+              "vertex CALL/CALLNZ/LABEL/RET, nested call or inherited aL result differs");
+    }
+
+    void CheckPixelSubroutineSemantics()
+    {
+        constexpr std::uint32_t temporary = 0u;
+        constexpr std::uint32_t constant = 2u;
+        constexpr std::uint32_t integerConstant = 7u;
+        constexpr std::uint32_t colorOutput = 8u;
+        constexpr std::uint32_t booleanConstant = 14u;
+        constexpr std::uint32_t loop = 15u;
+        constexpr std::uint32_t label = 18u;
+        constexpr std::uint32_t predicate = 19u;
+        const auto registerBits = [](std::uint32_t type)
+        {
+            return ((type & 0x7u) << 28u) | ((type >> 3u) << 11u);
+        };
+        const auto destination = [&](std::uint32_t type, std::uint32_t number,
+                                     std::uint32_t mask = 0xFu)
+        {
+            return 0x80000000u | registerBits(type) | number | (mask << 16u);
+        };
+        const auto source = [&](std::uint32_t type, std::uint32_t number,
+                                std::uint32_t swizzle = 0xE4u)
+        {
+            return 0x80000000u | registerBits(type) | number | (swizzle << 16u);
+        };
+        SoftwareShaderProgramEXT program;
+        program.stage = SoftwareShaderStageEXT::Pixel;
+        program.majorVersion = 3;
+        const auto add = [&](std::uint16_t opcode, std::initializer_list<std::uint32_t> tokens,
+                             std::uint8_t controls = 0u)
+        {
+            SoftwareShaderInstructionEXT instruction;
+            instruction.opcode = opcode;
+            instruction.controls = controls;
+            instruction.tokens.assign(tokens);
+            program.instructions.push_back(std::move(instruction));
+        };
+
+        add(1u, {1u, destination(temporary, 0u), source(constant, 0u)});
+        add(25u, {25u, source(label, 0u)});
+        add(26u, {26u, source(label, 2u), source(booleanConstant, 0u, 0x00u)});
+        add(26u, {26u, source(label, 2u), source(booleanConstant, 1u, 0x00u)});
+        add(94u, {94u, destination(predicate, 0u, 0x1u), source(constant, 5u, 0x00u),
+                  source(constant, 0u, 0x00u)}, 1u);
+        add(40u, {40u, source(booleanConstant, 0u, 0x00u)});
+        add(26u, {26u, source(label, 2u), source(predicate, 0u, 0x00u)});
+        add(43u, {43u});
+        add(27u, {27u, source(loop, 0u, 0x00u), source(integerConstant, 0u)});
+        add(25u, {25u, source(label, 3u)});
+        add(29u, {29u});
+        add(1u, {1u, destination(colorOutput, 0u), source(temporary, 0u)});
+        add(28u, {28u});
+        add(30u, {30u, source(label, 0u)});
+        add(2u, {2u, destination(temporary, 0u, 0x1u),
+                 source(temporary, 0u), source(constant, 2u)});
+        add(25u, {25u, source(label, 1u)});
+        add(28u, {28u});
+        add(30u, {30u, source(label, 1u)});
+        add(2u, {2u, destination(temporary, 0u, 0x2u),
+                 source(temporary, 0u), source(constant, 3u)});
+        add(28u, {28u});
+        add(30u, {30u, source(label, 2u)});
+        add(2u, {2u, destination(temporary, 0u, 0x4u),
+                 source(temporary, 0u), source(constant, 4u)});
+        add(28u, {28u});
+        add(30u, {30u, source(label, 3u)});
+        add(2u, {2u, destination(temporary, 0u, 0x8u),
+                 source(temporary, 0u), source(loop, 0u, 0x00u)});
+        add(28u, {28u});
+
+        std::array<float, 256u * 4u> floats{};
+        const auto setConstant = [&](std::size_t index, std::array<float, 4> value)
+        {
+            std::copy(value.begin(), value.end(),
+                      floats.begin() + static_cast<std::ptrdiff_t>(index * 4u));
+        };
+        setConstant(0u, {0.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(2u, {1.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(3u, {0.0f, 2.0f, 0.0f, 0.0f});
+        setConstant(4u, {0.0f, 0.0f, 3.0f, 0.0f});
+        setConstant(5u, {1.0f, 0.0f, 0.0f, 0.0f});
+        std::array<int, 16u * 4u> integers{};
+        integers[0] = 2;
+        integers[1] = 3;
+        integers[2] = 4;
+        std::array<unsigned char, 16> booleans{};
+        booleans[0] = 1u;
+        const auto result = ExecuteSoftwarePixelShaderEXT(
+            program, floats, integers, booleans, {});
+        Check(result.colorWriteMask == 1u &&
+                  result.colors[0] == std::array<float, 4>{1.0f, 2.0f, 6.0f, 10.0f},
+              "pixel CALL/CALLNZ/LABEL/RET, nested call or inherited aL result differs");
+    }
+
+    void CheckSubroutineValidation()
+    {
+        constexpr std::uint32_t label = 18u;
+        const auto registerBits = [](std::uint32_t type)
+        {
+            return ((type & 0x7u) << 28u) | ((type >> 3u) << 11u);
+        };
+        const auto source = [&](std::uint32_t type, std::uint32_t number)
+        {
+            return 0x80000000u | registerBits(type) | number | (0xE4u << 16u);
+        };
+        const auto append = [](SoftwareShaderProgramEXT& program, std::uint16_t opcode,
+                               std::initializer_list<std::uint32_t> tokens)
+        {
+            SoftwareShaderInstructionEXT instruction;
+            instruction.opcode = opcode;
+            instruction.tokens.assign(tokens);
+            program.instructions.push_back(std::move(instruction));
+        };
+        const std::array<float, 256u * 4u> floats{};
+        const std::array<int, 16u * 4u> integers{};
+        const std::array<unsigned char, 16> booleans{};
+
+        for (const SoftwareShaderStageEXT stage :
+             {SoftwareShaderStageEXT::Vertex, SoftwareShaderStageEXT::Pixel})
+        {
+            const std::string stageName =
+                stage == SoftwareShaderStageEXT::Vertex ? "vertex" : "pixel";
+            const auto expectRejected = [&](SoftwareShaderProgramEXT program,
+                                            const std::string& needle,
+                                            const std::string& scenario)
+            {
+                bool rejected = false;
+                try
+                {
+                    if (stage == SoftwareShaderStageEXT::Vertex)
+                        static_cast<void>(ExecuteSoftwareVertexShaderEXT(
+                            program, floats, integers, booleans, {}));
+                    else
+                        static_cast<void>(ExecuteSoftwarePixelShaderEXT(
+                            program, floats, integers, booleans, {}));
+                }
+                catch (const std::runtime_error& error)
+                {
+                    rejected = std::string(error.what()).find(needle) != std::string::npos;
+                }
+                Check(rejected, stageName + " " + scenario +
+                                    " did not report the bounded subroutine error");
+            };
+            const auto makeProgram = [&](std::uint8_t major = 3u)
+            {
+                SoftwareShaderProgramEXT program;
+                program.stage = stage;
+                program.majorVersion = major;
+                return program;
+            };
+
+            auto missing = makeProgram();
+            append(missing, 25u, {25u, source(label, 7u)});
+            append(missing, 28u, {28u});
+            expectRejected(std::move(missing), "undefined label", "missing-label CALL");
+
+            auto backward = makeProgram();
+            append(backward, 25u, {25u, source(label, 0u)});
+            append(backward, 28u, {28u});
+            append(backward, 30u, {30u, source(label, 0u)});
+            append(backward, 25u, {25u, source(label, 0u)});
+            append(backward, 28u, {28u});
+            expectRejected(std::move(backward), "only forward", "backward CALL");
+
+            auto duplicate = makeProgram();
+            append(duplicate, 28u, {28u});
+            append(duplicate, 30u, {30u, source(label, 0u)});
+            append(duplicate, 28u, {28u});
+            append(duplicate, 30u, {30u, source(label, 0u)});
+            append(duplicate, 28u, {28u});
+            expectRejected(std::move(duplicate), "duplicate LABEL", "duplicate label");
+
+            auto deep = makeProgram();
+            append(deep, 25u, {25u, source(label, 0u)});
+            append(deep, 28u, {28u});
+            for (std::uint32_t index = 0u; index < 5u; ++index)
+            {
+                append(deep, 30u, {30u, source(label, index)});
+                if (index < 4u)
+                    append(deep, 25u, {25u, source(label, index + 1u)});
+                append(deep, 28u, {28u});
+            }
+            expectRejected(std::move(deep), "call nesting", "five-deep Shader Model 3 CALL");
+
+            auto shaderModel2 = makeProgram(2u);
+            append(shaderModel2, 25u, {25u, source(label, 0u)});
+            append(shaderModel2, 28u, {28u});
+            append(shaderModel2, 30u, {30u, source(label, 0u)});
+            append(shaderModel2, 25u, {25u, source(label, 1u)});
+            append(shaderModel2, 28u, {28u});
+            append(shaderModel2, 30u, {30u, source(label, 1u)});
+            append(shaderModel2, 28u, {28u});
+            expectRejected(std::move(shaderModel2), "call nesting",
+                           "nested Shader Model 2.0 CALL");
+
+            auto missingReturn = makeProgram();
+            append(missingReturn, 25u, {25u, source(label, 0u)});
+            append(missingReturn, 28u, {28u});
+            append(missingReturn, 30u, {30u, source(label, 0u)});
+            append(missingReturn, 0u, {0u});
+            expectRejected(std::move(missingReturn), "without RET",
+                           "unterminated subroutine");
+        }
+    }
+
+    void CheckParsedSubroutineEffect(SoftwareRenderer& renderer)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesSubroutine = true;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        auto runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+        const float tint[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+        runtime->SetParameterValue(FindParameter(*runtime, "Tint"), tint, sizeof(tint));
+        runtime->SetTechnique(0u);
+        CompiledEffectPassStateChanges changes;
+        runtime->ApplyPass(1u, {}, changes);
+        auto* software = dynamic_cast<SoftwareCompiledEffect*>(runtime.get());
+        Check(software != nullptr, "parsed subroutine Effect has the wrong backend type");
+        if (software == nullptr)
+            return;
+        const auto result = software->ExecutePixelEXT({});
+        Check(result.colorWriteMask == 1u &&
+                  result.colors[0] == std::array<float, 4>{0.25f, 0.25f, 0.25f, 1.0f},
+              "parsed pixel CALL/CALLNZ/LABEL/RET program produced the wrong result");
+    }
+
     void CheckCompiledSamplerRasterization(SoftwareRenderer& renderer)
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
@@ -1921,6 +2255,10 @@ int main()
         CheckPixelConditionalSemantics();
         CheckVertexLoopSemantics();
         CheckPixelLoopSemantics();
+        CheckVertexSubroutineSemantics();
+        CheckPixelSubroutineSemantics();
+        CheckSubroutineValidation();
+        CheckParsedSubroutineEffect(renderer);
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
         CheckCompiledLineAndWireframeRasterization(renderer);
