@@ -1,0 +1,4 @@
+System.ArgumentNullException: Value cannot be null.
+Parameter name: value
+   at Microsoft.Xna.Framework.Content.Pipeline.Serialization.Intermediate.IntermediateSerializer.Serialize[T](XmlWriter output, T value, String referenceRelocationPath)
+   at Cna.Xna40.IntermediateOracle.Program.Serialize[T](String directory, String name, T value, String referenceRelocationPath)

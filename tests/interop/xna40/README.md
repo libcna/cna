@@ -4,13 +4,40 @@
 
 ## Status, stated plainly
 
-**Nothing in this directory has ever been executed against a real Microsoft XNA 4.0 runtime by
-CNA's own automation.** No environment CNA builds in has XNA installed, or Windows, or Wine, or
-Mono, or .NET. Until someone runs this harness and records the result in
-`plans/plan_xnapipeline.md` `XNAP-34`, every CNA document must describe XNA compatibility as
-*unverified*, however well the fixtures parse elsewhere.
+**Executed against a genuine Microsoft XNA 4.0 runtime on 2026-09-06.** Six of six uncompressed
+fixtures loaded through the real `ContentManager` and every value each expectation manifest
+declares matched; the LZX-compressed corpus failed six of six, was diagnosed, fixed, and now
+passes six of six too (see below).
 
-What *has* been verified, without XNA:
+```text
+graphics device: AMD Radeon 780M (RADV PHOENIX) (Reach)
+PASSED  texture2d_color_mips
+PASSED  soundeffect_pcm16_mono_22050
+         (not asserted) SoundEffect exposes no sample-rate, channel-count or PCM accessor in
+         XNA 4.0, so only Duration is asserted here.
+PASSED  spritefont_two_glyphs
+PASSED  curve_two_keys
+PASSED  list_of_strings
+PASSED  model_triangle_basiceffect
+
+fixtures: 6   failed: 0
+XNA runtime: 4.0.0.0
+```
+
+The host was not Windows. It was Debian with the XNA 4.0 Refresh runtime installed into a Wine
+prefix (`~/.wine-cna-xna40`: the GAC, `XnaNative.dll`, and Direct3D 9 through DXVK), the harness
+compiled with mono's `mcs` against the SDK reference assemblies, and run under
+`DISPLAY=:99` on Xvfb. `plans/plan_xnapipeline_parity.md` `XNAPP-280` records the exact recipe.
+
+One change to the harness itself was needed, and it is worth knowing about: `Game.RunOneFrame()`
+returns on this host with `GraphicsDeviceManager.GraphicsDevice` still **null**, so every
+`Texture2D`, `SpriteFont` and `Model` failed with `GraphicsDevice component not found` -- a
+message that says nothing about the `.xnb` and everything about the host. Calling the documented
+`((IGraphicsDeviceManager)manager).CreateDevice()` creates a real device, and the harness now does
+that first and falls back to `RunOneFrame()`. The "no usable graphics device" limitation this file
+used to describe was therefore avoidable, not inherent.
+
+What was already verified, without XNA, and still is:
 
 | Evidence | What it shows |
 |---|---|
@@ -18,9 +45,40 @@ What *has* been verified, without XNA:
 | An independent Python parser validates every fixture (`tools/xnb/xnb_conformance.py`) | the bytes satisfy the format specification, judged by code that shares nothing with CNA |
 | CNA reproduces a genuine XNA 4.0 file byte for byte (`XnbWriterTest.GoldenXna40ListOfStringsIsByteIdentical`) | for `List<string>`, CNA's container header, type-reader table spelling, 7-bit encoding, object dispatch and string encoding are *identical* to Microsoft's own Content Pipeline output |
 
-That third row is the strongest available signal short of running XNA, and it is the reason this
-harness is worth building: the remaining risk is concentrated in the per-type payloads, not in the
-container.
+What the run does **not** show: only these six roots were exercised, and only the values XNA 4.0's
+public API exposes. The `(not asserted)` lines are honest gaps, not passes.
+
+### The LZX corpus: refused, diagnosed, fixed, and passing
+
+The same six assets written with CNA's own LZX encoder were **all six refused** by the same
+runtime in the same session, with `InvalidOperationException: Error decompressing content data.`
+They now all pass. What the failure was is worth recording, because nothing inside CNA could have
+found it:
+
+* The container was never the problem, and neither was the Huffman coding. A hand-built LZX
+  *uncompressed* block -- no Huffman tree in it at all -- was refused too, which moved the search
+  out of the compressor entirely.
+* A Microsoft-loadable file from another writer was compared against CNA's: it ends with **five
+  zero bytes after its final block**, and CNA's ended exactly at the block.
+* Handing the real runtime the same asset with 0, 1, 2, 3, 4, 5 and 6 trailing bytes settled it:
+  everything through four failed, five loaded. Two of the five are the next chunk's size field,
+  which the reader consumes before it notices the stream has ended and which must read as zero to
+  stop it; the other three are slack for an LZX bit buffer that fills a sixteen-bit word at a time
+  and so reads past the last byte it actually consumes.
+
+**CNA's own decoder and the independent Python parser both accepted every one of those files.**
+Neither reads ahead, and both stop once they have the declared number of decompressed bytes, so
+neither could see what was missing. Two implementations agreeing is not the same as the one that
+matters agreeing -- which is the whole argument for this harness existing.
+
+The encoder now emits the trailer, `LzxEncoderTest.EveryCompressedPayloadEndsWithTheTrailerXnaRequires`
+holds it there, and the LZX corpus passes six of six against the genuine runtime.
+
+Every fixture in that corpus is a single LZX frame, so the multi-frame case was checked separately
+and end to end: a 256x256 texture built from a `.png` by `cna-content build ... --format xnb
+--xnb-compress lzx` -- 262 321 decompressed bytes across **nine frames** -- loads as a `Texture2D`
+in the same runtime. That path is source through CNA's importer, processor, XNB writer and LZX
+encoder into Microsoft's `ContentManager`, which is the whole pipeline rather than a fixture.
 
 ## What you need
 
@@ -95,4 +153,6 @@ not "fix" a fixture to make the harness pass; fix the writer, regenerate, and re
 * Texture mip levels above 0 are not read back; only level 0's exact bytes are compared.
 * The harness constructs a hidden `Game` to obtain a real `GraphicsDevice`. On a machine with no
   usable graphics device, `Texture2D`, `SpriteFont` and `Model` will fail to load for reasons that
-  have nothing to do with CNA; `Curve` and `List<string>` still exercise the container.
+  have nothing to do with CNA; `Curve` and `List<string>` still exercise the container. The
+  harness now says which case it is: it prints the adapter and profile when a device was created,
+  and a line naming the host when one could not be.

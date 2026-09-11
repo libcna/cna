@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <optional>
@@ -259,11 +260,16 @@ namespace Microsoft::Xna::Framework
 
     std::string Matrix::ToString() const
     {
+        // The outer braces are XNA's own: a `Matrix` boxed in a material's opaque data comes back
+        // from the genuine pipeline as `{ {M11:1 ...} {M21:...} {M31:...} {M41:...} }`, with the
+        // space after the first brace and before the last. Measured on the genuine importer over
+        // `x_effect_instance.x`, whose `EffectParamFloats` of sixteen floats is a `Matrix`
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-183`).
         std::ostringstream stream;
-        stream << "{M11:" << M11 << " M12:" << M12 << " M13:" << M13 << " M14:" << M14
+        stream << "{ {M11:" << M11 << " M12:" << M12 << " M13:" << M13 << " M14:" << M14
             << "} {M21:" << M21 << " M22:" << M22 << " M23:" << M23 << " M24:" << M24
             << "} {M31:" << M31 << " M32:" << M32 << " M33:" << M33 << " M34:" << M34
-            << "} {M41:" << M41 << " M42:" << M42 << " M43:" << M43 << " M44:" << M44 << "}";
+            << "} {M41:" << M41 << " M42:" << M42 << " M43:" << M43 << " M44:" << M44 << "} }";
         return stream.str();
     }
 
@@ -984,69 +990,74 @@ namespace Microsoft::Xna::Framework
          * 3. Create the adjugate matrix, which satisfies: A * adj(A) = det(A) * I.
          * 4. Divide adjugate matrix with the determinant to find the inverse.
          */
-        // FNA casts each operand to double before multiplying to gain extra precision;
-        // CNA uses plain float arithmetic for simplicity (no observable difference in practice).
-        const float num1 = matrix.M11;
-        const float num2 = matrix.M12;
-        const float num3 = matrix.M13;
-        const float num4 = matrix.M14;
-        const float num5 = matrix.M21;
-        const float num6 = matrix.M22;
-        const float num7 = matrix.M23;
-        const float num8 = matrix.M24;
-        const float num9 = matrix.M31;
-        const float num10 = matrix.M32;
-        const float num11 = matrix.M33;
-        const float num12 = matrix.M34;
-        const float num13 = matrix.M41;
-        const float num14 = matrix.M42;
-        const float num15 = matrix.M43;
-        const float num16 = matrix.M44;
+        // Where each of those steps rounds is measured, not chosen. XNA's is 32-bit x87
+        // arithmetic, so an expression is accumulated wide and narrowed when it is *stored*: the
+        // 2x2 minors and the four cofactors below are `float` locals and are narrowed, the
+        // determinant and its reciprocal are not, and every entry is one wide expression narrowed
+        // once. Over the 52 inversions of tests/reference/xna40/framework/matrix-oracle.txt this
+        // reproduces all 52; narrowing the reciprocal too reproduces 8, and plain `float`
+        // throughout reproduces 3 (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-172`).
+        const double num1 = matrix.M11;
+        const double num2 = matrix.M12;
+        const double num3 = matrix.M13;
+        const double num4 = matrix.M14;
+        const double num5 = matrix.M21;
+        const double num6 = matrix.M22;
+        const double num7 = matrix.M23;
+        const double num8 = matrix.M24;
+        const double num9 = matrix.M31;
+        const double num10 = matrix.M32;
+        const double num11 = matrix.M33;
+        const double num12 = matrix.M34;
+        const double num13 = matrix.M41;
+        const double num14 = matrix.M42;
+        const double num15 = matrix.M43;
+        const double num16 = matrix.M44;
 
-        const float num17 = num11 * num16 - num12 * num15;
-        const float num18 = num10 * num16 - num12 * num14;
-        const float num19 = num10 * num15 - num11 * num14;
-        const float num20 = num9 * num16 - num12 * num13;
-        const float num21 = num9 * num15 - num11 * num13;
-        const float num22 = num9 * num14 - num10 * num13;
-        const float num23 = num6 * num17 - num7 * num18 + num8 * num19;
-        const float num24 = -(num5 * num17 - num7 * num20 + num8 * num21);
-        const float num25 = num5 * num18 - num6 * num20 + num8 * num22;
-        const float num26 = -(num5 * num19 - num6 * num21 + num7 * num22);
-        const float num27 = 1.0f / (num1 * num23 + num2 * num24 + num3 * num25 + num4 * num26);
+        const double num17 = static_cast<float>(num11 * num16 - num12 * num15);
+        const double num18 = static_cast<float>(num10 * num16 - num12 * num14);
+        const double num19 = static_cast<float>(num10 * num15 - num11 * num14);
+        const double num20 = static_cast<float>(num9 * num16 - num12 * num13);
+        const double num21 = static_cast<float>(num9 * num15 - num11 * num13);
+        const double num22 = static_cast<float>(num9 * num14 - num10 * num13);
+        const double num23 = static_cast<float>(num6 * num17 - num7 * num18 + num8 * num19);
+        const double num24 = static_cast<float>(-(num5 * num17 - num7 * num20 + num8 * num21));
+        const double num25 = static_cast<float>(num5 * num18 - num6 * num20 + num8 * num22);
+        const double num26 = static_cast<float>(-(num5 * num19 - num6 * num21 + num7 * num22));
+        const double num27 = 1.0 / (num1 * num23 + num2 * num24 + num3 * num25 + num4 * num26);
 
-        result.M11 = num23 * num27;
-        result.M21 = num24 * num27;
-        result.M31 = num25 * num27;
-        result.M41 = num26 * num27;
-        result.M12 = -(num2 * num17 - num3 * num18 + num4 * num19) * num27;
-        result.M22 = (num1 * num17 - num3 * num20 + num4 * num21) * num27;
-        result.M32 = -(num1 * num18 - num2 * num20 + num4 * num22) * num27;
-        result.M42 = (num1 * num19 - num2 * num21 + num3 * num22) * num27;
+        result.M11 = static_cast<float>(num23 * num27);
+        result.M21 = static_cast<float>(num24 * num27);
+        result.M31 = static_cast<float>(num25 * num27);
+        result.M41 = static_cast<float>(num26 * num27);
+        result.M12 = static_cast<float>(-(num2 * num17 - num3 * num18 + num4 * num19) * num27);
+        result.M22 = static_cast<float>((num1 * num17 - num3 * num20 + num4 * num21) * num27);
+        result.M32 = static_cast<float>(-(num1 * num18 - num2 * num20 + num4 * num22) * num27);
+        result.M42 = static_cast<float>((num1 * num19 - num2 * num21 + num3 * num22) * num27);
 
-        const float num28 = num7 * num16 - num8 * num15;
-        const float num29 = num6 * num16 - num8 * num14;
-        const float num30 = num6 * num15 - num7 * num14;
-        const float num31 = num5 * num16 - num8 * num13;
-        const float num32 = num5 * num15 - num7 * num13;
-        const float num33 = num5 * num14 - num6 * num13;
+        const double num28 = static_cast<float>(num7 * num16 - num8 * num15);
+        const double num29 = static_cast<float>(num6 * num16 - num8 * num14);
+        const double num30 = static_cast<float>(num6 * num15 - num7 * num14);
+        const double num31 = static_cast<float>(num5 * num16 - num8 * num13);
+        const double num32 = static_cast<float>(num5 * num15 - num7 * num13);
+        const double num33 = static_cast<float>(num5 * num14 - num6 * num13);
 
-        result.M13 = (num2 * num28 - num3 * num29 + num4 * num30) * num27;
-        result.M23 = -(num1 * num28 - num3 * num31 + num4 * num32) * num27;
-        result.M33 = (num1 * num29 - num2 * num31 + num4 * num33) * num27;
-        result.M43 = -(num1 * num30 - num2 * num32 + num3 * num33) * num27;
+        result.M13 = static_cast<float>((num2 * num28 - num3 * num29 + num4 * num30) * num27);
+        result.M23 = static_cast<float>(-(num1 * num28 - num3 * num31 + num4 * num32) * num27);
+        result.M33 = static_cast<float>((num1 * num29 - num2 * num31 + num4 * num33) * num27);
+        result.M43 = static_cast<float>(-(num1 * num30 - num2 * num32 + num3 * num33) * num27);
 
-        const float num34 = num7 * num12 - num8 * num11;
-        const float num35 = num6 * num12 - num8 * num10;
-        const float num36 = num6 * num11 - num7 * num10;
-        const float num37 = num5 * num12 - num8 * num9;
-        const float num38 = num5 * num11 - num7 * num9;
-        const float num39 = num5 * num10 - num6 * num9;
+        const double num34 = static_cast<float>(num7 * num12 - num8 * num11);
+        const double num35 = static_cast<float>(num6 * num12 - num8 * num10);
+        const double num36 = static_cast<float>(num6 * num11 - num7 * num10);
+        const double num37 = static_cast<float>(num5 * num12 - num8 * num9);
+        const double num38 = static_cast<float>(num5 * num11 - num7 * num9);
+        const double num39 = static_cast<float>(num5 * num10 - num6 * num9);
 
-        result.M14 = -(num2 * num34 - num3 * num35 + num4 * num36) * num27;
-        result.M24 = (num1 * num34 - num3 * num37 + num4 * num38) * num27;
-        result.M34 = -(num1 * num35 - num2 * num37 + num4 * num39) * num27;
-        result.M44 = (num1 * num36 - num2 * num38 + num3 * num39) * num27;
+        result.M14 = static_cast<float>(-(num2 * num34 - num3 * num35 + num4 * num36) * num27);
+        result.M24 = static_cast<float>((num1 * num34 - num3 * num37 + num4 * num38) * num27);
+        result.M34 = static_cast<float>(-(num1 * num35 - num2 * num37 + num4 * num39) * num27);
+        result.M44 = static_cast<float>((num1 * num36 - num2 * num38 + num3 * num39) * num27);
     }
 
     Matrix Matrix::Lerp(Matrix matrix1, Matrix matrix2, float amount)
@@ -1085,41 +1096,36 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::Multiply(const Matrix& matrix1, const Matrix& matrix2, Matrix& result)
     {
-        result.M11 = matrix1.M11 * matrix2.M11 + matrix1.M12 * matrix2.M21 + matrix1.M13 * matrix2.M31 + matrix1.M14 *
-            matrix2.M41;
-        result.M12 = matrix1.M11 * matrix2.M12 + matrix1.M12 * matrix2.M22 + matrix1.M13 * matrix2.M32 + matrix1.M14 *
-            matrix2.M42;
-        result.M13 = matrix1.M11 * matrix2.M13 + matrix1.M12 * matrix2.M23 + matrix1.M13 * matrix2.M33 + matrix1.M14 *
-            matrix2.M43;
-        result.M14 = matrix1.M11 * matrix2.M14 + matrix1.M12 * matrix2.M24 + matrix1.M13 * matrix2.M34 + matrix1.M14 *
-            matrix2.M44;
-
-        result.M21 = matrix1.M21 * matrix2.M11 + matrix1.M22 * matrix2.M21 + matrix1.M23 * matrix2.M31 + matrix1.M24 *
-            matrix2.M41;
-        result.M22 = matrix1.M21 * matrix2.M12 + matrix1.M22 * matrix2.M22 + matrix1.M23 * matrix2.M32 + matrix1.M24 *
-            matrix2.M42;
-        result.M23 = matrix1.M21 * matrix2.M13 + matrix1.M22 * matrix2.M23 + matrix1.M23 * matrix2.M33 + matrix1.M24 *
-            matrix2.M43;
-        result.M24 = matrix1.M21 * matrix2.M14 + matrix1.M22 * matrix2.M24 + matrix1.M23 * matrix2.M34 + matrix1.M24 *
-            matrix2.M44;
-
-        result.M31 = matrix1.M31 * matrix2.M11 + matrix1.M32 * matrix2.M21 + matrix1.M33 * matrix2.M31 + matrix1.M34 *
-            matrix2.M41;
-        result.M32 = matrix1.M31 * matrix2.M12 + matrix1.M32 * matrix2.M22 + matrix1.M33 * matrix2.M32 + matrix1.M34 *
-            matrix2.M42;
-        result.M33 = matrix1.M31 * matrix2.M13 + matrix1.M32 * matrix2.M23 + matrix1.M33 * matrix2.M33 + matrix1.M34 *
-            matrix2.M43;
-        result.M34 = matrix1.M31 * matrix2.M14 + matrix1.M32 * matrix2.M24 + matrix1.M33 * matrix2.M34 + matrix1.M34 *
-            matrix2.M44;
-
-        result.M41 = matrix1.M41 * matrix2.M11 + matrix1.M42 * matrix2.M21 + matrix1.M43 * matrix2.M31 + matrix1.M44 *
-            matrix2.M41;
-        result.M42 = matrix1.M41 * matrix2.M12 + matrix1.M42 * matrix2.M22 + matrix1.M43 * matrix2.M32 + matrix1.M44 *
-            matrix2.M42;
-        result.M43 = matrix1.M41 * matrix2.M13 + matrix1.M42 * matrix2.M23 + matrix1.M43 * matrix2.M33 + matrix1.M44 *
-            matrix2.M43;
-        result.M44 = matrix1.M41 * matrix2.M14 + matrix1.M42 * matrix2.M24 + matrix1.M43 * matrix2.M34 + matrix1.M44 *
-            matrix2.M44;
+        // Each entry is a dot product of four terms, and XNA accumulates it *wider than `float`*
+        // and narrows once, when the entry is stored. XNA 4.0 ships as a 32-bit assembly and that
+        // arithmetic runs on the x87 unit, where the sum stays in an 80-bit register between the
+        // multiplications; accumulating in `float` instead answers different bits on most
+        // products, and the difference is what a rotation composed with its own inverse is made
+        // of. Measured against the genuine assembly over 168 products
+        // (tests/reference/xna40/framework/matrix-oracle.txt): a `float` accumulation reproduces
+        // 48 of them and a wide one all 168 (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-172`).
+        const double a[16] = {matrix1.M11, matrix1.M12, matrix1.M13, matrix1.M14,
+                              matrix1.M21, matrix1.M22, matrix1.M23, matrix1.M24,
+                              matrix1.M31, matrix1.M32, matrix1.M33, matrix1.M34,
+                              matrix1.M41, matrix1.M42, matrix1.M43, matrix1.M44};
+        const double b[16] = {matrix2.M11, matrix2.M12, matrix2.M13, matrix2.M14,
+                              matrix2.M21, matrix2.M22, matrix2.M23, matrix2.M24,
+                              matrix2.M31, matrix2.M32, matrix2.M33, matrix2.M34,
+                              matrix2.M41, matrix2.M42, matrix2.M43, matrix2.M44};
+        float entries[16] = {};
+        for (std::size_t row = 0; row < 4u; ++row)
+        {
+            for (std::size_t column = 0; column < 4u; ++column)
+            {
+                entries[(row * 4u) + column] = static_cast<float>(
+                    ((a[row * 4u] * b[column]) + (a[(row * 4u) + 1u] * b[4u + column])) +
+                    ((a[(row * 4u) + 2u] * b[8u + column]) + (a[(row * 4u) + 3u] * b[12u + column])));
+            }
+        }
+        result.M11 = entries[0];  result.M12 = entries[1];  result.M13 = entries[2];  result.M14 = entries[3];
+        result.M21 = entries[4];  result.M22 = entries[5];  result.M23 = entries[6];  result.M24 = entries[7];
+        result.M31 = entries[8];  result.M32 = entries[9];  result.M33 = entries[10]; result.M34 = entries[11];
+        result.M41 = entries[12]; result.M42 = entries[13]; result.M43 = entries[14]; result.M44 = entries[15];
     }
 
     Matrix Matrix::Multiply(Matrix matrix1, float scaleFactor)

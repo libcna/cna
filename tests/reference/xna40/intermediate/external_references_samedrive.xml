@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle">
+  <Asset Type="IntermediateOracle:ExternalReferences">
+    <Texture>
+      <Reference>#External1</Reference>
+    </Texture>
+    <Again>
+      <Reference>#External1</Reference>
+    </Again>
+    <Other>
+      <Reference>#External2</Reference>
+    </Other>
+    <Null Null="true" />
+    <List>
+      <Item>
+        <Reference>#External3</Reference>
+      </Item>
+      <Item>
+        <Reference>#External4</Reference>
+      </Item>
+    </List>
+  </Asset>
+  <ExternalReferences>
+    <ExternalReference ID="#External1" TargetType="Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent">..\Textures\wall.png</ExternalReference>
+    <ExternalReference ID="#External2" TargetType="Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent">..\..\Shared\other.dds</ExternalReference>
+    <ExternalReference ID="#External3" TargetType="Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent">..\Textures\a.png</ExternalReference>
+    <ExternalReference ID="#External4" TargetType="Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent">..\Textures\b.png</ExternalReference>
+  </ExternalReferences>
+</XnaContent>

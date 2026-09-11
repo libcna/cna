@@ -114,6 +114,29 @@ Each normal `BUILD` or `SKIP` line is followed by sorted `reason:` lines. Paths 
 are source- or output-root-relative. `--quiet` takes precedence over `--explain` and suppresses all
 successful build/skip/reason output while retaining failures. `clean` does not accept `--explain`.
 
+### `--xna-compatible`
+
+By default a build refuses anything it cannot honour exactly: a processor parameter naming a
+property the processor has not got, a value it cannot convert to that property's type, and a
+`.spritefont` character region the resolved font has no glyphs for. Each is a mistake in the project
+that nothing else in a build will notice, and refusing is how an author finds out.
+
+Microsoft's XNA warns and carries on for all three, measured case by case in
+[`plans/plan_xnapipeline_parity.md`](../plans/plan_xnapipeline_parity.md) `XNAPP-267`. A host that
+has to reproduce that behaviour passes `--xna-compatible`:
+
+```bash
+cna-content build ContentSource -o Content --format xnb --xna-compatible
+```
+
+An unrecognised or unconvertible parameter is then dropped with a warning and the processor keeps
+its default; a character with no glyph is drawn with the font's own `.notdef` box and warned about.
+Every other refusal stays a refusal in both modes, because an impossible request is impossible
+whoever asked: a build with no DXT encoder, a texture whose dimensions block compression cannot
+take, a malformed source. The XNA task façade
+(`Microsoft::Xna::Framework::Content::Pipeline::Tasks::BuildContent`) selects `--xna-compatible`
+for itself, so a `.contentproj` that builds under XNA builds through it.
+
 After a valid manifest has established ownership, all unchanged pipeline-owned compiled and
 deployment files can be removed without scanning the output tree:
 
@@ -1128,6 +1151,14 @@ renderer selection is a runtime concern. A profile would therefore carry no impl
 is not exposed in configuration, fingerprints, CMake, CNB, or the API. If a future processor gains
 a real output policy, its explicit parameter can use the existing typed fingerprint contract first;
 a cross-cutting profile is justified only after more than a label is shared.
+
+One route now looks at the container it is building for, and only that far: a `.spritefont`'s glyph
+atlas is block-compressed to DXT3 when the build is producing an `.xnb`, because XNA's own
+`FontDescriptionProcessor` hands the writer a DXT3 atlas -- measured over seven descriptions at
+five sizes (`plans/plan_xnapipeline_parity.md` `XNAPP-182`). A `.cnb` keeps the lossless 8-bit
+atlas: that container is CNA's own and nothing about it obliges a 2010 memory budget. The
+difference is not marginal, 16 KB against 128 KB for a 95-glyph font, which is why it is reproduced
+rather than left as a divergence.
 
 Build-graph scheduling is serial and deterministic unless `--workers` opts into bounded concurrent
 execution. Registries are configured explicitly and frozen before discovery. Built-in components

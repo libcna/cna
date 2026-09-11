@@ -1,0 +1,24 @@
+{
+ "sample": "SAMPLE-108-WinFormsContentSample_4_0",
+ "runner": "original/WinFormsContentLoading/MainForm.cs",
+ "guid": "5A3B9F1C-2D74-4E60-8A11-6C9F0B2E5D33",
+ "comment": "This sample builds its content at RUN time rather than at build time: MainForm.LoadModel() calls ContentBuilder.Add(fileName, \"Model\", null, \"ModelProcessor\") for whichever file the Open dialog selected and then Load<Model>(\"Model\"). evidence/build-results.txt records the run that produced the reference -- 'Selected source=Content/Cats.fbx' -- with the two digests the corpus froze, so the build unit is one item: Cats.fbx, named Model, no importer (the extension chooses it), ModelProcessor, Windows/Reach as the reference header says. Its nested texture cat_0.xnb is the ModelProcessor's own output beside it. Recorded 2026-09-10 (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-163).",
+ "units": [
+  {
+   "project": "WinFormsContentLoading.contentproj",
+   "sourceRoot": "original/WinFormsContentLoading/Content",
+   "recurse": false,
+   "platform": "Windows",
+   "profile": "Reach",
+   "compress": false,
+   "items": [
+    {
+     "match": "Cats.fbx",
+     "importer": "FbxImporter",
+     "processor": "ModelProcessor",
+     "assetName": "Model"
+    }
+   ]
+  }
+ ]
+}

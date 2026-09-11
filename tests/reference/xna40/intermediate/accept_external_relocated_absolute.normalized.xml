@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle">
+  <Asset Type="IntermediateOracle:ExternalReferences">
+    <Texture>
+      <Reference>#External1</Reference>
+    </Texture>
+    <Again Null="true" />
+    <Other Null="true" />
+    <Null Null="true" />
+    <List />
+  </Asset>
+  <ExternalReferences>
+    <ExternalReference ID="#External1" TargetType="Microsoft.Xna.Framework.Content.Pipeline.Graphics.Texture2DContent">C:\Other\wall.png</ExternalReference>
+  </ExternalReferences>
+</XnaContent>

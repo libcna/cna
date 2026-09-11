@@ -17,6 +17,8 @@
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "CNA/Content/Cnb/CnbTextureFormat.hpp"
+#include <filesystem>
+
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SongContentPipeline.hpp"
@@ -37,6 +39,38 @@ namespace CNA::Content::Pipeline
     {
         /** @brief The stable codec identity every XNB writer shares. */
         constexpr const char* kXnbCodecName = "CNA.XnbSerializer";
+
+        /**
+         * @brief The streaming-media reference as XNA writes it: relative to the asset itself.
+         *
+         * The canonical pipeline carries a media reference relative to the content root, because
+         * that is the identity the build graph and the manifest need. An `.xnb` carries something
+         * else: XNA writes the media file's path **relative to the `.xnb` that names it**, which
+         * is what its `SongReader` then resolves against. Three genuine files say so and no
+         * counter-example does -- `Content/Sounds/Music.xnb` names `Music.wma`,
+         * `Content-phone/Sounds/NinjAcademy.xnb` names `NinjAcademy_Music.wma`, and NetRumble's
+         * root-level song names `One Step Beyond.wma`. CNA's own reader resolves it the same way
+         * (`ResolveContainedPathRelativeToFile`), so a root-relative spelling was wrong on both
+         * sides at once: a song in a subdirectory resolved to `Content/Sounds/Sounds/Music.wma`
+         * and only a song at the content root happened to work
+         * (plans/plan_xnapipeline_parity.md `XNAPP-332`).
+         *
+         * @param rootRelative The media reference relative to the content root.
+         * @param logicalName The asset's own content name, whose directory this is relative to.
+         * @return The reference relative to the asset's directory.
+         */
+        [[nodiscard]] std::string MediaPathRelativeToAsset(const std::string& rootRelative,
+                                                           const std::string& logicalName)
+        {
+            const std::size_t slash = logicalName.find_last_of('/');
+            if (slash == std::string::npos) { return rootRelative; }
+            const std::filesystem::path directory(logicalName.substr(0, slash));
+            const std::filesystem::path relative =
+                std::filesystem::path(rootRelative).lexically_relative(directory);
+            // An empty answer means the two share no prefix at all, which a content root and one
+            // of its own assets always do; keeping the original is the safe reading either way.
+            return relative.empty() ? rootRelative : relative.generic_string();
+        }
 
         /** @brief Bumped whenever the serializer's byte output changes for unchanged inputs. */
         constexpr const char* kXnbCodecVersion = "1";
@@ -238,15 +272,7 @@ namespace CNA::Content::Pipeline
             [[nodiscard]] ContentWriteResult Write(
                 const ContentValue& input, const std::string& logicalName) const override
             {
-                const Cnb::CnbSoundEffectData& sound = input.Get<Cnb::CnbSoundEffectData>();
-                if (sound.format != Cnb::CnbAudioFormat::Pcm16)
-                {
-                    throw XnbWriteException(
-                        "'" + logicalName + "': the XNB SoundEffect writer emits 16-bit PCM "
-                        "only, but the processed audio is '" +
-                        Cnb::CnbAudioFormatToString(sound.format) +
-                        "'. Configure the SoundEffect processor to produce PCM16.");
-                }
+                const ProcessedSoundEffect& sound = input.Get<ProcessedSoundEffect>();
                 if (sound.channels == 0u || sound.channels > 2u)
                 {
                     throw XnbWriteException(
@@ -255,12 +281,24 @@ namespace CNA::Content::Pipeline
                         " channels.");
                 }
 
+                // The WAVEFORMATEX the genuine writer emits for the source's own width, field for
+                // field: format tag 1, `bitsPerSample` the source's, `blockAlign` channels times
+                // the sample size, `averageBytesPerSecond` the rate times that, and the payload
+                // exactly as it came in -- unsigned for 8-bit, signed for 16. Measured on nine
+                // genuine builds covering both widths, mono and stereo, three rates, a loop and
+                // no loop, Windows, Windows Phone and HiDef
+                // (`tests/reference/xna40/differential-sound-widths/`,
+                // plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+                const std::uint16_t sampleBytes =
+                    static_cast<std::uint16_t>(ProcessedPcmSampleBytes(sound.encoding));
                 Xnb::XnbSoundEffectData converted;
                 converted.formatTag = 1u;
                 converted.channels = static_cast<std::uint16_t>(sound.channels);
                 converted.sampleRate = sound.sampleRate;
-                converted.bitsPerSample = 16u;
-                converted.blockAlign = static_cast<std::uint16_t>(2u * sound.channels);
+                converted.bitsPerSample =
+                    static_cast<std::uint16_t>(ProcessedPcmBitsPerSample(sound.encoding));
+                converted.blockAlign =
+                    static_cast<std::uint16_t>(sampleBytes * sound.channels);
                 converted.averageBytesPerSecond = sound.sampleRate * converted.blockAlign;
                 converted.samples = sound.samples;
                 converted.loopStart = static_cast<std::int32_t>(sound.loopStart);
@@ -293,7 +331,7 @@ namespace CNA::Content::Pipeline
             {
                 const Cnb::CnbSongData& song = input.Get<Cnb::CnbSongData>();
                 Xnb::XnbSongData converted;
-                converted.mediaPath = song.streamReference;
+                converted.mediaPath = MediaPathRelativeToAsset(song.streamReference, logicalName);
                 converted.durationMs = static_cast<std::int32_t>(song.durationMs);
                 return MakeResult(
                     Xnb::WriteXnbAssetWithIdentity(converted, Options(), logicalName));
@@ -317,7 +355,7 @@ namespace CNA::Content::Pipeline
             {
                 const Cnb::CnbVideoData& video = input.Get<Cnb::CnbVideoData>();
                 Xnb::XnbVideoData converted;
-                converted.mediaPath = video.streamReference;
+                converted.mediaPath = MediaPathRelativeToAsset(video.streamReference, logicalName);
                 converted.durationMs = static_cast<std::int32_t>(video.durationMs);
                 converted.width = static_cast<std::int32_t>(video.width);
                 converted.height = static_cast<std::int32_t>(video.height);
@@ -405,11 +443,26 @@ namespace CNA::Content::Pipeline
                         "assets as their own sources.");
                 }
                 std::vector<std::string> warnings;
+                // An XNA-shaped model is already the graph this writer writes; converting it to
+                // CNB and back would only be undone here (plans/plan_xna_sample_xnb_sweep.md
+                // `XNASWEEP-174`).
+                if (bundle.xnaModel.has_value())
+                {
+                    return MakeResult(
+                        Xnb::WriteXnbAssetWithIdentity(*bundle.xnaModel, Options(), logicalName));
+                }
+                if (!bundle.primary.has_value())
+                {
+                    throw XnbWriteException(
+                        "'" + logicalName +
+                        "': this processed model has neither a canonical CNB form nor an "
+                        "XNA-shaped one, so there is nothing to write.");
+                }
                 const Xnb::XnbModelData model =
-                    std::holds_alternative<Cnb::CnbModelV2Data>(bundle.primary)
-                        ? ConvertModelV2ToXnb(std::get<Cnb::CnbModelV2Data>(bundle.primary),
+                    std::holds_alternative<Cnb::CnbModelV2Data>(*bundle.primary)
+                        ? ConvertModelV2ToXnb(std::get<Cnb::CnbModelV2Data>(*bundle.primary),
                                               logicalName)
-                        : ConvertModelSchema1ToXnb(std::get<Cnb::CnbModelData>(bundle.primary),
+                        : ConvertModelSchema1ToXnb(std::get<Cnb::CnbModelData>(*bundle.primary),
                                                    logicalName, warnings);
                 ContentWriteResult result =
                     MakeResult(Xnb::WriteXnbAssetWithIdentity(model, Options(), logicalName));
@@ -955,6 +1008,7 @@ namespace CNA::Content::Pipeline
             {
                 Xnb::XnbModelBoneData converted;
                 converted.name = bone.name;
+                converted.nameIsNull = bone.nameIsNull;
                 converted.transform = ConvertTransform(bone.transform);
                 converted.parent = bone.parent;
                 result.bones.push_back(std::move(converted));
@@ -978,14 +1032,17 @@ namespace CNA::Content::Pipeline
             result.rootBone = static_cast<std::int32_t>(model.rootBone);
 
             // Schema 2 stores vertex buffers, index buffers and effects as three separate tables;
-            // XNB stores one flat shared-resource list, so the three are concatenated in that
-            // order and each part's references are rebased onto the flat numbering.
-            const std::size_t vertexBase = 0u;
-            const std::size_t indexBase = model.vertexBuffers.size();
-            const std::size_t effectBase = indexBase + model.indexBuffers.size();
-
-            for (const Cnb::CnbModelV2VertexBuffer& buffer : model.vertexBuffers)
+            // XNB stores one flat shared-resource list, and the order is **first reference**, not
+            // the three tables concatenated. XNA's own writer emits a shared resource the first
+            // time the graph names it, so a model whose meshes carry two vertex declarations
+            // answers `vertex buffer, index buffer, every effect of the first group, the second
+            // vertex buffer, its effects` -- SAMPLE-142's `France.FBX` reaches XNA's own build
+            // exactly that way, its second vertex buffer at identifier 26 behind twenty-three
+            // effects (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-157`).
+            const auto vertexResource = [&](std::size_t index)
             {
+                if (index >= model.vertexBuffers.size()) { return std::size_t{0}; }
+                const Cnb::CnbModelV2VertexBuffer& buffer = model.vertexBuffers[index];
                 if (buffer.declaration >= model.vertexDeclarations.size())
                 {
                     throw XnbWriteException(
@@ -1001,18 +1058,73 @@ namespace CNA::Content::Pipeline
                 converted.bytes = buffer.bytes;
                 result.sharedResources.push_back(
                     {"Microsoft.Xna.Framework.Content.VertexBufferReader", std::move(converted)});
-            }
-            for (const Cnb::CnbModelV2IndexBuffer& buffer : model.indexBuffers)
+                return result.sharedResources.size() - 1u;
+            };
+            const auto indexResource = [&](std::size_t index)
             {
+                if (index >= model.indexBuffers.size()) { return std::size_t{0}; }
                 Xnb::XnbIndexBufferData converted;
-                converted.indexElementSize = buffer.indexElementSize;
-                converted.bytes = buffer.bytes;
+                converted.indexElementSize = model.indexBuffers[index].indexElementSize;
+                converted.bytes = model.indexBuffers[index].bytes;
                 result.sharedResources.push_back(
                     {"Microsoft.Xna.Framework.Content.IndexBufferReader", std::move(converted)});
-            }
-            for (const Cnb::CnbModelV2Effect& effect : model.effects)
+                return result.sharedResources.size() - 1u;
+            };
+            const auto effectResource = [&](std::size_t index)
             {
-                result.sharedResources.push_back(ConvertEffect(effect, logicalName));
+                if (index >= model.effects.size()) { return std::size_t{0}; }
+                result.sharedResources.push_back(ConvertEffect(model.effects[index], logicalName));
+                return result.sharedResources.size() - 1u;
+            };
+            std::map<std::size_t, std::size_t> vertexFlat;
+            std::map<std::size_t, std::size_t> indexFlat;
+            std::map<std::size_t, std::size_t> effectFlat;
+            for (const Cnb::CnbModelV2Mesh& mesh : model.meshes)
+            {
+                for (const Cnb::CnbModelV2Part& part : mesh.parts)
+                {
+                    if (part.vertexBuffer >= model.vertexBuffers.size() ||
+                        part.indexBuffer >= model.indexBuffers.size() ||
+                        part.effect >= model.effects.size())
+                    {
+                        continue;  // reported below, where the part is converted
+                    }
+                    if (vertexFlat.find(part.vertexBuffer) == vertexFlat.end())
+                    {
+                        vertexFlat.emplace(part.vertexBuffer, vertexResource(part.vertexBuffer));
+                    }
+                    if (indexFlat.find(part.indexBuffer) == indexFlat.end())
+                    {
+                        indexFlat.emplace(part.indexBuffer, indexResource(part.indexBuffer));
+                    }
+                    if (effectFlat.find(part.effect) == effectFlat.end())
+                    {
+                        effectFlat.emplace(part.effect, effectResource(part.effect));
+                    }
+                }
+            }
+            // Anything the graph never names still belongs in the table: a Model that carries an
+            // unreferenced buffer is unusual but not invalid, and dropping it would lose it.
+            for (std::size_t index = 0u; index < model.vertexBuffers.size(); ++index)
+            {
+                if (vertexFlat.find(index) == vertexFlat.end())
+                {
+                    vertexFlat.emplace(index, vertexResource(index));
+                }
+            }
+            for (std::size_t index = 0u; index < model.indexBuffers.size(); ++index)
+            {
+                if (indexFlat.find(index) == indexFlat.end())
+                {
+                    indexFlat.emplace(index, indexResource(index));
+                }
+            }
+            for (std::size_t index = 0u; index < model.effects.size(); ++index)
+            {
+                if (effectFlat.find(index) == effectFlat.end())
+                {
+                    effectFlat.emplace(index, effectResource(index));
+                }
             }
 
             result.meshes.reserve(model.meshes.size());
@@ -1044,11 +1156,11 @@ namespace CNA::Content::Pipeline
                     convertedPart.startIndex = static_cast<std::int32_t>(part.startIndex);
                     convertedPart.primitiveCount = static_cast<std::int32_t>(part.primitiveCount);
                     convertedPart.vertexBufferResource =
-                        static_cast<std::int32_t>(vertexBase + part.vertexBuffer);
+                        static_cast<std::int32_t>(vertexFlat.at(part.vertexBuffer));
                     convertedPart.indexBufferResource =
-                        static_cast<std::int32_t>(indexBase + part.indexBuffer);
+                        static_cast<std::int32_t>(indexFlat.at(part.indexBuffer));
                     convertedPart.effectResource =
-                        static_cast<std::int32_t>(effectBase + part.effect);
+                        static_cast<std::int32_t>(effectFlat.at(part.effect));
                     converted.parts.push_back(convertedPart);
                 }
                 result.meshes.push_back(std::move(converted));

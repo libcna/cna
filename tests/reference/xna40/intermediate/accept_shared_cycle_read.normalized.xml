@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle">
+  <Asset Type="IntermediateOracle:Node">
+    <Name>a</Name>
+    <Next>#Resource1</Next>
+  </Asset>
+  <Resources>
+    <Resource ID="#Resource1" Type="IntermediateOracle:Node">
+      <Name>b</Name>
+      <Next>#Resource2</Next>
+    </Resource>
+    <Resource ID="#Resource2" Type="IntermediateOracle:Node">
+      <Name>a2</Name>
+      <Next>#Resource1</Next>
+    </Resource>
+  </Resources>
+</XnaContent>

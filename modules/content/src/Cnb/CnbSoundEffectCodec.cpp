@@ -30,7 +30,13 @@ namespace CNA::Content::Cnb
 
         /// The rules both directions share. A `reader` is supplied on the decode side so the
         /// diagnostic names the file rather than reading like a programming error.
-        void ValidateSound(const CnbSoundEffectData& data, CnbByteReader* reader)
+        ///
+        /// `schemaVersion` is the version the file declares on the decode side and the version
+        /// the writer is about to emit on the encode side. It is what keeps schema 1 meaning what
+        /// it has always meant: a version-1 file declaring Pcm8 is refused rather than read as an
+        /// 8-bit sound, so no file already on disk changes meaning when the codec learns a format.
+        void ValidateSound(const CnbSoundEffectData& data, std::uint32_t schemaVersion,
+                           CnbByteReader* reader)
         {
             const auto fail = [&](const std::string& what)
             {
@@ -38,10 +44,19 @@ namespace CNA::Content::Cnb
                 Fail(what);
             };
 
-            if (data.format != CnbAudioFormat::Pcm16)
+            const std::uint32_t needed = CnbSoundEffectSchemaVersionForFormat(data.format);
+            if (needed == 0u)
             {
-                fail("schema 1 stores Pcm16 only; " + CnbAudioFormatToString(data.format) +
+                fail(CnbAudioFormatToString(data.format) +
                      " is a reserved identifier with no codec in this build.");
+            }
+            if (needed > schemaVersion)
+            {
+                fail("schema " + std::to_string(schemaVersion) + " stores " +
+                     (schemaVersion == 1u ? std::string("Pcm16")
+                                          : std::string("Pcm16 and Pcm8")) +
+                     " only; " + CnbAudioFormatToString(data.format) +
+                     " needs schema " + std::to_string(needed) + ".");
             }
             if (data.sampleRate == 0u || data.sampleRate > CnbMaxAudioSampleRate)
             {
@@ -78,6 +93,22 @@ namespace CNA::Content::Cnb
         }
     }
 
+    std::uint32_t CnbSoundEffectSchemaVersionForFormat(CnbAudioFormat format)
+    {
+        switch (format)
+        {
+            case CnbAudioFormat::Pcm16: return 1u;
+            case CnbAudioFormat::Pcm8: return 2u;
+            // Reserved identifiers: no schema version writes or reads one yet, and whichever
+            // gains a codec first says so here.
+            case CnbAudioFormat::PcmFloat32:
+            case CnbAudioFormat::Adpcm:
+            case CnbAudioFormat::Vorbis:
+            case CnbAudioFormat::Unknown:
+            default: return 0u;
+        }
+    }
+
     std::uint32_t CnbAudioFrameBytes(CnbAudioFormat format, std::uint32_t channels)
     {
         switch (format)
@@ -111,10 +142,33 @@ namespace CNA::Content::Cnb
         }
     }
 
+    std::vector<std::uint8_t> CnbSoundEffectSamplesAsPcm16(const CnbSoundEffectData& data)
+    {
+        if (data.format == CnbAudioFormat::Pcm16) { return data.samples; }
+        if (data.format != CnbAudioFormat::Pcm8)
+        {
+            Fail(CnbAudioFormatToString(data.format) +
+                 " has no codec in this build, so its samples cannot be widened.");
+        }
+        std::vector<std::uint8_t> widened(data.samples.size() * 2u);
+        for (std::size_t index = 0; index < data.samples.size(); ++index)
+        {
+            const auto value =
+                static_cast<std::int16_t>((static_cast<int>(data.samples[index]) - 128) * 256);
+            const auto stored = static_cast<std::uint16_t>(value);
+            widened[index * 2u] = static_cast<std::uint8_t>(stored & 0xFFu);
+            widened[index * 2u + 1u] = static_cast<std::uint8_t>(stored >> 8);
+        }
+        return widened;
+    }
+
     std::vector<std::uint8_t> EncodeSoundEffectToCnb(const CnbSoundEffectData& data,
                                                      const std::string& contentName)
     {
-        ValidateSound(data, nullptr);
+        // Every sound this build writes is schema 2, whatever its format: the writer declares one
+        // schema identity to the build graph and the manifest, and a version that varied per asset
+        // would make that declaration a guess. Schema 1 files stay readable; none are written.
+        ValidateSound(data, CnbSoundEffectSchemaVersion, nullptr);
 
         CnbByteWriter header;
         header.WriteU32(static_cast<std::uint32_t>(data.format));
@@ -166,7 +220,7 @@ namespace CNA::Content::Cnb
             document.ChunkData(document.RequireSingle(CnbSoundEffectChunk::Data));
         data.samples.assign(samples.begin(), samples.end());
 
-        ValidateSound(data, &header);
+        ValidateSound(data, document.AssetSchemaVersion(), &header);
         return data;
     }
 }

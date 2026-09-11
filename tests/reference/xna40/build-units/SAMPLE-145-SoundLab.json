@@ -1,0 +1,26 @@
+{
+ "sample": "SAMPLE-145-SoundLab",
+ "runner": "scripts/XnaPipelineRunner.cs",
+ "guid": "A53054D1-5C05-4D9C-8C21-14C496E8D2E8",
+ "comment": "Its ReadAssets() walks xna4-original\\SoundLab\\Audio for *.wav through every subdirectory, names each by its stem and gives every one WavImporter and SoundEffectProcessor. It skips MinigunWindup_7_21.wav by name, which its own log says XNA 4.0 rejected as 24-bit. Windows/Reach, CompressContent false, OutputDirectory xna4-build\\Content-compatible.",
+ "units": [
+  {
+   "project": "SoundLab.contentproj",
+   "sourceRoot": "xna4-original/SoundLab/Audio",
+   "recurse": true,
+   "platform": "Windows",
+   "profile": "Reach",
+   "compress": false,
+   "skip": [
+    "MinigunWindup_7_21.wav"
+   ],
+   "items": [
+    {
+     "match": "*.wav",
+     "importer": "WavImporter",
+     "processor": "SoundEffectProcessor"
+    }
+   ]
+  }
+ ]
+}

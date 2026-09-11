@@ -2,8 +2,10 @@
 #pragma once
 #include <cstdint>
 #include <algorithm>
+#include <cmath>
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp"
+#include "CNA/Internal/PackedRounding.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
@@ -79,10 +81,16 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     private:
         uint64_t packedValue_;
         static uint64_t Pack(float x, float y, float z, float w) {
-            auto xi = static_cast<uint16_t>(static_cast<int16_t>(std::clamp(x,-32768.f,32767.f)));
-            auto yi = static_cast<uint16_t>(static_cast<int16_t>(std::clamp(y,-32768.f,32767.f)));
-            auto zi = static_cast<uint16_t>(static_cast<int16_t>(std::clamp(z,-32768.f,32767.f)));
-            auto wi = static_cast<uint16_t>(static_cast<int16_t>(std::clamp(w,-32768.f,32767.f)));
+            // XNA saturates the channel and rounds it to the nearest integer with ties to even
+        // (.NET Math.Round), where FNA rounds a tie away from zero and a NaN channel reaches an
+        // integer cast undefined in C++. Measured on the XNA 4.0 runtime:
+        // tests/reference/xna40/framework/framework-packing-oracle.json, cases packed/*/ties,
+        // packed/*/negative_ties and packed/*/nan_and_infinities.
+
+            auto xi = static_cast<uint16_t>(static_cast<int16_t>(CNA::Internal::ClampAndRound(x, -32768.0f, 32767.0f)));
+            auto yi = static_cast<uint16_t>(static_cast<int16_t>(CNA::Internal::ClampAndRound(y, -32768.0f, 32767.0f)));
+            auto zi = static_cast<uint16_t>(static_cast<int16_t>(CNA::Internal::ClampAndRound(z, -32768.0f, 32767.0f)));
+            auto wi = static_cast<uint16_t>(static_cast<int16_t>(CNA::Internal::ClampAndRound(w, -32768.0f, 32767.0f)));
             return static_cast<uint64_t>(xi) | (static_cast<uint64_t>(yi)<<16) | (static_cast<uint64_t>(zi)<<32) | (static_cast<uint64_t>(wi)<<48);
         }
     };

@@ -1,0 +1,22 @@
+{
+ "format": "cna.provenance.derived-sources/1",
+ "comment": "plans/plan_xna_sample_xnb_sweep.md XNASWEEP-149: a production source that is adapted from properly licensed third-party code carries that project's licence and copyright notice rather than CNA's, which check 3 of tools/provenance/provenance_gate.py would otherwise report as a foreign attribution. Every such file has a row here naming the upstream project, the exact revision it was taken from, its licence and licence file, what was taken and what was changed; the gate checks both directions -- a row with no file, and a file with a foreign notice and no row, are both findings.",
+ "derived": [
+  {
+   "path": "modules/content-pipeline/src/Internal/DirectXMeshOptimizeFaces.cpp",
+   "upstreamProject": "microsoft/DirectXMesh",
+   "upstreamUrl": "https://github.com/microsoft/DirectXMesh",
+   "upstreamRevision": "bd17eb215d463d98f2b3a13082ce13979219314f",
+   "upstreamTag": "oct2025",
+   "upstreamFiles": ["DirectXMesh/DirectXMeshOptimizeTVC.cpp"],
+   "license": "MIT",
+   "licenseHolder": "Microsoft Corporation",
+   "licenseFile": "THIRD_PARTY_NOTICES.md",
+   "spdx": "MIT",
+   "whatWasTaken": "The classes mesh_status and sim_vcache and the function VertexCacheStripReorderImpl -- Hoppe's greedy strip-growing face reorder, which Microsoft documents as the algorithm the legacy D3DX9 D3DXOptimizeFaces used.",
+   "whatWasChanged": "Direct3D types and HRESULT returns replaced by std::vector; attribute subsets removed because a GeometryContent is one subset; the uint16_t overload and the strip-order route omitted; a face the walk never reaches is appended in input order instead of being dropped. No decision the algorithm makes was altered.",
+   "whyItIsHere": "XNASWEEP-149. Genuine XNA 4.0's MeshHelper.OptimizeForCache is D3DXOptimizeFaces on 1,210 measured probes, and this is Microsoft's own open-source implementation of that algorithm. The adjacency it is given is CNA's own measurement and is in LegacyMeshAdjacency.cpp, which is MS-PL.",
+   "boundary": "cna_content_pipeline, which only cna_content_compiler links. A game that loads a .xnb never reaches it."
+  }
+ ]
+}

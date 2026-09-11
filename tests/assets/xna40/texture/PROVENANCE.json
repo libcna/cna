@@ -1,0 +1,395 @@
+{
+  "format": "cna.xna40.corpus-provenance/1",
+  "comment": "plans/plan_xnapipeline_parity.md XNAPP-022: every black-box fixture in this directory, with where it came from. The prose beside this file explains what each one is for; this is the machine-readable half, and tools/provenance/provenance_gate.py fails when a file here has no row or a row names a file that is not here. `thirdParty` true would need a `license` beside it; nothing here is.",
+  "directory": "tests/assets/xna40/texture",
+  "summary": "Every fixture is 2x2 (or the size its own row says) and carries the same four pixels, so a format's own limits show up in what the importer answers rather than in the source. The bytes of every format but JPEG are written by the script itself, and the JPEG by the host FFmpeg from the same raw pixels.",
+  "files": [
+    {
+      "file": "empty.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "font_sheet.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
+      "note": "A font sheet in XNA's own shape for FontTextureProcessor: three 5x7 glyph cells separated by magenta.",
+      "thirdParty": false
+    },
+    {
+      "file": "png_gamma_no_alpha.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_png_gamma_fixtures.py",
+      "note": "Eight by eight, one gradient, a non-standard gAMA of 0.45 and no an alpha channel: GDI+ applies a file gamma to the second and not the first (XNASWEEP-218).",
+      "thirdParty": false
+    },
+    {
+      "file": "png_gamma_with_alpha.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_png_gamma_fixtures.py",
+      "note": "Eight by eight, one gradient, a non-standard gAMA of 0.45 and with an alpha channel: GDI+ applies a file gamma to the second and not the first (XNASWEEP-218).",
+      "thirdParty": false
+    },
+    {
+      "file": "dxt5_alpha_table.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dxt5_alpha_table.py",
+      "note": "1,024 DXT5 blocks, each one endpoint pair carrying all eight alpha indices, so one build reads the whole interpolation table of whatever decoder converts it (XNASWEEP-220).",
+      "thirdParty": false
+    },
+    {
+      "file": "font_sheet_alpha_border.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
+      "note": "The same sheet bordered in transparent black rather than magenta, which is what settles that the separator colour is fixed and not read from the image.",
+      "thirdParty": false
+    },
+    {
+      "file": "font_sheet_edge_touch.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
+      "note": "A sheet whose last glyph runs to the right edge with no separator column after it, which is what says a glyph does not have to be enclosed.",
+      "thirdParty": false
+    },
+    {
+      "file": "font_sheet_many.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
+      "note": "Ten equal cells, so the packer's row wrapping is visible.",
+      "thirdParty": false
+    },
+    {
+      "file": "font_sheet_uneven.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
+      "note": "The same, with cells of three different widths, so the packing order is visible.",
+      "thirdParty": false
+    },
+    {
+      "file": "font_sheet_white_corner.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_font_sheet_fixtures.py",
+      "note": "A sheet whose corner texel is white while the rest of its border is magenta, which is what says the scan starts at the first magenta texel rather than at the origin.",
+      "thirdParty": false
+    },
+    {
+      "file": "gamma_45000.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "gamma_srgb.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "garbage.tga",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.bmp",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.dib",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.hdr",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.jpg",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.pfm",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.ppm",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.tga",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe.xyz",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_2048x1.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_2049x1.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_3x2.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_4096x1.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_4097x1.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_4x4.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_colorkey_alpha.png",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_cube.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3_blue_sweep.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3_blue_sweep_hi.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3_blue_sweep_lo.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3_green_sweep.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3_lerp.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt3_red_sweep.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_flat.hdr",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_impulse16.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_mipchain.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_mipchain_npot.dds",
+      "origin": "authored",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_step16.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_volume.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "truncated.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "truncated.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_texture_fixtures.py",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt5_partial_pot.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dxt_partial_level_fixtures.py",
+      "note": "A 4x4 DXT5 chain down to 1x1: a whole level, a 2x2 whose dither shifts and a 1x1 whose single colour comes back as its 565 round trip (XNASWEEP-222).",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt5_partial_npot.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dxt_partial_level_fixtures.py",
+      "note": "The same three rules at widths six and three, which shift by two and by one (XNASWEEP-222).",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt5_three_colour.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dxt_partial_level_fixtures.py",
+      "note": "A DXT5 block whose c0 is not above its c1: the three-colour rule is not DXT1's alone (XNASWEEP-222).",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_dxt1_three_colour.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dxt_partial_level_fixtures.py",
+      "note": "Its DXT1 twin, where the same index is also fully transparent (XNASWEEP-222).",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_mip_dither.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_mip_dither_fixture.py",
+      "note": "Twelve by twelve and uncompressed: the first generated level is six wide, which is where the mip filter's dither shifts its column (XNASWEEP-223).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_5x5.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_9x9.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_17x3.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt3_5x5.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt3_9x9.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt5_5x5.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt5_17x3.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_1x1.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_22x22.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_6x10.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_9x9_mips.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    }
+  ]
+}

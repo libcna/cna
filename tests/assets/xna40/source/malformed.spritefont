@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    plans/plan_xnapipeline_parity.md XNAPP-267: a description that is not well-formed XML.
+
+    The <Size> element is never closed, so the failure happens in the reader before any schema
+    question is asked. Kept separate from unknown_type.spritefont, which is well-formed and wrong
+    in what it declares: the two are different failures and a build ought to say so differently.
+-->
+<XnaContent xmlns:Graphics="Microsoft.Xna.Framework.Content.Pipeline.Graphics">
+  <Asset Type="Graphics:FontDescription">
+    <FontName>Liberation Mono</FontName>
+    <Size>14
+    <Spacing>2</Spacing>
+  </Asset>
+</XnaContent>

@@ -29,6 +29,7 @@ set(CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS
     Globalization
     Storage
     Security.Cryptography
+    Xml
 )
 
 # SAMPLE-066: modules/math's XmlSerializationEXT.hpp includes

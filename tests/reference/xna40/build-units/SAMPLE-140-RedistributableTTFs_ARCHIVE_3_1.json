@@ -1,0 +1,23 @@
+{
+ "sample": "SAMPLE-140-RedistributableTTFs_ARCHIVE_3_1",
+ "runner": "scripts/XnaPipelineRunner.cs",
+ "guid": "7E2C9A31-0B4D-4E77-9E22-51F0B3C8A104",
+ "comment": "Its ReadAssets() walks diagnostic\\ for *.spritefont, names each by its stem and gives every one FontDescriptionImporter and FontDescriptionProcessor. The families they name live in original\\RedistributableTTFs, which the sweep already passes as a --font-directory. Windows/Reach, CompressContent false, OutputDirectory xna4-build\\Content.",
+ "units": [
+  {
+   "project": "RedistributableTTFs.contentproj",
+   "sourceRoot": "diagnostic",
+   "recurse": false,
+   "platform": "Windows",
+   "profile": "Reach",
+   "compress": false,
+   "items": [
+    {
+     "match": "*.spritefont",
+     "importer": "FontDescriptionImporter",
+     "processor": "FontDescriptionProcessor"
+    }
+   ]
+  }
+ ]
+}

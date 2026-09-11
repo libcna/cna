@@ -183,8 +183,30 @@ namespace CNA::Content::Cnb
      * @param imported Source-oriented PCM from DecodeWavAsImportedSound().
      * @return Runtime-oriented Pcm16 SoundEffect data.
      */
+    /**
+     * @brief What a sound whose source declares no loop gets as its loop region.
+     *
+     * XNA's `SoundEffectProcessor` writes the whole sound -- loop start 0 and loop length equal to
+     * the frame count -- rather than nothing (measured, `tests/reference/xna40/audio`
+     * `soundeffectprocessor/process_best`, and again through the genuine `BuildContent`,
+     * `tests/reference/xna40/differential/audio_wav_soundeffect.xnb`). Zero would be a sound whose
+     * looped instance loops nothing.
+     *
+     * It is a *build-time* decision, which is why it is a parameter: a runtime reader must
+     * reproduce what its file declares, and inventing a region there would give a compiled asset a
+     * loop its author never wrote (plans/plan_xnapipeline_parity.md `XNAPP-266`).
+     */
+    enum class SoundEffectLoopPolicy
+    {
+        /** @brief Keep the region the source declared, even when that is none. */
+        AsAuthored,
+        /** @brief Give a source that declares no loop the whole sound, as XNA's processor does. */
+        WholeSoundWhenUnset,
+    };
+
     [[nodiscard]] CnbSoundEffectData ProcessImportedSoundEffect(
-        const CNA::Content::Import::ImportedSound& imported);
+        const CNA::Content::Import::ImportedSound& imported,
+        SoundEffectLoopPolicy loopPolicy = SoundEffectLoopPolicy::AsAuthored);
 
     /**
      * @brief Reads and decodes a WAV file as a `SoundEffect` description.

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    plans/plan_xnapipeline_parity.md XNAPP-182: two character regions rather than one.
+
+    The second region is the Latin-1 supplement, which the face covers, and it is written *before*
+    the ASCII one on purpose: the character list a SpriteFont carries has to be sorted, and a
+    description that lists its regions out of order is the case that says whether the processor
+    sorts them or trusts the document.
+-->
+<XnaContent xmlns:Graphics="Microsoft.Xna.Framework.Content.Pipeline.Graphics">
+  <Asset Type="Graphics:FontDescription">
+    <FontName>Liberation Mono</FontName>
+    <Size>14</Size>
+    <Spacing>0</Spacing>
+    <UseKerning>true</UseKerning>
+    <Style>Regular</Style>
+    <DefaultCharacter>?</DefaultCharacter>
+    <CharacterRegions>
+      <CharacterRegion>
+        <Start>&#192;</Start>
+        <End>&#207;</End>
+      </CharacterRegion>
+      <CharacterRegion>
+        <Start>&#65;</Start>
+        <End>&#90;</End>
+      </CharacterRegion>
+    </CharacterRegions>
+  </Asset>
+</XnaContent>

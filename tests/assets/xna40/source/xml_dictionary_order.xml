@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- plans/plan_xna_sample_xnb_sweep.md XNASWEEP-119: the same generic dictionary as
+     xml_dictionary.xml, listed in an order that is not its keys' order. A dictionary asset is
+     written in the order its document gives, so this file and that one settle different things:
+     that one cannot tell document order from key order, because they are the same order in it. -->
+<XnaContent xmlns:Generic="System.Collections.Generic">
+  <Asset Type="Generic:Dictionary[string,int]">
+    <Item><Key>zulu</Key><Value>1</Value></Item>
+    <Item><Key>mike</Key><Value>2</Value></Item>
+    <Item><Key>alpha</Key><Value>3</Value></Item>
+    <Item><Key>tango</Key><Value>4</Value></Item>
+  </Asset>
+</XnaContent>

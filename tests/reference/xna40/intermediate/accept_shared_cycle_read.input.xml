@@ -1,0 +1,1 @@
+<XnaContent><Asset Type="Cna.Xna40.IntermediateOracle.Node"><Name>a</Name><Next>#B</Next></Asset><Resources><Resource ID="#B" Type="Cna.Xna40.IntermediateOracle.Node"><Name>b</Name><Next>#A</Next></Resource><Resource ID="#A" Type="Cna.Xna40.IntermediateOracle.Node"><Name>a2</Name><Next>#B</Next></Resource></Resources></XnaContent>

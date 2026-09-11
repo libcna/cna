@@ -1,0 +1,551 @@
+{
+  "schema": "cna.xna40.content-pipeline-inputs/1",
+  "generator": "tools/xna-pipeline-oracle/inputs_matrix.py; the xna half of every entry is regenerated from tests/reference/xna40/content-pipeline-api.json and must not be edited by hand",
+  "denominator": {
+    "source": "ContentImporterAttribute metadata of the XNA Game Studio 4.0 Refresh assemblies",
+    "extensions": 18,
+    "importers": 10
+  },
+  "extensions": {
+    ".bmp": {
+      "xna": {
+        "importer": "TextureImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "displayName": "Texture - XNA Framework",
+        "defaultProcessor": "SpriteTextureProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::TextureImporter",
+        "processor": "SpriteTextureProcessor",
+        "fixture": "tests/assets/xna40/texture/probe.bmp",
+        "tests": {
+          "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers",
+          "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
+          "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json textureext/probe.bmp, textureext/probe.bmp/*, textureprop/*, textureprofile/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are. One rule of the importer's is measured rather than documented: a bitmap of more than eight bits per pixel may put bytes between its DIB header and its pixels -- a colour table written for 256-colour displays is the usual one -- and the decoder CNA vendors reads such a file from the wrong place. spikes/bmp-offset-spike reproduces that in the decoder alone, and CNA closes the gap before the bytes reach it, so a .bmp with a colour table now decodes to what the file describes and to what XNA's own build produced (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-221)."
+      }
+    },
+    ".dds": {
+      "xna": {
+        "importer": "TextureImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "displayName": "Texture - XNA Framework",
+        "defaultProcessor": "SpriteTextureProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::TextureImporter",
+        "processor": "SpriteTextureProcessor",
+        "fixture": "tests/assets/xna40/texture/probe.dds",
+        "tests": {
+          "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers, XnaTextureImporter.EveryDdsShapeIsReadAsXnaReadsIt",
+          "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt, XnaTextureImporter.ADx10HeaderIsRefusedAsXnaRefusesIt",
+          "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json textureext/probe.dds, textureext/probe.dds/*, textureprop/*, textureprofile/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
+      }
+    },
+    ".dib": {
+      "xna": {
+        "importer": "TextureImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "displayName": "Texture - XNA Framework",
+        "defaultProcessor": "SpriteTextureProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::TextureImporter",
+        "processor": "SpriteTextureProcessor",
+        "fixture": "tests/assets/xna40/texture/probe.dib",
+        "tests": {
+          "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers",
+          "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
+          "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json textureext/probe.dib, textureext/probe.dib/*, textureprop/*, textureprofile/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
+      }
+    },
+    ".fbx": {
+      "xna": {
+        "importer": "FbxImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.FbxImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.FbxImporter",
+        "displayName": "Autodesk FBX - XNA Framework",
+        "defaultProcessor": "ModelProcessor",
+        "cacheImportedData": true,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::FbxImporter",
+        "processor": "ModelProcessor",
+        "fixture": "tests/assets/xna40/model/fbx_quad_textured.fbx",
+        "tests": {
+          "importer": "XnaFbxImporter.EveryFileAnswersTheGraphXnaAnswers, XnaFbxImporter.AModernBinaryFbxIsReadWhereXnasSdkRefusesIt",
+          "processor": "XnaModelSourceContentPipelineTest.BothModelExtensionsResolveToTheirOwnImporter, XnaModelSourceContentPipelineTest.XnaProcessorPropertiesAreAcceptedByTheirXnaNames",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaFbxImporter.RefusalsMatchXna, XnaModelSourceContentPipelineTest.EveryMalformedModelSourceIsRefused",
+          "target": "XnaModelProcessor.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/model/model-import-oracle.json fbx/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Six corpus files are compared graph for graph against the genuine importer, in FBX 6.1 ASCII because XNA's own SDK refuses every version a current tool writes. CNA also reads the binary encoding, which is a recorded divergence in CNA's favour. Both containers are reached through the canonical coordinator, which is what this route was missing entirely: `CNA.XImporter` and `CNA.FbxImporter` were names the XNA component mapping pointed at and no registry contained, so a project naming a model built nothing and reported nothing wrong. The target leg is still unnamed. The three targets are measured, and XNA's ModelProcessor answers identically on all five legs."
+      }
+    },
+    ".fx": {
+      "xna": {
+        "importer": "EffectImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.EffectImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.EffectImporter",
+        "displayName": "Effect - XNA Framework",
+        "defaultProcessor": "EffectProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.EffectContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::EffectImporter",
+        "processor": "EffectProcessor",
+        "fixture": "tests/assets/xna40/source/probe.fx",
+        "tests": {
+          "importer": "XnaSourceCorpus.TheCommittedEffectReadsAsItsOwnSource",
+          "processor": "XnaEffectProcessor.TheRealCompilerAnswersWhatXnaAnswered",
+          "sourceToXnb": "EffectSourceCommandLineTest.AnFxInASourceTreeIsAnAssetRatherThanBeingSilentlyIgnored, EffectSourceCommandLineTest.TheCompiledBytesTheCompilerReturnedReachTheXnbUnchanged",
+          "sourceToCnb": "EffectSourceCommandLineTest.AnFxAskedForCnbIsRefusedWithTheArchitecturalReason",
+          "malformed": "XnaEffectProcessor.TheRealCompilerAnswersWhatXnaAnswered",
+          "target": "XnaEffectProcessor.TheRealCompilerAnswersWhatXnaAnswered"
+        },
+        "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json effectprocessor/*, tests/reference/xna40/graphics/effect-compile-simple.bin",
+        "windows": "SUPPORTED",
+        "windowsPhone": "UNVERIFIED",
+        "xbox360": "UNVERIFIED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "The route is measured against the genuine EffectProcessor with the compiler XNA itself used, Microsoft's legacy fxc at fx_2_0 from the June 2010 DirectX SDK, run through Wine. Two things came out of it. First, a real defect: a path handed to a compiler through a launcher was spelled the host's way, so fxc read '/tmp/.../effect.fxb' as an option and the whole .fx route was broken on every non-Windows machine; paths are now spelled the way the launcher's program reads them. Second, a measurement nothing in this repository had: XNA's compiled effect is a 0xBCF00BCF header in front of the Direct3D 9 Effect Framework binary, and the header is not fixed -- it is one pair of dwords per pass, so 8 + 8 x passCount bytes. The first of each pair is a bitmask of the device state the pass assigns (1 blend, 2 depth-stencil, 4 rasterizer, with the second copy shifted up three places) and the second a bitmask of the sampler registers the pass binds. Measuring it from the processor called directly gave the sixteen bytes this row used to claim, which is what a single-pass effect happens to produce; a real build says otherwise, and CNA emits the per-pass form now (XNAPP-191). What still differs is the blob behind that header: XNA compiles from a memory buffer through d3dx9 and CNA runs the fxc command line. Over seventeen effects every differing byte is accounted for -- 195 inside the compiler's own version string and 54 of padding d3dx9 leaves as heap residue -- and neither is reproducible without running Microsoft's compiler in-process. A relative source name and a working directory do not close it; only calling D3DXCreateEffectCompiler on a buffer would, which needs a native helper (XNAPP-191/192). sourceToCnb is a documented refusal rather than a gap: a .cnb carrying Direct3D 9 bytecode would be unloadable on every CNA renderer that is not Direct3D 9. The differential skips on a machine with no fxc -- set CNA_FXC to one -- so this row's coverage is real here and conditional elsewhere, which no other row is."
+      }
+    },
+    ".hdr": {
+      "xna": {
+        "importer": "TextureImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "displayName": "Texture - XNA Framework",
+        "defaultProcessor": "SpriteTextureProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::TextureImporter",
+        "processor": "SpriteTextureProcessor",
+        "fixture": "tests/assets/xna40/texture/probe.hdr",
+        "tests": {
+          "importer": "XnaTextureExtension.TheTwoFloatSourcesAnswerVector4AsXnaDoes, XnaTextureExtension.ARadiancePictureAnswersTheFloatsXnaAnswers",
+          "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
+          "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json textureext/probe.hdr, textureext/probe.hdr/*, textureprop/*, textureprofile/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "The one texture extension with no measurement before this task, and the one that changed the importer: XNA answers a Vector4 bitmap for a Radiance picture, with the RGBE (mantissa + 0.5) / 256 * 2^(e - 128) convention. D3DX cannot read a flat scanline, which is a recorded divergence: CNA reads one. The source-to-XNB and source-to-CNB legs are named too, so all six are."
+      }
+    },
+    ".jpg": {
+      "xna": {
+        "importer": "TextureImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "displayName": "Texture - XNA Framework",
+        "defaultProcessor": "SpriteTextureProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::TextureImporter",
+        "processor": "SpriteTextureProcessor",
+        "fixture": "tests/assets/xna40/texture/probe.jpg",
+        "tests": {
+          "importer": "XnaTextureExtension.AJpegMatchesXnasShapeAndItsPixelsWithinDecoderTolerance",
+          "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
+          "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json textureext/probe.jpg, textureext/probe.jpg/*, textureprop/*, textureprofile/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "The one source two conformant decoders may legitimately disagree about: the shape is compared exactly and the pixels within an IDCT's tolerance. The source-to-XNB and source-to-CNB legs are named too, so all six are."
+      }
+    },
+    ".mp3": {
+      "xna": {
+        "importer": "Mp3Importer",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.Mp3Importer",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.AudioImporters",
+        "displayName": "MP3 Audio File - XNA Framework",
+        "defaultProcessor": "SongProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::Mp3Importer",
+        "processor": "SongProcessor",
+        "fixture": "tests/assets/xna40/media/mp3_mono_44100_128k.mp3",
+        "tests": {
+          "importer": "XnaMp3Importer.EveryMp3AnswersTheFormatAndDurationXnaAnswers",
+          "processor": "XnaSongProcessor.ASongIsWrittenAsRealWindowsMediaAudioBesideTheAsset, XnaSongProcessor.TheQualityChoosesTheBitRate",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaMp3Importer.RefusalsMatchXna",
+          "target": "XnaSongProcessor.TheAnswerIsTheSameForEveryTargetXnaHas"
+        },
+        "differentialEvidence": "tests/reference/xna40/media/media-content-oracle.json mp3/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "UNVERIFIED",
+        "xbox360": "UNVERIFIED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Twelve MP3 sources across all three MPEG versions and every rate from 8000 to 48000 answer the format and duration the genuine importer answered for the same files. The processor, source-to-XNB, source-to-CNB and target legs are all named. XNA's own SongProcessor cannot be measured in this environment at all -- both recorded cases are Windows Media refusals under Wine -- so the target leg holds CNA's own half only: the same answer for every target. The same crossing exists for MP3: a project pairing Mp3Importer with SoundEffectProcessor reaches CNA.CompressedSoundImporter (XNAPP-332)."
+      }
+    },
+    ".pfm": {
+      "xna": {
+        "importer": "TextureImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "displayName": "Texture - XNA Framework",
+        "defaultProcessor": "SpriteTextureProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::TextureImporter",
+        "processor": "SpriteTextureProcessor",
+        "fixture": "tests/assets/xna40/texture/probe.pfm",
+        "tests": {
+          "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers, XnaTextureExtension.TheTwoFloatSourcesAnswerVector4AsXnaDoes, XnaTextureImporter.APortableFloatMapAnswersItsOwnFloats",
+          "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
+          "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json textureext/probe.pfm, textureext/probe.pfm/*, textureprop/*, textureprofile/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
+      }
+    },
+    ".png": {
+      "xna": {
+        "importer": "TextureImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "displayName": "Texture - XNA Framework",
+        "defaultProcessor": "SpriteTextureProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::TextureImporter",
+        "processor": "SpriteTextureProcessor",
+        "fixture": "tests/assets/xna40/texture/probe.png",
+        "tests": {
+          "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers",
+          "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
+          "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json textureext/probe.png, textureext/probe.png/*, textureprop/*, textureprofile/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are. One rule of the importer's is worth naming here because it is not in the XNA documentation and is measured: XNA loads an image through GDI+, which honours a PNG's own gAMA chunk, and it does so only when the image carries an alpha channel -- a truecolour PNG without one is loaded as Format24bppRgb and is not corrected. Over the public sample corpus the split is exact: all 94 colour-type-6 sources with a non-standard gAMA match with the correction and all 14 colour-type-2 sources match without it, and two purpose-built eight-by-eight PNGs built through the genuine BuildContent confirm both halves (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-218)."
+      }
+    },
+    ".ppm": {
+      "xna": {
+        "importer": "TextureImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "displayName": "Texture - XNA Framework",
+        "defaultProcessor": "SpriteTextureProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::TextureImporter",
+        "processor": "SpriteTextureProcessor",
+        "fixture": "tests/assets/xna40/texture/probe.ppm",
+        "tests": {
+          "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers",
+          "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
+          "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json textureext/probe.ppm, textureext/probe.ppm/*, textureprop/*, textureprofile/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
+      }
+    },
+    ".spritefont": {
+      "xna": {
+        "importer": "FontDescriptionImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.FontDescriptionImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline",
+        "displayName": "Sprite Font Description - XNA Framework",
+        "defaultProcessor": "FontDescriptionProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.FontDescription"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::FontDescriptionImporter",
+        "processor": "FontDescriptionProcessor",
+        "fixture": "tests/assets/xna40/source/probe.spritefont, tests/assets/xna40/source/buildable.spritefont",
+        "tests": {
+          "importer": "XnaSourceCorpus.TheCommittedSpriteFontReadsEveryElementItNames, XnaFontDescriptionImporter.ReadsASpriteFontAsXnaDoes, XnaFontDescriptionImporter.WhichElementsAreRequiredMatchesXna",
+          "processor": "XnaFontProcessors.DefaultsMatchXna, XnaFontProcessors.RefusalsMatchXna",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaFontDescriptionImporter.RefusalsMatchXna",
+          "target": "XnaFontProcessors.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json font/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "The schema and every FontDescription refusal are measured; the atlas, glyph bounds, kerning and line spacing differential XNAPP-182 asks for needs a font registered in the Wine prefix and is not done. The three targets are measured with a font family neither side has, because XNA resolves a family through the host: the refusal is identical on all five legs."
+      }
+    },
+    ".tga": {
+      "xna": {
+        "importer": "TextureImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter",
+        "displayName": "Texture - XNA Framework",
+        "defaultProcessor": "SpriteTextureProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.TextureContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::TextureImporter",
+        "processor": "SpriteTextureProcessor",
+        "fixture": "tests/assets/xna40/texture/probe.tga",
+        "tests": {
+          "importer": "XnaTextureExtension.EveryDeclaredExtensionAnswersWhatXnaAnswers",
+          "processor": "XnaTextureExtension.TheThreeTextureProcessorsAnswerWhatXnaAnswers, XnaTextureExtension.EveryTextureProcessorPropertyAnswersWhatXnaAnswers",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaTextureExtension.EveryMalformedSourceIsRefusedAsXnaRefusesIt",
+          "target": "XnaTextureExtension.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/graphics/graphics-content-oracle.json textureext/probe.tga, textureext/probe.tga/*, textureprop/*, textureprofile/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Importer, the three processors, every TextureProcessor property and every target/profile leg are compared against the genuine importer over this committed fixture. The source-to-XNB and source-to-CNB legs are named too, so all six are."
+      }
+    },
+    ".wav": {
+      "xna": {
+        "importer": "WavImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.WavImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.AudioImporters",
+        "displayName": "WAV Audio File - XNA Framework",
+        "defaultProcessor": "SoundEffectProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::WavImporter",
+        "processor": "SoundEffectProcessor",
+        "fixture": "tests/assets/xna40/media/tone_mono_44100.wav",
+        "tests": {
+          "importer": "XnaSourceCorpus.TheCommittedWavReadsAsTheToneItCarries, XnaWavImporter.EveryVariantXnaAcceptsIsAccepted, XnaWavImporter.ImportAndItsRefusalsMatchXna",
+          "processor": "XnaAudioProcessors.TheSoundEffectProcessorConvertsAsXnaDoes",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaWavImporter.ImportAndItsRefusalsMatchXna",
+          "target": "XnaAudioProcessors.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/audio/audio-content-oracle.json",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "XMA ENCODER EXTERNALLY UNAVAILABLE",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Every WAV variant the genuine importer accepts is accepted with the same fields; the source-to-XNB, source-to-CNB and per-target legs are all named. The three targets are measured: XNA converts a sound effect to XMA for the Xbox 360 -- format tag 0x6601, different loop points, a quarter of the data and a big-endian XMA2WAVEFORMATEX -- and keeps PCM for Windows and Windows Phone (soundeffectprofile/*). CNA reproduces the two PCM targets exactly and cannot produce XMA, which the test asserts as a divergence rather than hiding. The blocker is the encoder and nothing else: XMA has no public specification sufficient to implement a conforming one, no licensable one, and none in FFmpeg, which decodes xma1 and xma2 and encodes neither. Everything around it is built and tested -- the XMA2WAVEFORMATEX byte order and every field of it, the 128-sample quantization of the loop region against an exact PlayLength, the container, and a build-time codec interface an encoder attaches to with --xma-encoder and no change to any public pipeline API. The audit and the measurements are docs/xma-encoder-backend.md. A project may also pair this importer with SongProcessor, as 14 of the sample corpus's .wav items do; that reading is CNA.WavSongImporter (XNAPP-332)."
+      }
+    },
+    ".wma": {
+      "xna": {
+        "importer": "WmaImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.WmaImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.AudioImporters",
+        "displayName": "WMA Audio File - XNA Framework",
+        "defaultProcessor": "SongProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Audio.AudioContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::WmaImporter",
+        "processor": "SongProcessor",
+        "fixture": "tests/assets/xna40/media/wma_mono_44100.wma",
+        "tests": {
+          "importer": "XnaWmaImporter.EveryWmaReadsAsTheDecodedPcmTheSongPathNeeds",
+          "processor": "XnaSongProcessor.ASongIsWrittenAsRealWindowsMediaAudioBesideTheAsset, XnaSongProcessor.TheQualityChoosesTheBitRate",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaWmaImporter.RefusalsMatchXna",
+          "target": "XnaSongProcessor.TheAnswerIsTheSameForEveryTargetXnaHas"
+        },
+        "differentialEvidence": "",
+        "windows": "SUPPORTED",
+        "windowsPhone": "UNVERIFIED",
+        "xbox360": "UNVERIFIED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "The route is implemented and tested; the genuine importer could not be measured in this environment (docs/xna-content-pipeline-media.md section 6), so the successful path is held to the format and to the shape the MP3 measurement settled for the same SongProcessor input rather than to a measurement of its own. XNA's own SongProcessor cannot be measured in this environment at all -- both recorded cases are Windows Media refusals under Wine -- so the target leg holds CNA's own half only: the same answer for every target. A project may also pair this importer with SoundEffectProcessor, as 14 of the sample corpus's .wma items do; that reading is CNA.CompressedSoundImporter and is proved against the genuine build of the Platformer sample, whose seven .wma sound effects CNA now reproduces byte for byte (XNAPP-332)."
+      }
+    },
+    ".wmv": {
+      "xna": {
+        "importer": "WmvImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.WmvImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.VideoImporters",
+        "displayName": "WMV Video File - XNA Framework",
+        "defaultProcessor": "VideoProcessor",
+        "cacheImportedData": false,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.VideoContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::WmvImporter",
+        "processor": "VideoProcessor",
+        "fixture": "tests/assets/xna40/media/wmv_64x48_15fps_silent.wmv",
+        "tests": {
+          "importer": "XnaWmvImporter.ImportAndItsRefusalsMatchXna, XnaVideoContent.AReadableVideoAnswersItsOwnShape",
+          "processor": "XnaVideoProcessor.DefaultsAndProcessMatchXna, XnaVideoProcessor.TheEnumValuesMatchXna, XnaVideoProbeTest.TheBuildTimeProbeSuppliesWhatTheProcessorWouldOtherwiseRequire",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaVideoContent.EveryRefusalIsTheOneSentenceXnaGives",
+          "target": "XnaVideoProcessor.TheAnswerIsTheSameForEveryTargetXnaHas"
+        },
+        "differentialEvidence": "tests/reference/xna40/media/media-content-oracle.json wmv/*, videocontent/*, videoprocessor/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "UNVERIFIED",
+        "xbox360": "UNVERIFIED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Every refusal is the measured one, including the split that makes a missing file a FileNotFoundException through the importer and an InvalidContentException through VideoContent's own constructor. The successful path could not be measured (Wine 10.0 has no Media Foundation), so the shape read from the container is held to the format. The source-to-XNB and source-to-CNB legs are named too, so all six are. The canonical route now reads the frame metadata from the file: `cna_content` has no decoder and must not grow one, so the importer takes a probe from whoever registers it and `cna_content_pipeline` supplies one over the build-time media decoder. Before that, `width`, `height` and `framesPerSecond` were required parameters, so a `.wmv` -- the one video format XNA itself accepts -- could not be built by naming it and nothing else. XNA's own per-target answer is not measurable here: constructing a VideoContent needs Media Foundation and Wine aborts on MFCreateVideoMediaType, so every videoprocessor/target_* case is an SEHException. The target leg holds CNA's own half only: the same answer for every target."
+      }
+    },
+    ".x": {
+      "xna": {
+        "importer": "XImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.XImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline.XImporter",
+        "displayName": "X File - XNA Framework",
+        "defaultProcessor": "ModelProcessor",
+        "cacheImportedData": true,
+        "outputType": "Microsoft.Xna.Framework.Content.Pipeline.Graphics.NodeContent"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::XImporter",
+        "processor": "ModelProcessor",
+        "fixture": "tests/assets/xna40/model/quad_textured.x, tests/assets/xna40/model/surface.png",
+        "tests": {
+          "importer": "XnaXImporter.EveryFileAnswersTheGraphXnaAnswers, XnaXImporter.SkinningAndAnimationAnswerWhatXnaAnswers",
+          "processor": "XnaModelSourceContentPipelineTest.BothModelExtensionsResolveToTheirOwnImporter, XnaModelSourceContentPipelineTest.XnaProcessorPropertiesAreAcceptedByTheirXnaNames",
+          "sourceToXnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToXnb, XnaSourceToOutput.BuildingTheSameSourceTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaSourceToOutput.EveryRoutableSourceBuildsToCnb",
+          "malformed": "XnaXImporter.RefusalsMatchXna, XnaModelSourceContentPipelineTest.EveryMalformedModelSourceIsRefused",
+          "target": "XnaModelProcessor.EveryTargetAndProfileAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/model/model-import-oracle.json x/*",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "Thirteen corpus files -- text and binary, hierarchy, materials, skinning and animation -- are compared graph for graph against the genuine importer. Both containers are reached through the canonical coordinator, which is what this route was missing entirely: `CNA.XImporter` and `CNA.FbxImporter` were names the XNA component mapping pointed at and no registry contained, so a project naming a model built nothing and reported nothing wrong. The target leg is still unnamed. The three targets are measured, and XNA's ModelProcessor answers identically on all five legs."
+      }
+    },
+    ".xml": {
+      "xna": {
+        "importer": "XmlImporter",
+        "importerType": "Microsoft.Xna.Framework.Content.Pipeline.XmlImporter",
+        "assembly": "Microsoft.Xna.Framework.Content.Pipeline",
+        "displayName": "XML Content - XNA Framework",
+        "defaultProcessor": null,
+        "cacheImportedData": false,
+        "outputType": "System.Object"
+      },
+      "cna": {
+        "importer": "Microsoft::Xna::Framework::Content::Pipeline::XmlImporter",
+        "processor": "PassThroughProcessor(<the type the document declares>)",
+        "fixture": "tests/assets/xna40/source/probe.xml, tests/assets/xna40/source/xml_int.xml, tests/assets/xna40/source/xml_vector3.xml, tests/assets/xna40/source/xml_curve.xml, tests/assets/xna40/source/xml_dictionary.xml, tests/assets/xna40/source/xml_rectangles.xml",
+        "tests": {
+          "importer": "XnaSourceCorpus.TheCommittedXmlBuildsWhateverItsAssetTypeNames, XnaXmlImporter.ImportsWhateverTheDocumentNames",
+          "processor": "XnaXmlSourceRoute.EveryDocumentBuildsUnderTheImporterPassThroughAndWriterItDeclares",
+          "sourceToXnb": "XnaXmlSourceRoute.EveryDocumentBuildsToTheBytesGenuineXnaWrote, XnaXmlSourceRoute.BuildingTheSameDocumentTwiceWritesTheSameBytes",
+          "sourceToCnb": "XnaXmlSourceRoute.TheCnbRefusalNamesTheTypeAndTheReason",
+          "malformed": "XnaXmlImporter.RefusalsMatchXna, XnaCustomPipelineAcceptanceTest.AnXmlDocumentNamingAnUnregisteredTypeIsRefusedByName",
+          "target": "XnaXmlSourceRoute.EveryTargetPlatformAnswersWhatXnaAnswers"
+        },
+        "differentialEvidence": "tests/reference/xna40/differential xml/* and xbox/xml_passthrough (six documents, all byte-identical); tests/reference/xna40/intermediate/ importer_* cases",
+        "windows": "SUPPORTED",
+        "windowsPhone": "SUPPORTED",
+        "xbox360": "SUPPORTED",
+        "status": "IMPLEMENTED+TESTED",
+        "note": "The one source extension whose meaning is in the file: the document's Asset Type names the type, the intermediate serializer builds it, XNA's PassThroughProcessor carries it and the content compiler's writer for that type emits the .xnb. Six committed documents -- a primitive, a framework value type, a framework reference type with a nested collection, a generic dictionary and two generic lists -- are byte-identical to what genuine XNA built from the same files, on Windows and on the Xbox 360. A game's own type reaches the same route by registering its serializer and its ContentTypeWriter (modules/content-pipeline/examples/xna-custom-pipeline.cpp, QuestBook). There is deliberately no source-to-CNB half: an .xnb is what an XNA object graph is, and .cnb carries CNA's own per-asset-type schemas, so the absence is recorded with ContentPipelineRegistry::DocumentAbsentWriter() and the refusal names the type and says --format xnb."
+      }
+    }
+  }
+}

@@ -398,7 +398,7 @@ namespace CNA::Internal::Xnb
                 {
                     throw ContentLoadException("XnbImporter: Model bone ordering is inconsistent.");
                 }
-                model_.bones.push_back({std::move(name), transform, -1, {}});
+                model_.bones.push_back({std::move(name), false, transform, -1, {}});
             }
 
             void BeginBoneLinks(const std::uint32_t bone, const std::int32_t parent,
@@ -1317,7 +1317,8 @@ namespace CNA::Internal::Xnb
                 childrenByParent[static_cast<std::size_t>(input.parent)].push_back(
                     static_cast<std::int32_t>(bone));
             }
-            result.bones.push_back({input.name, input.parent, MatrixValues(input.transform)});
+            result.bones.push_back(
+                {input.name, input.nameIsNull, input.parent, MatrixValues(input.transform)});
         }
         if (source.bones[static_cast<std::size_t>(source.rootBone)].parent != -1)
         {

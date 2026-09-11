@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/XnbWriter.hpp"
 
+#include <filesystem>
+
 #include "CNA/Internal/Xnb/LzxEncoder.hpp"
 #include "CNA/Internal/Xnb/XnbCompressionWriter.hpp"
 
@@ -30,7 +32,20 @@ namespace CNA::Internal::Xnb
          * @param reference The authored reference, which may be empty for "no reference".
          * @return Empty when the reference is acceptable, otherwise the reason it is not.
          */
-        [[nodiscard]] std::string ExternalReferenceProblem(const std::string& reference)
+        /// Counts the directory components of a logical asset name: the depth an external
+        /// reference written from that asset may climb with `..` and still stay in the root.
+        [[nodiscard]] int AssetDirectoryDepth(const std::string& assetName)
+        {
+            int depth = 0;
+            for (const char character : assetName)
+            {
+                if (character == '/' || character == '\\') { ++depth; }
+            }
+            return depth;
+        }
+
+        [[nodiscard]] std::string ExternalReferenceProblem(const std::string& reference,
+                                                           const int assetDirectoryDepth)
         {
             if (reference.empty()) { return {}; }
             // A NUL or a control character in a path is never authored on purpose. It survives
@@ -53,7 +68,10 @@ namespace CNA::Internal::Xnb
                 return "it names a drive-qualified absolute path";
             }
 
-            int depth = 0;
+            // The reader resolves the reference relative to the asset's own directory
+            // (ContentReader::ReadExternalReference), so an asset in a subdirectory may climb
+            // that many levels before it leaves the content root.
+            int depth = assetDirectoryDepth;
             std::size_t start = 0u;
             while (start <= reference.size())
             {
@@ -226,9 +244,34 @@ namespace CNA::Internal::Xnb
         body_.WriteSingle(value.Radius);
     }
 
+    void XnbWriter::WriteExternalReferenceLogicalName(const std::string& logicalName)
+    {
+        if (logicalName.empty())
+        {
+            WriteExternalReference(logicalName);
+            return;
+        }
+        const std::filesystem::path referenced(logicalName);
+        const std::filesystem::path directory = std::filesystem::path(assetName_).parent_path();
+        if (directory.empty())
+        {
+            WriteExternalReference(referenced.generic_string());
+            return;
+        }
+        const std::filesystem::path relative = referenced.lexically_relative(directory);
+        // XNA writes a reference the way Windows spells a path. Of the 218 model texture
+        // references in the public XNA sample corpus, 178 have no separator at all and 40 use a
+        // backslash; not one uses a forward slash (plans/plan_xna_sample_xnb_sweep.md
+        // `XNASWEEP-116`). CNA's own reader normalizes either, so this changes only the bytes.
+        std::string spelled =
+            (relative.empty() ? referenced.generic_string() : relative.generic_string());
+        std::replace(spelled.begin(), spelled.end(), '/', '\\');
+        WriteExternalReference(spelled);
+    }
+
     void XnbWriter::WriteExternalReference(const std::string& relativePath)
     {
-        const std::string problem = ExternalReferenceProblem(relativePath);
+        const std::string problem = ExternalReferenceProblem(relativePath, AssetDirectoryDepth(assetName_));
         if (!problem.empty())
         {
             throw XnbWriteException(
@@ -256,6 +299,11 @@ namespace CNA::Internal::Xnb
                 " elements, above the configured maximum of " +
                 std::to_string(options_.limits.maxCollectionElementCount) + ".");
         }
+    }
+
+    bool XnbWriter::IsXboxTarget() const noexcept
+    {
+        return options_.platform == XnbTargetPlatform::Xbox360;
     }
 
     void XnbWriter::RequireVerifiedPlatformPayload(const std::string& readerName,
@@ -287,7 +335,8 @@ namespace CNA::Internal::Xnb
     std::int32_t XnbWriter::InternTypeWriter(const XnbTypeWriterBase& writer)
     {
         const XnbReaderIdentity identity = writer.ReaderIdentity();
-        const std::string name = FormatXnbReaderName(identity, options_.readerNameStyle);
+        const std::string name =
+            FormatXnbReaderName(identity, options_.readerNameStyle, options_.platform);
         const auto existing = typeTableIndices_.find(name);
         if (existing != typeTableIndices_.end()) { return existing->second; }
 
@@ -300,10 +349,48 @@ namespace CNA::Internal::Xnb
         typeTable_.push_back({name, identity.readerVersion});
         const auto index = static_cast<std::int32_t>(typeTable_.size());
         typeTableIndices_.emplace(name, index);
+        // The readers this one names go in immediately after it, which is where XNA's own end up:
+        // its writer asks the compiler for them while it is being initialised, and the asking is
+        // what interns them (see `XnbTypeWriterBase::DependentReaders`).
+        for (const XnbReaderIdentity& dependent : writer.DependentReaders())
+        {
+            const std::string dependentName =
+                FormatXnbReaderName(dependent, options_.readerNameStyle, options_.platform);
+            if (typeTableIndices_.count(dependentName) != 0u) { continue; }
+            if (static_cast<std::int32_t>(typeTable_.size()) >= options_.limits.maxTypeWriterCount)
+            {
+                throw XnbWriteException(
+                    "'" + assetName_ + "': the type-reader table would exceed the configured "
+                    "maximum of " + std::to_string(options_.limits.maxTypeWriterCount) +
+                    " entries.");
+            }
+            typeTable_.push_back({dependentName, dependent.readerVersion});
+            typeTableIndices_.emplace(dependentName,
+                                      static_cast<std::int32_t>(typeTable_.size()));
+        }
         return index;
     }
 
     void XnbWriter::WriteNullObject() { body_.Write7BitEncodedInt(0); }
+
+    void XnbWriter::WriteObject(const XnbTypeWriterBase& writer, const void* value)
+    {
+        Write7BitEncodedInt(InternTypeWriter(writer));
+        WriteNested(writer, value);
+    }
+
+    void XnbWriter::WriteRawObject(const XnbTypeWriterBase& writer, const void* value)
+    {
+        InternTypeWriter(writer);
+        WriteNested(writer, value);
+    }
+
+    std::int32_t XnbWriter::AddSharedResource(const XnbTypeWriterBase& writer,
+                                              std::shared_ptr<const void> owner)
+    {
+        const void* pointer = owner.get();
+        return EnqueueSharedResource(writer, pointer, std::move(owner));
+    }
 
     std::string XnbWriter::MissingWriterContext() const
     {

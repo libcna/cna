@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- plans/plan_xnapipeline_parity.md XNAPP-260: the smallest thing an .xml asset can be. -->
+<XnaContent>
+  <Asset Type="System.Int32">1234567</Asset>
+</XnaContent>

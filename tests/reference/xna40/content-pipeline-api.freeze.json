@@ -1,0 +1,54 @@
+{
+  "format": "cna.xna40.content-pipeline-api.freeze/1",
+  "comment": "plans/plan_xnapipeline_parity.md XNAPP-016: the denominator every percentage in this plan is a fraction of, frozen at the measurement it was read from. tools/xna-pipeline-oracle/inventory_freeze.py check compares three things: the assemblies by SHA-256 and MVID (a different build was read), the counts (the same assemblies answered differently, so the reader changed), and the inventory file's own digest (it was edited). Only the third may change, and only by recording the new digest here with a date and a reason -- which is what makes a regeneration a decision rather than a diff nobody read.",
+  "frozen": "2026-09-07",
+  "sha256": "0cd7baca6756c846dfd4fff454e9e2a4871fa7989d1e14f0755077e2fde7acb9",
+  "clrRuntime": "4.0.30319.1",
+  "counts": {
+    "publicTypes": 128,
+    "publicAndProtectedMembers": 708,
+    "importers": 10,
+    "importerExtensionDeclarations": 18,
+    "distinctExtensions": 18,
+    "processors": 12,
+    "processorProperties": 47
+  },
+  "assemblies": {
+    "Microsoft.Xna.Framework.Content.Pipeline": {
+      "sha256": "1ea481da62eb9e66bad8589df83f173725e62d22362801e1264cd02347721c69",
+      "mvid": "22a50afc-25d6-4266-8c0a-2dd3c1eeb728",
+      "fileSize": 543232
+    },
+    "Microsoft.Xna.Framework.Content.Pipeline.AudioImporters": {
+      "sha256": "1daca08f4e4f12da5ff095e7861e7702fd41f761a8c2ece5ee714894b7684165",
+      "mvid": "a97059bc-6f7f-42d3-aa6e-c1b4341c0010",
+      "fileSize": 11264
+    },
+    "Microsoft.Xna.Framework.Content.Pipeline.EffectImporter": {
+      "sha256": "9f30ac3db23c14afce527ac18fdf29905dcd7bad48273a88b3040c918b789c8d",
+      "mvid": "78711c9c-744b-475f-a5a3-2acfbb8febe8",
+      "fileSize": 9728
+    },
+    "Microsoft.Xna.Framework.Content.Pipeline.FbxImporter": {
+      "sha256": "01a22ab5ed7a08f0e4b7a856fe73b1e3fa12a8789026d43125bedb7edcf93f91",
+      "mvid": "7fe6ffc8-4a0d-46ad-99c7-4e2cf6fff2cf",
+      "fileSize": 2877440
+    },
+    "Microsoft.Xna.Framework.Content.Pipeline.TextureImporter": {
+      "sha256": "3b418ce4a72f1d090563363530a9fc0859b0d6a9c637a500dab1a4901696eba6",
+      "mvid": "6b5543cd-efa4-47dc-9844-b54939b0d6e7",
+      "fileSize": 318464
+    },
+    "Microsoft.Xna.Framework.Content.Pipeline.VideoImporters": {
+      "sha256": "8768d9992c303af401fed6af20eb4d3548bed48a9c05f125f22e278b2fc0b492",
+      "mvid": "c0663cb1-a10d-49d8-9d3b-de1352f103f3",
+      "fileSize": 9216
+    },
+    "Microsoft.Xna.Framework.Content.Pipeline.XImporter": {
+      "sha256": "ccb90834938ee0ab129f0a9089cff8dcd7827759d05cd86ea97e70be1b1928e8",
+      "mvid": "e05b8132-5b3b-4423-b2e2-a084d9e0558e",
+      "fileSize": 476672
+    }
+  },
+  "regenerations": []
+}

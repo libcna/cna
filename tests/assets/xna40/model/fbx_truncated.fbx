@@ -1,0 +1,20 @@
+; FBX 6.1.0 project file
+; Written by tools/xna-pipeline-oracle/model/make_fbx_fixtures.py for this repository.
+;----------------------------------------------------
+
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 6100
+	CreationTimeStamp:  {
+		Version: 1000
+		Year: 2026
+		Month: 1
+		Day: 1
+		Hour: 0
+		Minute: 0
+		Second: 0
+		Millisecond: 0
+	}
+	Creator: "CNA"
+}
+CreationTime: "2026-01-0

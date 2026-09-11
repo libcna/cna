@@ -40,6 +40,16 @@ namespace CNA::Internal::Xnb
         Framework,
         /** @brief `Microsoft.Xna.Framework.Graphics`. */
         FrameworkGraphics,
+        /**
+         * @brief `Microsoft.Xna.Framework.Video` -- where `VideoReader` and `Video` actually live.
+         *
+         * A separate assembly from the core one, and the difference is not cosmetic: a genuine XNA
+         * 4.0 runtime handed an unqualified `Microsoft.Xna.Framework.Content.VideoReader` answers
+         * `Cannot find ContentTypeReader`, because it looks for the type in the core assembly and
+         * the type is not there. Measured by loading CNA's own `.xnb` in that runtime
+         * (plans/plan_xnapipeline_parity.md XNAPP-281).
+         */
+        FrameworkVideo,
     };
 
     /**
@@ -92,10 +102,18 @@ namespace CNA::Internal::Xnb
     /**
      * @brief Returns the assembly-qualification suffix for one assembly.
      *
+     * `mscorlib` is the one identity that depends on the target: the Xbox 360 and Windows Phone
+     * run the .NET Compact Framework, whose `mscorlib` is version 3.7.0.0 under its own public key
+     * and a different key on each of the two. `Microsoft.Xna.Framework` and
+     * `Microsoft.Xna.Framework.Graphics` are 4.0.0.0 on all three (measured, every `xbox_*` and
+     * `phone_*` case of tests/reference/xna40/differential).
+     *
      * @param assembly The assembly to qualify with.
+     * @param platform The target platform whose framework identities apply.
      * @return A suffix beginning `", "`, or an empty string for @ref XnbAssembly::None.
      */
-    [[nodiscard]] std::string XnbAssemblyQualifier(XnbAssembly assembly);
+    [[nodiscard]] std::string XnbAssemblyQualifier(
+        XnbAssembly assembly, XnbTargetPlatform platform = XnbTargetPlatform::Windows);
 
     /**
      * @brief Formats the reader type name exactly as it must appear in the type-reader table.
@@ -107,10 +125,12 @@ namespace CNA::Internal::Xnb
      *
      * @param identity The reader identity to format.
      * @param style The configured name spelling.
+     * @param platform The target platform whose framework identities apply.
      * @return The complete type-reader table entry name.
      */
-    [[nodiscard]] std::string FormatXnbReaderName(const XnbReaderIdentity& identity,
-                                                  XnbReaderNameStyle style);
+    [[nodiscard]] std::string FormatXnbReaderName(
+        const XnbReaderIdentity& identity, XnbReaderNameStyle style,
+        XnbTargetPlatform platform = XnbTargetPlatform::Windows);
 
     /**
      * @brief Formats the assembly-free canonical name CNA's own reader registry is keyed by.

@@ -410,7 +410,8 @@ namespace CNA::Content::Pipeline
                 name != VideoFramesPerSecondParameter &&
                 name != VideoSoundtrackTypeParameter)
             {
-                throw std::invalid_argument(
+                throw ContentParameterError(
+                    ContentParameterFault::UnknownName, name,
                     "XnbVideoProcessor does not recognize parameter '" + name + "'.");
             }
         }

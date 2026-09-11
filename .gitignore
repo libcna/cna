@@ -104,3 +104,9 @@ build/doxygen-cnaext/
 # checked; the logs are kept only until the next run.
 build/renderer-sweep/
 spikes/occlusion-count-spike/occlusion_count_probe
+
+# plans/plan_xna_sample_xnb_sweep.md XNASWEEP-187: the importer suites give their contexts an
+# intermediate directory of `obj` and an output directory of `bin`, which is what XNA's own
+# `ContentImporterContext` answers; run from the repository root, that leaves an `obj/` here.
+# Build output of a test run, never source.
+/obj/

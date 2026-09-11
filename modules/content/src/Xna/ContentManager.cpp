@@ -6122,16 +6122,21 @@ namespace Microsoft::Xna::Framework::Content
         {
             const auto channels = data.channels == 2u ? Audio::AudioChannels::Stereo
                                                       : Audio::AudioChannels::Mono;
+            // A schema-2 file may store its samples 8-bit, which is what the source declared and
+            // what the build now preserves; `SoundEffect` takes 16-bit PCM, so the width is given
+            // up here and nowhere earlier (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+            const std::vector<std::uint8_t> samples =
+                CNA::Content::Cnb::CnbSoundEffectSamplesAsPcm16(data);
             std::shared_ptr<Audio::SoundEffect> result;
             if (data.loopLength == 0u)
             {
                 result = std::make_shared<Audio::SoundEffect>(
-                    data.samples, static_cast<SharpRuntime::intcs>(data.sampleRate), channels);
+                    samples, static_cast<SharpRuntime::intcs>(data.sampleRate), channels);
             }
             else
             {
                 result = std::make_shared<Audio::SoundEffect>(
-                    data.samples, 0, static_cast<SharpRuntime::intcs>(data.samples.size()),
+                    samples, 0, static_cast<SharpRuntime::intcs>(samples.size()),
                     static_cast<SharpRuntime::intcs>(data.sampleRate), channels,
                     static_cast<SharpRuntime::intcs>(data.loopStart),
                     static_cast<SharpRuntime::intcs>(data.loopLength));

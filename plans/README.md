@@ -34,6 +34,8 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_cnj.md`](plan_cnj.md) — `.cnj` content format.
 - [`plan_gltf.md`](plan_gltf.md) — glTF import correctness.
 - [`plan_xnb.md`](plan_xnb.md) — XNB content pipeline.
+- [`plan_xnapipeline.md`](plan_xnapipeline.md) — native XNB output (closed; external verification rows only).
+- [`plan_xnapipeline_parity.md`](plan_xnapipeline_parity.md) — TRUE XNA 4.0 Content Pipeline public API + input-format parity, measured against the genuine SDK.
 
 ## Shader language and conformance
 

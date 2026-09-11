@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    plans/plan_xnapipeline_parity.md XNAPP-267: a well-formed description declaring a type that
+    does not exist.
+
+    Everything a reader needs is here and the document parses; what fails is the declaration
+    itself, because no pipeline assembly defines `Graphics:NoSuchDescription`.
+-->
+<XnaContent xmlns:Graphics="Microsoft.Xna.Framework.Content.Pipeline.Graphics">
+  <Asset Type="Graphics:NoSuchDescription">
+    <FontName>Liberation Mono</FontName>
+    <Size>14</Size>
+  </Asset>
+</XnaContent>

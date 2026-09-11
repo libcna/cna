@@ -239,6 +239,148 @@ namespace
         return fixture;
     }
 
+    /**
+     * @brief A cube map: six 4x4 faces, each a flat colour, so a wrong face order is visible.
+     *
+     * The six faces are the six axes in XNA's own order -- +X, -X, +Y, -Y, +Z, -Z -- and each is a
+     * different flat colour, which is the one shape that makes a runtime reading them in another
+     * order say so rather than merely look wrong.
+     */
+    [[nodiscard]] Fixture MakeTextureCube(const Xnb::XnbFileOptions& options)
+    {
+        constexpr std::uint32_t kSide = 4u;
+        const std::uint8_t faceColours[6][3] = {{255u, 0u, 0u},   {0u, 255u, 0u},
+                                                {0u, 0u, 255u},   {255u, 255u, 0u},
+                                                {255u, 0u, 255u}, {0u, 255u, 255u}};
+        Xnb::XnbTextureData texture;
+        texture.kind = Xnb::XnbTextureKind::TextureCube;
+        texture.surfaceFormat = SurfaceFormat::Color;
+        texture.width = kSide;
+        texture.height = kSide;
+        texture.faceCount = 6u;
+        texture.mipCount = 1u;
+        for (const auto& colour : faceColours)
+        {
+            std::vector<std::uint8_t> face(static_cast<std::size_t>(kSide) * kSide * 4u);
+            for (std::size_t texel = 0u; texel < face.size(); texel += 4u)
+            {
+                face[texel + 0u] = colour[0];
+                face[texel + 1u] = colour[1];
+                face[texel + 2u] = colour[2];
+                face[texel + 3u] = 255u;
+            }
+            texture.levels.push_back(std::move(face));
+        }
+
+        Fixture fixture;
+        fixture.name = "texturecube_six_faces";
+        fixture.purpose =
+            "TextureCube, SurfaceFormat.Color, 4x4, one mip level, with each face a different "
+            "flat colour in XNA's face order. A correct runtime must report Size 4, LevelCount 1, "
+            "Format Color, and GetData on face 0 must be opaque red, face 1 green, face 2 blue, "
+            "face 3 yellow, face 4 magenta and face 5 cyan.";
+        fixture.bytes = Xnb::WriteXnbAsset(Xnb::XnbTextureCubeContent{texture}, options,
+                                           fixture.name);
+
+        Json json;
+        json.BeginObject();
+        json.Key("rootReader");
+        json.String("Microsoft.Xna.Framework.Content.TextureCubeReader");
+        json.Key("root");
+        json.BeginObject();
+        json.Key("kind"); json.String("TextureCube");
+        json.Key("surfaceFormat"); json.String("Color");
+        json.Key("size"); json.Number(static_cast<double>(kSide));
+        json.Key("faceCount"); json.Number(6);
+        json.Key("mipCount"); json.Number(1);
+        json.Key("faceFirstTexels");
+        json.BeginArray();
+        for (const auto& colour : faceColours)
+        {
+            json.BeginArray();
+            json.Number(colour[0]); json.Number(colour[1]); json.Number(colour[2]); json.Number(255);
+            json.EndArray();
+        }
+        json.EndArray();
+        json.EndObject();
+        json.EndObject();
+        fixture.expectationJson = json.Take();
+        return fixture;
+    }
+
+    /**
+     * @brief A volume texture: 4x4x2, whose two slices differ, so a collapsed depth is visible.
+     */
+    [[nodiscard]] Fixture MakeTexture3D(const Xnb::XnbFileOptions& options)
+    {
+        constexpr std::uint32_t kWidth = 4u;
+        constexpr std::uint32_t kHeight = 4u;
+        constexpr std::uint32_t kDepth = 2u;
+        Xnb::XnbTextureData texture;
+        texture.kind = Xnb::XnbTextureKind::Texture3D;
+        texture.surfaceFormat = SurfaceFormat::Color;
+        texture.width = kWidth;
+        texture.height = kHeight;
+        texture.depth = kDepth;
+        texture.faceCount = 1u;
+        texture.mipCount = 1u;
+        std::vector<std::uint8_t> level(
+            static_cast<std::size_t>(kWidth) * kHeight * kDepth * 4u);
+        for (std::uint32_t slice = 0u; slice < kDepth; ++slice)
+        {
+            for (std::uint32_t texel = 0u; texel < kWidth * kHeight; ++texel)
+            {
+                const std::size_t at =
+                    (static_cast<std::size_t>(slice) * kWidth * kHeight + texel) * 4u;
+                level[at + 0u] = slice == 0u ? 255u : 0u;
+                level[at + 1u] = slice == 0u ? 0u : 255u;
+                level[at + 2u] = static_cast<std::uint8_t>(texel * 16u);
+                level[at + 3u] = 255u;
+            }
+        }
+        texture.levels.push_back(std::move(level));
+
+        Fixture fixture;
+        fixture.name = "texture3d_two_slices";
+        fixture.purpose =
+            "Texture3D, SurfaceFormat.Color, 4x4x2, one mip level, whose first slice is red and "
+            "second green with a per-texel blue ramp. A correct runtime must report Width 4, "
+            "Height 4, Depth 2, LevelCount 1, Format Color, and GetData's first texel must be "
+            "R=255 G=0 B=0 A=255 and its seventeenth R=0 G=255 B=0 A=255.";
+        // A Texture3D is a HiDef-only asset: XNA refuses to create one under Reach, and an `.xnb`
+        // that declares Reach is asking the runtime to do exactly that. The container's profile
+        // flag is per file, so this fixture carries HiDef while the rest of the corpus stays Reach
+        // (plans/plan_xnapipeline_parity.md XNAPP-281).
+        Xnb::XnbFileOptions hiDef = options;
+        hiDef.graphicsProfile = Xnb::XnbGraphicsProfile::HiDef;
+        fixture.bytes = Xnb::WriteXnbAsset(Xnb::XnbTexture3DContent{texture}, hiDef, fixture.name);
+
+        Json json;
+        json.BeginObject();
+        json.Key("rootReader");
+        json.String("Microsoft.Xna.Framework.Content.Texture3DReader");
+        json.Key("root");
+        json.BeginObject();
+        json.Key("kind"); json.String("Texture3D");
+        json.Key("surfaceFormat"); json.String("Color");
+        json.Key("width"); json.Number(static_cast<double>(kWidth));
+        json.Key("height"); json.Number(static_cast<double>(kHeight));
+        json.Key("depth"); json.Number(static_cast<double>(kDepth));
+        json.Key("mipCount"); json.Number(1);
+        json.Key("firstTexel");
+        json.BeginArray();
+        json.Number(255); json.Number(0); json.Number(0); json.Number(255);
+        json.EndArray();
+        json.Key("secondSliceFirstTexel");
+        json.BeginArray();
+        json.Number(0); json.Number(255); json.Number(0); json.Number(255);
+        json.EndArray();
+        json.EndObject();
+        json.EndObject();
+        fixture.expectationJson = json.Take();
+        return fixture;
+    }
+
     [[nodiscard]] Fixture MakeSoundEffect(const Xnb::XnbFileOptions& options)
     {
         Xnb::XnbSoundEffectData sound;
@@ -547,6 +689,8 @@ namespace
     {
         std::vector<Fixture> fixtures;
         fixtures.push_back(MakeTexture2D(options));
+        fixtures.push_back(MakeTextureCube(options));
+        fixtures.push_back(MakeTexture3D(options));
         fixtures.push_back(MakeSoundEffect(options));
         fixtures.push_back(MakeSpriteFont(options));
         fixtures.push_back(MakeCurve(options));

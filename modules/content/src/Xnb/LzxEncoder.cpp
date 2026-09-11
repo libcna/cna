@@ -796,6 +796,25 @@ namespace CNA::Internal::Xnb
             output.insert(output.end(), frame.begin(), frame.end());
         }
 
+        // Five zero bytes after the last block, and this is not padding for tidiness: a genuine
+        // Microsoft XNA 4.0 runtime REFUSES a compressed .xnb without them, with
+        // `InvalidOperationException: Error decompressing content data.`
+        //
+        // Measured, not reasoned about (tests/interop/xna40, 2026-09-06). The same asset was
+        // handed to the real runtime with 0, 1, 2, 3, 4, 5 and 6 trailing bytes: everything up to
+        // four failed and five loaded. Two of them are the chunk-size field of the next chunk,
+        // which the reader consumes before it notices the stream has ended -- a zero size is what
+        // stops it -- and the other three are slack for the LZX bit buffer, which fills itself a
+        // sixteen-bit word at a time and reads past the last byte it actually consumes. A
+        // Microsoft-written file ends the same way: `Explosion.xnb` in the MonoGame corpus has
+        // exactly five zero bytes after its final block.
+        //
+        // Nothing in CNA noticed for the same reason nothing could: CNA's own decoder stops when
+        // it has the declared number of decompressed bytes and never reads ahead, and the
+        // independent Python parser does the same. Two implementations agreeing is not the same
+        // as the one that matters agreeing.
+        output.insert(output.end(), 5u, 0u);
+
         return output;
     }
 }

@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -20,6 +23,7 @@ extern char** environ;
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
@@ -60,6 +64,24 @@ namespace
     private:
         std::filesystem::path path_;
     };
+
+    /** @brief Walks up from the working directory, then from this file, to a repository path. */
+    std::filesystem::path Locate(const std::filesystem::path& relative)
+    {
+        for (std::filesystem::path dir = std::filesystem::current_path(); !dir.empty();
+             dir = dir.parent_path())
+        {
+            if (std::filesystem::exists(dir / relative)) { return dir / relative; }
+            if (dir == dir.root_path()) { break; }
+        }
+        for (std::filesystem::path dir = std::filesystem::path(__FILE__).parent_path();
+             !dir.empty(); dir = dir.parent_path())
+        {
+            if (std::filesystem::exists(dir / relative)) { return dir / relative; }
+            if (dir == dir.root_path()) { break; }
+        }
+        return relative;
+    }
 
     void WriteBytes(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes)
     {
@@ -104,7 +126,71 @@ namespace
     {
         auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
         Pipeline::RegisterTexture2DContentPipeline(*registry);
+        // The image importer answers a cube or a volume for a DDS that declares one
+        // (XNAPP-255), so a registry that can route only the 2D third of it is not a registry
+        // this importer can be measured in.
+        Pipeline::RegisterCnjContentPipeline(*registry);
         return registry;
+    }
+
+    /** @brief Builds one named source, for the routes whose fixture is not a `.png`. */
+    Pipeline::ContentBuildResult BuildNamed(const std::filesystem::path& root,
+                                            const std::string& source)
+    {
+        const Pipeline::ContentPipeline pipeline(MakeRegistry());
+        Pipeline::ContentBuildRequest request;
+        request.sourceRoot = root;
+        request.source = source;
+        request.logicalName = "Textures/wall";
+        return pipeline.Build(request);
+    }
+
+    /** @brief Little-endian dword, appended. */
+    void Word32(std::vector<std::uint8_t>& bytes, std::uint32_t value)
+    {
+        for (int shift = 0; shift < 32; shift += 8)
+        {
+            bytes.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFu));
+        }
+    }
+
+    /**
+     * @brief A 2x2 uncompressed A8R8G8B8 DDS holding red, green, blue and half-transparent grey.
+     *
+     * @param cube When true, declares a cube map and writes the six faces one such file carries.
+     */
+    std::vector<std::uint8_t> MakeUncompressedDds(const bool cube = false)
+    {
+        std::vector<std::uint8_t> bytes{'D', 'D', 'S', ' '};
+        Word32(bytes, 124u);      // dwSize
+        Word32(bytes, 0x100Fu);   // caps | height | width | pitch | pixelformat
+        Word32(bytes, 2u);        // height
+        Word32(bytes, 2u);        // width
+        Word32(bytes, 8u);        // pitch
+        Word32(bytes, 0u);        // depth
+        Word32(bytes, 1u);        // mip count
+        for (int reserved = 0; reserved < 11; ++reserved) { Word32(bytes, 0u); }
+        Word32(bytes, 32u);       // ddspf.dwSize
+        Word32(bytes, 0x41u);     // DDPF_RGB | DDPF_ALPHAPIXELS
+        Word32(bytes, 0u);        // fourCC
+        Word32(bytes, 32u);       // bits per pixel
+        Word32(bytes, 0x00FF0000u);
+        Word32(bytes, 0x0000FF00u);
+        Word32(bytes, 0x000000FFu);
+        Word32(bytes, 0xFF000000u);
+        Word32(bytes, cube ? 0x1008u : 0x1000u);  // DDSCAPS_TEXTURE, plus COMPLEX for a cube
+        Word32(bytes, cube ? 0xFE00u : 0u);       // DDSCAPS2_CUBEMAP and its six face bits
+        Word32(bytes, 0u);
+        Word32(bytes, 0u);
+        Word32(bytes, 0u);
+        // BGRA texels, top-down, as a DDS stores them.
+        const std::array<std::uint8_t, 16> texels{0x00, 0x00, 0xFF, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
+                                                  0xFF, 0x00, 0x00, 0xFF, 0x80, 0x80, 0x80, 0x80};
+        for (int face = 0; face < (cube ? 6 : 1); ++face)
+        {
+            bytes.insert(bytes.end(), texels.begin(), texels.end());
+        }
+        return bytes;
     }
 
     Pipeline::ContentBuildResult BuildTexture(
@@ -240,35 +326,49 @@ TEST(Texture2DContentPipelineTest, ColorKeyPolicyMatchesTheUnchangedProducerExac
 
     // premultiplyAlpha is pinned off here on purpose: this contract is about the colour-key
     // policy converging with the unchanged producer, and the unchanged producer has no
-    // premultiplication step at all (XNAP-96). The default's own effect on a keyed texel --
-    // transparent black, which is what XNA 4.0 produces -- is asserted separately below.
+    // premultiplication step at all (XNAP-96).
+    //
+    // It converges on *which* texels are keyed and no longer on what is left in them. XNA writes
+    // transparent black -- the colour goes with the alpha -- and the pre-pipeline producer keeps
+    // the colour, which is invisible while premultiplication is on and shows the moment it is
+    // turned off. Measured on the genuine build (`texture/png4x4_no_premultiply` in the
+    // differential corpus, plans/plan_xnapipeline_parity.md XNAPP-251), and the pipeline follows
+    // XNA. So the byte-for-byte comparison below is against a producer told not to key at all,
+    // and the keyed texel is asserted directly.
     Pipeline::ContentProcessorParameters parameters;
     parameters.Set(Pipeline::TextureColorKeyParameter, std::string("200,100,50"));
     parameters.Set(Pipeline::TexturePremultiplyAlphaParameter, false);
     const Pipeline::ContentBuildResult result = BuildTexture(scratch.Path(), parameters);
 
-    Cnb::CnbImageImportOptions oldOptions;
-    oldOptions.colorKey = std::array<std::uint8_t, 3>{200u, 100u, 50u};
-    const std::vector<std::uint8_t> oldLibraryBytes = Cnb::EncodeTexture2DToCnb(
-        Cnb::ImportImageAsCnbTexture2D(source.string(), oldOptions), "Textures/wall");
-    EXPECT_EQ(result.output.bytes, oldLibraryBytes);
-
     const Cnb::CnbTextureData decoded = Cnb::DecodeTexture2DFromCnb(
         Cnb::CnbDocument::Parse(result.output.bytes, "keyed pipeline wall.cnb"));
     ASSERT_FALSE(decoded.representations.empty());
     ASSERT_FALSE(decoded.representations[0].levels.empty());
-    EXPECT_EQ(decoded.representations[0].levels[0][0], 200u);
-    EXPECT_EQ(decoded.representations[0].levels[0][1], 100u);
-    EXPECT_EQ(decoded.representations[0].levels[0][2], 50u);
+    EXPECT_EQ(decoded.representations[0].levels[0][0], 0u);
+    EXPECT_EQ(decoded.representations[0].levels[0][1], 0u);
+    EXPECT_EQ(decoded.representations[0].levels[0][2], 0u);
     EXPECT_EQ(decoded.representations[0].levels[0][3], 0u);
 
-#if !defined(_WIN32)
-    const std::filesystem::path oldToolOutput = scratch.Path() / "old-tool-keyed.cnb";
-    ASSERT_EQ(RunSourceTool({source.string(), oldToolOutput.string(), "--name", "Textures/wall",
-                             "--color-key", "200,100,50"}),
-              0);
-    EXPECT_EQ(result.output.bytes, ReadBytes(oldToolOutput));
-#endif
+    // Every other texel is the unchanged producer's, byte for byte: the divergence is the keyed
+    // texel and nothing else. Compared against a producer told not to key, since the two disagree
+    // about exactly the texels a key names.
+    Pipeline::ContentProcessorParameters unkeyed;
+    unkeyed.Set(Pipeline::TexturePremultiplyAlphaParameter, false);
+    const Pipeline::ContentBuildResult plain = BuildTexture(scratch.Path(), unkeyed);
+    const std::vector<std::uint8_t> oldLibraryBytes = Cnb::EncodeTexture2DToCnb(
+        Cnb::ImportImageAsCnbTexture2D(source.string(), Cnb::CnbImageImportOptions{}),
+        "Textures/wall");
+    EXPECT_EQ(plain.output.bytes, oldLibraryBytes);
+
+    const Cnb::CnbTextureData plainDecoded = Cnb::DecodeTexture2DFromCnb(
+        Cnb::CnbDocument::Parse(plain.output.bytes, "unkeyed pipeline wall.cnb"));
+    ASSERT_FALSE(plainDecoded.representations.empty());
+    for (std::size_t texel = 4u; texel < plainDecoded.representations[0].levels[0].size(); ++texel)
+    {
+        EXPECT_EQ(plainDecoded.representations[0].levels[0][texel],
+                  decoded.representations[0].levels[0][texel])
+            << "texel byte " << texel << " changed, and only the keyed texel should have";
+    }
 }
 
 TEST(Texture2DContentPipelineTest, ResultLoadsThroughTheExistingContentManagerRuntimePath)
@@ -308,7 +408,7 @@ TEST(Texture2DContentPipelineTest, RejectsUnknownMistypedAndMalformedProcessorPa
              {Pipeline::TextureColorKeyParameter, std::uint64_t{1u}},
              {Pipeline::TextureColorKeyParameter, std::string("1,2")},
              {Pipeline::TextureColorKeyParameter, std::string("1,2,256")},
-             {Pipeline::TextureColorKeyParameter, std::string("1,2,3,4")}})
+             {Pipeline::TextureColorKeyParameter, std::string("1,2,3,4,5")}})
     {
         Pipeline::ContentProcessorParameters parameters;
         parameters.Set(name, value);
@@ -667,4 +767,151 @@ TEST(Texture2DContentPipelineTest, CompressionWithoutAnEncoderSaysWhichBuildProv
         const std::string message = error.what();
         EXPECT_NE(message.find("cna_content_pipeline"), std::string::npos) << message;
     }
+}
+
+// plans/plan_xnapipeline_parity.md XNAPP-021: the four sources XNA's TextureImporter accepts and a
+// plain stb decode does not. Before this the canonical graph had no route for them at all, so a
+// `.dds`, `.dib`, `.pfm` or `.ppm` the XNA façade imported perfectly never reached any container.
+TEST(Texture2DContentPipelineTest, RoutesEveryTextureSourceXnaItselfAccepts)
+{
+    const std::vector<std::string> routed = Pipeline::ImageImporter().SourceExtensions();
+    for (const char* extension :
+         {".bmp", ".dds", ".dib", ".hdr", ".jpg", ".pfm", ".png", ".ppm", ".tga"})
+    {
+        EXPECT_NE(std::find(routed.begin(), routed.end(), extension), routed.end())
+            << "XNA's TextureImporter accepts " << extension;
+    }
+}
+
+TEST(Texture2DContentPipelineTest, DecodesAnUncompressedDdsSurface)
+{
+    ScratchDirectory scratch("dds");
+    WriteBytes(scratch.Path() / "wall.dds", MakeUncompressedDds());
+
+    const Pipeline::ContentBuildResult result = BuildNamed(scratch.Path(), "wall.dds");
+    const Cnb::CnbTextureData decoded = Cnb::DecodeTexture2DFromCnb(
+        Cnb::CnbDocument::Parse(result.output.bytes, "pipeline wall.cnb"));
+
+    EXPECT_EQ(decoded.width, 2u);
+    EXPECT_EQ(decoded.height, 2u);
+    ASSERT_EQ(decoded.representations.size(), 1u);
+    ASSERT_EQ(decoded.representations[0].levels.size(), 1u);
+    // RGBA, and the half-transparent grey premultiplied by its own alpha, which is this
+    // processor's documented default.
+    EXPECT_EQ(decoded.representations[0].levels[0],
+              (std::vector<std::uint8_t>{0xFF, 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
+                                         0x00, 0x00, 0xFF, 0xFF, 0x40, 0x40, 0x40, 0x80}));
+}
+
+TEST(Texture2DContentPipelineTest, DecodesAPortableFloatMapWithTheColorPackingRule)
+{
+    ScratchDirectory scratch("pfm");
+    // "PF" is colour, and a negative scale means little-endian floats stored bottom-up.
+    std::vector<std::uint8_t> pfm{'P', 'F', '\n', '2', ' ', '1', '\n', '-', '1', '.', '0', '\n'};
+    for (const float channel : {0.0f, 0.5f, 1.0f, 2.0f, -1.0f, 0.25f})
+    {
+        std::array<std::uint8_t, 4> raw{};
+        std::memcpy(raw.data(), &channel, sizeof(channel));
+        pfm.insert(pfm.end(), raw.begin(), raw.end());
+    }
+    WriteBytes(scratch.Path() / "wall.pfm", pfm);
+
+    const Pipeline::ContentBuildResult result = BuildNamed(scratch.Path(), "wall.pfm");
+    const Cnb::CnbTextureData decoded = Cnb::DecodeTexture2DFromCnb(
+        Cnb::CnbDocument::Parse(result.output.bytes, "pipeline wall.cnb"));
+
+    EXPECT_EQ(decoded.width, 2u);
+    EXPECT_EQ(decoded.height, 1u);
+    // Out-of-range floats clamp rather than wrap, and alpha is opaque: a float map carries none.
+    EXPECT_EQ(decoded.representations[0].levels[0],
+              (std::vector<std::uint8_t>{0x00, 0x80, 0xFF, 0xFF, 0xFF, 0x00, 0x40, 0xFF}));
+}
+
+TEST(Texture2DContentPipelineTest, DecodesAPortablePixmapAndAHeaderlessBitmap)
+{
+    ScratchDirectory scratch("ppm_dib");
+    const std::vector<std::uint8_t> ppm{'P', '6', '\n', '2', ' ', '1', '\n', '2', '5', '5', '\n',
+                                        0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00};
+    WriteBytes(scratch.Path() / "wall.ppm", ppm);
+
+    std::vector<std::uint8_t> dib(40u, 0u);
+    dib[0] = 40u;   // BITMAPINFOHEADER
+    dib[4] = 2u;    // width
+    dib[8] = 1u;    // height
+    dib[12] = 1u;   // planes
+    dib[14] = 32u;  // bits per pixel
+    const std::array<std::uint8_t, 8> bgra{0x00, 0x00, 0xFF, 0xFF, 0x00, 0xFF, 0x00, 0xFF};
+    dib.insert(dib.end(), bgra.begin(), bgra.end());
+    WriteBytes(scratch.Path() / "wall.dib", dib);
+
+    for (const char* source : {"wall.ppm", "wall.dib"})
+    {
+        const Pipeline::ContentBuildResult result = BuildNamed(scratch.Path(), source);
+        const Cnb::CnbTextureData decoded = Cnb::DecodeTexture2DFromCnb(
+            Cnb::CnbDocument::Parse(result.output.bytes, "pipeline wall.cnb"));
+        EXPECT_EQ(decoded.width, 2u) << source;
+        EXPECT_EQ(decoded.height, 1u) << source;
+        EXPECT_EQ(decoded.representations[0].levels[0],
+                  (std::vector<std::uint8_t>{0xFF, 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF}))
+            << source;
+    }
+}
+
+// A `.dds` is three formats wearing one extension, and this importer answers whichever one the
+// header describes -- the same thing XNA's own TextureImporter does. It used to refuse a cube map
+// and name the route that would build it; there was no such route
+// (plans/plan_xnapipeline_parity.md XNAPP-255).
+TEST(Texture2DContentPipelineTest, ADdsCubeIsImportedAsACubeRatherThanRefused)
+{
+    ScratchDirectory scratch("dds_cube");
+    WriteBytes(scratch.Path() / "wall.dds", MakeUncompressedDds(true));
+
+    const Pipeline::ContentBuildResult result = BuildNamed(scratch.Path(), "wall.dds");
+    EXPECT_EQ(result.importer.name, "CNA.ImageImporter");
+    EXPECT_EQ(result.processor.name, "CNA.TextureCubeProcessor");
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-109. XNA's `TextureImporter` loads an image through
+// `System.Drawing`, and GDI+ honours a PNG's own `gAMA` chunk: a file that declares a gamma of
+// 0.45 rather than the standard 0.45455 is corrected on load. The correction is one unit over most
+// of the range and none at either end, but it reaches every texel, and 103 of the 2,267 distinct
+// PNG sources in the public XNA sample corpus declare exactly 0.45000. CNA decoded through
+// stb_image, which ignores the chunk, so those textures were wrong in every texel of the middle of
+// their range: NetRumble's `barrierPurple.png` had 35,340 of 65,536 bytes differing from XNA's own
+// build, all of them by one. An `sRGB` chunk declares the standard gamma and so corrects nothing,
+// which is the other half of the rule.
+TEST(Texture2DContentPipelineTest, APngsOwnGammaChunkIsAppliedTheWayGdiPlusAppliesIt)
+{
+    const std::filesystem::path corrected = Locate("tests/assets/xna40/texture/gamma_45000.png");
+    const std::filesystem::path plain = Locate("tests/assets/xna40/texture/gamma_srgb.png");
+    if (!std::filesystem::exists(corrected) || !std::filesystem::exists(plain))
+    {
+        GTEST_SKIP() << "the gamma fixtures are missing";
+    }
+
+    const Pipeline::ImportedImage withGamma = Pipeline::DecodeImportedImage(corrected);
+    const Pipeline::ImportedImage withSrgb = Pipeline::DecodeImportedImage(plain);
+    ASSERT_EQ(withGamma.width, 16u);
+    ASSERT_EQ(withSrgb.width, 16u);
+
+    // The ramp is 8, 24, 40, ... 248 in every channel, and `sRGB` leaves it exactly there.
+    for (std::uint32_t step = 0; step < 16u; ++step)
+    {
+        const std::uint8_t authored = static_cast<std::uint8_t>(step * 16u + 8u);
+        EXPECT_EQ(withSrgb.rgbaPixels[step * 4u], authored) << step;
+        EXPECT_EQ(withSrgb.rgbaPixels[step * 4u + 3u], 255u) << step;
+    }
+
+    // `gAMA` 0.45000 corrects towards a display gamma of 2.2: `round(255 * (c/255)^(1/(0.45*2.2)))`.
+    for (std::uint32_t step = 0; step < 16u; ++step)
+    {
+        const double authored = static_cast<double>(step * 16u + 8u);
+        const auto expected = static_cast<std::uint8_t>(
+            std::floor(255.0 * std::pow(authored / 255.0, 1.0 / (0.45 * 2.2)) + 0.5));
+        EXPECT_EQ(withGamma.rgbaPixels[step * 4u], expected) << step;
+        // Alpha is not a colour and is left alone.
+        EXPECT_EQ(withGamma.rgbaPixels[step * 4u + 3u], 255u) << step;
+    }
+    // And the correction is not a no-op: the middle of the ramp moves.
+    EXPECT_NE(withGamma.rgbaPixels[8u * 4u], withSrgb.rgbaPixels[8u * 4u]);
 }

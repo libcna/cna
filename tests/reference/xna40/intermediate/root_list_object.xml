@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:Generic="System.Collections.Generic">
+  <Asset Type="Generic:List[System.Object]">
+    <Item Type="int">1</Item>
+    <Item Type="string">s</Item>
+  </Asset>
+</XnaContent>

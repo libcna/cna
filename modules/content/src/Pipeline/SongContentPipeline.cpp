@@ -17,6 +17,7 @@ namespace CNA::Content::Pipeline
         constexpr const char* kSongImporterName = "CNA.SongImporter";
         constexpr const char* kSongProcessorName = "CNA.SongProcessor";
         constexpr const char* kSongWriterName = "CNA.SongContentWriter";
+        constexpr const char* kWavSongImporterName = "CNA.WavSongImporter";
         constexpr std::uint64_t kMaxMediaDurationMs = 0x7FFFFFFFu;
 
         const std::string* OptionalString(const ContentProcessorParameters& parameters,
@@ -70,9 +71,13 @@ namespace CNA::Content::Pipeline
         }
     }
 
+    SongImporter::SongImporter(SongDurationProbe probe) : probe_(std::move(probe)) {}
+
     ContentComponentIdentity SongImporter::Identity() const
     {
-        return {kSongImporterName, "2"};
+        // Version 3: the importer reads the source's duration when a probe is registered, so an
+        // asset built by version 2 carries a different value (XNAPP-281).
+        return {kSongImporterName, "3"};
     }
 
     std::vector<std::string> SongImporter::SourceExtensions() const
@@ -120,6 +125,12 @@ namespace CNA::Content::Pipeline
         imported.mediaSource = context.SourcePath();
         imported.streamReference = CNA::Internal::ContentPathToUtf8(relative);
         imported.byteSize = static_cast<std::uint64_t>(size);
+        // Part of the imported value, and therefore part of what the incremental build compares: a
+        // file whose length changed is a different import even when its size in bytes did not.
+        if (probe_)
+        {
+            imported.authoredDurationMs = probe_(context.SourcePath());
+        }
         if (const std::string problem = Cnb::CnbLogicalNameProblem(imported.streamReference);
             !problem.empty())
         {
@@ -129,6 +140,29 @@ namespace CNA::Content::Pipeline
         context.LogInfo("recorded " + std::to_string(imported.byteSize) +
                         "-byte external streaming audio source; media bytes remain external.");
         return ContentValue::Create(ImportedSongSourceType, std::move(imported));
+    }
+
+    WavSongImporter::WavSongImporter(SongDurationProbe probe) : inner_(std::move(probe)) {}
+
+    ContentComponentIdentity WavSongImporter::Identity() const
+    {
+        return {kWavSongImporterName, "1"};
+    }
+
+    std::vector<std::string> WavSongImporter::SourceExtensions() const { return {".wav"}; }
+
+    std::vector<std::string> WavSongImporter::OutputTypes() const
+    {
+        return {ImportedSongSourceType};
+    }
+
+    bool WavSongImporter::SelectedByNameOnly() const { return true; }
+
+    ContentValue WavSongImporter::Import(ContentImporterContext& context) const
+    {
+        // A song is the source file, streamed: the same recording `SongImporter` does, for an
+        // extension whose default reading is a sound effect.
+        return inner_.Import(context);
     }
 
     ContentComponentIdentity SongProcessor::Identity() const
@@ -154,8 +188,9 @@ namespace CNA::Content::Pipeline
             if (name != SongStreamReferenceParameter && name != SongNameParameter &&
                 name != SongDurationMsParameter)
             {
-                throw std::invalid_argument("SongProcessor does not recognize parameter '" + name +
-                                            "'.");
+                throw ContentParameterError(
+                    ContentParameterFault::UnknownName, name,
+                    "SongProcessor does not recognize parameter '" + name + "'.");
             }
         }
         static_cast<void>(OptionalString(parameters, SongNameParameter));
@@ -223,9 +258,12 @@ namespace CNA::Content::Pipeline
                 "Microsoft.Xna.Framework.Media.Song", Cnb::CnbMediaSchemaVersion};
     }
 
-    void RegisterSongContentPipeline(ContentPipelineRegistry& registry)
+    void RegisterSongContentPipeline(ContentPipelineRegistry& registry, SongDurationProbe probe)
     {
-        registry.RegisterImporter(std::make_shared<SongImporter>());
+        registry.RegisterImporter(std::make_shared<SongImporter>(probe));
+        // The `.wav`-as-song reading a project may ask for by name; it never competes with the
+        // sound-effect route that owns the extension by convention (XNAPP-332).
+        registry.RegisterImporter(std::make_shared<WavSongImporter>(std::move(probe)));
         registry.RegisterProcessor(std::make_shared<SongProcessor>());
         registry.RegisterWriter(std::make_shared<SongContentWriter>());
     }

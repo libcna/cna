@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<XnaContent xmlns:IntermediateOracle="Cna.Xna40.IntermediateOracle">
+  <Asset Type="IntermediateOracle:Collections">
+    <IntArray>1 2 3</IntArray>
+    <StringArray>
+      <Item>a</Item>
+      <Item>b</Item>
+    </StringArray>
+    <FloatArray>0.5 1.5</FloatArray>
+    <Vector3Array>1 2 3 4 5 6</Vector3Array>
+    <Bytes>0 127 255</Bytes>
+    <IntList>4 5 6</IntList>
+    <StringList>
+      <Item>x</Item>
+      <Item>y</Item>
+    </StringList>
+    <Vector3List>7 8 9</Vector3List>
+    <NestedList>
+      <Item>
+        <Name>nested</Name>
+        <Value>7</Value>
+      </Item>
+      <Item>
+        <Name>second</Name>
+        <Value>8</Value>
+      </Item>
+    </NestedList>
+    <StructList>
+      <Item>
+        <Position>1 1 1</Position>
+        <Weight>0.25</Weight>
+      </Item>
+    </StructList>
+    <StringIntMap>
+      <Item>
+        <Key>one</Key>
+        <Value>1</Value>
+      </Item>
+      <Item>
+        <Key>two</Key>
+        <Value>2</Value>
+      </Item>
+    </StringIntMap>
+    <IntStringMap>
+      <Item>
+        <Key>10</Key>
+        <Value>ten</Value>
+      </Item>
+    </IntStringMap>
+    <NestedMap>
+      <Item>
+        <Key>k</Key>
+        <Value>
+          <Name>nested</Name>
+          <Value>7</Value>
+        </Value>
+      </Item>
+    </NestedMap>
+    <ListOfLists>
+      <Item>1</Item>
+      <Item>2 3</Item>
+    </ListOfLists>
+    <MapOfLists>
+      <Item>
+        <Key>a</Key>
+        <Value>9</Value>
+      </Item>
+    </MapOfLists>
+    <EmptyArray />
+    <EmptyList />
+    <ListWithNull>
+      <Item>present</Item>
+      <Item Null="true" />
+    </ListWithNull>
+    <NullList Null="true" />
+  </Asset>
+</XnaContent>

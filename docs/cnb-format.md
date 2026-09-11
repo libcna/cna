@@ -317,7 +317,7 @@ Precisely, as implemented by `CnbLoaderRegistry::ResolveForDocument`, in this or
 | 5 | `Model` | **versions 1 and 2**, §11 |
 | 6 | `AnimationClip` | **version 1**, §10 |
 | 7 | `Curve` | **version 1**, §9 |
-| 8 | `SoundEffect` | **version 1**, §18 |
+| 8 | `SoundEffect` | **version 2**, §18 |
 | 9 | `Song` | **version 1**, §19 |
 | 10 | `Video` | **version 1**, §19 |
 | 11 | `Effect` | reserved, not implemented |
@@ -1145,7 +1145,7 @@ A type can be fully readable at runtime and still have no supported way to *prod
 | `Model` | §11 | yes | `EncodeModelToCnb`, `EncodeModelV2ToCnb` | **yes** — glTF/`.cnj` schema 1; compatible XNB schema 1 or exact schema 2 |
 | `AnimationClip` | §10 | yes | `EncodeAnimationClipToCnb` | **yes** — `.cnj` |
 | `Curve` | §9 | yes | `EncodeCurveToCnb` | **yes** — `.cnj` |
-| `SoundEffect` | §18 | yes | `EncodeSoundEffectToCnb` | **yes** — WAV source, and `.cnj`. PCM16 and 8-bit unsigned PCM only |
+| `SoundEffect` | §18 | yes | `EncodeSoundEffectToCnb` | **yes** — WAV source, and `.cnj`. PCM16 and 8-bit unsigned PCM only, each stored at its own width |
 | `Song` | §19 | yes | `EncodeSongToCnb` | **yes** — wraps a media file; no `Song` `.cnj` exists |
 | `Video` | §19 | yes | `EncodeVideoToCnb` | **yes**, with required metadata arguments; no `Video` `.cnj` exists |
 | `Effect` | — | — | — | — |
@@ -1348,7 +1348,7 @@ A `defaultCharacter` that is not in the map is likewise refused.
 
 ---
 
-## 18. `SoundEffect`, schema version 1
+## 18. `SoundEffect`, schema versions 1 and 2
 
 | chunk | count | flags | contents |
 |---|---|---|---|
@@ -1377,14 +1377,39 @@ rule it becomes an out-of-range read inside the mixer, at playback time, on some
 Its own numbering, for the same reason `CnbTextureFormat` has one: no audio backend's enumerators
 are a serialisation ABI.
 
-| id | name | frame bytes | v1 |
+| id | name | frame bytes | from |
 |---|---|---|---|
 | 0 | invalid | — | rejected |
-| 1 | `Pcm16` | `2 × channels` | **written and read** |
-| 2 | `Pcm8` | `1 × channels` | reserved |
+| 1 | `Pcm16` | `2 × channels` | **version 1** |
+| 2 | `Pcm8` | `1 × channels` | **version 2** |
 | 3 | `PcmFloat32` | `4 × channels` | reserved |
 | 4 | `Adpcm` | block format, no fixed frame size | reserved |
 | 5 | `Vorbis` | packet format, no fixed frame size | reserved |
+
+### 18.3 What version 2 changed, and what it did not
+
+**The physical header did not change.** `AUDH` is the same 28 bytes in the same order, and version 2
+adds no chunk and no field. What it changes is which `format` identifiers a file of that version may
+declare: version 1 means `Pcm16` and nothing else, version 2 means `Pcm16` or `Pcm8`. A version-1
+file declaring `Pcm8` is refused rather than read as an 8-bit sound, so no file already on disk
+changes meaning, and every version-1 file still reads.
+
+The reason is XNA. Its `WavImporter` accepts 8-bit unsigned and 16-bit signed PCM and refuses every
+wider encoding outright -- *"Only 8-bit and 16-bit audio data is supported."* for 24- and 32-bit
+integer PCM and *"contains non-PCM data."* for IEEE float -- and its `SoundEffectProcessor` then
+preserves whichever of the two it was given, at every channel count and sample rate measured
+(`tests/reference/xna40/audio/audio-content-oracle.json`,
+`processors/SoundEffectProcessor_pcm_matrix`). Storing 16-bit only meant CNA's XNA-compatible
+`.xnb` writer could not reproduce an 8-bit `SoundEffect`, which is a container deciding what an
+unrelated container is able to say (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+
+Everything this build writes is version 2, whatever its format: the writer declares one schema
+identity to the build graph and the incremental manifest, and a version that varied per asset would
+make that declaration a guess.
+
+`SoundEffect` is the only asset that owns raw samples, and CNA's own `SoundEffect` runtime type
+takes a 16-bit PCM buffer, so a `Pcm8` file is widened when it is **loaded** — `(sample - 128) ×
+256`, which is exact — rather than when it is built.
 
 Samples are **headerless** little-endian PCM, not a WAV or other container's raw bytes. That is
 what the runtime's raw-buffer constructor takes, so storing a container would mean parsing one at

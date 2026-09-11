@@ -42,6 +42,12 @@ namespace CNA::Content::Pipeline
         Curve = 9u,
         /** @brief `Microsoft.Xna.Framework.Graphics.Effect`, from already-compiled bytecode. */
         Effect = 10u,
+        /**
+         * @brief Any object written by an XNA-shaped `ContentTypeWriter` through the
+         *        `ContentCompiler` façade (plans/plan_xnapipeline_parity.md `XNAPP-063`); the
+         *        manifest tells these apart by their asset type name.
+         */
+        XnaObject = 11u,
     };
 
     /**

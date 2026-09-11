@@ -180,6 +180,19 @@ namespace CNA::Internal::Xnb
          */
         void WriteExternalReference(const std::string& relativePath);
 
+        /**
+         * @brief Appends a reference given as a content-root-relative logical name.
+         *
+         * `ContentReader::ReadExternalReference` resolves a reference against the *asset's own*
+         * directory, so a model in `Models/` that named `Textures/wall` would send its reader
+         * looking for `Models/Textures/wall`. XNA writes `..\textures\wall` for exactly that
+         * case, and the canonical model route handed this writer the logical name unchanged
+         * (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-116`).
+         *
+         * @param logicalName The referenced asset's logical content name, or empty for none.
+         */
+        void WriteExternalReferenceLogicalName(const std::string& logicalName);
+
         // -- object graph --
 
         /**
@@ -208,6 +221,18 @@ namespace CNA::Internal::Xnb
          */
         void RequireVerifiedPlatformPayload(const std::string& readerName,
                                             bool handlesXboxByteOrder = false) const;
+
+        /**
+         * @brief Whether this file is being written for the big-endian Xbox 360.
+         *
+         * A writer that converts its own raw payload asks this instead of calling
+         * RequireVerifiedPlatformPayload(): the guard exists to refuse a payload nobody has
+         * converted, and a writer that converts one has nothing to refuse
+         * (plans/plan_xnapipeline_parity.md XNAPP-252).
+         *
+         * @return true for the `x` platform byte.
+         */
+        [[nodiscard]] bool IsXboxTarget() const noexcept;
 
         /**
          * @brief Interns one reader identity into the type-reader table.
@@ -253,6 +278,37 @@ namespace CNA::Internal::Xnb
 
         /** @brief Writes dispatch index zero, the encoding of a null reference. */
         void WriteNullObject();
+
+        /**
+         * @brief Writes one object with its dispatch index using an explicit type writer -- the
+         *        "writer worker" form XNA's `ContentWriter.WriteObject<T>(T, ContentTypeWriter)`
+         *        exposes (plans/plan_xnapipeline_parity.md `XNAPP-060`).
+         *
+         * @param writer The type writer to intern and invoke.
+         * @param value Pointer to the exact C++ value type @p writer serializes.
+         */
+        void WriteObject(const XnbTypeWriterBase& writer, const void* value);
+
+        /**
+         * @brief Writes one object without a dispatch index using an explicit type writer, while
+         *        still interning the writer so the reader can be resolved by type.
+         *
+         * @param writer The type writer to intern and invoke.
+         * @param value Pointer to the exact C++ value type @p writer serializes.
+         */
+        void WriteRawObject(const XnbTypeWriterBase& writer, const void* value);
+
+        /**
+         * @brief Queues a shared resource held by an erased owner, for writers that resolve their
+         *        type writer at run time.
+         *
+         * @param writer The type writer that will serialize the resource when Finish() runs.
+         * @param owner Owning pointer to the exact C++ value type @p writer serializes; kept
+         *        alive until the file is finished.
+         * @return The 1-based shared-resource identifier.
+         */
+        [[nodiscard]] std::int32_t AddSharedResource(const XnbTypeWriterBase& writer,
+                                                     std::shared_ptr<const void> owner);
 
         /**
          * @brief Enqueues one value as a shared resource, serialized after the root object.

@@ -31,6 +31,8 @@ extern char** environ;
 #include "CNA/Content/Pipeline/ModelContentPipeline.hpp"
 #include "CNA/Content/Pipeline/SoundEffectContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
+#include "CNA/Content/Cnb/CnbDocument.hpp"
+#include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
@@ -169,6 +171,99 @@ namespace
         WriteBytes(path, result.output.bytes);
         return Xnb::DecodeXnbCanonicalAsset(path);
     }
+}
+
+TEST(XnbOutputContentPipelineTest, OneEightBitWavGivesOneProcessedValueAndTwoFaithfulContainers)
+{
+    // The architectural rule, as a test: the processor must not run differently because a caller
+    // asked for `.xnb` or for `.cnb`. It used to, because its output type *was* the CNB schema's
+    // description, and that schema stored 16-bit only -- so an 8-bit source came out of both
+    // containers widened, and the `.xnb` did not match what the genuine XNA pipeline writes
+    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+    //
+    // One source, one importer, one processed value; each writer adapts it and neither decides
+    // what it says.
+    ScratchDirectory scratch("dual_eight_bit");
+    const std::vector<std::uint8_t> pcm8{0u, 7u, 14u, 21u, 128u, 200u, 255u, 64u};
+    std::vector<std::uint8_t> wav;
+    {
+        const auto push16 = [&wav](std::uint16_t value)
+        {
+            wav.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+            wav.push_back(static_cast<std::uint8_t>(value >> 8));
+        };
+        const auto push32 = [&wav](std::uint32_t value)
+        {
+            for (int shift = 0; shift < 32; shift += 8)
+            {
+                wav.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFu));
+            }
+        };
+        const auto tag = [&wav](const char* text)
+        {
+            for (int index = 0; index < 4; ++index)
+            {
+                wav.push_back(static_cast<std::uint8_t>(text[index]));
+            }
+        };
+        tag("RIFF");
+        push32(4u + 24u + 8u + static_cast<std::uint32_t>(pcm8.size()));
+        tag("WAVE");
+        tag("fmt ");
+        push32(16u);
+        push16(1u);
+        push16(1u);
+        push32(22050u);
+        push32(22050u);
+        push16(1u);
+        push16(8u);
+        tag("data");
+        push32(static_cast<std::uint32_t>(pcm8.size()));
+        wav.insert(wav.end(), pcm8.begin(), pcm8.end());
+    }
+    WriteBytes(scratch.Path() / "explosion.wav", wav);
+
+    const Pipeline::ContentBuildResult toXnb =
+        Build(scratch.Path(), "explosion.wav", "Sounds/explosion",
+              Pipeline::ContentOutputFormat::Xnb);
+    const Pipeline::ContentBuildResult toCnb =
+        Build(scratch.Path(), "explosion.wav", "Sounds/explosion",
+              Pipeline::ContentOutputFormat::Cnb);
+
+    // The stage before the writers is the same stage: same importer, same processor, same version.
+    EXPECT_EQ(toXnb.importer, toCnb.importer);
+    EXPECT_EQ(toXnb.processor, toCnb.processor);
+    EXPECT_EQ(toXnb.processor,
+              (Pipeline::ContentComponentIdentity{"CNA.SoundEffectProcessor", "3"}));
+
+    // The `.xnb` side: 8-bit WAVEFORMATEX and the source's own bytes.
+    const Xnb::XnbCanonicalAsset asset = DecodeResult(scratch, toXnb, "explosion");
+    const auto& sound = std::get<Xnb::XnbSoundEffectData>(asset.value);
+    EXPECT_EQ(sound.formatTag, 1u);
+    EXPECT_EQ(sound.bitsPerSample, 8u);
+    EXPECT_EQ(sound.channels, 1u);
+    EXPECT_EQ(sound.blockAlign, 1u);
+    EXPECT_EQ(sound.sampleRate, 22050u);
+    EXPECT_EQ(sound.averageBytesPerSecond, 22050u);
+    EXPECT_EQ(sound.samples, pcm8);
+
+    // The `.cnb` side: the same width, under the schema version that can express it.
+    const Cnb::CnbDocument document =
+        Cnb::CnbDocument::Parse(toCnb.output.bytes, "dual-format explosion.cnb");
+    EXPECT_EQ(document.AssetSchemaVersion(), Cnb::CnbSoundEffectSchemaVersion);
+    const Cnb::CnbSoundEffectData decoded = Cnb::DecodeSoundEffectFromCnb(document);
+    EXPECT_EQ(decoded.format, Cnb::CnbAudioFormat::Pcm8);
+    EXPECT_EQ(decoded.channels, 1u);
+    EXPECT_EQ(decoded.sampleRate, 22050u);
+    EXPECT_EQ(decoded.frameCount, static_cast<std::uint32_t>(pcm8.size()));
+    EXPECT_EQ(decoded.samples, pcm8);
+
+    // And the two containers agree about everything an audio fact can be about.
+    EXPECT_EQ(sound.sampleRate, decoded.sampleRate);
+    EXPECT_EQ(static_cast<std::uint32_t>(sound.channels), decoded.channels);
+    EXPECT_EQ(sound.samples, decoded.samples);
+    EXPECT_EQ(static_cast<std::uint32_t>(sound.loopStart), decoded.loopStart);
+    EXPECT_EQ(static_cast<std::uint32_t>(sound.loopLength), decoded.loopLength);
 }
 
 TEST(XnbOutputContentPipelineTest, AnImageSourceBuildsToTexture2DXnbThroughTheSameImporter)

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    plans/plan_xnapipeline_parity.md XNAPP-182: control_font.spritefont at size 10.
+
+    One of the sizes the metric sweep needs. Line spacing and the cropping cell are both derived
+    from the face's scaled metrics, and a rule cannot be told apart from a coincidence with two
+    points, so the corpus carries five sizes of one face rather than one size of five faces.
+-->
+<XnaContent xmlns:Graphics="Microsoft.Xna.Framework.Content.Pipeline.Graphics">
+  <Asset Type="Graphics:FontDescription">
+    <FontName>Liberation Mono</FontName>
+    <Size>10</Size>
+    <Spacing>0</Spacing>
+    <UseKerning>true</UseKerning>
+    <Style>Regular</Style>
+    <CharacterRegions>
+      <CharacterRegion>
+        <Start>&#32;</Start>
+        <End>&#126;</End>
+      </CharacterRegion>
+    </CharacterRegions>
+  </Asset>
+</XnaContent>

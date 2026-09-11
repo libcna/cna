@@ -91,3 +91,55 @@ TEST(ContentPipelineCMakeIntegrationTest, HelperForwardsConfigurationAndWorkersT
     EXPECT_EQ(std::get<std::string>(*prefix), "Configured: ");
 #endif
 }
+
+// plans/plan_xnapipeline_parity.md XNAPP-320: the input a ported XNA game actually owns. The CLI
+// had built a `.contentproj` since XNAPP-240, but CMake could not name one, so the documented
+// migration route ended in a hand-written add_custom_command. `CONTENT_PROJECT` closes that, and
+// this reads what the target produced: the project's own asset name, its `.xnb` container, and the
+// `None` item its targets copy rather than build.
+TEST(ContentPipelineCMakeIntegrationTest, HelperBuildsAnXnaContentProject)
+{
+#if !defined(CNA_CONTENTPROJ_CMAKE_FIXTURE_OUTPUT)
+    GTEST_SKIP() << "native .contentproj CMake integration is unavailable in this configuration";
+#else
+    const std::filesystem::path output(CNA_CONTENTPROJ_CMAKE_FIXTURE_OUTPUT);
+    // The item's own directory plus its `Name`, which is what XNA's own builds put there.
+    const std::filesystem::path artifact = output / "Textures" / "probe.xnb";
+    ASSERT_TRUE(std::filesystem::is_regular_file(artifact));
+
+    // A content project is an XNA project, so it produces the XNA container whatever the tool's
+    // own default is: the four header bytes say so.
+    std::ifstream artifactStream(artifact, std::ios::binary);
+    char header[4] = {};
+    artifactStream.read(header, 4);
+    EXPECT_EQ(std::string(header, 4), "XNBw");
+
+    // The `None` item, copied where `CopyToOutputDirectory` says and not compiled.
+    EXPECT_TRUE(std::filesystem::is_regular_file(output / "readme.txt"));
+    EXPECT_FALSE(std::filesystem::exists(output / "readme.xnb"));
+    EXPECT_FALSE(std::filesystem::exists(output / "probe.xnb"));
+#endif
+}
+
+// The other half of the same row: the container itself. A game that ships `.xnb` had no way to say
+// so from CMake, whatever its sources were.
+TEST(ContentPipelineCMakeIntegrationTest, HelperBuildsTheXnbContainerWhenAskedTo)
+{
+#if !defined(CNA_XNB_CONTENT_CMAKE_FIXTURE_OUTPUT)
+    GTEST_SKIP() << "native XNB CMake content integration is unavailable in this configuration";
+#else
+    const std::filesystem::path output(CNA_XNB_CONTENT_CMAKE_FIXTURE_OUTPUT);
+    const std::filesystem::path artifact = output / "Nested" / "curve.xnb";
+    ASSERT_TRUE(std::filesystem::is_regular_file(artifact));
+
+    std::ifstream artifactStream(artifact, std::ios::binary);
+    const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(artifactStream),
+                                          std::istreambuf_iterator<char>()};
+    ASSERT_GE(bytes.size(), 6u);
+    EXPECT_EQ(std::string(bytes.begin(), bytes.begin() + 3), "XNB");
+    EXPECT_EQ(bytes[3], 'w');                       // --xnb-platform windows
+    EXPECT_EQ(bytes[4], 5u);                        // the XNA 4.0 container version
+    EXPECT_EQ(bytes[5] & 0x01u, 0u);                // --xnb-profile reach
+    EXPECT_EQ(bytes[5] & 0x80u, 0u);                // --xnb-compress none
+#endif
+}

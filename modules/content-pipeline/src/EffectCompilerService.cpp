@@ -42,10 +42,12 @@
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <atomic>
 #include <random>
 #include <sstream>
 #include <system_error>
+#include <utility>
 
 #include "CNA/Internal/HostProcess.hpp"
 
@@ -153,7 +155,476 @@ namespace CNA::Content::Pipeline
             std::filesystem::path path_;
         };
 
+        /** @brief What one pass of a compiled effect disturbs, as XNA's header records it. */
+        struct EffectPassStateSummary
+        {
+            /**
+             * @brief Bit 0 blend, bit 1 depth-stencil, bit 2 rasterizer, and from bit 3 one bit
+             *        per sampler register the pass binds whose sampler carries state of its own.
+             */
+            std::uint32_t stateGroups = 0u;
+            /** @brief Bit per sampler register the pass binds a texture into. */
+            std::uint32_t samplerRegisters = 0u;
+        };
+
+        /** @brief What one of an effect's sampler parameters assigns. */
+        struct EffectSamplerParameter
+        {
+            /** @brief The sampler assigns `Texture`, so the effect binds a texture into it. */
+            bool assignsTexture = false;
+            /** @brief The sampler assigns something other than `Texture` -- a filter, an address
+             *         mode, a border colour: device sampler state rather than a binding. */
+            bool assignsOtherState = false;
+        };
+
+        /** @brief The container's state number for a sampler's `Texture` assignment. */
+        constexpr std::uint32_t kEffectSamplerTextureState = 164u;
+
+        /** @brief The group answered for a render state this repository has not measured. */
+        constexpr std::uint32_t kUnmeasuredEffectStateGroup = 0xFFFFFFFFu;
+
+        /**
+         * @brief Which of XNA's three device states a container render state belongs to.
+         *
+         * The Direct3D 9 effect container numbers the render states densely from `D3DRS_ZENABLE`,
+         * and the three sets below are measured rather than derived: three fixtures each assign
+         * every state of one group and nothing else, and the genuine build answers 1, 2 and 4 for
+         * them (`effect/fx_state_blend_wide`, `_depth_wide`, `_raster_wide` in the differential
+         * corpus, plans/plan_xnapipeline_parity.md XNAPP-191). 146 and 147 are the pass's own
+         * vertex and pixel shader assignments and belong to no device state.
+         *
+         * A state outside every set is one this repository has not measured. It answers a group
+         * of its own -- see @ref SummarizeEffectPasses, which then declines to describe the effect
+         * at all rather than describe it wrongly.
+         *
+         * @param stateType The container's dense render-state number.
+         * @return 1 blend, 2 depth-stencil, 4 rasterizer, 0 for a shader assignment,
+         *         @ref kUnmeasuredEffectStateGroup for anything unmeasured.
+         */
+        [[nodiscard]] std::uint32_t EffectStateGroupOf(const std::uint32_t stateType)
+        {
+            switch (stateType)
+            {
+            // SrcBlend, DestBlend, AlphaBlendEnable, ColorWriteEnable, BlendOp,
+            // SeparateAlphaBlendEnable, SrcBlendAlpha, DestBlendAlpha, BlendOpAlpha.
+            case 6u: case 7u: case 13u: case 73u: case 75u:
+            case 99u: case 100u: case 101u: case 102u:
+                return 1u;
+            // ZEnable, ZWriteEnable, ZFunc, StencilEnable, StencilFail, StencilZFail,
+            // StencilPass, StencilFunc, StencilRef, StencilMask, StencilWriteMask.
+            case 0u: case 3u: case 9u: case 22u: case 23u: case 24u:
+            case 25u: case 26u: case 27u: case 28u: case 29u:
+                return 2u;
+            // FillMode, CullMode, ScissorTestEnable, DepthBias, SlopeScaleDepthBias,
+            // MultiSampleAntialias.
+            case 1u: case 8u: case 68u: case 78u: case 79u: case 98u:
+                return 4u;
+            // VertexShader, PixelShader.
+            case 146u: case 147u:
+                return 0u;
+            default:
+                return kUnmeasuredEffectStateGroup;
+            }
+        }
+
+        /**
+         * @brief The sampler parameters one Direct3D 9 shader binds, by name and register.
+         *
+         * The `dcl` instructions name the registers but not the effect parameters behind them,
+         * and the two masks XNA's header carries are properties of the *parameter* -- whether it
+         * assigns a texture, whether it assigns sampler state -- so the register alone cannot
+         * answer either. The constant table does: the compiler puts a `CTAB` comment block in
+         * front of the instruction stream naming every constant the shader binds together with
+         * the register set and index it occupies, and set 3 is the sampler file.
+         *
+         * Every read is bounds-checked; anything unexpected answers false, which makes the
+         * caller describe the effect not at all rather than wrongly.
+         *
+         * @param bytes The whole container.
+         * @param start Offset of the shader's version token.
+         * @param end One past the shader blob's last byte.
+         * @param bindings Receives one `(parameter name, sampler register)` pair per entry.
+         * @return False when the table is missing or stops making sense.
+         */
+        [[nodiscard]] bool SamplerBindingsOf(
+            const std::vector<std::uint8_t>& bytes, const std::size_t start, const std::size_t end,
+            std::vector<std::pair<std::string, std::uint32_t>>& bindings)
+        {
+            const auto word = [&bytes, end](const std::size_t at, bool& bad) -> std::uint32_t
+            {
+                if (at + 4u > end) { bad = true; return 0u; }
+                return static_cast<std::uint32_t>(bytes[at]) |
+                       (static_cast<std::uint32_t>(bytes[at + 1u]) << 8) |
+                       (static_cast<std::uint32_t>(bytes[at + 2u]) << 16) |
+                       (static_cast<std::uint32_t>(bytes[at + 3u]) << 24);
+            };
+            constexpr std::uint32_t kEndToken = 0x0000FFFFu;
+            constexpr std::uint32_t kCommentOpcode = 0xFFFEu;
+            constexpr std::uint32_t kConstantTableFourCc = 0x42415443u;   // 'CTAB'
+            constexpr std::uint32_t kSamplerRegisterSet = 3u;
+            constexpr std::uint32_t kMaximumSamplerRegister = 16u;
+            constexpr std::uint32_t kMaximumConstants = 4096u;
+
+            std::size_t at = start + 4u;
+            while (at + 4u <= end)
+            {
+                bool bad = false;
+                const std::uint32_t token = word(at, bad);
+                if (bad) { return false; }
+                if (token == kEndToken) { return true; }
+                const std::uint32_t opcode = token & 0xFFFFu;
+                if (opcode != kCommentOpcode)
+                {
+                    const std::uint32_t length = (token >> 24) & 0xFu;
+                    if (length == 0u) { return true; }
+                    at += 4u * (static_cast<std::size_t>(length) + 1u);
+                    continue;
+                }
+                const std::size_t words = static_cast<std::size_t>((token >> 16) & 0x7FFFu);
+                const std::size_t body = at + 4u;
+                if (words == 0u || body + 4u * words > end)
+                {
+                    at += 4u + 4u * words;
+                    continue;
+                }
+                if (word(body, bad) != kConstantTableFourCc || bad)
+                {
+                    at += 4u + 4u * words;
+                    continue;
+                }
+
+                // Every offset in the table is relative to the dword after the four-character
+                // code, which is where the 28-byte header begins.
+                const std::size_t table = body + 4u;
+                const std::uint32_t constants = word(table + 12u, bad);
+                const std::uint32_t entries = word(table + 16u, bad);
+                if (bad || constants > kMaximumConstants) { return false; }
+                for (std::uint32_t index = 0u; index < constants; ++index)
+                {
+                    const std::size_t entry = table + entries + 20u * static_cast<std::size_t>(index);
+                    const std::uint32_t nameOffset = word(entry, bad);
+                    const std::uint32_t registers = word(entry + 4u, bad);
+                    if (bad) { return false; }
+                    const std::uint32_t registerSet = registers & 0xFFFFu;
+                    const std::uint32_t registerIndex = (registers >> 16) & 0xFFFFu;
+                    const std::uint32_t registerCount = word(entry + 8u, bad) & 0xFFFFu;
+                    if (bad || registerSet != kSamplerRegisterSet) { continue; }
+                    // A sampler array would span several registers under one parameter name, and
+                    // attributing them needs the element the effect declared. Nothing measured
+                    // has one, so it is refused rather than assumed.
+                    if (registerCount != 1u || registerIndex >= kMaximumSamplerRegister)
+                    {
+                        return false;
+                    }
+                    const std::size_t name = table + nameOffset;
+                    std::string parameter;
+                    for (std::size_t cursor = name; cursor < end; ++cursor)
+                    {
+                        if (bytes[cursor] == 0u) { break; }
+                        parameter.push_back(static_cast<char>(bytes[cursor]));
+                        if (parameter.size() > 1024u) { return false; }
+                    }
+                    if (parameter.empty()) { return false; }
+                    bindings.emplace_back(std::move(parameter), registerIndex);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        /**
+         * @brief Reads one summary per pass out of a compiled Direct3D 9 effect.
+         *
+         * The container's own graph answers all three halves: a pass lists the render states it
+         * assigns, the parameter table records what each sampler assigns, and the large-object
+         * table records, for every shader blob, which technique and pass it belongs to -- the
+         * attribution the two sampler masks need when two passes bind different samplers.
+         *
+         * The masks are properties of the effect's sampler *parameters*, not of the registers the
+         * shader declares: a sampler written `sampler S : register(s0);` with no state block is
+         * declared by the shader and is in neither mask, which is what separates it from one
+         * written `sampler_state { Texture = <T>; }`. Measured on thirty-one effects built by the
+         * genuine pipeline -- the seventeen of plans/plan_xnapipeline_parity.md XNAPP-191 and
+         * fourteen written to vary one property at a time
+         * (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-201).
+         *
+         * Every read is bounds-checked and every unexpected shape answers empty, because a
+         * summary this build is not sure of must not be written: the caller then emits the single
+         * zero pair, which is what it always emitted before.
+         *
+         * @param bytes The bare Effect Framework binary, beginning with `0xFEFF0901`.
+         * @return One summary per pass in container order, or empty when it cannot be read.
+         */
+        [[nodiscard]] std::vector<EffectPassStateSummary> SummarizeEffectPasses(
+            const std::vector<std::uint8_t>& bytes)
+        {
+            constexpr std::size_t kMaximumItems = 64u * 1024u;
+            const std::vector<EffectPassStateSummary> unreadable;
+            std::size_t cursor = 0u;
+            bool failed = false;
+            const auto read = [&bytes, &cursor, &failed]() -> std::uint32_t
+            {
+                if (failed || cursor + 4u > bytes.size()) { failed = true; return 0u; }
+                const std::uint32_t value =
+                    static_cast<std::uint32_t>(bytes[cursor]) |
+                    (static_cast<std::uint32_t>(bytes[cursor + 1u]) << 8) |
+                    (static_cast<std::uint32_t>(bytes[cursor + 2u]) << 16) |
+                    (static_cast<std::uint32_t>(bytes[cursor + 3u]) << 24);
+                cursor += 4u;
+                return value;
+            };
+            const auto skip = [&bytes, &cursor, &failed](const std::size_t count)
+            {
+                if (failed || count > bytes.size() - std::min(cursor, bytes.size()))
+                {
+                    failed = true;
+                    return;
+                }
+                cursor += count;
+            };
+
+            if (bytes.size() < 8u) { return unreadable; }
+            cursor = 4u;
+            const std::uint32_t structureOffset = read();
+            const std::size_t base = 8u;
+            if (failed || structureOffset > bytes.size() - base || (structureOffset & 3u) != 0u)
+            {
+                return unreadable;
+            }
+            cursor = base + structureOffset;
+
+            const std::uint32_t parameterCount = read();
+            const std::uint32_t techniqueCount = read();
+            static_cast<void>(read());
+            static_cast<void>(read());
+            if (failed || parameterCount > kMaximumItems || techniqueCount == 0u ||
+                techniqueCount > kMaximumItems)
+            {
+                return unreadable;
+            }
+            // Absolute reads into the blob region, which the parameter table addresses by offset
+            // rather than walking.
+            const auto at32 = [&bytes, &failed](const std::size_t offset) -> std::uint32_t
+            {
+                if (failed || offset + 4u > bytes.size()) { failed = true; return 0u; }
+                return static_cast<std::uint32_t>(bytes[offset]) |
+                       (static_cast<std::uint32_t>(bytes[offset + 1u]) << 8) |
+                       (static_cast<std::uint32_t>(bytes[offset + 2u]) << 16) |
+                       (static_cast<std::uint32_t>(bytes[offset + 3u]) << 24);
+            };
+
+            std::map<std::string, EffectSamplerParameter> samplers;
+            for (std::uint32_t index = 0u; index < parameterCount; ++index)
+            {
+                const std::uint32_t typeOffset = read();
+                const std::uint32_t valueOffset = read();
+                static_cast<void>(read());
+                const std::uint32_t annotations = read();
+                if (failed || annotations > kMaximumItems) { return unreadable; }
+                skip(static_cast<std::size_t>(annotations) * 8u);
+                if (failed) { return unreadable; }
+
+                // D3DXPARAMETER_DESC: type, class, name, semantic, element count. Types 10 to 14
+                // are `sampler` and its four dimensioned spellings.
+                const std::uint32_t parameterType = at32(base + typeOffset);
+                const std::uint32_t nameOffset = at32(base + typeOffset + 8u);
+                const std::uint32_t elementCount = at32(base + typeOffset + 16u);
+                if (failed) { return unreadable; }
+                if (parameterType < 10u || parameterType > 14u) { continue; }
+                // A sampler array's value is one state list per element, and nothing measured has
+                // one; refusing it keeps the zero header rather than describing it wrongly.
+                if (elementCount != 0u) { return unreadable; }
+
+                const std::uint32_t nameLength = at32(base + nameOffset);
+                if (failed || nameLength == 0u || nameLength > 1024u ||
+                    base + nameOffset + 4u + nameLength > bytes.size())
+                {
+                    return unreadable;
+                }
+                std::string name;
+                for (std::uint32_t character = 0u; character < nameLength; ++character)
+                {
+                    const std::uint8_t byte = bytes[base + nameOffset + 4u + character];
+                    if (byte == 0u) { break; }
+                    name.push_back(static_cast<char>(byte));
+                }
+                if (name.empty()) { return unreadable; }
+
+                EffectSamplerParameter sampler;
+                const std::uint32_t stateCount = at32(base + valueOffset);
+                if (failed || stateCount > kMaximumItems) { return unreadable; }
+                for (std::uint32_t state = 0u; state < stateCount; ++state)
+                {
+                    const std::uint32_t stateType =
+                        at32(base + valueOffset + 4u + 16u * static_cast<std::size_t>(state));
+                    if (failed) { return unreadable; }
+                    if (stateType == kEffectSamplerTextureState) { sampler.assignsTexture = true; }
+                    else { sampler.assignsOtherState = true; }
+                }
+                samplers[name] = sampler;
+            }
+
+            std::vector<EffectPassStateSummary> passes;
+            std::map<std::pair<std::uint32_t, std::uint32_t>, std::size_t> located;
+            for (std::uint32_t technique = 0u; technique < techniqueCount; ++technique)
+            {
+                static_cast<void>(read());
+                const std::uint32_t annotations = read();
+                const std::uint32_t passCount = read();
+                if (failed || annotations > kMaximumItems || passCount == 0u ||
+                    passCount > kMaximumItems)
+                {
+                    return unreadable;
+                }
+                skip(static_cast<std::size_t>(annotations) * 8u);
+                for (std::uint32_t pass = 0u; pass < passCount; ++pass)
+                {
+                    static_cast<void>(read());
+                    const std::uint32_t passAnnotations = read();
+                    const std::uint32_t stateCount = read();
+                    if (failed || passAnnotations > kMaximumItems || stateCount > kMaximumItems)
+                    {
+                        return unreadable;
+                    }
+                    skip(static_cast<std::size_t>(passAnnotations) * 8u);
+                    EffectPassStateSummary summary;
+                    for (std::uint32_t state = 0u; state < stateCount; ++state)
+                    {
+                        const std::uint32_t stateType = read();
+                        static_cast<void>(read());
+                        static_cast<void>(read());
+                        static_cast<void>(read());
+                        if (failed) { return unreadable; }
+                        const std::uint32_t group = EffectStateGroupOf(stateType);
+                        // An unmeasured state: this build does not know which device state it
+                        // belongs to, and a header that guesses is worse than the zero one.
+                        if (group == kUnmeasuredEffectStateGroup) { return unreadable; }
+                        summary.stateGroups |= group;
+                    }
+                    located[{technique, pass}] = passes.size();
+                    passes.push_back(summary);
+                }
+            }
+
+            const std::uint32_t smallObjects = read();
+            const std::uint32_t largeObjects = read();
+            if (failed || smallObjects > kMaximumItems || largeObjects > kMaximumItems)
+            {
+                return unreadable;
+            }
+            for (std::uint32_t index = 0u; index < smallObjects; ++index)
+            {
+                static_cast<void>(read());
+                const std::uint32_t length = read();
+                if (failed) { return unreadable; }
+                skip((static_cast<std::size_t>(length) + 3u) & ~static_cast<std::size_t>(3u));
+            }
+            for (std::uint32_t index = 0u; index < largeObjects; ++index)
+            {
+                const std::uint32_t technique = read();
+                const std::uint32_t pass = read();
+                static_cast<void>(read());
+                static_cast<void>(read());
+                static_cast<void>(read());
+                const std::uint32_t length = read();
+                if (failed) { return unreadable; }
+                const std::size_t blob = cursor;
+                skip((static_cast<std::size_t>(length) + 3u) & ~static_cast<std::size_t>(3u));
+                if (failed) { return unreadable; }
+                if (length < 4u) { continue; }
+                const std::uint32_t head =
+                    static_cast<std::uint32_t>(bytes[blob]) |
+                    (static_cast<std::uint32_t>(bytes[blob + 1u]) << 8) |
+                    (static_cast<std::uint32_t>(bytes[blob + 2u]) << 16) |
+                    (static_cast<std::uint32_t>(bytes[blob + 3u]) << 24);
+                const std::uint32_t kind = head & 0xFFFF0000u;
+                if (kind != 0xFFFE0000u && kind != 0xFFFF0000u) { continue; }
+                const auto found = located.find({technique, pass});
+                if (found == located.end()) { continue; }
+                std::vector<std::pair<std::string, std::uint32_t>> bindings;
+                if (!SamplerBindingsOf(bytes, blob, blob + length, bindings))
+                {
+                    return unreadable;
+                }
+                for (const auto& binding : bindings)
+                {
+                    const auto sampler = samplers.find(binding.first);
+                    if (sampler == samplers.end()) { return unreadable; }
+                    if (sampler->second.assignsTexture)
+                    {
+                        passes[found->second].samplerRegisters |= 1u << binding.second;
+                    }
+                    if (sampler->second.assignsOtherState)
+                    {
+                        passes[found->second].stateGroups |= 1u << (binding.second + 3u);
+                    }
+                }
+            }
+            return passes;
+        }
+
         /** @brief The external-process backend. */
+        /**
+         * @brief Puts the header XNA's own pipeline puts in front of a compiled effect.
+         *
+         * `fxc /T fx_2_0 /Fo` writes the bare Direct3D 9 Effect Framework binary, magic
+         * `0xFEFF0901`. XNA's `EffectProcessor` answers the same binary behind a header -- magic
+         * `0xBCF00BCF`, the offset of the inner token, then **one pair of dwords per pass** -- and
+         * that is what reaches an `.xnb` and what a game loads.
+         *
+         * The pair was recorded here as two zeros, because the two effects
+         * `effectprocessor/compile_simple_digest` and `effectprocessor/compile_second_digest`
+         * measure the processor called *directly* and both answer zero. A build answers something
+         * else: the pair says which device state that pass disturbs and which sampler registers it
+         * binds, and its length therefore follows the pass count rather than being sixteen bytes
+         * (plans/plan_xnapipeline_parity.md `XNAPP-191`, and @ref SummarizeEffectPasses for the
+         * rule and the seventeen effects it was measured on).
+         *
+         * Applied here rather than in the processor because this is where an *fxc result*
+         * exists: a caller that supplies its own compiler is handing over finished bytes, and
+         * those still reach the container unchanged.
+         *
+         * @param bytecode The compiler's output, wrapped in place when it needs wrapping.
+         */
+        void WrapAsXnaEffect(std::vector<std::uint8_t>& bytecode)
+        {
+            constexpr std::uint32_t kEffectFrameworkToken = 0xFEFF0901u;
+            constexpr std::uint32_t kXna4EffectWrapperToken = 0xBCF00BCFu;
+            if (bytecode.size() < 4u) { return; }
+            const std::uint32_t leading = static_cast<std::uint32_t>(bytecode[0]) |
+                                          (static_cast<std::uint32_t>(bytecode[1]) << 8) |
+                                          (static_cast<std::uint32_t>(bytecode[2]) << 16) |
+                                          (static_cast<std::uint32_t>(bytecode[3]) << 24);
+            if (leading != kEffectFrameworkToken) { return; }
+
+            // One pair per pass, or the single zero pair when the container cannot be read. The
+            // pair is the *pass's* own summary, so a container this build cannot walk is described
+            // as disturbing nothing, which is what the header said before it was understood at all.
+            std::vector<EffectPassStateSummary> passes = SummarizeEffectPasses(bytecode);
+            if (passes.empty()) { passes.emplace_back(); }
+            const std::size_t headerBytes = 8u + 8u * passes.size();
+
+            std::vector<std::uint8_t> wrapped;
+            wrapped.reserve(bytecode.size() + headerBytes);
+            const auto word32 = [&wrapped](std::uint32_t value)
+            {
+                for (int shift = 0; shift < 32; shift += 8)
+                {
+                    wrapped.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFu));
+                }
+            };
+            word32(kXna4EffectWrapperToken);
+            word32(static_cast<std::uint32_t>(headerBytes));
+            for (const EffectPassStateSummary& pass : passes)
+            {
+                word32(pass.stateGroups);
+                word32(pass.samplerRegisters);
+            }
+            wrapped.insert(wrapped.end(), bytecode.begin(), bytecode.end());
+            bytecode = std::move(wrapped);
+        }
+
+
         class ExternalEffectCompiler final : public EffectCompilerService
         {
         public:
@@ -184,14 +655,35 @@ namespace CNA::Content::Pipeline
                 const ScratchDirectory scratch;
                 const std::filesystem::path output = scratch.Path() / "effect.fxb";
 
+                // Every path in one translation, in a fixed order: output, source, then the
+                // include directories.
+                std::vector<std::filesystem::path> paths{output, request.source};
+                paths.insert(paths.end(), request.includeDirectories.begin(),
+                             request.includeDirectories.end());
+                const std::vector<std::string> spelled = SpellForLauncher(paths);
+
                 std::vector<std::string> arguments;
                 if (!launcher_.empty()) { arguments.push_back(executable_.string()); }
                 arguments.push_back("/nologo");
                 arguments.push_back("/T");
                 arguments.push_back(kTargetProfile);
                 arguments.push_back("/Fo");
-                arguments.push_back(output.string());
-                arguments.push_back(request.debugInformation ? "/Zi" : "/Qstrip_debug");
+                arguments.push_back(spelled[0]);
+                // XNA's `DebugMode.Debug` is "debug information *and* optimizations disabled",
+                // which is what its own documentation says and what the corpus shows: four of the
+                // five sample effects whose reference is uncompressed come out at exactly the
+                // length XNA wrote under `/Zi /Od`, and at a quite different one under `/Zi`
+                // alone -- 1744 against 1608, 1652 against 1340, 3668 against 3724, 4796 against
+                // 4428 (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-108`).
+                if (request.debugInformation)
+                {
+                    arguments.push_back("/Zi");
+                    arguments.push_back("/Od");
+                }
+                else
+                {
+                    arguments.push_back("/Qstrip_debug");
+                }
                 arguments.push_back("/D");
                 arguments.push_back(request.profile == EffectSourceProfile::HiDef
                                         ? "CNA_HIDEF=1"
@@ -201,12 +693,12 @@ namespace CNA::Content::Pipeline
                     arguments.push_back("/D");
                     arguments.push_back(value.empty() ? name : name + "=" + value);
                 }
-                for (const std::filesystem::path& directory : request.includeDirectories)
+                for (std::size_t at = 2u; at < spelled.size(); ++at)
                 {
                     arguments.push_back("/I");
-                    arguments.push_back(directory.string());
+                    arguments.push_back(spelled[at]);
                 }
-                arguments.push_back(request.source.string());
+                arguments.push_back(spelled[1]);
 
                 const CNA::Internal::HostProcessResult process = CNA::Internal::RunHostProcess(
                     launcher_.empty() ? executable_ : launcher_, arguments);
@@ -253,6 +745,7 @@ namespace CNA::Content::Pipeline
                 }
                 result.bytecode.assign(std::istreambuf_iterator<char>(stream),
                                        std::istreambuf_iterator<char>());
+                WrapAsXnaEffect(result.bytecode);
                 result.succeeded = !result.bytecode.empty();
                 if (!result.succeeded)
                 {
@@ -266,6 +759,52 @@ namespace CNA::Content::Pipeline
             }
 
         private:
+
+            /**
+             * @brief The launcher's own spelling of each path.
+             *
+             * A compiler run through a launcher is a foreign program: `fxc.exe` under Wine reads
+             * `/tmp/build/effect.fxb` as an option, because a leading `/` is how a Windows command
+             * line begins one, and answers `Unknown or invalid option`. Wine can spell a host path
+             * the way the program it runs will read it, so ask it -- once per compile, for every
+             * path at once, which is what `winepath` accepts.
+             *
+             * Any other launcher gets the paths unchanged: a translation that has not been
+             * measured is a guess, and a guess here turns a working build into a puzzling one.
+             *
+             * @param paths The host paths, in order.
+             * @return The spellings, in the same order; the inputs unchanged when no translation
+             *         applies or the launcher could not answer.
+             */
+            [[nodiscard]] std::vector<std::string> SpellForLauncher(
+                const std::vector<std::filesystem::path>& paths) const
+            {
+                std::vector<std::string> spelled;
+                spelled.reserve(paths.size());
+                for (const std::filesystem::path& path : paths) { spelled.push_back(path.string()); }
+                if (!launcherTranslatesPaths_ || paths.empty()) { return spelled; }
+
+                std::vector<std::string> arguments{"winepath", "-w"};
+                for (const std::string& path : spelled) { arguments.push_back(path); }
+                const CNA::Internal::HostProcessResult process =
+                    CNA::Internal::RunHostProcess(launcher_, arguments);
+                if (!process.started || process.exitCode != 0) { return spelled; }
+
+                std::vector<std::string> lines;
+                std::istringstream stream(process.standardOutput);
+                std::string line;
+                while (std::getline(stream, line))
+                {
+                    while (!line.empty() && (line.back() == '\r' || line.back() == '\n'))
+                    {
+                        line.pop_back();
+                    }
+                    if (!line.empty()) { lines.push_back(line); }
+                }
+                // One line per path, or the answer is not the one that was asked for.
+                return lines.size() == spelled.size() ? lines : spelled;
+            }
+
             void Resolve(const ExternalEffectCompilerOptions& options)
             {
                 identity_.targetProfile = kTargetProfile;
@@ -278,6 +817,11 @@ namespace CNA::Content::Pipeline
                                     ? std::filesystem::path(ConfiguredLauncher())
                                     : std::filesystem::path(fromEnvironment);
                 }
+
+                // Wine is the launcher this project documents, and the only one whose path
+                // translation has been measured here.
+                const std::string launcherName = launcher_.filename().string();
+                launcherTranslatesPaths_ = launcherName.rfind("wine", 0) == 0;
 
                 executable_ = options.executable;
                 if (executable_.empty())
@@ -362,6 +906,8 @@ namespace CNA::Content::Pipeline
 
             std::filesystem::path executable_;
             std::filesystem::path launcher_;
+            /** @brief Whether the launcher can spell a host path for the program it runs. */
+            bool launcherTranslatesPaths_ = false;
             EffectCompilerIdentity identity_;
             bool available_ = false;
             std::string reason_;

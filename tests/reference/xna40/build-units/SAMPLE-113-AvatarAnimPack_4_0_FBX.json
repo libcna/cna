@@ -1,0 +1,23 @@
+{
+ "sample": "SAMPLE-113-AvatarAnimPack_4_0_FBX",
+ "runner": "scripts/XnaPipelineRunner.cs",
+ "guid": "1C8B0A55-33C7-4A6E-9F41-2D6E7B10C9A2",
+ "comment": "Its ReadAssets() walks xna4-original for *.fbx, names each by its stem and gives every one FbxImporter and the sample's own CustomAvatarAnimationProcessor. Xbox360/HiDef, CompressContent true, OutputDirectory xna4-build\\Content-xbox. The processor is the sample's, so what this unit adds is the reason rather than a build.",
+ "units": [
+  {
+   "project": "AvatarAnimPack.contentproj",
+   "sourceRoot": "xna4-original",
+   "recurse": false,
+   "platform": "Xbox360",
+   "profile": "HiDef",
+   "compress": true,
+   "items": [
+    {
+     "match": "*.fbx",
+     "importer": "FbxImporter",
+     "processor": "CustomAvatarAnimationProcessor"
+    }
+   ]
+  }
+ ]
+}

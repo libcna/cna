@@ -318,7 +318,14 @@ TEST(CustomContentPipelineTest, BuiltInWritersDeclareStableSchemaAndCodecIdentit
         const auto schemas = registry.ResolveWriter(item.inputType)->OutputSchemaIdentities();
         ASSERT_EQ(schemas.size(), 1u) << item.inputType;
         EXPECT_EQ(schemas[0].assetTypeId, item.assetTypeId) << item.inputType;
-        EXPECT_EQ(schemas[0].assetSchemaVersion, 1u) << item.inputType;
+        // Every asset schema is at version 1 except `SoundEffect`, which reached version 2 when
+        // it learned to store an 8-bit sound at its own width
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-197`).
+        EXPECT_EQ(schemas[0].assetSchemaVersion,
+                  item.assetTypeId == Cnb::CnbAssetTypeId::SoundEffect
+                      ? Cnb::CnbSoundEffectSchemaVersion
+                      : 1u)
+            << item.inputType;
         EXPECT_EQ(schemas[0].assetTypeName, item.assetTypeName) << item.inputType;
         EXPECT_EQ(schemas[0].codec.name, item.codecName) << item.inputType;
         EXPECT_EQ(schemas[0].codec.version, "1") << item.inputType;

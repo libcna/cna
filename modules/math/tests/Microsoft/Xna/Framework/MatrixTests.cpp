@@ -299,6 +299,19 @@ TEST(MatrixTest, ToStringContainsM11)
     EXPECT_NE(s.find("M44"), std::string::npos);
 }
 
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-183: the whole form, not two substrings of it. A
+// `Matrix` boxed in a material's opaque data comes back from the genuine XNA pipeline as this
+// exact string -- four brace-wrapped rows inside one more pair, with a space after the opening
+// brace and before the closing one -- which is what `x_effect_instance.x`'s sixteen-float
+// `EffectParamFloats` answered through `tools/xna-pipeline-oracle/model/`.
+TEST(MatrixTest, ToStringIsXnasOwnForm)
+{
+    Matrix m(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 7, 8, 9, 1);
+    EXPECT_EQ(m.ToString(),
+              "{ {M11:1 M12:0 M13:0 M14:0} {M21:0 M22:1 M23:0 M24:0} "
+              "{M31:0 M32:0 M33:1 M34:0} {M41:7 M42:8 M43:9 M44:1} }");
+}
+
 // --- Out-ref overloads ---
 
 TEST(MatrixTest, AddRefOverload)
