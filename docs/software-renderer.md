@@ -564,6 +564,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   so the final raster conversion performs only the required W divide and viewport-origin addition.
   Ordinary W=1 half-pixel edges no longer drift through an algebraically cancelling projection/
   viewport round trip, while transformed/clipped varying-W sprites retain perspective semantics.
+- **The complete 39-scene Microsoft XNA image corpus is now reproducible on Software**
+  (`SOFTWARE-343`). `cna_oracle_render_software` consumes the same renderer-neutral scene files as
+  the checked-in XNA references, while `scripts/run-oracle-corpus-diff-software.sh` runs it without
+  a display and reports every pixel delta. All 39 scenes render; 8 are byte-exact, 26 match within
+  one byte per channel and 28 within two. Independent real-XNA probes classify the nine remaining
+  point-texture boundary deltas as interpolation precision rather than a point-sampler rule defect.
+  The two remaining line-coverage deltas are not waived and are tracked by `SOFTWARE-344`.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

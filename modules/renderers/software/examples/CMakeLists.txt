@@ -1112,6 +1112,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
     cna_software_test(cna_diag_software ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
+
+    # SOFTWARE-343: renderer-neutral real-XNA scene-corpus measurement. This is deliberately not
+    # a CTest: hardware floating-point and edge precision make exact image identity diagnostic
+    # evidence rather than a portable pass/fail contract.
+    cna_software_test(cna_oracle_render_software
+        ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp)
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot
