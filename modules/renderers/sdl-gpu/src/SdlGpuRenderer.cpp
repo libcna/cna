@@ -4706,8 +4706,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (auto& [key, pipeline] : spritePipelines_)
             ReleaseGraphicsPipeline(pipeline);
         spritePipelines_.clear();
-        for (auto& [key, sampler] : samplerCache_)
-            ReleaseSampler(sampler);
+        for (auto& [key, entry] : samplerCache_)
+            ReleaseSampler(entry.sampler);
         samplerCache_.clear();
         if (spriteVertexBuffer_ != nullptr)
         {
@@ -4801,7 +4801,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const float minLod = static_cast<float>(std::max(maxMipLevel, 0));
         const SamplerCacheKeyEXT key = SamplerCacheKeyEXT::Make(
             textureFilter, addressU, addressV, addressW, clampedAniso, maxMipLevel, lodBias);
-        const auto it = samplerCache_.find(key);
+        auto it = samplerCache_.find(key);
         const bool hit = it != samplerCache_.end();
 
         SDL_GPUSamplerCreateInfo createInfo{};
@@ -4821,7 +4821,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUSampler* sampler = nullptr;
         if (hit)
         {
-            sampler = it->second;
+            it->second.lastUse = ++samplerCacheUseSerial_;
+            sampler = it->second.sampler;
         }
         else
         {
@@ -4831,7 +4832,35 @@ namespace CNA::Internal::Renderers::SdlGpu
                 throw std::runtime_error(std::string("CNA SDL_GPU: failed to create sampler: ") + SDL_GetError());
             NotifyResourceEvent(SdlGpuResourceKindEXT::Sampler,
                                 SdlGpuResourceEventEXT::Acquired);
-            samplerCache_[key] = sampler;
+            try
+            {
+                samplerCache_.emplace(
+                    key, CachedSamplerEXT{sampler, ++samplerCacheUseSerial_});
+            }
+            catch (...)
+            {
+                ReleaseSampler(sampler);
+                throw;
+            }
+
+            // SDLGPU-126: EasyGL owns one mutable sampler per slot, whereas SDL_GPU needs
+            // immutable descriptor objects. Retain a generous working set across frames, not
+            // every unrestricted MaxMipLevel/LOD-bias value the application has ever supplied.
+            // SDL tracks every bound sampler on the recording command buffer; releasing an older
+            // handle here therefore queues native destruction until those already-recorded uses
+            // finish. No future renderer call can reference the evicted handle because queued CNA
+            // draws store the sampler description and resolve it only when they are replayed.
+            if (samplerCache_.size() > MaxRetainedSamplerCountEXT)
+            {
+                const auto victim = std::min_element(
+                    samplerCache_.begin(), samplerCache_.end(),
+                    [](const auto& lhs, const auto& rhs) {
+                        return lhs.second.lastUse < rhs.second.lastUse;
+                    });
+                SDL_GPUSampler* evicted = victim->second.sampler;
+                samplerCache_.erase(victim);
+                ReleaseSampler(evicted);
+            }
         }
         // REMED-GFX-170: the whole public->native translation on one line, so a wrong ordinal
         // mapping is readable directly instead of being inferred from pixels.

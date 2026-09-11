@@ -2709,6 +2709,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             return spritePipelines_.size();
         }
+        /** @brief Maximum number of native samplers retained across submitted frames. CNAEXT. */
+        CNAEXT static constexpr std::size_t MaxRetainedSamplerCountEXT = 256;
+        /** @brief Number of native samplers currently retained for reuse. Test-only. CNAEXT. */
+        CNAEXT [[nodiscard]] std::size_t GetSamplerCacheSizeEXT() const
+        {
+            return samplerCache_.size();
+        }
         /** @brief Number of cached stock colored-3D pipelines. Test-only pipeline-static
          * rasterizer-state introspection for REMED-GFX-051. CNAEXT. */
         CNAEXT [[nodiscard]] std::size_t GetColoredPipelineCacheSizeEXT() const
@@ -3416,10 +3423,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         // format vs. render-target R8G8B8A8_UNORM), unlike Phases 1-7 where sprites only ever
         // targeted the swapchain.
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> spritePipelines_;
-        /// REMED-GFX-170 / plans/plan_fx.md FX-091: keyed on the complete sampler description as a
-        /// struct with member-wise equality, so two states that differ in ANY component get their
-        /// own native sampler and no field can be silently truncated out of the key.
-        std::unordered_map<SamplerCacheKeyEXT, SDL_GPUSampler*, SamplerCacheKeyHashEXT> samplerCache_;
+        struct CachedSamplerEXT
+        {
+            SDL_GPUSampler* sampler = nullptr;
+            std::uint64_t lastUse = 0;
+        };
+        /// REMED-GFX-170 / FX-091: complete immutable-sampler identity. SDLGPU-126 adds bounded
+        /// cross-frame LRU retention: arbitrary ordinary SamplerState values must not retain one
+        /// native object each until GraphicsDevice destruction.
+        std::unordered_map<SamplerCacheKeyEXT, CachedSamplerEXT, SamplerCacheKeyHashEXT> samplerCache_;
+        std::uint64_t samplerCacheUseSerial_ = 0;
         SDL_GPUBuffer* spriteVertexBuffer_ = nullptr;
         Uint32 spriteVertexCapacityBytes_ = 0;
         std::vector<SpriteCommand> spriteCommands_;

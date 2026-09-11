@@ -122,6 +122,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_Smoke PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # SDLGPU-126: immutable native samplers are cached for cross-frame reuse, but ordinary
+    # SamplerState values are unrestricted. Keep the cache bounded and prove an evicted state can
+    # be recreated after the recording that used its old handle has submitted.
+    cna_sdlgpu_test(cna_test_sdlgpu_sampler_cache
+        ${CMAKE_SOURCE_DIR}/modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/SdlGpuSamplerCacheTests.cpp)
+    target_link_libraries(cna_test_sdlgpu_sampler_cache PRIVATE gtest_main)
+    cna_register_renderer_test(NAME SdlGpu_SamplerCacheLifetime
+        COMMAND cna_test_sdlgpu_sampler_cache
+        TIMEOUT 180 LABELS "SdlGpu;Parity"
+        ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_SamplerCacheLifetime PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # SDLGPU-101: exercise the real public GraphicsDevice path without a window or swapchain.
     # This is a routine Vulkan CTest on Linux; the same executable/command is also the portable
     # D3D12 probe run through the repository's isolated Wine/vkd3d launcher.
