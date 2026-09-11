@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Phone/Notification/HttpNotificationChannel.hpp"
 
 #include <algorithm>

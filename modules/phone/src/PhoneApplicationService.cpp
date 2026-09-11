@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Phone/Shell/PhoneApplicationService.hpp"
 
 #include "Microsoft/Xna/Framework/Game.hpp"
