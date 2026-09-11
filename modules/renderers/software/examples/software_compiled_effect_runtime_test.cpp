@@ -2852,6 +2852,32 @@ namespace
         }
     }
 
+    void CheckCompiledPixelShaderModel20OpcodeValidation(SoftwareRenderer& renderer)
+    {
+        using Opcode = CNA::TestSupport::SyntheticInvalidPixelShaderModel20Opcode;
+        constexpr std::array opcodes{
+            Opcode::Defb, Opcode::Defi, Opcode::Rep, Opcode::If,
+            Opcode::Dsx, Opcode::Dsy, Opcode::Setp,
+        };
+        for (const Opcode opcode : opcodes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderModel20InvalidOpcode = opcode;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected, "compiled Effect parser accepted a later-profile opcode in ps_2_0");
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4635,6 +4661,7 @@ int main()
         CheckCompiledVertexOnlyAndExpValidation(renderer);
         CheckCompiledPixelShaderModel1OpcodeValidation(renderer);
         CheckCompiledVertexShaderModel1OpcodeValidation(renderer);
+        CheckCompiledPixelShaderModel20OpcodeValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();

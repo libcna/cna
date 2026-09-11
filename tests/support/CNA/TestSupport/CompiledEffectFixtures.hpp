@@ -291,6 +291,27 @@ namespace CNA::TestSupport
         Defi,
     };
 
+    /** @brief Later-profile pixel opcode deliberately emitted in a ps_2_0 program. */
+    enum class SyntheticInvalidPixelShaderModel20Opcode
+    {
+        /** @brief Emit no deliberately invalid opcode. */
+        None,
+        /** @brief Emit `DEFB`. */
+        Defb,
+        /** @brief Emit `DEFI`. */
+        Defi,
+        /** @brief Emit `REP`/`ENDREP`. */
+        Rep,
+        /** @brief Emit `IF`/`ENDIF`. */
+        If,
+        /** @brief Emit `DSX`. */
+        Dsx,
+        /** @brief Emit `DSY`. */
+        Dsy,
+        /** @brief Emit `SETP`. */
+        Setp,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -479,6 +500,9 @@ namespace CNA::TestSupport
         /// Emits the selected later-profile vertex opcode in a vs_1_1 program.
         SyntheticInvalidVertexShaderModel1Opcode vertexShaderModel1InvalidOpcode =
             SyntheticInvalidVertexShaderModel1Opcode::None;
+        /// Emits the selected later-profile pixel opcode in a ps_2_0 program.
+        SyntheticInvalidPixelShaderModel20Opcode pixelShaderModel20InvalidOpcode =
+            SyntheticInvalidPixelShaderModel20Opcode::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -558,7 +582,9 @@ namespace CNA::TestSupport
         bool usesInvalidSge = false,
         bool usesInvalidExpSwizzle = false,
         SyntheticInvalidPixelShaderModel1Opcode shaderModel1InvalidOpcode =
-            SyntheticInvalidPixelShaderModel1Opcode::None)
+            SyntheticInvalidPixelShaderModel1Opcode::None,
+        SyntheticInvalidPixelShaderModel20Opcode shaderModel20InvalidOpcode =
+            SyntheticInvalidPixelShaderModel20Opcode::None)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -826,6 +852,55 @@ namespace CNA::TestSupport
                 case SyntheticInvalidPixelShaderModel1Opcode::Dsx: appendVector(0x0000005Bu); break;
                 case SyntheticInvalidPixelShaderModel1Opcode::Dsy: appendVector(0x0000005Cu); break;
                 case SyntheticInvalidPixelShaderModel1Opcode::None: break;
+            }
+        }
+
+        if (shaderModel20InvalidOpcode != SyntheticInvalidPixelShaderModel20Opcode::None)
+        {
+            switch (shaderModel20InvalidOpcode)
+            {
+                case SyntheticInvalidPixelShaderModel20Opcode::Defb:
+                    AppendUInt32(shader, 0x0000002Fu | (2u << 24)); // defb b0, true
+                    AppendUInt32(shader, destination(regConstBool, 0, 0xFu));
+                    AppendUInt32(shader, 1u);
+                    break;
+                case SyntheticInvalidPixelShaderModel20Opcode::Defi:
+                    AppendUInt32(shader, 0x00000030u | (5u << 24)); // defi i0, 1, 0, 1, 0
+                    AppendUInt32(shader, destination(regConstInt, 0, 0xFu));
+                    AppendUInt32(shader, 1u);
+                    AppendUInt32(shader, 0u);
+                    AppendUInt32(shader, 1u);
+                    AppendUInt32(shader, 0u);
+                    break;
+                case SyntheticInvalidPixelShaderModel20Opcode::Rep:
+                    AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
+                    AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                    AppendUInt32(shader, 0x00000027u); // endrep
+                    break;
+                case SyntheticInvalidPixelShaderModel20Opcode::If:
+                    AppendUInt32(shader, 0x00000028u | (1u << 24)); // if b0
+                    AppendUInt32(shader, source(regConstBool, 0, 0x00u));
+                    AppendUInt32(shader, 0x0000002Bu); // endif
+                    break;
+                case SyntheticInvalidPixelShaderModel20Opcode::Dsx:
+                case SyntheticInvalidPixelShaderModel20Opcode::Dsy:
+                    AppendUInt32(
+                        shader,
+                        (shaderModel20InvalidOpcode == SyntheticInvalidPixelShaderModel20Opcode::Dsx
+                             ? 0x0000005Bu
+                             : 0x0000005Cu) |
+                            (2u << 24));
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regConst, 0));
+                    break;
+                case SyntheticInvalidPixelShaderModel20Opcode::Setp:
+                    AppendUInt32(shader,
+                                 0x0000005Eu | (1u << 16) | (3u << 24)); // setp_gt p0, c0.x, c0.y
+                    AppendUInt32(shader, destination(regPredicate, 0, 0xFu));
+                    AppendUInt32(shader, source(regConst, 0, 0x00u));
+                    AppendUInt32(shader, source(regConst, 0, 0x55u));
+                    break;
+                case SyntheticInvalidPixelShaderModel20Opcode::None: break;
             }
         }
 
@@ -2536,7 +2611,8 @@ namespace CNA::TestSupport
             options.pixelShaderUsesInvalidSlt,
             options.pixelShaderUsesInvalidSge,
             options.pixelShaderUsesInvalidExpSwizzle,
-            options.pixelShaderModel1InvalidOpcode);
+            options.pixelShaderModel1InvalidOpcode,
+            options.pixelShaderModel20InvalidOpcode);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
