@@ -397,6 +397,14 @@ namespace CNA::TestSupport
         /// Emits an otherwise well-formed pixel `SGN`; D3D9 exposes this opcode only to vertex
         /// shaders, so shared parser validation must reject it.
         bool pixelShaderUsesInvalidSgn = false;
+        /// Emits an otherwise well-formed pixel `EXPP`; D3D9 exposes this opcode only to vertex
+        /// shaders, so shared parser validation must reject it.
+        bool pixelShaderUsesInvalidExpp = false;
+        /// Emits an otherwise well-formed pixel `LOGP`; D3D9 exposes this opcode only to vertex
+        /// shaders, so shared parser validation must reject it.
+        bool pixelShaderUsesInvalidLogp = false;
+        /// Emits a vertex `EXPP` with an identity rather than replicate source swizzle.
+        bool vertexShaderUsesInvalidExppSwizzle = false;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -468,7 +476,9 @@ namespace CNA::TestSupport
         bool readsUninitializedDestination = false,
         bool texkillReadsPartialTemporary = false,
         bool texkillReadsSplitTemporary = false,
-        bool usesInvalidSgn = false)
+        bool usesInvalidSgn = false,
+        bool usesInvalidExpp = false,
+        bool usesInvalidLogp = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -664,6 +674,14 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 0));
             AppendUInt32(shader, source(regTemp, 1));
             AppendUInt32(shader, source(regTemp, 2));
+        }
+
+        if (usesInvalidExpp || usesInvalidLogp)
+        {
+            const std::uint32_t opcode = usesInvalidExpp ? 0x0000004Eu : 0x0000004Fu;
+            AppendUInt32(shader, opcode | (2u << 24));
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 0, 0x00u));
         }
 
         if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic)
@@ -1407,7 +1425,8 @@ namespace CNA::TestSupport
                                                                 bool usesShaderModel11ExtendedInputs = false,
                                                                 bool usesLegacyExpp = false,
                                                                 SyntheticSgnScratchOperands sgnScratchOperands =
-                                                                    SyntheticSgnScratchOperands::None)
+                                                                    SyntheticSgnScratchOperands::None,
+                                                                bool usesInvalidExppSwizzle = false)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp;
@@ -1704,6 +1723,12 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regInput, 0));
             AppendUInt32(shader, source(scratchType, nonTemporary ? 0u : 1u));
             AppendUInt32(shader, source(scratchType, nonTemporary ? 1u : secondScratch));
+        }
+        if (usesInvalidExppSwizzle)
+        {
+            AppendUInt32(shader, 0x0000004Eu | (2u << 24)); // expp r1, c0.xyzw
+            AppendUInt32(shader, destination(regTemp, 1));
+            AppendUInt32(shader, source(regConst, 0));
         }
         if (readsSecondStream)
         {
@@ -2267,7 +2292,9 @@ namespace CNA::TestSupport
             options.pixelShaderReadsUninitializedDestination,
             options.pixelShaderTexkillReadsPartialTemporary,
             options.pixelShaderTexkillReadsSplitTemporary,
-            options.pixelShaderUsesInvalidSgn);
+            options.pixelShaderUsesInvalidSgn,
+            options.pixelShaderUsesInvalidExpp,
+            options.pixelShaderUsesInvalidLogp);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -2340,7 +2367,8 @@ namespace CNA::TestSupport
                 options.vertexShaderUsesShaderModel11Input,
                 options.vertexShaderUsesShaderModel11ExtendedInputs,
                 options.vertexShaderUsesLegacyExpp,
-                options.vertexShaderSgnScratchOperands);
+                options.vertexShaderSgnScratchOperands,
+                options.vertexShaderUsesInvalidExppSwizzle);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

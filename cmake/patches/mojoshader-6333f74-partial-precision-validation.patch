@@ -1,0 +1,30 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1714,6 +1714,12 @@ static void state_LOG(Context *ctx)
+         fail(ctx, "LOG src0 must have replicate swizzle");
+ } // state_LOG
+ 
++static void state_EXPP(Context *ctx)
++{
++    if (!replicate_swizzle(ctx->source_args[0].swizzle))
++        fail(ctx, "EXPP src0 must have replicate swizzle");
++} // state_EXPP
++
+ static void state_LOGP(Context *ctx)
+ {
+     if (!replicate_swizzle(ctx->source_args[0].swizzle))
+diff --git a/mojoshader_internal.h b/mojoshader_internal.h
+--- a/mojoshader_internal.h
++++ b/mojoshader_internal.h
+@@ -752,8 +752,8 @@ INSTRUCTION(RESERVED, 0, 0, NULL, MOJOSHADER_TYPE_UNKNOWN, 0xF)
+ INSTRUCTION(RESERVED, 0, 0, NULL, MOJOSHADER_TYPE_UNKNOWN, 0xF)
+ INSTRUCTION_STATE(TEXM3X3SPEC, "TEXM3X3SPEC", 1, DSS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(TEXM3X3VSPEC, "TEXM3X3VSPEC", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+-INSTRUCTION(EXPP, "EXPP", 1, DS, MOJOSHADER_TYPE_ANY, 0xF)
+-INSTRUCTION_STATE(LOGP, "LOGP", 1, DS, MOJOSHADER_TYPE_ANY, 0xF)
++INSTRUCTION_STATE(EXPP, "EXPP", 1, DS, MOJOSHADER_TYPE_VERTEX, 0xF)
++INSTRUCTION_STATE(LOGP, "LOGP", 1, DS, MOJOSHADER_TYPE_VERTEX, 0xF)
+ INSTRUCTION_STATE(CND, "CND", 1, DSSS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(DEF, "DEF", 0, DEF, MOJOSHADER_TYPE_ANY, 0xF)
+ INSTRUCTION_STATE(TEXREG2RGB, "TEXREG2RGB", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)

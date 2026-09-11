@@ -2735,6 +2735,35 @@ namespace
         expectRejected("compiled Effect parser accepted pixel-shader SGN");
     }
 
+    void CheckCompiledPartialPrecisionOpcodeValidation(SoftwareRenderer& renderer)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        const auto expectRejected = [&renderer, &options](const char* message)
+        {
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected, message);
+        };
+
+        options.pixelShaderUsesInvalidExpp = true;
+        expectRejected("compiled Effect parser accepted pixel-shader EXPP");
+        options.pixelShaderUsesInvalidExpp = false;
+        options.pixelShaderUsesInvalidLogp = true;
+        expectRejected("compiled Effect parser accepted pixel-shader LOGP");
+        options.pixelShaderUsesInvalidLogp = false;
+        options.vertexShaderUsesInvalidExppSwizzle = true;
+        expectRejected("compiled Effect parser accepted EXPP without a replicate source swizzle");
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4514,6 +4543,7 @@ int main()
         CheckCompiledUninitializedTemporaryValidation(renderer);
         CheckCompiledTexkillTemporaryValidation(renderer);
         CheckCompiledSgnValidation(renderer);
+        CheckCompiledPartialPrecisionOpcodeValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();

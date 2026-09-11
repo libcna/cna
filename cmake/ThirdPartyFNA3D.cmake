@@ -71,7 +71,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-vs11-expp.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-temp-self-read-validation.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texkill-temp-components.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sgn-validation.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sgn-validation.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-partial-precision-validation.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 
