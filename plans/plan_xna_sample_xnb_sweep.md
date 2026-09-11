@@ -424,19 +424,20 @@ could read, none. Its two references were the floor of that class until
 which file the run that produced them selected; a build-unit description now says
 so and they are built.
 
-### 11.2 The sweep, run 64 (2026-09-11)
+### 11.2 The sweep, run 66 (2026-09-11)
 
-Printed by `python3 tools/xna-sample-sweep/status_table.py run42 run57 run59 run64`;
-nothing below is typed. Run 42 is the last run of the session before the previous
-one, 57 and 59 the two clean sweeps that closed it, and **run 64 is a clean full
-sweep of all 433 build units** with every rule of this session in the binary.
+Printed by `python3 tools/xna-sample-sweep/status_table.py run57 run59 run64 run66`;
+nothing below is typed. Runs 57 and 59 are the two clean sweeps that closed the
+previous session, and **runs 64 and 66 are clean full sweeps of all 433 build
+units**, 64 with this session's first six rules in the binary and **66 with all
+of them**.
 
-| | run42 | run57 | run59 | run64 |
+| | run57 | run59 | run64 | run66 |
 |---|---:|---:|---:|---:|
-| byte-identical | 4192 | 4325 | 4325 | 4332 |
-| differing | 1632 | 1574 | 1574 | 1567 |
-| missing (CNA produced nothing) | 1871 | 1806 | 1806 | 1806 |
-| build units that finished | 168 | 260 | 260 | 260 |
+| byte-identical | 4325 | 4325 | 4332 | 4337 |
+| differing | 1574 | 1574 | 1567 | 1562 |
+| missing (CNA produced nothing) | 1806 | 1806 | 1806 | 1806 |
+| build units that finished | 260 | 260 | 260 | 260 |
 
 Runs 57, 59 and 64 are **clean full sweeps** rather than splices: 433 build units
 rebuilt from nothing. **Run 64 moves thirteen references and not one of them backwards**, checked
@@ -449,7 +450,16 @@ under a mechanism `XNASWEEP-227` names rather than under a threshold. No
 reference left `IDENTICAL`, and none moved to a worse class. `UNEXPLAINED` goes
 from eight to **zero**.
 
-**Run 65 is run 64's build re-read by a corrected classifier, and every total is
+**Run 66 moves five, all the same way**, checked the same way against run 65:
+SAMPLE-046's `spaceship.xnb`, one model built five ways, goes
+`SEMANTICALLY_IDENTICAL` -> `IDENTICAL` (`XNASWEEP-237`). That is the whole
+difference between the two runs -- `IDENTICAL` 4,332 to **4,337** -- and it is
+what came of *naming* the references in a class rather than counting them: the
+five were the last whose difference had no mechanism written down, and reading
+their two differing bytes found a subnormal `std::stod` refused and a root that
+did not divide by its parent. Nothing else moved in either direction.
+
+**Run 65 is run 64's build re-read by a corrected classifier, and every total was
 the same.** Auditing the classes reference by reference rather than by their
 totals found two references that had been counted `ACCEPTED_DIFFERENCE` while
 nothing at all had been compared for them -- `classify.py` was answering
@@ -579,16 +589,16 @@ ship, so four units failed to build. `XNASWEEP-175` is what finally explained it
 
 `taxonomy.py` puts all 7,726 into one class each, with the reason beside it.
 
-| class | run42 | run57 | run59 | run64 |
+| class | run57 | run59 | run64 | run66 |
 |---|---:|---:|---:|---:|
-| `IDENTICAL` | 4192 | 4325 | 4325 | 4332 |
-| `SEMANTICALLY_IDENTICAL` | 761 | 751 | 751 | 752 |
-| `ACCEPTED_DIFFERENCE` | 851 | 815 | 815 | 815 |
-| `CUSTOM_PIPELINE_GAP` | 1763 | 1797 | 1797 | 1797 |
-| `ENVIRONMENT_GAP` | 15 | 9 | 9 | 9 |
-| `CORPUS_GAP` | 103 | 0 | 0 | 0 |
+| `IDENTICAL` | 4325 | 4325 | 4332 | **4337** |
+| `SEMANTICALLY_IDENTICAL` | 751 | 751 | 752 | 747 |
+| `ACCEPTED_DIFFERENCE` | 815 | 815 | 815 | 815 |
+| `CUSTOM_PIPELINE_GAP` | 1797 | 1797 | 1797 | 1797 |
+| `ENVIRONMENT_GAP` | 9 | 9 | 9 | 9 |
+| `CORPUS_GAP` | 0 | 0 | 0 | **0** |
 | `REFERENCE_REMOVED` | 21 | 21 | 21 | 21 |
-| `UNEXPLAINED` | 20 | 8 | 8 | 0 |
+| `UNEXPLAINED` | 8 | 8 | 0 | **0** |
 | **total** | 7726 | 7726 | 7726 | 7726 |
 
 **The accepted differences, and what proves each of them.**
@@ -614,9 +624,9 @@ target rather than only its audio.
 
 ### 11.3.1 What is still unexplained
 
-**Nothing. `UNEXPLAINED` is zero**, on run 64, a clean sweep of all 433 build
-units. The two mechanisms that class held are closed, and each is a measured rule
-rather than a widened tolerance:
+**Nothing. `UNEXPLAINED` is zero**, on run 66, a clean sweep of all 433 build
+units -- and on run 64 before it. The two mechanisms that class held are closed,
+and each is a measured rule rather than a widened tolerance:
 
 * SAMPLE-141's two `xwing` references are **byte-identical**. `XNASWEEP-231`
   found the generated `.x` normal's arithmetic by probing its three stages one at
@@ -638,13 +648,25 @@ Two more references left the differing set with them: `XNASWEEP-234` found that
 way `Vector3::Normalize` does, which took SAMPLE-041's four `terrain` references
 to byte-identical and SAMPLE-055's and SAMPLE-074's from 1.79e-07 to 1.19e-07.
 
+**And the class below it is now named too, not just counted.** `XNASWEEP-236`
+and `XNASWEEP-237` came out of walking `SEMANTICALLY_IDENTICAL` and
+`ACCEPTED_DIFFERENCE` reference by reference and asking what each one's
+difference *is*: two references were sitting in the accepted class with nothing
+compared at all, and five were the last whose difference had no mechanism -- two
+bytes, a signed zero, an exporter's malformed `Lcl Rotation` and a `std::stod`
+that reads a subnormal as a corrupt file. All seven are closed, five of them into
+`IDENTICAL`.
+
 **What is under the tolerance, and whether the tolerance hides anything**, is
 `XNASWEEP-227`: eighteen references, two mechanisms, every one named -- and
-thirty-six mutations of the very floats the classifier compared, all of them seen.
+thirty-six mutations of the very floats the classifier compared, all of them
+seen. What is under `payload-identical` is `semantic_mutation.py`, which changes
+a byte of CNA's side and asks again, and which re-derives the claim itself by
+decompressing both payloads rather than believing the tool that made it.
 
 ### 11.4 The read-only roots, re-audited 2026-09-11 (sixth pass)
 
-**Run 64's sweep wrote nothing into either root.** Every corpus reference still
+**Runs 64 and 66 wrote nothing into either root.** Every corpus reference still
 on disk hashes to the `sha256` `corpus_inventory.py` froze it with -- 7,705
 identical, 0 changed, 21 missing of 7,726, the same prune §11.4.3 itemises,
 re-checked after the session's last build as well as before its first -- and
@@ -658,17 +680,19 @@ at all.
 
 | run | result |
 |---|---|
-| `CnaContentPipelineTests` | **480 / 480**, no skips, exit 0 -- with the four new rules' tests and the sixteen new fixtures in it. |
+| `CnaContentPipelineTests` | **481 / 481**, no skips, exit 0 -- with the session's rules' tests and its eighteen new fixtures in it. |
 | `CnaContentTests` | 1,806 run, **1,792 passed**, 9 skipped, **5 failed** -- exactly the five `HEADLESS` `Cnb`/`Cnj` texture-cube and `Texture3D` failures §33.1 of `plan_xnapipeline_parity.md` names, and no others. |
 | `CnaMathTests` | **850 / 850**. |
 | `CnaGraphicsTests` | 2,345 run, **2,101 passed**, 243 skipped, **1 failed** -- `OcclusionQueryPixelCountPrecisionTest.PixelCountMatchesWhatTheQuerySaysItIs`, which asks the `HEADLESS` renderer for a backbuffer readback. Pre-existing and environmental rather than this session's: the refusal it hits was written on 2026-08-10 and the test on 2026-08-27, and the only file this session changed under `modules/graphics/` is `DxtUtil.cpp`. Its neighbours in the same directory skip for that reason; this one throws, which is a missing guard in a test and nothing to do with the pipeline. |
-| `provenance_gate.py` | 10,718 tracked files, 4,259 production sources, 267 corpus fixtures, **0 findings** -- the sixteen fixtures this session added have their rows. |
+| `provenance_gate.py` | 10,721 tracked files, 4,259 production sources, 269 corpus fixtures, **0 findings** -- the eighteen fixtures this session added have their rows. |
 | `dependency_boundary.py` | **holds**: 4 build-time-only nodes, none reachable from the runtime archives, no strong symbol shared. |
-| `accepted_audit.py` | **815 proved, 0 violations, 0 unmatched**, run against run 65's classification -- and the same tool run against run 64's record exits **1** and names the two references `XNASWEEP-236` found, which is what says the check is a check. |
+| `accepted_audit.py` | **815 proved, 0 violations, 0 unmatched**, run against run 66's classification -- and the same tool run against run 64's record exits **1** and names the two references `XNASWEEP-236` found, which is what says the check is a check. |
+| `tolerance_mutation.py` | 18 references, **36 mutations, 0 still inside the tolerance** (`XNASWEEP-227`). |
+| `semantic_mutation.py` | 729 references, **2,916 mutations, 2,916 seen, 0 holes** -- and all 729 `payload-identical` claims re-derived here by decompressing both sides, 729 of 729 equal (`XNASWEEP-236`). |
 | the frozen references | **7,705 identical, 0 changed, 21 missing of 7,726**. |
 | both read-only roots | **0 files written**, §11.4 above. |
 | `git diff --check` | clean. |
-| the corpus | run 64: `sweep.py` -> `report.py` over all 433 build units, from an empty output tree; then run 65's `classify.py` -> `taxonomy.py` -> `accepted_audit.py` over all 7,726 references, from that same output tree. |
+| the corpus | run 66: `sweep.py` -> `classify.py` -> `taxonomy.py` -> `accepted_audit.py` over all 433 build units and all 7,726 references, from an emptied output tree and a binary frozen from the commit. |
 
 ### 11.4.0 The fifth pass, 2026-09-10
 
@@ -812,15 +836,32 @@ sequence every time.
 Nothing on this list can be started from a total; each names the measurement it
 needs first.
 
-1. **The signs of the zeros a generated `.x` normal carries.** `XNASWEEP-231`
-   reproduces 1,290 of 1,291 probe normals and 1,293 of `xwing.x`'s 1,293
-   positions bit for bit; what is left is thirteen probe normals and one fixture
-   normal that differ in the sign of a zero and in nothing else -- the genuine
-   importer answers `-0` in Z where a sum that starts at `+0` cannot. No corpus
-   reference carries one, so it is a probe-only residue. The measurement it needs
-   is a probe family whose vertices are shared by faces whose normals cancel
-   along one axis, so the accumulation's own starting sign is observable rather
-   than inferred.
+1. **The signs of the zeros a generated `.x` normal carries**, and this pass
+   narrowed it from a residue to a named mechanism without closing it.
+   `XNASWEEP-231` reproduces 1,290 of 1,291 probe normals and 1,293 of
+   `xwing.x`'s 1,293 positions bit for bit; what is left is thirteen probe
+   normals and one fixture normal that differ in the sign of a zero and in
+   nothing else. **Which fixture normal it is**, measured by running the genuine
+   oracle in `CNA_MODEL_ORACLE_BITS=1` over the whole committed fixture set and
+   comparing every 3-vector both sides print: `generated_normals.x`, one of its
+   eight, `(0x00000000, 0xBF800000, 0x80000000)` against CNA's
+   `(0x00000000, 0xBF800000, 0x00000000)` -- `(0, -1, -0)` against `(0, -1, +0)`.
+   **And where that `-0` comes from** is almost certainly not the accumulation at
+   all: it is `XNASWEEP-170`'s basis matrix,
+   `[[1, +0, -0], [+0, 1, +0], [-0, +0, -1]]`, whose third column takes
+   `0 * -0`, `-1 * +0` and `0 * -1` -- three negative zeros, which sum to a
+   negative one. A *declared* normal of `(0, -1, 0)` already comes back with `-0`
+   in Z for exactly that reason (`x_basis_signed_zero.x`), and a **generated**
+   one does not go through the matrix in CNA, because CNA generates it from
+   positions the importer has already converted. The rule that would close it is
+   therefore "generate in the file's own space and convert the result", and it is
+   **not** implemented here on purpose: converting the cross product is not the
+   cross product of the converted positions, so the change would move the
+   rounding of every generated normal in the corpus, and the form now in
+   production is the one that answers 1,290 of 1,291. What it needs before it can
+   land is the probe family that separates the two orders on *magnitudes* --
+   triangles whose Z coordinates do not negate exactly -- not another reading of
+   the zeros.
 
 2. **What is left of the FBX residue.** `XNASWEEP-228`--`XNASWEEP-232` take
    SAMPLE-142's thirteen models from 3,049 differing bone elements to 597, and
@@ -854,12 +895,14 @@ for this campaign, and all 7,726 still match the digest it froze them with. The
 number was 7,734 until `XNASWEEP-132` found eight of them were MonoGame's output
 rather than XNA's and the inventory stopped counting them.
 
-**The answer, at run 64.** **4,332** of them are byte for byte what CNA's product
+**The answer, at run 66.** **4,337** of them are byte for byte what CNA's product
 pipeline produces from the same source, up from 922 when the sweep first ran and
-3,879 at run 25. Another **752** differ only in ways nothing a runtime does can
-see -- 729 in the LZX stream alone, 5 that the independent parser reads to the
-same values, and 18 whose numbers agree to between 1.94e-16 and 3.89e-07 of the
-larger magnitude, every one of them owned by a mechanism `XNASWEEP-227` names.
+3,879 at run 25. Another **747** differ only in ways nothing a runtime does can
+see -- 729 in the LZX stream alone, and 18 whose numbers agree to between
+1.94e-16 and 3.89e-07 of the larger magnitude, every one of them owned by a
+mechanism `XNASWEEP-227` names. Neither class is taken on trust: 36 mutations of
+the floats the tolerance judged and 2,916 of the bytes the payload claim covers
+are all seen.
 **815** differ for a reason that is written down, proved field by field by
 `accepted_audit.py`, and cannot be closed from here. **1,797** need a component
 the *sample* defines and .NET loads from an assembly. **9** are this machine's
@@ -868,10 +911,10 @@ holds, and **none is unexplained**.
 
 ### 12.1 What the corpus found that one project could not
 
-**Seventy-four framework defects**, each fixed in the component that owns it,
+**Seventy-five framework defects**, each fixed in the component that owns it,
 each with its own regression test. None of them is sample-specific and none of
 them was visible from the API surface, the differential corpus, or Platformer.
-Thirty-six of them were found by run 25; the rest by the five passes after it,
+Thirty-six of them were found by run 25; the rest by the six passes after it,
 and those are the second table:
 
 | | |
@@ -934,6 +977,7 @@ than noise:
 | `XNASWEEP-224` | A DXT `.dds` is imported at its size rounded up to a whole number of blocks. |
 | `XNASWEEP-234` | `MeshHelper.TransformScene` normalizes wide and divides, which `Vector3::Normalize` does not. |
 | `XNASWEEP-235` | A batch joins whichever vertex buffer already carries its declaration. |
+| `XNASWEEP-237` | A subnormal is a number `std::stod` refuses, and a root divides by its parent too. |
 
 Two of the sweep's own findings were about the *measurement* rather than the
 thing measured, and both mattered: `XNASWEEP-021/041/042` established that 89 of
@@ -1014,11 +1058,13 @@ saying which kind each piece is.
    in §11 is a full re-measurement because a cached one has twice been wrong
    (`XNASWEEP-208`, `XNASWEEP-226`). That is the right trade, and it is also why
    a pass costs what it does.
-9. **The classes are only as good as the audits under them**, and two of the
-   three now have one that fails: `accepted_audit.py` over every accepted
-   reference's fields, and `tolerance_mutation.py` over the float threshold. The
-   third, `payload-identical`, has no mutation test yet -- its claim (the
-   decompressed payloads are byte-equal) is the strongest of the three and the
-   cheapest to check, and it should still be checked. `XNASWEEP-236` is what a
-   missing audit costs: two references sat in `ACCEPTED_DIFFERENCE` for six runs
-   with nothing behind them.
+9. **The classes are only as good as the audits under them**, and all three now
+   have one that can fail: `accepted_audit.py` over every accepted reference's
+   fields, `tolerance_mutation.py` over the float threshold, and
+   `semantic_mutation.py` over `payload-identical` -- which also re-derives that
+   claim by decompressing both payloads itself rather than believing the tool
+   that made it. `XNASWEEP-236` is what a missing audit costs: two references sat
+   in `ACCEPTED_DIFFERENCE` for six runs with nothing behind them, and the audit
+   that should have caught them called them proved because there was nothing to
+   disprove. What is still owed is making the three of them a single step of the
+   recipe rather than three things a session has to remember.

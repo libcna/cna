@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import concurrent.futures
 import json
 import os
 import shutil
@@ -82,12 +83,40 @@ def payload_equal(reference, mine):
         return "unreadable: %s" % type(error).__name__
 
 
+def one_reference(job):
+    """Every mutation of one reference, as (mutations, holes, payloads-that-are-not-equal)."""
+    kind, reference, mine = job
+    if not os.path.exists(mine) or not os.path.exists(reference):
+        return 0, [(kind, reference, "one side is not on disk")], []
+    wrong = []
+    if kind == "payload-identical":
+        verdict = payload_equal(reference, mine)
+        if verdict is not True:
+            wrong.append((reference, verdict))
+    with open(mine, "rb") as handle:
+        original = handle.read()
+    scratch = tempfile.mkdtemp(prefix="xnasweep-semantic-")
+    holes, done = [], 0
+    try:
+        copy = os.path.join(scratch, "mutated.xnb")
+        for at in positions(len(original)):
+            with open(copy, "wb") as handle:
+                handle.write(mutate(original, at))
+            done += 1
+            if reclassify(reference, copy) == kind:
+                holes.append((kind, reference, "byte %d changed and it is still %s" % (at, kind)))
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    return done, holes, wrong
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--classified", required=True)
     parser.add_argument("--limit", type=int, default=12,
                         help="references per kind (0 for all)")
     parser.add_argument("--kinds", default=",".join(KINDS))
+    parser.add_argument("--jobs", type=int, default=8)
     args = parser.parse_args(argv)
 
     wanted = tuple(one.strip() for one in args.kinds.split(",") if one.strip())
@@ -104,38 +133,20 @@ def main(argv=None):
 
     mutations = detected = 0
     holes, unequal = [], []
-    scratch = tempfile.mkdtemp(prefix="xnasweep-semantic-")
-    try:
-        for kind in wanted:
-            chosen = by_kind.get(kind, [])
-            if args.limit:
-                chosen = chosen[:args.limit]
-            print("=== %s: %d of %d reference(s) ===" % (kind, len(chosen), len(by_kind.get(kind, []))))
-            for reference, mine in chosen:
-                if not os.path.exists(mine) or not os.path.exists(reference):
-                    holes.append((kind, reference, "one side is not on disk"))
-                    continue
-                # The claim itself, re-derived, for the one kind that states a byte equality.
-                if kind == "payload-identical":
-                    verdict = payload_equal(reference, mine)
-                    if verdict is not True:
-                        unequal.append((reference, verdict))
-                with open(mine, "rb") as handle:
-                    original = handle.read()
-                copy = os.path.join(scratch, "mutated.xnb")
-                for at in positions(len(original)):
-                    with open(copy, "wb") as handle:
-                        handle.write(mutate(original, at))
-                    mutations += 1
-                    after = reclassify(reference, copy)
-                    if after == kind:
-                        holes.append((kind, reference,
-                                      "byte %d changed and it is still %s" % (at, kind)))
-                    else:
-                        detected += 1
-            print("  %d mutation(s) so far, %d seen" % (mutations, detected))
-    finally:
-        shutil.rmtree(scratch, ignore_errors=True)
+    for kind in wanted:
+        chosen = by_kind.get(kind, [])
+        if args.limit:
+            chosen = chosen[:args.limit]
+        print("=== %s: %d of %d reference(s) ===" % (kind, len(chosen), len(by_kind.get(kind, []))),
+              flush=True)
+        jobs = [(kind, reference, mine) for reference, mine in chosen]
+        with concurrent.futures.ProcessPoolExecutor(max_workers=args.jobs) as pool:
+            for done, bad, wrong in pool.map(one_reference, jobs, chunksize=2):
+                mutations += done
+                detected += done - len(bad)
+                holes += bad
+                unequal += wrong
+        print("  %d mutation(s) so far, %d seen" % (mutations, detected), flush=True)
 
     print()
     print("=== %d mutation(s), %d seen, %d hole(s) ===" % (mutations, detected, len(holes)))
