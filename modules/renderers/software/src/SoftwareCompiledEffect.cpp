@@ -310,6 +310,37 @@ namespace CNA::Internal::Renderers::Software
 
             if (!foundEnd)
                 throw std::runtime_error("Software compiled effect: shader has no END token.");
+            if (result.stage == SoftwareShaderStageEXT::Pixel)
+            {
+                for (unsigned int symbolIndex = 0; symbolIndex < parseData.symbol_count;
+                     ++symbolIndex)
+                {
+                    const MOJOSHADER_symbol& symbol = parseData.symbols[symbolIndex];
+                    if (symbol.register_set != MOJOSHADER_SYMREGSET_SAMPLER)
+                        continue;
+                    SoftwareShaderSamplerTypeEXT type = SoftwareShaderSamplerTypeEXT::Unknown;
+                    if (symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER2D)
+                        type = SoftwareShaderSamplerTypeEXT::Texture2D;
+                    else if (symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER3D)
+                        type = SoftwareShaderSamplerTypeEXT::Volume;
+                    else if (symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLERCUBE)
+                        type = SoftwareShaderSamplerTypeEXT::Cube;
+                    if (type == SoftwareShaderSamplerTypeEXT::Unknown ||
+                        symbol.register_index >= 16u)
+                        continue;
+                    const auto declaration = std::find_if(
+                        result.samplers.begin(), result.samplers.end(),
+                        [&symbol](const SoftwareShaderSamplerEXT& candidate)
+                        {
+                            return candidate.registerNumber == symbol.register_index;
+                        });
+                    if (declaration != result.samplers.end())
+                        declaration->type = type;
+                    else
+                        result.samplers.push_back(SoftwareShaderSamplerEXT{
+                            static_cast<std::uint8_t>(symbol.register_index), type});
+                }
+            }
             return result;
         }
     } // namespace

@@ -673,6 +673,15 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9LegacySampledTextureMatrix2)
     CNA::TestSupport::RunCompiledEffectLegacyTextureMatrix2Contract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9LegacySampledTextureMatrix3)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyTextureMatrix3SampleContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureComponentRemap)
 {
     GraphicsDevice device;

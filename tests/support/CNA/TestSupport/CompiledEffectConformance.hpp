@@ -1547,6 +1547,99 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Proves sampled legacy `TEXM3X3PAD`/`TEXM3X3TEX` execution and implicit LOD.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyTextureMatrix3SampleContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.samplerRegister = 3;
+        options.samplerKind = SyntheticSamplerKind::Sampler3D;
+        options.pixelShaderUsesLegacyTextureMatrix3Sample = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+            {Fx::SampAddressW, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        Texture3D texture(device, 8, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> base(512, Color::Red);
+        for (int z = 4; z < 8; ++z)
+            for (int y = 4; y < 8; ++y)
+                for (int x = 0; x < 4; ++x)
+                    base[static_cast<std::size_t>(z * 64 + y * 8 + x)] = Color::Green;
+        texture.SetData(base.data(), static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent * extent), Color::Blue);
+            texture.SetData(level, 0, 0, extent, extent, 0, extent,
+                            mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](Effect& selectedEffect, bool minify)
+        {
+            const float left = minify ? 0.0f : 0.125f;
+            const float right = minify ? 0.5f : 0.125f;
+            const Vertex vertices[6] = {
+                {-1,  1, 0, 0, 0, left}, {-1, -1, 0, 0, 0, left},
+                { 1, -1, 0, 0, 0, right}, {-1,  1, 0, 0, 0, left},
+                { 1, -1, 0, 0, 0, right}, { 1,  1, 0, 0, 0, right},
+            };
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            selectedEffect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(render(effect, /*minify=*/false), Color::Green)
+            << "constant rows must sample stage 3 at (u,v,w)=(.25,.75,.5)";
+        EXPECT_EQ(render(effect, /*minify=*/true), Color::Blue)
+            << "implicit volume LOD must use the TEXM3X3-transformed footprint";
+
+        options.samplerKind = SyntheticSamplerKind::SamplerCube;
+        Effect cubeEffect(device, BuildSyntheticEffect(options));
+        cubeEffect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        TextureCube cube(device, 2, /*mipMap=*/false, SurfaceFormat::Color);
+        for (int face = 0; face < 6; ++face)
+        {
+            const Color color = face == 2 ? Color::Yellow : Color::Red;
+            const Color texels[4] = {color, color, color, color};
+            cube.SetData(static_cast<CubeMapFace>(face), texels, 4);
+        }
+        cubeEffect.getParametersProperty()["FxTexture"]->SetValue(&cube);
+        EXPECT_EQ(render(cubeEffect, /*minify=*/false), Color::Yellow)
+            << "the transformed direction must also sample the allowed cube texture";
+    }
+
+    /**
      * @brief Proves legacy `TEXREG2AR`/`TEXREG2GB` component selection and implicit LOD.
      *
      * @param device Device whose renderer executes classic compiled Effects.
@@ -3756,6 +3849,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectShaderModel14PhaseContract` -- ps_1_4 two-phase execution
      * - `RunCompiledEffectLegacyTextureMatrixContract` -- ps_1_2 stateful matrix operations
      * - `RunCompiledEffectLegacyTextureMatrix2Contract` -- sampled ps_1_2 matrix + implicit LOD
+     * - `RunCompiledEffectLegacyTextureMatrix3SampleContract` -- sampled 3x3 + volume LOD
      * - `RunCompiledEffectLegacyTextureRemapContract` -- ps_1_2 AR/GB sampling and implicit LOD
      * - `RunCompiledEffectMultiStreamDrawContract` -- several streams, and their own offsets
      * - `RunCompiledEffectInstancingDrawContract` -- instanced draws, offsets and divisor reset

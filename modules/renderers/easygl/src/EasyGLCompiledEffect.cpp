@@ -211,7 +211,52 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             (void) ctx;
             (void) mainfn;
-            return MOJOSHADER_glCompileShader(tokenbuf, bufsize, swiz, swizcount, smap, smapcount);
+            MOJOSHADER_glShader* shader =
+                MOJOSHADER_glCompileShader(tokenbuf, bufsize, swiz, swizcount, smap, smapcount);
+            if (shader == nullptr || smapcount != 0)
+                return shader;
+
+            const MOJOSHADER_parseData* parseData = MOJOSHADER_glGetShaderParseData(shader);
+            if (parseData == nullptr || parseData->error_count != 0 ||
+                parseData->shader_type != MOJOSHADER_TYPE_PIXEL || parseData->major_ver != 1)
+                return shader;
+
+            std::vector<MOJOSHADER_samplerMap> inferred;
+            bool differs = false;
+            for (unsigned int symbolIndex = 0; symbolIndex < parseData->symbol_count;
+                 ++symbolIndex)
+            {
+                const MOJOSHADER_symbol& symbol = parseData->symbols[symbolIndex];
+                if (symbol.register_set != MOJOSHADER_SYMREGSET_SAMPLER)
+                    continue;
+                MOJOSHADER_samplerType type = MOJOSHADER_SAMPLER_UNKNOWN;
+                if (symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER ||
+                    symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER1D ||
+                    symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER2D)
+                    type = MOJOSHADER_SAMPLER_2D;
+                else if (symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER3D)
+                    type = MOJOSHADER_SAMPLER_VOLUME;
+                else if (symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLERCUBE)
+                    type = MOJOSHADER_SAMPLER_CUBE;
+                if (type == MOJOSHADER_SAMPLER_UNKNOWN)
+                    continue;
+
+                inferred.push_back({static_cast<int>(symbol.register_index), type});
+                const MOJOSHADER_sampler* parsedSampler = nullptr;
+                for (int samplerIndex = 0; samplerIndex < parseData->sampler_count;
+                     ++samplerIndex)
+                    if (parseData->samplers[samplerIndex].index ==
+                        static_cast<int>(symbol.register_index))
+                        parsedSampler = &parseData->samplers[samplerIndex];
+                differs = differs || parsedSampler == nullptr || parsedSampler->type != type;
+            }
+            if (!differs)
+                return shader;
+
+            MOJOSHADER_glDeleteShader(shader);
+            return MOJOSHADER_glCompileShader(
+                tokenbuf, bufsize, swiz, swizcount,
+                inferred.data(), static_cast<unsigned int>(inferred.size()));
         }
 
         void DeleteShaderTrampoline(const void* ctx, void* shader)

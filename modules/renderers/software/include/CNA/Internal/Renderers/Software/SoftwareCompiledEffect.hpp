@@ -149,7 +149,7 @@ namespace CNA::Internal::Renderers::Software
         /** @brief Source-register components that become the sampled u/v/w coordinates. */
         std::array<std::uint8_t, 3> coordinateComponents{0u, 1u, 2u};
         /** @brief Legacy matrix-row texture registers, or `-1` when no matrix transform applies. */
-        std::array<std::int8_t, 2> legacyMatrix2RowRegisters{-1, -1};
+        std::array<std::int8_t, 3> legacyMatrixRowRegisters{-1, -1, -1};
         /** @brief Declared sampler dimensionality. */
         SoftwareShaderSamplerTypeEXT samplerType = SoftwareShaderSamplerTypeEXT::Unknown;
         /** @brief Texture coordinates after source swizzle/modification. */

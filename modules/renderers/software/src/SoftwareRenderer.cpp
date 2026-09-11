@@ -2033,77 +2033,83 @@ namespace CNA::Internal::Renderers::Software
             return CompiledVaryingValue(vertex, usage, usageIndex, value);
         }
 
+        bool CompiledTriangleSampleCoordinates(
+            const SoftwareShaderProgramEXT& program,
+            const SoftwarePixelSampleRequestEXT& request,
+            const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+            std::array<float, 4> (&coordinates)[3])
+        {
+            const RasterVertex* vertices[3] = {&v0, &v1, &v2};
+            std::array<float, 4> source[3]{};
+            for (int vertex = 0; vertex < 3; ++vertex)
+                if (!CompiledTextureRegisterValue(
+                        program, *vertices[vertex], request.coordinateRegister,
+                        source[vertex]))
+                    return false;
+
+            int matrixRows = 0;
+            while (matrixRows < 3 && request.legacyMatrixRowRegisters[matrixRows] >= 0)
+                ++matrixRows;
+            if (matrixRows != 0)
+            {
+                if (matrixRows < 2)
+                    return false;
+                for (int row = 0; row < matrixRows; ++row)
+                {
+                    for (int vertex = 0; vertex < 3; ++vertex)
+                    {
+                        std::array<float, 4> rowValue{};
+                        if (!CompiledTextureRegisterValue(
+                                program, *vertices[vertex],
+                                static_cast<std::uint8_t>(
+                                    request.legacyMatrixRowRegisters[row]),
+                                rowValue))
+                            return false;
+                        for (int term = 0; term < 3; ++term)
+                            coordinates[vertex][row] +=
+                                source[vertex][term] * rowValue[term];
+                    }
+                }
+                return true;
+            }
+
+            for (int vertex = 0; vertex < 3; ++vertex)
+                for (int component = 0; component < 3; ++component)
+                    coordinates[vertex][component] =
+                        source[vertex][request.coordinateComponents[component]];
+            return true;
+        }
+
         TextureFootprint CompiledTriangleTextureFootprint(
             const SoftwareShaderProgramEXT& program,
             const SoftwarePixelSampleRequestEXT& request,
             const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
             int width, int height)
         {
-            std::array<float, 4> c0{}, c1{}, c2{};
-            if (!CompiledTextureRegisterValue(
-                    program, v0, request.coordinateRegister, c0) ||
-                !CompiledTextureRegisterValue(
-                    program, v1, request.coordinateRegister, c1) ||
-                !CompiledTextureRegisterValue(
-                    program, v2, request.coordinateRegister, c2))
+            std::array<float, 4> coordinates[3]{};
+            if (!CompiledTriangleSampleCoordinates(
+                    program, request, v0, v1, v2, coordinates))
                 return TextureFootprint{};
-
-            if (request.legacyMatrix2RowRegisters[0] >= 0 &&
-                request.legacyMatrix2RowRegisters[1] >= 0)
-            {
-                std::array<float, 4> rows[2][3]{};
-                const RasterVertex* vertices[3] = {&v0, &v1, &v2};
-                for (int row = 0; row < 2; ++row)
-                    for (int vertex = 0; vertex < 3; ++vertex)
-                        if (!CompiledTextureRegisterValue(
-                                program, *vertices[vertex],
-                                static_cast<std::uint8_t>(
-                                    request.legacyMatrix2RowRegisters[row]),
-                                rows[row][vertex]))
-                            return TextureFootprint{};
-                const std::array<float, 4>* coordinates[3] = {&c0, &c1, &c2};
-                float transformed[2][3]{};
-                for (int component = 0; component < 2; ++component)
-                    for (int vertex = 0; vertex < 3; ++vertex)
-                        for (int term = 0; term < 3; ++term)
-                            transformed[component][vertex] +=
-                                (*coordinates[vertex])[term] * rows[component][vertex][term];
-                return ScreenSpaceTextureFootprint(
-                    v0, v1, v2,
-                    transformed[0][0] * static_cast<float>(width),
-                    transformed[0][1] * static_cast<float>(width),
-                    transformed[0][2] * static_cast<float>(width),
-                    transformed[1][0] * static_cast<float>(height),
-                    transformed[1][1] * static_cast<float>(height),
-                    transformed[1][2] * static_cast<float>(height), width, height);
-            }
             return ScreenSpaceTextureFootprint(
                 v0, v1, v2,
-                c0[request.coordinateComponents[0]] * static_cast<float>(width),
-                c1[request.coordinateComponents[0]] * static_cast<float>(width),
-                c2[request.coordinateComponents[0]] * static_cast<float>(width),
-                c0[request.coordinateComponents[1]] * static_cast<float>(height),
-                c1[request.coordinateComponents[1]] * static_cast<float>(height),
-                c2[request.coordinateComponents[1]] * static_cast<float>(height), width, height);
+                coordinates[0][0] * static_cast<float>(width),
+                coordinates[1][0] * static_cast<float>(width),
+                coordinates[2][0] * static_cast<float>(width),
+                coordinates[0][1] * static_cast<float>(height),
+                coordinates[1][1] * static_cast<float>(height),
+                coordinates[2][1] * static_cast<float>(height), width, height);
         }
 
         TextureFootprint CompiledTriangleCubeTextureFootprint(
-            const SoftwareShaderProgramEXT& program, std::uint8_t coordinateRegister,
+            const SoftwareShaderProgramEXT& program,
+            const SoftwarePixelSampleRequestEXT& request,
             const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
             int faceDimension)
         {
-            const SoftwareShaderSemanticEXT* semantic =
-                CompiledCoordinateSemantic(program, coordinateRegister);
-            const MOJOSHADER_usage usage = semantic != nullptr
-                ? semantic->usage : MOJOSHADER_USAGE_TEXCOORD;
-            const std::uint8_t usageIndex = semantic != nullptr
-                ? semantic->usageIndex : coordinateRegister;
             std::array<float, 4> coordinates[3]{};
-            const RasterVertex* vertices[3] = {&v0, &v1, &v2};
-            for (int index = 0; index < 3; ++index)
-                if (!CompiledVaryingValue(
-                        *vertices[index], usage, usageIndex, coordinates[index]))
-                    return TextureFootprint{};
+            if (!CompiledTriangleSampleCoordinates(
+                    program, request, v0, v1, v2, coordinates))
+                return TextureFootprint{};
 
             const Vector3 directions[3] = {
                 Vector3(coordinates[0][0], coordinates[0][1], coordinates[0][2]),
@@ -2129,20 +2135,14 @@ namespace CNA::Internal::Renderers::Software
         }
 
         float CompiledTriangleVolumeLod(
-            const SoftwareShaderProgramEXT& program, std::uint8_t coordinateRegister,
+            const SoftwareShaderProgramEXT& program,
+            const SoftwarePixelSampleRequestEXT& request,
             const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
             int width, int height, int depth)
         {
-            const SoftwareShaderSemanticEXT* semantic =
-                CompiledCoordinateSemantic(program, coordinateRegister);
-            const MOJOSHADER_usage usage = semantic != nullptr
-                ? semantic->usage : MOJOSHADER_USAGE_TEXCOORD;
-            const std::uint8_t usageIndex = semantic != nullptr
-                ? semantic->usageIndex : coordinateRegister;
             std::array<float, 4> coordinates[3]{};
-            if (!CompiledVaryingValue(v0, usage, usageIndex, coordinates[0]) ||
-                !CompiledVaryingValue(v1, usage, usageIndex, coordinates[1]) ||
-                !CompiledVaryingValue(v2, usage, usageIndex, coordinates[2]))
+            if (!CompiledTriangleSampleCoordinates(
+                    program, request, v0, v1, v2, coordinates))
                 return 0.0f;
             const float area = (v1.x - v0.x) * (v2.y - v0.y) -
                                (v2.x - v0.x) * (v1.y - v0.y);
@@ -2357,7 +2357,7 @@ namespace CNA::Internal::Renderers::Software
                         throw std::runtime_error(
                             "Software compiled effect: samplerCUBE requires a Software TextureCube.");
                     const TextureFootprint footprint = CompiledTriangleCubeTextureFootprint(
-                        program_, request.coordinateRegister, v0_, v1_, v2_,
+                        program_, request, v0_, v1_, v2_,
                         surface->CubeSize());
                     const float lambda = request.lodMode == SoftwareTextureLodModeEXT::Explicit
                         ? request.lod : LodFromTexelRate(footprint.isotropicRate) + request.lod;
@@ -2378,7 +2378,7 @@ namespace CNA::Internal::Renderers::Software
                         throw std::runtime_error(
                             "Software compiled effect: sampler3D requires a Software Texture3D.");
                     float implicitLod = CompiledTriangleVolumeLod(
-                        program_, request.coordinateRegister, v0_, v1_, v2_,
+                        program_, request, v0_, v1_, v2_,
                         surface->VolumeWidthEXT(0), surface->VolumeHeightEXT(0),
                         surface->VolumeDepthEXT(0));
                     if (request.lodMode == SoftwareTextureLodModeEXT::Gradients)
