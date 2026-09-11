@@ -925,6 +925,44 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   D3D12; the Vulkan `SdlGpu*` renderer aggregate passes **50/50**. The D3D12 CTest retained the
   global fatal debug-diagnostic policy, and neither run emitted a validation failure.
 
+### SDLGPU-119 — prove compiled-effect SpriteBatch cannot outlive its texture wrapper ⬜
+
+- **Provenance — this row records a finding, not a verified defect.** It was stated by the
+  autonomous `cnasdlgpu` session at 2026-09-10T22:33:50Z, immediately before that session stopped
+  mid-task while building the regression target for it. No test, no reproduction and no fix exist
+  yet, and the claim has not been checked against the source by anyone else. It is written down
+  here only so that it does not exist solely inside a session rollout log
+  (`~/.codex/sessions/2026/09/09/rollout-2026-09-09T19-35-03-01a0873c-c9e7-7620-8ae3-6bb41ddea3a0.jsonl`),
+  which is where it was when `SDLGPU-118` was pushed. Recorded by the `cnanextmerge` session on
+  2026-09-11 at the project owner's instruction.
+- **The finding, verbatim as stated (Czech, as written):**
+
+  > Další konkrétní nález: compiled-effect SpriteBatch má ještě jednu mezifrontu mezi `Draw` a
+  > `End`. Ta sice drží životnost nativní textury, ale zároveň si nechává holý `ITextureRenderer*`
+  > a při `End` z něj znovu čte rozměry/formát. FNA v tomto místě drží spravovanou referenci
+  > `Texture2D`; v CNA tedy zánik texture wrapperu po `Draw` může způsobit UAF navzdory tomu, že
+  > GPU resource stále žije. Zakládám `SDLGPU-119` regresí, která texture wrapper zničí před `End`.
+
+- **Translation of the claim:** the compiled-effect SpriteBatch path has a second intermediate
+  queue between `Draw` and `End`. That queue keeps the NATIVE texture alive, but it also retains a
+  bare `ITextureRenderer*` and re-reads dimensions/format from it during `End`. FNA holds a managed
+  `Texture2D` reference at the same point, so in CNA destroying the texture WRAPPER after `Draw`
+  may be a use-after-free even though the GPU resource itself is still alive.
+- **Relationship to `SDLGPU-118`:** that task fixed the analogous lifetime edge for compiled
+  *shaders* (`CompiledEffectShaderLease`). This is the same shape one level over: the queue owns
+  the GPU resource but not the wrapper object it later reads metadata from. `SDLGPU-118`'s own
+  evidence notes that driver-dependent survival is not a valid renderer contract; the same
+  argument would apply here.
+- **Acceptance/test (as the session intended it):** a regression that destroys the public
+  `Texture2D` wrapper after `Draw` and before `End` on the compiled-effect SpriteBatch path, and
+  shows either a correct draw or an explicit refusal rather than reading freed memory. Run under a
+  sanitizer, because a plain pixel check can pass on freed-but-unreused memory — the same trap
+  `SDLGPU-118` documented.
+- **Next step:** confirm or refute the claim against
+  `BuildCompiledEffectBindingEXT` / the SpriteBatch queue before writing the fix. If the bare
+  `ITextureRenderer*` is not in fact re-read at `End`, close this row as not-a-defect and say so.
+
+
 ## 2026-09-10 parity audit final status
 
 | Item | Current evidence |
