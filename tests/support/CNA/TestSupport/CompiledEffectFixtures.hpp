@@ -249,6 +249,8 @@ namespace CNA::TestSupport
         bool pixelShaderUsesPredicatedTexkill = false;
         /// Emits a Shader Model 1.4 pixel program that applies `_dz` and `_dw` to `TEXCRD`.
         bool pixelShaderUsesProjectiveModifiers = false;
+        /// Emits a Shader Model 1.4 pixel program whose destination selects the sampler stage.
+        bool pixelShaderUsesShaderModel14TextureLoad = false;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -302,12 +304,15 @@ namespace CNA::TestSupport
         bool usesRasterInputs = false,
         bool usesPredication = false,
         bool usesPredicatedTexkill = false,
-        bool usesProjectiveModifiers = false)
+        bool usesProjectiveModifiers = false,
+        bool usesShaderModel14TextureLoad = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill;
-        const std::uint32_t versionToken = usesProjectiveModifiers
+        const bool usesShaderModel14 =
+            usesProjectiveModifiers || usesShaderModel14TextureLoad;
+        const std::uint32_t versionToken = usesShaderModel14
                                                ? 0xFFFF0104u
                                                : usesShaderModel3 ? 0xFFFF0300u : 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
@@ -364,7 +369,7 @@ namespace CNA::TestSupport
             appendCtabString(breakSymbolBinding ? "NoSuchParameter" : "Tint");
         const std::uint32_t samplerName = appendCtabString("FxSampler");
         const std::uint32_t target = appendCtabString(
-            usesProjectiveModifiers ? "ps_1_4" : usesShaderModel3 ? "ps_3_0" : "ps_2_0");
+            usesShaderModel14 ? "ps_1_4" : usesShaderModel3 ? "ps_3_0" : "ps_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
         while ((ctab.size() & 3u) != 0) ctab.push_back(0);
 
@@ -422,7 +427,18 @@ namespace CNA::TestSupport
                    (modifier << 24);
         };
 
-        if (usesProjectiveModifiers)
+        if (usesShaderModel14TextureLoad)
+        {
+            // ps_1_4 selects the texture stage from the destination register number while the
+            // source independently selects the coordinate set: sample stage 1 at TEXCOORD0.
+            AppendUInt32(shader, 0x00000042u); // texld r<samplerRegister>, t0
+            AppendUInt32(shader, destination(regTemp, samplerRegister, 0xFu));
+            AppendUInt32(shader, source(regTexture, 0, swizzleIdentity, 10u));
+            AppendUInt32(shader, 0x00000001u); // mov r0, sampled value (ps_1_x output is r0)
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, samplerRegister));
+        }
+        else if (usesProjectiveModifiers)
         {
             // t0=(.25,.5,.5,.25): _dz contributes .5 to red and _dw contributes 1 to green.
             AppendUInt32(shader, 0x00000040u); // texcrd r0.xy, t0_dz
@@ -1328,7 +1344,8 @@ namespace CNA::TestSupport
             options.pixelShaderUsesSubroutine, options.pixelShaderUsesDerivatives,
             options.pixelShaderUsesRasterInputs, options.shadersUsePredication,
             options.pixelShaderUsesPredicatedTexkill,
-            options.pixelShaderUsesProjectiveModifiers);
+            options.pixelShaderUsesProjectiveModifiers,
+            options.pixelShaderUsesShaderModel14TextureLoad);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -1338,10 +1355,12 @@ namespace CNA::TestSupport
             const std::vector<std::uint8_t> vertexShader = BuildSyntheticVertexShader(
                 options.vertexShaderReadsSecondStream,
                 options.pixelShaderSamplesTexture || options.pixelShaderUsesDerivatives ||
-                    options.pixelShaderUsesProjectiveModifiers,
+                    options.pixelShaderUsesProjectiveModifiers ||
+                    options.pixelShaderUsesShaderModel14TextureLoad,
                 options.samplerKind != SyntheticSamplerKind::Sampler2D,
                 options.shadersUsePredication,
-                options.pixelShaderUsesProjectiveModifiers);
+                options.pixelShaderUsesProjectiveModifiers ||
+                    options.pixelShaderUsesShaderModel14TextureLoad);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

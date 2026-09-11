@@ -57,7 +57,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-raster-inputs.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-predicated-destinations.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-predicated-texkill.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-projective-source-modifiers.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-projective-source-modifiers.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-shader-model-14-texld.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

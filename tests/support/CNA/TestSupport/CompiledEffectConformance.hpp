@@ -1314,6 +1314,76 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Proves Shader Model 1.4 `TEXLD` selects its stage from dst and coordinates from src.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectShaderModel14TextureLoadContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.samplerRegister = 1;
+        options.pixelShaderUsesShaderModel14TextureLoad = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        Texture2D texture(device, 4, 1);
+        const Color texels[4] = {Color::Red, Color::Green, Color::Blue, Color::White};
+        texture.SetData(texels, 4);
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, w;
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](float divisorW)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .2f, .5f, .5f, divisorW},
+                {-1, -1, 0, .2f, .5f, .5f, divisorW},
+                { 1, -1, 0, .2f, .5f, .5f, divisorW},
+                {-1,  1, 0, .2f, .5f, .5f, divisorW},
+                { 1, -1, 0, .2f, .5f, .5f, divisorW},
+                { 1,  1, 0, .2f, .5f, .5f, divisorW},
+            };
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(drawAndRead(0.5f), Color::Green)
+            << "ps_1_4 must sample stage r1 from projected TEXCOORD0";
+        EXPECT_EQ(drawAndRead(0.0f), Color::White)
+            << "ps_1_4 TEXLD _dw must map a zero divisor to x/y=1";
+    }
+
+    /**
      * @brief Contract: a compiled effect reads attributes from more than one bound stream.
      *
      * plans/plan_fx.md FX-082. Only for backends reporting `MultiStreamVertexInput`. The fixture's
@@ -3435,6 +3505,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectPredicationContract` -- SM3 predicates mask vertex/pixel components
      * - `RunCompiledEffectPredicatedTexkillContract` -- a false predicate suppresses pixel kill
      * - `RunCompiledEffectProjectiveModifierContract` -- ps_1_4 `_dz`/`_dw`, including zero
+     * - `RunCompiledEffectShaderModel14TextureLoadContract` -- ps_1_4 destination-selected stage
      * - `RunCompiledEffectMultiStreamDrawContract` -- several streams, and their own offsets
      * - `RunCompiledEffectInstancingDrawContract` -- instanced draws, offsets and divisor reset
      * - `RunCompiledEffectSpriteBatchContract` -- SpriteBatch runs the effect, or refuses by name

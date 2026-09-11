@@ -527,7 +527,12 @@ private:
       operand.number += static_cast<int>(
           relative[static_cast<std::size_t>(relativeComponent)]);
     }
-    const Vector raw = ReadRaw(operand.type, operand.number);
+    Vector raw = ReadRaw(operand.type, operand.number);
+    if (operand.sourceModifier == 9u || operand.sourceModifier == 10u) {
+      const float divisor = raw[operand.sourceModifier == 9u ? 2u : 3u];
+      raw[0] = divisor == 0.0f ? 1.0f : raw[0] / divisor;
+      raw[1] = divisor == 0.0f ? 1.0f : raw[1] / divisor;
+    }
     Vector value{};
     for (int component = 0; component < 4; ++component) {
       const auto selected = static_cast<std::size_t>(
@@ -569,18 +574,9 @@ private:
       for (float &component : value)
         component *= -2.0f;
       break;
-    case 9: {
-      const float divisor = value[2];
-      for (float &component : value)
-        component = divisor == 0.0f ? 1.0f : component / divisor;
+    case 9:
+    case 10:
       break;
-    }
-    case 10: {
-      const float divisor = value[3];
-      for (float &component : value)
-        component = divisor == 0.0f ? 1.0f : component / divisor;
-      break;
-    }
     case 11:
       for (float &component : value)
         component = std::abs(component);
@@ -1015,7 +1011,12 @@ private:
     if (operand.relative)
       throw std::runtime_error(
           "Software pixel shader: relative texture coordinates require SOFTWARE-165.");
-    const Vector raw = ReadRaw(operand.type, operand.number);
+    Vector raw = ReadRaw(operand.type, operand.number);
+    if (operand.sourceModifier == 9u || operand.sourceModifier == 10u) {
+      const float divisor = raw[operand.sourceModifier == 9u ? 2u : 3u];
+      raw[0] = divisor == 0.0f ? 1.0f : raw[0] / divisor;
+      raw[1] = divisor == 0.0f ? 1.0f : raw[1] / divisor;
+    }
     Vector value{};
     for (int component = 0; component < 4; ++component) {
       const auto selected = static_cast<std::size_t>(
@@ -1025,7 +1026,8 @@ private:
     if (operand.sourceModifier == 1u)
       for (float &component : value)
         component = -component;
-    else if (operand.sourceModifier != 0u)
+    else if (operand.sourceModifier != 0u && operand.sourceModifier != 9u &&
+             operand.sourceModifier != 10u)
       throw std::runtime_error(
           "Software pixel shader: texture coordinate uses an unsupported modifier.");
     return value;
