@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-181/SOFTWARE-336..338/SOFTWARE-340: selected depth storage, XNA clip-depth semantics,
-// complete homogeneous SpriteBatch transforms and signed source geometry must affect fragments.
+// SOFTWARE-181/SOFTWARE-336..338/SOFTWARE-340/341: selected depth storage, XNA clip-depth
+// semantics, complete SpriteBatch transforms and safe signed source geometry affect fragments.
 
 #include <gtest/gtest.h>
 
@@ -431,6 +431,30 @@ namespace
         target.GetData(0, &centerRect, &center, 0, 1);
         return center;
     }
+
+    Color RenderSpriteOverflowingSourceEndpointProbe()
+    {
+        GraphicsDevice device;
+        RenderTarget2D target(
+            device, 8, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::PreserveContents);
+        Texture2D texture(device, 2, 2, false, SurfaceFormat::Color);
+        const Color pixels[4] = {Color::Red, Color::Green, Color::Blue, Color::Yellow};
+        texture.SetData(pixels, 4);
+
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+
+        const int maximum = std::numeric_limits<int>::max();
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                    &DepthStencilState::None, &RasterizerState::CullNone);
+        batch.Draw(texture, Rectangle(0, 0, 8, 8),
+                   std::optional<Rectangle>(Rectangle(maximum, maximum, 1, 1)), Color::White);
+        batch.End();
+        device.SetRenderTarget(nullptr);
+        return ReadCenter(target);
+    }
 }
 
 TEST(BackBufferDepthStencilContractTest, NoneAndDepth24SelectDepthFragmentAcceptance)
@@ -681,6 +705,13 @@ TEST(BackBufferDepthStencilContractTest, SpriteBatchZeroWidthSourceDoesNotInvent
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
 
     EXPECT_EQ(RenderSpriteZeroWidthSourceProbe(), Color::Black);
+}
+
+TEST(BackBufferDepthStencilContractTest, SpriteBatchSourceEndpointsUseFloatDomainWithoutOverflow)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    EXPECT_EQ(RenderSpriteOverflowingSourceEndpointProbe(), Color::Yellow);
 }
 
 TEST(BackBufferDepthStencilContractTest, UnknownClearOptionBitsAreIgnored)

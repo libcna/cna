@@ -554,6 +554,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   coerces a nonpositive source width or height to one before transforming the origin. Negative
   source rectangles therefore pivot on the same side as XNA/FNA/EasyGL, and a zero extent cannot
   manufacture visible one-texel geometry.
+- **SpriteBatch source endpoints are computed in float domain** (`SOFTWARE-341`). Adding an
+  `Int32` source origin and extent before conversion could overflow at the public Rectangle limits
+  and sample the opposite texture edge. Software and EasyGL now retain the separately converted
+  origin/extent used by Microsoft XNA/FNA; an exact two-axis PointClamp case matches a measured
+  Microsoft XNA 4.0 Reach render at `INT_MAX + 1` without invoking signed-integer undefined behavior.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

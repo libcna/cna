@@ -81,8 +81,8 @@ namespace CNA::Internal::Renderers::Software
         const float texH = static_cast<float>(std::max(1, texture.GetHeight()));
         float u1 = static_cast<float>(sourceRectangle.X) / texW;
         float v1 = static_cast<float>(sourceRectangle.Y) / texH;
-        float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width) / texW;
-        float v2 = static_cast<float>(sourceRectangle.Y + sourceRectangle.Height) / texH;
+        float u2 = u1 + static_cast<float>(sourceRectangle.Width) / texW;
+        float v2 = v1 + static_cast<float>(sourceRectangle.Height) / texH;
         if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0) std::swap(u1, u2);
         if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0) std::swap(v1, v2);
 

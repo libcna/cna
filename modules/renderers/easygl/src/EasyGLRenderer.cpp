@@ -5811,8 +5811,28 @@ if (ProfileUsesGlslEs100())
         // govern edge sampling — the classic XNA scrolling/tiling-background technique.
         float u1 = (float)sourceRectangle.X / texW;
         float v1 = (float)sourceRectangle.Y / texH;
-        float u2 = (float)(sourceRectangle.X + sourceRectangle.Width)  / texW;
-        float v2 = (float)(sourceRectangle.Y + sourceRectangle.Height) / texH;
+        float u2 = u1 + (float)sourceRectangle.Width / texW;
+        float v2 = v1 + (float)sourceRectangle.Height / texH;
+
+        // A float cannot preserve the final texel-sized increment once a signed source origin is
+        // sufficiently large. If the resulting constant coordinate is wholly beyond a clamped
+        // axis, reduce it to the equivalent edge before handing it to GL: some GLES samplers
+        // resolve very large positive coordinates to the opposite edge. Restricting
+        // this to an already-constant coordinate preserves the derivatives used for mip choice,
+        // and restricting it to the stock SpriteEffect avoids changing coordinates visible to an
+        // arbitrary user effect.
+        if (customEffect_ == nullptr &&
+            pendingAddressU_ == static_cast<int>(TextureAddressMode::Clamp) && u1 == u2)
+        {
+            if (u1 < 0.0f) u1 = u2 = 0.0f;
+            else if (u1 > 1.0f) u1 = u2 = 1.0f;
+        }
+        if (customEffect_ == nullptr &&
+            pendingAddressV_ == static_cast<int>(TextureAddressMode::Clamp) && v1 == v2)
+        {
+            if (v1 < 0.0f) v1 = v2 = 0.0f;
+            else if (v1 > 1.0f) v1 = v2 = 1.0f;
+        }
 
         if ((int)effects & (int)SpriteEffects::FlipHorizontally) std::swap(u1, u2);
         if ((int)effects & (int)SpriteEffects::FlipVertically) std::swap(v1, v2);
