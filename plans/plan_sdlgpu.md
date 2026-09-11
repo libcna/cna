@@ -1716,6 +1716,55 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   existing trees only for the minimum affected targets and the requested current sweep.
 
 
+### SDLGPU-135 — the contract manifest's `easygl` column is decided by a build option, not by the source ✅
+
+- **Problem/public behavior:** `tools/check_sdlgpu_renderer_contract_audit.py` reads one compile
+  command per renderer out of two `compile_commands.json` files and classifies the contract hooks
+  from the Clang AST. That makes the committed `plans/sdlgpu_renderer_contract_audit.csv` a
+  function of *which* EasyGL configuration it was pointed at, which the manifest itself never
+  records. Run against an EasyGL build with `CNA_EASYGL_COMPILED_EFFECTS=ON`, two rows change
+  without a line of source changing:
+
+  | hook | manifest | `CNA_EASYGL_COMPILED_EFFECTS=ON` |
+  |---|---|---|
+  | `IGraphicsRenderer::CreateCompiledEffect` | `renderer=inherited:default-null` | `renderer=override` |
+  | `IGraphicsRenderer::SupportsCompiledEffects` | `renderer=inherited:default-implementation` | `renderer=override` |
+
+  Both overrides live behind `#if defined(CNA_EASYGL_COMPILED_EFFECTS)` in
+  `EasyGLRenderer.hpp:1479`, so each configuration makes the other's manifest look stale. Anyone
+  regenerating with `--write` flips them, and the next person flips them back.
+- **Evidence:** run on the `sdlgpu`-into-`next` merge (`e3d528e7f`). The classification itself is
+  unchanged from `SDLGPU-134`'s recorded result -- **266/266 hooks, 144 `=`, 117 `out`, five `⛔`
+  ** -- so the merge did not disturb the contract; only the two configuration-dependent rows
+  differ. The manifest was left at its committed value rather than rewritten to this machine's
+  configuration.
+- **Location:** `tools/check_sdlgpu_renderer_contract_audit.py` and
+  `plans/sdlgpu_renderer_contract_audit.csv`. No renderer or public API change belongs here.
+- **Acceptance/test:** the manifest should either record the EasyGL configuration it was generated
+  under (so a mismatch is reported as "generated with X, run with Y" instead of as drift), or the
+  checker should normalize a `#if`-gated override to one answer for both configurations. Until
+  then, regenerate only with `CNA_EASYGL_COMPILED_EFFECTS` matching what the manifest was written
+  with, and treat exactly these two rows as expected noise.
+- **Reproduction:** the checker needs only a *configure*, never a built engine -- it dumps the AST
+  of two translation units. Per the project's closed build-directory list this configure is
+  temporary and its directory is removed again afterwards:
+
+  ```
+  cmake -S . -B build-probe -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+        -DCNA_GRAPHICS_RENDERER=SDL_GPU -DCNA_PLATFORM=SDL3 \
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+        -DCNA_SHARP_RUNTIME_ROOT=../sharp-runtimenext \
+        -DCNA_SDL_PREBUILT_ROOT=<a .sdl-prebuilt-Linux-x86_64-* tree> \
+        -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF
+  python3 tools/check_sdlgpu_renderer_contract_audit.py \
+        --sdl-build build-probe --easygl-build build
+  ```
+
+  `CNA_SHARP_RUNTIME_ROOT` is not optional: a fresh configure defaults to `../sharp-runtime`,
+  which lacks the `Xml.Serialization` component this tree requires and fails in under a second.
+  The configure takes ~29 s and ~73 MB; nothing is compiled.
+
+
 ## 2026-09-10 parity audit final status
 
 | Item | Current evidence |
