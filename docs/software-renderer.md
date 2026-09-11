@@ -262,6 +262,14 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   operations, None/Solid for cull/fill and Linear/Wrap for sampler filter/addressing. Exact pixel
   tests cover blend, opposite windings, depth, two-sided stencil and SpriteBatch filtering/wrap on
   Software and EasyGL; a recording test also protects SpriteBatch's private sampler channel.
+- **Two-sided stencil uses the absolute XNA winding contract** (`SOFTWARE-372`). Positive-area,
+  counter-clockwise Software triangles select every `CounterClockwiseStencil*` field; negative-area
+  clockwise triangles retain the ordinary tuple. EasyGL maps the same division to `GL_FRONT` and
+  `GL_BACK` respectively under its unchanged `GL_CCW` convention. Both renderers use only the
+  ordinary tuple for line/point topology as D3D9 requires, and EasyGL restores the face split when
+  a later triangle draw reuses the same public state object. A 46-check shared matrix proves
+  function, pass, fail, depth-fail and both topology transitions independently instead of merely
+  checking that two anonymous opposite windings differ.
 - **Stencil references retain their signed public value but consume the effective low byte**
   (`SOFTWARE-326`). Microsoft XNA forwards the full `Int32` through its D3D9 DWORD state while its
   only stencil surface is eight-bit `Depth24Stencil8`. The common device boundary now supplies the

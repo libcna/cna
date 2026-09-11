@@ -28,6 +28,7 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <utility>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -38,7 +39,8 @@ namespace
     const Color kBackground(20, 20, 20, 255);
     const Color kGreen(0, 255, 0, 255);
 
-    std::array<VertexPositionColor, 6> FrontQuad(const Color& color, float depth = 0.5f)
+    std::array<VertexPositionColor, 6> CounterClockwiseQuad(
+        const Color& color, float depth = 0.5f)
     {
         return {{
             {Vector3(-1.0f,  1.0f, depth), color},
@@ -48,6 +50,15 @@ namespace
             {Vector3( 1.0f, -1.0f, depth), color},
             {Vector3( 1.0f,  1.0f, depth), color},
         }};
+    }
+
+    std::array<VertexPositionColor, 6> ClockwiseQuad(
+        const Color& color, float depth = 0.5f)
+    {
+        auto result = CounterClockwiseQuad(color, depth);
+        for (std::size_t triangle = 0; triangle < result.size(); triangle += 3)
+            std::swap(result[triangle + 1], result[triangle + 2]);
+        return result;
     }
 
     std::array<VertexPositionTexture, 6> TexturedQuad(float depth = 0.5f)
@@ -150,9 +161,16 @@ class StencilMatrixContractTest final : public Game
         return state;
     }
 
-    void DrawFront(GraphicsDevice& device, const Color& color, float depth = 0.5f)
+    void DrawCounterClockwise(GraphicsDevice& device, const Color& color,
+                              float depth = 0.5f)
     {
-        const auto quad = FrontQuad(color, depth);
+        const auto quad = CounterClockwiseQuad(color, depth);
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
+    }
+
+    void DrawClockwise(GraphicsDevice& device, const Color& color, float depth = 0.5f)
+    {
+        const auto quad = ClockwiseQuad(color, depth);
         device.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
     }
 
@@ -161,7 +179,7 @@ class StencilMatrixContractTest final : public Game
         DepthStencilState read = StencilState(CompareFunction::Equal, expected);
         device.setDepthStencilStateProperty(read);
         basic.Apply();
-        DrawFront(device, kGreen);
+        DrawCounterClockwise(device, kGreen);
         return IsGreen(Center(device));
     }
 
@@ -175,7 +193,7 @@ class StencilMatrixContractTest final : public Game
                 DepthStencilState state = StencilState(test.function, kReferences[relation]);
                 device.setDepthStencilStateProperty(state);
                 basic.Apply();
-                DrawFront(device, kGreen);
+                DrawCounterClockwise(device, kGreen);
                 const bool drawn = IsGreen(Center(device));
                 Check(drawn == test.expected[relation],
                       std::string("StencilFunction ") + test.name + " with reference " +
@@ -194,7 +212,7 @@ class StencilMatrixContractTest final : public Game
             state.setStencilPassProperty(test.operation);
             device.setDepthStencilStateProperty(state);
             basic.Apply();
-            DrawFront(device, kBackground);
+            DrawCounterClockwise(device, kBackground);
             Check(ProbeStencil(device, basic, test.expected),
                   std::string("StencilPass ") + test.name + " produces the exact 8-bit value");
         }
@@ -207,7 +225,7 @@ class StencilMatrixContractTest final : public Game
         fail.setStencilFailProperty(StencilOperation::Replace);
         device.setDepthStencilStateProperty(fail);
         basic.Apply();
-        DrawFront(device, kBackground);
+        DrawCounterClockwise(device, kBackground);
         Check(ProbeStencil(device, basic, 0x45),
               "StencilFail writes the configured operation result");
 
@@ -219,9 +237,97 @@ class StencilMatrixContractTest final : public Game
         depthFail.setStencilDepthBufferFailProperty(StencilOperation::Replace);
         device.setDepthStencilStateProperty(depthFail);
         basic.Apply();
-        DrawFront(device, kBackground, 0.8f);
+        DrawCounterClockwise(device, kBackground, 0.8f);
         Check(ProbeStencil(device, basic, 0x56),
               "StencilDepthBufferFail writes only after a passing stencil test and failed depth test");
+    }
+
+    void CheckCounterClockwiseProperties(GraphicsDevice& device, BasicEffect& basic)
+    {
+        Clear(device, 0x11);
+        DepthStencilState function = StencilState(CompareFunction::Never, 0x11);
+        function.setTwoSidedStencilModeProperty(true);
+        function.setCounterClockwiseStencilFunctionProperty(CompareFunction::Equal);
+        device.setDepthStencilStateProperty(function);
+        basic.Apply();
+        DrawCounterClockwise(device, kGreen);
+        Check(IsGreen(Center(device)),
+              "CounterClockwiseStencilFunction applies only to the CCW winding");
+
+        Clear(device, 0x11);
+        DepthStencilState pass = StencilState(CompareFunction::Always, 0x45);
+        pass.setTwoSidedStencilModeProperty(true);
+        pass.setCounterClockwiseStencilFunctionProperty(CompareFunction::Always);
+        pass.setStencilPassProperty(StencilOperation::Keep);
+        pass.setCounterClockwiseStencilPassProperty(StencilOperation::Replace);
+        device.setDepthStencilStateProperty(pass);
+        basic.Apply();
+        DrawCounterClockwise(device, kBackground);
+        Check(ProbeStencil(device, basic, 0x45),
+              "CounterClockwiseStencilPass writes the CCW result");
+
+        Clear(device, 0x11);
+        DepthStencilState fail = StencilState(CompareFunction::Always, 0x46);
+        fail.setTwoSidedStencilModeProperty(true);
+        fail.setCounterClockwiseStencilFunctionProperty(CompareFunction::Never);
+        fail.setStencilFailProperty(StencilOperation::Keep);
+        fail.setCounterClockwiseStencilFailProperty(StencilOperation::Replace);
+        device.setDepthStencilStateProperty(fail);
+        basic.Apply();
+        DrawCounterClockwise(device, kBackground);
+        Check(ProbeStencil(device, basic, 0x46),
+              "CounterClockwiseStencilFail writes the CCW result");
+
+        Clear(device, 0x11, 0.2f);
+        DepthStencilState depthFail = StencilState(CompareFunction::Always, 0x47);
+        depthFail.setTwoSidedStencilModeProperty(true);
+        depthFail.setDepthBufferEnableProperty(true);
+        depthFail.setDepthBufferWriteEnableProperty(false);
+        depthFail.setDepthBufferFunctionProperty(CompareFunction::Less);
+        depthFail.setCounterClockwiseStencilFunctionProperty(CompareFunction::Always);
+        depthFail.setStencilDepthBufferFailProperty(StencilOperation::Keep);
+        depthFail.setCounterClockwiseStencilDepthBufferFailProperty(StencilOperation::Replace);
+        device.setDepthStencilStateProperty(depthFail);
+        basic.Apply();
+        DrawCounterClockwise(device, kBackground, 0.8f);
+        Check(ProbeStencil(device, basic, 0x47),
+              "CounterClockwiseStencilDepthBufferFail writes the CCW result");
+
+        Clear(device, 0x11);
+        DepthStencilState ordinary = StencilState(CompareFunction::Always, 0x48);
+        ordinary.setTwoSidedStencilModeProperty(true);
+        ordinary.setStencilPassProperty(StencilOperation::Replace);
+        ordinary.setCounterClockwiseStencilPassProperty(StencilOperation::Keep);
+        device.setDepthStencilStateProperty(ordinary);
+        basic.Apply();
+        DrawClockwise(device, kBackground);
+        Check(ProbeStencil(device, basic, 0x48),
+              "ordinary stencil tuple remains assigned to clockwise winding");
+
+        Clear(device, 0x11);
+        DepthStencilState line = StencilState(CompareFunction::Always, 0x49);
+        line.setTwoSidedStencilModeProperty(true);
+        line.setStencilPassProperty(StencilOperation::Replace);
+        line.setCounterClockwiseStencilFunctionProperty(CompareFunction::Always);
+        line.setCounterClockwiseStencilPassProperty(StencilOperation::Keep);
+        device.setDepthStencilStateProperty(line);
+        basic.Apply();
+        StampTopology(device, PrimitiveType::LineList, false);
+        Check(ProbeStencil(device, basic, 0x49),
+              "two-sided mode ignores the CCW tuple for line primitives");
+
+        Clear(device, 0x11);
+        DepthStencilState transition = StencilState(CompareFunction::Always, 0);
+        transition.setTwoSidedStencilModeProperty(true);
+        transition.setStencilPassProperty(StencilOperation::Increment);
+        transition.setCounterClockwiseStencilFunctionProperty(CompareFunction::Always);
+        transition.setCounterClockwiseStencilPassProperty(StencilOperation::Keep);
+        device.setDepthStencilStateProperty(transition);
+        basic.Apply();
+        StampTopology(device, PrimitiveType::LineList, false);
+        DrawCounterClockwise(device, kBackground);
+        Check(ProbeStencil(device, basic, 0x12),
+              "a CCW triangle restores its tuple after a line draw without a state reassignment");
     }
 
     void StampTopology(GraphicsDevice& device, PrimitiveType primitive, bool indexed32)
@@ -312,6 +418,7 @@ protected:
         CheckComparisons(device, basic);
         CheckOperations(device, basic);
         CheckWritePaths(device, basic);
+        CheckCounterClockwiseProperties(device, basic);
         CheckTopologies(device, basic);
         CheckAlphaDiscard(device, basic);
 

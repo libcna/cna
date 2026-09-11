@@ -303,9 +303,9 @@ namespace CNA::Internal::Renderers::Software
                 renderer.GetCounterClockwiseStencilDepthFailOperation()};
         }
 
-        /// The public CounterClockwiseStencil* tuple belongs to XNA back faces. In Software's
-        /// top-left framebuffer coordinates those have negative signed area (the same convention
-        /// used by ShouldCullTriangle); non-triangle primitives use the ordinary/front tuple.
+        /// The public CounterClockwiseStencil* tuple belongs to counter-clockwise faces. In
+        /// Software's top-left framebuffer coordinates those have positive signed area (the same
+        /// convention used by ShouldCullTriangle); non-triangle primitives use the ordinary tuple.
         RasterStencilState SelectStencilFace(const RasterStencilState& state,
                                               bool counterClockwiseFace)
         {
@@ -2804,7 +2804,7 @@ namespace CNA::Internal::Renderers::Software
             if (ShouldCullTriangle(area, cullMode))
                 return;
             const RasterStencilState faceStencil = SelectStencilFace(
-                stencilState, area < 0.0f);
+                stencilState, area > 0.0f);
 
             // REMED-GFX-083: one polygon-offset value for the whole triangle (after culling; a culled
             // triangle emits no fragments, biased or not). hasBias is 0 for the common zero-bias case, so
@@ -3254,7 +3254,7 @@ namespace CNA::Internal::Renderers::Software
             if (area == 0.0f || ShouldCullTriangle(area, cullMode))
                 return;
             const float face = area < 0.0f ? 1.0f : -1.0f;
-            const RasterStencilState faceStencil = SelectStencilFace(stencilState, area < 0.0f);
+            const RasterStencilState faceStencil = SelectStencilFace(stencilState, area > 0.0f);
             const float biasOffset =
                 ComputeDepthBiasOffset(v0, v1, v2, depthBias, slopeScaleDepthBias);
             const bool hasBias = biasOffset != 0.0f;
@@ -4676,7 +4676,7 @@ namespace CNA::Internal::Renderers::Software
             if (ShouldCullTriangle(area, cullMode))
                 return;
             const RasterStencilState faceStencil = SelectStencilFace(
-                stencilState, area < 0.0f);
+                stencilState, area > 0.0f);
 
             // REMED-GFX-124: the cast target is the colour-storage capability, not a concrete
             // renderer class, so both a SoftwareTextureRenderer and a SoftwareRenderTargetRenderer

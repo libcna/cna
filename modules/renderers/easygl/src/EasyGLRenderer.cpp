@@ -5551,6 +5551,8 @@ if (ProfileUsesGlslEs100())
                       pending_indices_.data(),
                       pending_indices_.size() * sizeof(uint16_t));
 
+        if (graphicsRenderer_)
+            graphicsRenderer_->ApplyStencilPrimitiveTopology(PrimitiveType::TriangleList);
         device_.draw_elements(
             ::easygl::PrimitiveType::Triangles,
             static_cast<int>(pending_indices_.size()),
@@ -5711,6 +5713,7 @@ if (ProfileUsesGlslEs100())
         for (int pass = 0; pass < passCount; ++pass)
         {
             technique->getPassesProperty()[pass]->Apply();
+            graphicsRenderer_->ApplyStencilPrimitiveTopology(PrimitiveType::TriangleList);
             vao.bind();
             graphicsRenderer_->BindCompiledEffectForDrawEXT(&stream, 1, *runtime,
                                                             current_texture_, &deviceTextures,
@@ -7914,9 +7917,16 @@ if (!ProfileIsEs2ApiGeneration())
         stencilWriteMask_  = stencilWriteMask;   // REMED-GFX-237
         stencilTwoSided_  = twoSidedStencilMode;
         stencilFunc_      = stencilFunc;
+        stencilPass_      = stencilPass;
+        stencilFail_      = stencilFail;
+        stencilDepthFail_ = stencilDepthFail;
         stencilCcwFunc_   = ccwStencilFunc;
+        stencilCcwPass_   = ccwStencilPass;
+        stencilCcwFail_   = ccwStencilFail;
+        stencilCcwDepthFail_ = ccwStencilDepthFail;
         stencilReadMask_  = stencilMask;
         referenceStencil_ = referenceStencil;
+        stencilPrimitiveUsesTwoSided_ = twoSidedStencilMode;
 
         device.set_stencil_test_enabled(stencilEnable && bound_->depthFormat == 3);
         if (stencilEnable)
@@ -7926,22 +7936,25 @@ if (!ProfileIsEs2ApiGeneration())
             const auto eglPass   = ToEasyGLStencilOp(stencilPass);
             if (twoSidedStencilMode)
             {
-                device.set_stencil_func_separate(::easygl::CullFace::Front,
+                // EasyGL leaves OpenGL's GL_CCW front-face convention unchanged. XNA's
+                // CounterClockwiseStencil* tuple therefore belongs to GL_FRONT, while the
+                // ordinary clockwise/front-in-XNA tuple belongs to GL_BACK.
+                device.set_stencil_func_separate(::easygl::CullFace::Back,
                     ToEasyGLCompareFunc(stencilFunc),
                     referenceStencil, static_cast<unsigned int>(stencilMask));
-                device.set_stencil_op_separate(::easygl::CullFace::Front,
+                device.set_stencil_op_separate(::easygl::CullFace::Back,
                     eglSFail, eglDFail, eglPass);
-                device.set_stencil_mask_separate(::easygl::CullFace::Front,
+                device.set_stencil_mask_separate(::easygl::CullFace::Back,
                     static_cast<unsigned int>(stencilWriteMask));
 
-                device.set_stencil_func_separate(::easygl::CullFace::Back,
+                device.set_stencil_func_separate(::easygl::CullFace::Front,
                     ToEasyGLCompareFunc(ccwStencilFunc),
                     referenceStencil, static_cast<unsigned int>(stencilMask));
-                device.set_stencil_op_separate(::easygl::CullFace::Back,
+                device.set_stencil_op_separate(::easygl::CullFace::Front,
                     ToEasyGLStencilOp(ccwStencilFail),
                     ToEasyGLStencilOp(ccwStencilDepthFail),
                     ToEasyGLStencilOp(ccwStencilPass));
-                device.set_stencil_mask_separate(::easygl::CullFace::Back,
+                device.set_stencil_mask_separate(::easygl::CullFace::Front,
                     static_cast<unsigned int>(stencilWriteMask));
             }
             else
@@ -7952,6 +7965,50 @@ if (!ProfileIsEs2ApiGeneration())
                 device.set_stencil_mask(static_cast<unsigned int>(stencilWriteMask));
             }
         }
+    }
+
+    void EasyGLRenderer::ApplyStencilPrimitiveTopology(PrimitiveType primitive)
+    {
+        if (metagl::IsContextLost() || !stencilEnabled_ || !stencilTwoSided_) return;
+
+        // Direct3D 9 applies the CCW tuple only to counter-clockwise triangles. Two-sided stencil
+        // is ignored for lines and points, which instead use the ordinary tuple. GL's separate
+        // face state still affects line rasterization (as GL_FRONT), so install the ordinary
+        // tuple on both faces for every non-triangle draw and restore the split before the next
+        // triangle draw even when the public DepthStencilState object did not change.
+        const bool useTwoSided = primitive == PrimitiveType::TriangleList ||
+                                 primitive == PrimitiveType::TriangleStrip;
+        if (stencilPrimitiveUsesTwoSided_ == useTwoSided) return;
+        stencilPrimitiveUsesTwoSided_ = useTwoSided;
+
+        if (!useTwoSided)
+        {
+            device.set_stencil_func(ToEasyGLCompareFunc(stencilFunc_), referenceStencil_,
+                                    static_cast<unsigned int>(stencilReadMask_));
+            device.set_stencil_op(ToEasyGLStencilOp(stencilFail_),
+                                  ToEasyGLStencilOp(stencilDepthFail_),
+                                  ToEasyGLStencilOp(stencilPass_));
+            device.set_stencil_mask(static_cast<unsigned int>(stencilWriteMask_));
+            return;
+        }
+
+        device.set_stencil_func_separate(::easygl::CullFace::Back,
+            ToEasyGLCompareFunc(stencilFunc_), referenceStencil_,
+            static_cast<unsigned int>(stencilReadMask_));
+        device.set_stencil_op_separate(::easygl::CullFace::Back,
+            ToEasyGLStencilOp(stencilFail_), ToEasyGLStencilOp(stencilDepthFail_),
+            ToEasyGLStencilOp(stencilPass_));
+        device.set_stencil_mask_separate(::easygl::CullFace::Back,
+            static_cast<unsigned int>(stencilWriteMask_));
+
+        device.set_stencil_func_separate(::easygl::CullFace::Front,
+            ToEasyGLCompareFunc(stencilCcwFunc_), referenceStencil_,
+            static_cast<unsigned int>(stencilReadMask_));
+        device.set_stencil_op_separate(::easygl::CullFace::Front,
+            ToEasyGLStencilOp(stencilCcwFail_), ToEasyGLStencilOp(stencilCcwDepthFail_),
+            ToEasyGLStencilOp(stencilCcwPass_));
+        device.set_stencil_mask_separate(::easygl::CullFace::Front,
+            static_cast<unsigned int>(stencilWriteMask_));
     }
 
     void EasyGLRenderer::ApplyCurrentDepthStencilAvailability()
@@ -8089,12 +8146,12 @@ if (!ProfileIsEs2ApiGeneration())
         // Nothing to reissue while the stencil test is off -- the value is kept, and whichever
         // ApplyDepthStencilState re-enables the test carries its own reference anyway.
         if (!stencilEnabled_) return;
-        if (stencilTwoSided_)
+        if (stencilPrimitiveUsesTwoSided_)
         {
-            device.set_stencil_func_separate(::easygl::CullFace::Front,
+            device.set_stencil_func_separate(::easygl::CullFace::Back,
                 ToEasyGLCompareFunc(stencilFunc_),
                 referenceStencil_, static_cast<unsigned int>(stencilReadMask_));
-            device.set_stencil_func_separate(::easygl::CullFace::Back,
+            device.set_stencil_func_separate(::easygl::CullFace::Front,
                 ToEasyGLCompareFunc(stencilCcwFunc_),
                 referenceStencil_, static_cast<unsigned int>(stencilReadMask_));
         }
@@ -12677,6 +12734,7 @@ else
                                                       PrimitiveType primitive,
                                                       int primitiveCount)
     {
+        ApplyStencilPrimitiveTopology(primitive);
         EnsureColored3DProgram();
         const auto& vb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
 
@@ -12716,6 +12774,7 @@ else
                                                              PrimitiveType primitive,
                                                              int primitiveCount)
     {
+        ApplyStencilPrimitiveTopology(primitive);
         EnsureColored3DProgram();
         const auto& vb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
         const auto& ib = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
@@ -12866,6 +12925,7 @@ else
                                                  const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+        ApplyStencilPrimitiveTopology(primitive);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-062: a compiled effect's vertex layout is arbitrary and validated against
         // the applied pass's own shader reflection (BindCompiledEffectForDrawEXT), not against the
@@ -12963,6 +13023,7 @@ else
                                                         const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+        ApplyStencilPrimitiveTopology(primitive);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-062: see DrawPrimitivesEx's own compiled-effect branch for why this
         // dispatches before RequireDeclarationFitsStockProgramEXT runs.
@@ -13085,6 +13146,7 @@ else
                                                           const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+        ApplyStencilPrimitiveTopology(primitive);
 if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 core has no glDrawElementsInstanced/glVertexAttribDivisor, and this profile
@@ -13288,6 +13350,7 @@ else
                                               const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+        ApplyStencilPrimitiveTopology(primitive);
         if (!SupportsIndirectDrawEXT())
             throw System::NotSupportedException(
                 "CNA EasyGL: this GL context has no indirect draw (GL ES 3.1 / desktop GL 4.0 and "

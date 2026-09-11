@@ -1085,6 +1085,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // platform context is still current and alive.
         std::unique_ptr<EasyGLPlatformContext> platformContext_;
         std::recursive_mutex threadContextMutex_;
+        friend class EasyGLSpriteBatchRenderer;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         friend class EasyGLCompiledEffect;
         // plans/plan_fx.md FX-062: one MojoShader GL context per this renderer's whole lifetime, created
@@ -1184,6 +1185,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void ResolveMsaa();
         /** @brief Enables only the depth/stencil planes selected for the active destination. */
         void ApplyCurrentDepthStencilAvailability();
+        /** @brief Installs XNA's topology-dependent ordinary or two-sided stencil tuple. */
+        void ApplyStencilPrimitiveTopology(PrimitiveType primitive);
         /** @brief Reapplies XNA's normalized constant depth bias for the active depth format. */
         void ApplyCurrentDepthBias();
         void EnsureCallingThreadContext();
@@ -1370,8 +1373,15 @@ namespace CNA::Internal::Renderers::EasyGL
         bool depthWriteEnabled_ = true;
         int  stencilWriteMask_ = static_cast<int>(0xFFFFFFFF);
         bool stencilTwoSided_ = false;
+        bool stencilPrimitiveUsesTwoSided_ = false;
         int  stencilFunc_ = 0;
+        int  stencilPass_ = 0;
+        int  stencilFail_ = 0;
+        int  stencilDepthFail_ = 0;
         int  stencilCcwFunc_ = 0;
+        int  stencilCcwPass_ = 0;
+        int  stencilCcwFail_ = 0;
+        int  stencilCcwDepthFail_ = 0;
         int  stencilReadMask_ = 0;
         int  referenceStencil_ = 0;
 
