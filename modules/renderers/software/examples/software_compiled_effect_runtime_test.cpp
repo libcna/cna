@@ -1840,6 +1840,47 @@ namespace
               "parsed vs_1_1 vertex program did not bind implicit v0 as POSITION0");
 
         options.vertexShaderUsesShaderModel11Input = false;
+        options.vertexShaderUsesShaderModel11ExtendedInputs = true;
+        bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+        runtime->SetParameterValue(FindParameter(*runtime, "Transform"), &identity,
+                                   sizeof(identity));
+        runtime->SetTechnique(0u);
+        runtime->ApplyPass(1u, {}, changes);
+        software = dynamic_cast<SoftwareCompiledEffect*>(runtime.get());
+        Check(software != nullptr, "parsed extended vs_1_1 input Effect has the wrong backend type");
+        if (software == nullptr)
+            return;
+        const SoftwareShaderProgramEXT* extendedProgram = software->GetVertexProgramEXT();
+        Check(extendedProgram != nullptr && extendedProgram->inputSemantics.size() == 3u,
+              "parsed extended vs_1_1 program did not expose exactly three fixed inputs");
+        const auto hasInput = [extendedProgram](MOJOSHADER_usage usage, std::uint8_t usageIndex,
+                                                std::uint16_t registerNumber)
+        {
+            return extendedProgram != nullptr &&
+                   std::find_if(extendedProgram->inputSemantics.begin(),
+                                extendedProgram->inputSemantics.end(),
+                                [=](const auto& semantic)
+                                {
+                                    return semantic.usage == usage &&
+                                           semantic.usageIndex == usageIndex &&
+                                           semantic.registerNumber == registerNumber;
+                                }) != extendedProgram->inputSemantics.end();
+        };
+        Check(hasInput(MOJOSHADER_USAGE_POSITION, 0u, 0u) &&
+                  hasInput(MOJOSHADER_USAGE_COLOR, 0u, 5u) &&
+                  hasInput(MOJOSHADER_USAGE_TEXCOORD, 7u, 14u),
+              "parsed vs_1_1 fixed input table does not contain v0/v5/v14");
+        const std::array<SoftwareShaderSemanticValueEXT, 3> extendedInputs = {{
+            input,
+            {MOJOSHADER_USAGE_COLOR, 0u, {1.0f, 1.0f, 1.0f, 1.0f}},
+            {MOJOSHADER_USAGE_TEXCOORD, 7u, {1.0f, 1.0f, 1.0f, 1.0f}},
+        }};
+        result = software->ExecuteVertexEXT(extendedInputs);
+        Check(result.position == input.value,
+              "parsed vs_1_1 vertex program did not bind v5/v14 as COLOR0/TEXCOORD7");
+
+        options.vertexShaderUsesShaderModel11ExtendedInputs = false;
         options.vertexShaderUsesLegacyExpp = true;
         bytes = CNA::TestSupport::BuildSyntheticEffect(options);
         runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());

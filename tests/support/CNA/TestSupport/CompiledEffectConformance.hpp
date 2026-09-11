@@ -1118,6 +1118,60 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Contract: Shader Model 1.1 v5/v14 map to COLOR0/TEXCOORD7.
+     *
+     * The declaration-free program multiplies its transformed position by both inputs. The
+     * extreme texture-coordinate usage index distinguishes the fixed v7..v14 range from an
+     * incorrectly zero-based range, while COLOR0 proves that v5 is not a texture coordinate.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectShaderModel11ExtendedInputContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexShaderUsesShaderModel11ExtendedInputs = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(1.0f));
+
+        struct ClipVertex
+        {
+            float x, y, z;
+            float color[4];
+            float texCoord7[2];
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
+            VertexElement(28, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate,
+                          7),
+        });
+        const ClipVertex quad[6] = {
+            {-1,  1, 0, {1, 1, 1, 1}, {1, 1}},
+            {-1, -1, 0, {1, 1, 1, 1}, {1, 1}},
+            { 1, -1, 0, {1, 1, 1, 1}, {1, 1}},
+            {-1,  1, 0, {1, 1, 1, 1}, {1, 1}},
+            { 1, -1, 0, {1, 1, 1, 1}, {1, 1}},
+            { 1,  1, 0, {1, 1, 1, 1}, {1, 1}},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        EXPECT_EQ(centre, Color::White);
+    }
+
+    /**
      * @brief Contract: Shader Model 1.1 `EXPP` emits its legacy four-part approximation tuple.
      *
      * The vertex program compares `EXPP(3.25)` with `(9,.5,10,2)` and preserves the submitted

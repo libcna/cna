@@ -625,6 +625,14 @@ TEST(EasyGLCompiledEffectDrawTest, ShaderModel11ImplicitVertexInputMap)
     CNA::TestSupport::RunCompiledEffectShaderModel11InputContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, ShaderModel11ExtendedVertexInputMap)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectShaderModel11ExtendedInputContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9RelativeConstantTextureCoordinates)
 {
     GraphicsDevice device;

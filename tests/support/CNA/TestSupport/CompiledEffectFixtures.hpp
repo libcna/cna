@@ -267,6 +267,9 @@ namespace CNA::TestSupport
         bool vertexShaderSwizzlesSampleResult = false;
         /// Emits a Shader Model 1.1 vertex program that consumes its implicit POSITION0 input.
         bool vertexShaderUsesShaderModel11Input = false;
+        /// Emits a Shader Model 1.1 vertex program that consumes the fixed COLOR0 and TEXCOORD7
+        /// inputs in addition to POSITION0.
+        bool vertexShaderUsesShaderModel11ExtendedInputs = false;
         /// Emits a Shader Model 1.1 vertex program whose coverage depends on the legacy four-part
         /// `EXPP` result rather than the Shader Model 2+ replicated result.
         bool vertexShaderUsesLegacyExpp = false;
@@ -1326,9 +1329,11 @@ namespace CNA::TestSupport
                                                                     SyntheticSamplerKind::Sampler2D,
                                                                 bool swizzlesSampleResult = false,
                                                                 bool usesShaderModel11Input = false,
+                                                                bool usesShaderModel11ExtendedInputs = false,
                                                                 bool usesLegacyExpp = false)
     {
-        const bool usesShaderModel11 = usesShaderModel11Input || usesLegacyExpp;
+        const bool usesShaderModel11 = usesShaderModel11Input ||
+                                       usesShaderModel11ExtendedInputs || usesLegacyExpp;
         const std::uint32_t versionToken = usesShaderModel11
                                                ? 0xFFFE0101u
                                                : usesPredication || samplesTexture ? 0xFFFE0300u
@@ -1653,6 +1658,23 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regRastOut, 0));
             AppendUInt32(shader, source(regTemp, 2));
             AppendUInt32(shader, source(regTemp, 1, 0x00u));
+        }
+        else if (usesShaderModel11ExtendedInputs)
+        {
+            // Shader Model 1 has a fixed declaration-free map: v5 is COLOR0 and v14 is
+            // TEXCOORD7. Both values must be one for the transformed quad to retain coverage.
+            AppendUInt32(shader, 0x00000014u); // m4x4 r2, v0, c0
+            AppendUInt32(shader, destination(regTemp, 2));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x00000005u); // mul r0, v5.x, v14.x
+            AppendUInt32(shader, destination(regTemp, 0));
+            AppendUInt32(shader, source(regInput, 5, 0x00u));
+            AppendUInt32(shader, source(regInput, 14, 0x00u));
+            AppendUInt32(shader, 0x00000005u); // mul oPos, r2, r0.x
+            AppendUInt32(shader, destination(regRastOut, 0));
+            AppendUInt32(shader, source(regTemp, 2));
+            AppendUInt32(shader, source(regTemp, 0, 0x00u));
         }
         else if (usesShaderModel11)
         {
@@ -2222,6 +2244,7 @@ namespace CNA::TestSupport
                 options.vertexShaderSamplesTexture, options.samplerRegister,
                 options.samplerKind, options.vertexShaderSwizzlesSampleResult,
                 options.vertexShaderUsesShaderModel11Input,
+                options.vertexShaderUsesShaderModel11ExtendedInputs,
                 options.vertexShaderUsesLegacyExpp);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));

@@ -9,6 +9,7 @@
 #include <cstring>
 #include <limits>
 #include <stdexcept>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -36,29 +37,56 @@ namespace CNA::Internal::Renderers::Software
                                              ((token >> 8u) & 0x18u));
         }
 
-        int ShaderModelOneVertexInputRegister(MOJOSHADER_usage usage, int index)
+        std::pair<MOJOSHADER_usage, std::uint8_t> ShaderModelOneVertexInputSemantic(
+            int registerNumber)
         {
-            switch (usage)
+            switch (registerNumber)
             {
-            case MOJOSHADER_USAGE_POSITION:
-                return index == 0 ? 0 : index == 1 ? 15 : -1;
-            case MOJOSHADER_USAGE_BLENDWEIGHT:
-                return index == 0 ? 1 : -1;
-            case MOJOSHADER_USAGE_BLENDINDICES:
-                return index == 0 ? 2 : -1;
-            case MOJOSHADER_USAGE_NORMAL:
-                return index == 0 ? 3 : index == 1 ? 16 : -1;
-            case MOJOSHADER_USAGE_POINTSIZE:
-                return index == 0 ? 4 : -1;
-            case MOJOSHADER_USAGE_TEXCOORD:
-                return index >= 0 && index <= 7 ? 5 + index : -1;
-            case MOJOSHADER_USAGE_TANGENT:
-                return index == 0 ? 6 : -1;
-            case MOJOSHADER_USAGE_BINORMAL:
-                return index == 0 ? 7 : -1;
+            case 0: return {MOJOSHADER_USAGE_POSITION, 0u};
+            case 1: return {MOJOSHADER_USAGE_BLENDWEIGHT, 0u};
+            case 2: return {MOJOSHADER_USAGE_BLENDINDICES, 0u};
+            case 3: return {MOJOSHADER_USAGE_NORMAL, 0u};
+            case 4: return {MOJOSHADER_USAGE_POINTSIZE, 0u};
+            case 5: return {MOJOSHADER_USAGE_COLOR, 0u};
+            case 6: return {MOJOSHADER_USAGE_COLOR, 1u};
+            case 7: return {MOJOSHADER_USAGE_TEXCOORD, 0u};
+            case 8: return {MOJOSHADER_USAGE_TEXCOORD, 1u};
+            case 9: return {MOJOSHADER_USAGE_TEXCOORD, 2u};
+            case 10: return {MOJOSHADER_USAGE_TEXCOORD, 3u};
+            case 11: return {MOJOSHADER_USAGE_TEXCOORD, 4u};
+            case 12: return {MOJOSHADER_USAGE_TEXCOORD, 5u};
+            case 13: return {MOJOSHADER_USAGE_TEXCOORD, 6u};
+            case 14: return {MOJOSHADER_USAGE_TEXCOORD, 7u};
+            case 15: return {MOJOSHADER_USAGE_POSITION, 1u};
+            case 16: return {MOJOSHADER_USAGE_NORMAL, 1u};
             default:
-                return -1;
+                throw std::runtime_error(
+                    "Software compiled effect: Shader Model 1 vertex input register is out of "
+                    "range.");
             }
+        }
+
+        int ShaderModelOneVertexInputRegister(const MOJOSHADER_attribute& input)
+        {
+            constexpr std::string_view prefix = "vs_v";
+            if (input.name == nullptr)
+                throw std::runtime_error(
+                    "Software compiled effect: Shader Model 1 vertex input has no parser name.");
+            const std::string_view name(input.name);
+            if (!name.starts_with(prefix) || name.size() == prefix.size())
+                throw std::runtime_error(
+                    "Software compiled effect: Shader Model 1 vertex input parser name is "
+                    "invalid.");
+            int result = 0;
+            for (const char digit : name.substr(prefix.size()))
+            {
+                if (digit < '0' || digit > '9')
+                    throw std::runtime_error(
+                        "Software compiled effect: Shader Model 1 vertex input parser name is "
+                        "invalid.");
+                result = result * 10 + (digit - '0');
+            }
+            return result;
         }
 
         std::size_t ShaderModelOneOperandCount(std::uint16_t opcode, SoftwareShaderStageEXT stage,
@@ -340,16 +368,11 @@ namespace CNA::Internal::Renderers::Software
                 for (int attribute = 0; attribute < parseData.attribute_count; ++attribute)
                 {
                     const MOJOSHADER_attribute& input = parseData.attributes[attribute];
-                    const int registerNumber =
-                        ShaderModelOneVertexInputRegister(input.usage, input.index);
-                    if (registerNumber < 0)
-                    {
-                        throw std::runtime_error(
-                            "Software compiled effect: Shader Model 1 vertex input has no "
-                            "D3D9 register mapping.");
-                    }
+                    const int registerNumber = ShaderModelOneVertexInputRegister(input);
+                    const auto [usage, usageIndex] =
+                        ShaderModelOneVertexInputSemantic(registerNumber);
                     result.inputSemantics.push_back(
-                        {input.usage, static_cast<std::uint8_t>(input.index),
+                        {usage, usageIndex,
                          static_cast<std::uint16_t>(registerNumber), 1u});
                 }
             }
