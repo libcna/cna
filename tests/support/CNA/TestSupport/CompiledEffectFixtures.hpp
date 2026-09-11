@@ -1025,9 +1025,11 @@ namespace CNA::TestSupport
             AppendUInt32(shader, FloatBits(8.0f));
             AppendUInt32(shader, FloatBits(1.0f));
             AppendUInt32(shader, FloatBits(1.0f));
-            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_texcoord0 v0.xy
+            const bool threeComponent = samplerKind != SyntheticSamplerKind::Sampler2D;
+            const std::uint32_t coordinateMask = threeComponent ? 0x7u : 0x3u;
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_texcoord0 v0.xy(z)
             AppendUInt32(shader, 0x80000000u | 5u);
-            AppendUInt32(shader, destination(regInput, 0, 0x3u));
+            AppendUInt32(shader, destination(regInput, 0, coordinateMask));
             AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_2d s#
             AppendUInt32(shader, 0x80000000u | (samplerTextureType << 27));
             AppendUInt32(shader, destination(regSampler, samplerRegister, 0xFu));

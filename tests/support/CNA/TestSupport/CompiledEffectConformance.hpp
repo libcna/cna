@@ -1137,6 +1137,124 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Draws the dependent temporary-coordinate fixture through a cube or volume sampler.
+     * @param device Device used for the draw.
+     * @param effect Parsed fixture effect.
+     * @param samplerKind Cube or volume sampler kind to bind.
+     * @return Centre target pixel after the compiled draw.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectDependentTemporaryTextureCoordinate3D(
+        GraphicsDevice& device, Effect& effect, SyntheticSamplerKind samplerKind)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto draw = [&](const Vertex (&vertices)[6])
+        {
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle probe(2, 2, 1, 1);
+            target.GetData(0, &probe, &centre, 0, 1);
+            return centre;
+        };
+
+        if (samplerKind == SyntheticSamplerKind::SamplerCube)
+        {
+            TextureCube cube(device, 8, /*mipMap=*/true, SurfaceFormat::Color);
+            for (int face = 0; face < 6; ++face)
+            {
+                const std::vector<Color> base(64, Color::Red);
+                cube.SetData(static_cast<CubeMapFace>(face), base.data(),
+                             static_cast<int>(base.size()));
+                for (int level = 1; level < cube.getLevelCountProperty(); ++level)
+                {
+                    const int extent = std::max(1, 8 >> level);
+                    const std::vector<Color> mip(
+                        static_cast<std::size_t>(extent * extent), Color::Blue);
+                    cube.SetData(static_cast<CubeMapFace>(face), level, nullptr,
+                                 mip.data(), 0, static_cast<int>(mip.size()));
+                }
+            }
+            effect.getParametersProperty()["FxTexture"]->SetValue(&cube);
+            const Vertex vertices[6] = {
+                {-1,  1, 0, -.125f, -.125f, 1},
+                {-1, -1, 0, -.125f,  .125f, 1},
+                { 1, -1, 0,  .125f,  .125f, 1},
+                {-1,  1, 0, -.125f, -.125f, 1},
+                { 1, -1, 0,  .125f,  .125f, 1},
+                { 1,  1, 0,  .125f, -.125f, 1},
+            };
+            return draw(vertices);
+        }
+
+        Texture3D volume(device, 8, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        const std::vector<Color> base(512, Color::Red);
+        volume.SetData(base.data(), static_cast<int>(base.size()));
+        for (int level = 1; level < volume.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            const std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent * extent), Color::Blue);
+            volume.SetData(level, 0, 0, extent, extent, 0, extent,
+                           mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect.getParametersProperty()["FxTexture"]->SetValue(&volume);
+        const Vertex vertices[6] = {
+            {-1,  1, 0, 0, 0, .5f},       {-1, -1, 0, 0, .25f, .5f},
+            { 1, -1, 0, .25f, .25f, .5f}, {-1,  1, 0, 0, 0, .5f},
+            { 1, -1, 0, .25f, .25f, .5f}, { 1,  1, 0, .25f, 0, .5f},
+        };
+        return draw(vertices);
+    }
+
+    /**
+     * @brief Proves temporary-coordinate implicit LOD for cube and volume samplers.
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectDependentTemporaryTextureCoordinate3DContract(
+        GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        for (const SyntheticSamplerKind kind : {
+                 SyntheticSamplerKind::SamplerCube, SyntheticSamplerKind::Sampler3D})
+        {
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.samplerKind = kind;
+            options.pixelShaderUsesDependentTemporaryTextureCoordinate = true;
+            options.samplerStates = {
+                {Fx::SampMagFilter, Fx::FilterPoint},
+                {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+                {Fx::SampAddressU, Fx::AddressClamp},
+                {Fx::SampAddressV, Fx::AddressClamp},
+                {Fx::SampAddressW, Fx::AddressClamp},
+            };
+            Effect effect(device, BuildSyntheticEffect(options));
+            const Color centre =
+                DrawCompiledEffectDependentTemporaryTextureCoordinate3D(
+                    device, effect, kind);
+            EXPECT_EQ(centre, Color::Blue)
+                << (kind == SyntheticSamplerKind::SamplerCube ? "cube" : "volume")
+                << " implicit LOD must include the temporary coordinate expression";
+        }
+    }
+
+    /**
      * @brief Proves that parsed D3D9 subroutines execute and return to the main pixel program.
      *
      * The fixture uses an unconditional call whose body nests a second forward call, followed by

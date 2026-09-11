@@ -609,6 +609,16 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9DependentTemporaryTextureCoordinatesDrive
     CNA::TestSupport::RunCompiledEffectDependentTemporaryTextureCoordinateContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9DependentTemporaryCubeAndVolumeCoordinatesDriveLod)
+{
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDependentTemporaryTextureCoordinate3DContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9SubroutinesExecuteAndReturn)
 {
     GraphicsDevice device;

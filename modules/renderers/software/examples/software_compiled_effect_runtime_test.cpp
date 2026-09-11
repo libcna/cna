@@ -1759,6 +1759,134 @@ namespace
               "compiled dependent temporary coordinate did not select the minified mip");
     }
 
+    void CheckCompiledDependentTemporaryCubeCoordinate()
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            PresentationParameters());
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+        options.pixelShaderUsesDependentTemporaryTextureCoordinate = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+        };
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        TextureCube cube(device, 8, true, SurfaceFormat::Color);
+        for (int face = 0; face < 6; ++face)
+        {
+            const std::vector<Color> base(64, Color::Red);
+            cube.SetData(static_cast<CubeMapFace>(face), base.data(),
+                         static_cast<int>(base.size()));
+            for (int level = 1; level < cube.getLevelCountProperty(); ++level)
+            {
+                const int extent = std::max(1, 8 >> level);
+                const std::vector<Color> mip(
+                    static_cast<std::size_t>(extent * extent), Color::Blue);
+                cube.SetData(static_cast<CubeMapFace>(face), level, nullptr,
+                             mip.data(), 0, static_cast<int>(mip.size()));
+            }
+        }
+        effect->getParametersProperty()["FxTexture"]->SetValue(&cube);
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const Vertex vertices[6] = {
+            {-1,  1, 0, -.125f, -.125f, 1},
+            {-1, -1, 0, -.125f,  .125f, 1},
+            { 1, -1, 0,  .125f,  .125f, 1},
+            {-1,  1, 0, -.125f, -.125f, 1},
+            { 1, -1, 0,  .125f,  .125f, 1},
+            { 1,  1, 0,  .125f, -.125f, 1},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(vertices), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        Check(centre == Color::Blue,
+              "compiled dependent temporary cube coordinate did not select the minified mip");
+    }
+
+    void CheckCompiledDependentTemporaryVolumeCoordinate()
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            PresentationParameters());
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.samplerKind = CNA::TestSupport::SyntheticSamplerKind::Sampler3D;
+        options.pixelShaderUsesDependentTemporaryTextureCoordinate = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+            {Fx::SampAddressW, Fx::AddressClamp},
+        };
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        Texture3D volume(device, 8, 8, 8, true, SurfaceFormat::Color);
+        const std::vector<Color> base(512, Color::Red);
+        volume.SetData(base.data(), static_cast<int>(base.size()));
+        for (int level = 1; level < volume.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            const std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent * extent), Color::Blue);
+            volume.SetData(level, 0, 0, extent, extent, 0, extent,
+                           mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect->getParametersProperty()["FxTexture"]->SetValue(&volume);
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const Vertex vertices[6] = {
+            {-1,  1, 0, 0, 0, .5f},       {-1, -1, 0, 0, .25f, .5f},
+            { 1, -1, 0, .25f, .25f, .5f}, {-1,  1, 0, 0, 0, .5f},
+            { 1, -1, 0, .25f, .25f, .5f}, { 1,  1, 0, .25f, 0, .5f},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(vertices), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        Check(centre == Color::Blue,
+              "compiled dependent temporary volume coordinate did not select the minified mip");
+    }
+
     void CheckCompiledDerivativeRasterization()
     {
         GraphicsDevice device;
@@ -3909,6 +4037,8 @@ int main()
         CheckParsedSubroutineEffect(renderer);
         CheckCompiledRelativeTextureCoordinate();
         CheckCompiledDependentTemporaryTextureCoordinate();
+        CheckCompiledDependentTemporaryCubeCoordinate();
+        CheckCompiledDependentTemporaryVolumeCoordinate();
         CheckCompiledDerivativeRasterization();
         CheckCompiledRasterInputs();
         CheckCompiledInstructionPredication();

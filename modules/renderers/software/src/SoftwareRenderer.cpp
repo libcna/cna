@@ -2258,6 +2258,37 @@ namespace CNA::Internal::Renderers::Software
                 request.gradientY[1] * static_cast<float>(height), width, height);
         }
 
+        TextureFootprint ExplicitGradientCubeFootprint(
+            const SoftwarePixelSampleRequestEXT& request, int faceDimension)
+        {
+            const Vector3 directions[3] = {
+                Vector3(request.coordinate[0], request.coordinate[1], request.coordinate[2]),
+                Vector3(request.coordinate[0] + request.gradientX[0],
+                        request.coordinate[1] + request.gradientX[1],
+                        request.coordinate[2] + request.gradientX[2]),
+                Vector3(request.coordinate[0] + request.gradientY[0],
+                        request.coordinate[1] + request.gradientY[1],
+                        request.coordinate[2] + request.gradientY[2]),
+            };
+            int face = 0;
+            float s[3]{}, t[3]{};
+            SelectCubeFace(directions[0], face, s[0], t[0]);
+            for (int index = 1; index < 3; ++index)
+                if (!CubeFaceLocal(directions[index], face, s[index], t[index]))
+                    return TextureFootprint{};
+            RasterVertex origin;
+            RasterVertex horizontal;
+            RasterVertex vertical;
+            horizontal.x = 1.0f;
+            vertical.y = 1.0f;
+            const float dimension = static_cast<float>(std::max(1, faceDimension));
+            return ScreenSpaceTextureFootprint(
+                origin, horizontal, vertical,
+                s[0] * dimension, s[1] * dimension, s[2] * dimension,
+                t[0] * dimension, t[1] * dimension, t[2] * dimension,
+                faceDimension, faceDimension);
+        }
+
         void SampleVolumeLevel(const SoftwareTexture3DRenderer& texture, int level,
                                const SoftwareSamplerState& sampler, bool magnify,
                                float u, float v, float w, std::array<float, 4>& result)
@@ -2524,9 +2555,12 @@ namespace CNA::Internal::Renderers::Software
                     if (surface == nullptr)
                         throw std::runtime_error(
                             "Software compiled effect: samplerCUBE requires a Software TextureCube.");
-                    const TextureFootprint footprint = CompiledTriangleCubeTextureFootprint(
-                        program_, request, v0_, v1_, v2_,
-                        surface->CubeSize());
+                    const TextureFootprint footprint =
+                        request.lodMode == SoftwareTextureLodModeEXT::Gradients
+                            ? ExplicitGradientCubeFootprint(request, surface->CubeSize())
+                            : CompiledTriangleCubeTextureFootprint(
+                                  program_, request, v0_, v1_, v2_,
+                                  surface->CubeSize());
                     const float lambda = request.lodMode == SoftwareTextureLodModeEXT::Explicit
                         ? request.lod : LodFromTexelRate(footprint.isotropicRate) + request.lod;
                     float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
