@@ -756,6 +756,32 @@ TEST(EasyGLCompiledEffectTest, RejectsReadOfUninitializedTemporaryDestination)
     EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
+TEST(EasyGLCompiledEffectTest, RejectsTexkillWithUndefinedTemporaryComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = false;
+    options.pixelShaderTexkillReadsPartialTemporary = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, AcceptsTexkillAfterCompleteSplitTemporaryWrites)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = false;
+    options.pixelShaderTexkillReadsSplitTemporary = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;

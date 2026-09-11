@@ -1,0 +1,59 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -453,11 +453,15 @@ static int parse_destination_token(Context *ctx, DestArgInfo *info)
+         fail(ctx, "Register type is out of range");
+ 
+     if (!isfail(ctx))
+     {
++        RegisterList *reg =
++            set_used_register(ctx, info->regtype, info->regnum, 0);
+         ctx->have_dest_arg = 1;
+         ctx->dest_arg_was_written =
+             register_was_written(ctx, info->regtype, info->regnum);
+-        set_used_register(ctx, info->regtype, info->regnum, 1);
++        ctx->dest_arg_prior_writemask = reg ? reg->written : 0;
++        if (reg)
++            reg->written |= info->writemask;
+     } // if
+ 
+     return 1;
+@@ -1752,8 +1757,15 @@ static void state_TEXKILL(Context *ctx)
+         fail(ctx, "TEXKILL writemask must be .xyzw");
+     else if ((regtype != REG_TYPE_TEMP) && (regtype != REG_TYPE_TEXTURE))
+         fail(ctx, "TEXKILL must use a temp or texture register");
++    else if ((regtype == REG_TYPE_TEMP) &&
++             (ctx->dest_arg_prior_writemask != 0xF))
++        fail(ctx, "TEXKILL temporary register components are uninitialized");
++
++    RegisterList *reg =
++        reglist_find(&ctx->used_registers, info->regtype, info->regnum);
++    if (reg)
++        reg->written = ctx->dest_arg_prior_writemask;
+ 
+-    // !!! FIXME: "If a temporary register is used, all components must have been previously written."
+     // !!! FIXME: "If a texture register is used, all components that are read must have been declared."
+     // !!! FIXME: there are further limitations in ps_1_3 and earlier.
+ } // state_TEXKILL
+diff --git a/profiles/mojoshader_profile.h b/profiles/mojoshader_profile.h
+--- a/profiles/mojoshader_profile.h
++++ b/profiles/mojoshader_profile.h
+@@ -125,6 +125,7 @@ typedef struct Context
+     DestArgInfo dest_arg;
+     int have_dest_arg;
+     int dest_arg_was_written;
++    int dest_arg_prior_writemask;
+     SourceArgInfo source_args[5];
+     SourceArgInfo predicate_arg;  // for predicated instructions.
+     uint32 dwords[4];
+diff --git a/profiles/mojoshader_profile_common.c b/profiles/mojoshader_profile_common.c
+--- a/profiles/mojoshader_profile_common.c
++++ b/profiles/mojoshader_profile_common.c
+@@ -302,6 +302,6 @@ RegisterList *set_used_register(Context *ctx,
+ 
+     reg = reglist_insert(ctx, &ctx->used_registers, regtype, regnum);
+     if (reg && written)
+-        reg->written = 1;
++        reg->written = 0xF;
+     return reg;
+ } // set_used_register

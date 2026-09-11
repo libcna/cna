@@ -2658,6 +2658,41 @@ namespace
               "compiled Effect parser accepted a temporary self-read before initialization");
     }
 
+    void CheckCompiledTexkillTemporaryValidation(SoftwareRenderer& renderer)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = false;
+        options.pixelShaderTexkillReadsPartialTemporary = true;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        bool rejected = false;
+        try
+        {
+            static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+        }
+        catch (const std::runtime_error&)
+        {
+            rejected = true;
+        }
+        Check(rejected,
+              "compiled Effect parser accepted TEXKILL with undefined temporary components");
+
+        options.pixelShaderTexkillReadsPartialTemporary = false;
+        options.pixelShaderTexkillReadsSplitTemporary = true;
+        const auto splitBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        bool accepted = true;
+        try
+        {
+            static_cast<void>(renderer.CreateCompiledEffect(splitBytes.data(), splitBytes.size()));
+        }
+        catch (const std::runtime_error&)
+        {
+            accepted = false;
+        }
+        Check(accepted,
+              "compiled Effect parser rejected TEXKILL after complete split temporary writes");
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4435,6 +4470,7 @@ int main()
         CheckCompiledShaderModel14Phase();
         CheckCompiledShaderModel14PhaseValidation(renderer);
         CheckCompiledUninitializedTemporaryValidation(renderer);
+        CheckCompiledTexkillTemporaryValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();

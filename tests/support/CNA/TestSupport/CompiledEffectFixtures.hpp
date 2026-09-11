@@ -372,6 +372,12 @@ namespace CNA::TestSupport
         /// Prepends `mov r0, r0` before r0 has been initialized. D3D9 shader validation must
         /// reject the self-read even though the same instruction also names r0 as its destination.
         bool pixelShaderReadsUninitializedDestination = false;
+        /// Writes only r0.x before TEXKILL reads all four temporary components. D3D9 shader
+        /// validation must reject the three undefined components.
+        bool pixelShaderTexkillReadsPartialTemporary = false;
+        /// Defines r0.xy and r0.zw in separate instructions before TEXKILL. Validation must
+        /// accumulate the two write masks and accept the complete temporary.
+        bool pixelShaderTexkillReadsSplitTemporary = false;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -440,7 +446,9 @@ namespace CNA::TestSupport
         bool swizzlesSampleResult = false,
         bool usesSignedLog = false,
         bool usesNrmWriteMask = false,
-        bool readsUninitializedDestination = false)
+        bool readsUninitializedDestination = false,
+        bool texkillReadsPartialTemporary = false,
+        bool texkillReadsSplitTemporary = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -600,6 +608,27 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, r0
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
+        }
+
+        if (texkillReadsPartialTemporary)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.x, c0.x
+            AppendUInt32(shader, destination(regTemp, 0, 0x1u));
+            AppendUInt32(shader, source(regConst, 0, 0x00u));
+            AppendUInt32(shader, 0x00000041u | (1u << 24)); // texkill r0
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+        }
+
+        if (texkillReadsSplitTemporary)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.xy, c0.xy
+            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.zw, c0.zw
+            AppendUInt32(shader, destination(regTemp, 0, 0xCu));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x00000041u | (1u << 24)); // texkill r0
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
         }
 
         if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic)
@@ -2185,7 +2214,9 @@ namespace CNA::TestSupport
             options.pixelShaderSwizzlesSampleResult,
             options.pixelShaderUsesSignedLog,
             options.pixelShaderUsesNrmWriteMask,
-            options.pixelShaderReadsUninitializedDestination);
+            options.pixelShaderReadsUninitializedDestination,
+            options.pixelShaderTexkillReadsPartialTemporary,
+            options.pixelShaderTexkillReadsSplitTemporary);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
