@@ -1215,6 +1215,47 @@ TEST(XnaFbxImporter, AQuarterTurnIsComposedTheWayXnasIsAndNotInFloat)
 // a non-uniform scaling, which is a basis whose rows are not orthogonal, and FBX's translation /
 // rotation / scaling form cannot carry that shear. The grandchild composes onto what is left of it
 // once it is re-expressed -- which is why 0.412 comes back as 0.406 rather than unchanged.
+TEST(XnaFbxImporter, ARootsUnderflowedRotationEntryIsAPositiveZero)
+{
+    const auto asBits = [](const float value)
+    {
+        std::uint32_t out = 0;
+        std::memcpy(&out, &value, sizeof out);
+        return out;
+    };
+
+    ImporterContext context;
+    Xna::FbxImporter importer;
+
+    // A rotation small enough that its sine underflows when the transform is narrowed to `float`.
+    // The double the composition holds is *negative*, so narrowing it alone answers `0x80000000`
+    // -- a negative zero -- and the genuine importer answers `0x00000000`. It divides by its
+    // parent even at the root, and a product's entry is a sum, in which `0.0 + -0.0` is `+0.0`
+    // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-237`).
+    const std::shared_ptr<Graphics::NodeContent> underflow =
+        importer.Import(Fixture("fbx_underflow_rotation.fbx").string(), context);
+    ASSERT_NE(underflow, nullptr);
+    const Matrix small = underflow->getTransformProperty();
+    EXPECT_EQ(asBits(small.M13), 0x00000000u);
+    EXPECT_EQ(asBits(small.M31), 0x00000000u);
+    EXPECT_EQ(asBits(small.M11), 0x3F800000u);
+    EXPECT_EQ(asBits(small.M33), 0x3F800000u);
+
+    // The same, written as a *subnormal* double -- which is the shape SAMPLE-046's `spaceship.fbx`
+    // carries, an exporter having written two `float` `-0.0`s into one `double` slot. `std::stod`
+    // reports `ERANGE` for a value it has converted correctly, and reading that as a parse failure
+    // refused the whole scene where the genuine importer reads it.
+    const std::shared_ptr<Graphics::NodeContent> denormal =
+        importer.Import(Fixture("fbx_denormal_rotation.fbx").string(), context);
+    ASSERT_NE(denormal, nullptr);
+    const Matrix tiny = denormal->getTransformProperty();
+    EXPECT_EQ(asBits(tiny.M13), 0x00000000u);
+    EXPECT_EQ(asBits(tiny.M31), 0x00000000u);
+    EXPECT_EQ(asBits(tiny.M11), 0x3F800000u);
+    EXPECT_EQ(asBits(tiny.M33), 0x3F800000u);
+    ASSERT_EQ(denormal->getChildrenProperty().getCountProperty(), 1);
+}
+
 TEST(XnaFbxImporter, InheritTypeDecidesHowMuchOfTheParentsScalingReachesAChild)
 {
     const auto asBits = [](const float value)

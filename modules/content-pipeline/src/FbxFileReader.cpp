@@ -3,6 +3,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
+#include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 
@@ -285,14 +288,20 @@ namespace CNA::Content::Pipeline
                     }
                 }
                 const std::string text(reinterpret_cast<const char*>(bytes_.data()) + start, at_ - start);
-                try
-                {
-                    return std::stod(text);
-                }
-                catch (const std::exception&)
+                // `std::stod` throws `out_of_range` on `ERANGE`, which `strtod` also reports for a
+                // value that *underflows to a subnormal* -- a number it has converted correctly.
+                // SAMPLE-046's `spaceship.fbx` carries one, an exporter having written two `float`
+                // `-0.0`s into a `double` slot, and the genuine importer reads that file; CNA
+                // refused the whole scene as corrupt. Only a genuine overflow, which comes back
+                // infinite, is a parse failure (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-237`).
+                errno = 0;
+                char* stopped = nullptr;
+                const double value = std::strtod(text.c_str(), &stopped);
+                if (stopped == text.c_str() || !std::isfinite(value))
                 {
                     Fail(FbxFileError::ParseError, "'" + text + "' is not a number.");
                 }
+                return value;
             }
 
             std::span<const std::uint8_t> bytes_;

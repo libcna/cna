@@ -1040,7 +1040,22 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         [[nodiscard]] Matrix QuotientTransform(const Rows& world, const Rows& parentWorld,
                                                const bool hasParent)
         {
-            if (!hasParent) { return ToMatrix(world); }
+            // A root divides too. XNA's node transform is `world * Invert(parentWorld)` and a
+            // root's parent is the scene, whose world is the identity -- and multiplying by the
+            // identity is *not* a no-op on a signed zero, because each entry of a product is a sum
+            // of four terms and `0.0 + -0.0` is `+0.0`. An entry whose only nonzero contribution
+            // underflowed to a zero therefore comes out positive where the lone narrowed product
+            // is negative. SAMPLE-046's `spaceship.fbx` is where it shows: its `Fbx_Root` carries
+            // an `Lcl Rotation` whose Y and Z are the double `00 00 00 80 00 00 00 80` -- a pair
+            // of `float` `-0.0`s an exporter wrote into a `double` slot, which reads as the
+            // negative denormal -1.0609978955e-314 -- and the sine of it, scaled and narrowed,
+            // is a negative zero at `M12` and `M31` where the genuine importer answers a positive
+            // one. Measured over twenty-seven probes, including the file's own bytes patched to
+            // each candidate value: XNA answers `+0.0` for *every* underflow and reproduces every
+            // float denormal that does not underflow, which is what says the narrowing is CNA's
+            // own and the sum is what washes the sign
+            // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-237`).
+            if (!hasParent) { return ToMatrix(Multiply(NarrowAll(world), IdentityRows())); }
             // XNA's own `Matrix.Invert` rather than the affine shortcut. The two agree to a float
             // ulp on a well-conditioned basis and disagree exactly where this campaign looks: the
             // affine form's translation row is three products and a negation, the cofactor form's

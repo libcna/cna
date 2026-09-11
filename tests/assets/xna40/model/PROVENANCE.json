@@ -714,6 +714,20 @@
    "thirdParty": false
   },
   {
+   "file": "fbx_underflow_rotation.fbx",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_signed_zero_transform_probes.py",
+   "note": "A rotation whose sine underflows when the transform is narrowed to float; the genuine importer answers a positive zero where a lone narrowed product is a negative one (XNASWEEP-237).",
+   "thirdParty": false
+  },
+  {
+   "file": "fbx_denormal_rotation.fbx",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_signed_zero_transform_probes.py",
+   "note": "The same rotation written as a subnormal, which std::stod reports as out of range and CNA read as a corrupt scene (XNASWEEP-237).",
+   "thirdParty": false
+  },
+  {
    "file": "x_generated_normals_exact.x",
    "origin": "generated",
    "generator": "tools/xna-pipeline-oracle/model/make_generated_normal_probes.py",
