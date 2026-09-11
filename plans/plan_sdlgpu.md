@@ -1633,6 +1633,35 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   renderer audit remains **266/266** (144 `=`, 117 `out`, five limitations) and now requires
   explicit SDL overrides for all three presentation-format hooks.
 
+### SDLGPU-133 — make depth-state oracles request an XNA depth buffer ✅
+
+- **Problem/public behavior:** the first complete post-`SDLGPU-132` native sweep passed **192/194**.
+  Only the shared depth compare-function and depth-write-enable programs failed, because both
+  derived directly from `Game` without installing a `GraphicsDeviceManager`. CNA's eager
+  `GraphicsDevice` therefore retained `PresentationParameters`' ordinary default
+  `DepthFormat::None`; the tests nevertheless cleared and expected a depth plane. Before
+  `SDLGPU-132`, SDL GPU incorrectly allocated D24S8 regardless of that public request, masking the
+  invalid fixture setup.
+- **EasyGL/SDL/FNA evidence:** `PresentationParameters` defaults to `DepthFormat::None`, while the
+  normal XNA game path creates a `GraphicsDeviceManager` whose default
+  `PreferredDepthStencilFormat` is `Depth24`. `SDLGPU-132` deliberately made SDL GPU distinguish
+  those paths. The two tests' compare/write assertions remain valid once they request the depth
+  buffer whose contents they observe; changing renderer behavior back would regress the truthful
+  None/Depth16/Depth24/Depth24Stencil8 contract.
+- **Location:** the two renderer-neutral EasyGL depth-state oracle sources reused verbatim by the
+  SDL GPU suite. Install a normal `GraphicsDeviceManager` in each test game; do not special-case
+  the renderer or weaken any pixel assertion.
+- **Acceptance/test:** both discriminating programs pass all **5/5** compare-function and **2/2**
+  write-enable checks on offscreen Vulkan with validation diagnostics fatal; then rerun the full
+  native SDL GPU integration inventory before final closeout.
+- **Result (2026-09-11):** both renderer-neutral games now install the ordinary
+  `GraphicsDeviceManager`, so its XNA-default `Depth24` request reaches Reset before the first
+  frame. No expected colour, compare function or write-enable assertion changed. The two exact
+  sources rebuild incrementally and pass **2/2 CTests** on offscreen Vulkan: all **5/5** distinct
+  compare-function pixels and both **2/2** write-enable sequence pixels are correct, with the SDL
+  GPU validation-fatal wrapper still active. The complete 194-registration rerun is retained as
+  the separate final closeout gate so this focused task can be committed immediately.
+
 
 ## 2026-09-10 parity audit final status
 
