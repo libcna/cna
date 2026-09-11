@@ -190,6 +190,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   transitions share one renderer-neutral public test corpus. `SOFTWARE-323` removed a stale compile
   guard and now runs all 17 applicable complete range/state/target/lifecycle cases under Software.
   This is deterministic CPU expansion, not delegation to EasyGL or a GPU.
+- **The existing CNAEXT point path keeps its generic range proof active** (`SOFTWARE-324`). Software
+  now runs all fourteen renderer-neutral positive `PointListEXT` cases, including the exact
+  nonzero `vertexStart`/count pixel discriminator. This is extension regression evidence and is not
+  counted toward classic-XNA parity.
 - **Static and dynamic vertex/index buffers share EasyGL's public contract** (`SOFTWARE-109`,
   `SOFTWARE-294`). The complete fixed-size resource exists at construction, so readable buffers
   support `GetData` and valid draw ranges before their first upload, matching XNA/FNA native
