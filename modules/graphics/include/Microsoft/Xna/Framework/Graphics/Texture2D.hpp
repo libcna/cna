@@ -53,7 +53,7 @@ namespace Microsoft::Xna::Framework::Graphics
         using Texture::Dispose;
 
         /** @brief Constructs a default, uninitialized Texture2D. */
-        Texture2D();
+        CNAEXT Texture2D();
 
         /**
          * @brief Loads a Texture2D from a file asset by name.
@@ -264,10 +264,33 @@ namespace Microsoft::Xna::Framework::Graphics
                               static_cast<int>(sizeof(T)));
         }
 
+        /**
+         * @brief Uploads a complete level from a window of XNA-compatible value types.
+         *
+         * This is the C++ pointer/count mapping of XNA's
+         * `SetData&lt;T&gt;(T[] data, int startIndex, int elementCount)` overload. The selected
+         * source elements must contain exactly the complete level-zero payload.
+         *
+         * @tparam T A supported logical packed/vector type or a trivially-copyable raw value type.
+         * @param data Source elements.
+         * @param startIndex First source element to upload.
+         * @param elementCount Exact number of elements required for the complete level.
+         */
+        template<typename T>
+        void SetData(const T* data, int startIndex, int elementCount)
+        {
+            SetData(0, nullptr, data, startIndex, elementCount);
+        }
+
         /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
         void SetData(std::nullptr_t, int elementCount)
         {
             SetData(static_cast<const Color*>(nullptr), elementCount);
+        }
+        /** @brief Preserves null-pointer overload resolution for the source-window overload. */
+        void SetData(std::nullptr_t, int startIndex, int elementCount)
+        {
+            SetData(static_cast<const Color*>(nullptr), startIndex, elementCount);
         }
         /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
         void SetData(int level, const Rectangle* rect, std::nullptr_t,

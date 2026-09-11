@@ -225,6 +225,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   `CNAEXT`. The remaining rectangle/foreign-window `Present` overload is a physical window/swapchain
   API unsupported by EasyGL too and explicitly outside the Software renderer target; no no-op stub
   is counted as parity.
+- **`Texture2D.SetData<T>` includes the classic source-window shape** (`SOFTWARE-330`). The
+  three-argument pointer/count mapping dispatches Color and packed XNA value objects through their
+  logical packers and arbitrary trivially-copyable values through the exact raw path. Nonzero
+  source guards and validation are shared with EasyGL rather than inferred from storage-only tests.
 - **Static and dynamic vertex/index buffers share EasyGL's public contract** (`SOFTWARE-109`,
   `SOFTWARE-294`). The complete fixed-size resource exists at construction, so readable buffers
   support `GetData` and valid draw ranges before their first upload, matching XNA/FNA native

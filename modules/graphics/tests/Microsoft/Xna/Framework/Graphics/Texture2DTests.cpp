@@ -61,6 +61,11 @@ using System::IO::MemoryStream;
 
 namespace
 {
+    struct FourByteTextureValue
+    {
+        std::uint8_t bytes[4];
+    };
+
     using CNA::Internal::Renderers::ITextureRenderer;
 
     template <typename TException, typename TCallable>
@@ -365,6 +370,52 @@ namespace
                 ExpectExactColor(destination[i], sentinel);
         }
     }
+}
+
+TEST(Texture2DTest, SetDataSourceWindowOverloadCoversLogicalAndRawValueTypes)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    GraphicsDevice device;
+
+    Texture2D colorTexture(device, 2, 2);
+    const std::array<Color, 6> colorSource{
+        Color::Magenta, Color::Red, Color::Green, Color::Blue, Color::White, Color::Cyan};
+    colorTexture.SetData(colorSource.data(), 1, 4);
+    std::array<Color, 4> colorResult{};
+    colorTexture.GetData(colorResult.data(), static_cast<int>(colorResult.size()));
+    EXPECT_EQ(colorResult[0], Color::Red);
+    EXPECT_EQ(colorResult[1], Color::Green);
+    EXPECT_EQ(colorResult[2], Color::Blue);
+    EXPECT_EQ(colorResult[3], Color::White);
+
+    Texture2D packedTexture(device, 2, 2, false, SurfaceFormat::Bgr565);
+    std::array<Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565, 6> packedSource{};
+    for (std::size_t i = 0; i < packedSource.size(); ++i)
+        packedSource[i].setPackedValueProperty(static_cast<std::uint16_t>(0x1111u * i));
+    packedTexture.SetData(packedSource.data(), 1, 4);
+    std::array<Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565, 4> packedResult{};
+    packedTexture.GetData(packedResult.data(), static_cast<int>(packedResult.size()));
+    for (std::size_t i = 0; i < packedResult.size(); ++i)
+    {
+        EXPECT_EQ(packedResult[i].getPackedValueProperty(),
+                  packedSource[i + 1].getPackedValueProperty());
+    }
+
+    Texture2D rawTexture(device, 1, 1);
+    const std::array<FourByteTextureValue, 3> rawSource{{
+        {{0xEE, 0xEE, 0xEE, 0xEE}},
+        {{17, 83, 149, 211}},
+        {{0xDD, 0xDD, 0xDD, 0xDD}}
+    }};
+    rawTexture.SetData(rawSource.data(), 1, 1);
+    std::array<std::uint8_t, 4> rawResult{};
+    rawTexture.GetData(rawResult.data(), static_cast<int>(rawResult.size()));
+    EXPECT_EQ(rawResult, (std::array<std::uint8_t, 4>{17, 83, 149, 211}));
+
+    EXPECT_THROW(colorTexture.SetData(colorSource.data(), -1, 4),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(colorTexture.SetData(nullptr, 0, 4), System::ArgumentNullException);
 }
 
 // -----------------------------------------------------------------------
