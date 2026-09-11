@@ -302,6 +302,8 @@ namespace CNA::TestSupport
         bool pixelShaderUsesPredicatedTexkill = false;
         /// Emits a Shader Model 1.4 pixel program that applies `_dz` and `_dw` to `TEXCRD`.
         bool pixelShaderUsesProjectiveModifiers = false;
+        /// Emits ps_1_4 projective modifiers after non-identity source swizzles.
+        bool pixelShaderUsesProjectiveSwizzleModifiers = false;
         /// Emits a Shader Model 1.4 pixel program whose destination selects the sampler stage.
         bool pixelShaderUsesShaderModel14TextureLoad = false;
         /// Emits a two-phase Shader Model 1.4 pixel program and carries temporary RGB across it.
@@ -394,6 +396,7 @@ namespace CNA::TestSupport
         bool usesPredication = false,
         bool usesPredicatedTexkill = false,
         bool usesProjectiveModifiers = false,
+        bool usesProjectiveSwizzleModifiers = false,
         bool usesShaderModel14TextureLoad = false,
         bool usesShaderModel14Phase = false,
         bool usesLegacyTextureMatrix = false,
@@ -416,7 +419,9 @@ namespace CNA::TestSupport
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
             usesDependentTemporaryTextureCoordinate;
-        const bool usesShaderModel14 = usesProjectiveModifiers || usesShaderModel14TextureLoad ||
+        const bool usesShaderModel14 = usesProjectiveModifiers ||
+                                       usesProjectiveSwizzleModifiers ||
+                                       usesShaderModel14TextureLoad ||
                                        usesShaderModel14Phase || duplicatesShaderModel14Phase ||
                                        legacyDepthOutput == SyntheticLegacyDepthOutput::Register ||
                                        legacyBumpEnvironment ==
@@ -781,6 +786,24 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u); // mov r0, sampled value (ps_1_x output is r0)
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, samplerRegister));
+        }
+        else if (usesProjectiveSwizzleModifiers)
+        {
+            constexpr std::uint32_t swizzleZxyw =
+                2u | (0u << 2) | (1u << 4) | (3u << 6);
+            constexpr std::uint32_t swizzleWxyz =
+                3u | (0u << 2) | (1u << 4) | (2u << 6);
+            constexpr std::uint32_t swizzleXyxy =
+                0u | (1u << 2) | (0u << 4) | (1u << 6);
+            AppendUInt32(shader, 0x00000040u); // texcrd r0.xy, t0.zxyw_dz
+            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+            AppendUInt32(shader, source(regTexture, 0, swizzleZxyw, 9u));
+            AppendUInt32(shader, 0x00000040u); // texcrd r1.xy, t0.wxyz_dw
+            AppendUInt32(shader, destination(regTemp, 1, 0x3u));
+            AppendUInt32(shader, source(regTexture, 0, swizzleWxyz, 10u));
+            AppendUInt32(shader, 0x00000001u); // mov r0.zw, r1.xy
+            AppendUInt32(shader, destination(regTemp, 0, 0xCu));
+            AppendUInt32(shader, source(regTemp, 1, swizzleXyxy));
         }
         else if (usesProjectiveModifiers)
         {
@@ -1963,6 +1986,7 @@ namespace CNA::TestSupport
             options.pixelShaderUsesRasterInputs, options.shadersUsePredication,
             options.pixelShaderUsesPredicatedTexkill,
             options.pixelShaderUsesProjectiveModifiers,
+            options.pixelShaderUsesProjectiveSwizzleModifiers,
             options.pixelShaderUsesShaderModel14TextureLoad,
             options.pixelShaderUsesShaderModel14Phase,
             options.pixelShaderUsesLegacyTextureMatrix,
@@ -1991,6 +2015,7 @@ namespace CNA::TestSupport
                     options.pixelShaderUsesRelativeTextureCoordinate ||
                     options.pixelShaderUsesDependentTemporaryTextureCoordinate ||
                     options.pixelShaderUsesProjectiveModifiers ||
+                    options.pixelShaderUsesProjectiveSwizzleModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
                     options.pixelShaderUsesShaderModel14Phase ||
                     options.pixelShaderDuplicatesShaderModel14Phase ||
@@ -2024,6 +2049,7 @@ namespace CNA::TestSupport
                 options.shadersUsePredication,
                 options.vertexShaderSamplesTexture ||
                     options.pixelShaderUsesProjectiveModifiers ||
+                    options.pixelShaderUsesProjectiveSwizzleModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
                     options.pixelShaderUsesShaderModel14Phase ||
                     options.pixelShaderDuplicatesShaderModel14Phase ||

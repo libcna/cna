@@ -667,6 +667,14 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14ProjectiveSourceModifiers)
     CNA::TestSupport::RunCompiledEffectProjectiveModifierContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14ProjectiveModifiersFollowSwizzles)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectProjectiveSwizzleModifierContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14TextureLoad)
 {
     GraphicsDevice device;

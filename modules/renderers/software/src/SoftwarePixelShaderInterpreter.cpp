@@ -551,11 +551,8 @@ private:
                                    relativeType, relativeComponent);
     operand = ResolveRelativeSource(operand, relativeType, relativeComponent);
     Vector raw = ReadRaw(operand.type, operand.number);
-    if (operand.sourceModifier == 9u || operand.sourceModifier == 10u) {
-      const float divisor = raw[operand.sourceModifier == 9u ? 2u : 3u];
-      raw[0] = divisor == 0.0f ? 1.0f : raw[0] / divisor;
-      raw[1] = divisor == 0.0f ? 1.0f : raw[1] / divisor;
-    }
+    const float projectiveDivisor =
+        raw[operand.sourceModifier == 9u ? 2u : 3u];
     Vector value{};
     for (int component = 0; component < 4; ++component) {
       const auto selected = static_cast<std::size_t>(
@@ -599,6 +596,11 @@ private:
       break;
     case 9:
     case 10:
+      if (projectiveDivisor == 0.0f)
+        value.fill(1.0f);
+      else
+        for (float &component : value)
+          component /= projectiveDivisor;
       break;
     case 11:
       for (float &component : value)
@@ -1106,11 +1108,8 @@ private:
       throw std::runtime_error(
           "Software pixel shader: unresolved relative source operand.");
     Vector raw = ReadRaw(operand.type, operand.number);
-    if (operand.sourceModifier == 9u || operand.sourceModifier == 10u) {
-      const float divisor = raw[operand.sourceModifier == 9u ? 2u : 3u];
-      raw[0] = divisor == 0.0f ? 1.0f : raw[0] / divisor;
-      raw[1] = divisor == 0.0f ? 1.0f : raw[1] / divisor;
-    }
+    const float projectiveDivisor =
+        raw[operand.sourceModifier == 9u ? 2u : 3u];
     Vector value{};
     for (int component = 0; component < 4; ++component) {
       const auto selected = static_cast<std::size_t>(
@@ -1126,8 +1125,15 @@ private:
     else if (operand.sourceModifier == 5u)
       for (float &component : value)
         component = -2.0f * (component - 0.5f);
-    else if (operand.sourceModifier != 0u && operand.sourceModifier != 9u &&
-             operand.sourceModifier != 10u)
+    else if (operand.sourceModifier == 9u || operand.sourceModifier == 10u)
+    {
+      if (projectiveDivisor == 0.0f)
+        value.fill(1.0f);
+      else
+        for (float &component : value)
+          component /= projectiveDivisor;
+    }
+    else if (operand.sourceModifier != 0u)
       throw std::runtime_error(
           "Software pixel shader: texture coordinate uses an unsupported modifier.");
     return value;

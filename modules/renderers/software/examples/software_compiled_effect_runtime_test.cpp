@@ -2120,7 +2120,7 @@ namespace
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
-        const auto drawAndRead = [&](float divisorZ, float divisorW)
+        const auto drawAndRead = [&](Effect& selectedEffect, float divisorZ, float divisorW)
         {
             const Vertex quad[6] = {
                 {-1,  1, 0, .25f, .5f, divisorZ, divisorW},
@@ -2132,7 +2132,7 @@ namespace
             };
             device.SetRenderTarget(&target);
             device.Clear(Color::Black);
-            effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            selectedEffect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(quad), 0, 2, declaration);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -2141,17 +2141,29 @@ namespace
             target.GetData(0, &centreRectangle, &centre, 0, 1);
             return centre;
         };
-        const Color projected = drawAndRead(0.5f, 0.25f);
+        const Color projected = drawAndRead(*effect, 0.5f, 0.25f);
         Check(std::abs(static_cast<int>(projected.getRProperty()) - 128) <= 1 &&
                   projected.getGProperty() == 255 &&
                   std::abs(static_cast<int>(projected.getBProperty()) - 64) <= 1 &&
                   projected.getAProperty() == 255,
               "compiled ps_1_4 _dz/_dw projection produced the wrong color");
-        const Color zeroDivisors = drawAndRead(0.0f, 0.0f);
+        const Color zeroDivisors = drawAndRead(*effect, 0.0f, 0.0f);
         Check(zeroDivisors.getRProperty() == 255 && zeroDivisors.getGProperty() == 255 &&
                   std::abs(static_cast<int>(zeroDivisors.getBProperty()) - 64) <= 1 &&
                   zeroDivisors.getAProperty() == 255,
               "compiled ps_1_4 projective zero divisors did not produce one");
+
+        options.pixelShaderUsesProjectiveModifiers = false;
+        options.pixelShaderUsesProjectiveSwizzleModifiers = true;
+        auto swizzled = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        swizzled->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        const Color swizzledProjection = drawAndRead(*swizzled, 0.5f, 0.25f);
+        Check(swizzledProjection.getRProperty() == 255 &&
+                  std::abs(static_cast<int>(swizzledProjection.getGProperty()) - 128) <= 1 &&
+                  swizzledProjection.getBProperty() == 255 &&
+                  swizzledProjection.getAProperty() == 255,
+              "compiled ps_1_4 projection ran before the coordinate source swizzle");
     }
 
     void CheckCompiledShaderModel14TextureLoad()

@@ -1609,6 +1609,56 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Proves ps_1_4 `_dz`/`_dw` divide the swizzled source by unswizzled z/w.
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectProjectiveSwizzleModifierContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = false;
+        options.pixelShaderUsesProjectiveSwizzleModifiers = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, w;
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const Vertex quad[6] = {
+            {-1,  1, 0, .25f, .5f, .5f, .25f},
+            {-1, -1, 0, .25f, .5f, .5f, .25f},
+            { 1, -1, 0, .25f, .5f, .5f, .25f},
+            {-1,  1, 0, .25f, .5f, .5f, .25f},
+            { 1, -1, 0, .25f, .5f, .5f, .25f},
+            { 1,  1, 0, .25f, .5f, .5f, .25f},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        EXPECT_NEAR(centre.getRProperty(), 255, 1);
+        EXPECT_NEAR(centre.getGProperty(), 128, 1);
+        EXPECT_NEAR(centre.getBProperty(), 255, 1);
+        EXPECT_NEAR(centre.getAProperty(), 255, 1);
+    }
+
+    /**
      * @brief Proves Shader Model 1.4 `TEXLD` selects its stage from dst and coordinates from src.
      *
      * @param device Device whose renderer executes classic compiled Effects.
