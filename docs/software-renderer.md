@@ -44,7 +44,7 @@ Those are real parser, vertex and sampled-pixel phases, not complete execution p
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
 continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
 is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371/373/374/375/376/377` are complete: the opt-in runtime now includes compiled MRT,
+`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371/373/374/375/376/377/378` are complete: the opt-in runtime now includes compiled MRT,
 render-target/cube sampling, SpriteBatch custom-effect routing and classic line/wireframe rasterization. `SOFTWARE-164/165` remain the
 encompassing shader-profile, lifecycle and content-conformance backlog.
 The independent EasyGL challenge in `SOFTWARE-367` also repaired MojoShader's invalid writemask-
@@ -175,7 +175,7 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 
 - **Classic compiled XNA Effects are not yet executable** (`SOFTWARE-161`). The public bytecode
   constructor accepts XNA/FNA Direct3D 9 Effect Framework bytes only on renderers whose real
-  runtime implements them. Opt-in EasyGL passes 49 tests covering reflection, techniques/passes,
+  runtime implements them. Opt-in EasyGL passes 50 tests covering reflection, techniques/passes,
   parameters, draw pixels, state, SpriteBatch, instancing, multi-stream input and 2D/cube/volume
   sampling plus loop/subroutine control flow. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software can parse and reflect those real
   binaries, apply their pass state, run their preshaders, retain validated D3D9 token/register IR
@@ -225,8 +225,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   source, the same projective modifiers apply before its selector, and the common translator emits
   2D/cube/volume lookup forms from the Effect sampler map. SOFTWARE-377 executes the decoded
   ps_1_4 `PHASE` marker and proves temporary RGB survives into phase 2 while the program separately
-  initializes alpha as the XNA contract requires. Invalid marker placement/count and other
-  unimplemented legacy stateful texture operations remain in the explicit profile backlog.
+  initializes alpha as the XNA contract requires. SOFTWARE-378 executes the legacy paired
+  `TEXM3X3PAD`/`TEXM3X3` matrix form and corrects MojoShader's false sampler requirement for that
+  explicitly texture-free instruction. Invalid marker placement/count, sampled matrix variants and
+  other unimplemented legacy stateful texture operations remain in the explicit profile backlog.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.

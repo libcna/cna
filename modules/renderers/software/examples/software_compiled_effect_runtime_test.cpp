@@ -2004,6 +2004,42 @@ namespace
               "compiled ps_1_4 PHASE did not preserve temporary RGB into phase 2");
     }
 
+    void CheckCompiledLegacyTextureMatrix()
+    {
+        GraphicsDevice device;
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = false;
+        options.pixelShaderUsesLegacyTextureMatrix = true;
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        struct Vertex { float x, y, z; };
+        const Vertex vertices[6] = {
+            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(vertices), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre;
+        const Rectangle centreRectangle(2, 2, 1, 1);
+        target.GetData(0, &centreRectangle, &centre, 0, 1);
+        Check(centre == Color(64, 128, 64, 255),
+              "compiled ps_1_2 TEXM3X3 did not produce the exact matrix product");
+    }
+
     void CheckCompiledSamplerRasterization(SoftwareRenderer& renderer)
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
@@ -2816,6 +2852,7 @@ int main()
         CheckCompiledProjectiveSourceModifiers();
         CheckCompiledShaderModel14TextureLoad();
         CheckCompiledShaderModel14Phase();
+        CheckCompiledLegacyTextureMatrix();
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
         CheckCompiledLineAndWireframeRasterization(renderer);

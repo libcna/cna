@@ -657,6 +657,14 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14Phase)
     CNA::TestSupport::RunCompiledEffectShaderModel14PhaseContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyTextureMatrixContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedMultiStreamDrawContract)
 {
     GraphicsDevice device;

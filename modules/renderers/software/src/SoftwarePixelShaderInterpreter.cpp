@@ -1116,6 +1116,52 @@ private:
       ExecuteTextureInstruction(instruction);
       return;
     }
+    if (instruction.opcode == 73u) {
+      if (tokens.size() != 3u || legacyTextureMatrixDotCount_ >= 2u)
+        throw std::runtime_error(
+            "Software pixel shader: malformed TEXM3X3PAD sequence.");
+      const Operand destination = DecodeDestination(tokens[1]);
+      if (destination.type != RegisterType::Texture)
+        throw std::runtime_error(
+            "Software pixel shader: TEXM3X3PAD destination is not a texture register.");
+      std::size_t cursor = 2u;
+      RegisterType relativeType;
+      int relativeComponent = 0;
+      const Operand source = DecodeSource(tokens, cursor, program_.majorVersion,
+                                          relativeType, relativeComponent);
+      if (source.relative || source.type != RegisterType::Texture ||
+          cursor != tokens.size())
+        throw std::runtime_error(
+            "Software pixel shader: TEXM3X3PAD source is not a direct texture register.");
+      legacyTextureMatrixDots_[legacyTextureMatrixDotCount_++] =
+          Dot(ReadRaw(destination.type, destination.number),
+              ReadSourceFromOperand(source), 3);
+      return;
+    }
+    if (instruction.opcode == 86u) {
+      if (tokens.size() != 3u || legacyTextureMatrixDotCount_ != 2u)
+        throw std::runtime_error(
+            "Software pixel shader: TEXM3X3 has no matching pad pair.");
+      const Operand destination = DecodeDestination(tokens[1]);
+      if (destination.type != RegisterType::Texture)
+        throw std::runtime_error(
+            "Software pixel shader: TEXM3X3 destination is not a texture register.");
+      std::size_t cursor = 2u;
+      RegisterType relativeType;
+      int relativeComponent = 0;
+      const Operand source = DecodeSource(tokens, cursor, program_.majorVersion,
+                                          relativeType, relativeComponent);
+      if (source.relative || source.type != RegisterType::Texture ||
+          cursor != tokens.size())
+        throw std::runtime_error(
+            "Software pixel shader: TEXM3X3 source is not a direct texture register.");
+      const Vector row = ReadRaw(destination.type, destination.number);
+      const Vector vector = ReadSourceFromOperand(source);
+      Write(destination, {legacyTextureMatrixDots_[0], legacyTextureMatrixDots_[1],
+                          Dot(row, vector, 3), 1.0f});
+      legacyTextureMatrixDotCount_ = 0u;
+      return;
+    }
     if (instruction.opcode == 93u || instruction.opcode == 95u) {
       ExecuteTextureLodInstruction(instruction);
       return;
@@ -1375,6 +1421,8 @@ private:
   float depthOutput_ = 0.0f;
   bool depthWritten_ = false;
   bool discarded_ = false;
+  std::array<float, 2> legacyTextureMatrixDots_{};
+  std::size_t legacyTextureMatrixDotCount_ = 0u;
   std::array<bool, 4> predicateRegister_{};
   std::uint8_t predicateWriteMask_ = 0xFu;
   int loopRegister_ = 0;
