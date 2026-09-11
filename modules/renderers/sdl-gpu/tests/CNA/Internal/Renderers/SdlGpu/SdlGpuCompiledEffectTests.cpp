@@ -936,8 +936,10 @@ TEST(SdlGpuCompiledEffectDrawTest, QueuedVolumeSamplerRetainsTextureUntilReplay)
 TEST(SdlGpuCompiledEffectDrawTest, QueuedDrawRetainsShadersAfterEffectDestruction)
 {
     GraphicsDevice device;
+    SdlGpuRenderer* renderer = RendererOf(device);
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    ASSERT_NE(renderer, nullptr);
 
     namespace Fx = CNA::TestSupport::EffectFormat;
     auto effect = std::make_unique<Effect>(
@@ -982,13 +984,17 @@ TEST(SdlGpuCompiledEffectDrawTest, QueuedDrawRetainsShadersAfterEffectDestructio
     EXPECT_NEAR(centre.getRProperty(), sourcePixel[0].getRProperty(), 3);
     EXPECT_NEAR(centre.getGProperty(), sourcePixel[0].getGProperty(), 3);
     EXPECT_NEAR(centre.getBProperty(), sourcePixel[0].getBProperty(), 3);
+    EXPECT_EQ(renderer->GetCompiledEffectPipelineCacheSizeEXT(), 0u)
+        << "the deferred command's lease must evict its pipeline after replay";
 }
 
 TEST(SdlGpuCompiledEffectDrawTest, QueuedSpriteRetainsShadersAfterEffectDisposal)
 {
     GraphicsDevice device;
+    SdlGpuRenderer* renderer = RendererOf(device);
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    ASSERT_NE(renderer, nullptr);
 
     constexpr int kSize = 8;
     auto effect = std::make_unique<Effect>(
@@ -1023,6 +1029,8 @@ TEST(SdlGpuCompiledEffectDrawTest, QueuedSpriteRetainsShadersAfterEffectDisposal
     EXPECT_NEAR(centre.getRProperty(), 64, 3);
     EXPECT_NEAR(centre.getGProperty(), 128, 3);
     EXPECT_NEAR(centre.getBProperty(), 191, 3);
+    EXPECT_EQ(renderer->GetCompiledEffectPipelineCacheSizeEXT(), 0u)
+        << "the deferred sprite's lease must evict its pipeline after replay";
 }
 
 TEST(SdlGpuCompiledEffectDrawTest, RecreatedEffectsReceiveDistinctStablePipelineIdentities)
@@ -1099,8 +1107,12 @@ TEST(SdlGpuCompiledEffectDrawTest, RecreatedEffectsReceiveDistinctStablePipeline
         EXPECT_NEAR(centre.getGProperty(), expected.getGProperty(), 3) << "iteration " << iteration;
         EXPECT_NEAR(centre.getBProperty(), expected.getBProperty(), 3) << "iteration " << iteration;
 
+        EXPECT_EQ(renderer->GetCompiledEffectPipelineCacheSizeEXT(), 1u)
+            << "the live effect should retain and reuse its one immutable pipeline";
         effect->Dispose();
         effect.reset();
+        EXPECT_EQ(renderer->GetCompiledEffectPipelineCacheSizeEXT(), 0u)
+            << "a destroyed effect must not leave an unreachable GPU pipeline cached";
     }
 }
 

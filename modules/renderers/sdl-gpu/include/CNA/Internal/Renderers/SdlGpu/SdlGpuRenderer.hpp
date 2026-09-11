@@ -1312,6 +1312,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         friend class SdlGpuRenderTargetCubeRenderer;
         friend struct SdlGpuRenderTarget2DState;
         friend struct SdlGpuRenderTargetCubeState;
+        friend class SdlGpuCompiledEffect;
         // REMED-GFX-152: ordinary uploaded textures defer their native release through the same
         // QueueTextureRelease path render targets already used.
         friend struct SdlGpuSampledTextureState;
@@ -1600,6 +1601,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUShader* pixelShader = nullptr;
             /// SDLGPU-124: monotonic MojoShader identity; native wrapper addresses may be reused.
             std::uint64_t programIdentity = 0;
+            /// Keeps this program's pipeline-cache entries reachable through deferred replay.
+            std::shared_ptr<const void> programLease;
             /// Keeps both native shader modules valid until this deferred binding is discarded.
             std::shared_ptr<CompiledEffectShaderLease> shaderLease;
             std::vector<SDL_GPUVertexAttribute> vertexAttributes;
@@ -2712,6 +2715,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             return coloredPipelines_.size();
         }
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        /** @brief Number of cached ordinary compiled-effect pipelines. Test-only. CNAEXT. */
+        CNAEXT [[nodiscard]] std::size_t GetCompiledEffectPipelineCacheSizeEXT() const;
+#endif
         /**
          * @brief Drives the ordinary lazy stock-sprite pipeline and sampler factories without
          * requiring swapchain presentation. Test-only GFX-028 failure/retry probe. CNAEXT.
@@ -3511,10 +3518,28 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::unique_ptr<SdlGpuTextureRenderer> defaultFlatNormalTexture_;
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        struct CompiledProgramLifetimeStateEXT
+        {
+            SdlGpuRenderer* owner = nullptr;
+        };
+
+        [[nodiscard]] std::shared_ptr<const void> RetainCompiledProgramIdentityEXT(
+            std::uint64_t programIdentity);
+        void ExpireCompiledProgramIdentityEXT(std::uint64_t programIdentity) noexcept;
+
         // plans/plan_fx.md FX-071: unlike every stock family's cache above, this one is keyed on a
-        // linked shader pair rather than a fixed shader field, since arbitrary compiled effects
-        // share it across effect instances (see GetOrCreatePipelineCompiledEffect).
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> compiledEffectPipelines_;
+        // linked program rather than a fixed shader field, since arbitrary compiled effects share
+        // it across effect instances. The exact 64-bit program identity is the outer key; each
+        // program's immutable state/layout hash is local to that identity and cannot alias another
+        // program merely through a size_t hash collision.
+        std::unordered_map<std::uint64_t,
+                           std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*>>
+            compiledEffectPipelines_;
+        /// Weak canonical lease per live program; Effects and queued draws own the strong copies.
+        std::unordered_map<std::uint64_t, std::weak_ptr<const void>> compiledProgramLeases_;
+        /// Makes a lease callback harmless after renderer teardown, even if an Effect outlives it.
+        std::shared_ptr<CompiledProgramLifetimeStateEXT> compiledProgramLifetimeState_ =
+            std::make_shared<CompiledProgramLifetimeStateEXT>();
         std::vector<CompiledEffectDrawCommand> compiledEffectDrawCommands_;
 #endif
 

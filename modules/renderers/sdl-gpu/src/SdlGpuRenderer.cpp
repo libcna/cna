@@ -2311,6 +2311,9 @@ namespace CNA::Internal::Renderers::SdlGpu
           virtualHeight_(virtualHeight),
           presentationMode_(presentationMode)
     {
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        compiledProgramLifetimeState_->owner = this;
+#endif
         ConstructionResources resources(window_, testHooks);
         // SDLGPU-102: retain the caller's real platform window for the public Game lifecycle,
         // but let renderer integration tests opt out of the swapchain alone. This exercises the
@@ -2494,9 +2497,12 @@ namespace CNA::Internal::Renderers::SdlGpu
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         // Compiled-effect pipelines must go before their shader-owning MojoShader context. Queued
         // shader leases were already released by ReleaseSceneDrawBuffers()/spriteCommands_.clear().
-        for (auto& [key, pipeline] : compiledEffectPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [programIdentity, pipelines] : compiledEffectPipelines_)
+            for (auto& [key, pipeline] : pipelines)
+                ReleaseGraphicsPipeline(pipeline);
         compiledEffectPipelines_.clear();
+        compiledProgramLeases_.clear();
+        compiledProgramLifetimeState_->owner = nullptr;
         // plans/plan_fx.md FX-061: released after its queued leases and pipelines, but before the
         // SDL_GPU device it was created against.
         if (mojoShaderContext_ != nullptr)
@@ -7270,6 +7276,57 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+    std::size_t SdlGpuRenderer::GetCompiledEffectPipelineCacheSizeEXT() const
+    {
+        std::size_t count = 0;
+        for (const auto& [programIdentity, pipelines] : compiledEffectPipelines_)
+            count += pipelines.size();
+        return count;
+    }
+
+    std::shared_ptr<const void> SdlGpuRenderer::RetainCompiledProgramIdentityEXT(
+        std::uint64_t programIdentity)
+    {
+        if (programIdentity == 0)
+            throw std::invalid_argument(
+                "CNA SDL_GPU: cannot retain a zero compiled-program identity.");
+
+        const auto existing = compiledProgramLeases_.find(programIdentity);
+        if (existing != compiledProgramLeases_.end())
+        {
+            if (std::shared_ptr<const void> lease = existing->second.lock())
+                return lease;
+        }
+
+        const std::weak_ptr<CompiledProgramLifetimeStateEXT> lifetime =
+            compiledProgramLifetimeState_;
+        std::shared_ptr<const void> lease(
+            new std::uint8_t{0},
+            [lifetime, programIdentity](const void* token) noexcept
+            {
+                delete static_cast<const std::uint8_t*>(token);
+                if (const auto state = lifetime.lock();
+                    state != nullptr && state->owner != nullptr)
+                {
+                    state->owner->ExpireCompiledProgramIdentityEXT(programIdentity);
+                }
+            });
+        compiledProgramLeases_[programIdentity] = lease;
+        return lease;
+    }
+
+    void SdlGpuRenderer::ExpireCompiledProgramIdentityEXT(
+        std::uint64_t programIdentity) noexcept
+    {
+        compiledProgramLeases_.erase(programIdentity);
+        const auto program = compiledEffectPipelines_.find(programIdentity);
+        if (program == compiledEffectPipelines_.end())
+            return;
+        for (auto& [key, pipeline] : program->second)
+            ReleaseGraphicsPipeline(pipeline);
+        compiledEffectPipelines_.erase(program);
+    }
+
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineCompiledEffect(
         const CompiledEffectBinding& binding,
         SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
@@ -7282,11 +7339,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                                            colorTargetCount, sampleCount, depthStencilFormat,
                                            renderState);
         // The base key above is exactly what every stock pipeline hashes; a compiled effect's
-        // shader pair and vertex layout vary per pass/effect (unlike a stock family's fixed shader
-        // fields, or SpriteBatch's own fixed SpriteVertex layout), so those are folded in here
-        // instead of being implicit in which cache this key is looked up in. One cache and one key
-        // scheme serves both the ordinary-draw and SpriteBatch routes.
-        key = HashCombine(key, std::hash<std::uint64_t>{}(binding.programIdentity));
+        // vertex layout varies per pass/effect (unlike a stock family's fixed SpriteVertex layout),
+        // so it is folded in here. The exact shader-program identity is the outer cache key rather
+        // than a lossy member of this size_t hash. One key scheme serves both the ordinary-draw and
+        // SpriteBatch routes within that program.
         key = HashCombine(key, binding.vertexBuffers.size());
         for (const SDL_GPUVertexBufferDescription& buffer : binding.vertexBuffers)
         {
@@ -7303,8 +7359,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             key = HashCombine(key, static_cast<std::size_t>(attribute.offset));
         }
 
-        const auto it = compiledEffectPipelines_.find(key);
-        if (it != compiledEffectPipelines_.end())
+        auto& programPipelines = compiledEffectPipelines_[binding.programIdentity];
+        const auto it = programPipelines.find(key);
+        if (it != programPipelines.end())
             return it->second;
 
         std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
@@ -7336,7 +7393,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUGraphicsPipeline* pipeline =
             CreateGraphicsPipeline(pipelineInfo,
                                    "CNA SDL_GPU: failed to create compiled-effect pipeline: ");
-        return CacheGraphicsPipeline(compiledEffectPipelines_, key, pipeline);
+        return CacheGraphicsPipeline(programPipelines, key, pipeline);
     }
 
     SdlGpuRenderer::CompiledEffectBinding SdlGpuRenderer::BuildCompiledEffectBindingEXT(
@@ -7353,6 +7410,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             throw std::runtime_error(
                 "CNA SDL_GPU: linked compiled effect has no stable program identity.");
         }
+        binding.programLease = effect.RetainProgramIdentityEXT(binding.programIdentity);
         binding.pixelUsesLodBias = effect.LinkedPixelShaderUsesLodBiasEXT();
         binding.vertexAttributes = std::move(vertexLayout.attributes);
         binding.vertexBuffers = std::move(vertexLayout.buffers);

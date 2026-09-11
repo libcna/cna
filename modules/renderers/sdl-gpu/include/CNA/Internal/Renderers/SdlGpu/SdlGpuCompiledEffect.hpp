@@ -239,6 +239,19 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         CNAEXT [[nodiscard]] std::uint64_t LinkedProgramIdentityEXT() const;
 
+        /**
+         * @brief Retains the currently linked program's renderer cache lifetime. CNAEXT.
+         *
+         * The returned lease is shared with every deferred draw that uses the program. The
+         * renderer evicts that program's immutable pipelines only after both this Effect and all
+         * already-issued draws have released their copies.
+         *
+         * @param programIdentity The non-zero identity returned by @ref LinkedProgramIdentityEXT.
+         * @return A non-null lifetime lease for that exact linked program.
+         */
+        CNAEXT [[nodiscard]] std::shared_ptr<const void> RetainProgramIdentityEXT(
+            std::uint64_t programIdentity) const;
+
     private:
         SdlGpuCompiledEffect(SdlGpuRenderer& renderer, const SdlGpuCompiledEffect& cloneSource);
 
@@ -272,6 +285,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             samplerAssigned_{};
         std::array<bool, Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             vertexSamplerAssigned_{};
+        /// One owning cache lease per linked program this live Effect has actually drawn with.
+        mutable std::unordered_map<std::uint64_t, std::shared_ptr<const void>> programLeases_;
     };
 }
 

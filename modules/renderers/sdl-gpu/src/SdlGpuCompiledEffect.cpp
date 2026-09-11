@@ -486,6 +486,22 @@ namespace CNA::Internal::Renderers::SdlGpu
                    : 0u;
     }
 
+    std::shared_ptr<const void> SdlGpuCompiledEffect::RetainProgramIdentityEXT(
+        std::uint64_t programIdentity) const
+    {
+        if (programIdentity == 0)
+            throw std::invalid_argument(
+                "SDL_GPU compiled effect: cannot retain a zero program identity.");
+        const auto existing = programLeases_.find(programIdentity);
+        if (existing != programLeases_.end())
+            return existing->second;
+
+        std::shared_ptr<const void> lease =
+            renderer_.RetainCompiledProgramIdentityEXT(programIdentity);
+        programLeases_.emplace(programIdentity, lease);
+        return lease;
+    }
+
     void SdlGpuCompiledEffect::GetBoundShadersEXT(MOJOSHADER_sdlShaderData*& vertex,
                                                   MOJOSHADER_sdlShaderData*& pixel) const
     {
