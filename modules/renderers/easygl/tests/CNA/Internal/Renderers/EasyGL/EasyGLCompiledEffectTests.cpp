@@ -964,6 +964,37 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Dsx,
         CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Dsy));
 
+class EasyGLCompiledEffectVertexShaderModel1OpcodeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode>
+{
+};
+
+TEST_P(EasyGLCompiledEffectVertexShaderModel1OpcodeTest, RejectsLaterProfileOpcode)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.vertexShaderModel1InvalidOpcode = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    LaterProfileOpcodes,
+    EasyGLCompiledEffectVertexShaderModel1OpcodeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Abs,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Crs,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Nrm,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Pow,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::SinCos,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Sgn,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Mova,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Defb,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Defi));
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;

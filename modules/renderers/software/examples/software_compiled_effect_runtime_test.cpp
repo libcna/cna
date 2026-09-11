@@ -2826,6 +2826,32 @@ namespace
         }
     }
 
+    void CheckCompiledVertexShaderModel1OpcodeValidation(SoftwareRenderer& renderer)
+    {
+        using Opcode = CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode;
+        constexpr std::array opcodes{
+            Opcode::Abs, Opcode::Crs, Opcode::Nrm, Opcode::Pow, Opcode::SinCos,
+            Opcode::Sgn, Opcode::Mova, Opcode::Defb, Opcode::Defi,
+        };
+        for (const Opcode opcode : opcodes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.vertexShaderModel1InvalidOpcode = opcode;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected, "compiled Effect parser accepted a later-profile opcode in vs_1_1");
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4608,6 +4634,7 @@ int main()
         CheckCompiledPartialPrecisionOpcodeValidation(renderer);
         CheckCompiledVertexOnlyAndExpValidation(renderer);
         CheckCompiledPixelShaderModel1OpcodeValidation(renderer);
+        CheckCompiledVertexShaderModel1OpcodeValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();

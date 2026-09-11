@@ -266,6 +266,31 @@ namespace CNA::TestSupport
         Dsy,
     };
 
+    /** @brief Later-profile vertex opcode deliberately emitted in a vs_1_1 program. */
+    enum class SyntheticInvalidVertexShaderModel1Opcode
+    {
+        /** @brief Emit no deliberately invalid opcode. */
+        None,
+        /** @brief Emit `ABS`. */
+        Abs,
+        /** @brief Emit `CRS`. */
+        Crs,
+        /** @brief Emit `NRM`. */
+        Nrm,
+        /** @brief Emit `POW`. */
+        Pow,
+        /** @brief Emit `SINCOS`. */
+        SinCos,
+        /** @brief Emit `SGN`. */
+        Sgn,
+        /** @brief Emit `MOVA`. */
+        Mova,
+        /** @brief Emit `DEFB`. */
+        Defb,
+        /** @brief Emit `DEFI`. */
+        Defi,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -451,6 +476,9 @@ namespace CNA::TestSupport
         /// Emits the selected Shader Model 2+ arithmetic opcode in a ps_1_4 program.
         SyntheticInvalidPixelShaderModel1Opcode pixelShaderModel1InvalidOpcode =
             SyntheticInvalidPixelShaderModel1Opcode::None;
+        /// Emits the selected later-profile vertex opcode in a vs_1_1 program.
+        SyntheticInvalidVertexShaderModel1Opcode vertexShaderModel1InvalidOpcode =
+            SyntheticInvalidVertexShaderModel1Opcode::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -1559,10 +1587,15 @@ namespace CNA::TestSupport
                                                                 SyntheticSgnScratchOperands sgnScratchOperands =
                                                                     SyntheticSgnScratchOperands::None,
                                                                 bool usesInvalidExppSwizzle = false,
-                                                                bool usesInvalidExpSwizzle = false)
+                                                                bool usesInvalidExpSwizzle = false,
+                                                                SyntheticInvalidVertexShaderModel1Opcode
+                                                                    shaderModel1InvalidOpcode =
+                                                                        SyntheticInvalidVertexShaderModel1Opcode::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
-                                       usesShaderModel11ExtendedInputs || usesLegacyExpp;
+                                       usesShaderModel11ExtendedInputs || usesLegacyExpp ||
+                                       shaderModel1InvalidOpcode !=
+                                           SyntheticInvalidVertexShaderModel1Opcode::None;
         const std::uint32_t versionToken = usesShaderModel11
                                                ? 0xFFFE0101u
                                                : usesPredication || samplesTexture ? 0xFFFE0300u
@@ -1667,10 +1700,13 @@ namespace CNA::TestSupport
         constexpr std::uint32_t regTemp = 0;
         constexpr std::uint32_t regInput = 1;
         constexpr std::uint32_t regConst = 2;
+        constexpr std::uint32_t regAddress = 3;
         constexpr std::uint32_t regRastOut = 4;
         constexpr std::uint32_t regTexCoordOut = 6;  // vs_2_0 oT#
         constexpr std::uint32_t regPredicate = 19;
         constexpr std::uint32_t regSampler = 10;
+        constexpr std::uint32_t regConstInt = 7;
+        constexpr std::uint32_t regConstBool = 14;
         const auto registerBits = [](std::uint32_t type) {
             return ((type & 0x7u) << 28) | ((type >> 3) << 11);
         };
@@ -1868,6 +1904,68 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x0000000Eu | (2u << 24)); // exp r1, c0.xyzw
             AppendUInt32(shader, destination(regTemp, 1));
             AppendUInt32(shader, source(regConst, 0));
+        }
+        if (shaderModel1InvalidOpcode != SyntheticInvalidVertexShaderModel1Opcode::None)
+        {
+            const auto appendUnary = [&](std::uint32_t opcode, std::uint32_t mask = 0xFu) {
+                AppendUInt32(shader, opcode);
+                AppendUInt32(shader, destination(regTemp, 1, mask));
+                AppendUInt32(shader, source(regConst, 0));
+            };
+            switch (shaderModel1InvalidOpcode)
+            {
+                case SyntheticInvalidVertexShaderModel1Opcode::Abs:
+                    appendUnary(0x00000023u);
+                    break;
+                case SyntheticInvalidVertexShaderModel1Opcode::Crs:
+                    AppendUInt32(shader, 0x00000021u);
+                    AppendUInt32(shader, destination(regTemp, 1, 0x7u));
+                    AppendUInt32(shader, source(regConst, 0));
+                    AppendUInt32(shader, source(regConst, 1));
+                    break;
+                case SyntheticInvalidVertexShaderModel1Opcode::Nrm:
+                    appendUnary(0x00000024u);
+                    break;
+                case SyntheticInvalidVertexShaderModel1Opcode::Pow:
+                    AppendUInt32(shader, 0x00000020u);
+                    AppendUInt32(shader, destination(regTemp, 1));
+                    AppendUInt32(shader, source(regConst, 0, 0x00u));
+                    AppendUInt32(shader, source(regConst, 1, 0x00u));
+                    break;
+                case SyntheticInvalidVertexShaderModel1Opcode::SinCos:
+                    AppendUInt32(shader, 0x00000025u);
+                    AppendUInt32(shader, destination(regTemp, 1, 0x3u));
+                    AppendUInt32(shader, source(regConst, 0, 0x00u));
+                    AppendUInt32(shader, source(regConst, 1));
+                    AppendUInt32(shader, source(regConst, 2));
+                    break;
+                case SyntheticInvalidVertexShaderModel1Opcode::Sgn:
+                    AppendUInt32(shader, 0x00000022u);
+                    AppendUInt32(shader, destination(regTemp, 1));
+                    AppendUInt32(shader, source(regConst, 0));
+                    AppendUInt32(shader, source(regTemp, 2));
+                    AppendUInt32(shader, source(regTemp, 3));
+                    break;
+                case SyntheticInvalidVertexShaderModel1Opcode::Mova:
+                    AppendUInt32(shader, 0x0000002Eu);
+                    AppendUInt32(shader, destination(regAddress, 0, 0x1u));
+                    AppendUInt32(shader, source(regConst, 0));
+                    break;
+                case SyntheticInvalidVertexShaderModel1Opcode::Defb:
+                    AppendUInt32(shader, 0x0000002Fu);
+                    AppendUInt32(shader, destination(regConstBool, 0));
+                    AppendUInt32(shader, 1u);
+                    break;
+                case SyntheticInvalidVertexShaderModel1Opcode::Defi:
+                    AppendUInt32(shader, 0x00000030u);
+                    AppendUInt32(shader, destination(regConstInt, 0));
+                    AppendUInt32(shader, 1u);
+                    AppendUInt32(shader, 2u);
+                    AppendUInt32(shader, 3u);
+                    AppendUInt32(shader, 4u);
+                    break;
+                case SyntheticInvalidVertexShaderModel1Opcode::None: break;
+            }
         }
         if (readsSecondStream)
         {
@@ -2513,7 +2611,8 @@ namespace CNA::TestSupport
                 options.vertexShaderUsesLegacyExpp,
                 options.vertexShaderSgnScratchOperands,
                 options.vertexShaderUsesInvalidExppSwizzle,
-                options.vertexShaderUsesInvalidExpSwizzle);
+                options.vertexShaderUsesInvalidExpSwizzle,
+                options.vertexShaderModel1InvalidOpcode);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());
