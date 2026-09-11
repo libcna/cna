@@ -66,6 +66,9 @@ namespace CNA::Internal::Renderers::Software
         struct RasterVertex
         {
             float x = 0.0f, y = 0.0f;   ///< Screen-space pixel coordinates.
+            /// CPU pixel offset used for varyings. Coverage remains at x/y+0.5; non-MSAA classic
+            /// 3D vertices carry the matching D3D logical-pixel offset instead (SOFTWARE-346).
+            float interpolationCenterOffset = 0.5f;
             float depth = 0.0f;         ///< Post-divide Z, 0..1 (D3D/XNA convention).
             float invW = 1.0f;          ///< 1 / clip.W, used to un-premultiply interpolated attributes.
             float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;  ///< Vertex color * invW, 0..1 range.
@@ -637,7 +640,8 @@ namespace CNA::Internal::Renderers::Software
         /// -- so a custom GraphicsDevice.Viewport positions (X/Y), sub-scales (Width/Height), and
         /// depth-range-remaps 3D geometry, instead of the old mapping over the full framebuffer.
         RasterVertex ClipVertexToRasterVertexWithOffset(
-            const ClipVertex& cv, const ViewportTransform& vp, float pixelCenterOffset)
+            const ClipVertex& cv, const ViewportTransform& vp, float pixelCenterOffset,
+            float interpolationCenterOffset)
         {
             const float invW = 1.0f / cv.w;
             const float ndcX = cv.x * invW;
@@ -647,6 +651,7 @@ namespace CNA::Internal::Renderers::Software
             RasterVertex out;
             out.x = (ndcX * 0.5f + 0.5f) * vp.width + vp.x + pixelCenterOffset;
             out.y = (1.0f - (ndcY * 0.5f + 0.5f)) * vp.height + vp.y + pixelCenterOffset;
+            out.interpolationCenterOffset = interpolationCenterOffset;
             out.depth = vp.minDepth + ndcZ * (vp.maxDepth - vp.minDepth);
             out.invW = invW;
             out.r = cv.r * invW;
@@ -690,7 +695,10 @@ namespace CNA::Internal::Renderers::Software
             constexpr float kXnaPixelCenterOffset = 63.0f / 128.0f;
             const float pixelCenterOffset =
                 vp.multisampledDestination ? 0.0f : kXnaPixelCenterOffset;
-            return ClipVertexToRasterVertexWithOffset(cv, vp, pixelCenterOffset);
+            const float interpolationCenterOffset =
+                vp.multisampledDestination ? 0.5f : kXnaPixelCenterOffset;
+            return ClipVertexToRasterVertexWithOffset(
+                cv, vp, pixelCenterOffset, interpolationCenterOffset);
         }
 
         /// SOFTWARE-338: SpriteBatch's existing screen-space route already aligns rectangle edges
@@ -699,7 +707,7 @@ namespace CNA::Internal::Renderers::Software
         RasterVertex SpriteClipVertexToRasterVertex(
             const ClipVertex& cv, const ViewportTransform& vp)
         {
-            RasterVertex out = ClipVertexToRasterVertexWithOffset(cv, vp, 0.0f);
+            RasterVertex out = ClipVertexToRasterVertexWithOffset(cv, vp, 0.0f, 0.5f);
             const float invW = 1.0f / cv.w;
             // The orthographic projection and viewport transform algebraically cancel for X/Y.
             // Recover the preserved pre-projection coordinates directly so an ordinary W=1
@@ -2083,8 +2091,10 @@ namespace CNA::Internal::Renderers::Software
         /// `(x + 0.5, y + 0.5)` with four half-pixel diagonal planes. A directed line covers the
         /// pixel only when it exits that diamond before reaching its ending vertex; an endpoint
         /// which remains inside the diamond is the inclusive/exclusive line rule, not a fragment.
-        /// `interpolationT` is evaluated at the pixel centre and remains relative to the original
-        /// unclipped segment.
+        /// `interpolationT` is evaluated at the segment's logical interpolation centre and remains
+        /// relative to the original unclipped segment. SOFTWARE-346 keeps this distinct from the
+        /// coverage-diamond centre because non-MSAA classic geometry is translated by 63/128 to
+        /// reproduce D3D9's integer-centred raster rules in this corner-origin CPU framebuffer.
         bool SegmentExitsPixelDiamond(const RasterVertex& a, const RasterVertex& b,
                                       int x, int y, float& interpolationT)
         {
@@ -2132,8 +2142,12 @@ namespace CNA::Internal::Renderers::Software
             if (exitT < 0.0 || enterT > 1.0 || !(exitT < 1.0))
                 return false;
 
+            const double interpolationX = static_cast<double>(x) +
+                static_cast<double>(a.interpolationCenterOffset);
+            const double interpolationY = static_cast<double>(y) +
+                static_cast<double>(a.interpolationCenterOffset);
             interpolationT = static_cast<float>(std::clamp(
-                ((centerX - ax) * dx + (centerY - ay) * dy) / lengthSquared,
+                ((interpolationX - ax) * dx + (interpolationY - ay) * dy) / lengthSquared,
                 0.0, 1.0));
             return true;
         }

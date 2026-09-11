@@ -585,6 +585,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   pins those results. The complete XNA corpus rises from 10 to 18 byte-exact scenes and from 28 to
   30 within one byte; three newly measured line gradients shrink from 32/32/142 differing pixels
   to 2/2/34. The residual one-byte subpixel interpolation cases remain an explicit follow-up audit.
+- **Classic line coverage and varying positions are independent** (`SOFTWARE-346`). The 63/128
+  geometry translation used to emulate D3D9 integer-centred coverage stays paired with the CPU
+  diamond at `pixel+0.5`, but non-MSAA line colors/UVs/depth now evaluate at the equivalently shifted
+  logical D3D pixel centre. SpriteBatch and multisampled geometry keep their ordinary half-pixel
+  varying location. Red-to-blue horizontal and 45-degree Microsoft XNA probes are now byte-exact;
+  a public LineList regression pins five exact bytes and the excluded endpoint.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared
