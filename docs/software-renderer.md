@@ -44,7 +44,7 @@ Those are real parser, vertex and sampled-pixel phases, not complete execution p
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
 continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
 is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163/355/356/357/358/360/361` are complete: the opt-in runtime now includes compiled MRT,
+`SOFTWARE-162/163/355/356/357/358/360/361/362` are complete: the opt-in runtime now includes compiled MRT,
 render-target/cube sampling, SpriteBatch custom-effect routing and classic line/wireframe rasterization. `SOFTWARE-164/165` remain the
 encompassing shader-profile, lifecycle and content-conformance backlog.
 
@@ -197,6 +197,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   SOFTWARE-361 additionally closes the valid straight-line opcodes missed by the fixture-driven
   inventory: vertex/pixel `SINCOS`, all five pixel matrix forms and pixel `DP2ADD`, including the
   different Shader Model 2/3 `SINCOS` operand shapes.
+  SOFTWARE-362 covers the EasyGL-supported Shader Model 1 arithmetic aliases `EXPP`, `LOGP` and
+  component-wise `CND`; the remaining old texture-family instructions are still being audited
+  against what the active MojoShader GLSL profile can genuinely execute.
 - **Public vertex-stage texture/sampler collections are inert renderer-wide** (`SOFTWARE-167`).
   `GraphicsDevice.VertexTextures` and `VertexSamplerStates` have the correct public shape and
   resource-disposal bookkeeping, but common code has no operation that publishes their contents

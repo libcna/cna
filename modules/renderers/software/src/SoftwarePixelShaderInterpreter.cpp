@@ -695,6 +695,7 @@ private:
     case 4:
     case 18:
     case 34:
+    case 80:
     case 88:
     case 90:
       source1 = ReadSource(tokens, cursor);
@@ -767,10 +768,12 @@ private:
         result[i] = source0[i] >= source1[i] ? 1.0f : 0.0f;
       break;
     case 14:
+    case 78:
       for (int i = 0; i < 4; ++i)
         result[i] = std::exp2(source0[i]);
       break;
     case 15:
+    case 79:
       for (int i = 0; i < 4; ++i)
         result[i] = std::log2(source0[i]);
       break;
@@ -853,6 +856,10 @@ private:
     case 37:
       result[0] = std::cos(source0[0]);
       result[1] = std::sin(source0[0]);
+      break;
+    case 80:
+      for (int i = 0; i < 4; ++i)
+        result[i] = source0[i] > 0.5f ? source1[i] : source2[i];
       break;
     case 88:
       for (int i = 0; i < 4; ++i)

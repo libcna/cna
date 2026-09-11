@@ -634,10 +634,12 @@ namespace CNA::Internal::Renderers::Software
                         result[i] = source0[i] >= source1[i] ? 1.0f : 0.0f;
                     break;
                 case 14:
+                case 78: // EXPP uses EXP behavior in the EasyGL MojoShader profile.
                     for (int i = 0; i < 4; ++i)
                         result[i] = std::exp2(source0[i]);
                     break;
                 case 15:
+                case 79: // LOGP is the lower-precision LOG form; EasyGL keeps full precision.
                     for (int i = 0; i < 4; ++i)
                         result[i] = std::log2(source0[i]);
                     break;

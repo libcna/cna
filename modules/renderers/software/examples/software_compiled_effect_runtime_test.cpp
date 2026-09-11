@@ -418,6 +418,8 @@ namespace
         add(1, {1u, destination(textureOutput, 7), source(constant, 10, 0xE4u, 1u)});
         add(37, {37u, destination(textureOutput, 7, 0x3u), source(constant, 24, 0x00u),
                  source(constant, 25), source(constant, 26)});
+        add(78, {78u, destination(textureOutput, 7, 0x4u), source(constant, 30, 0x00u)});
+        add(79, {79u, destination(textureOutput, 7, 0x8u), source(constant, 31, 0x00u)});
 
         std::array<float, 256u * 4u> floats{};
         const auto setConstant = [&](std::size_t index, std::array<float, 4> value)
@@ -443,6 +445,8 @@ namespace
         setConstant(24, {0.5f, 0.0f, 0.0f, 0.0f});
         setConstant(25, {1.0f, 0.0f, 0.0f, 0.0f});
         setConstant(26, {0.0f, 1.0f, 0.0f, 0.0f});
+        setConstant(30, {3.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(31, {8.0f, 0.0f, 0.0f, 0.0f});
         const std::array<int, 16u * 4u> integers{};
         const std::array<unsigned char, 16> booleans{};
         const SoftwareShaderSemanticValueEXT inputs[] = {
@@ -485,8 +489,8 @@ namespace
               "MIN/MAX/SGE result differs");
         Check(std::abs(varying(7)[0] - std::cos(0.5f)) < 0.00001f &&
                   std::abs(varying(7)[1] - std::sin(0.5f)) < 0.00001f &&
-                  varying(7)[2] == -0.5f && varying(7)[3] == -3.0f,
-              "vertex SINCOS or partial destination write differs");
+                  varying(7)[2] == 8.0f && varying(7)[3] == 3.0f,
+              "vertex SINCOS/EXPP/LOGP or partial destination write differs");
         const auto color = std::find_if(result.varyings.begin(), result.varyings.end(),
                                         [](const auto& value)
                                         {
@@ -582,6 +586,11 @@ namespace
         setConstant(27, {0.5f, 0.0f, 0.0f, 0.0f});
         setConstant(28, {1.0f, 0.0f, 0.0f, 0.0f});
         setConstant(29, {0.0f, 1.0f, 0.0f, 0.0f});
+        setConstant(30, {3.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(31, {8.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(32, {0.5f, 0.5001f, 0.2f, 1.0f});
+        setConstant(33, {1.0f, 2.0f, 3.0f, 4.0f});
+        setConstant(34, {5.0f, 6.0f, 7.0f, 8.0f});
         const auto executeArithmetic = [&](std::uint16_t opcode, std::uint32_t writeMask,
                                            std::initializer_list<std::uint32_t> sources,
                                            const std::string& label,
@@ -614,9 +623,11 @@ namespace
         const auto checkArithmetic = [&](std::uint16_t opcode, std::uint32_t writeMask,
                                          std::initializer_list<std::uint32_t> sources,
                                          const std::array<float, 4>& expected,
-                                         const std::string& label)
+                                         const std::string& label,
+                                         std::uint8_t majorVersion = 2u)
         {
-            const auto arithmetic = executeArithmetic(opcode, writeMask, sources, label);
+            const auto arithmetic =
+                executeArithmetic(opcode, writeMask, sources, label, majorVersion);
             Check(arithmetic.colorWriteMask == 1u && arithmetic.colors[0] == expected,
                   label + " result differs");
         };
@@ -649,6 +660,13 @@ namespace
                   std::abs(sincosSm3.colors[0][0] - std::cos(0.5f)) < 0.00001f &&
                   std::abs(sincosSm3.colors[0][1] - std::sin(0.5f)) < 0.00001f,
               "pixel Shader Model 3 SINCOS result differs");
+        checkArithmetic(78u, 0xFu, {source(constant, 30, 0x00u)},
+                        {8.0f, 8.0f, 8.0f, 8.0f}, "pixel Shader Model 1 EXPP", 1u);
+        checkArithmetic(79u, 0xFu, {source(constant, 31, 0x00u)},
+                        {3.0f, 3.0f, 3.0f, 3.0f}, "pixel Shader Model 1 LOGP", 1u);
+        checkArithmetic(80u, 0xFu,
+                        {source(constant, 32), source(constant, 33), source(constant, 34)},
+                        {5.0f, 2.0f, 7.0f, 4.0f}, "pixel Shader Model 1 CND", 1u);
 
         constexpr std::uint32_t samplerRegisterType = 10u;
         constexpr std::uint32_t predicateRegisterType = 19u;
