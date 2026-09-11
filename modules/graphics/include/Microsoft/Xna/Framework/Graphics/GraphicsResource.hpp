@@ -92,7 +92,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param device New owning device, or nullptr to detach it.
          */
-        void BindSharedResourceIdentityToDevice(GraphicsDevice* device);
+        void BindSharedResourceIdentityToDevice(GraphicsDevice* device) const;
 
         /**
          * @brief Releases managed and native resources.

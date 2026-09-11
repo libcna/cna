@@ -406,13 +406,13 @@ namespace Microsoft::Xna::Framework::Graphics
             // (GraphicsDevice.cs: "BlendState = BlendState.Opaque; DepthStencilState =
             // DepthStencilState.Default; RasterizerState = RasterizerState.CullCounterClockwise;") —
             // Task 896 ported only the 3rd line; this now ports the other 2 as well, matching FNA.
-            setBlendStateProperty(blendState_);
+            setBlendStateProperty(BlendState::Opaque);
             // A 2D-only renderer has no native depth/stencil state to initialize. Skipping this one
             // constructor-time synchronization lets such a renderer reject every later public state
             // assignment consistently, instead of needing a special first-call exception.
             if (renderer_->SupportsDepthStencil())
-                setDepthStencilStateProperty(depthStencilState_);
-            setRasterizerStateProperty(rasterizerState_);
+                setDepthStencilStateProperty(DepthStencilState::Default);
+            setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
             restoreCallerGlBinding();
         }
         catch (...)
@@ -4264,7 +4264,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         ThrowIfDisposed();
         ValidateBlendStateForProfile(graphicsProfile_, value);
-        value.BindForUse();
+        value.BindForUse(this);
         if (renderer_)
         {
             // REMED-GFX-077: the four per-MRT colour write masks + the coverage sample mask travel
@@ -4307,7 +4307,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setDepthStencilStateProperty(const DepthStencilState& value)
     {
         ThrowIfDisposed();
-        value.BindForUse();
+        value.BindForUse(this);
         if (renderer_)
         {
             renderer_->ApplyDepthStencilState(
@@ -4352,7 +4352,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setRasterizerStateProperty(const RasterizerState& value)
     {
         ThrowIfDisposed();
-        value.BindForUse();
+        value.BindForUse(this);
         if (renderer_)
         {
             renderer_->ApplyRasterizerState(

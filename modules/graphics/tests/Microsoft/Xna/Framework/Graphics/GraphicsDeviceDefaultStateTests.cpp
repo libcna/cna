@@ -10,6 +10,8 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "System/EventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -21,6 +23,20 @@ using Microsoft::Xna::Framework::Graphics::CullMode;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
+using Microsoft::Xna::Framework::Graphics::SamplerState;
+
+namespace
+{
+    class StateTestTag final : public System::Object
+    {
+    public:
+        [[nodiscard]] const std::string& GetTypeName() const override
+        {
+            static const std::string name = "StateTestTag";
+            return name;
+        }
+    };
+}
 
 // Task 302: FNA's GraphicsDevice.cs initializes "BlendState = BlendState.Opaque". Verifies the
 // default BlendState's Name matches Opaque's exactly (not just its blend-factor values, which
@@ -279,6 +295,157 @@ TEST(GraphicsDeviceDefaultStateTest, CustomStatesCanBeReappliedAcrossDevices)
     EXPECT_NO_THROW(second.setRasterizerStateProperty(rasterizer));
     EXPECT_NO_THROW(first.setRasterizerStateProperty(rasterizer));
     EXPECT_EQ(second.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
+}
+
+TEST(GraphicsDeviceDefaultStateTest, AssignedStatesShareResourceSemanticsAcrossPublicAliases)
+{
+    GraphicsDevice device;
+    StateTestTag firstTag;
+    StateTestTag secondTag;
+    BlendState blend;
+    DepthStencilState depth;
+    RasterizerState rasterizer;
+    SamplerState sampler;
+    blend.setNameProperty("blend-before");
+    depth.setNameProperty("depth-before");
+    rasterizer.setNameProperty("raster-before");
+    sampler.setNameProperty("sampler-before");
+    blend.setTagProperty(&firstTag);
+    depth.setTagProperty(&firstTag);
+    rasterizer.setTagProperty(&firstTag);
+    sampler.setTagProperty(&firstTag);
+
+    device.setBlendStateProperty(blend);
+    device.setDepthStencilStateProperty(depth);
+    device.setRasterizerStateProperty(rasterizer);
+    device.getSamplerStatesProperty()[0] = sampler;
+    BlendState& retainedBlend = device.getBlendStateProperty();
+    DepthStencilState& retainedDepth = device.getDepthStencilStateProperty();
+    RasterizerState& retainedRasterizer = device.getRasterizerStateProperty();
+    SamplerState& retainedSampler = device.getSamplerStatesProperty()[0];
+
+    EXPECT_EQ(blend.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(depth.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(rasterizer.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(sampler.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(retainedBlend.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(retainedDepth.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(retainedRasterizer.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(retainedSampler.getGraphicsDeviceProperty(), &device);
+
+    blend.setNameProperty("blend-after");
+    depth.setNameProperty("depth-after");
+    rasterizer.setNameProperty("raster-after");
+    sampler.setNameProperty("sampler-after");
+    blend.setTagProperty(&secondTag);
+    depth.setTagProperty(&secondTag);
+    rasterizer.setTagProperty(&secondTag);
+    sampler.setTagProperty(&secondTag);
+    EXPECT_EQ(retainedBlend.getNameProperty(), "blend-after");
+    EXPECT_EQ(retainedDepth.getNameProperty(), "depth-after");
+    EXPECT_EQ(retainedRasterizer.getNameProperty(), "raster-after");
+    EXPECT_EQ(retainedSampler.getNameProperty(), "sampler-after");
+    EXPECT_EQ(retainedBlend.getTagProperty(), &secondTag);
+    EXPECT_EQ(retainedDepth.getTagProperty(), &secondTag);
+    EXPECT_EQ(retainedRasterizer.getTagProperty(), &secondTag);
+    EXPECT_EQ(retainedSampler.getTagProperty(), &secondTag);
+
+    int blendSourceDisposing = 0;
+    int blendRetainedDisposing = 0;
+    System::Object* blendSender = nullptr;
+    blend.Disposing += [&](System::Object* sender, const System::EventArgs&)
+    {
+        ++blendSourceDisposing;
+        blendSender = sender;
+    };
+    retainedBlend.Disposing += [&](System::Object* sender, const System::EventArgs&)
+    {
+        ++blendRetainedDisposing;
+        blendSender = sender;
+    };
+    retainedBlend.Dispose();
+    EXPECT_TRUE(blend.getIsDisposedProperty());
+    EXPECT_TRUE(retainedBlend.getIsDisposedProperty());
+    EXPECT_EQ(blendSourceDisposing, 1);
+    EXPECT_EQ(blendRetainedDisposing, 1);
+    EXPECT_EQ(blendSender, &blend);
+
+    depth.Dispose();
+    retainedRasterizer.Dispose();
+    sampler.Dispose();
+    EXPECT_TRUE(retainedDepth.getIsDisposedProperty());
+    EXPECT_TRUE(rasterizer.getIsDisposedProperty());
+    EXPECT_TRUE(retainedSampler.getIsDisposedProperty());
+}
+
+TEST(GraphicsDeviceDefaultStateTest, AssignedStateIdentitiesOutliveSourcesAndRebindAcrossDevices)
+{
+    GraphicsDevice first;
+    GraphicsDevice second;
+    {
+        BlendState blend;
+        DepthStencilState depth;
+        RasterizerState rasterizer;
+        SamplerState sampler;
+        blend.setNameProperty("retained-blend");
+        depth.setNameProperty("retained-depth");
+        rasterizer.setNameProperty("retained-rasterizer");
+        sampler.setNameProperty("retained-sampler");
+        first.setBlendStateProperty(blend);
+        first.setDepthStencilStateProperty(depth);
+        first.setRasterizerStateProperty(rasterizer);
+        first.getSamplerStatesProperty()[0] = sampler;
+    }
+
+    second.setBlendStateProperty(first.getBlendStateProperty());
+    second.setDepthStencilStateProperty(first.getDepthStencilStateProperty());
+    second.setRasterizerStateProperty(first.getRasterizerStateProperty());
+    second.getSamplerStatesProperty()[0] = first.getSamplerStatesProperty()[0];
+
+    EXPECT_EQ(first.getBlendStateProperty().getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(first.getDepthStencilStateProperty().getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(first.getRasterizerStateProperty().getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(first.getSamplerStatesProperty()[0].getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(second.getBlendStateProperty().getNameProperty(), "retained-blend");
+    EXPECT_EQ(second.getDepthStencilStateProperty().getNameProperty(), "retained-depth");
+    EXPECT_EQ(second.getRasterizerStateProperty().getNameProperty(), "retained-rasterizer");
+    EXPECT_EQ(second.getSamplerStatesProperty()[0].getNameProperty(), "retained-sampler");
+}
+
+TEST(GraphicsDeviceDefaultStateTest, DefaultStatesSharePresetResourceSemantics)
+{
+    GraphicsDevice first;
+    StateTestTag tag;
+
+    EXPECT_EQ(BlendState::Opaque.getGraphicsDeviceProperty(), &first);
+    EXPECT_EQ(DepthStencilState::Default.getGraphicsDeviceProperty(), &first);
+    EXPECT_EQ(RasterizerState::CullCounterClockwise.getGraphicsDeviceProperty(), &first);
+    EXPECT_EQ(SamplerState::LinearWrap.getGraphicsDeviceProperty(), &first);
+
+    first.getBlendStateProperty().setNameProperty("temporary-opaque");
+    first.getDepthStencilStateProperty().setNameProperty("temporary-depth");
+    first.getRasterizerStateProperty().setNameProperty("temporary-rasterizer");
+    first.getSamplerStatesProperty()[0].setNameProperty("temporary-linear-wrap");
+    first.getSamplerStatesProperty()[0].setTagProperty(&tag);
+    EXPECT_EQ(BlendState::Opaque.getNameProperty(), "temporary-opaque");
+    EXPECT_EQ(DepthStencilState::Default.getNameProperty(), "temporary-depth");
+    EXPECT_EQ(RasterizerState::CullCounterClockwise.getNameProperty(), "temporary-rasterizer");
+    EXPECT_EQ(SamplerState::LinearWrap.getNameProperty(), "temporary-linear-wrap");
+    EXPECT_EQ(first.getSamplerStatesProperty()[1].getNameProperty(), "temporary-linear-wrap");
+    EXPECT_EQ(SamplerState::LinearWrap.getTagProperty(), &tag);
+    EXPECT_EQ(first.getSamplerStatesProperty()[1].getTagProperty(), &tag);
+
+    first.getBlendStateProperty().setNameProperty("BlendState.Opaque");
+    first.getDepthStencilStateProperty().setNameProperty("DepthStencilState.Default");
+    first.getRasterizerStateProperty().setNameProperty("RasterizerState.CullCounterClockwise");
+    first.getSamplerStatesProperty()[0].setNameProperty("SamplerState.LinearWrap");
+    first.getSamplerStatesProperty()[0].setTagProperty(nullptr);
+
+    GraphicsDevice second;
+    EXPECT_EQ(first.getBlendStateProperty().getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(first.getDepthStencilStateProperty().getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(first.getRasterizerStateProperty().getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(first.getSamplerStatesProperty()[0].getGraphicsDeviceProperty(), &second);
 }
 
 // Task 319: FNA's GraphicsDevice.ReferenceStencil is a real, independent device property

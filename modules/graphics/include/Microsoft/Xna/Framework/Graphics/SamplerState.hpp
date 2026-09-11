@@ -147,11 +147,12 @@ namespace Microsoft::Xna::Framework::Graphics
         };
 
         void ThrowIfBound() const;
-        void BindForUse() const;
-        void MarkCollectionSlot();
+        void BindForUse(GraphicsDevice* device) const;
+        void MarkCollectionSlot(GraphicsDevice* device);
 
         std::shared_ptr<State> state_;
         bool bindOnAssignment_ = false;
+        GraphicsDevice* bindingDevice_ = nullptr;
 
         friend class SamplerStateCollection;
     };

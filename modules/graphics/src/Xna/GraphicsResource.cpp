@@ -321,7 +321,7 @@ namespace Microsoft::Xna::Framework::Graphics
         isDisposed_ = identity->isDisposed;
     }
 
-    void GraphicsResource::BindSharedResourceIdentityToDevice(GraphicsDevice* device)
+    void GraphicsResource::BindSharedResourceIdentityToDevice(GraphicsDevice* device) const
     {
         const std::shared_ptr<SharedIdentity> identity = EnsureSharedIdentity();
         if (identity->graphicsDevice == device &&

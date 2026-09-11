@@ -1512,6 +1512,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /// callback, so this stays Normal there, matching the pre-existing hardcoded behavior.
         GraphicsDeviceStatus deviceStatus_ = GraphicsDeviceStatus::Normal;
 
+        // State/sampler collection construction binds public resource identities to this device.
+        // Declare the lifetime token first so that binding never observes it before construction.
+        std::shared_ptr<void> resourceDeviceLifetime_ = std::make_shared<int>(0);
+
         BlendState blendState_;
         DepthStencilState depthStencilState_;
         RasterizerState rasterizerState_;
@@ -1529,9 +1533,6 @@ namespace Microsoft::Xna::Framework::Graphics
         bool renderTargetBound_ = false;
         std::vector<VertexBufferBinding> currentVertexBuffers_;
         std::vector<GraphicsResource*> resources_;
-        // Resources keep a weak copy so their C++ destructors can distinguish a live, explicitly
-        // disposed device from a GraphicsDevice object whose lifetime has actually ended.
-        std::shared_ptr<void> resourceDeviceLifetime_ = std::make_shared<int>(0);
 
         // Reusable byte buffers for DrawUserPrimitives / DrawUserIndexedPrimitives staging,
         // avoiding a heap allocation on every draw call once capacity has grown to fit.

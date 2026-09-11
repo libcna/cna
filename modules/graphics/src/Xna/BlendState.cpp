@@ -32,6 +32,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             GraphicsResource::operator=(other);
             state_ = other.state_;
+            ShareResourceIdentityWith(other);
         }
         return *this;
     }
@@ -98,11 +99,12 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    void BlendState::BindForUse() const
+    void BlendState::BindForUse(GraphicsDevice* device) const
     {
         if (state_->isDisposed || getIsDisposedProperty())
             throw System::ObjectDisposedException("BlendState");
         state_->isBound = true;
+        BindSharedResourceIdentityToDevice(device);
     }
 
     GetTypeNameCPP(BlendState, "Microsoft.Xna.Framework.Graphics.BlendState")

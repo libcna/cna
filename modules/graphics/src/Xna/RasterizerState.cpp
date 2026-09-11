@@ -30,6 +30,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             GraphicsResource::operator=(other);
             state_ = other.state_;
+            ShareResourceIdentityWith(other);
         }
         return *this;
     }
@@ -75,11 +76,12 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    void RasterizerState::BindForUse() const
+    void RasterizerState::BindForUse(GraphicsDevice* device) const
     {
         if (state_->isDisposed || getIsDisposedProperty())
             throw System::ObjectDisposedException("RasterizerState");
         state_->isBound = true;
+        BindSharedResourceIdentityToDevice(device);
     }
 
     GetTypeNameCPP(RasterizerState, "Microsoft.Xna.Framework.Graphics.RasterizerState")

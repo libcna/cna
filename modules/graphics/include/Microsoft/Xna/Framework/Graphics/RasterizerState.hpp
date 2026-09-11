@@ -125,7 +125,7 @@ namespace Microsoft::Xna::Framework::Graphics
         };
 
         void ThrowIfBound() const;
-        void BindForUse() const;
+        void BindForUse(GraphicsDevice* device) const;
 
         std::shared_ptr<State> state_;
 

@@ -21,7 +21,10 @@ namespace Microsoft::Xna::Framework::Graphics
         , vertexStage_(vertexStage)
     {
         for (auto& sampler : samplers_)
-            sampler.MarkCollectionSlot();
+        {
+            sampler = SamplerState::LinearWrap;
+            sampler.MarkCollectionSlot(graphicsDevice_);
+        }
     }
 
     int SamplerStateCollection::ActiveSamplerCount() const

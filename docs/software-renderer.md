@@ -603,6 +603,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   sources and cross-device ownership rebinding. Literal caller-address equality remains the
   explicitly tracked ownership-model limitation `SOFTWARE-207`; it is not emulated with a dangling
   borrowed pointer.
+- **Graphics-state aliases preserve observable resource identity** (`SOFTWARE-349`). Microsoft XNA
+  retains assigned Blend/DepthStencil/Rasterizer/Sampler objects and rebinds their parent when they
+  are applied to another device. CNA's source, device-property and sampler-slot wrappers now share
+  device, Name, Tag, disposal and disposal-event delivery while remaining lifetime-safe after a
+  stack source leaves scope. Device defaults also retain the three named preset identities, and
+  untouched sampler slots share `SamplerState.LinearWrap` as XNA/FNA do. Only literal C++ wrapper
+  address and event-token identity remain under `SOFTWARE-198`.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

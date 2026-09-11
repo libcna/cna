@@ -33,12 +33,15 @@ namespace Microsoft::Xna::Framework::Graphics
             return *this;
 
         if (bindOnAssignment_)
-            other.BindForUse();
+            other.BindForUse(bindingDevice_);
 
         const bool bindOnAssignment = bindOnAssignment_;
+        GraphicsDevice* const bindingDevice = bindingDevice_;
         GraphicsResource::operator=(other);
         state_ = other.state_;
+        ShareResourceIdentityWith(other);
         bindOnAssignment_ = bindOnAssignment;
+        bindingDevice_ = bindingDevice;
         return *this;
     }
 
@@ -93,17 +96,19 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    void SamplerState::BindForUse() const
+    void SamplerState::BindForUse(GraphicsDevice* device) const
     {
         if (state_->isDisposed || getIsDisposedProperty())
             throw System::ObjectDisposedException("SamplerState");
         state_->isBound = true;
+        BindSharedResourceIdentityToDevice(device);
     }
 
-    void SamplerState::MarkCollectionSlot()
+    void SamplerState::MarkCollectionSlot(GraphicsDevice* device)
     {
         bindOnAssignment_ = true;
-        BindForUse();
+        bindingDevice_ = device;
+        BindForUse(device);
     }
 
     GetTypeNameCPP(SamplerState, "Microsoft.Xna.Framework.Graphics.SamplerState")
