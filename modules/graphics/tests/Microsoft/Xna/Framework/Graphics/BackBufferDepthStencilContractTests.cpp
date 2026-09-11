@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-181/SOFTWARE-336: selected depth storage and XNA clip-depth semantics must affect
-// fragment acceptance.
+// SOFTWARE-181/SOFTWARE-336/SOFTWARE-337: selected depth storage, XNA clip-depth semantics and
+// SpriteBatch layerDepth must affect fragment acceptance.
 
 #include <gtest/gtest.h>
 
@@ -13,6 +13,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -29,8 +30,13 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -154,6 +160,39 @@ namespace
                      Color::Black, clearDepth, 0);
         DrawFullScreen(device, Color::Red, 0.5f);
         return ReadCenter(device);
+    }
+
+    Color RenderSpriteDepthWinner()
+    {
+        GraphicsDevice device;
+        RenderTarget2D target(
+            device, 8, 8, false, SurfaceFormat::Color, DepthFormat::Depth24, 0,
+            RenderTargetUsage::PreserveContents);
+        Texture2D red(device, 1, 1, false, SurfaceFormat::Color);
+        Texture2D green(device, 1, 1, false, SurfaceFormat::Color);
+        const Color redPixel = Color::Red;
+        const Color greenPixel = Color::Green;
+        red.SetData(&redPixel, 1);
+        green.SetData(&greenPixel, 1);
+
+        device.SetRenderTarget(&target);
+        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                     Color::Black, 1.0f, 0);
+
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                    &DepthStencilState::Default, &RasterizerState::CullNone);
+        // Deferred preserves submission order. XNA/FNA write layerDepth into POSITION.Z, so the
+        // nearer red sprite writes depth 0.1 and the farther green sprite must then fail LessEqual.
+        // A renderer that treats layerDepth only as a CPU sort key gives both quads equal depth and
+        // incorrectly lets the later green sprite overwrite red.
+        batch.Draw(red, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 1, 1), Color::White,
+                   0.0f, Vector2::Zero, SpriteEffects::None, 0.1f);
+        batch.Draw(green, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 1, 1), Color::White,
+                   0.0f, Vector2::Zero, SpriteEffects::None, 0.9f);
+        batch.End();
+        device.SetRenderTarget(nullptr);
+        return ReadCenter(target);
     }
 }
 
@@ -329,6 +368,13 @@ TEST(BackBufferDepthStencilContractTest, StockEffectUsesXnaClipDepthConvention)
     DrawFullScreen(device, Color::Red, -0.5f);
     EXPECT_EQ(ReadCenter(device), Color::Black)
         << "XNA clips stock-effect geometry with clip z below zero";
+}
+
+TEST(BackBufferDepthStencilContractTest, SpriteBatchLayerDepthParticipatesInDepthTesting)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    EXPECT_EQ(RenderSpriteDepthWinner(), Color::Red);
 }
 
 TEST(BackBufferDepthStencilContractTest, UnknownClearOptionBitsAreIgnored)

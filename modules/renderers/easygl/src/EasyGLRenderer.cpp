@@ -5197,7 +5197,7 @@ if (ProfileIsEs2ApiGeneration())
         const char* vertexShaderSource = R"(#version 300 es
 precision highp float;
 
-layout(location = 0) in vec2 aPos;
+layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec2 aTexCoord;
 layout(location = 2) in vec4 aColor;
 
@@ -5208,7 +5208,8 @@ uniform mat4 projection;
 
 void main()
 {
-    gl_Position = projection * vec4(aPos, 0.0, 1.0);
+    gl_Position = projection * vec4(aPos, 1.0);
+    gl_Position.z = gl_Position.z * 2.0 - gl_Position.w;
     TexCoord = aTexCoord;
     Color = aColor;
 }
@@ -5306,16 +5307,16 @@ if (ProfileUsesGlslEs100())
             // Position (0), TexCoord (1), Color (2). WebGL 1 / GLES 2 has no core VAO;
             // that path reapplies the same default-array attributes immediately before drawing.
             vao_.enable_attribute(0);
-            vao_.set_attribute_pointer(0, 2, ::easygl::DataType::Float, false,
-                                       8 * sizeof(float), (void*)0);
+            vao_.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false,
+                                       9 * sizeof(float), (void*)0);
 
             vao_.enable_attribute(1);
             vao_.set_attribute_pointer(1, 2, ::easygl::DataType::Float, false,
-                                       8 * sizeof(float), (void*)(2 * sizeof(float)));
+                                       9 * sizeof(float), (void*)(3 * sizeof(float)));
 
             vao_.enable_attribute(2);
             vao_.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false,
-                                       8 * sizeof(float), (void*)(4 * sizeof(float)));
+                                       9 * sizeof(float), (void*)(5 * sizeof(float)));
 
             ibo_.bind(::easygl::BufferTarget::ElementArray);
             vao_.unbind();
@@ -5492,10 +5493,13 @@ if (ProfileUsesGlslEs100())
             logH = vh;
         }
 
+        // FNA's inlined SpriteBatch matrix preserves POSITION.Z as layerDepth. The equivalent
+        // XNA matrix uses near=0/far=-1; the built-in shader then performs the D3D-to-GL clip-depth
+        // conversion, while a CNAEXT custom GLSL effect remains responsible for its native output.
         const Matrix orthoM = Matrix::CreateOrthographicOffCenter(
             0.0f, static_cast<float>(logW),
             static_cast<float>(logH), 0.0f,
-            -1.0f, 1.0f);
+            0.0f, -1.0f);
         const Matrix combined = transform_ * orthoM;
         float ortho[16];
         combined.ToColumnMajor(ortho);
@@ -5523,19 +5527,19 @@ if (ProfileUsesGlslEs100())
             // have changed it since the previous batch, so restore SpriteBatch's complete layout
             // after binding this batch's VBO instead of pretending a core VAO exists.
             metagl::glEnableVertexAttribArray(metagl::AttribLocation{0});
-            metagl::glVertexAttribPointer(metagl::AttribLocation{0}, 2,
+            metagl::glVertexAttribPointer(metagl::AttribLocation{0}, 3,
                                           metagl::DataType::Float, 0,
-                                          static_cast<metagl::GLsizei>(8 * sizeof(float)), (void*)0);
+                                          static_cast<metagl::GLsizei>(9 * sizeof(float)), (void*)0);
             metagl::glEnableVertexAttribArray(metagl::AttribLocation{1});
             metagl::glVertexAttribPointer(metagl::AttribLocation{1}, 2,
                                           metagl::DataType::Float, 0,
-                                          static_cast<metagl::GLsizei>(8 * sizeof(float)),
-                                          (void*)(2 * sizeof(float)));
+                                          static_cast<metagl::GLsizei>(9 * sizeof(float)),
+                                          (void*)(3 * sizeof(float)));
             metagl::glEnableVertexAttribArray(metagl::AttribLocation{2});
             metagl::glVertexAttribPointer(metagl::AttribLocation{2}, 4,
                                           metagl::DataType::Float, 0,
-                                          static_cast<metagl::GLsizei>(8 * sizeof(float)),
-                                          (void*)(4 * sizeof(float)));
+                                          static_cast<metagl::GLsizei>(9 * sizeof(float)),
+                                          (void*)(5 * sizeof(float)));
         }
         else
         {
@@ -5613,13 +5617,14 @@ if (ProfileUsesGlslEs100())
             return;
         }
 
-        // The sprite vertex is the one this renderer builds above: two floats of position, two of
-        // texture coordinate and four of colour, tightly packed.
+        // FNA's private sprite vertex is POSITION0 Vector3, COLOR0 and TEXCOORD0. EasyGL stores
+        // colour expanded as four floats, but retains the same three-component position so the
+        // stock vertex shader and caller-selected depth state can observe layerDepth.
         static const VertexDeclaration kSpriteDeclaration(
             static_cast<int>(sizeof(Vertex)),
             {
                 VertexElement(static_cast<int>(offsetof(Vertex, x)),
-                              VertexElementFormat::Vector2, VertexElementUsage::Position, 0),
+                              VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
                 VertexElement(static_cast<int>(offsetof(Vertex, u)),
                               VertexElementFormat::Vector2,
                               VertexElementUsage::TextureCoordinate, 0),
@@ -5870,10 +5875,10 @@ if (ProfileUsesGlslEs100())
 
         const auto base = static_cast<uint16_t>(pending_vertices_.size());
 
-        pending_vertices_.push_back({v0x, v0y, u1, v1, r, g, b, a});
-        pending_vertices_.push_back({v1x, v1y, u2, v1, r, g, b, a});
-        pending_vertices_.push_back({v2x, v2y, u2, v2, r, g, b, a});
-        pending_vertices_.push_back({v3x, v3y, u1, v2, r, g, b, a});
+        pending_vertices_.push_back({v0x, v0y, layerDepth, u1, v1, r, g, b, a});
+        pending_vertices_.push_back({v1x, v1y, layerDepth, u2, v1, r, g, b, a});
+        pending_vertices_.push_back({v2x, v2y, layerDepth, u2, v2, r, g, b, a});
+        pending_vertices_.push_back({v3x, v3y, layerDepth, u1, v2, r, g, b, a});
 
         pending_indices_.push_back(base + 0);
         pending_indices_.push_back(base + 1);

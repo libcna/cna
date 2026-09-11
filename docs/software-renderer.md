@@ -525,6 +525,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   Software and isolated EasyGL tests prove both missing-plane exception types, depth-only success,
   failure atomicity, and backbuffer/render-target behavior.
 - **`Clear(Color)` clears depth to 1.0 independently of `Viewport.MaxDepth`** (`SOFTWARE-334`).
+  Microsoft XNA hardcodes `1f`; FNA's use of the current viewport maximum is a lower-authority
+  divergence. A depth-rendered discriminator first proves that an explicit 0.25 clear rejects a
+  fragment at the viewport maximum, then requires the single-color overload to admit it. The same
+  pre-fix failure and repaired output are proven on Software and isolated EasyGL.
 - **Explicit depth clears reproduce XNA/D3D normalized-depth saturation** (`SOFTWARE-335`):
   finite values and infinities clamp to `[0,1]`, NaN becomes `0`, and no managed range exception
   is synthesized.
@@ -532,10 +536,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   3D vertex shader converts `[0,w]` to OpenGL's `[-w,w]`, so `z=0` reaches the near depth endpoint,
   `z<0` is clipped, the full viewport depth interval is used, and MojoShader compiled Effects no
   longer need a per-draw depth-range workaround.
-  Microsoft XNA hardcodes `1f`; FNA's use of the current viewport maximum is a lower-authority
-  divergence. A depth-rendered discriminator first proves that an explicit 0.25 clear rejects a
-  fragment at the viewport maximum, then requires the single-color overload to admit it. The same
-  pre-fix failure and repaired output are proven on Software and isolated EasyGL.
+- **`SpriteBatch.layerDepth` is real vertex depth on both renderers** (`SOFTWARE-337`). FNA writes
+  the value into `POSITION0.Z`; Software already rasterized it directly, and EasyGL now retains the
+  same Vector3 position through both its built-in shader and compiled-Effect SpriteBatch route.
+  An exact Depth24/LessEqual scene proves a later far sprite cannot overwrite a nearer one. The
+  separate `SOFTWARE-338` audit covers matrices that couple this Z value into transformed Z/W;
+  Software's current 2D-specialized transform path does not yet reproduce that uncommon case.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

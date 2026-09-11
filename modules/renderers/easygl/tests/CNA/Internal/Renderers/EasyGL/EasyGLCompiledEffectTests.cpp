@@ -649,6 +649,49 @@ TEST(EasyGLCompiledEffectDrawTest, SpriteBatchInheritsStockVertexShaderForPixelO
     EXPECT_NEAR(actual.getBProperty(), 0, 3);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SpriteBatchLayerDepthReachesInheritedStockVertexShader)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeSampler = true;
+    options.pixelShaderSamplesTexture = true;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4::One);
+
+    Texture2D nearTexture(device, 1, 1);
+    Texture2D farTexture(device, 1, 1);
+    const Color red[1] = {Color::Red};
+    const Color green[1] = {Color::Green};
+    nearTexture.SetData(red, 1);
+    farTexture.SetData(green, 1);
+
+    RenderTarget2D target(device, 8, 8, false, SurfaceFormat::Color,
+                          DepthFormat::Depth24);
+    device.SetRenderTarget(&target);
+    device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                 Color::Black, 1.0f, 0);
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                &DepthStencilState::Default, &RasterizerState::CullNone, &effect);
+    batch.Draw(nearTexture, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 1, 1), Color::White,
+               0.0f, Microsoft::Xna::Framework::Vector2::Zero, SpriteEffects::None, 0.1f);
+    batch.Draw(farTexture, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 1, 1), Color::White,
+               0.0f, Microsoft::Xna::Framework::Vector2::Zero, SpriteEffects::None, 0.9f);
+    batch.End();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color actual = Color::Transparent;
+    const Rectangle centre(4, 4, 1, 1);
+    target.GetData(0, &centre, &actual, 0, 1);
+    EXPECT_GT(actual.getRProperty(), 100);
+    EXPECT_NEAR(actual.getGProperty(), 0, 3);
+    EXPECT_NEAR(actual.getBProperty(), 0, 3);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SpriteBatchBeginMipClampReachesCompiledPixelSampler)
 {
     // SOFTWARE-187: this effect samples slot 0 but assigns no sampler-state fields of its own.

@@ -832,7 +832,7 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLSpriteBatchRenderer : public ISpriteBatchRenderer, public ::easygl::RecoverableResource
     {
     public:
-        struct Vertex { float x, y, u, v, r, g, b, a; };
+        struct Vertex { float x, y, z, u, v, r, g, b, a; };
 
     private:
         // Microsoft XNA and FNA both keep the native UInt16-indexed SpriteBatch buffers at 2,048
