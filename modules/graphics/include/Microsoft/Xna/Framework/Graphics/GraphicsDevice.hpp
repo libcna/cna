@@ -1525,6 +1525,8 @@ namespace Microsoft::Xna::Framework::Graphics
         int referenceStencil_ = 0;
         bool blendStateDirty_ = false;
         bool depthStencilStateDirty_ = false;
+        std::uint16_t spriteBeginCount_ = 0;
+        std::uint16_t spriteImmediateBeginCount_ = 0;
 
         TextureCollection textures_;
         SamplerStateCollection samplerStates_;

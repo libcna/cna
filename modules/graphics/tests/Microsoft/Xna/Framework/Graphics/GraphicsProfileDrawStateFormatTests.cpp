@@ -205,13 +205,17 @@ TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchEnforcesFilteringAtItsRealFl
     EXPECT_NO_THROW(batch.Draw(texture, Vector2::Zero, Color::White));
     EXPECT_THROW(batch.End(), System::NotSupportedException);
 
-    // FNA clears the public begun guard before a deferred flush. The renderer-side batch must be
-    // ended as well, or Software's next otherwise-valid Begin sees a stale unmatched Begin.
-    EXPECT_NO_THROW(batch.Begin(
+    // Microsoft XNA retains the pair and the GraphicsDevice batch count when deferred validation
+    // fails. Repeated End retries the same flush; neither this object nor an Immediate peer can
+    // silently discard the failed draw.
+    EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+    EXPECT_THROW(batch.End(), System::NotSupportedException);
+
+    SpriteBatch immediate(draw.device);
+    EXPECT_THROW(immediate.Begin(
         SpriteSortMode::Immediate, &BlendState::Opaque, &SamplerState::PointClamp,
-        nullptr, nullptr));
-    EXPECT_NO_THROW(batch.Draw(texture, Vector2::Zero, Color::White));
-    EXPECT_NO_THROW(batch.End());
+        nullptr, nullptr),
+        System::InvalidOperationException);
 }
 
 TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchRejectsBlendOnNonBlendableTarget)

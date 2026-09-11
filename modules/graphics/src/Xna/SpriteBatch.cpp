@@ -250,9 +250,28 @@ namespace Microsoft::Xna::Framework::Graphics
         sortMode_ = sortMode;
         spriteQueue_.clear();
 
-        // FNA's PrepRenderState runs here only for Immediate. Every deferred sorting mode waits
-        // until End(), including an empty batch, so public device state remains observable as the
-        // caller left it between Begin and the eventual flush.
+        // Microsoft XNA coordinates every SpriteBatch attached to one GraphicsDevice. Multiple
+        // deferred batches may coexist, but Immediate is mutually exclusive with all of them.
+        // These checks precede Immediate state application and do not publish a failed Begin.
+        if (graphicsDevice_ != nullptr)
+        {
+            if (sortMode_ == SpriteSortMode::Immediate)
+            {
+                if (graphicsDevice_->spriteBeginCount_ > 0)
+                {
+                    throw System::InvalidOperationException(
+                        "Cannot begin an Immediate SpriteBatch while another SpriteBatch is active.");
+                }
+            }
+            else if (graphicsDevice_->spriteImmediateBeginCount_ > 0)
+            {
+                throw System::InvalidOperationException(
+                    "Cannot begin a SpriteBatch while an Immediate SpriteBatch is active.");
+            }
+        }
+
+        // Immediate applies state before the pair and device counters become active. Every other
+        // sorting mode waits until End(), including an empty batch.
         if (sortMode_ == SpriteSortMode::Immediate)
             applyRenderState();
 
@@ -290,9 +309,14 @@ namespace Microsoft::Xna::Framework::Graphics
                 throw;
             }
         }
-        // Renderer setup can reject an unsupported requested state (for example Skia's mip-only
-        // sampler filters). Publish a successful Begin only after that setup completes, so the
-        // same SpriteBatch remains reusable after the caller catches the exception.
+        // Renderer setup can reject an unsupported requested state. Publish a successful Begin
+        // and the Microsoft device-level accounting only after that setup completes.
+        if (graphicsDevice_ != nullptr)
+        {
+            if (sortMode_ == SpriteSortMode::Immediate)
+                ++graphicsDevice_->spriteImmediateBeginCount_;
+            ++graphicsDevice_->spriteBeginCount_;
+        }
         begun = true;
     }
 
@@ -301,10 +325,19 @@ namespace Microsoft::Xna::Framework::Graphics
         throwIfDisposed();
         if (!begun)
             throw System::InvalidOperationException("End was called, but Begin has not yet been called.");
-        // FNA clears its front-end guard before PrepRenderState/FlushBatch. A backend exception
-        // therefore ends this Begin/End session and a caller that catches it may start another.
-        begun = false;
         bool rendererEndAttempted = false;
+        const auto releaseDeviceAccounting = [this]()
+        {
+            if (graphicsDevice_ == nullptr)
+                return;
+            if (sortMode_ == SpriteSortMode::Immediate &&
+                graphicsDevice_->spriteImmediateBeginCount_ > 0)
+            {
+                --graphicsDevice_->spriteImmediateBeginCount_;
+            }
+            if (graphicsDevice_->spriteBeginCount_ > 0)
+                --graphicsDevice_->spriteBeginCount_;
+        };
         try
         {
             if (sortMode_ != SpriteSortMode::Immediate)
@@ -324,24 +357,26 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         catch (...)
         {
-            // A shared validation or renderer draw can fail before the backend's End() is reached.
-            // Leaving that private begun flag set poisons the same SpriteBatch even though FNA's
-            // public guard is already clear. End an otherwise-unmatched renderer batch, discard
-            // retained sprites/effect state, then preserve the original exception.
+            // Microsoft leaves the Begin/End pair and device counters active when deferred state
+            // application or Flush fails. A repeated End retries the same work, and Immediate
+            // remains blocked on this device. A CNA-private renderer End failure is different: its
+            // backend pair cannot safely be retried, so retain the established recoverable seam.
+            if (!rendererEndAttempted)
+                throw;
+
             spriteQueue_.clear();
             if (renderer_)
             {
-                if (!rendererEndAttempted)
-                {
-                    try { renderer_->End(); }
-                    catch (...) {}
-                }
                 try { renderer_->SetCustomEffect(nullptr); }
                 catch (...) {}
             }
             customEffect_ = nullptr;
+            begun = false;
+            releaseDeviceAccounting();
             throw;
         }
+        begun = false;
+        releaseDeviceAccounting();
     }
 
     // -----------------------------------------------------------------------

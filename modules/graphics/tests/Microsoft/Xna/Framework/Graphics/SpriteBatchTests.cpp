@@ -38,6 +38,9 @@ using Microsoft::Xna::Framework::Graphics::SpriteEffects;
 using Microsoft::Xna::Framework::Graphics::SpriteFont;
 using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::SamplerState;
 using CNA::Internal::Renderers::DummyTextureRenderer;
 using CNA::Internal::Renderers::RecordingSpriteBatchRenderer;
 using System::ArgumentOutOfRangeException;
@@ -471,6 +474,10 @@ TEST(SpriteBatchTest, ImmediateBeginRejectsEveryDisposedStateFamily)
         EXPECT_THROW(batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, &sampler,
                                  nullptr, nullptr),
                      System::ObjectDisposedException);
+        // XNA has not incremented either device counter or published the Begin/End pair when
+        // Immediate SetRenderState fails, so this same object remains usable.
+        EXPECT_NO_THROW(batch.Begin());
+        EXPECT_NO_THROW(batch.End());
     }
     {
         SpriteBatch batch(device);
@@ -502,24 +509,119 @@ TEST(SpriteBatchTest, DeferredEndRejectsDisposedStateAtBeginOrBeforeFlush)
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::SamplerState;
 
+    {
+        GraphicsDevice device;
+        SpriteBatch batch(device);
+        SamplerState alreadyDisposed;
+        alreadyDisposed.Dispose();
+        ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque,
+                                    &alreadyDisposed, nullptr, nullptr));
+        EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+        EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+        EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+    }
+
+    {
+        GraphicsDevice device;
+        SpriteBatch batch(device);
+        SamplerState disposedAfterBegin = SamplerState::PointClamp;
+        ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque,
+                                    &disposedAfterBegin, nullptr, nullptr));
+        disposedAfterBegin.Dispose();
+        EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+        EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+        EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+    }
+
+    {
+        GraphicsDevice device;
+        SpriteBatch batch(device);
+        ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque,
+                                    nullptr, nullptr, nullptr));
+        EXPECT_NO_THROW(batch.End());
+    }
+}
+
+// SOFTWARE-351: recovered Microsoft XNA tracks active SpriteBatch pairs on GraphicsDevice. Any
+// number of non-Immediate batches may coexist, but Immediate is mutually exclusive with every
+// other active batch. A rejected cross-mode Begin must not itself become active.
+TEST(SpriteBatchTest, GraphicsDeviceCoordinatesImmediateAcrossBatchInstances)
+{
     GraphicsDevice device;
-    SpriteBatch batch(device);
+    SpriteBatch deferredA(device);
+    SpriteBatch deferredB(device);
+    SpriteBatch immediate(device);
 
-    SamplerState alreadyDisposed;
-    alreadyDisposed.Dispose();
-    ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque,
-                                &alreadyDisposed, nullptr, nullptr));
-    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+    deferredA.Begin();
+    deferredB.Begin();
+    bool immediateRejected = false;
+    try
+    {
+        immediate.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
+    }
+    catch (const System::InvalidOperationException&)
+    {
+        immediateRejected = true;
+    }
+    EXPECT_TRUE(immediateRejected);
+    if (!immediateRejected)
+        immediate.End();
+    deferredB.End();
+    deferredA.End();
 
-    SamplerState disposedAfterBegin = SamplerState::PointClamp;
-    ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque,
-                                &disposedAfterBegin, nullptr, nullptr));
-    disposedAfterBegin.Dispose();
-    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+    immediate.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
+    bool deferredRejected = false;
+    try
+    {
+        deferredA.Begin();
+    }
+    catch (const System::InvalidOperationException&)
+    {
+        deferredRejected = true;
+    }
+    EXPECT_TRUE(deferredRejected);
+    if (!deferredRejected)
+        deferredA.End();
 
-    ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque,
-                                nullptr, nullptr, nullptr));
-    EXPECT_NO_THROW(batch.End());
+    SpriteBatch secondImmediate(device);
+    bool secondImmediateRejected = false;
+    try
+    {
+        secondImmediate.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
+    }
+    catch (const System::InvalidOperationException&)
+    {
+        secondImmediateRejected = true;
+    }
+    EXPECT_TRUE(secondImmediateRejected);
+    if (!secondImmediateRejected)
+        secondImmediate.End();
+    immediate.End();
+
+    EXPECT_NO_THROW(deferredA.Begin());
+    EXPECT_NO_THROW(deferredA.End());
+}
+
+TEST(SpriteBatchTest, FailedDeferredEndRetainsDeviceBatchAccountingEvenAfterDispose)
+{
+    GraphicsDevice device;
+    SamplerState disposed;
+    disposed.Dispose();
+    SpriteBatch poisoned(device);
+    poisoned.Begin(SpriteSortMode::Deferred, &BlendState::AlphaBlend,
+                   &disposed, nullptr, nullptr);
+    EXPECT_THROW(poisoned.End(), System::ObjectDisposedException);
+
+    SpriteBatch parallelDeferred(device);
+    EXPECT_NO_THROW(parallelDeferred.Begin());
+    EXPECT_NO_THROW(parallelDeferred.End());
+
+    SpriteBatch immediate(device);
+    EXPECT_THROW(immediate.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend),
+                 System::InvalidOperationException);
+    poisoned.Dispose();
+    EXPECT_THROW(immediate.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend),
+                 System::InvalidOperationException);
 }
 
 // --- Draw guard: throws when called before Begin (no-renderer batch) ---
@@ -1248,6 +1350,8 @@ TEST(SpriteBatchSortModeTest, InvalidNonzeroModeThrowsNotSupportedBeforeDrawing)
 
     EXPECT_THROW(batch.End(), System::NotSupportedException);
     EXPECT_TRUE(rec->drawCalls.empty());
+    EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+    EXPECT_THROW(batch.End(), System::NotSupportedException);
 }
 
 TEST(SpriteBatchSortModeTest, InvalidNonzeroModeWithEmptyQueueDoesNotSort)

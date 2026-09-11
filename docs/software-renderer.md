@@ -616,6 +616,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   `BlendFactor`, `MultiSampleMask`, or `ReferenceStencil` marks the corresponding device cache
   dirty, so the next same-identity whole-state assignment does re-enter `Apply` and observes
   disposal. A different disposed object or sampler slot is still rejected.
+- **SpriteBatch activity is coordinated per GraphicsDevice** (`SOFTWARE-351`). Multiple Deferred
+  batches may coexist, but Immediate is mutually exclusive with every active batch on the same
+  device. A failed Immediate state application leaves the batch retryable. A deferred state or
+  flush failure instead retains the active pair and device count exactly as measured on Microsoft
+  XNA: another Begin is rejected, a repeated End retries, and Immediate remains blocked even if
+  the failed batch is disposed. Only CNA's renderer-private End failure releases the pair because
+  that backend seam cannot safely be retried.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared
