@@ -147,6 +147,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set_tests_properties(SdlGpu_HeadlessGraphicsDevice PROPERTIES
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
 
+    # SDLGPU-132: apply the ordinary PresentationParameters backbuffer format contract rather
+    # than retaining a combined depth/stencil texture for every request and echoing unsupported
+    # packed color formats. The A -> depth -> no-depth pixels make Reset resource replacement and
+    # capability reporting observable; the same executable is portable to headless D3D12.
+    cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_format sdlgpu_backbuffer_format_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_BackbufferFormat
+        COMMAND cna_test_sdlgpu_backbuffer_format
+        TIMEOUT 120 LABELS "SdlGpu;Parity"
+        ENVIRONMENT
+            "${CNA_SDLGPU_HEADLESS_TEST_ENVIRONMENT};SDL_GPU_DRIVER=${CNA_SDLGPU_HEADLESS_TEST_DRIVER}")
+    set_tests_properties(SdlGpu_BackbufferFormat PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # SDLGPU-112: keep the complete compiled-XNA-effect runtime independently runnable.  The
     # canonical source normally belongs to the renderer-focused unit-test aggregate, whose link
     # graph includes every renderer unit test; compiling this one source directly avoids that

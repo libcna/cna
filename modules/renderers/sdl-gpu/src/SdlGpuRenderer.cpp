@@ -1237,6 +1237,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             return levels;
         }
 
+        using Microsoft::Xna::Framework::Graphics::DepthFormat;
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
         [[nodiscard]] constexpr bool IsClassicDxtFormat(SurfaceFormat format) noexcept
@@ -1807,6 +1808,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         int physicalWidth = 0;
         int physicalHeight = 0;
         SDL_GPUTextureFormat depthStencilFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+        bool backbufferHasStencil = false;
         SDL_GPUTextureFormat backbufferFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
         SDL_GPUSampleCount backbufferSampleCount = SDL_GPU_SAMPLECOUNT_1;
         int backbufferMultiSampleCount = 0;
@@ -1940,6 +1942,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             owner.physicalWidth_ = physicalWidth;
             owner.physicalHeight_ = physicalHeight;
             owner.depthStencilFormat_ = depthStencilFormat;
+            owner.backbufferHasStencil_ = backbufferHasStencil;
             owner.backbufferSampleCount_ = backbufferSampleCount;
             owner.backbufferMultiSampleCount_ = backbufferMultiSampleCount;
             owner.testHooks_ = hooks;
@@ -2294,9 +2297,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                    int virtualHeight,
                                    CnaPresentationMode presentationMode,
                                    int swapInterval,
-                                   int multiSampleCount)
+                                   int multiSampleCount,
+                                   int depthStencilFormat)
         : SdlGpuRenderer(window, virtualWidth, virtualHeight, presentationMode,
-                         swapInterval, SdlGpuTestHooksEXT{}, multiSampleCount)
+                         swapInterval, SdlGpuTestHooksEXT{}, multiSampleCount,
+                         depthStencilFormat)
     {
     }
 
@@ -2305,7 +2310,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                    CnaPresentationMode presentationMode,
                                    int swapInterval,
                                    const SdlGpuTestHooksEXT& testHooks,
-                                   int multiSampleCount)
+                                   int multiSampleCount,
+                                   int depthStencilFormat)
         : window_(window),
           virtualWidth_(virtualWidth),
           virtualHeight_(virtualHeight),
@@ -2419,9 +2425,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         resources.FailAt(SdlGpuFailurePointEXT::DepthStencilFormatQuery);
-        resources.depthStencilFormat = QueryDepthStencilFormat(resources.device);
+        DepthTargetFormatInfo depthInfo{};
+        if (!TryGetDepthTargetFormatInfo(
+                resources.device, static_cast<DepthFormat>(depthStencilFormat), depthInfo))
+        {
+            depthInfo = {SDL_GPU_TEXTUREFORMAT_INVALID,
+                         static_cast<int>(DepthFormat::None), 0, false};
+        }
         if (testHooks.forceNoDepthStencilFormat)
-            resources.depthStencilFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+        {
+            depthInfo = {SDL_GPU_TEXTUREFORMAT_INVALID,
+                         static_cast<int>(DepthFormat::None), 0, false};
+        }
+        resources.depthStencilFormat = depthInfo.nativeFormat;
+        resources.backbufferHasStencil = depthInfo.hasStencil;
         resources.backbufferSampleCount = ClampSampleCount(
             resources.device, resources.backbufferFormat,
             resources.depthStencilFormat, multiSampleCount);
@@ -2580,8 +2597,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                 return false;
 #endif
             case CNA::GraphicsCapability::DepthStencilBuffer:
-            case CNA::GraphicsCapability::StencilBuffer:
                 return depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID;
+            case CNA::GraphicsCapability::StencilBuffer:
+                return backbufferHasStencil_;
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
                 // Sample-count support is not required to be monotonic. Ask the same clamping
                 // routine resource creation uses whether ANY ordinary 2/4/8x mode survives,
@@ -2612,34 +2630,6 @@ namespace CNA::Internal::Renderers::SdlGpu
                "completion and cannot count samples that pass depth/stencil.";
     }
 
-    SDL_GPUTextureFormat SdlGpuRenderer::QueryDepthStencilFormat(SDL_GPUDevice* device)
-    {
-        // plans/plan_sdlgpu.md: SDL_gpu guarantees at most one of D24_UNORM_S8_UINT/D32_FLOAT_S8_UINT
-        // per device -- must query, never assume either is available. Queried once here (not
-        // lazily inside EnsureDepthStencilTexture) so pipeline creation has a stable answer for
-        // SDL_GPUGraphicsPipelineTargetInfo before any frame has actually rendered.
-        if (SDL_GPUTextureSupportsFormat(device, SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
-                                          SDL_GPU_TEXTURETYPE_2D,
-                                          SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET))
-        {
-            return SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
-        }
-        if (SDL_GPUTextureSupportsFormat(device, SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
-                                               SDL_GPU_TEXTURETYPE_2D,
-                                               SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET))
-        {
-            return SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
-        }
-
-        // Genuine SDL_gpu/device capability gap, not a "not implemented yet" stub -- warn
-        // and keep running with no depth/stencil attachment rather than throw.
-        CNA::Logger::Warn(
-            "CNA SDL_GPU: no combined depth+stencil texture format is supported by this "
-            "device; depth/stencil clearing and depth-tested draws will have no effect.",
-            CNA::LogCategory::GPU);
-        return SDL_GPU_TEXTUREFORMAT_INVALID;
-    }
-
     void SdlGpuRenderer::QueueTextureRelease(SDL_GPUTexture* texture)
     {
         if (texture != nullptr)
@@ -2650,6 +2640,27 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (pipeline != nullptr)
             pendingGraphicsPipelineReleases_.push_back(pipeline);
+    }
+
+    void SdlGpuRenderer::ReleaseBackbufferDepthAndMsaaAttachments()
+    {
+        if (depthStencilTexture_ != nullptr)
+        {
+            SDL_ReleaseGPUTexture(device_, depthStencilTexture_);
+            depthStencilTexture_ = nullptr;
+        }
+        depthStencilWidth_ = 0;
+        depthStencilHeight_ = 0;
+        depthStencilSampleCount_ = SDL_GPU_SAMPLECOUNT_1;
+
+        if (backbufferMsaaTexture_ != nullptr)
+        {
+            SDL_ReleaseGPUTexture(device_, backbufferMsaaTexture_);
+            backbufferMsaaTexture_ = nullptr;
+        }
+        backbufferMsaaWidth_ = 0;
+        backbufferMsaaHeight_ = 0;
+        backbufferMsaaFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
     }
 
     void SdlGpuRenderer::EnsureDepthStencilTexture(Uint32 width, Uint32 height)
@@ -3846,6 +3857,50 @@ namespace CNA::Internal::Renderers::SdlGpu
             appliedSwapInterval_ = appliedInterval;
     }
 
+    int SdlGpuRenderer::GetAppliedBackBufferFormatEXT(int requestedFormat) const
+    {
+        (void)requestedFormat;
+        // SDL chooses an RGBA8/BGRA8 swapchain format. Readback normalizes BGRA to RGBA, so both
+        // have the ordinary SurfaceFormat::Color transfer contract (ordinal zero).
+        return static_cast<int>(SurfaceFormat::Color);
+    }
+
+    int SdlGpuRenderer::GetAppliedDepthStencilFormatEXT(int requestedFormat) const
+    {
+        DepthTargetFormatInfo info{};
+        if (device_ != nullptr && TryGetDepthTargetFormatInfo(
+                device_, static_cast<DepthFormat>(requestedFormat), info))
+        {
+            return info.appliedDepthFormat;
+        }
+        return static_cast<int>(DepthFormat::None);
+    }
+
+    void SdlGpuRenderer::UpdatePresentationFormatEXT(
+        int backBufferFormat, int depthStencilFormat, bool isFullScreen)
+    {
+        (void)backBufferFormat;
+        (void)isFullScreen;
+
+        DepthTargetFormatInfo info{};
+        if (!TryGetDepthTargetFormatInfo(
+                device_, static_cast<DepthFormat>(depthStencilFormat), info))
+        {
+            info = {SDL_GPU_TEXTUREFORMAT_INVALID,
+                    static_cast<int>(DepthFormat::None), 0, false};
+        }
+
+        const bool nativeFormatChanged = info.nativeFormat != depthStencilFormat_;
+        if (nativeFormatChanged && framePending_ && !EnsureFrameRendered())
+            return;
+        if (nativeFormatChanged)
+        {
+            ReleaseBackbufferDepthAndMsaaAttachments();
+            depthStencilFormat_ = info.nativeFormat;
+        }
+        backbufferHasStencil_ = info.hasStencil;
+    }
+
     int SdlGpuRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
     {
         const SDL_GPUSampleCount applied = ClampSampleCount(
@@ -3859,23 +3914,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (framePending_ && !EnsureFrameRendered())
             return backbufferMultiSampleCount_;
 
-        if (depthStencilTexture_ != nullptr)
-        {
-            SDL_ReleaseGPUTexture(device_, depthStencilTexture_);
-            depthStencilTexture_ = nullptr;
-        }
-        depthStencilWidth_ = 0;
-        depthStencilHeight_ = 0;
-        depthStencilSampleCount_ = SDL_GPU_SAMPLECOUNT_1;
-
-        if (backbufferMsaaTexture_ != nullptr)
-        {
-            SDL_ReleaseGPUTexture(device_, backbufferMsaaTexture_);
-            backbufferMsaaTexture_ = nullptr;
-        }
-        backbufferMsaaWidth_ = 0;
-        backbufferMsaaHeight_ = 0;
-        backbufferMsaaFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+        ReleaseBackbufferDepthAndMsaaAttachments();
 
         backbufferSampleCount_ = applied;
         backbufferMultiSampleCount_ = SampleCountToInt(applied);
@@ -11848,6 +11887,6 @@ namespace CNA::Internal::Renderers
         return std::make_unique<SdlGpu::SdlGpuRenderer>(
             CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
             args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval,
-            args.multiSampleCount);
+            args.multiSampleCount, args.depthStencilFormat);
     }
 }

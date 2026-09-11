@@ -33,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
@@ -276,6 +277,9 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(320);
         gdm_->setPreferredBackBufferHeightProperty(240);
+        // This smoke explicitly clears and advertises stencil, so request the XNA format that
+        // actually owns a stencil plane rather than relying on the Depth24 manager default.
+        gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
         // GraphicsDeviceManager.SynchronizeWithVerticalRetrace defaults to true (the XNA
         // default); this test's virtual/headless display has no real vblank signal, so leaving
         // VSync on makes every frame wait roughly a second, blowing past this test's frame

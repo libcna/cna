@@ -235,10 +235,16 @@ GRAPHICS_EVIDENCE_GROUPS = (
             "AcquireThreadContextLeaseEXT", "OnSurfaceInvalidated",
             "GetDefaultViewportRect", "SetVirtualResolution", "SetPresentationMode",
             "SetSwapInterval", "GetSwapIntervalEXT", "ApplyMultiSampleCount",
-            "UpdatePresentationFormatEXT", "GetAppliedBackBufferFormatEXT",
-            "GetAppliedMultiSampleCountEXT", "GetAppliedDepthStencilFormatEXT",
+            "GetAppliedMultiSampleCountEXT",
             "GetMultiSampleCount", "TransformWindowToLogical", "TransformLogicalToWindow",
             "CanBeginDrawEXT",
+        },
+    ),
+    (
+        "SDLGPU-68/85/132",
+        {
+            "UpdatePresentationFormatEXT", "GetAppliedBackBufferFormatEXT",
+            "GetAppliedDepthStencilFormatEXT",
         },
     ),
     (
@@ -251,10 +257,13 @@ GRAPHICS_EVIDENCE_GROUPS = (
             "ClassifyRenderTargetCubeFormatEXT", "ClassifyColorTransferFormatEXT",
             "IsCompressedTransferFormatEXT", "IsCompressedCubeTransferFormatEXT",
             "LoadsCompressedContentNativelyEXT",
-            "SupportsDepthStencil", "SupportsDepthBuffer", "SupportsStencilBuffer",
             "SupportsCapability", "GetAdditionalLimitationsTextEXT", "GetMaxVertexStreams",
             "GetMaxTextureDimension",
         },
+    ),
+    (
+        "SDLGPU-57/87/132",
+        {"SupportsDepthStencil", "SupportsDepthBuffer", "SupportsStencilBuffer"},
     ),
     (
         "SDLGPU-68/69/70/71/72/73/74/80",
@@ -359,21 +368,6 @@ ALLOWED_CLASSIC_SDL_INHERITED: set[tuple[str, str, str]] = {
     (
         "IGraphicsRenderer",
         "OnSurfaceInvalidated :: void (CNA::Platform::WindowId)",
-        "renderer",
-    ),
-    (
-        "IGraphicsRenderer",
-        "UpdatePresentationFormatEXT :: void (int, int, bool)",
-        "renderer",
-    ),
-    (
-        "IGraphicsRenderer",
-        "GetAppliedBackBufferFormatEXT :: int (int) const",
-        "renderer",
-    ),
-    (
-        "IGraphicsRenderer",
-        "GetAppliedDepthStencilFormatEXT :: int (int) const",
         "renderer",
     ),
     (

@@ -129,11 +129,18 @@
 > shaders through the already-freed renderer context. SDL GPU now detaches every live runtime while
 > the context/device remain valid; the pre-fix-failing ASan contract and the complete 45-case corpus
 > pass on Vulkan, and the same corpus passes on D3D12.
+> `SDLGPU-132` closes three inherited-default presentation-format errors found by the renewed
+> mechanical sweep. The ordinary constructor and Reset now apply `DepthFormat::None`, `Depth16`,
+> `Depth24` and `Depth24Stencil8` to real matching SDL_gpu attachments; depth/stencil capability
+> answers follow the applied planes; and SDL's fixed RGBA8/BGRA8 backbuffer reports its actual
+> logical `SurfaceFormat::Color` instead of echoing an unsupported packed request that makes
+> readback type validation fail. The pre-fix public discriminator passed only 5/10 checks; its
+> expanded four-format A→B→A form passes 17/17 on Vulkan and D3D12.
 > `SDLGPU-94`–`SDLGPU-96` remain open: D3D12 swapchain presentation/recovery, Metal and
 > Android/Vulkan still require native runtime evidence.
-> Nine EasyGL defect findings (eight distinct
+> Ten EasyGL defect findings (nine distinct
 > behavior families) are deliberately not copied. The last full 191/191 SDL integration sweep,
-> prior 51/51 renderer-unit aggregate, new 5/5 sampler-cache and 71/71 pipeline-cache focused
+> current 54/54 renderer-unit aggregate, new 5/5 sampler-cache and 71/71 pipeline-cache focused
 > targets, and 33/33 EasyGL
 > oracle and 32/32 two-renderer corpus gates remain green on Linux/Vulkan. This verdict supersedes historical
 > completion banners below; those remain implementation history, not current truth.
@@ -159,10 +166,10 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Item | Current evidence |
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
-| Newly created tasks | 41 (`SDLGPU-91`–`SDLGPU-131`) |
-| Completed / open | 38 / 3 (`SDLGPU-91`–`93`, `SDLGPU-97`–`131` complete; `SDLGPU-94`–`96` open) |
-| Ending evidence commit | `SDLGPU-131` (including the `SDLGPU-119` focused ASan follow-up) |
-| Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, all nine shared classic stock-effect fixtures, the complete ten-fixture state/sampler matrix, the 24-test texture/format/transfer matrix, all 33 render-target registrations, all 25 buffer/draw registrations, all five model oracles and the current 45-case compiled-effect corpus. The target evidence includes the 851-assertion mip/readback oracle and 40-assertion classic MRT matrix; the draw evidence includes instancing, multistream and declaration semantics. Six presentation/reset/resize programs, 73 individually isolated backbuffer/bound-target/Present lifecycle legs and 291/291 applicable constructor/lazy-resource rollback checks also pass through D3D12. There are now 193 registered native and 260 registered Windows SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. The expanded 45-case compiled-effect corpus passes Vulkan, focused ASan Vulkan and headless D3D12; the immutable-sampler target passes 5/5 on both drivers, while the immutable-pipeline target passes 71/71 on Vulkan and all 64 applicable classic checks on D3D12. The nine-case sampler-publication oracle also passes on both drivers. Unchanged dependencies were reused from the stable builds. |
+| Newly created tasks | 42 (`SDLGPU-91`–`SDLGPU-132`) |
+| Completed / open | 39 / 3 (`SDLGPU-91`–`93`, `SDLGPU-97`–`132` complete; `SDLGPU-94`–`96` open) |
+| Ending evidence commit | `SDLGPU-132` (including the `SDLGPU-119` focused ASan follow-up) |
+| Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, all nine shared classic stock-effect fixtures, the complete ten-fixture state/sampler matrix, the 24-test texture/format/transfer matrix, all 33 render-target registrations, all 25 buffer/draw registrations, all five model oracles and the current 45-case compiled-effect corpus. The target evidence includes the 851-assertion mip/readback oracle and 40-assertion classic MRT matrix; the draw evidence includes instancing, multistream and declaration semantics. Six presentation/reset/resize programs, 73 individually isolated backbuffer/bound-target/Present lifecycle legs and 291/291 applicable constructor/lazy-resource rollback checks also pass through D3D12. There are now 194 registered native and 261 registered Windows SDL integration tests; the newest shared public-format contract passes all 17 depth/capability/pixel/readback assertions on both available drivers. The pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. The expanded 45-case compiled-effect corpus passes Vulkan, focused ASan Vulkan and headless D3D12; the immutable-sampler target passes 5/5 on both drivers, while the immutable-pipeline target passes 71/71 on Vulkan and all 64 applicable classic checks on D3D12. The nine-case sampler-publication oracle also passes on both drivers. Unchanged dependencies were reused from the stable builds. |
 | Available local cross tools | MinGW-w64, Wine 10.0, DXVK v3.0.2-58 and vkd3d-proton 3.1.0 are present. There is no Apple SDK/device or `xcrun`/`xcodebuild`/`metal`. The Android PATH audit located `adb`/platform-tools but did not locate an NDK/toolchain, `sdkmanager` or `avdmanager`, and `adb devices` reported no running/attached target. The project owner subsequently confirmed that an Android emulator is available on this host outside those searched paths, so emulator absence is not a blocker; Android execution is intentionally deferred at the owner's request. No system `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found; CNA uses its pinned static ShaderCross dependency instead. |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
 
@@ -1550,31 +1557,83 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   fatal, and the freshly rebuilt headless D3D12 corpus passes **45/45** with its authenticated
   vkd3d/debug-layer gate.
 
+### SDLGPU-132 — apply truthful ordinary backbuffer color/depth formats ✅
+
+- **Problem/public behavior:** the SDL GPU factory discarded
+  `GraphicsRendererCreateArgs::depthStencilFormat`; construction always selected the best combined
+  depth/stencil format, and the renderer inherited the no-op presentation-format Reset hook plus
+  identity applied-format getters. Consequently public `DepthFormat::None` still depth-tested,
+  `Depth16`/`Depth24` falsely advertised stencil, a Reset could not change the native attachment,
+  and a requested packed backbuffer format remained visible even though the actual proxy is
+  RGBA8/BGRA8. The latter made ordinary `GetBackBufferData(Color*)` reject its destination because
+  validation trusted the echoed packed element size.
+- **EasyGL/SDL/FNA evidence:** current EasyGL also owns a fixed window-system framebuffer. Its
+  `UpdatePresentationFormatEXT` changes only the depth-bit value used for bias conversion and it
+  inherits the same identity format/capability defaults; `easygl_depth_format_test.cpp` explicitly
+  checks only field storage/no throw. This is `EASYGL-PARITY-10`, not behavior SDL should copy.
+  FNA forwards `depthStencilFormat` inside the native presentation structure to
+  `FNA3D_ResetBackbuffer`; CNA's `PresentationParameters` default is `None` and
+  `GraphicsDeviceManager` deliberately changes that to `Depth24`. Vendored SDL_gpu exposes the
+  exact D16/D24/D24S8 families (with D32/D32S8 precision-compatible fallbacks) and allows CNA to
+  own them beside its existing virtual backbuffer, so there is no underlying SDL limitation.
+- **Implementation/location:** pass the requested ordinal from the SDL GPU factory into
+  construction, reuse the render-target depth-format mapper for backbuffer selection, and retain
+  whether the chosen format really has stencil. Override all three formerly inherited
+  presentation-format hooks. A format-changing Reset flushes pending work, releases the dependent
+  depth/MSAA attachments through SDL's command-buffer-aware resource lifetime, and recreates them
+  lazily. SDL-selected RGBA8/BGRA8 swapchains and the normalized readback proxy expose logical
+  `SurfaceFormat::Color`; unsupported requests therefore report the applied format instead of a
+  false promise. `GraphicsDevice::Reset` now applies the new color/depth tuple before clamping its
+  MSAA request, matching FNA's single native reset structure and avoiding a clamp against stale
+  formats.
+- **Acceptance/test:** begin with `Color`/`None`, use near-red then far-green full-screen draws to
+  prove painter ordering with no depth, Reset through `Depth24`, `Depth24Stencil8`, `Depth16` and
+  back to `None`, and require both discriminating pixels and exact depth/stencil capability answers
+  at every leg. Request `Bgr565` and `Bgra4444`, require applied `Color`, and prove Color readback
+  remains valid. Run the identical public test on real offscreen Vulkan and authenticated headless
+  D3D12 with validation/debug diagnostics fatal; rerun adjacent construction, MSAA, presentation,
+  pass-order and backbuffer-readback gates plus the shared graphics lifecycle tests. Update the
+  fail-closed renderer-contract inventory so these hooks may no longer regress to inherited
+  defaults.
+- **Result (2026-09-11):** complete. Before the fix the initial discriminator passed **5/10**:
+  None still rendered the nearer red quad, both no-depth capability assertions were false, the
+  packed format was echoed, `Depth16` claimed stencil, and Color readback then threw an element-size
+  error. The expanded post-fix executable passes **17/17** on Vulkan and the same **17/17** through
+  headless D3D12. Nine adjacent native presentation/MSAA/lifecycle/readback registrations pass
+  **9/9**, the explicitly stencil-owning smoke test passes, and the shared
+  `PresentationLifecycle`/`PresentationParameters`/`RenderTargetSemantics` slice passes **43/43**.
+  After the merge's one required stable-build cascade, that same shared slice passes **43/43** on
+  EasyGL under isolated Xvfb, so the common Reset-order correction does not regress the reference
+  renderer. The complete focused SDL GPU renderer-unit aggregate also passes **54/54**. No relevant
+  Vulkan validation or D3D12 debug-layer diagnostic was emitted. The mechanical
+  renderer audit remains **266/266** (144 `=`, 117 `out`, five limitations) and now requires
+  explicit SDL overrides for all three presentation-format hooks.
+
 
 ## 2026-09-10 parity audit final status
 
 | Item | Current evidence |
 |---|---|
 | Starting branch / commit | `sdlgpu` / `3a44315fdffe974e02a664cacae4fd388c9728aa` |
-| Ending parity-behavior/test commit | `9285b36e39106aecd85402c6f14688a4fa2f0fcb` (`SDLGPU-89`); the Linux audit closeout is `SDLGPU-90`; the platform/adversarial closeout now includes `SDLGPU-131` and the focused ASan follow-ups |
+| Ending parity-behavior/test commit | `9285b36e39106aecd85402c6f14688a4fa2f0fcb` (`SDLGPU-89`); the Linux audit closeout is `SDLGPU-90`; the platform/adversarial closeout now includes `SDLGPU-132` and the focused ASan follow-ups |
 | Renderer contract | `modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp`; exact audit in `plans/sdlgpu_renderer_contract_audit.csv` |
 | Reference renderer | `modules/renderers/easygl/{include,src,examples}` |
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
-| EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files at audit start; 247 / 45 now (source count, not capability count) |
-| EasyGL / SDL GPU renderer unit-test sources | 2 / 2 `.cpp` files |
-| SDL GPU registered integration tests | 193 CTests (85 baseline plus 108 parity/remediation registrations) |
+| EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files at audit start; 247 / 46 now (source count, not capability count) |
+| EasyGL / SDL GPU renderer unit-test sources | 2 / 3 `.cpp` files (2 / 2 at audit start) |
+| SDL GPU registered integration tests | 194 CTests (85 baseline plus 109 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 32 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 32/32 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
-| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform/adversarial re-audit creates 41 more (`SDLGPU-91`–`131`) |
-| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 74 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
+| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform/adversarial re-audit creates 42 more (`SDLGPU-91`–`132`) |
+| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 75 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
-| Display constraint | Sandboxed tests do not access the host display. All 193 SDL GPU registrations explicitly use `SDL_VIDEODRIVER=offscreen`, `DISPLAY=` and `WAYLAND_DISPLAY=` while still creating the real Vulkan device/swapchain; EasyGL alone uses isolated Xvfb `:179`. Native driver defaults are platform-specific rather than hard-coded to X11. |
-| Final SDL GPU verification | **191/191** registered SDL integration CTests pass from the last full stable sweep; the 192nd sampler-cache registration passes **5/5** on Vulkan and headless D3D12, and the new 193rd sampler-publication registration passes **9/9** on both. `SDLGPU-130` restores the strict texture-filter oracle from **69/70** to **70/70** on Vulkan and passes the same **70/70** fixture on headless D3D12; the native-bias-rejection LOD and all-shader constructor/reflection targets pass beside it (**3/3 CTests**), followed by the complete native sampler/mipmap slice at **14/14**. The preceding focused SDL GPU renderer aggregate is **51/51**. `SDLGPU-131` expands the compiled-effect subset to **45/45** on native Vulkan, focused ASan Vulkan and headless D3D12; the new case has a pre-fix ASan trace proving the renderer-context lifetime defect. SDLGPU-122's native-bias rejection gate makes its authored-mip result a shader-emulation proof, and the shared SPIR-V corpus passes 2/2 over all 27 effect passes. `SDLGPU-121` additionally passes the exact stock LOD-bias oracle 7/7 on Vulkan and D3D12, the SpriteBatch/constructor/stock-family companion slice 7/7 on Vulkan, and ShaderCross reflection of all 26 updated stock shaders. `SDLGPU-123` adds a pre-fix-failing cube-face coordinate discriminator that passes 25/25 on Vulkan/D3D12 plus an 11/11 native companion slice. `SDLGPU-124` adds eight destroy/recreate program-identity generations and distinct pass pixels on both drivers; `SDLGPU-125` proves the same loop holds one cache entry while live and returns to zero after every destruction, including deferred ordinary and SpriteBatch replay. `SDLGPU-126` bounds immutable sampler retention at 256 entries and recreates evicted states correctly on both available drivers. `SDLGPU-127` similarly bounds every stock/per-program immutable pipeline cache; its depth-bias discriminator passes **71/71** on Vulkan and **64/64** applicable checks on D3D12, the affected native seven-registration slice passes **7/7**, and the D3D12 compiled-effect corpus remains **45/45**. The integration total contains all 32 shared parity fixtures and now 114 parity-labelled registrations. `SDLGPU-87`'s capability/lifetime regression remains **295/295**; `SDLGPU-89` adds a 21/21 multistream result and isolated slot-15 parity pixels on both renderers. |
-| Validation | SDL GPU debug mode is enabled. All 193 integration registrations now make `Validation Error`, `Validation Warning`, bare `VUID-`, `D3D12 ERROR:` or `D3D12 WARNING:` output fatal; the new publication and focused sampler runs emitted none. |
+| Display constraint | Sandboxed tests do not access the host display. All 194 SDL GPU registrations explicitly use `SDL_VIDEODRIVER=offscreen`, `DISPLAY=` and `WAYLAND_DISPLAY=` while still creating the real Vulkan device/swapchain; EasyGL alone uses isolated Xvfb `:179`. Native driver defaults are platform-specific rather than hard-coded to X11. |
+| Final SDL GPU verification | **191/191** registered SDL integration CTests pass from the last full stable sweep; the 192nd sampler-cache registration passes **5/5** on Vulkan and headless D3D12, and the 193rd sampler-publication registration passes **9/9** on both. `SDLGPU-130` restores the strict texture-filter oracle from **69/70** to **70/70** on Vulkan and passes the same **70/70** fixture on headless D3D12; the native-bias-rejection LOD and all-shader constructor/reflection targets pass beside it (**3/3 CTests**), followed by the complete native sampler/mipmap slice at **14/14**. The current focused SDL GPU renderer aggregate is **54/54**. `SDLGPU-131` expands the compiled-effect subset to **45/45** on native Vulkan, focused ASan Vulkan and headless D3D12; the new case has a pre-fix ASan trace proving the renderer-context lifetime defect. `SDLGPU-132` adds the 194th native/261st Windows registration: its four-depth-format capability/pixel/readback contract passes **17/17** on Vulkan and D3D12, nine adjacent native presentation tests pass **9/9**, and the affected shared graphics slice passes **43/43**. SDLGPU-122's native-bias rejection gate makes its authored-mip result a shader-emulation proof, and the shared SPIR-V corpus passes 2/2 over all 27 effect passes. `SDLGPU-121` additionally passes the exact stock LOD-bias oracle 7/7 on Vulkan and D3D12, the SpriteBatch/constructor/stock-family companion slice 7/7 on Vulkan, and ShaderCross reflection of all 26 updated stock shaders. `SDLGPU-123` adds a pre-fix-failing cube-face coordinate discriminator that passes 25/25 on Vulkan/D3D12 plus an 11/11 native companion slice. `SDLGPU-124` adds eight destroy/recreate program-identity generations and distinct pass pixels on both drivers; `SDLGPU-125` proves the same loop holds one cache entry while live and returns to zero after every destruction, including deferred ordinary and SpriteBatch replay. `SDLGPU-126` bounds immutable sampler retention at 256 entries and recreates evicted states correctly on both available drivers. `SDLGPU-127` similarly bounds every stock/per-program immutable pipeline cache; its depth-bias discriminator passes **71/71** on Vulkan and **64/64** applicable checks on D3D12, the affected native seven-registration slice passes **7/7**, and the D3D12 compiled-effect corpus remains **45/45**. The integration total contains all 32 shared parity fixtures and now 115 parity-labelled registrations. `SDLGPU-87`'s capability/lifetime regression remains **295/295**; `SDLGPU-89` adds a 21/21 multistream result and isolated slot-15 parity pixels on both renderers. |
+| Validation | SDL GPU debug mode is enabled. All 194 integration registrations now make `Validation Error`, `Validation Warning`, bare `VUID-`, `D3D12 ERROR:` or `D3D12 WARNING:` output fatal; the new format and focused presentation runs emitted none. |
 | Final EasyGL/parity oracle | **33/33** registered EasyGL oracle CTests pass under Xvfb/llvmpipe. The direct corpus executes all 32 shared sources under both renderers: 27 frames satisfy the strict byte policy, two use renderer-local discriminating invariants, and three stay within fixed measured line/edge coverage budgets. |
-| Exact remaining EasyGL differences | Exact half-rate `PresentInterval::Two` (`⛔`) and `OcclusionQuery` (`SDLGPU-80`, `⛔`). EasyGL's non-default `MultiSampleMask` is also unimplemented, so it is an SDL_gpu limitation but not an EasyGL difference. SDL GPU intentionally differs from the nine XNA/FNA-invalid findings in `EASYGL-PARITY-1`–`9`; findings 4 and 7 are two EasyGL examples of the same bound-FBO backbuffer-readback defect. |
+| Exact remaining EasyGL differences | Exact half-rate `PresentInterval::Two` (`⛔`) and `OcclusionQuery` (`SDLGPU-80`, `⛔`). EasyGL's non-default `MultiSampleMask` is also unimplemented, so it is an SDL_gpu limitation but not an EasyGL difference. SDL GPU intentionally differs from the ten XNA/FNA-invalid findings in `EASYGL-PARITY-1`–`10`; findings 4 and 7 are two EasyGL examples of the same bound-FBO backbuffer-readback defect. |
 
 The first attempted baseline used the suite's historical hard-coded `SDL_VIDEODRIVER=x11` and
 could not reach the inaccessible host display: early programs skipped and 47 tests failed for the
@@ -1628,6 +1687,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | Clear color/depth/stencil overloads | Direct GL clears; ordered-clear corpus | Deferred clear commands and all combinations | `=` — ordered clear/draw/cube-target tests and state suites pass; `SDLGPU-58/66` |
 | Present, interval and modes | Runtime swap interval; resize examples | SDL claim/present modes and proxy copy | `=` for Immediate/One/default forwarding, reset, resize and minimize retry; exact half-rate `PresentInterval::Two` is `⛔` because SDL exposes only VSYNC/IMMEDIATE/MAILBOX and no vblank timing primitive; `SDLGPU-68` |
 | Backbuffer size/readback/channel order | Direct readback, RGBA contract | Real `backbufferProxy_` download, contrary to old SDLGPU-39 text | `=` — dimension/first-read/range plus reset/resize/minimize-retained readback pass; `SDLGPU-68` |
+| Backbuffer color/depth formats | Window framebuffer is fixed; Reset only changes depth-bias bookkeeping and inherited getters echo requests (`EASYGL-PARITY-10`) | Fixed logical Color proxy; requested None/D16/D24/D24S8 select matching native depth/stencil planes at construction and Reset | `=` to XNA/FNA rather than the EasyGL defect — all four depth formats, exact capability answers, painter/depth pixels, packed-color fallback and A→B→A attachment replacement pass on Vulkan/D3D12; `SDLGPU-132` |
 | Backbuffer MSAA | Construction-time multisample colour/depth FBO, resolved before present | Device-clamped multisample colour/depth attachments resolve into the swapchain/readback proxy; public reports and Reset track the applied count | `=` — identical public source proves 4x applied state, intermediate edge coverage, opaque interior and segment preservation on both renderers; SDL-only A→B→A reset adds the XNA/FNA behavior EasyGL lacks; `SDLGPU-85` |
 | Logical resolution/transforms/letterbox | Explicit default viewport and transforms | Explicit physical/logical transforms | `=` — physical rectangle, all modes, HiDPI transforms, zero-size safety, SpriteBatch projection and real resize pass; `SDLGPU-68` |
 | Blend factors/functions/BlendFactor | Full separate RGB/A state | Complete immutable pipeline state and per-draw dynamic factor | `=` — all 13 factors in all four roles, all five equations for RGB/A, separate fields and A→B→A are pixel-verified; `SDLGPU-58` |
@@ -1716,13 +1776,13 @@ overrides from grep or trigger a rebuild. After merge `b4508d38d` it finds **266
 `∅` rows.
 
 For the classic rows, EasyGL has 128 concrete override instances and 35 inherited instances; SDL
-GPU has 134 concrete override instances, 23 explicitly allowlisted inherited instances, the five
+GPU has 137 concrete override instances, 20 explicitly allowlisted inherited instances, the five
 unavailable query hooks, and one deliberately absent lease object because its factory's reviewed
 null default means this non-GL renderer needs no movable context. Exact signatures make every
 allowance fail closed when the interface changes. The inherited cases are limited to: framework-
 owned CPU/mip shadows; a compressed upload unreachable on render-target cubes; the float-coordinate
 SpriteBatch overload that delegates to the rectangle overload; null/no-op context and invalidation
-hooks appropriate to SDL_gpu; identity presentation/profile facts shared with EasyGL; cube-face
+hooks appropriate to SDL_gpu; identity profile facts shared with EasyGL; cube-face
 binding delegated to the concrete target; and healthy 3D/device/default-limit answers. GL handle/
 binding hooks and unused resource-dimension helpers are separately classified `out`, never treated
 as missing SDL behavior.
@@ -1745,7 +1805,7 @@ mean parity.
 | `ISpriteBatchRenderer::{Begin,End,SetTransformMatrix,SetCustomEffect,SetSampler*,SetImmediateMode,Draw overloads}` | explicit except default immediate hook | explicit for all public stock and compiled-Effect paths, including complete sampler state | classic geometry/state/font/compiled-Effect behavior `=` (`SDLGPU-64/65/76/79`) |
 | `AcquireThreadContextLeaseEXT`, surface changed/invalidated, context-loss hooks | context/registry explicit | surface change explicit; invalidation/recovery defaults retained | surface change is ordinary lifecycle and verified by `SDLGPU-68`; lease and simulated recovery are EasyGL-specific/CNAEXT, while resource lifetime remains `SDLGPU-81` |
 | `Clear`, all six depth/stencil variants, legacy depth/blend/write toggles | explicit | explicit | classic; discriminating sweep (`SDLGPU-58/66`) |
-| `Present`, viewport/default viewport, virtual resolution, presentation mode, swap interval, MSAA/application-format facts | explicit including default viewport and runtime facts | present/size/default-physical-viewport/virtual/mode/requested interval explicit; SDL-local applied-interval fact distinguishes fallbacks; applied-format hooks remain inherited | classic presentation behavior verified by `SDLGPU-68`; format facts remain `SDLGPU-69–74` |
+| `Present`, viewport/default viewport, virtual resolution, presentation mode, swap interval, MSAA/application-format facts | explicit including default viewport and runtime facts, but fixed-framebuffer format getters remain inherited | present/size/default-physical-viewport/virtual/mode/requested interval explicit; SDL-local applied interval, backbuffer Color and depth/stencil format hooks distinguish real fallbacks | classic presentation behavior verified by `SDLGPU-68/85/132`; EasyGL's inherited-format defect is `EASYGL-PARITY-10` |
 | format classifiers, compressed transfer policy, half-float filtering | explicit, runtime/profile aware; volume inherits Color-only framework fallback | Texture2D, TextureCube, Texture3D, RT2D and cube-target classification explicit; half filtering still inherited | classic textures/volume/targets `=` through `SDLGPU-69–73`; remaining filtering evidence is owned by its sampler/effect tasks |
 | coordinate transforms and `ReadBackbuffer` | explicit | explicit | classic; readback baseline passes (`SDLGPU-68`) |
 | texture/sprite/RT2D/RTCube/Texture3D/TextureCube factories, including format-bearing `*EXT` RT factories | explicit | Every texture and target factory preserves its classified format; cube and 2D targets retain per-resource depth and usage facts | classic format/factory/lifecycle surface `=` (`SDLGPU-69–74`) |
@@ -1753,7 +1813,7 @@ mean parity.
 | blend/depth/raster/sampler applications; BlendFactor/reference/scissor/viewport | all explicit | all explicit | classic; immutable-key and propagation verification (`SDLGPU-58/63/65`) |
 | buffer factories and colored/extended primitive/indexed draw hooks | explicit | explicit | classic; semantic dispatch, native topology, all ordinary draw families and ranges are verified by `SDLGPU-59/78` |
 | `DrawInstancedPrimitivesEx`, `GetMaxVertexStreams`, multistream capability | explicit | explicit stock/compiled-effect draws, full sixteen-stream public ceiling and truthful capabilities | classic XNA 4.0 stock and ordinary compiled Effect semantics `=` (`SDLGPU-60/79/89`); CNAEXT `ShaderEffect` instancing is `out` |
-| `SupportsDepth*`, `Ensure3DSupported`, unsupported-call behavior, `CanBeginDrawEXT` | runtime-aware | all three default-framebuffer depth/stencil answers and the legacy capability switch use the same queried native-format fact; other defaults retained where semantically applicable | classic capability/profile truthfulness (`SDLGPU-57/87`) |
+| `SupportsDepth*`, `Ensure3DSupported`, unsupported-call behavior, `CanBeginDrawEXT` | inherited defaults falsely describe the fixed framebuffer after a format request | all three default-framebuffer depth/stencil answers and the legacy capability switch use the applied native-format facts; other defaults retained where semantically applicable | classic capability/profile truthfulness (`SDLGPU-57/87/132`); EasyGL defect not copied |
 | `SupportsCapability`, numeric texture/cube/volume/RT limits, limitations text | explicit runtime answers | explicit exhaustive capability switch, sixteen XNA vertex streams and limitations text; format/device limits remain owned by their dedicated tasks | publicly observable; false promises removed by `SDLGPU-57`, stream claims verified by `SDLGPU-60/89` |
 | compiled-effect factory/runtime/support | explicit | explicit | ordinary Effect bytecode path `=` across reflection, state and all shared draw contracts (`SDLGPU-79`) |
 | ShaderEffect dialect/source execution | EasyGL explicit | runtime compile path exists, while `GetShaderDialectEXT` inherits the truthful `Unknown` default | existing CNAEXT, `out`; no classic XNA behavior depends on the source-dialect query |
@@ -1812,6 +1872,7 @@ whenever implementation evidence disproves its classification.
 | `EASYGL-PARITY-7` | `easygl_rt_roundtrip_test.cpp` repeats the bound-FBO assumption from `EASYGL-PARITY-4`: it calls `GraphicsDevice::GetBackBufferData` while each render target is active and labels the returned target pixel an RT readback. FNA defines this as backbuffer readback regardless of the active target; `RenderTarget2D::GetData` is the target API. The example is now explicitly classified as the same EasyGL defect, while SDL GPU's target/backbuffer transition and independent readback contracts remain the valid oracle. |
 | `EASYGL-PARITY-8` | EasyGL's stock SpriteBatch decides a viewport is custom whenever the current GL rectangle differs from the complete physical target. A default Letterbox viewport necessarily does differ: the reproduced 800x480/240x240 case is the correct physical `(160,0,480x480)` presentation rectangle. `EasyGLSpriteBatchRenderer::FlushBatch` therefore projects the 240x240 logical sprite over a 480x480 *physical* extent and covers only half of the presentation rectangle. Its compiled-effect branch has the opposite default-framebuffer error: it resets the viewport to the entire 800x480 drawable and therefore includes the bars. SDL GPU recovers the logical projection extent from the mapped physical viewport and passes the exact shared public test; copying either EasyGL route would regress `SDLGPU-68`. |
 | `EASYGL-PARITY-9` | `EasyGLRenderer::ReadBackbuffer` flips top-left XNA coordinates with `GetViewportSize`, which is the logical virtual height under Letterbox, instead of the physical default-framebuffer height. In the reproduced 800x480/240x240 case every request at public `y >= 240` produces a negative GL Y; the zero-filled failed reads made the shared test's old coarse scanner report `(0,245)-(792,476)` as if ink had landed there. That rectangle is a readback artifact, not rendered ink. `GraphicsDevice::GetBackBufferData` addresses the actual backbuffer and SDL GPU's proxy uses its physical extent, so SDL remains correct and the EasyGL bug is not copied. |
+| `EASYGL-PARITY-10` | EasyGL's window-system backbuffer storage is fixed, but `UpdatePresentationFormatEXT` merely changes the integer used to normalize depth bias; it does not replace the framebuffer depth/stencil planes. EasyGL also inherits identity `GetAppliedBackBufferFormatEXT`/`GetAppliedDepthStencilFormatEXT` and unconditional-true default depth/stencil capabilities. Its dedicated `easygl_depth_format_test.cpp` acknowledges the fixed allocation and checks only that requested fields are stored and calls do not throw. Thus `DepthFormat::None` can publicly coexist with a real depth/stencil plane, `Depth16`/`Depth24` can falsely claim stencil, and packed color requests can be echoed for RGBA window storage. FNA forwards the requested formats into the native backbuffer reset. SDL GPU implements that contract through renderer-owned depth attachments and truthful applied getters in `SDLGPU-132`; copying EasyGL's storage-only reporting would reproduce a reference defect. A future EasyGL task should either recreate/emulate the requested planes or normalize every public applied field/capability to the actual default framebuffer. |
 
 ## Executable EasyGL-parity backlog
 

@@ -2137,18 +2137,29 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param presentationMode Initial presentation/scaling policy.
          * @param swapInterval Initial swap interval (0=immediate, 1=VSync, 2=half-rate).
          * @param multiSampleCount Requested backbuffer sample count; clamped to device support.
+         * @param depthStencilFormat Requested XNA DepthFormat ordinal for the backbuffer.
          */
         SdlGpuRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
                        CnaPresentationMode presentationMode, int swapInterval,
-                       int multiSampleCount = 0);
+                       int multiSampleCount = 0, int depthStencilFormat = 3);
         /**
          * @brief Test-only constructor with scoped failure injection and destruction callbacks.
+         *
          * CNAEXT. Public renderer selection APIs continue to use the ordinary overload above.
+         *
+         * @param window SDL window to claim, or null for headless operation.
+         * @param virtualWidth Initial virtual resolution width.
+         * @param virtualHeight Initial virtual resolution height.
+         * @param presentationMode Initial presentation/scaling policy.
+         * @param swapInterval Initial swap interval.
+         * @param testHooks Scoped construction failure/destruction instrumentation.
+         * @param multiSampleCount Requested backbuffer sample count.
+         * @param depthStencilFormat Requested XNA DepthFormat ordinal for the backbuffer.
          */
         CNAEXT SdlGpuRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
                               CnaPresentationMode presentationMode, int swapInterval,
                               const SdlGpuTestHooksEXT& testHooks,
-                              int multiSampleCount = 0);
+                              int multiSampleCount = 0, int depthStencilFormat = 3);
 
         /**
          * @brief Creates every production stock shader on a named SDL_gpu driver without a window.
@@ -2230,32 +2241,31 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         /**
-         * @brief Reports whether the default framebuffer has a usable combined depth/stencil format.
+         * @brief Reports whether the default framebuffer has a usable requested depth format.
          *
-         * @return True when the device exposed a format from which the backing attachment can be
-         *         created.
+         * @return True when the applied backbuffer format has a depth plane.
          */
         [[nodiscard]] bool SupportsDepthStencil() const override
         {
             return depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID;
         }
         /**
-         * @brief Reports whether the default framebuffer has a usable depth plane.
+         * @brief Reports whether the default framebuffer has a usable requested depth plane.
          *
-         * @return True when the renderer can create its combined depth/stencil attachment.
+         * @return True when the applied backbuffer format has a depth plane.
          */
         [[nodiscard]] bool SupportsDepthBuffer() const override
         {
             return SupportsDepthStencil();
         }
         /**
-         * @brief Reports whether the default framebuffer has a usable stencil plane.
+         * @brief Reports whether the default framebuffer has a usable requested stencil plane.
          *
-         * @return True when the renderer can create its combined depth/stencil attachment.
+         * @return True only for an applied depth/stencil format with a stencil plane.
          */
         [[nodiscard]] bool SupportsStencilBuffer() const override
         {
-            return SupportsDepthStencil();
+            return backbufferHasStencil_;
         }
 
         /** @brief Returns the full sixteen-stream XNA binding ceiling supported by SDL_gpu. */
@@ -2321,6 +2331,33 @@ namespace CNA::Internal::Renderers::SdlGpu
             (void)requestedMultiSampleCount;
             return backbufferMultiSampleCount_;
         }
+        /**
+         * @brief Applies a new ordinary backbuffer depth/stencil request during Reset.
+         *
+         * SDL_gpu chooses the swapchain color format, so @p backBufferFormat is normalized to
+         * logical Color by @ref GetAppliedBackBufferFormatEXT. Fullscreen is owned by the platform
+         * window path; this hook replaces only renderer-owned depth/MSAA attachments.
+         *
+         * @param backBufferFormat Requested SurfaceFormat ordinal.
+         * @param depthStencilFormat Requested DepthFormat ordinal.
+         * @param isFullScreen Whether fullscreen presentation was requested.
+         */
+        void UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
+                                         bool isFullScreen) override;
+        /**
+         * @brief Reports the logical Color format of the SDL_gpu RGBA8/BGRA8 backbuffer.
+         *
+         * @param requestedFormat Requested SurfaceFormat ordinal.
+         * @return SurfaceFormat::Color, the transfer contract actually implemented.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Maps a requested backbuffer depth format to a supported native representation.
+         *
+         * @param requestedFormat Requested DepthFormat ordinal.
+         * @return The equivalent applied DepthFormat, or None when no faithful storage exists.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
         /** @brief Returns the swap interval most recently requested by the XNA presentation path. */
         CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
         /**
@@ -2781,14 +2818,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         // on-demand-submit semantics.
         bool EnsureFrameRendered();
         // (Re)creates depthStencilTexture_ if it does not already match the requested size.
-        // depthStencilFormat_ itself is queried once in the constructor (QueryDepthStencilFormat),
-        // not here, since pipeline creation needs a stable answer before any frame has rendered.
+        // depthStencilFormat_ is selected at construction/Reset, not here, since pipeline creation
+        // needs a stable answer before any frame has rendered.
         void EnsureDepthStencilTexture(Uint32 width, Uint32 height);
+        // Releases the renderer-owned depth and multisample attachments whose compatibility
+        // depends on either the depth format or sample count.
+        void ReleaseBackbufferDepthAndMsaaAttachments();
         // (Re)creates the multisample colour attachment selected for the backbuffer. A sample count
         // of one needs no intermediate attachment and therefore returns true without allocation.
         bool EnsureBackbufferMsaaTexture(Uint32 width, Uint32 height);
-        // Queries the best available combined depth+stencil format once, at construction time.
-        static SDL_GPUTextureFormat QueryDepthStencilFormat(SDL_GPUDevice* device);
         [[nodiscard]] static int ConfigureSwapchain(
             SDL_GPUDevice* device, SDL_Window* window, int interval);
         void MaybeFailForTest(SdlGpuFailurePointEXT point);
@@ -3395,6 +3433,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool shaderCrossAcquired_ = false;
         SDL_GPUTexture* depthStencilTexture_ = nullptr;
         SDL_GPUTextureFormat depthStencilFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+        bool backbufferHasStencil_ = false;
         SDL_GPUSampleCount depthStencilSampleCount_ = SDL_GPU_SAMPLECOUNT_1;
 
         // SDLGPU-85: SDL_gpu swapchain textures themselves are single-sample. A requested

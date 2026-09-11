@@ -145,10 +145,10 @@ IGraphicsRenderer,SetPresentationMode :: void (int),2236,required,classic-xna-ob
 IGraphicsRenderer,SetSwapInterval :: void (int),2243,default-no-op,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-56/68/81/83/85
 IGraphicsRenderer,GetSwapIntervalEXT :: int () const,2255,default-delegates-or-value,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-56/68/81/83/85
 IGraphicsRenderer,ApplyMultiSampleCount :: int (int),2262,default-delegates-or-value,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-56/68/81/83/85
-IGraphicsRenderer,"UpdatePresentationFormatEXT :: void (int, int, bool)",2277,default-no-op,classic-xna-observable,renderer=override,renderer=inherited:default-no-op,=,SDLGPU-56/68/81/83/85
-IGraphicsRenderer,GetAppliedBackBufferFormatEXT :: int (int) const,2286,default-delegates-or-value,classic-xna-observable,renderer=inherited:default-delegates-or-value,renderer=inherited:default-delegates-or-value,=,SDLGPU-56/68/81/83/85
+IGraphicsRenderer,"UpdatePresentationFormatEXT :: void (int, int, bool)",2277,default-no-op,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-68/85/132
+IGraphicsRenderer,GetAppliedBackBufferFormatEXT :: int (int) const,2286,default-delegates-or-value,classic-xna-observable,renderer=inherited:default-delegates-or-value,renderer=override,=,SDLGPU-68/85/132
 IGraphicsRenderer,GetAppliedMultiSampleCountEXT :: int (int) const,2304,default-delegates-or-value,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-56/68/81/83/85
-IGraphicsRenderer,GetAppliedDepthStencilFormatEXT :: int (int) const,2310,default-delegates-or-value,classic-xna-observable,renderer=inherited:default-delegates-or-value,renderer=inherited:default-delegates-or-value,=,SDLGPU-56/68/81/83/85
+IGraphicsRenderer,GetAppliedDepthStencilFormatEXT :: int (int) const,2310,default-delegates-or-value,classic-xna-observable,renderer=inherited:default-delegates-or-value,renderer=override,=,SDLGPU-68/85/132
 IGraphicsRenderer,GetMultiSampleCount :: int () const,2315,default-zero,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-56/68/81/83/85
 IGraphicsRenderer,GetMaxTextureSizeForProfileEXT :: int (int) const,2336,default-delegates-or-value,classic-xna-observable,renderer=inherited:default-delegates-or-value,renderer=inherited:default-delegates-or-value,=,SDLGPU-57/69/70/71/72/73/74
 IGraphicsRenderer,GetMaxCubeSizeForProfileEXT :: int (int) const,2348,default-delegates-or-value,classic-xna-observable,renderer=inherited:default-delegates-or-value,renderer=inherited:default-delegates-or-value,=,SDLGPU-57/69/70/71/72/73/74
@@ -231,9 +231,9 @@ IGraphicsRenderer,"SetBlendFactor :: void (float, float, float, float)",3098,def
 IGraphicsRenderer,SetReferenceStencil :: void (int),3105,default-implementation,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-58/65/66/67
 IGraphicsRenderer,"SetScissorRect :: void (int, int, int, int)",3108,default-implementation,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-58/65/66/67
 IGraphicsRenderer,"SetViewport :: void (int, int, int, int, float, float)",3111,default-no-op,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-58/65/66/67
-IGraphicsRenderer,SupportsDepthStencil :: bool () const,3127,default-implementation,classic-xna-observable,renderer=inherited:default-implementation,renderer=override,=,SDLGPU-57/69/70/71/72/73/74
-IGraphicsRenderer,SupportsDepthBuffer :: bool () const,3131,default-delegates-or-value,classic-xna-observable,renderer=inherited:default-delegates-or-value,renderer=override,=,SDLGPU-57/69/70/71/72/73/74
-IGraphicsRenderer,SupportsStencilBuffer :: bool () const,3137,default-delegates-or-value,classic-xna-observable,renderer=inherited:default-delegates-or-value,renderer=override,=,SDLGPU-57/69/70/71/72/73/74
+IGraphicsRenderer,SupportsDepthStencil :: bool () const,3127,default-implementation,classic-xna-observable,renderer=inherited:default-implementation,renderer=override,=,SDLGPU-57/87/132
+IGraphicsRenderer,SupportsDepthBuffer :: bool () const,3131,default-delegates-or-value,classic-xna-observable,renderer=inherited:default-delegates-or-value,renderer=override,=,SDLGPU-57/87/132
+IGraphicsRenderer,SupportsStencilBuffer :: bool () const,3137,default-delegates-or-value,classic-xna-observable,renderer=inherited:default-delegates-or-value,renderer=override,=,SDLGPU-57/87/132
 IGraphicsRenderer,Ensure3DSupported :: void (const char *) const,3145,default-no-op,classic-xna-observable,renderer=inherited:default-no-op,renderer=inherited:default-no-op,=,SDLGPU-59/60/66/78/79
 IGraphicsRenderer,"ClearColorAndDepth :: void (float, float, float, float, float)",3153,required,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-58/65/66/67
 IGraphicsRenderer,ClearDepth :: void (float),3154,required,classic-xna-observable,renderer=override,renderer=override,=,SDLGPU-58/65/66/67
