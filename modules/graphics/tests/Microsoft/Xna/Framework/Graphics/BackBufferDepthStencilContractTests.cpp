@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-181/SOFTWARE-336..338: selected depth storage, XNA clip-depth semantics and the
-// complete homogeneous SpriteBatch transform must affect fragment acceptance and coverage.
+// SOFTWARE-181/SOFTWARE-336..338/SOFTWARE-340: selected depth storage, XNA clip-depth semantics,
+// complete homogeneous SpriteBatch transforms and signed source geometry must affect fragments.
 
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <optional>
 #include <utility>
 
 #include "CNA/RendererTestGate.hpp"
@@ -360,6 +361,76 @@ namespace
         device.SetRenderTarget(nullptr);
         return ReadCenter(target);
     }
+
+    std::pair<Color, Color> RenderSpriteNegativeSourceOriginProbe(bool rectangleDestination)
+    {
+        GraphicsDevice device;
+        RenderTarget2D target(
+            device, 8, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::PreserveContents);
+        Texture2D red(device, 2, 2, false, SurfaceFormat::Color);
+        const Color pixels[4] = {Color::Red, Color::Red, Color::Red, Color::Red};
+        red.SetData(pixels, 4);
+
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+
+        const Rectangle source(2, 0, -2, 2);
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                    &DepthStencilState::None, &RasterizerState::CullNone);
+        if (rectangleDestination)
+        {
+            batch.Draw(red, Rectangle(2, 2, 4, 4), std::optional<Rectangle>(source),
+                       Color::White, 0.0f, Vector2(1.0f, 0.0f), SpriteEffects::None, 0.0f);
+        }
+        else
+        {
+            batch.Draw(red, Vector2(6.0f, 2.0f), std::optional<Rectangle>(source),
+                       Color::White, 0.0f, Vector2(1.0f, 0.0f), 2.0f,
+                       SpriteEffects::None, 0.0f);
+        }
+        batch.End();
+        device.SetRenderTarget(nullptr);
+
+        Color expected;
+        Color opposite;
+        const Rectangle expectedRect(
+            rectangleDestination ? 6 : 2, 3, 1, 1);
+        const Rectangle oppositeRect(
+            rectangleDestination ? 0 : 7, 3, 1, 1);
+        target.GetData(0, &expectedRect, &expected, 0, 1);
+        target.GetData(0, &oppositeRect, &opposite, 0, 1);
+        return {expected, opposite};
+    }
+
+    Color RenderSpriteZeroWidthSourceProbe()
+    {
+        GraphicsDevice device;
+        RenderTarget2D target(
+            device, 8, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::PreserveContents);
+        Texture2D red(device, 2, 2, false, SurfaceFormat::Color);
+        const Color pixels[4] = {Color::Red, Color::Red, Color::Red, Color::Red};
+        red.SetData(pixels, 4);
+
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                    &DepthStencilState::None, &RasterizerState::CullNone);
+        batch.Draw(red, Rectangle(2, 2, 4, 4),
+                   std::optional<Rectangle>(Rectangle(0, 0, 0, 2)), Color::White,
+                   0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
+        batch.End();
+        device.SetRenderTarget(nullptr);
+
+        Color center;
+        const Rectangle centerRect(3, 3, 1, 1);
+        target.GetData(0, &centerRect, &center, 0, 1);
+        return center;
+    }
 }
 
 TEST(BackBufferDepthStencilContractTest, NoneAndDepth24SelectDepthFragmentAcceptance)
@@ -585,6 +656,31 @@ TEST(BackBufferDepthStencilContractTest, SpriteBatchUsesViewportDepthRange)
 
     EXPECT_EQ(RenderSpriteViewportDepthRangeProbe(), Color::Black)
         << "layer depth 0.5 must map to 0.6 through viewport depth range [0.4, 0.8]";
+}
+
+TEST(BackBufferDepthStencilContractTest, SpriteBatchVectorDrawPreservesNegativeSourceOrigin)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    const auto [expected, opposite] = RenderSpriteNegativeSourceOriginProbe(false);
+    EXPECT_EQ(expected, Color::Red);
+    EXPECT_EQ(opposite, Color::Black);
+}
+
+TEST(BackBufferDepthStencilContractTest, SpriteBatchRectangleDrawPreservesNegativeSourceOrigin)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    const auto [expected, opposite] = RenderSpriteNegativeSourceOriginProbe(true);
+    EXPECT_EQ(expected, Color::Red);
+    EXPECT_EQ(opposite, Color::Black);
+}
+
+TEST(BackBufferDepthStencilContractTest, SpriteBatchZeroWidthSourceDoesNotInventGeometry)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    EXPECT_EQ(RenderSpriteZeroWidthSourceProbe(), Color::Black);
 }
 
 TEST(BackBufferDepthStencilContractTest, UnknownClearOptionBitsAreIgnored)

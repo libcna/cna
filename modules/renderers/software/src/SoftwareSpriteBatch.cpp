@@ -95,8 +95,10 @@ namespace CNA::Internal::Renderers::Software
         const float dy = destinationY;
         const float dw = destinationWidth;
         const float dh = destinationHeight;
-        const float sw = static_cast<float>(std::max(1, sourceRectangle.Width));
-        const float sh = static_cast<float>(std::max(1, sourceRectangle.Height));
+        // Source extents remain signed through XNA's sprite calculation. Their sign participates
+        // in the origin transform, and a zero extent must not be expanded into one texel.
+        const float sw = static_cast<float>(sourceRectangle.Width);
+        const float sh = static_cast<float>(sourceRectangle.Height);
         const float ox = origin.X;
         const float oy = origin.Y;
         const float scaleX = dw / sw;

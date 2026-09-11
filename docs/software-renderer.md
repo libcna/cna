@@ -550,6 +550,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   `NotSupportedException` when that sorter's switch receives anything other than Texture,
   BackToFront or FrontToBack. CNA no longer silently treats such a value as Deferred or submits a
   queued sprite before reporting the error; an empty batch still performs no sort and succeeds.
+- **SpriteBatch source extents stay signed and zero** (`SOFTWARE-340`). The CPU path no longer
+  coerces a nonpositive source width or height to one before transforming the origin. Negative
+  source rectangles therefore pivot on the same side as XNA/FNA/EasyGL, and a zero extent cannot
+  manufacture visible one-texel geometry.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared
