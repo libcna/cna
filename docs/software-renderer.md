@@ -623,6 +623,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   XNA: another Begin is rejected, a repeated End retries, and Immediate remains blocked even if
   the failed batch is disposed. Only CNA's renderer-private End failure releases the pair because
   that backend seam cannot safely be retried.
+- **SpriteBatch preserves the complete floating-point destination domain** (`SOFTWARE-352`).
+  Microsoft XNA and FNA carry `Single` positions and scale-derived dimensions directly into the
+  sprite vertex path; finite values outside `Int32` are not an error. Software and EasyGL accept
+  the same extremes, while the compatibility adapter for older integer-only renderers uses a
+  defined saturating/non-finite conversion rather than invoking C++ float-to-int undefined behavior.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

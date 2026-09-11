@@ -15,7 +15,6 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "System/ArgumentException.hpp"
-#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -43,7 +42,6 @@ using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SamplerState;
 using CNA::Internal::Renderers::DummyTextureRenderer;
 using CNA::Internal::Renderers::RecordingSpriteBatchRenderer;
-using System::ArgumentOutOfRangeException;
 
 namespace
 {
@@ -1417,24 +1415,6 @@ namespace
     }
 
     template<typename TAction>
-    void expectNumericArgumentOutOfRange(const char* parameterName, TAction&& action)
-    {
-        try
-        {
-            action();
-            FAIL() << "Expected System::ArgumentOutOfRangeException for " << parameterName;
-        }
-        catch (const ArgumentOutOfRangeException& exception)
-        {
-            EXPECT_EQ(exception.getParamNameProperty(), parameterName);
-        }
-        catch (...)
-        {
-            FAIL() << "Expected System::ArgumentOutOfRangeException for " << parameterName;
-        }
-    }
-
-    template<typename TAction>
     void expectTextArgumentException(TAction&& action)
     {
         try
@@ -1651,13 +1631,25 @@ TEST(SpriteBatchSubPixelDestinationTest, ARendererWithoutTheSubPixelOverloadStil
 
     batch.Begin();
     batch.Draw(texture, Vector2(12.75f, -9.75f), Color::White);
+    batch.Draw(texture,
+               Vector2(std::numeric_limits<float>::max(),
+                       -std::numeric_limits<float>::max()),
+               Color::White);
+    batch.Draw(texture,
+               Vector2(std::numeric_limits<float>::quiet_NaN(),
+                       std::numeric_limits<float>::infinity()),
+               Color::White);
     batch.End();
 
-    ASSERT_EQ(rec->destinations.size(), 1u);
+    ASSERT_EQ(rec->destinations.size(), 3u);
     EXPECT_EQ(rec->destinations[0], Rectangle(12, -9, 16, 16));
+    EXPECT_EQ(rec->destinations[1],
+              Rectangle(std::numeric_limits<int>::max(),
+                        std::numeric_limits<int>::lowest(), 16, 16));
+    EXPECT_EQ(rec->destinations[2], Rectangle(0, 0, 16, 16));
 }
 
-TEST(SpriteBatchNumericInputTest, DrawXYDefinesFiniteInt32BoundariesAndTruncation)
+TEST(SpriteBatchNumericInputTest, DrawXYCarriesTheCompleteFloatDomain)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -1675,20 +1667,20 @@ TEST(SpriteBatchNumericInputTest, DrawXYDefinesFiniteInt32BoundariesAndTruncatio
         std::nextafter(negativeLimit, -std::numeric_limits<float>::infinity());
 
     batch.Begin();
-    // CABI-38: non-finite coordinates are XNA-valid and travel through; only finite values too
-    // large to be a representable destination are refused.
+    // SOFTWARE-352: Microsoft XNA stores every Single directly in SpriteInfo. Its Draw and End
+    // both accept the finite values outside Int32 just as they accept non-finite values.
     batch.Draw(texture, std::numeric_limits<float>::quiet_NaN(), 0.0f);
     batch.Draw(texture, std::numeric_limits<float>::infinity(), 0.0f);
     batch.Draw(texture, 0.0f, -std::numeric_limits<float>::infinity());
-    expectNumericArgumentOutOfRange("x", [&] {
+    EXPECT_NO_THROW(
         batch.Draw(texture, std::numeric_limits<float>::max(), 0.0f);
-    });
-    expectNumericArgumentOutOfRange("x", [&] {
+    );
+    EXPECT_NO_THROW(
         batch.Draw(texture, 2147483648.0f, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("y", [&] {
+    );
+    EXPECT_NO_THROW(
         batch.Draw(texture, 0.0f, belowNegativeLimit);
-    });
+    );
 
     batch.Draw(texture, positiveLimit, negativeLimit);
     batch.Draw(texture, std::numeric_limits<float>::denorm_min(),
@@ -1696,18 +1688,21 @@ TEST(SpriteBatchNumericInputTest, DrawXYDefinesFiniteInt32BoundariesAndTruncatio
     batch.Draw(texture, 12.75f, -9.75f);
     batch.End();
 
-    ASSERT_EQ(rec->drawCalls.size(), 6u);
+    ASSERT_EQ(rec->drawCalls.size(), 9u);
     // The three non-finite draws arrive first, and arrive unaltered.
     EXPECT_TRUE(std::isnan(rec->drawCalls[0].destinationX));
     EXPECT_TRUE(std::isinf(rec->drawCalls[1].destinationX));
     EXPECT_TRUE(std::isinf(rec->drawCalls[2].destinationY));
-    EXPECT_EQ(rec->drawCalls[3].destinationRectangle,
+    EXPECT_FLOAT_EQ(rec->drawCalls[3].destinationX, std::numeric_limits<float>::max());
+    EXPECT_FLOAT_EQ(rec->drawCalls[4].destinationX, 2147483648.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[5].destinationY, belowNegativeLimit);
+    EXPECT_EQ(rec->drawCalls[6].destinationRectangle,
               Rectangle(2147483520, -2147483647 - 1, 16, 16));
-    EXPECT_EQ(rec->drawCalls[4].destinationRectangle, Rectangle(0, 0, 16, 16));
-    EXPECT_EQ(rec->drawCalls[5].destinationRectangle, Rectangle(12, -9, 16, 16));
+    EXPECT_EQ(rec->drawCalls[7].destinationRectangle, Rectangle(0, 0, 16, 16));
+    EXPECT_EQ(rec->drawCalls[8].destinationRectangle, Rectangle(12, -9, 16, 16));
 }
 
-TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoordinates)
+TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyCarriesFloatExtremes)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -1720,8 +1715,7 @@ TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoo
     const std::optional<Rectangle> source(Rectangle(2, 3, 8, 6));
 
     batch.Begin();
-    // CABI-38: the three non-finite positions are carried through; only the finite value too large
-    // to be a representable destination is refused.
+    // Non-finite and finite out-of-Int32 positions all reach the renderer unchanged.
     batch.Draw(texture,
                Vector2(std::numeric_limits<float>::quiet_NaN(), 0.0f),
                Color::White);
@@ -1732,21 +1726,22 @@ TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoo
                Vector2(-std::numeric_limits<float>::infinity(), 0.0f),
                source, Color::White, 0.0f, Vector2::Zero, 1.0f,
                SpriteEffects::None, 0.0f);
-    expectNumericArgumentOutOfRange("position", [&] {
+    EXPECT_NO_THROW(
         batch.Draw(texture,
                    Vector2(0.0f, std::numeric_limits<float>::max()),
                    source, Color::White, 0.0f, Vector2::Zero, Vector2::One,
                    SpriteEffects::None, 0.0f);
-    });
+    );
     batch.End();
 
-    ASSERT_EQ(rec->drawCalls.size(), 3u);
+    ASSERT_EQ(rec->drawCalls.size(), 4u);
     EXPECT_TRUE(std::isnan(rec->drawCalls[0].destinationX));
     EXPECT_TRUE(std::isinf(rec->drawCalls[1].destinationY));
     EXPECT_TRUE(std::isinf(rec->drawCalls[2].destinationX));
+    EXPECT_FLOAT_EQ(rec->drawCalls[3].destinationY, std::numeric_limits<float>::max());
     rec->drawCalls.clear();
 
-    // A rejected Draw leaves the Begin/End state balanced and reusable.
+    // The same batch remains balanced and reusable after carrying the extreme inputs.
     batch.Begin();
     batch.Draw(texture, Vector2(1.75f, -2.75f), Color::White);
     batch.Draw(texture, Vector2(3.75f, -4.75f), source, Color::White);
@@ -1763,7 +1758,7 @@ TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoo
     EXPECT_EQ(rec->drawCalls[3].destinationRectangle, Rectangle(7, -8, 8, 6));
 }
 
-TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepresentableValues)
+TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleCarryTheCompleteFloatDomain)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -1783,8 +1778,7 @@ TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepr
         std::nextafter(scalarNegativeLimit, -std::numeric_limits<float>::infinity());
 
     batch.Begin();
-    // CABI-38: a non-finite scale is XNA-valid and reaches the vertex path; the refusals below are
-    // the finite-but-unrepresentable ones, which is a separate contract and unchanged.
+    // Every Single scale is XNA-valid and reaches the vertex path.
     batch.Draw(texture, Vector2::Zero, source, Color::White,
                0.0f, Vector2::Zero, std::numeric_limits<float>::quiet_NaN(),
                SpriteEffects::None, 0.0f);
@@ -1801,17 +1795,15 @@ TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepr
                0.0f, Vector2::Zero,
                Vector2(std::numeric_limits<float>::infinity(), 1.0f),
                SpriteEffects::None, 0.0f);
-    // float::max() as a scale is finite, but the 16-pixel source multiplies it to infinity, and an
-    // infinite destination is now carried through rather than refused. The refusal below is the
-    // real remaining case: a value whose product stays finite and is still unrepresentable.
+    // float::max() as a scale is finite, but the 16-pixel source multiplies it to infinity.
     batch.Draw(texture, Vector2::Zero, source, Color::White,
                0.0f, Vector2::Zero, std::numeric_limits<float>::max(),
                SpriteEffects::None, 0.0f);
-    expectNumericArgumentOutOfRange("scale", [&] {
+    EXPECT_NO_THROW(
         batch.Draw(texture, Vector2::Zero, source, Color::White,
                    0.0f, Vector2::Zero, Vector2(1.0f, belowScalarNegativeLimit),
                    SpriteEffects::None, 0.0f);
-    });
+    );
 
     batch.Draw(texture, Vector2::Zero, source, Color::White,
                0.0f, Vector2::Zero, std::numeric_limits<float>::denorm_min(),
@@ -1830,22 +1822,24 @@ TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepr
                SpriteEffects::FlipHorizontally, 0.75f);
     batch.End();
 
-    ASSERT_EQ(rec->drawCalls.size(), 10u);
-    // The five non-finite scales arrive first, unaltered, and so does the one that overflowed.
+    ASSERT_EQ(rec->drawCalls.size(), 11u);
+    // The five non-finite scales arrive first, unaltered, followed by both finite extremes.
     EXPECT_TRUE(std::isnan(rec->drawCalls[0].destinationWidth));
     EXPECT_TRUE(std::isinf(rec->drawCalls[1].destinationWidth));
     EXPECT_TRUE(std::isinf(rec->drawCalls[2].destinationWidth));
     EXPECT_TRUE(std::isnan(rec->drawCalls[3].destinationHeight));
     EXPECT_TRUE(std::isinf(rec->drawCalls[4].destinationWidth));
     EXPECT_TRUE(std::isinf(rec->drawCalls[5].destinationWidth));
+    EXPECT_FLOAT_EQ(rec->drawCalls[6].destinationHeight,
+                    static_cast<float>(16) * belowScalarNegativeLimit);
 
-    EXPECT_EQ(rec->drawCalls[6].destinationRectangle, Rectangle(0, 0, 0, 0));
-    EXPECT_EQ(rec->drawCalls[7].destinationRectangle,
-              Rectangle(0, 0, 2147483520, 2147483520));
+    EXPECT_EQ(rec->drawCalls[7].destinationRectangle, Rectangle(0, 0, 0, 0));
     EXPECT_EQ(rec->drawCalls[8].destinationRectangle,
+              Rectangle(0, 0, 2147483520, 2147483520));
+    EXPECT_EQ(rec->drawCalls[9].destinationRectangle,
               Rectangle(0, 0, -2147483647 - 1, -2147483647 - 1));
 
-    const auto& ordinary = rec->drawCalls[9];
+    const auto& ordinary = rec->drawCalls[10];
     EXPECT_EQ(ordinary.destinationRectangle, Rectangle(10, -20, -24, 8));
     EXPECT_EQ(ordinary.sourceRectangle, source.value());
     EXPECT_EQ(ordinary.color, tint);
@@ -1906,10 +1900,8 @@ TEST(SpriteBatchNumericInputTest, EveryDrawStringFamilyCarriesNonFiniteValuesThr
         << "an infinite origin must reach the destination";
 }
 
-// The Int32 destination range is a separate contract from finiteness, and it survives CABI-38: a
-// finite value too large to be a representable destination is still refused, with the parameter
-// named. Only the non-finite refusals went away.
-TEST(SpriteBatchNumericInputTest, DrawStringStillRefusesUnrepresentableFiniteDestinations)
+// SOFTWARE-352: DrawString uses the same unchecked Single-domain SpriteInfo fields as Draw.
+TEST(SpriteBatchNumericInputTest, DrawStringCarriesFiniteValuesOutsideInt32)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -1923,21 +1915,24 @@ TEST(SpriteBatchNumericInputTest, DrawStringStillRefusesUnrepresentableFiniteDes
     builder.Append("A");
 
     batch.Begin();
-    expectNumericArgumentOutOfRange("position", [&] {
+    EXPECT_NO_THROW(
         batch.DrawString(font, std::string("A"),
                          Vector2(std::numeric_limits<float>::max(), 0.0f),
                          Color::White);
-    });
-    expectNumericArgumentOutOfRange("scale", [&] {
+    );
+    EXPECT_NO_THROW(
         batch.DrawString(font, builder, Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, std::numeric_limits<float>::max(),
                          SpriteEffects::None, 0.0f);
-    });
+    );
     batch.End();
 
-    EXPECT_TRUE(rec->drawCalls.empty());
+    ASSERT_EQ(rec->drawCalls.size(), 2u);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationX, std::numeric_limits<float>::max());
+    EXPECT_FLOAT_EQ(rec->drawCalls[1].destinationWidth, std::numeric_limits<float>::max());
+    rec->drawCalls.clear();
 
-    // A rejected DrawString leaves the Begin/End state balanced and reusable.
+    // The same batch remains balanced and reusable.
     batch.Begin();
     batch.DrawString(font, std::string("A"), Vector2(10.25f, -4.25f), Color::White);
     batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
@@ -2038,7 +2033,7 @@ TEST(SpriteBatchNumericInputTest, NonFiniteLayerDepthsSortWithoutCorruptingTheQu
     }
 }
 
-TEST(SpriteBatchNumericInputTest, DrawStringAcceptsExactInt32RoundedBoundaries)
+TEST(SpriteBatchNumericInputTest, DrawStringCarriesValuesAcrossFormerInt32Boundaries)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -2061,23 +2056,25 @@ TEST(SpriteBatchNumericInputTest, DrawStringAcceptsExactInt32RoundedBoundaries)
     batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
                      0.0f, Vector2::Zero, negativeLimit,
                      SpriteEffects::None, 0.0f);
-    expectNumericArgumentOutOfRange("scale", [&] {
+    EXPECT_NO_THROW(
         batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, 2147483648.0f,
                          SpriteEffects::None, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("scale", [&] {
+    );
+    EXPECT_NO_THROW(
         batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, belowNegativeLimit,
                          SpriteEffects::None, 0.0f);
-    });
+    );
     batch.End();
 
-    ASSERT_EQ(rec->drawCalls.size(), 2u);
+    ASSERT_EQ(rec->drawCalls.size(), 4u);
     EXPECT_EQ(rec->drawCalls[0].destinationRectangle,
               Rectangle(0, 0, 2147483520, 2147483520));
     EXPECT_EQ(rec->drawCalls[1].destinationRectangle,
               Rectangle(0, 0, -2147483647 - 1, -2147483647 - 1));
+    EXPECT_FLOAT_EQ(rec->drawCalls[2].destinationWidth, 2147483648.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[3].destinationWidth, belowNegativeLimit);
 }
 
 TEST(SpriteBatchDrawStringSpriteEffectsTest, CombinedFlipMirrorsXLikeHorizontalAlone)

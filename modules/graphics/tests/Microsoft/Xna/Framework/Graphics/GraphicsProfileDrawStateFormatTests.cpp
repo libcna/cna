@@ -3,6 +3,8 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <limits>
+#include <optional>
 
 #include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -216,6 +218,31 @@ TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchEnforcesFilteringAtItsRealFl
         SpriteSortMode::Immediate, &BlendState::Opaque, &SamplerState::PointClamp,
         nullptr, nullptr),
         System::InvalidOperationException);
+}
+
+TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchCarriesFloatExtremesToTheRealRenderer)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    ProfileDraw draw;
+    Texture2D texture(draw.device, 1, 1, false, SurfaceFormat::Color);
+    const Color red = Color::Red;
+    texture.SetData(&red, 1);
+
+    draw.device.Clear(Color::Black);
+    SpriteBatch batch(draw.device);
+    batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, &SamplerState::PointClamp,
+                nullptr, nullptr);
+    EXPECT_NO_THROW(batch.Draw(
+        texture,
+        Vector2(std::numeric_limits<float>::max(), -std::numeric_limits<float>::max()),
+        std::nullopt, Color::White, 0.0f, Vector2::Zero,
+        std::numeric_limits<float>::max(), SpriteEffects::None, 0.0f));
+    EXPECT_NO_THROW(batch.Draw(texture, Rectangle(0, 0, 1, 1), Color::White));
+    EXPECT_NO_THROW(batch.End());
+
+    std::array<Color, 64> pixels{};
+    draw.device.GetBackBufferData(pixels.data(), 0, static_cast<int>(pixels.size()));
+    EXPECT_EQ(pixels[0], Color::Red);
 }
 
 TEST(GraphicsProfileDrawStateFormatTest, SpriteBatchRejectsBlendOnNonBlendableTarget)

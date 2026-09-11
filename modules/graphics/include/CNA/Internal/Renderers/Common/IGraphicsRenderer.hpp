@@ -17,6 +17,7 @@
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -1210,9 +1211,18 @@ namespace CNA::Internal::Renderers
                           SpriteEffects effects,
                           float layerDepth)
         {
+            const auto quantise = [](float value) noexcept
+            {
+                if (!std::isfinite(value)) return 0;
+                if (value >= static_cast<float>(std::numeric_limits<int>::max()))
+                    return std::numeric_limits<int>::max();
+                if (value <= static_cast<float>(std::numeric_limits<int>::lowest()))
+                    return std::numeric_limits<int>::lowest();
+                return static_cast<int>(value);
+            };
             Draw(texture,
-                 Rectangle(static_cast<int>(destinationX), static_cast<int>(destinationY),
-                           static_cast<int>(destinationWidth), static_cast<int>(destinationHeight)),
+                 Rectangle(quantise(destinationX), quantise(destinationY),
+                           quantise(destinationWidth), quantise(destinationHeight)),
                  sourceRectangle, color, rotation, origin, effects, layerDepth);
         }
 

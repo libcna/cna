@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 
 #include <cmath>
+#include <limits>
 #include <vector>
 
 namespace CNA::Internal::Renderers
@@ -49,11 +50,16 @@ namespace CNA::Internal::Renderers
         /// `float-cast-overflow`, which plain `-fsanitize=undefined` leaves off on this GCC.
         ///
         /// The float fields above are the record that matters and keep the value exactly; this is
-        /// the quantised convenience copy, so a non-finite component becomes 0 rather than
-        /// whatever the cast happened to produce.
+        /// the quantised convenience copy. Non-finite values become 0 and finite values outside
+        /// Int32 saturate rather than reaching an undefined float-to-int conversion.
         [[nodiscard]] static int Quantise(float value) noexcept
         {
-            return std::isfinite(value) ? static_cast<int>(value) : 0;
+            if (!std::isfinite(value)) return 0;
+            if (value >= static_cast<float>(std::numeric_limits<int>::max()))
+                return std::numeric_limits<int>::max();
+            if (value <= static_cast<float>(std::numeric_limits<int>::lowest()))
+                return std::numeric_limits<int>::lowest();
+            return static_cast<int>(value);
         }
 
         struct DrawCall
