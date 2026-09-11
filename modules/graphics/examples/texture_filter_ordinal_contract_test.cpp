@@ -605,6 +605,23 @@ class TextureFilterOrdinalContractTest : public Game
         return n;
     }
 
+    static void ReportFirstDifferences(const std::vector<Color>& a,
+                                       const std::vector<Color>& b,
+                                       int width)
+    {
+        int reported = 0;
+        const std::size_t count = std::min(a.size(), b.size());
+        for (std::size_t i = 0; i < count && reported < 8; ++i)
+        {
+            if (SameColor(a[i], b[i])) continue;
+            std::printf("          pixel(%d,%d): %s vs %s\n",
+                        static_cast<int>(i % static_cast<std::size_t>(width)),
+                        static_cast<int>(i / static_cast<std::size_t>(width)),
+                        Str(a[i]).c_str(), Str(b[i]).c_str());
+            ++reported;
+        }
+    }
+
     // A -----------------------------------------------------------------------------------------
     // Every ordinal's MAGNIFICATION half, through SpriteBatch. 8x4 -> 16x8 is an exact 2x, so a
     // point fetch's expected texel is exactly computable and a linear fetch's 0.25/0.75 weights
@@ -944,6 +961,7 @@ class TextureFilterOrdinalContractTest : public Game
                     std::printf("        F: %s and %s owe the same magnification filter but "
                                 "differ in %d pixels\n",
                                 kOrdinals[i].name, kOrdinals[j].name, diff);
+                    ReportFirstDifferences(images[i], images[j], 16);
                 }
             }
         }

@@ -19,13 +19,18 @@ layout(set = 3, binding = 0) uniform ChannelExpansion {
 
 // SDLGPU-121: SDL_gpu's Metal driver deliberately ignores sampler mip_lod_bias. Keep stock
 // sampling backend-independent by carrying the first eight fragment-sampler biases in a
-// renderer-owned block and using SPIR-V's explicit Bias operand on every implicit-LOD lookup.
+// renderer-owned block. SDLGPU-130 keeps the ordinary zero-bias lookup implicit: a zero-valued
+// SPIR-V Bias operand measurably changed fixed-function linear-sampling rounding according to an
+// otherwise irrelevant minification filter on Vulkan.
 layout(set = 3, binding = 1) uniform SamplerLodBias {
     vec4 slots0To3;
     vec4 slots4To7;
 } samplerLodBias;
 
 void main() {
-    outColor = (texture(texSampler, fragUV, samplerLodBias.slots0To3.x)
-                * channels.mask + channels.fill) * fragColor;
+    float lodBias = samplerLodBias.slots0To3.x;
+    vec4 sampled = lodBias == 0.0
+        ? texture(texSampler, fragUV)
+        : texture(texSampler, fragUV, lodBias);
+    outColor = (sampled * channels.mask + channels.fill) * fragColor;
 }
