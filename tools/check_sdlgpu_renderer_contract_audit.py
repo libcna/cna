@@ -59,6 +59,14 @@ INTERFACE_IMPLEMENTATIONS = {
         (("Texture3D", "EasyGLTexture3DRenderer"),),
         (("Texture3D", "SdlGpuTexture3DRenderer"),),
     ),
+    "ITexture2DArrayRenderer": (
+        (),
+        (),
+    ),
+    "IStorageTexture2DRenderer": (
+        (),
+        (),
+    ),
     "ITextureRenderer": (
         (
             ("Texture2D", "EasyGLTextureRenderer"),
@@ -98,6 +106,8 @@ INTERFACE_IMPLEMENTATIONS = {
 OUT_INTERFACES = {
     "IGpuTimerRenderer",
     "IStorageBufferRenderer",
+    "ITexture2DArrayRenderer",
+    "IStorageTexture2DRenderer",
     "IComputeShaderRenderer",
     "IEffectRenderer",
 }
@@ -107,6 +117,9 @@ OUT_GRAPHICS_METHODS = {
     "CreateEffectRenderer",
     "CreateComputeShader",
     "CreateStorageBuffer",
+    "CreateStorageBufferEXT",
+    "CreateTexture2DArrayEXT",
+    "CreateStorageTexture2DEXT",
     "DispatchCompute",
     "MemoryBarrierEXT",
     "ExecutesShaderEffectSourceEXT",
@@ -114,10 +127,26 @@ OUT_GRAPHICS_METHODS = {
     "SupportsImageBasedLightingEXT",
     "SupportsComputeShadersEXT",
     "SupportsIndirectDrawEXT",
+    "SupportsBaseInstanceDrawingEXT",
     "SupportsComputeImageBindingEXT",
+    "SupportsTexture3DSamplingEXT",
+    "SupportsShaderLanguageEXT",
+    "GetSurfaceFormatUsageSupportEXT",
     "GetDisplayColorSpaceEXT",
     "SetDisplayColorSpaceEXT",
     "GetMaxVertexShaderStorageBlocksEXT",
+    "GetMaxStorageBufferBytesEXT",
+    "GetMaxUniformBufferBytesEXT",
+    "GetMaxComputeStorageBufferBindingsEXT",
+    "GetMaxTextureArrayLayersEXT",
+    "GetMaxSampledTexturesPerShaderStageEXT",
+    "GetMaxStorageImagesPerShaderStageEXT",
+    "GetMaxVertexInputBindingsEXT",
+    "GetMaxVertexInputAttributesEXT",
+    "GetMaxColorAttachmentsEXT",
+    "GetMinStorageBufferOffsetAlignmentEXT",
+    "GetMinUniformBufferOffsetAlignmentEXT",
+    "GetTimestampPeriodPicosecondsEXT",
     "BindStorageBufferForDrawEXT",
     "SupportsGpuTimerEXT",
     "CreateGpuTimerEXT",
@@ -141,8 +170,8 @@ OUT_SPRITE_METHODS = {"DrawMeshEXT"}
 
 OUT_INTERFACE_METHODS = {
     "IOcclusionQueryRenderer": {"PixelCountIsPreciseEXT"},
-    "ITextureCubeRenderer": {"BindGL", "GetSizeEXT"},
-    "ITexture3DRenderer": {"BindGL", "GetDimensionsEXT"},
+    "ITextureCubeRenderer": {"BindGL", "GetSizeEXT", "GetSurfaceFormatEXT"},
+    "ITexture3DRenderer": {"BindGL", "GetDimensionsEXT", "GetSurfaceFormatEXT"},
     "ITextureRenderer": {"BindGL"},
     "IRenderTargetRenderer": {"GetColorGLHandle"},
     "IRenderTargetCubeRenderer": {"GetGLHandle"},
@@ -155,10 +184,14 @@ OUT_METHOD_EVIDENCE = {
         "out: EasyGL-native binding hook; SDL_GPU binds sampled texture descriptors",
     ("ITextureCubeRenderer", "GetSizeEXT"):
         "out: unused renderer helper; public TextureCube owns its size",
+    ("ITextureCubeRenderer", "GetSurfaceFormatEXT"):
+        "out: unused renderer metadata; public TextureCube owns its SurfaceFormat",
     ("ITexture3DRenderer", "BindGL"):
         "out: EasyGL-native binding hook; SDL_GPU binds sampled texture descriptors",
     ("ITexture3DRenderer", "GetDimensionsEXT"):
         "out: unused renderer helper; public Texture3D owns its dimensions",
+    ("ITexture3DRenderer", "GetSurfaceFormatEXT"):
+        "out: unused renderer metadata; public Texture3D owns its SurfaceFormat",
     ("ITextureRenderer", "BindGL"):
         "out: EasyGL-native binding hook; SDL_GPU binds sampled texture descriptors",
     ("IRenderTargetRenderer", "GetColorGLHandle"):
@@ -181,6 +214,8 @@ INTERFACE_EVIDENCE = {
     "IGpuTimerRenderer": "out: plans/plan_modern.md",
     "IOcclusionQueryRenderer": "SDLGPU-80",
     "IStorageBufferRenderer": "out: plans/plan_modern.md",
+    "ITexture2DArrayRenderer": "out: plans/plan_modern.md MOD-2226",
+    "IStorageTexture2DRenderer": "out: plans/plan_modern.md MOD-2227",
     "IComputeShaderRenderer": "out: plans/plan_modern.md",
     "ITextureCubeRenderer": "SDLGPU-70/73/74/81",
     "ITexture3DRenderer": "SDLGPU-71/79/81",
@@ -298,6 +333,21 @@ ALLOWED_CLASSIC_SDL_INHERITED: set[tuple[str, str, str]] = {
         "ISpriteBatchRenderer",
         "Draw :: void (const ITextureRenderer &, float, float, float, float, "
         "const Rectangle &, const Color &, float, const Vector2 &, SpriteEffects, float)",
+        "SpriteBatch",
+    ),
+    (
+        "ISpriteBatchRenderer",
+        "SetSamplerMipState :: void (int, float)",
+        "SpriteBatch",
+    ),
+    (
+        "ISpriteBatchRenderer",
+        "SetSamplerAddressW :: void (int)",
+        "SpriteBatch",
+    ),
+    (
+        "ISpriteBatchRenderer",
+        "SetSamplerAddressModeWEXT :: void (int)",
         "SpriteBatch",
     ),
     (

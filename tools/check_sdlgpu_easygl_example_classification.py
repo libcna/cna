@@ -49,6 +49,8 @@ MODERN_TOKENS = (
 MODERN_EXPLICIT = {
     "easygl_instancedmodel_shader_test.cpp":
         "ShaderEffect is explicitly CNAEXT; ordinary compiled Effect instancing is covered by SDLGPU-79",
+    "easygl_texture3d_addressw_test.cpp":
+        "CNA-specific ShaderEffect sampler3D route; ordinary XNA SamplerState AddressW is covered by SDLGPU-64/79/121/122",
 }
 
 EASYGL_SPECIFIC = {

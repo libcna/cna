@@ -111,9 +111,17 @@
 > aware lifetime path. The pre-fix depth-bias stress retained 298 entries and grew to 299 when an
 > old state was reused; it now remains exactly 256 and recreates the evicted state with exact
 > pixels on Vulkan and D3D12. Seven affected native pipeline/effect fixtures pass together.
-> `SDLGPU-94`–`SDLGPU-96`
+> `SDLGPU-128` re-synchronizes the fail-closed audits after merge commit `b4508d38d` brought
+> `next` into `sdlgpu`: all 266 live renderer hooks and all 247 EasyGL examples are classified,
+> including the modern texture-array/storage contracts and EasyGL's CNA-specific volume-sampler
+> example. The merged complete SpriteBatch sampler hook reaches SDL GPU directly and fans out to
+> legacy renderer hooks by default. The audit found one ordinary-XNA verification gap, recorded as
+> `SDLGPU-129`: the new XNA-measured deferred sampler-publication oracle is shared by EasyGL and
+> Vulkan but is not yet registered for SDL GPU.
+> `SDLGPU-94`–`SDLGPU-96` and `SDLGPU-129`
 > remain open: D3D12 swapchain presentation/recovery, Metal and Android/Vulkan still require native
-> runtime evidence. Nine EasyGL defect findings (eight distinct
+> runtime evidence, and the merged SpriteBatch publication behavior still needs its SDL GPU run.
+> Nine EasyGL defect findings (eight distinct
 > behavior families) are deliberately not copied. The last full 191/191 SDL integration sweep,
 > prior 51/51 renderer-unit aggregate, new 5/5 sampler-cache and 71/71 pipeline-cache focused
 > targets, and 33/33 EasyGL
@@ -141,9 +149,9 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Item | Current evidence |
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
-| Newly created tasks | 37 (`SDLGPU-91`–`SDLGPU-127`) |
-| Completed / open | 34 / 3 (`SDLGPU-91`–`93`, `SDLGPU-97`–`127` complete; `SDLGPU-94`–`96` open) |
-| Ending evidence commit | `SDLGPU-127` (including the `SDLGPU-119` focused ASan follow-up) |
+| Newly created tasks | 39 (`SDLGPU-91`–`SDLGPU-129`) |
+| Completed / open | 35 / 4 (`SDLGPU-91`–`93`, `SDLGPU-97`–`128` complete; `SDLGPU-94`–`96` and `SDLGPU-129` open) |
+| Ending evidence commit | `SDLGPU-128` (including the `SDLGPU-119` focused ASan follow-up) |
 | Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, all nine shared classic stock-effect fixtures, the complete ten-fixture state/sampler matrix, the 24-test texture/format/transfer matrix, all 33 render-target registrations, all 25 buffer/draw registrations, all five model oracles and the current 44-case compiled-effect corpus. The target evidence includes the 851-assertion mip/readback oracle and 40-assertion classic MRT matrix; the draw evidence includes instancing, multistream and declaration semantics. Six presentation/reset/resize programs, 73 individually isolated backbuffer/bound-target/Present lifecycle legs and 291/291 applicable constructor/lazy-resource rollback checks also pass through D3D12. There are now 192 registered native and 259 registered Windows SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. The expanded 44-case compiled-effect corpus passes both Vulkan and headless D3D12; the immutable-sampler target passes 5/5 on both, while the immutable-pipeline target passes 71/71 on Vulkan and all 64 applicable classic checks on D3D12. Vulkan additionally has the focused AddressSanitizer evidence for the 43-case corpus preceding `SDLGPU-124`. Unchanged dependencies were reused from the stable builds. |
 | Available local cross tools | MinGW-w64, Wine 10.0, DXVK v3.0.2-58 and vkd3d-proton 3.1.0 are present. There is no Apple SDK/device or `xcrun`/`xcodebuild`/`metal`. The Android PATH audit located `adb`/platform-tools but did not locate an NDK/toolchain, `sdkmanager` or `avdmanager`, and `adb devices` reported no running/attached target. The project owner subsequently confirmed that an Android emulator is available on this host outside those searched paths, so emulator absence is not a blocker; Android execution is intentionally deferred at the owner's request. No system `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found; CNA uses its pinned static ShaderCross dependency instead. |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
@@ -1397,22 +1405,73 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   D3D12 wrapper-fatal diagnostic, host-display access or full rebuild occurred.
 
 
+### SDLGPU-128 — re-synchronize fail-closed parity inventories after the `next` merge ✅
+
+- **Problem/public behavior:** merge `b4508d38d` added two modern resource interfaces, forty
+  renderer hooks and one EasyGL example after `SDLGPU-117`'s closeout. Both parity checkers failed
+  closed: the contract generator refused unknown interfaces/methods and the corpus classifier left
+  `easygl_texture3d_addressw_test.cpp` unclassified. A stale audit could otherwise hide a newly
+  inherited default or mistake a CNA-specific shader diagnostic for an ordinary XNA gap.
+- **EasyGL/SDL evidence:** the merged `SpriteBatch` calls one complete seven-field
+  `ISpriteBatchRenderer::SetSamplerState`; SDL GPU overrides it directly, while the default fans
+  out to the three legacy sampler hooks used by other families. The new EasyGL volume-address test
+  constructs `ShaderEffect`, whose source-shader API is CNA-specific; ordinary XNA sampler W/LOD
+  behavior remains owned by `SDLGPU-64/79/121/122`. `ITexture3DRenderer` and
+  `ITextureCubeRenderer` format getters are unused renderer metadata: the public XNA wrappers own
+  their `SurfaceFormat`, and neither renderer samples through those getters.
+- **Location:** `tools/check_sdlgpu_renderer_contract_audit.py`, generated
+  `plans/sdlgpu_renderer_contract_audit.csv`,
+  `tools/check_sdlgpu_easygl_example_classification.py`, the generated example manifest and this
+  execution log. No renderer or shared graphics behavior changes.
+- **Acceptance/test:** enumerate every live hook and example with zero unresolved/unclassified
+  rows; classify the merged modern surface explicitly; retain exact-signature fail-closed checks
+  for SDL GPU's complete sampler override versus inherited compatibility hooks; create a concrete
+  task for any ordinary behavior with weaker SDL evidence.
+- **Result (2026-09-11):** both stable compile databases parse without a build. The contract audit
+  is **266/266**: 144 equivalent, five `SDLGPU-80` query limitations and 117 renderer-specific or
+  modern `out`, with zero `~`, `≠` or `∅`. The corpus audit is **247/247**: 128 covered, 52 direct,
+  two query-limit examples, three EasyGL defects, nine EasyGL-specific, 53 modern-out and zero
+  unclassified/new-test-needed. The only new ordinary-XNA evidence gap is the merged
+  `SpriteBatch.SamplerStates[0]` publication oracle, now recorded separately as `SDLGPU-129`.
+
+### SDLGPU-129 — run the merged SpriteBatch sampler-publication oracle on SDL GPU ⬜
+
+- **Problem/public behavior:** XNA 4.0 publishes a SpriteBatch's sampler into
+  `GraphicsDevice.SamplerStates[0]` when render state is prepared: during `Begin` for Immediate,
+  but only during the `End` flush for Deferred. The assigned state remains observable by a later
+  3D draw. Merge `b4508d38d` brought the shared, XNA-runtime-measured discriminator and registered
+  it for EasyGL and Vulkan, but not SDL GPU.
+- **EasyGL/SDL evidence:** EasyGL and Vulkan compile the identical
+  `modules/graphics/examples/spritebatch_sampler0_publication_test.cpp`. SDL GPU's source reaches
+  its complete sampler override, but source shape alone does not prove the deferred timing or the
+  later draw's wrap-versus-clamp pixel. This is verification weakness (`~`), not a demonstrated
+  implementation defect.
+- **Likely location:** register the unchanged shared source in
+  `modules/renderers/sdl-gpu/examples/CMakeLists.txt`; change renderer/shared code only if the
+  discriminator exposes a real difference.
+- **Acceptance/test:** under offscreen Vulkan, require all nine timing/state/pixel legs to pass,
+  including Deferred A→B publication, Immediate publication and the later stock `BasicEffect`
+  draw inheriting `PointWrap`; keep validation diagnostics fatal and rerun the adjacent sampler
+  fixtures. If portable Windows configuration accepts the source, run the same target on headless
+  D3D12 as a portability check.
+
+
 ## 2026-09-10 parity audit final status
 
 | Item | Current evidence |
 |---|---|
 | Starting branch / commit | `sdlgpu` / `3a44315fdffe974e02a664cacae4fd388c9728aa` |
-| Ending parity-behavior/test commit | `9285b36e39106aecd85402c6f14688a4fa2f0fcb` (`SDLGPU-89`); the Linux audit closeout is `SDLGPU-90`; the platform/adversarial closeout now includes `SDLGPU-127` and the `SDLGPU-119` focused ASan follow-up |
+| Ending parity-behavior/test commit | `9285b36e39106aecd85402c6f14688a4fa2f0fcb` (`SDLGPU-89`); the Linux audit closeout is `SDLGPU-90`; the platform/adversarial closeout now includes `SDLGPU-128` and the `SDLGPU-119` focused ASan follow-up |
 | Renderer contract | `modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp`; exact audit in `plans/sdlgpu_renderer_contract_audit.csv` |
 | Reference renderer | `modules/renderers/easygl/{include,src,examples}` |
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
-| EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files at audit start; 246 / 45 now (source count, not capability count) |
+| EasyGL / SDL GPU example sources | 246 / 38 `.cpp` files at audit start; 247 / 45 now (source count, not capability count) |
 | EasyGL / SDL GPU renderer unit-test sources | 2 / 2 `.cpp` files |
 | SDL GPU registered integration tests | 192 CTests (85 baseline plus 107 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 32 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 32/32 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
-| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform/adversarial re-audit creates 37 more (`SDLGPU-91`–`127`) |
-| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 70 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
+| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform/adversarial re-audit creates 39 more (`SDLGPU-91`–`129`) |
+| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 71 / 4. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
@@ -1556,12 +1615,13 @@ ordinary call path proves otherwise. They are not silently counted toward this p
 `plans/sdlgpu_renderer_contract_audit.csv` is the exact, one-row-per-hook inventory generated by
 `tools/check_sdlgpu_renderer_contract_audit.py`. The checker asks Clang to parse the real EasyGL and
 SDL GPU translation units using the two stable build trees' compile databases; it does not infer
-overrides from grep or trigger a rebuild. It currently finds **226** virtual hooks: **146** are on a
-classic-observable call path (**141 `=`**, **5 `⛔` occlusion-query hooks**), and **80** are
-renderer-specific or CNAEXT/modern `out`. There are **zero** unresolved `~`, `≠`, or `∅` rows.
+overrides from grep or trigger a rebuild. After merge `b4508d38d` it finds **266** virtual hooks:
+**149** are on a classic-observable call path (**144 `=`**, **5 `⛔` occlusion-query hooks**), and
+**117** are renderer-specific or CNAEXT/modern `out`. There are **zero** unresolved `~`, `≠`, or
+`∅` rows.
 
-For the classic rows, EasyGL has 126 concrete override instances and 34 inherited instances; SDL
-GPU has 134 concrete override instances, 20 explicitly allowlisted inherited instances, the five
+For the classic rows, EasyGL has 128 concrete override instances and 35 inherited instances; SDL
+GPU has 134 concrete override instances, 23 explicitly allowlisted inherited instances, the five
 unavailable query hooks, and one deliberately absent lease object because its factory's reviewed
 null default means this non-GL renderer needs no movable context. Exact signatures make every
 allowance fail closed when the interface changes. The inherited cases are limited to: framework-
@@ -1582,8 +1642,8 @@ mean parity.
 | `IIndexBufferRenderer::{SetData16,SetData32,*WithOptions,GetIndexCount,IsThirtyTwoBit}` | all explicit | all explicit | classic; both widths, partial/empty transfers, CPU round-trip and every option are verified (`SDLGPU-78`) |
 | `IOcclusionQueryRenderer::{Begin,End,IsComplete,PixelCount,PixelCountIsPreciseEXT}` and factory | explicit | factory explicitly throws the exact underlying SDL_gpu limitation; capability/profile false | classic `⛔`; silent inherited-null object removed and no false result is fabricated (`SDLGPU-80`) |
 | `ITextureRenderer::{GetWidth,GetHeight,UpdatePixels,UpdatePixelsLevel,HasDefinedMipLevel,GetSurfaceFormatEXT,ShareCpuPixels,GetData}` | explicit except default mip query behavior is implemented through EasyGL state | width/height/update/format/GetData explicit; mip query and CPU-share defaults remain appropriate because the XNA layer owns those shadows | classic format behavior `=` through `SDLGPU-69`; deferred lifetime remains `SDLGPU-81` |
-| `ITexture3DRenderer::{SetData,GetData,BindGL,GetDimensionsEXT}` | upload/readback/bind explicit; concrete storage is RGBA8 | upload/readback explicit; concrete resource records and guards its Color format; GL/default dimensions irrelevant | classic Color storage/transfers `=` (`SDLGPU-71`) |
-| `ITextureCubeRenderer::{SetData,SetCompressedDataEXT,GetData,BindGL,ShareCpuPixels,GetSizeEXT}` | all storage paths explicit | RGBA and DXT Set/Get explicit; exact DXT block shadow; size/cpu-share defaults are unused by ordinary SDL sampling | classic cube storage `=` through `SDLGPU-70`; `BindGL` is EasyGL-specific |
+| `ITexture3DRenderer::{SetData,GetData,BindGL,GetDimensionsEXT,GetSurfaceFormatEXT}` | upload/readback/bind explicit; concrete storage is RGBA8 | upload/readback explicit; concrete resource records and guards its Color format; GL/default dimensions and format metadata are irrelevant | classic Color storage/transfers `=` (`SDLGPU-71`); renderer metadata getters are `out` because the public wrapper owns them |
+| `ITextureCubeRenderer::{SetData,SetCompressedDataEXT,GetData,BindGL,ShareCpuPixels,GetSizeEXT,GetSurfaceFormatEXT}` | all storage paths explicit | RGBA and DXT Set/Get explicit; exact DXT block shadow; size/format/cpu-share defaults are unused by ordinary SDL sampling | classic cube storage `=` through `SDLGPU-70`; `BindGL` and unused renderer metadata are `out` |
 | `IRenderTargetRenderer::{Bind/Unbind,GetData,GetMultiSampleCount,GetAppliedDepthStencilFormatEXT,HasRealDepthBuffer,DepthBufferBitsEXT,HasRealStencilBuffer}` | explicit where native facts differ | bind/read/MSAA and all applied depth/stencil facts explicit from per-target state | classic format/property/lifecycle behavior `=` (`SDLGPU-72–74`) |
 | `IRenderTargetCubeRenderer::{GetSize,BindFace,Unbind,GetData,GetMultiSampleCount,depth/stencil facts}` | explicit where native facts differ | size/bind/read/MSAA and all applied depth/stencil facts explicit from per-target state | classic format/property/lifecycle behavior `=` (`SDLGPU-66/73/74`) |
 | `IEffectRenderer` compile/bind/unbind, uniform scalar/vector/matrix/arrays, 2D/cube/3D texture binds | all explicit | compile and scalar/vector/matrix explicit; bind/unbind no-op by design; array and texture defaults are covered by renderer-owned compiled path only | ShaderEffect is CNAEXT; ordinary compiled effect separately in scope (`SDLGPU-79`) |
@@ -1616,7 +1676,7 @@ filesystem, rejects duplicates/unknown categories/missing evidence, and currentl
 | `classic-xna-direct-parity` | 52 |
 | `classic-xna-new-sdlgpu-test-needed` | 0 |
 | `classic-xna-feature-missing` | 2 |
-| `modern-cnaext-out` | 52 |
+| `modern-cnaext-out` | 53 |
 | `easygl-specific` | 9 |
 | `duplicate` | 0 |
 | `easygl-defect` | 3 |
