@@ -1082,6 +1082,86 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Proves `ps_3_0` receives D3D9 integer `vPos` and clockwise-positive `vFace`.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     * @param effect Prepared raster-input fixture owned by the caller.
+     */
+    inline void RunCompiledEffectRasterInputDrawContract(GraphicsDevice& device, Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4::Zero);
+        struct Position
+        {
+            float x, y, z;
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Position)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const Position front[6] = {
+            {-1.0f,  1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f},
+            { 1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f},
+        };
+        const Position back[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+            { 1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+        };
+
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](const Position* vertices)
+        {
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            std::array<Color, 16> pixels{};
+            target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+            return pixels;
+        };
+        const auto frontPixels = drawAndRead(front);
+        const auto backPixels = drawAndRead(back);
+
+        for (int y = 0; y < 4; ++y)
+        {
+            for (int x = 0; x < 4; ++x)
+            {
+                const Color& frontPixel =
+                    frontPixels[static_cast<std::size_t>(y * 4 + x)];
+                const Color& backPixel =
+                    backPixels[static_cast<std::size_t>(y * 4 + x)];
+                const int expectedX = static_cast<int>(std::lround(x * 0.25f * 255.0f));
+                const int expectedY = static_cast<int>(std::lround(y * 0.25f * 255.0f));
+                EXPECT_NEAR(frontPixel.getRProperty(), expectedX, 1) << "at " << x << ',' << y;
+                EXPECT_NEAR(frontPixel.getGProperty(), expectedY, 1) << "at " << x << ',' << y;
+                EXPECT_EQ(frontPixel.getBProperty(), 255) << "front at " << x << ',' << y;
+                EXPECT_EQ(frontPixel.getAProperty(), 255) << "front at " << x << ',' << y;
+                EXPECT_NEAR(backPixel.getRProperty(), expectedX, 1) << "at " << x << ',' << y;
+                EXPECT_NEAR(backPixel.getGProperty(), expectedY, 1) << "at " << x << ',' << y;
+                EXPECT_EQ(backPixel.getBProperty(), 0) << "back at " << x << ',' << y;
+                EXPECT_EQ(backPixel.getAProperty(), 255) << "back at " << x << ',' << y;
+            }
+        }
+    }
+
+    /**
+     * @brief Builds and runs the shared D3D9 raster-input fixture.
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectRasterInputContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesRasterInputs = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        RunCompiledEffectRasterInputDrawContract(device, effect);
+    }
+
+    /**
      * @brief Contract: a compiled effect reads attributes from more than one bound stream.
      *
      * plans/plan_fx.md FX-082. Only for backends reporting `MultiStreamVertexInput`. The fixture's

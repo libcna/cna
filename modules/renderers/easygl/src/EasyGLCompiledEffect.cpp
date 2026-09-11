@@ -1141,6 +1141,11 @@ namespace CNA::Internal::Renderers::EasyGL
             ? -xnaPixelCenterScale_ / static_cast<float>(viewportH)
             : 0.0f;
         MOJOSHADER_glProgramPixelCenterInfo(pixelCenterX, pixelCenterY);
+
+        // EasyGL keeps OpenGL's counter-clockwise front-face convention while XNA/D3D9 VFACE
+        // defines clockwise triangles as positive. Invert only the shader-visible sign; culling
+        // continues to use EasyGL's established face mapping.
+        MOJOSHADER_glProgramVFaceFlipInfo(1);
     }
 }
 

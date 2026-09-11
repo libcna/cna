@@ -79,6 +79,16 @@ namespace CNA::Internal::Renderers::Software
         std::array<float, 4> value{0.0f, 0.0f, 0.0f, 1.0f};
     };
 
+    /** @brief Rasterizer-provided Direct3D 9 pixel-shader values that are not
+     * interpolated vertex semantics. */
+    struct SoftwarePixelShaderBuiltinsEXT
+    {
+        /** @brief Integer-centred, top-down VPOS value for the current fragment. */
+        std::array<float, 4> position{0.0f, 0.0f, 0.0f, 1.0f};
+        /** @brief VFACE sign: positive for clockwise/front-facing triangles. */
+        float face = 1.0f;
+    };
+
     /** @brief Result of executing one compiled Direct3D vertex shader invocation. */
     struct SoftwareVertexShaderResultEXT
     {
@@ -200,6 +210,7 @@ namespace CNA::Internal::Renderers::Software
      * @param booleanRegisters Direct3D Boolean constant register storage.
      * @param inputs Perspective-correct declaration-semantic values for one fragment.
      * @param sampler Renderer-side texture provider, or null for texture-free programs.
+     * @param builtins Rasterizer-provided VPOS/VFACE values, or null for defaults.
      * @return Colour/depth outputs and discard state.
      * @throws std::runtime_error if a texture instruction has no sampler provider.
      */
@@ -208,7 +219,8 @@ namespace CNA::Internal::Renderers::Software
         std::span<const int> integerRegisters,
         std::span<const unsigned char> booleanRegisters,
         std::span<const SoftwareShaderSemanticValueEXT> inputs,
-        const ISoftwarePixelSamplerEXT* sampler = nullptr);
+        const ISoftwarePixelSamplerEXT* sampler = nullptr,
+        const SoftwarePixelShaderBuiltinsEXT* builtins = nullptr);
 
     /**
      * @brief Executes four lock-step Direct3D pixel invocations in one 2x2 quad.
@@ -219,6 +231,7 @@ namespace CNA::Internal::Renderers::Software
      * @param inputs Perspective-correct semantic inputs in top-left, top-right,
      * bottom-left, bottom-right order.
      * @param sampler Renderer-side texture provider, or null for texture-free programs.
+     * @param builtins Rasterizer-provided VPOS/VFACE values in lane order, or null for defaults.
      * @return Colour/depth outputs and discard state for the four lanes in input order.
      */
     CNAEXT [[nodiscard]] std::array<SoftwarePixelShaderResultEXT, 4>
@@ -227,7 +240,8 @@ namespace CNA::Internal::Renderers::Software
         std::span<const int> integerRegisters,
         std::span<const unsigned char> booleanRegisters,
         const std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4>& inputs,
-        const ISoftwarePixelSamplerEXT* sampler = nullptr);
+        const ISoftwarePixelSamplerEXT* sampler = nullptr,
+        const std::array<SoftwarePixelShaderBuiltinsEXT, 4>* builtins = nullptr);
 
     /** @brief A validated Direct3D 9 shader program prepared for the later CPU
      * execution phases. */
@@ -384,22 +398,26 @@ namespace CNA::Internal::Renderers::Software
          * @brief Executes the selected classic Direct3D pixel program for one fragment.
          * @param inputs Perspective-correct semantic values from the vertex stage.
          * @param sampler Renderer-side texture provider, or null for texture-free programs.
+         * @param builtins Rasterizer-provided VPOS/VFACE values, or null for defaults.
          * @return Colour/depth outputs and discard state.
          */
         CNAEXT [[nodiscard]] SoftwarePixelShaderResultEXT ExecutePixelEXT(
             std::span<const SoftwareShaderSemanticValueEXT> inputs,
-            const ISoftwarePixelSamplerEXT* sampler = nullptr) const;
+            const ISoftwarePixelSamplerEXT* sampler = nullptr,
+            const SoftwarePixelShaderBuiltinsEXT* builtins = nullptr) const;
 
         /**
          * @brief Executes the selected pixel program on one lock-step 2x2 fragment quad.
          * @param inputs Perspective-correct semantic inputs in top-left, top-right,
          * bottom-left, bottom-right order.
          * @param sampler Renderer-side texture provider, or null for texture-free programs.
+         * @param builtins Rasterizer-provided VPOS/VFACE values in lane order, or null for defaults.
          * @return Colour/depth outputs and discard state for all four lanes.
          */
         CNAEXT [[nodiscard]] std::array<SoftwarePixelShaderResultEXT, 4> ExecutePixelQuadEXT(
             const std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4>& inputs,
-            const ISoftwarePixelSamplerEXT* sampler = nullptr) const;
+            const ISoftwarePixelSamplerEXT* sampler = nullptr,
+            const std::array<SoftwarePixelShaderBuiltinsEXT, 4>* builtins = nullptr) const;
 
         /**
          * @brief Returns how many successful vertex invocations this runtime executed.

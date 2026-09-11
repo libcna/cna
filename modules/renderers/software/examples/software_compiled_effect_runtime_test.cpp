@@ -1692,6 +1692,73 @@ namespace
         expect(3, 3, 80, 80);
     }
 
+    void CheckCompiledRasterInputs()
+    {
+        GraphicsDevice device;
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesRasterInputs = true;
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect->getParametersProperty()["Tint"]->SetValue(Vector4::Zero);
+        struct Position
+        {
+            float x, y, z;
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Position)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const Position front[6] = {
+            {-1.0f,  1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f},
+            { 1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f},
+        };
+        const Position back[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+            { 1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](const Position* vertices)
+        {
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            std::array<Color, 16> pixels{};
+            target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+            return pixels;
+        };
+        const auto frontPixels = drawAndRead(front);
+        const auto backPixels = drawAndRead(back);
+        for (int y = 0; y < 4; ++y)
+        {
+            for (int x = 0; x < 4; ++x)
+            {
+                const Color& frontPixel =
+                    frontPixels[static_cast<std::size_t>(y * 4 + x)];
+                const Color& backPixel =
+                    backPixels[static_cast<std::size_t>(y * 4 + x)];
+                const int expectedX = static_cast<int>(std::lround(x * 0.25f * 255.0f));
+                const int expectedY = static_cast<int>(std::lround(y * 0.25f * 255.0f));
+                Check(std::abs(static_cast<int>(frontPixel.getRProperty()) - expectedX) <= 1 &&
+                          std::abs(static_cast<int>(frontPixel.getGProperty()) - expectedY) <= 1 &&
+                          frontPixel.getBProperty() == 255 && frontPixel.getAProperty() == 255,
+                      "compiled vPos/vFace front result differs at " +
+                          std::to_string(x) + "," + std::to_string(y));
+                Check(std::abs(static_cast<int>(backPixel.getRProperty()) - expectedX) <= 1 &&
+                          std::abs(static_cast<int>(backPixel.getGProperty()) - expectedY) <= 1 &&
+                          backPixel.getBProperty() == 0 && backPixel.getAProperty() == 255,
+                      "compiled vPos/vFace back result differs at " +
+                          std::to_string(x) + "," + std::to_string(y));
+            }
+        }
+    }
+
     void CheckCompiledSamplerRasterization(SoftwareRenderer& renderer)
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
@@ -2498,6 +2565,7 @@ int main()
         CheckSubroutineValidation();
         CheckParsedSubroutineEffect(renderer);
         CheckCompiledDerivativeRasterization();
+        CheckCompiledRasterInputs();
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
         CheckCompiledLineAndWireframeRasterization(renderer);

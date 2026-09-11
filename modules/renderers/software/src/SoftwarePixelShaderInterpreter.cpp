@@ -166,11 +166,12 @@ public:
                std::span<const unsigned char> booleanRegisters,
                std::span<const SoftwareShaderSemanticValueEXT> inputs,
                const ISoftwarePixelSamplerEXT *sampler,
+               const SoftwarePixelShaderBuiltinsEXT *builtins = nullptr,
                std::span<const DerivativeValue> derivativeValues = {},
                std::vector<DerivativeValue> *derivativeSources = nullptr)
       : program_(program), floatRegisters_(floatRegisters),
         integerRegisters_(integerRegisters),
-        booleanRegisters_(booleanRegisters), sampler_(sampler),
+        booleanRegisters_(booleanRegisters), sampler_(sampler), builtins_(builtins),
         derivativeValues_(derivativeValues), derivativeSources_(derivativeSources) {
     if (program.stage != SoftwareShaderStageEXT::Pixel)
       throw std::invalid_argument("Software pixel shader: a vertex program "
@@ -498,6 +499,16 @@ private:
               predicateRegister_[1] ? 1.0f : 0.0f,
               predicateRegister_[2] ? 1.0f : 0.0f,
               predicateRegister_[3] ? 1.0f : 0.0f};
+    case RegisterType::Miscellaneous:
+      if (number == 0)
+        return builtins_ != nullptr ? builtins_->position
+                                    : Vector{0.0f, 0.0f, 0.0f, 1.0f};
+      if (number == 1) {
+        const float face = builtins_ != nullptr ? builtins_->face : 1.0f;
+        return {face, face, face, face};
+      }
+      throw std::runtime_error(
+          "Software pixel shader: miscellaneous register is out of range.");
     default:
       throw std::runtime_error(
           "Software pixel shader: unsupported source register type " +
@@ -1301,6 +1312,7 @@ private:
   std::span<const int> integerRegisters_;
   std::span<const unsigned char> booleanRegisters_;
   const ISoftwarePixelSamplerEXT *sampler_ = nullptr;
+  const SoftwarePixelShaderBuiltinsEXT *builtins_ = nullptr;
   std::span<const DerivativeValue> derivativeValues_;
   std::vector<DerivativeValue> *derivativeSources_ = nullptr;
   std::size_t derivativeCursor_ = 0;
@@ -1331,9 +1343,10 @@ SoftwarePixelShaderResultEXT ExecuteSoftwarePixelShaderEXT(
     std::span<const int> integerRegisters,
     std::span<const unsigned char> booleanRegisters,
     std::span<const SoftwareShaderSemanticValueEXT> inputs,
-    const ISoftwarePixelSamplerEXT *sampler) {
+    const ISoftwarePixelSamplerEXT *sampler,
+    const SoftwarePixelShaderBuiltinsEXT *builtins) {
   return PixelMachine(program, floatRegisters, integerRegisters,
-                      booleanRegisters, inputs, sampler)
+                      booleanRegisters, inputs, sampler, builtins)
       .Execute();
 }
 
@@ -1343,7 +1356,8 @@ std::array<SoftwarePixelShaderResultEXT, 4> ExecuteSoftwarePixelShaderQuadEXT(
     std::span<const int> integerRegisters,
     std::span<const unsigned char> booleanRegisters,
     const std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4> &inputs,
-    const ISoftwarePixelSamplerEXT *sampler) {
+    const ISoftwarePixelSamplerEXT *sampler,
+    const std::array<SoftwarePixelShaderBuiltinsEXT, 4> *builtins) {
   std::array<std::vector<DerivativeValue>, 4> values;
   std::array<std::vector<DerivativeValue>, 4> sources;
   std::array<SoftwarePixelShaderResultEXT, 4> results;
@@ -1351,8 +1365,10 @@ std::array<SoftwarePixelShaderResultEXT, 4> ExecuteSoftwarePixelShaderQuadEXT(
   for (std::size_t pass = 0; pass < maximumPasses; ++pass) {
     for (std::size_t lane = 0; lane < 4u; ++lane) {
       sources[lane].clear();
+      const SoftwarePixelShaderBuiltinsEXT *laneBuiltins =
+          builtins != nullptr ? &(*builtins)[lane] : nullptr;
       results[lane] = PixelMachine(program, floatRegisters, integerRegisters,
-                                   booleanRegisters, inputs[lane], sampler,
+                                   booleanRegisters, inputs[lane], sampler, laneBuiltins,
                                    values[lane], &sources[lane])
                           .Execute();
     }

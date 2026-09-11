@@ -44,7 +44,7 @@ Those are real parser, vertex and sampled-pixel phases, not complete execution p
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
 continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
 is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368` are complete: the opt-in runtime now includes compiled MRT,
+`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371` are complete: the opt-in runtime now includes compiled MRT,
 render-target/cube sampling, SpriteBatch custom-effect routing and classic line/wireframe rasterization. `SOFTWARE-164/165` remain the
 encompassing shader-profile, lifecycle and content-conformance backlog.
 The independent EasyGL challenge in `SOFTWARE-367` also repaired MojoShader's invalid writemask-
@@ -175,7 +175,7 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 
 - **Classic compiled XNA Effects are not yet executable** (`SOFTWARE-161`). The public bytecode
   constructor accepts XNA/FNA Direct3D 9 Effect Framework bytes only on renderers whose real
-  runtime implements them. Opt-in EasyGL passes 42 tests covering reflection, techniques/passes,
+  runtime implements them. Opt-in EasyGL passes 44 tests covering reflection, techniques/passes,
   parameters, draw pixels, state, SpriteBatch, instancing, multi-stream input and 2D/cube/volume
   sampling plus loop/subroutine control flow. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software can parse and reflect those real
   binaries, apply their pass state, run their preshaders, retain validated D3D9 token/register IR
@@ -206,6 +206,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   project their logical centres onto the unclamped line so uncovered helpers extrapolate the
   along-line varying while remaining constant across its perpendicular. SOFTWARE-369 repairs the EasyGL compiled path's
   formerly missing XNA pixel-centre correction through a viewport-scaled MojoShader uniform.
+  SOFTWARE-371 then closes the explicit `ps_3_0` raster inputs: Software supplies top-down integer
+  `VPOS` and clockwise-positive `VFACE` to scalar and quad execution, while a managed MojoShader
+  patch floors EasyGL's translated fragment coordinates and opt-in flips its GL-facing sign.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.

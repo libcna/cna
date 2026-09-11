@@ -3048,14 +3048,17 @@ namespace CNA::Internal::Renderers::Software
             SoftwareOcclusionQueryRenderer* occlusionQuery, SoftwareCompiledEffect& runtime,
             int x, int y, float depth, unsigned int coverageMask,
             const std::array<float, 4>* sampleDepths,
+            float face,
             std::span<const SoftwareShaderSemanticValueEXT> inputs,
             const ISoftwarePixelSamplerEXT* sampler)
         {
+            const SoftwarePixelShaderBuiltinsEXT builtins{
+                {static_cast<float>(x), static_cast<float>(y), depth, 1.0f}, face};
             WriteCompiledPixelResult(
                 colorTargets, colorTargetCount, depthState, stencilState, blendState,
                 blendFactor, colorWriteMasks, multiSampleMask, occlusionQuery,
                 x, y, depth, coverageMask, sampleDepths,
-                runtime.ExecutePixelEXT(inputs, sampler));
+                runtime.ExecutePixelEXT(inputs, sampler, &builtins));
         }
 
         void RasterizeLineCompiled(
@@ -3066,7 +3069,7 @@ namespace CNA::Internal::Renderers::Software
             const std::array<int, 4>& colorWriteMasks, unsigned int multiSampleMask,
             SoftwareOcclusionQueryRenderer* occlusionQuery, SoftwareCompiledEffect& runtime,
             bool multiSampleAntiAlias, const CompiledPixelSampler& sampler,
-            float depthBiasOffset = 0.0f)
+            float depthBiasOffset = 0.0f, float face = 1.0f)
         {
             if (a.compiledVaryingCount != b.compiledVaryingCount)
             {
@@ -3152,10 +3155,13 @@ namespace CNA::Internal::Renderers::Software
                                    const std::array<float, 4>* sampleTs)
                 {
                     const auto inputs = interpolateInputs(t);
+                    const SoftwarePixelShaderBuiltinsEXT builtins{
+                        {static_cast<float>(x), static_cast<float>(y), 0.0f, 1.0f}, face};
                     writeResult(
                         x, y, t, coverageMask, sampleTs,
                         runtime.ExecutePixelEXT(
-                            std::span(inputs.data(), a.compiledVaryingCount), &sampler));
+                            std::span(inputs.data(), a.compiledVaryingCount), &sampler,
+                            &builtins));
                 });
                 return;
             }
@@ -3196,6 +3202,7 @@ namespace CNA::Internal::Renderers::Software
             {
                 std::array<std::array<SoftwareShaderSemanticValueEXT, 16>, 4> laneInputs{};
                 std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4> inputSpans{};
+                std::array<SoftwarePixelShaderBuiltinsEXT, 4> laneBuiltins{};
                 for (std::size_t lane = 0; lane < laneInputs.size(); ++lane)
                 {
                     const int x = quad.first + static_cast<int>(lane & 1u);
@@ -3210,8 +3217,12 @@ namespace CNA::Internal::Renderers::Software
                     laneInputs[lane] = interpolateInputs(t);
                     inputSpans[lane] = std::span(
                         laneInputs[lane].data(), a.compiledVaryingCount);
+                    laneBuiltins[lane].position = {
+                        static_cast<float>(x), static_cast<float>(y), 0.0f, 1.0f};
+                    laneBuiltins[lane].face = face;
                 }
-                const auto pixels = runtime.ExecutePixelQuadEXT(inputSpans, &sampler);
+                const auto pixels = runtime.ExecutePixelQuadEXT(
+                    inputSpans, &sampler, &laneBuiltins);
                 for (std::size_t lane = 0; lane < laneInputs.size(); ++lane)
                 {
                     const int x = quad.first + static_cast<int>(lane & 1u);
@@ -3242,6 +3253,7 @@ namespace CNA::Internal::Renderers::Software
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f || ShouldCullTriangle(area, cullMode))
                 return;
+            const float face = area < 0.0f ? 1.0f : -1.0f;
             const RasterStencilState faceStencil = SelectStencilFace(stencilState, area < 0.0f);
             const float biasOffset =
                 ComputeDepthBiasOffset(v0, v1, v2, depthBias, slopeScaleDepthBias);
@@ -3270,7 +3282,7 @@ namespace CNA::Internal::Renderers::Software
                     RasterizeLineCompiled(
                         colorTargets, colorTargetCount, depthState, faceStencil, blendState,
                         blendFactor, clip, a, b, colorWriteMasks, multiSampleMask,
-                        occlusionQuery, runtime, multiSampleAntiAlias, sampler, biasOffset);
+                        occlusionQuery, runtime, multiSampleAntiAlias, sampler, biasOffset, face);
                 };
                 if ((edgeMask & kEdgeV0V1) != 0u) drawEdge(v0, v1);
                 if ((edgeMask & kEdgeV1V2) != 0u) drawEdge(v1, v2);
@@ -3319,13 +3331,18 @@ namespace CNA::Internal::Renderers::Software
                 {
                     for (int quadX = quadMinX; quadX <= maxX; quadX += 2)
                     {
-                        std::array<QuadLane, 4> lanes{};
+                    std::array<QuadLane, 4> lanes{};
+                    std::array<SoftwarePixelShaderBuiltinsEXT, 4> laneBuiltins{};
                         bool anyCoverage = false;
                         for (std::size_t laneIndex = 0; laneIndex < lanes.size(); ++laneIndex)
                         {
                             QuadLane& lane = lanes[laneIndex];
                             lane.x = quadX + static_cast<int>(laneIndex & 1u);
                             lane.y = quadY + static_cast<int>(laneIndex >> 1u);
+                            laneBuiltins[laneIndex].position = {
+                                static_cast<float>(lane.x), static_cast<float>(lane.y),
+                                0.0f, 1.0f};
+                            laneBuiltins[laneIndex].face = face;
                             const float px = static_cast<float>(lane.x) + 0.5f;
                             const float py = static_cast<float>(lane.y) + 0.5f;
                             const float w0 = EdgeFunction(
@@ -3417,7 +3434,8 @@ namespace CNA::Internal::Renderers::Software
                             inputSpans[lane] = std::span(
                                 lanes[lane].inputs.data(), v0.compiledVaryingCount);
                         }
-                        const auto pixels = runtime.ExecutePixelQuadEXT(inputSpans, &sampler);
+                        const auto pixels = runtime.ExecutePixelQuadEXT(
+                            inputSpans, &sampler, &laneBuiltins);
                         for (std::size_t laneIndex = 0; laneIndex < lanes.size(); ++laneIndex)
                         {
                             const QuadLane& lane = lanes[laneIndex];
@@ -3517,6 +3535,7 @@ namespace CNA::Internal::Renderers::Software
                         blendFactor, colorWriteMasks, multiSampleMask, occlusionQuery, runtime,
                         x, y, depth, coverageMask,
                         primary.HasMultiSampleColor() ? &sampleDepths : nullptr,
+                        face,
                         std::span(inputs.data(), v0.compiledVaryingCount), &sampler);
                 }
             }

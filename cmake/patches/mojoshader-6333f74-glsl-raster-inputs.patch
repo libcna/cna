@@ -1,0 +1,91 @@
+diff --git a/mojoshader.h b/mojoshader.h
+--- a/mojoshader.h
++++ b/mojoshader.h
+@@ -1759,4 +1759,12 @@ DECLSPEC void MOJOSHADER_glProgramPixelCenterInfo(float x, float y);
+ 
++/*
++ * Invert the GLSL front-facing sign exposed through the Direct3D 9 VFACE
++ * miscellaneous register. A nonzero value flips the sign; zero preserves the
++ * OpenGL convention. This call requires a current MOJOSHADER_glContext.
++ */
++DECLSPEC void MOJOSHADER_glProgramVFaceFlipInfo(int flip);
++
++
+ /*
+  * Free the resources of a linked program. This will delete the GL object
+  *  and free memory.
+diff --git a/mojoshader_opengl.c b/mojoshader_opengl.c
+--- a/mojoshader_opengl.c
++++ b/mojoshader_opengl.c
+@@ -132,5 +132,7 @@ struct MOJOSHADER_glProgram
+     GLint ps_vpos_flip_loc;
+     int current_vpos_flip[2];
++    GLint ps_vface_flip_loc;
++    int current_vface_flip;
+     GLint vs_pixel_center_loc;
+     float current_pixel_center[2];
+ #ifdef MOJOSHADER_FLIP_RENDERTARGET
+@@ -1085,6 +1087,7 @@ static void impl_GLSL_FinalInitProgram(MOJOSHADER_glProgram *program)
+     program->ps_int4_loc = glsl_uniform_loc(program, "ps_uniforms_ivec4");
+     program->ps_bool_loc = glsl_uniform_loc(program, "ps_uniforms_bool");
+     program->ps_vpos_flip_loc = glsl_uniform_loc(program, "vposFlip");
++    program->ps_vface_flip_loc = glsl_uniform_loc(program, "cnaVFaceFlip");
+     program->vs_pixel_center_loc = glsl_uniform_loc(program, "cnaPixelCenter");
+ #ifdef MOJOSHADER_FLIP_RENDERTARGET
+     program->vs_flip_loc = glsl_uniform_loc(program, "vpFlip");
+@@ -2482,6 +2485,7 @@ MOJOSHADER_glProgram *MOJOSHADER_glLinkProgram(MOJOSHADER_glShader *vshader,
+     memset(retval, '\0', sizeof (MOJOSHADER_glProgram));
+     memset(retval->vertex_attrib_loc, 0xFF, sizeof(retval->vertex_attrib_loc));
+     retval->vs_pixel_center_loc = -1;
++    retval->ps_vface_flip_loc = -1;
+ 
+     numregs = 0;
+     if (vshader != NULL) numregs += vshader->parseData->uniform_count;
+@@ -3244,6 +3248,19 @@ void MOJOSHADER_glProgramPixelCenterInfo(float x, float y)
+ } // MOJOSHADER_glProgramPixelCenterInfo
+ 
+ 
++void MOJOSHADER_glProgramVFaceFlipInfo(int flip)
++{
++    MOJOSHADER_glProgram *program = ctx->bound_program;
++
++    if ((program->ps_vface_flip_loc != -1) &&
++        (program->current_vface_flip != flip))
++    {
++        ctx->glUniform1f(program->ps_vface_flip_loc, (float) flip);
++        program->current_vface_flip = flip;
++    } // if
++} // MOJOSHADER_glProgramVFaceFlipInfo
++
++
+ void MOJOSHADER_glDeleteProgram(MOJOSHADER_glProgram *program)
+ {
+     program_unref(program);
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -1230,8 +1230,11 @@ static void emit_GLSL_attribute(Context *ctx, RegisterType regtype, int regnum,
+             if (mt == MISCTYPE_TYPE_FACE)
+             {
++                push_output(ctx, &ctx->globals);
++                output_line(ctx, "uniform float cnaVFaceFlip;");
++                pop_output(ctx);
+                 push_output(ctx, &ctx->mainline_intro);
+                 ctx->indent++;
+-                output_line(ctx, "float %s = gl_FrontFacing ? 1.0 : -1.0;", var);
++                output_line(ctx, "float %s = (gl_FrontFacing ? 1.0 : -1.0) * (1.0 - (2.0 * cnaVFaceFlip));", var);
+                 pop_output(ctx);
+                 return;
+             } // if
+@@ -1241,10 +1245,9 @@ static void emit_GLSL_attribute(Context *ctx, RegisterType regtype, int regnum,
+                 output_line(ctx, "uniform vec2 vposFlip;");
+                 pop_output(ctx);
+ 
+-                // TODO: For half-pixel offset compensation, floor() this value!
+                 push_output(ctx, &ctx->mainline_intro);
+                 ctx->indent++;
+-                output_line(ctx, "vec4 %s = vec4(gl_FragCoord.x, (gl_FragCoord.y * vposFlip.x) + vposFlip.y, gl_FragCoord.z, gl_FragCoord.w);", var);
++                output_line(ctx, "vec4 %s = vec4(floor(gl_FragCoord.x), floor((gl_FragCoord.y * vposFlip.x) + vposFlip.y), gl_FragCoord.z, gl_FragCoord.w);", var);
+                 pop_output(ctx);
+                 return;
+             } // else if

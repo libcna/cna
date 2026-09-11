@@ -284,6 +284,10 @@ namespace CNA::Internal::Renderers::Software
                         semantic.usageIndex = static_cast<std::uint8_t>(registerNumber);
                         result.inputSemantics.push_back(semantic);
                     }
+                    else if (registerType == 17u)
+                    {
+                        result.inputSemantics.push_back(semantic);
+                    }
                     else if (registerType == 10u)
                     {
                         const auto samplerType = static_cast<SoftwareShaderSamplerTypeEXT>(
@@ -703,7 +707,8 @@ namespace CNA::Internal::Renderers::Software
 
     SoftwarePixelShaderResultEXT SoftwareCompiledEffect::ExecutePixelEXT(
         std::span<const SoftwareShaderSemanticValueEXT> inputs,
-        const ISoftwarePixelSamplerEXT* sampler) const
+        const ISoftwarePixelSamplerEXT* sampler,
+        const SoftwarePixelShaderBuiltinsEXT* builtins) const
     {
         const SoftwareShaderProgramEXT* program = GetPixelProgramEXT();
         if (program == nullptr)
@@ -711,12 +716,13 @@ namespace CNA::Internal::Renderers::Software
         return ExecuteSoftwarePixelShaderEXT(
             *program, GetFloatRegistersEXT(SoftwareShaderStageEXT::Pixel),
             GetIntegerRegistersEXT(SoftwareShaderStageEXT::Pixel),
-            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs, sampler);
+            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs, sampler, builtins);
     }
 
     std::array<SoftwarePixelShaderResultEXT, 4> SoftwareCompiledEffect::ExecutePixelQuadEXT(
         const std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4>& inputs,
-        const ISoftwarePixelSamplerEXT* sampler) const
+        const ISoftwarePixelSamplerEXT* sampler,
+        const std::array<SoftwarePixelShaderBuiltinsEXT, 4>* builtins) const
     {
         const SoftwareShaderProgramEXT* program = GetPixelProgramEXT();
         if (program == nullptr)
@@ -724,7 +730,7 @@ namespace CNA::Internal::Renderers::Software
         return ExecuteSoftwarePixelShaderQuadEXT(
             *program, GetFloatRegistersEXT(SoftwareShaderStageEXT::Pixel),
             GetIntegerRegistersEXT(SoftwareShaderStageEXT::Pixel),
-            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs, sampler);
+            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs, sampler, builtins);
     }
 
     std::size_t SoftwareCompiledEffect::GetVertexExecutionCountEXT() const noexcept

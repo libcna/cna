@@ -238,6 +238,9 @@ namespace CNA::TestSupport
         /// Emits a Shader Model 3 pixel program that squares TEXCOORD0 before applying `DSX` and
         /// `DSY`. The output exposes horizontal and vertical 2x2-quad changes independently.
         bool pixelShaderUsesDerivatives = false;
+        /// Emits a Shader Model 3 pixel program that encodes integer-centred `vPos.xy` in red/green
+        /// and the clockwise-positive `vFace` sign in blue.
+        bool pixelShaderUsesRasterInputs = false;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -287,9 +290,11 @@ namespace CNA::TestSupport
         std::int32_t loopInitial = 10,
         std::int32_t loopStep = 2,
         bool usesSubroutine = false,
-        bool usesDerivatives = false)
+        bool usesDerivatives = false,
+        bool usesRasterInputs = false)
     {
-        const bool usesShaderModel3 = usesLoop || usesSubroutine || usesDerivatives;
+        const bool usesShaderModel3 =
+            usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs;
         const std::uint32_t versionToken = usesShaderModel3 ? 0xFFFF0300u : 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
         std::vector<std::uint8_t> ctab;
@@ -382,6 +387,7 @@ namespace CNA::TestSupport
         constexpr std::uint32_t regSampler = 10;   // s#
         constexpr std::uint32_t regConstBool = 14;
         constexpr std::uint32_t regLoop = 15;
+        constexpr std::uint32_t regMiscellaneous = 17;
         constexpr std::uint32_t regLabel = 18;
         constexpr std::uint32_t swizzleIdentity = 0xE4u;  // .xyzw
         // .yzxw: x<-y, y<-z, z<-x, w<-w, two bits per component, lowest component first.
@@ -398,7 +404,57 @@ namespace CNA::TestSupport
             return 0x80000000u | registerBits(type) | number | (swizzle << 16);
         };
 
-        if (usesDerivatives)
+        if (usesRasterInputs)
+        {
+            // D3D9 vPos has integer-centred top-down pixel coordinates. Scale a 4x4 target into
+            // normalized red/green while vFace selects blue only for clockwise/front triangles.
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c1, .25, .25, 0, 1
+            AppendUInt32(shader, destination(regConst, 1, 0xFu));
+            AppendUInt32(shader, FloatBits(0.25f));
+            AppendUInt32(shader, FloatBits(0.25f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c2, 0, 0, 1, 0
+            AppendUInt32(shader, destination(regConst, 2, 0xFu));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c3, 0, 0, 0, 0
+            AppendUInt32(shader, destination(regConst, 3, 0xFu));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl vPos.xy
+            AppendUInt32(shader, 0x80000000u);
+            AppendUInt32(shader, destination(regMiscellaneous, 0, 0x3u));
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl vFace
+            AppendUInt32(shader, 0x80000000u);
+            AppendUInt32(shader, destination(regMiscellaneous, 1, 0xFu));
+            AppendUInt32(shader, 0x00000005u | (3u << 24)); // mul r0.xy, vPos, c1
+            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+            AppendUInt32(shader, source(regMiscellaneous, 0));
+            AppendUInt32(shader, source(regConst, 1));
+            AppendUInt32(shader, 0x00000029u | (1u << 16) | (2u << 24)); // if_gt vFace, c1.z
+            AppendUInt32(shader, source(regMiscellaneous, 1, 0x00u));
+            AppendUInt32(shader, source(regConst, 1, 0xAAu));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.z, c2.z
+            AppendUInt32(shader, destination(regTemp, 0, 0x4u));
+            AppendUInt32(shader, source(regConst, 2, 0xAAu));
+            AppendUInt32(shader, 0x0000002Au); // else
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.z, c3.z
+            AppendUInt32(shader, destination(regTemp, 0, 0x4u));
+            AppendUInt32(shader, source(regConst, 3, 0xAAu));
+            AppendUInt32(shader, 0x0000002Bu); // endif
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.w, c1.w
+            AppendUInt32(shader, destination(regTemp, 0, 0x8u));
+            AppendUInt32(shader, source(regConst, 1, 0xFFu));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+        }
+        else if (usesDerivatives)
         {
             AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c1, 0, 0, 0, 1
             AppendUInt32(shader, destination(regConst, 1, 0xFu));
@@ -1112,7 +1168,8 @@ namespace CNA::TestSupport
             options.pixelShaderSamplesTexture, /*swizzleTint=*/false, options.samplerKind,
             options.pixelShaderWritesMrt, options.pixelShaderUsesLoop,
             options.pixelLoopCount, options.pixelLoopInitial, options.pixelLoopStep,
-            options.pixelShaderUsesSubroutine, options.pixelShaderUsesDerivatives);
+            options.pixelShaderUsesSubroutine, options.pixelShaderUsesDerivatives,
+            options.pixelShaderUsesRasterInputs);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
