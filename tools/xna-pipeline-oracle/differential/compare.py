@@ -34,6 +34,9 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "xnb"))
 import xnb_conformance  # noqa: E402  (path is set above on purpose)
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import effect_mask  # noqa: E402  (path is set above on purpose)
+
 
 # What §24 says to compare, in the order a reader would look at it. A key absent from a report is
 # compared as absent on both sides rather than skipped, so a field that stops being written is a
@@ -155,6 +158,27 @@ def main(argv):
                         uncovered.append(line)
                     else:
                         matched_paths[case].add(covered)
+            # An effect accepted for `root/digest` is accepted for the two things in a compiled
+            # `fx_2_0` container that are not a function of the source -- the compiler's version
+            # string and the padding `d3dx9` leaves after an aligned string -- and for nothing
+            # else. Without this the acceptance is the whole blob, which is a hole a real change
+            # to the bytecode would fall through (plans/plan_xna_sample_xnb_sweep.md
+            # `XNASWEEP-225`). A decision that also accepts `root/bytecodeByteCount` is the Xbox
+            # 360's Xenos bytecode, which is a different instruction set and a different length;
+            # its own reason covers it and the mask has nothing to say.
+            if (not uncovered and "root/digest" in matched_paths[case]
+                    and "root/bytecodeByteCount" not in paths):
+                masked, mask_error = effect_mask.compare(xna_path, cna_path)
+                if mask_error:
+                    uncovered.append("root/digest: " + mask_error)
+                elif masked["elsewhere"]:
+                    uncovered.append(
+                        "root/digest: %d byte(s) differ outside the compiler's version string and "
+                        "the padding after an aligned string, at %s"
+                        % (len(masked["elsewhere"]), masked["elsewhere"][:8]))
+                else:
+                    row["maskedBytes"] = {"version": masked["inVersion"],
+                                          "padding": masked["inPadding"]}
             if uncovered:
                 row["outcome"] = "open"
                 row["reason"] = decisions[case]["reason"]
