@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-181/SOFTWARE-336/SOFTWARE-337: selected depth storage, XNA clip-depth semantics and
-// SpriteBatch layerDepth must affect fragment acceptance.
+// SOFTWARE-181/SOFTWARE-336..338: selected depth storage, XNA clip-depth semantics and the
+// complete homogeneous SpriteBatch transform must affect fragment acceptance and coverage.
 
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <utility>
 
 #include "CNA/RendererTestGate.hpp"
 
@@ -194,6 +195,171 @@ namespace
         device.SetRenderTarget(nullptr);
         return ReadCenter(target);
     }
+
+    Color RenderSpriteTransformedDepthProbe()
+    {
+        GraphicsDevice device;
+        RenderTarget2D target(
+            device, 8, 8, false, SurfaceFormat::Color, DepthFormat::Depth24, 0,
+            RenderTargetUsage::PreserveContents);
+        Texture2D red(device, 1, 1, false, SurfaceFormat::Color);
+        const Color redPixel = Color::Red;
+        red.SetData(&redPixel, 1);
+
+        DepthStencilState less;
+        less.setDepthBufferEnableProperty(true);
+        less.setDepthBufferWriteEnableProperty(true);
+        less.setDepthBufferFunctionProperty(CompareFunction::Less);
+
+        device.SetRenderTarget(&target);
+        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                     Color::Black, 0.25f, 0);
+
+        SpriteBatch batch(device);
+        const Matrix transform = Matrix::CreateTranslation(0.0f, 0.0f, 0.5f);
+        batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                    &less, &RasterizerState::CullNone, nullptr, transform);
+        batch.Draw(red, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 1, 1), Color::White,
+                   0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
+        batch.End();
+        device.SetRenderTarget(nullptr);
+        return ReadCenter(target);
+    }
+
+    std::pair<Color, Color> RenderSpriteHomogeneousWProbe()
+    {
+        GraphicsDevice device;
+        RenderTarget2D target(
+            device, 8, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::PreserveContents);
+        Texture2D red(device, 1, 1, false, SurfaceFormat::Color);
+        const Color redPixel = Color::Red;
+        red.SetData(&redPixel, 1);
+
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+
+        Matrix transform = Matrix::getIdentityProperty();
+        transform.M44 = 2.0f;
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                    &DepthStencilState::None, &RasterizerState::CullNone, nullptr, transform);
+        batch.Draw(red, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 1, 1), Color::White,
+                   0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
+        batch.End();
+        device.SetRenderTarget(nullptr);
+
+        Color inside;
+        Color outside;
+        const Rectangle insideRect(2, 2, 1, 1);
+        const Rectangle outsideRect(6, 6, 1, 1);
+        target.GetData(0, &insideRect, &inside, 0, 1);
+        target.GetData(0, &outsideRect, &outside, 0, 1);
+        return {inside, outside};
+    }
+
+    std::pair<Color, Color> RenderSpriteTransformedNearClipProbe()
+    {
+        GraphicsDevice device;
+        RenderTarget2D target(
+            device, 8, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::PreserveContents);
+        Texture2D red(device, 1, 1, false, SurfaceFormat::Color);
+        const Color redPixel = Color::Red;
+        red.SetData(&redPixel, 1);
+
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+
+        // z = x/4 - 1 crosses XNA's homogeneous near plane at sprite x=4 and reaches the
+        // far plane at x=8. The left half must be clipped while the right half remains visible.
+        Matrix transform = Matrix::getIdentityProperty();
+        transform.M13 = 0.25f;
+        transform.M43 = -1.0f;
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                    &DepthStencilState::None, &RasterizerState::CullNone, nullptr, transform);
+        batch.Draw(red, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 1, 1), Color::White,
+                   0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
+        batch.End();
+        device.SetRenderTarget(nullptr);
+
+        Color clipped;
+        Color visible;
+        const Rectangle clippedRect(2, 4, 1, 1);
+        const Rectangle visibleRect(6, 4, 1, 1);
+        target.GetData(0, &clippedRect, &clipped, 0, 1);
+        target.GetData(0, &visibleRect, &visible, 0, 1);
+        return {clipped, visible};
+    }
+
+    std::pair<Color, Color> RenderSpriteVaryingWProbe()
+    {
+        GraphicsDevice device;
+        RenderTarget2D target(
+            device, 8, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::PreserveContents);
+        Texture2D texture(device, 2, 1, false, SurfaceFormat::Color);
+        const Color pixels[2] = {Color::Red, Color::Green};
+        texture.SetData(pixels, 2);
+
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+
+        // w = 1 + x/8 maps the right edge from x=8 to x=4. At screen x=3.5 the
+        // perspective-correct source coordinate is about 0.78 (green); affine interpolation of
+        // the post-divide endpoints would incorrectly produce about 0.44 (red).
+        Matrix transform = Matrix::getIdentityProperty();
+        transform.M14 = 0.125f;
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                    &DepthStencilState::None, &RasterizerState::CullNone, nullptr, transform);
+        batch.Draw(texture, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 2, 1), Color::White,
+                   0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
+        batch.End();
+        device.SetRenderTarget(nullptr);
+
+        Color perspectiveCorrect;
+        Color outside;
+        const Rectangle perspectiveRect(3, 2, 1, 1);
+        const Rectangle outsideRect(5, 2, 1, 1);
+        target.GetData(0, &perspectiveRect, &perspectiveCorrect, 0, 1);
+        target.GetData(0, &outsideRect, &outside, 0, 1);
+        return {perspectiveCorrect, outside};
+    }
+
+    Color RenderSpriteViewportDepthRangeProbe()
+    {
+        GraphicsDevice device;
+        RenderTarget2D target(
+            device, 8, 8, false, SurfaceFormat::Color, DepthFormat::Depth24, 0,
+            RenderTargetUsage::PreserveContents);
+        Texture2D red(device, 1, 1, false, SurfaceFormat::Color);
+        const Color redPixel = Color::Red;
+        red.SetData(&redPixel, 1);
+
+        DepthStencilState less;
+        less.setDepthBufferEnableProperty(true);
+        less.setDepthBufferWriteEnableProperty(true);
+        less.setDepthBufferFunctionProperty(CompareFunction::Less);
+
+        device.SetRenderTarget(&target);
+        Viewport viewport = device.getViewportProperty();
+        viewport.setMinDepthProperty(0.4f);
+        viewport.setMaxDepthProperty(0.8f);
+        device.setViewportProperty(viewport);
+        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                     Color::Black, 0.55f, 0);
+
+        SpriteBatch batch(device);
+        batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                    &less, &RasterizerState::CullNone);
+        batch.Draw(red, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 1, 1), Color::White,
+                   0.0f, Vector2::Zero, SpriteEffects::None, 0.5f);
+        batch.End();
+        device.SetRenderTarget(nullptr);
+        return ReadCenter(target);
+    }
 }
 
 TEST(BackBufferDepthStencilContractTest, NoneAndDepth24SelectDepthFragmentAcceptance)
@@ -375,6 +541,50 @@ TEST(BackBufferDepthStencilContractTest, SpriteBatchLayerDepthParticipatesInDept
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
 
     EXPECT_EQ(RenderSpriteDepthWinner(), Color::Red);
+}
+
+TEST(BackBufferDepthStencilContractTest, SpriteBatchTransformsLayerDepthBeforeDepthTesting)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    EXPECT_EQ(RenderSpriteTransformedDepthProbe(), Color::Black)
+        << "SpriteBatch must transform POSITION.Z before the depth test";
+}
+
+TEST(BackBufferDepthStencilContractTest, SpriteBatchPreservesHomogeneousTransformW)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    const auto [inside, outside] = RenderSpriteHomogeneousWProbe();
+    EXPECT_EQ(inside, Color::Red);
+    EXPECT_EQ(outside, Color::Black)
+        << "M44=2 must divide the sprite's X/Y extent by homogeneous W";
+}
+
+TEST(BackBufferDepthStencilContractTest, SpriteBatchClipsTransformedDepthAtXnaNearPlane)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    const auto [clipped, visible] = RenderSpriteTransformedNearClipProbe();
+    EXPECT_EQ(clipped, Color::Black);
+    EXPECT_EQ(visible, Color::Red);
+}
+
+TEST(BackBufferDepthStencilContractTest, SpriteBatchInterpolatesThroughVaryingTransformW)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    const auto [perspectiveCorrect, outside] = RenderSpriteVaryingWProbe();
+    EXPECT_EQ(perspectiveCorrect, Color::Green);
+    EXPECT_EQ(outside, Color::Black);
+}
+
+TEST(BackBufferDepthStencilContractTest, SpriteBatchUsesViewportDepthRange)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    EXPECT_EQ(RenderSpriteViewportDepthRangeProbe(), Color::Black)
+        << "layer depth 0.5 must map to 0.6 through viewport depth range [0.4, 0.8]";
 }
 
 TEST(BackBufferDepthStencilContractTest, UnknownClearOptionBitsAreIgnored)

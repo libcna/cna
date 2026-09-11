@@ -3,6 +3,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 
 #include <array>
 #include <cstddef>
@@ -1775,9 +1776,11 @@ namespace CNA::Internal::Renderers::Software
         /// geometry/transform path in its own translation unit while all CPU 2D and 3D triangles
         /// continue to share one fragment implementation.
         void RasterizeSpriteQuad(const ITextureRenderer& texture,
-                                 const Vector2& c0, const Vector2& c1,
-                                 const Vector2& c2, const Vector2& c3,
-                                 float layerDepth, float r, float g, float b, float a,
+                                 const Microsoft::Xna::Framework::Vector4& c0,
+                                 const Microsoft::Xna::Framework::Vector4& c1,
+                                 const Microsoft::Xna::Framework::Vector4& c2,
+                                 const Microsoft::Xna::Framework::Vector4& c3,
+                                 float r, float g, float b, float a,
                                  float u1, float v1, float u2, float v2,
                                  Effect* customEffect,
                                  const SoftwareSamplerState& spriteSampler);

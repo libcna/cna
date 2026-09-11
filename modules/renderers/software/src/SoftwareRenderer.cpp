@@ -404,7 +404,6 @@ namespace CNA::Internal::Renderers::Software
             return passingSamples;
         }
 
-#ifndef CNA_SOFTWARE_2D_ONLY
         /// One vertex in clip space (before the perspective divide), attributes NOT premultiplied
         /// by W (SOFTWARE-83/106). Clip space is still linear -- position and attributes can both be
         /// interpolated with a plain lerp here, unlike the post-divide RasterVertex above.
@@ -633,22 +632,9 @@ namespace CNA::Internal::Renderers::Software
         ///   depth   = Viewport.MinDepth + ndcZ * (Viewport.MaxDepth - Viewport.MinDepth)
         /// -- so a custom GraphicsDevice.Viewport positions (X/Y), sub-scales (Width/Height), and
         /// depth-range-remaps 3D geometry, instead of the old mapping over the full framebuffer.
-        RasterVertex ClipVertexToRasterVertex(const ClipVertex& cv, const ViewportTransform& vp)
+        RasterVertex ClipVertexToRasterVertexWithOffset(
+            const ClipVertex& cv, const ViewportTransform& vp, float pixelCenterOffset)
         {
-            // SOFTWARE-131: XNA 4.0's Direct3D 9 raster coordinates place pixel centers at integer
-            // screen coordinates. This CPU rasterizer samples in the conventional corner-origin
-            // space at pixel + 0.5, so translate geometry by Wine/MonoGame/EasyGL's established
-            // 63/128-pixel amount. Staying just below one half selects the XNA side of exact fill
-            // edges after finite subpixel precision instead of leaving the result on the tie.
-            // REMED-GFX-235/SOFTWARE-134: the single-sample correction is deliberately absent
-            // from multisampled destinations. Moving four subpixel sample locations by
-            // almost half a pixel drops three samples at the outer corner and two on each outer
-            // edge. EasyGL established the same distinction against the shared render-target
-            // readback corpus; XNA's measured one-pixel triangle remains protected on ordinary
-            // single-sample destinations.
-            constexpr float kXnaPixelCenterOffset = 63.0f / 128.0f;
-            const float pixelCenterOffset =
-                vp.multisampledDestination ? 0.0f : kXnaPixelCenterOffset;
             const float invW = 1.0f / cv.w;
             const float ndcX = cv.x * invW;
             const float ndcY = cv.y * invW;
@@ -683,7 +669,34 @@ namespace CNA::Internal::Renderers::Software
             out.nz = cv.nz * invW;
             return out;
         }
-#endif
+
+        RasterVertex ClipVertexToRasterVertex(const ClipVertex& cv, const ViewportTransform& vp)
+        {
+            // SOFTWARE-131: XNA 4.0's Direct3D 9 raster coordinates place pixel centers at integer
+            // screen coordinates. This CPU rasterizer samples in the conventional corner-origin
+            // space at pixel + 0.5, so translate geometry by Wine/MonoGame/EasyGL's established
+            // 63/128-pixel amount. Staying just below one half selects the XNA side of exact fill
+            // edges after finite subpixel precision instead of leaving the result on the tie.
+            // REMED-GFX-235/SOFTWARE-134: the single-sample correction is deliberately absent
+            // from multisampled destinations. Moving four subpixel sample locations by
+            // almost half a pixel drops three samples at the outer corner and two on each outer
+            // edge. EasyGL established the same distinction against the shared render-target
+            // readback corpus; XNA's measured one-pixel triangle remains protected on ordinary
+            // single-sample destinations.
+            constexpr float kXnaPixelCenterOffset = 63.0f / 128.0f;
+            const float pixelCenterOffset =
+                vp.multisampledDestination ? 0.0f : kXnaPixelCenterOffset;
+            return ClipVertexToRasterVertexWithOffset(cv, vp, pixelCenterOffset);
+        }
+
+        /// SOFTWARE-338: SpriteBatch's existing screen-space route already aligns rectangle edges
+        /// to pixel corners. Preserve that placement while adding the same homogeneous clipping,
+        /// perspective divide and viewport depth mapping used by the 3D routes.
+        RasterVertex SpriteClipVertexToRasterVertex(
+            const ClipVertex& cv, const ViewportTransform& vp)
+        {
+            return ClipVertexToRasterVertexWithOffset(cv, vp, 0.0f);
+        }
 
         float EdgeFunction(float ax, float ay, float bx, float by, float px, float py)
         {
@@ -2871,23 +2884,6 @@ namespace CNA::Internal::Renderers::Software
         }
 #endif
 
-        /// Builds a RasterVertex directly from already-final screen-space pixel coordinates, with
-        /// no perspective divide needed (invW=1) -- used by SpriteBatch's own 2D quads, which are
-        /// placed directly in screen space rather than going through World*View*Projection.
-        RasterVertex MakeScreenSpaceVertex(float x, float y, float depth,
-                                           float r, float g, float b, float a, float u, float v)
-        {
-            RasterVertex out;
-            out.x = x;
-            out.y = y;
-            out.depth = depth;
-            out.invW = 1.0f;
-            out.r = r; out.g = g; out.b = b; out.a = a;
-            out.u = u; out.v = v;
-            out.u1 = u; out.v1 = v;
-            return out;
-        }
-
         /// REMED-GFX-073/079: the raster clip rectangle = the GraphicsDevice.Viewport rectangle
         /// intersected with the framebuffer. Uses a wider intermediate for the right/bottom edge so
         /// a large Viewport.X+Width / Viewport.Y+Height cannot overflow int; a zero/negative-size
@@ -4244,18 +4240,41 @@ namespace CNA::Internal::Renderers::Software
 
     void SoftwareRenderer::RasterizeSpriteQuad(
         const ITextureRenderer& texture,
-        const Vector2& c0, const Vector2& c1, const Vector2& c2, const Vector2& c3,
-        float layerDepth, float r, float g, float b, float a,
+        const Vector4& c0, const Vector4& c1, const Vector4& c2, const Vector4& c3,
+        float r, float g, float b, float a,
         float u1, float v1, float u2, float v2,
         Effect* customEffect, const SoftwareSamplerState& spriteSampler)
     {
         SoftwareFramebuffer& fb = CurrentFramebuffer();
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
-        GetActiveViewport(vpX, vpY, vpW, vpH);
-        const RasterVertex rv0 = MakeScreenSpaceVertex(c0.X, c0.Y, layerDepth, r, g, b, a, u1, v1);
-        const RasterVertex rv1 = MakeScreenSpaceVertex(c1.X, c1.Y, layerDepth, r, g, b, a, u2, v1);
-        const RasterVertex rv2 = MakeScreenSpaceVertex(c2.X, c2.Y, layerDepth, r, g, b, a, u2, v2);
-        const RasterVertex rv3 = MakeScreenSpaceVertex(c3.X, c3.Y, layerDepth, r, g, b, a, u1, v2);
+        float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
+        GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
+        if (vpW <= 0 || vpH <= 0)
+            return;
+        const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
+                                    static_cast<float>(vpW), static_cast<float>(vpH),
+                                    vpMinDepth, vpMaxDepth, fb.multiSampleCount > 1};
+
+        // SOFTWARE-338: apply FNA's inlined SpriteBatch orthographic projection after the caller's
+        // full homogeneous transform. This keeps transformed Z/W observable and leaves viewport
+        // origin outside the transform. The result uses XNA/D3D's 0 <= Z <= W clip volume.
+        const float xScale = 2.0f / static_cast<float>(vpW);
+        const float yScale = -2.0f / static_cast<float>(vpH);
+        const auto makeClipVertex = [&](const Vector4& position, float u, float v) {
+            ClipVertex out;
+            out.x = xScale * position.X - position.W;
+            out.y = yScale * position.Y + position.W;
+            out.z = position.Z;
+            out.w = position.W;
+            out.r = r; out.g = g; out.b = b; out.a = a;
+            out.u = u; out.v = v;
+            out.u1 = u; out.v1 = v;
+            return out;
+        };
+        const ClipVertex cv0 = makeClipVertex(c0, u1, v1);
+        const ClipVertex cv1 = makeClipVertex(c1, u2, v1);
+        const ClipVertex cv2 = makeClipVertex(c2, u2, v2);
+        const ClipVertex cv3 = makeClipVertex(c3, u1, v2);
 
         // REMED-GFX-030: snapshot the complete depth tuple for this submitted sprite draw.
         const RasterDepthState depthState{IsDepthTestEnabled(),
@@ -4281,16 +4300,6 @@ namespace CNA::Internal::Renderers::Software
         GetActiveScissor(scX, scY, scW, scH);
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 IsScissorTestEnabled(), scX, scY, scW, scH);
-        const float quadMinX = std::min({c0.X, c1.X, c2.X, c3.X});
-        const float quadMinY = std::min({c0.Y, c1.Y, c2.Y, c3.Y});
-        const float quadMaxX = std::max({c0.X, c1.X, c2.X, c3.X});
-        const float quadMaxY = std::max({c0.Y, c1.Y, c2.Y, c3.Y});
-        int damageMinX = 0, damageMinY = 0, damageMaxX = -1, damageMaxY = -1;
-        if (CalculateRasterBounds(quadMinX, quadMinY, quadMaxX, quadMaxY, clip,
-                                  damageMinX, damageMinY, damageMaxX, damageMaxY))
-        {
-            OnSpriteRasterBounds(damageMinX, damageMinY, damageMaxX, damageMaxY);
-        }
         GpuDrawParams spriteParams;
         // REMED-GFX-124: hand the sprite's texture on as the plain renderer handle and let
         // RasterizeTriangleShaded resolve the colour-storage capability, so this path has no second,
@@ -4320,18 +4329,63 @@ namespace CNA::Internal::Renderers::Software
         // channel (SetSamplerFilter/SetSamplerAddressMode), exactly as it does on every GPU renderer.
         // Begin always re-applies it, so it cannot leak in from a previous batch, and passing it
         // here rather than through the device slots means a sprite batch cannot leak it out either.
-        RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
-                                cullMode, depthBias, slopeScaleDepthBias,
-                                spriteParams, clip, rv0, rv1, rv2,
-                                GetColorWriteMask(), GetMultiSampleMask(),
-                                spriteSampler, spriteSampler, activeOcclusionQuery_,
-                                IsMultiSampleAntiAliasEnabled(), wire, kEdgeAll);
-        RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
-                                cullMode, depthBias, slopeScaleDepthBias,
-                                spriteParams, clip, rv2, rv3, rv0,
-                                GetColorWriteMask(), GetMultiSampleMask(),
-                                spriteSampler, spriteSampler, activeOcclusionQuery_,
-                                IsMultiSampleAntiAliasEnabled(), wire, kEdgeAll);
+        float visibleMinX = std::numeric_limits<float>::infinity();
+        float visibleMinY = std::numeric_limits<float>::infinity();
+        float visibleMaxX = -std::numeric_limits<float>::infinity();
+        float visibleMaxY = -std::numeric_limits<float>::infinity();
+        bool haveVisibleVertex = false;
+        const auto rasterizeClippedTriangle = [&](const ClipVertex& aClip,
+                                                   const ClipVertex& bClip,
+                                                   const ClipVertex& cClip) {
+            const ClipVertex input[3] = {aClip, bClip, cClip};
+            std::array<ClipVertex, kMaxClippedTriangleVertices> clipped{};
+            const int clippedCount = ClipTriangleToFrustum(input, clipped);
+            if (clippedCount == 0)
+                return;
+
+            std::array<RasterVertex, kMaxClippedTriangleVertices> vertices{};
+            for (int i = 0; i < clippedCount; ++i)
+            {
+                RasterVertex& vertex = vertices[static_cast<std::size_t>(i)];
+                vertex = SpriteClipVertexToRasterVertex(
+                    clipped[static_cast<std::size_t>(i)], vpT);
+                visibleMinX = std::min(visibleMinX, vertex.x);
+                visibleMinY = std::min(visibleMinY, vertex.y);
+                visibleMaxX = std::max(visibleMaxX, vertex.x);
+                visibleMaxY = std::max(visibleMaxY, vertex.y);
+                haveVisibleVertex = true;
+            }
+
+            // Fan triangulation retains only the clipped polygon boundary in wireframe. For an
+            // unclipped submitted triangle the mask is kEdgeAll, preserving SpriteBatch's visible
+            // quad-split diagonal exactly as before this homogeneous route.
+            for (int fan = 1; fan + 1 < clippedCount; ++fan)
+            {
+                unsigned edgeMask = kEdgeV1V2;
+                if (fan == 1) edgeMask |= kEdgeV0V1;
+                if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
+                RasterizeTriangleShaded(
+                    fb, depthState, stencilState, blendState, blendFactor,
+                    cullMode, depthBias, slopeScaleDepthBias,
+                    spriteParams, clip, vertices[0],
+                    vertices[static_cast<std::size_t>(fan)],
+                    vertices[static_cast<std::size_t>(fan + 1)],
+                    GetColorWriteMask(), GetMultiSampleMask(),
+                    spriteSampler, spriteSampler, activeOcclusionQuery_,
+                    IsMultiSampleAntiAliasEnabled(), wire, edgeMask);
+            }
+        };
+
+        rasterizeClippedTriangle(cv0, cv1, cv2);
+        rasterizeClippedTriangle(cv2, cv3, cv0);
+
+        int damageMinX = 0, damageMinY = 0, damageMaxX = -1, damageMaxY = -1;
+        if (haveVisibleVertex &&
+            CalculateRasterBounds(visibleMinX, visibleMinY, visibleMaxX, visibleMaxY, clip,
+                                  damageMinX, damageMinY, damageMaxX, damageMaxY))
+        {
+            OnSpriteRasterBounds(damageMinX, damageMinY, damageMaxX, damageMaxY);
+        }
     }
 
     std::unique_ptr<ITexture3DRenderer> SoftwareRenderer::CreateTexture3D(

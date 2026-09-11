@@ -2,7 +2,7 @@
 
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 
-#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -12,6 +12,7 @@
 namespace CNA::Internal::Renderers::Software
 {
     using Vector3 = Microsoft::Xna::Framework::Vector3;
+    using Vector4 = Microsoft::Xna::Framework::Vector4;
 
     // Phase S6 (SOFTWARE-51): SpriteBatch owns the public quad geometry and transform path; its
     // four prepared corners then enter SoftwareRenderer::RasterizeSpriteQuad(), where they
@@ -109,33 +110,30 @@ namespace CNA::Internal::Renderers::Software
         const float cosR = std::cos(rotation);
         const float sinR = std::sin(rotation);
 
-        // REMED-GFX-073: SpriteBatch coordinates are VIEWPORT-LOCAL. The Software path builds the
-        // viewport-local corner, applies the optional transform, then positions it at the viewport
-        // origin (which is deliberately not itself transformed).
-        int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
-        owner_.GetActiveViewport(vpX, vpY, vpW, vpH);
-        const auto placeCorner = [&](float px, float py) -> Vector2 {
+        // SOFTWARE-338: preserve FNA's complete `(x,y,layerDepth,1) * transformMatrix` result.
+        // RasterizeSpriteQuad applies the SpriteBatch projection and viewport after homogeneous
+        // clipping, so Viewport.X/Y remain outside the caller's transform (REMED-GFX-073).
+        const auto placeCorner = [&](float px, float py) -> Vector4 {
             const float rx = dx + px * cosR - py * sinR;
             const float ry = dy + px * sinR + py * cosR;
-            const Vector3 transformed = Vector3::Transform(Vector3(rx, ry, 0.0f), transformMatrix_);
-            return Vector2(transformed.X + static_cast<float>(vpX),
-                           transformed.Y + static_cast<float>(vpY));
+            return Vector4::Transform(Vector3(rx, ry, layerDepth), transformMatrix_);
         };
 
-        const Vector2 c0 = placeCorner(p0x, p0y);
-        const Vector2 c1 = placeCorner(p1x, p1y);
-        const Vector2 c2 = placeCorner(p2x, p2y);
-        const Vector2 c3 = placeCorner(p3x, p3y);
+        const Vector4 c0 = placeCorner(p0x, p0y);
+        const Vector4 c1 = placeCorner(p1x, p1y);
+        const Vector4 c2 = placeCorner(p2x, p2y);
+        const Vector4 c3 = placeCorner(p3x, p3y);
 
         // A non-finite transform cannot cover a defined framebuffer pixel. Reject it before both
         // damage calculation and raster edge math, keeping huge/invalid matrices deterministic.
-        if (!std::isfinite(c0.X) || !std::isfinite(c0.Y) ||
-            !std::isfinite(c1.X) || !std::isfinite(c1.Y) ||
-            !std::isfinite(c2.X) || !std::isfinite(c2.Y) ||
-            !std::isfinite(c3.X) || !std::isfinite(c3.Y))
+        const auto finite = [](const Vector4& value) {
+            return std::isfinite(value.X) && std::isfinite(value.Y) &&
+                   std::isfinite(value.Z) && std::isfinite(value.W);
+        };
+        if (!finite(c0) || !finite(c1) || !finite(c2) || !finite(c3))
             return;
 
-        owner_.RasterizeSpriteQuad(texture, c0, c1, c2, c3, layerDepth, r, g, b, a, u1, v1, u2, v2,
+        owner_.RasterizeSpriteQuad(texture, c0, c1, c2, c3, r, g, b, a, u1, v1, u2, v2,
                                    customEffect_, GetSamplerState());
     }
 }

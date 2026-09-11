@@ -454,7 +454,8 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   clipped before perspective divide against XNA/Direct3D's six clip planes
   (`-W <= X,Y <= W`, `0 <= Z <= W`). Polygon clipping interpolates all active varyings, preserves
   winding, supports multi-plane results larger than the old near-only quad, and keeps internal fan
-  diagonals out of wireframe output.
+  diagonals out of wireframe output. `SOFTWARE-338` routes fully transformed SpriteBatch triangles
+  through this same clipper while retaining SpriteBatch's established pixel-corner placement.
 - **XNA/D3D raster coverage** (`SOFTWARE-107`, `SOFTWARE-131`, `SOFTWARE-136`) — 3D viewport mapping reproduces
   Direct3D 9's integer pixel-center convention, and exact triangle boundaries use the top-left fill
   rule. Adjacent triangles therefore own a shared edge exactly once regardless of draw order or
@@ -537,11 +538,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   `z<0` is clipped, the full viewport depth interval is used, and MojoShader compiled Effects no
   longer need a per-draw depth-range workaround.
 - **`SpriteBatch.layerDepth` is real vertex depth on both renderers** (`SOFTWARE-337`). FNA writes
-  the value into `POSITION0.Z`; Software already rasterized it directly, and EasyGL now retains the
-  same Vector3 position through both its built-in shader and compiled-Effect SpriteBatch route.
-  An exact Depth24/LessEqual scene proves a later far sprite cannot overwrite a nearer one. The
-  separate `SOFTWARE-338` audit covers matrices that couple this Z value into transformed Z/W;
-  Software's current 2D-specialized transform path does not yet reproduce that uncommon case.
+  the value into `POSITION0.Z`; EasyGL retains the same Vector3 position through both its built-in
+  shader and compiled-Effect SpriteBatch route. `SOFTWARE-338` closes the adjacent Software
+  transform gap: the CPU path now multiplies `(x,y,layerDepth,1)` by the complete matrix, applies
+  FNA's SpriteBatch projection, clips in homogeneous space, divides by W, interpolates texture
+  coordinates perspective-correctly and maps depth through `Viewport.MinDepth/MaxDepth`. Exact
+  tests distinguish transformed Z acceptance, transformed-W coverage, near clipping and viewport
+  depth range on both renderers.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared
