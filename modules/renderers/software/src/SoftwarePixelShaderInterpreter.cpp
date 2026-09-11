@@ -1223,6 +1223,32 @@ private:
                    {0u, 1u, 2u}, matrixRows));
       return;
     }
+    if (instruction.opcode == 84u) {
+      if (program_.majorVersion != 1u || program_.minorVersion != 3u ||
+          tokens.size() != 3u || legacyTextureMatrix2Source_ < 0)
+        throw std::runtime_error(
+            "Software pixel shader: malformed TEXM3X2DEPTH sequence.");
+      const Operand destination = DecodeDestination(tokens[1]);
+      std::size_t cursor = 2u;
+      RegisterType relativeType;
+      int relativeComponent = 0;
+      const Operand source = DecodeSource(tokens, cursor, program_.majorVersion,
+                                          relativeType, relativeComponent);
+      if (destination.type != RegisterType::Texture || source.relative ||
+          source.type != RegisterType::Texture || source.sourceModifier != 0u ||
+          source.swizzle != 0xE4u || source.number != legacyTextureMatrix2Source_ ||
+          destination.number != legacyTextureMatrix2PadDestination_ + 1 ||
+          cursor != tokens.size())
+        throw std::runtime_error(
+            "Software pixel shader: invalid TEXM3X2DEPTH register sequence.");
+      const float divisor = Dot(ReadRaw(destination.type, destination.number),
+                                ReadRaw(source.type, source.number), 3);
+      depthOutput_ = divisor == 0.0f ? 1.0f : legacyTextureMatrix2Dot_ / divisor;
+      depthWritten_ = true;
+      legacyTextureMatrix2Source_ = -1;
+      legacyTextureMatrix2PadDestination_ = -1;
+      return;
+    }
     if (instruction.opcode == 73u) {
       if (tokens.size() != 3u || legacyTextureMatrixDotCount_ >= 2u)
         throw std::runtime_error(
@@ -1323,6 +1349,20 @@ private:
     }
     if (instruction.opcode == 93u || instruction.opcode == 95u) {
       ExecuteTextureLodInstruction(instruction);
+      return;
+    }
+    if (instruction.opcode == 87u) {
+      if (program_.majorVersion != 1u || program_.minorVersion != 4u ||
+          tokens.size() != 2u)
+        throw std::runtime_error(
+            "Software pixel shader: malformed TEXDEPTH instruction.");
+      const Operand destination = DecodeDestination(tokens[1]);
+      if (destination.type != RegisterType::Temporary || destination.number != 5)
+        throw std::runtime_error(
+            "Software pixel shader: TEXDEPTH destination is not r5.");
+      const Vector value = ReadRaw(destination.type, destination.number);
+      depthOutput_ = value[1] == 0.0f ? 1.0f : value[0] / value[1];
+      depthWritten_ = true;
       return;
     }
 

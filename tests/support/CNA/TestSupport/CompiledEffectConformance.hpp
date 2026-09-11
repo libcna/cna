@@ -17,6 +17,8 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
@@ -1730,6 +1732,67 @@ namespace CNA::TestSupport
             << "TEXM3X3VSPEC must take E=(.1,.2,1) from the three matrix-row w components";
         EXPECT_EQ(render(varyingEye, /*minifyEye=*/true), Color::Black)
             << "TEXM3X3VSPEC implicit LOD must include variation in the row-w eye ray";
+    }
+
+    /**
+     * @brief Proves the ps_1_3 matrix and ps_1_4 register forms of legacy pixel-depth output.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyDepthOutputContract(GraphicsDevice& device)
+    {
+        const auto render = [&](SyntheticLegacyDepthOutput instruction, bool zeroDivisor)
+        {
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderLegacyDepthOutput = instruction;
+            options.pixelShaderLegacyDepthZeroDivisor = zeroDivisor;
+            Effect effect(device, BuildSyntheticEffect(options));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect.getParametersProperty()["Tint"]->SetValue(
+                Vector4(0.0f, 1.0f, 0.0f, 1.0f));
+
+            struct Vertex { float x, y, z, u, v, w; };
+            const Vertex vertices[6] = {
+                {-1,  1, .75f, 0, 0, 1}, {-1, -1, .75f, 0, 0, 1},
+                { 1, -1, .75f, 0, 0, 1}, {-1,  1, .75f, 0, 0, 1},
+                { 1, -1, .75f, 0, 0, 1}, { 1,  1, .75f, 0, 0, 1},
+            };
+            const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+                VertexElement(0, VertexElementFormat::Vector3,
+                              VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3,
+                              VertexElementUsage::TextureCoordinate, 0),
+            });
+            RenderTarget2D target(
+                device, 4, 4, false, SurfaceFormat::Color,
+                Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24);
+            device.SetRenderTarget(&target);
+            device.Clear(Microsoft::Xna::Framework::Graphics::ClearOptions::Target |
+                             Microsoft::Xna::Framework::Graphics::ClearOptions::DepthBuffer,
+                         Color::Red, .5f, 0);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::Default);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        for (const SyntheticLegacyDepthOutput instruction : {
+                 SyntheticLegacyDepthOutput::TextureMatrix2,
+                 SyntheticLegacyDepthOutput::Register})
+        {
+            EXPECT_EQ(render(instruction, /*zeroDivisor=*/false), Color::Lime)
+                << "the shader depth below .5 must replace raster depth .75 and pass";
+            EXPECT_EQ(render(instruction, /*zeroDivisor=*/true), Color::Red)
+                << "a zero divisor must write depth one and fail against the cleared .5";
+        }
     }
 
     /**
@@ -3944,6 +4007,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectLegacyTextureMatrix2Contract` -- sampled ps_1_2 matrix + implicit LOD
      * - `RunCompiledEffectLegacyTextureMatrix3SampleContract` -- sampled 3x3 + volume LOD
      * - `RunCompiledEffectLegacyTextureMatrix3SpecularContract` -- reflected cube lookups
+     * - `RunCompiledEffectLegacyDepthOutputContract` -- ps_1_3/1_4 depth replacement and zero divide
      * - `RunCompiledEffectLegacyTextureRemapContract` -- ps_1_2 AR/GB sampling and implicit LOD
      * - `RunCompiledEffectMultiStreamDrawContract` -- several streams, and their own offsets
      * - `RunCompiledEffectInstancingDrawContract` -- instanced draws, offsets and divisor reset

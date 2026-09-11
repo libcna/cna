@@ -691,6 +691,14 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix3Specular)
     CNA::TestSupport::RunCompiledEffectLegacyTextureMatrix3SpecularContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyPixelDepthOutputs)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyDepthOutputContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureComponentRemap)
 {
     GraphicsDevice device;

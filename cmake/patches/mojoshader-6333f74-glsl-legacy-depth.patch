@@ -1,0 +1,99 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1882,6 +1882,20 @@ static void state_TEXM3X2TEX(Context *ctx)
+         fail(ctx, "TEXM3X2TEX needs a 2D sampler");
+ } // state_TEXM3X2TEX
+ 
++static void state_TEXM3X2DEPTH(Context *ctx)
++{
++    if (!shader_version_exactly(ctx, 1, 3))
++        fail(ctx, "TEXM3X2DEPTH opcode only available in Shader Model 1.3");
++    if (ctx->texm3x2pad_dst0 == -1)
++        fail(ctx, "TEXM3X2DEPTH opcode without matching TEXM3X2PAD");
++    state_texops(ctx, "TEXM3X2DEPTH", 0, 0);
++    if (ctx->source_args[0].regnum != ctx->texm3x2pad_src0)
++        fail(ctx, "TEXM3X2DEPTH source differs from matching TEXM3X2PAD");
++    if (ctx->dest_arg.regnum != ctx->texm3x2pad_dst0 + 1)
++        fail(ctx, "TEXM3X2DEPTH destination does not follow matching TEXM3X2PAD");
++    ctx->reset_texmpad = 1;
++} // state_TEXM3X2DEPTH
++
+ static void state_TEXM3X3PAD(Context *ctx)
+ {
+     if (shader_version_atleast(ctx, 1, 4))
+@@ -1949,6 +1963,14 @@ static void state_TEXM3X3VSPEC(Context *ctx)
+     state_texm3x3(ctx, "TEXM3X3VSPEC", 3);
+ } // state_TEXM3X3VSPEC
+ 
++static void state_TEXDEPTH(Context *ctx)
++{
++    if (!shader_version_exactly(ctx, 1, 4))
++        fail(ctx, "TEXDEPTH opcode only available in Shader Model 1.4");
++    if ((ctx->dest_arg.regtype != REG_TYPE_TEMP) || (ctx->dest_arg.regnum != 5))
++        fail(ctx, "TEXDEPTH destination must be r5");
++} // state_TEXDEPTH
++
+ 
+ static void state_TEXLD(Context *ctx)
+ {
+diff --git a/mojoshader_internal.h b/mojoshader_internal.h
+--- a/mojoshader_internal.h
++++ b/mojoshader_internal.h
+@@ -758,10 +758,10 @@ INSTRUCTION_STATE(CND, "CND", 1, DSSS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(DEF, "DEF", 0, DEF, MOJOSHADER_TYPE_ANY, 0xF)
+ INSTRUCTION(TEXREG2RGB, "TEXREG2RGB", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION(TEXDP3TEX, "TEXDP3TEX", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+-INSTRUCTION(TEXM3X2DEPTH, "TEXM3X2DEPTH", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
++INSTRUCTION_STATE(TEXM3X2DEPTH, "TEXM3X2DEPTH", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION(TEXDP3, "TEXDP3", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(TEXM3X3, "TEXM3X3", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+-INSTRUCTION(TEXDEPTH, "TEXDEPTH", 1, D, MOJOSHADER_TYPE_PIXEL, 0xF)
++INSTRUCTION_STATE(TEXDEPTH, "TEXDEPTH", 1, D, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(CMP, "CMP", 1, DSSS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION(BEM, "BEM", 2, DSS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(DP2ADD, "DP2ADD", 2, DSSS, MOJOSHADER_TYPE_PIXEL, 0xF)
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -2582,7 +2582,24 @@ void emit_GLSL_DEF(Context *ctx)
+ 
+ EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(TEXREG2RGB) // !!! FIXME
+ EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(TEXDP3TEX) // !!! FIXME
+-EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(TEXM3X2DEPTH) // !!! FIXME
++void emit_GLSL_TEXM3X2DEPTH(Context *ctx)
++{
++    if (ctx->texm3x2pad_src0 == -1)
++        return;
++
++    char vector[64];
++    char numeratorRow[64];
++    char denominatorRow[64];
++    get_GLSL_varname_in_buf(ctx, REG_TYPE_TEXTURE, ctx->texm3x2pad_src0,
++                            vector, sizeof (vector));
++    get_GLSL_varname_in_buf(ctx, REG_TYPE_TEXTURE, ctx->texm3x2pad_dst0,
++                            numeratorRow, sizeof (numeratorRow));
++    get_GLSL_destarg_varname(ctx, denominatorRow, sizeof (denominatorRow));
++    output_line(ctx,
++        "gl_FragDepth = (dot(%s.xyz, %s.xyz) == 0.0) ? 1.0 : "
++        "(dot(%s.xyz, %s.xyz) / dot(%s.xyz, %s.xyz));",
++        denominatorRow, vector, numeratorRow, vector, denominatorRow, vector);
++} // emit_GLSL_TEXM3X2DEPTH
+ EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(TEXDP3) // !!! FIXME
+ 
+ void emit_GLSL_TEXM3X3(Context *ctx)
+@@ -2618,7 +2636,13 @@ void emit_GLSL_TEXM3X3(Context *ctx)
+     output_line(ctx, "%s", code);
+ } // emit_GLSL_TEXM3X3
+ 
+-EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(TEXDEPTH) // !!! FIXME
++void emit_GLSL_TEXDEPTH(Context *ctx)
++{
++    char dst[64];
++    get_GLSL_destarg_varname(ctx, dst, sizeof (dst));
++    output_line(ctx, "gl_FragDepth = (%s.y == 0.0) ? 1.0 : (%s.x / %s.y);",
++                dst, dst, dst);
++} // emit_GLSL_TEXDEPTH
+ 
+ void emit_GLSL_CMP(Context *ctx)
+ {

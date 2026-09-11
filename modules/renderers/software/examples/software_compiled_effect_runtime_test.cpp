@@ -5,6 +5,7 @@
 #include "CNA/TestSupport/CompiledEffectFixtures.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
@@ -62,6 +63,7 @@ using CNA::Internal::Renderers::Software::ExecuteSoftwarePixelShaderQuadEXT;
 using CNA::Internal::Renderers::Software::ExecuteSoftwareVertexShaderEXT;
 using Microsoft::Xna::Framework::Graphics::Blend;
 using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::ClearOptions;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::CullMode;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
@@ -2297,6 +2299,63 @@ namespace
               "compiled ps_1_2 TEXM3X3VSPEC did not derive LOD from the varying eye ray");
     }
 
+    void CheckCompiledLegacyDepthOutputs()
+    {
+        using CNA::TestSupport::SyntheticLegacyDepthOutput;
+        GraphicsDevice device;
+        const auto render = [&](SyntheticLegacyDepthOutput instruction, bool zeroDivisor)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderLegacyDepthOutput = instruction;
+            options.pixelShaderLegacyDepthZeroDivisor = zeroDivisor;
+            auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+                device, CNA::TestSupport::BuildSyntheticEffect(options));
+            effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect->getParametersProperty()["Tint"]->SetValue(
+                Vector4(0.0f, 1.0f, 0.0f, 1.0f));
+
+            struct Vertex { float x, y, z, u, v, w; };
+            const Vertex vertices[6] = {
+                {-1,  1, .75f, 0, 0, 1}, {-1, -1, .75f, 0, 0, 1},
+                { 1, -1, .75f, 0, 0, 1}, {-1,  1, .75f, 0, 0, 1},
+                { 1, -1, .75f, 0, 0, 1}, { 1,  1, .75f, 0, 0, 1},
+            };
+            const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+                VertexElement(0, VertexElementFormat::Vector3,
+                              VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3,
+                              VertexElementUsage::TextureCoordinate, 0),
+            });
+            RenderTarget2D target(
+                device, 4, 4, false, SurfaceFormat::Color, DepthFormat::Depth24);
+            device.SetRenderTarget(&target);
+            device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                         Color::Red, .5f, 0);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::Default);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        for (const SyntheticLegacyDepthOutput instruction : {
+                 SyntheticLegacyDepthOutput::TextureMatrix2,
+                 SyntheticLegacyDepthOutput::Register})
+        {
+            Check(render(instruction, /*zeroDivisor=*/false) == Color::Lime,
+                  "compiled legacy pixel depth did not replace raster depth");
+            Check(render(instruction, /*zeroDivisor=*/true) == Color::Red,
+                  "compiled legacy pixel depth did not map zero divisor to one");
+        }
+    }
+
     void CheckCompiledLegacyTextureRemap()
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
@@ -3195,6 +3254,7 @@ int main()
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();
         CheckCompiledLegacyTextureMatrix3Specular();
+        CheckCompiledLegacyDepthOutputs();
         CheckCompiledLegacyTextureRemap();
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
