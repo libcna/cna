@@ -524,6 +524,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   `RenderTarget2D`, or cube face; the single-color overload requests only planes that really exist.
   Software and isolated EasyGL tests prove both missing-plane exception types, depth-only success,
   failure atomicity, and backbuffer/render-target behavior.
+- **`Clear(Color)` clears depth to 1.0 independently of `Viewport.MaxDepth`** (`SOFTWARE-334`).
+  Microsoft XNA hardcodes `1f`; FNA's use of the current viewport maximum is a lower-authority
+  divergence. A depth-rendered discriminator first proves that an explicit 0.25 clear rejects a
+  fragment at the viewport maximum, then requires the single-color overload to admit it. The same
+  pre-fix failure and repaired output are proven on Software and isolated EasyGL.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

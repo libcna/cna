@@ -92,7 +92,7 @@ CNA also has a fourth overload `Reset(const PresentationParameters&, GraphicsAda
 
 | FNA signature | CNA status |
 |---|---|
-| `Clear(Color color)` | ✅ (`SOFTWARE-333`: selects only real active attachments) |
+| `Clear(Color color)` | ✅ (`SOFTWARE-333`: selects only real active attachments; `SOFTWARE-334`: Microsoft depth 1.0 rather than FNA `Viewport.MaxDepth`) |
 | `Clear(ClearOptions, Color, float depth, int stencil)` | ✅ (`SOFTWARE-333`: Microsoft missing-attachment exception, intentionally stricter than FNA masking) |
 | `Clear(ClearOptions, Vector4 color, float depth, int stencil)` | ✅ (`SOFTWARE-327/332/333`) |
 

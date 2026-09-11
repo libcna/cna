@@ -605,9 +605,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::Clear(const Color& color)
     {
         // SOFTWARE-333: Microsoft selects its active DefaultClearOptions here; FNA instead asks
-        // for all three aspects and later masks unavailable planes. The remaining MaxDepth value
-        // follows FNA and is audited separately against Microsoft's hardcoded 1.0f.
-        Clear(GetDefaultClearOptions(), color, getViewportProperty().getMaxDepthProperty(), 0);
+        // for all three aspects and later masks unavailable planes. SOFTWARE-334 restores the
+        // separate Microsoft depth value: 1.0f, independent of the current viewport range.
+        Clear(GetDefaultClearOptions(), color, 1.0f, 0);
     }
 
     void GraphicsDevice::Clear(float r, float g, float b, float a)

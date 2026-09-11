@@ -29,6 +29,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/InvalidOperationException.hpp"
 
 using namespace Microsoft::Xna::Framework;
@@ -234,4 +235,31 @@ TEST(BackBufferDepthStencilContractTest, ExplicitMissingRenderTargetAttachmentsT
         System::InvalidOperationException);
     device.SetRenderTarget(nullptr);
     EXPECT_EQ(ReadCenter(depthOnly), Color::Red);
+}
+
+TEST(BackBufferDepthStencilContractTest, SingleArgumentClearUsesOneInsteadOfViewportMaxDepth)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        BackbufferParameters(DepthFormat::Depth24));
+    DepthStencilState less;
+    less.setDepthBufferEnableProperty(true);
+    less.setDepthBufferWriteEnableProperty(true);
+    less.setDepthBufferFunctionProperty(CompareFunction::Less);
+    PrepareDraw(device, less);
+
+    Viewport viewport = device.getViewportProperty();
+    viewport.setMaxDepthProperty(0.25f);
+    device.setViewportProperty(viewport);
+
+    device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                 Color::Black, viewport.getMaxDepthProperty(), 0);
+    DrawFullScreen(device, Color::Red, 1.0f);
+    EXPECT_EQ(ReadCenter(device), Color::Black);
+
+    device.Clear(Color::Blue);
+    DrawFullScreen(device, Color::Red, 1.0f);
+    EXPECT_EQ(ReadCenter(device), Color::Red);
 }
