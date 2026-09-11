@@ -313,6 +313,83 @@
       "generator": "tools/xna-pipeline-oracle/texture/make_mip_dither_fixture.py",
       "note": "Twelve by twelve and uncompressed: the first generated level is six wide, which is where the mip filter's dither shifts its column (XNASWEEP-223).",
       "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_5x5.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_9x9.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_17x3.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt3_5x5.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt3_9x9.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt5_5x5.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt5_17x3.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_1x1.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_22x22.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_6x10.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
+    },
+    {
+      "file": "dds_blocks_dxt1_9x9_mips.dds",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
+      "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
+      "thirdParty": false
     }
   ]
 }

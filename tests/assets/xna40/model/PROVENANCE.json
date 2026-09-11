@@ -691,6 +691,41 @@
    "generator": "tools/xna-pipeline-oracle/model/make_bone_chain_probes.py",
    "note": "Three nodes under an identity root carrying the same three-axis Lcl Rotation and no PreRotation: the shape that takes no pivot residue (XNASWEEP-213).",
    "thirdParty": false
+  },
+  {
+   "file": "fbx_inherit_rrss.fbx",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_inherit_probes.py",
+   "note": "A root scaled (2, 3, 5) over a turning, scaling child under InheritType 0, eInheritRrSs (XNASWEEP-228).",
+   "thirdParty": false
+  },
+  {
+   "file": "fbx_inherit_rsrs.fbx",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_inherit_probes.py",
+   "note": "The same scene under InheritType 1, eInheritRSrs, whose grandchild is where the shear shows (XNASWEEP-228, XNASWEEP-229).",
+   "thirdParty": false
+  },
+  {
+   "file": "fbx_inherit_rrs.fbx",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_inherit_probes.py",
+   "note": "The same scene under InheritType 2, eInheritRrs (XNASWEEP-228).",
+   "thirdParty": false
+  },
+  {
+   "file": "x_generated_normals_exact.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_generated_normal_probes.py",
+   "note": "Twenty-four triangles of the origin and two small integer vectors: the cross product is exact, so only the normalization rounds, and the shared origin is where the accumulation shows (XNASWEEP-231, XNASWEEP-233).",
+   "thirdParty": false
+  },
+  {
+   "file": "x_generated_normals_wide.x",
+   "origin": "generated",
+   "generator": "tools/xna-pipeline-oracle/model/make_generated_normal_probes.py",
+   "note": "Twenty-four triangles of integer coordinates up to 20,000: the differences are exact and every product in the cross rounds (XNASWEEP-231).",
+   "thirdParty": false
   }
  ]
 }
