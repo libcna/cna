@@ -589,7 +589,7 @@ namespace
             R"(if ((passesAlphaTest ? uAlphaTest.z : uAlphaTest.w) < 0.0) discard;)"}}},
         {"sdl-gpu", {{
             R"(out[4] = p.alphaTest[0])",
-            R"(const bool needsAlphaTest = !needsPbr)",
+            R"(const bool needsAlphaTest = !params.pbr && (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f))",
             R"(bool passesAlphaTest = (pbrp.alphaTest.y > 0.0))",
             R"(if ((passesAlphaTest ? pbrp.alphaTest.z : pbrp.alphaTest.w) < 0.0) discard;)"}}},
         {"vulkan", {{
@@ -805,11 +805,11 @@ namespace
         {"sdl-gpu",
          "p.pbrTextureTransformRows[row][component]",
          "pbrp.textureTransformRows[slot * 2 + 1].xyz",
-         {{"texture(uTexture, cnaPbrTransformUV(fragUV, 0))",
-           "texture(uNormalMap, cnaPbrTransformUV(fragUV, 1))",
-           "texture(uMetallicRoughnessMap, cnaPbrTransformUV(fragUV, 2))",
-           "texture(uEmissiveMap, cnaPbrTransformUV(fragUV, 3))",
-           "texture(uOcclusionMap, cnaPbrTransformUV(fragUV, 4))"}}, 1},
+         {{"texture(uTexture, cnaPbrTransformUV(fragUV, 0), samplerLodBias.slots0To3.x)",
+           "texture(uNormalMap, cnaPbrTransformUV(fragUV, 1), samplerLodBias.slots0To3.y)",
+           "texture(uMetallicRoughnessMap, cnaPbrTransformUV(fragUV, 2), samplerLodBias.slots0To3.z)",
+           "texture(uEmissiveMap, cnaPbrTransformUV(fragUV, 3), samplerLodBias.slots0To3.w)",
+           "texture(uOcclusionMap, cnaPbrTransformUV(fragUV, 4), samplerLodBias.slots4To7.x)"}}, 1},
         {"vulkan",
          "out[64 + row * 4 + component] = p.pbrTextureTransformRows[row][component]",
          "pbr.textureTransformRows[slot * 2 + 1].xyz",
@@ -1061,10 +1061,10 @@ namespace
          "mr.b * uMetallicFactor",
          "texture(uOcclusionMap, cnaPbrTransformUV(vUV, 4)).r", 1},
         {"sdl-gpu",
-         "texture(uNormalMap, cnaPbrTransformUV(fragUV, 1)).rgb * 2.0 - 1.0",
+         "texture(uNormalMap, cnaPbrTransformUV(fragUV, 1), samplerLodBias.slots0To3.y).rgb * 2.0 - 1.0",
          "mr.g * pbrp.roughnessFactor",
          "mr.b * pbrp.metallicFactor",
-         "texture(uOcclusionMap, cnaPbrTransformUV(fragUV, 4)).r", 1},
+         "texture(uOcclusionMap, cnaPbrTransformUV(fragUV, 4), samplerLodBias.slots4To7.x).r", 1},
         {"vulkan",
          "texture(uNormalMap, CnaPbrTransformUV(CNA_PBR_UV(1), 1)).rgb * 2.0 - 1.0",
          "mr.g * pbr.emissive_roughness.w",
@@ -1242,7 +1242,7 @@ namespace
          "gl_Position = uWorldViewProj * vec4(aPos, 1.0)",
          "gl_Position = uWorldViewProj * skinnedPos"},
         {"sdl-gpu",
-         "const Matrix wvp = world * view * projection",
+         "const Matrix wvp = ApplyXnaPixelCenter(world * view * projection)",
          "FillExtUniforms(command.uniforms, wvp, params)",
          "for (int wi = 0; wi < 16; ++wi) out[20 + wi] = p.worldColMajor[wi]",
          "gl_Position = pc.mvp * vec4(inPos, 1.0)",
@@ -1369,7 +1369,7 @@ namespace
             "cullMode_ = cullMode",
             "command.renderState = CaptureRenderState()",
             "auto& cache = skinned ? (colored ? pbrSkinnedColorPipelines_ : pbrSkinnedPipelines_)",
-            "FillRasterizerState(pipelineInfo.rasterizer_state, renderState, pipelineInfo.primitive_type)"}}},
+            "FillRasterizerState(pipelineInfo.rasterizer_state, renderState, pipelineInfo.primitive_type, depthStencilFormat)"}}},
         {"vulkan", {{
             "cullMode_ = cullMode",
             "d.cullMode = cullMode_",
@@ -1465,8 +1465,8 @@ namespace
         {"sdl-gpu",
          "out[i] = p.boneTransforms[i]",
          "command.lightUniforms[39] = static_cast<float>(params.weightsPerVertex)",
-         "if (weightsPerVertex >= 2.0) skinMat += bb.bones[inBoneIndices.y] * inBoneWeights.y",
-         "if (weightsPerVertex >= 4.0) skinMat += bb.bones[inBoneIndices.z] * inBoneWeights.z"},
+         "if (weightsPerVertex >= 2.0) skinMat += loadBone(inBoneIndices.y) * inBoneWeights.y",
+         "if (weightsPerVertex >= 4.0) skinMat += loadBone(inBoneIndices.z) * inBoneWeights.z"},
         // plans/plan_vulkan.md VULKAN-151: `aBoneIndices` is a `vec4` here now, not a `uvec4`, so the
         // palette subscript carries an `int()` -- the same shape the EasyGL row two entries above
         // has had all along. What this evidence asserts is unchanged: the shader really does read
@@ -2205,8 +2205,8 @@ TEST(GltfRendererPbrFallbackPolicy, SdlGpuSamplesBothKhrMaterialsSpecularTexture
              "fsInfo.num_samplers = 7",
              "layout(set = 2, binding = 5) uniform sampler2D uSpecularMap",
              "layout(set = 2, binding = 6) uniform sampler2D uSpecularColorMap",
-             "texture(uSpecularMap, cnaPbrSpecularTransformUV(fragUV, 0)).a",
-             "uSpecularColorMap, cnaPbrSpecularTransformUV(fragUV, 1)).rgb",
+             "texture(uSpecularMap, cnaPbrSpecularTransformUV(fragUV, 0), samplerLodBias.slots4To7.y).a",
+             "uSpecularColorMap, cnaPbrSpecularTransformUV(fragUV, 1), samplerLodBias.slots4To7.z).rgb",
              "mix(specularColorTex, cnaSrgbToLinear(specularColorTex), pbrp.srgbFlags.w)",
              "pbrp.specularFresnelInputs.xyz * specularColorTex, vec3(1.0)) * specularWeight",
              "mix(vec3(specularWeight), vec3(1.0), metallic)"})
@@ -3271,7 +3271,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
         {"directx9", "the skinned PBR stride check",
          "if (skinned && stride != 68 && stride != 80)"},
         {"sdl-gpu", "the draw-entry dispatch (both routes)",
-         "if (needsPbr &&"
+         "if (params.pbr &&"
          "    ((params.skinned && (stride == 68 || stride == 80)) ||"
          "     (!params.skinned && (stride == 48 || stride == 60))))"},
         {"sdl-gpu", "QueuePbrDraw's own acceptance",
