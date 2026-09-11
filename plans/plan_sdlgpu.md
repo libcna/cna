@@ -104,7 +104,7 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Completed / open | 26 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`119` complete; `SDLGPU-94`–`96` open) |
 | Ending evidence commit | `SDLGPU-119` (including the follow-up ASan evidence recorded in this status) |
 | Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, all nine shared classic stock-effect fixtures, the complete ten-fixture state/sampler matrix, the 24-test texture/format/transfer matrix, all 33 render-target registrations, all 25 buffer/draw registrations, all five model oracles and the 42-case compiled-effect corpus that existed at `SDLGPU-118`. The target evidence includes the 851-assertion mip/readback oracle and 40-assertion classic MRT matrix; the draw evidence includes instancing, multistream and declaration semantics. Six presentation/reset/resize programs, 73 individually isolated backbuffer/bound-target/Present lifecycle legs and 291/291 applicable constructor/lazy-resource rollback checks also pass through D3D12. There are now 191 registered native and 258 registered Windows SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. The expanded 43-case native compiled-effect corpus passes Vulkan, including a focused AddressSanitizer build of its test translation unit and `SdlGpuRenderer.cpp`; unchanged dependencies were reused from the stable build. |
-| Available local cross tools | MinGW-w64, Wine 10.0, DXVK v3.0.2-58 and vkd3d-proton 3.1.0 are present. There is no Apple SDK/device or `xcrun`/`xcodebuild`/`metal`. Android supplies only `adb`/platform-tools: no NDK, emulator, `sdkmanager`, `avdmanager` or attached device. No system `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found; CNA uses its pinned static ShaderCross dependency instead. |
+| Available local cross tools | MinGW-w64, Wine 10.0, DXVK v3.0.2-58 and vkd3d-proton 3.1.0 are present. There is no Apple SDK/device or `xcrun`/`xcodebuild`/`metal`. The Android PATH audit located `adb`/platform-tools but did not locate an NDK/toolchain, `sdkmanager` or `avdmanager`, and `adb devices` reported no running/attached target. The project owner subsequently confirmed that an Android emulator is available on this host outside those searched paths, so emulator absence is not a blocker; Android execution is intentionally deferred at the owner's request. No system `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found; CNA uses its pinned static ShaderCross dependency instead. |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
 
 ### SDLGPU-91 — correct the parity verdict's platform scope ✅
@@ -264,10 +264,13 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 - **Acceptance/test:** cross-build with a supported NDK and run construction/lifecycle,
   SpriteBatch, stock effect, texture, render-target and readback checks on an Android Vulkan
   device/emulator without weakening the desktop suite.
-- **Status:** open; runtime validation has an external SDK/device dependency. The 2026-09-11 audit
-  found `/usr/lib/android-sdk/platform-tools/adb` only: no NDK/toolchain, emulator, `sdkmanager`,
-  `avdmanager` or attached device (`adb devices` returned an empty inventory). Desktop Vulkan's
-  complete SPIR-V proof is relevant implementation evidence but cannot replace Android surface and
+- **Status:** open; execution is intentionally deferred at the project owner's request. The
+  2026-09-11 PATH audit found `/usr/lib/android-sdk/platform-tools/adb` but did not locate an
+  NDK/toolchain, `sdkmanager` or `avdmanager`, and `adb devices` returned an empty running/attached
+  inventory. The owner subsequently confirmed that an Android emulator is available on this host
+  outside those searched paths; its absence is therefore **not** a blocker and must not be used as
+  a reason to skip this task. Desktop Vulkan's complete SPIR-V proof is relevant implementation
+  evidence but cannot replace Android surface and
   lifecycle execution.
 
 ### SDLGPU-97 — make optional ShaderEffect compilation target-correct ✅
@@ -886,7 +889,8 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   The exact renderer-wide result is therefore still verdict **B**, solely because the three open
   platform evidence tasks cannot be executed in this environment: real D3D12 swapchain recovery
   needs DRI3 or a real Windows runner (`SDLGPU-94`), Metal needs an Apple SDK/device (`SDLGPU-95`),
-  and Android needs an NDK plus emulator/device (`SDLGPU-96`). On the complete Linux/Vulkan runtime
+  and Android still needs its toolchain and the owner-confirmed emulator to be located/configured
+  for the deferred runtime run (`SDLGPU-96`). On the complete Linux/Vulkan runtime
   surface and the extensively exercised windowless D3D12 surface, no remediable classic-XNA parity
   gap remains. The only known EasyGL capability differences are exact half-rate
   `PresentInterval::Two` and `OcclusionQuery`, both rigorously documented underlying SDL_gpu API
