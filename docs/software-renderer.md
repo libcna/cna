@@ -47,6 +47,9 @@ is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records 
 `SOFTWARE-162/163/355/356/357/358/360/361/362/363/364` are complete: the opt-in runtime now includes compiled MRT,
 render-target/cube sampling, SpriteBatch custom-effect routing and classic line/wireframe rasterization. `SOFTWARE-164/165` remain the
 encompassing shader-profile, lifecycle and content-conformance backlog.
+The independent EasyGL challenge in `SOFTWARE-367` also repaired MojoShader's invalid writemask-
+suffixed label identifiers and missing prototypes for legal nested forward subroutine calls;
+`SOFTWARE-366` tracks the matching CPU executor slice.
 
 The same challenge also confirmed a renderer-wide public-API hole: CNA stores
 `GraphicsDevice.VertexTextures` and `VertexSamplerStates`, but no renderer contract consumes them.
@@ -172,9 +175,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 
 - **Classic compiled XNA Effects are not yet executable** (`SOFTWARE-161`). The public bytecode
   constructor accepts XNA/FNA Direct3D 9 Effect Framework bytes only on renderers whose real
-  runtime implements them. Opt-in EasyGL passes 41 tests covering reflection, techniques/passes,
+  runtime implements them. Opt-in EasyGL passes 42 tests covering reflection, techniques/passes,
   parameters, draw pixels, state, SpriteBatch, instancing, multi-stream input and 2D/cube/volume
-  sampling. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software can parse and reflect those real
+  sampling plus loop/subroutine control flow. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software can parse and reflect those real
   binaries, apply their pass state, run their preshaders, retain validated D3D9 token/register IR
   (`SOFTWARE-162`) and execute the vertex programs used by all committed stock/authentic fixtures
   (`SOFTWARE-163`). Declaration semantics, draw offsets, signed base vertex, multiple streams,
@@ -193,6 +196,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   pixel-local integer definitions, including conditional-stack unwinding and inactive-loop skips.
   SOFTWARE-365 separately corrects the pinned MojoShader/EasyGL translator so D3D9 `LOOP` executes
   its declared count for positive, negative and zero address steps instead of terminating on `aL`.
+  SOFTWARE-367 repairs the same translator's subroutine output: label operands no longer inherit a
+  stale destination writemask, and prototypes precede definitions so nested forward calls compile.
+  SOFTWARE-366 is the corresponding in-progress Software `CALL`/`CALLNZ`/`LABEL`/`RET` phase.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.

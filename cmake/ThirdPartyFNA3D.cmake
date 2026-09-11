@@ -51,7 +51,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-legacy-texcoord-input.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-unmatched-fragment-input.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-ilp32-float-literal.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-d3d9-loop-count.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-d3d9-loop-count.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-subroutine-label.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

@@ -232,6 +232,9 @@ namespace CNA::TestSupport
         std::int32_t pixelLoopCount = 3;
         std::int32_t pixelLoopInitial = 10;
         std::int32_t pixelLoopStep = 2;
+        /// Emits a Shader Model 3 pixel program with unconditional, Boolean-conditional and
+        /// nested forward subroutine calls. Mutually exclusive with the loop/sampling/MRT forms.
+        bool pixelShaderUsesSubroutine = false;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -279,9 +282,11 @@ namespace CNA::TestSupport
         bool usesLoop = false,
         std::int32_t loopCount = 3,
         std::int32_t loopInitial = 10,
-        std::int32_t loopStep = 2)
+        std::int32_t loopStep = 2,
+        bool usesSubroutine = false)
     {
-        const std::uint32_t versionToken = usesLoop ? 0xFFFF0300u : 0xFFFF0200u;
+        const bool usesShaderModel3 = usesLoop || usesSubroutine;
+        const std::uint32_t versionToken = usesShaderModel3 ? 0xFFFF0300u : 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
         std::vector<std::uint8_t> ctab;
         AppendUInt32(ctab, 28);           // 0  sizeof(D3DXSHADER_CONSTANTTABLE)
@@ -335,7 +340,7 @@ namespace CNA::TestSupport
         const std::uint32_t tintName =
             appendCtabString(breakSymbolBinding ? "NoSuchParameter" : "Tint");
         const std::uint32_t samplerName = appendCtabString("FxSampler");
-        const std::uint32_t target = appendCtabString(usesLoop ? "ps_3_0" : "ps_2_0");
+        const std::uint32_t target = appendCtabString(usesShaderModel3 ? "ps_3_0" : "ps_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
         while ((ctab.size() & 3u) != 0) ctab.push_back(0);
 
@@ -370,7 +375,9 @@ namespace CNA::TestSupport
         constexpr std::uint32_t regConstInt = 7;
         constexpr std::uint32_t regColorOut = 8;   // oC#
         constexpr std::uint32_t regSampler = 10;   // s#
+        constexpr std::uint32_t regConstBool = 14;
         constexpr std::uint32_t regLoop = 15;
+        constexpr std::uint32_t regLabel = 18;
         constexpr std::uint32_t swizzleIdentity = 0xE4u;  // .xyzw
         // .yzxw: x<-y, y<-z, z<-x, w<-w, two bits per component, lowest component first.
         constexpr std::uint32_t swizzleYzxw = 1u | (2u << 2) | (0u << 4) | (3u << 6);
@@ -386,7 +393,58 @@ namespace CNA::TestSupport
             return 0x80000000u | registerBits(type) | number | (swizzle << 16);
         };
 
-        if (usesLoop)
+        if (usesSubroutine)
+        {
+            // Local constants make the called writes independent from reflected parameter data.
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c1, .25, .25, .25, 0
+            AppendUInt32(shader, destination(regConst, 1, 0xFu));
+            AppendUInt32(shader, FloatBits(0.25f));
+            AppendUInt32(shader, FloatBits(0.25f));
+            AppendUInt32(shader, FloatBits(0.25f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, 0x0000002Fu | (2u << 24)); // defb b0, true
+            AppendUInt32(shader, destination(regConstBool, 0, 0xFu));
+            AppendUInt32(shader, 1u);
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, c0
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x00000019u | (1u << 24)); // call l0
+            AppendUInt32(shader, source(regLabel, 0));
+            AppendUInt32(shader, 0x0000001Au | (2u << 24)); // callnz l2, b0
+            AppendUInt32(shader, source(regLabel, 2));
+            AppendUInt32(shader, source(regConstBool, 0, 0x00u));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+            AppendUInt32(shader, 0x0000001Cu); // ret from main
+
+            AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l0
+            AppendUInt32(shader, source(regLabel, 0));
+            AppendUInt32(shader, 0x00000002u | (3u << 24)); // add r0.x, r0.x, c1.x
+            AppendUInt32(shader, destination(regTemp, 0, 0x1u));
+            AppendUInt32(shader, source(regTemp, 0));
+            AppendUInt32(shader, source(regConst, 1));
+            AppendUInt32(shader, 0x00000019u | (1u << 24)); // nested call l1
+            AppendUInt32(shader, source(regLabel, 1));
+            AppendUInt32(shader, 0x0000001Cu);
+
+            AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l1
+            AppendUInt32(shader, source(regLabel, 1));
+            AppendUInt32(shader, 0x00000002u | (3u << 24)); // add r0.y, r0.y, c1.y
+            AppendUInt32(shader, destination(regTemp, 0, 0x2u));
+            AppendUInt32(shader, source(regTemp, 0));
+            AppendUInt32(shader, source(regConst, 1));
+            AppendUInt32(shader, 0x0000001Cu);
+
+            AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l2
+            AppendUInt32(shader, source(regLabel, 2));
+            AppendUInt32(shader, 0x00000002u | (3u << 24)); // add r0.z, r0.z, c1.z
+            AppendUInt32(shader, destination(regTemp, 0, 0x4u));
+            AppendUInt32(shader, source(regTemp, 0));
+            AppendUInt32(shader, source(regConst, 1));
+            AppendUInt32(shader, 0x0000001Cu);
+        }
+        else if (usesLoop)
         {
             // def c1, 0.25, 0, 0, 0
             AppendUInt32(shader, 0x00000051u | (5u << 24));
@@ -1006,7 +1064,8 @@ namespace CNA::TestSupport
             options.samplerRegister, options.breakShaderSymbolBinding, options.includeSampler,
             options.pixelShaderSamplesTexture, /*swizzleTint=*/false, options.samplerKind,
             options.pixelShaderWritesMrt, options.pixelShaderUsesLoop,
-            options.pixelLoopCount, options.pixelLoopInitial, options.pixelLoopStep);
+            options.pixelLoopCount, options.pixelLoopInitial, options.pixelLoopStep,
+            options.pixelShaderUsesSubroutine);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
