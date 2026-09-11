@@ -207,6 +207,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   preventing OpenGL's saturating reference clamp from changing negative or greater-than-255 values.
   Software and EasyGL share exact rendered `-1`/255 and 256/0 comparison proof, while getters retain
   `-1` and 256 exactly.
+- **The classic floating-point `GraphicsDevice.Clear` overload is present** (`SOFTWARE-327`).
+  `Clear(ClearOptions, Vector4, Single, Int32)` forwards unclamped Vector4 components through the
+  same target/depth/stencil option path as the Color overload. A shared RGBA32F test preserves
+  `(-2, 3, 0.5, 0.25)` exactly on Software and EasyGL, proving there is no hidden conversion through
+  eight-bit Color. CNA's component-wise and Color-plus-depth conveniences are explicitly `CNAEXT`.
 - **Static and dynamic vertex/index buffers share EasyGL's public contract** (`SOFTWARE-109`,
   `SOFTWARE-294`). The complete fixed-size resource exists at construction, so readable buffers
   support `GetData` and valid draw ranges before their first upload, matching XNA/FNA native

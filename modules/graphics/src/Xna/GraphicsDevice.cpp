@@ -569,6 +569,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Clear(ClearOptions options, const Color& color, float depth, int stencil)
     {
+        Clear(options, color.ToVector4(), depth, stencil);
+    }
+
+    void GraphicsDevice::Clear(ClearOptions options, const Vector4& color, float depth, int stencil)
+    {
         ThrowIfDisposed();
         if (renderer_ == nullptr)
         {
@@ -641,10 +646,10 @@ namespace Microsoft::Xna::Framework::Graphics
             options &= ~ClearOptions::Stencil;
         }
 
-        const float r = static_cast<float>(color.getRProperty()) / 255.0f;
-        const float g = static_cast<float>(color.getGProperty()) / 255.0f;
-        const float b = static_cast<float>(color.getBProperty()) / 255.0f;
-        const float a = static_cast<float>(color.getAProperty()) / 255.0f;
+        const float r = color.X;
+        const float g = color.Y;
+        const float b = color.Z;
+        const float a = color.W;
 
         const bool clearTarget  = hasClearFlag(options, ClearOptions::Target);
         const bool clearDepth   = hasClearFlag(options, ClearOptions::DepthBuffer);

@@ -11,6 +11,7 @@
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
@@ -247,7 +248,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param b Blue channel (0–1).
          * @param a Alpha channel (0–1).
          */
-        void Clear(float r, float g, float b, float a);
+        CNAEXT void Clear(float r, float g, float b, float a);
         /**
          * @brief Clears the specified buffers.
          * @param options Flags indicating which buffers to clear.
@@ -257,11 +258,20 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Clear(ClearOptions options, const Color& color, float depth, int stencil);
         /**
+         * @brief Clears the specified buffers using an unclamped floating-point color.
+         *
+         * @param options Flags indicating which buffers to clear.
+         * @param color   Floating-point color value for the color buffer.
+         * @param depth   Depth value for the depth buffer (0–1).
+         * @param stencil Stencil value for the stencil buffer.
+         */
+        void Clear(ClearOptions options, const Vector4& color, float depth, int stencil);
+        /**
          * @brief Clears the color and depth buffers.
          * @param color Color value for the color buffer.
          * @param depth Depth value for the depth buffer (0–1).
          */
-        void Clear(const Color& color, float depth);
+        CNAEXT void Clear(const Color& color, float depth);
 
         /** @brief Presents the rendered frame to the display. */
         void Present();

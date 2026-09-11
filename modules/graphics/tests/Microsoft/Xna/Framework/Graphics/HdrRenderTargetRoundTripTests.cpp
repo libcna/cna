@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
@@ -52,6 +53,7 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::ClearOptions;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::EnvironmentMapEffect;
 using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
@@ -131,6 +133,31 @@ TEST(HdrRenderTargetRoundTripTest, AFloatTargetKeepsValuesAboveOne)
         EXPECT_FLOAT_EQ(texel.Y, kGreen);
         EXPECT_FLOAT_EQ(texel.Z, kBlue);
         EXPECT_FLOAT_EQ(texel.W, 1.0f);
+    }
+}
+
+TEST(HdrRenderTargetRoundTripTest, ClassicVectorClearKeepsUnclampedComponents)
+{
+    GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))
+        GTEST_SKIP() << "this renderer/driver has no RGBA32F render targets";
+
+    RenderTarget2D target(gd, 2, 2, false, SurfaceFormat::Vector4, DepthFormat::None);
+    const Vector4 clearValue(-2.0f, 3.0f, 0.5f, 0.25f);
+
+    gd.SetRenderTarget(&target);
+    gd.Clear(ClearOptions::Target, clearValue, 1.0f, 0);
+    gd.SetRenderTarget(nullptr);
+
+    std::array<Vector4, 4> pixels{};
+    target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    for (const Vector4& texel : pixels)
+    {
+        EXPECT_FLOAT_EQ(texel.X, clearValue.X);
+        EXPECT_FLOAT_EQ(texel.Y, clearValue.Y);
+        EXPECT_FLOAT_EQ(texel.Z, clearValue.Z);
+        EXPECT_FLOAT_EQ(texel.W, clearValue.W);
     }
 }
 

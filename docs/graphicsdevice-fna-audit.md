@@ -89,12 +89,13 @@ CNA also has a fourth overload `Reset(const PresentationParameters&, GraphicsAda
 |---|---|
 | `Clear(Color color)` | ✅ |
 | `Clear(ClearOptions, Color, float depth, int stencil)` | ✅ |
-| `Clear(ClearOptions, Vector4 color, float depth, int stencil)` | ❌ Missing |
+| `Clear(ClearOptions, Vector4 color, float depth, int stencil)` | ✅ (`SOFTWARE-327`) |
 
-The `Vector4` overload is XNA 4.0 API. CNA instead has two non-XNA convenience overloads that are missing the `CNAEXT` tag:
+The `Vector4` overload is XNA 4.0 API and preserves unclamped components on floating-point render
+targets. CNA also has two non-XNA convenience overloads, now explicitly tagged `CNAEXT`:
 
-- `Clear(float r, float g, float b, float a)` — not in XNA, missing `CNAEXT`
-- `Clear(const Color& color, float depth)` — not in XNA, missing `CNAEXT`
+- `Clear(float r, float g, float b, float a)`
+- `Clear(const Color& color, float depth)`
 
 ### Dispose
 
@@ -201,15 +202,14 @@ The `VertexDeclaration` variants allow callers to pass a custom vertex layout wi
 | Priority | Item | Notes |
 |---|---|---|
 | Medium | `Present(Rectangle?, Rectangle?, IntPtr)` | Rarely used; stub that calls the no-arg Present is sufficient |
-| Medium | `Clear(ClearOptions, Vector4, float, int)` | Convert Vector4 to Color internally |
 | Low | `GetRenderTargetsNoAllocEXT(RenderTargetBinding[])` | FNA extension; low priority |
 
 ### Incorrect visibility / missing CNAEXT tags (should fix)
 
 | Item | Issue |
 |---|---|
-| `Clear(float, float, float, float)` | Not in XNA API — add `CNAEXT` |
-| `Clear(const Color&, float)` | Not in XNA API — add `CNAEXT` |
+| `Clear(float, float, float, float)` | Fixed by SOFTWARE-327 — tagged `CNAEXT` |
+| `Clear(const Color&, float)` | Fixed by SOFTWARE-327 — tagged `CNAEXT` |
 | `Reset(const PresentationParameters&, GraphicsAdapter*)` | Pointer overload not in XNA — add `CNAEXT` |
 | `SetIndexBuffer(const IndexBuffer*)` | Alias for `setIndicesProperty` — add `CNAEXT` |
 | `GetIndexBuffer()` | Alias for `getIndicesProperty` — add `CNAEXT` |
