@@ -2764,6 +2764,41 @@ namespace
         expectRejected("compiled Effect parser accepted EXPP without a replicate source swizzle");
     }
 
+    void CheckCompiledVertexOnlyAndExpValidation(SoftwareRenderer& renderer)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        const auto expectRejected = [&renderer, &options](const char* message)
+        {
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected, message);
+        };
+
+        options.pixelShaderUsesInvalidLit = true;
+        expectRejected("compiled Effect parser accepted pixel-shader LIT");
+        options.pixelShaderUsesInvalidLit = false;
+        options.pixelShaderUsesInvalidSlt = true;
+        expectRejected("compiled Effect parser accepted pixel-shader SLT");
+        options.pixelShaderUsesInvalidSlt = false;
+        options.pixelShaderUsesInvalidSge = true;
+        expectRejected("compiled Effect parser accepted pixel-shader SGE");
+        options.pixelShaderUsesInvalidSge = false;
+        options.pixelShaderUsesInvalidExpSwizzle = true;
+        expectRejected("compiled Effect parser accepted pixel EXP without replicate swizzle");
+        options.pixelShaderUsesInvalidExpSwizzle = false;
+        options.vertexShaderUsesInvalidExpSwizzle = true;
+        expectRejected("compiled Effect parser accepted vertex EXP without replicate swizzle");
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4544,6 +4579,7 @@ int main()
         CheckCompiledTexkillTemporaryValidation(renderer);
         CheckCompiledSgnValidation(renderer);
         CheckCompiledPartialPrecisionOpcodeValidation(renderer);
+        CheckCompiledVertexOnlyAndExpValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();
