@@ -1111,6 +1111,36 @@ namespace CNA::Internal::Renderers::EasyGL
             getPhysicalSize(targetW, targetH);
         MOJOSHADER_glProgramViewportInfo(targetW, targetH, targetW, targetH,
                                          /*renderTargetBound=*/0);
+
+        // XNA's D3D9 rasterizer uses integer pixel centres. The stock EasyGL path expresses that
+        // through the same clip-space translation before rasterization; compiled Effects must not
+        // silently retain OpenGL's half-integer centre convention. As with stock shaders, the
+        // single-sample correction is suppressed for a multisampled destination because applying
+        // a geometry translation to independent sample locations changes edge coverage.
+        int viewportX = 0, viewportY = 0, viewportW = 0, viewportH = 0;
+        device.get_viewport(viewportX, viewportY, viewportW, viewportH);
+        bool multisampledDestination = false;
+        if (bound_)
+        {
+            if (bound_->rt2D != nullptr && bound_->rt2D->GetMultiSampleCount() > 0)
+                multisampledDestination = true;
+            if (bound_->cube != nullptr && bound_->cube->GetMultiSampleCount() > 0)
+                multisampledDestination = true;
+            for (int slot = 0; slot < bound_->mrtCount; ++slot)
+            {
+                const EasyGLMrtBindingEXT& target = bound_->mrt[static_cast<std::size_t>(slot)];
+                if ((target.rt2D != nullptr && target.rt2D->GetMultiSampleCount() > 0) ||
+                    (target.cube != nullptr && target.cube->GetMultiSampleCount() > 0))
+                    multisampledDestination = true;
+            }
+        }
+        const float pixelCenterX = viewportW > 0 && !multisampledDestination
+            ? xnaPixelCenterScale_ / static_cast<float>(viewportW)
+            : 0.0f;
+        const float pixelCenterY = viewportH > 0 && !multisampledDestination
+            ? -xnaPixelCenterScale_ / static_cast<float>(viewportH)
+            : 0.0f;
+        MOJOSHADER_glProgramPixelCenterInfo(pixelCenterX, pixelCenterY);
     }
 }
 

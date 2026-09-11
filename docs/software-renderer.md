@@ -202,8 +202,8 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   forward-label validation, Shader Model call-depth limits, conditional returns and inherited `aL`.
   SOFTWARE-368 executes pixel `DSX`/`DSY` over aligned 2x2 Software triangle quads, including
   uncovered helper lanes and later derivatives that consume earlier derivative results. Compiled
-  line/wireframe derivatives remain SOFTWARE-370; the EasyGL compiled path's missing XNA
-  pixel-centre correction is SOFTWARE-369.
+  line/wireframe derivatives remain SOFTWARE-370. SOFTWARE-369 repairs the EasyGL compiled path's
+  formerly missing XNA pixel-centre correction through a viewport-scaled MojoShader uniform.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.
