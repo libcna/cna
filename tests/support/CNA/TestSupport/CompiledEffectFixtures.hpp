@@ -233,6 +233,39 @@ namespace CNA::TestSupport
         NonTemporary,
     };
 
+    /** @brief Shader Model 2+ arithmetic opcode deliberately emitted in a ps_1_4 program. */
+    enum class SyntheticInvalidPixelShaderModel1Opcode
+    {
+        /** @brief Emit no deliberately invalid opcode. */
+        None,
+        /** @brief Emit `RCP`. */
+        Rcp,
+        /** @brief Emit `RSQ`. */
+        Rsq,
+        /** @brief Emit `MIN`. */
+        Min,
+        /** @brief Emit `MAX`. */
+        Max,
+        /** @brief Emit `EXP`. */
+        Exp,
+        /** @brief Emit `LOG`. */
+        Log,
+        /** @brief Emit `FRC`. */
+        Frc,
+        /** @brief Emit `POW`. */
+        Pow,
+        /** @brief Emit `CRS`. */
+        Crs,
+        /** @brief Emit `ABS`. */
+        Abs,
+        /** @brief Emit `NRM`. */
+        Nrm,
+        /** @brief Emit `DSX`. */
+        Dsx,
+        /** @brief Emit `DSY`. */
+        Dsy,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -415,6 +448,9 @@ namespace CNA::TestSupport
         bool pixelShaderUsesInvalidExpSwizzle = false;
         /// Emits a vertex `EXP` with an identity rather than replicate source swizzle.
         bool vertexShaderUsesInvalidExpSwizzle = false;
+        /// Emits the selected Shader Model 2+ arithmetic opcode in a ps_1_4 program.
+        SyntheticInvalidPixelShaderModel1Opcode pixelShaderModel1InvalidOpcode =
+            SyntheticInvalidPixelShaderModel1Opcode::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -492,7 +528,9 @@ namespace CNA::TestSupport
         bool usesInvalidLit = false,
         bool usesInvalidSlt = false,
         bool usesInvalidSge = false,
-        bool usesInvalidExpSwizzle = false)
+        bool usesInvalidExpSwizzle = false,
+        SyntheticInvalidPixelShaderModel1Opcode shaderModel1InvalidOpcode =
+            SyntheticInvalidPixelShaderModel1Opcode::None)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -502,6 +540,8 @@ namespace CNA::TestSupport
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
                                        usesShaderModel14Phase || duplicatesShaderModel14Phase ||
+                                       shaderModel1InvalidOpcode !=
+                                           SyntheticInvalidPixelShaderModel1Opcode::None ||
                                        legacyDepthOutput == SyntheticLegacyDepthOutput::Register ||
                                        legacyBumpEnvironment ==
                                            SyntheticLegacyBumpEnvironment::Arithmetic;
@@ -713,6 +753,52 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(regConst, 0));
             AppendUInt32(shader, source(regConst, 0));
+        }
+
+        if (shaderModel1InvalidOpcode != SyntheticInvalidPixelShaderModel1Opcode::None)
+        {
+            const auto appendScalar = [&](std::uint32_t opcode) {
+                AppendUInt32(shader, opcode);
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, source(regConst, 0, 0x00u));
+            };
+            const auto appendVector = [&](std::uint32_t opcode, std::uint32_t writeMask = 0xFu) {
+                AppendUInt32(shader, opcode);
+                AppendUInt32(shader, destination(regTemp, 0, writeMask));
+                AppendUInt32(shader, source(regConst, 0));
+            };
+            const auto appendBinary = [&](std::uint32_t opcode, std::uint32_t writeMask = 0xFu) {
+                AppendUInt32(shader, opcode);
+                AppendUInt32(shader, destination(regTemp, 0, writeMask));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, source(regConst, 0));
+            };
+            switch (shaderModel1InvalidOpcode)
+            {
+                case SyntheticInvalidPixelShaderModel1Opcode::Rcp: appendScalar(0x00000006u); break;
+                case SyntheticInvalidPixelShaderModel1Opcode::Rsq: appendScalar(0x00000007u); break;
+                case SyntheticInvalidPixelShaderModel1Opcode::Min: appendBinary(0x0000000Au); break;
+                case SyntheticInvalidPixelShaderModel1Opcode::Max: appendBinary(0x0000000Bu); break;
+                case SyntheticInvalidPixelShaderModel1Opcode::Exp: appendScalar(0x0000000Eu); break;
+                case SyntheticInvalidPixelShaderModel1Opcode::Log: appendScalar(0x0000000Fu); break;
+                case SyntheticInvalidPixelShaderModel1Opcode::Frc:
+                    appendVector(0x00000013u, 0x2u);
+                    break;
+                case SyntheticInvalidPixelShaderModel1Opcode::Pow:
+                    AppendUInt32(shader, 0x00000020u);
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regConst, 0, 0x00u));
+                    AppendUInt32(shader, source(regConst, 0, 0x00u));
+                    break;
+                case SyntheticInvalidPixelShaderModel1Opcode::Crs:
+                    appendBinary(0x00000021u, 0x7u);
+                    break;
+                case SyntheticInvalidPixelShaderModel1Opcode::Abs: appendVector(0x00000023u); break;
+                case SyntheticInvalidPixelShaderModel1Opcode::Nrm: appendVector(0x00000024u); break;
+                case SyntheticInvalidPixelShaderModel1Opcode::Dsx: appendVector(0x0000005Bu); break;
+                case SyntheticInvalidPixelShaderModel1Opcode::Dsy: appendVector(0x0000005Cu); break;
+                case SyntheticInvalidPixelShaderModel1Opcode::None: break;
+            }
         }
 
         if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic)
@@ -1402,6 +1488,10 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
             AppendUInt32(shader, source(regConst, 0));
+        }
+        else if (shaderModel1InvalidOpcode != SyntheticInvalidPixelShaderModel1Opcode::None)
+        {
+            // The deliberately invalid instruction already writes ps_1_x's r0 colour output.
         }
         else if (writesMrt)
         {
@@ -2347,7 +2437,8 @@ namespace CNA::TestSupport
             options.pixelShaderUsesInvalidLit,
             options.pixelShaderUsesInvalidSlt,
             options.pixelShaderUsesInvalidSge,
-            options.pixelShaderUsesInvalidExpSwizzle);
+            options.pixelShaderUsesInvalidExpSwizzle,
+            options.pixelShaderModel1InvalidOpcode);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

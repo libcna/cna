@@ -929,6 +929,41 @@ TEST(EasyGLCompiledEffectTest, RejectsVertexExpWithoutReplicateSwizzle)
     EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
+class EasyGLCompiledEffectPixelShaderModel1OpcodeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPixelShaderModel1OpcodeTest, RejectsShaderModel2Arithmetic)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderModel1InvalidOpcode = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ArithmeticOpcodes,
+    EasyGLCompiledEffectPixelShaderModel1OpcodeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Rcp,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Rsq,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Min,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Max,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Exp,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Log,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Frc,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Pow,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Crs,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Abs,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Nrm,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Dsx,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Dsy));
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;

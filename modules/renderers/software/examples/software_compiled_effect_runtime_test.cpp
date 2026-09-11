@@ -2799,6 +2799,33 @@ namespace
         expectRejected("compiled Effect parser accepted vertex EXP without replicate swizzle");
     }
 
+    void CheckCompiledPixelShaderModel1OpcodeValidation(SoftwareRenderer& renderer)
+    {
+        using Opcode = CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode;
+        constexpr std::array opcodes{
+            Opcode::Rcp, Opcode::Rsq, Opcode::Min, Opcode::Max, Opcode::Exp,
+            Opcode::Log, Opcode::Frc, Opcode::Pow, Opcode::Crs, Opcode::Abs,
+            Opcode::Nrm, Opcode::Dsx, Opcode::Dsy,
+        };
+        for (const Opcode opcode : opcodes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderModel1InvalidOpcode = opcode;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected, "compiled Effect parser accepted a Shader Model 2+ opcode in ps_1_4");
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4580,6 +4607,7 @@ int main()
         CheckCompiledSgnValidation(renderer);
         CheckCompiledPartialPrecisionOpcodeValidation(renderer);
         CheckCompiledVertexOnlyAndExpValidation(renderer);
+        CheckCompiledPixelShaderModel1OpcodeValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();
