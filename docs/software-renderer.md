@@ -559,7 +559,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   shared device layer now distinguishes renderer capability from storage on the active backbuffer,
   `RenderTarget2D`, or cube face; the single-color overload requests only planes that really exist.
   Software and isolated EasyGL tests prove both missing-plane exception types, depth-only success,
-  failure atomicity, and backbuffer/render-target behavior.
+  failure atomicity, and backbuffer/render-target behavior. SOFTWARE-359 subsequently repaired a
+  stale MSAA/depth supervisor that requested nonexistent planes in 16 cells; all 31 construction,
+  sampling, depth, stencil and lifecycle legs now execute on both renderers without relaxing that rule.
 - **`Clear(Color)` clears depth to 1.0 independently of `Viewport.MaxDepth`** (`SOFTWARE-334`).
   Microsoft XNA hardcodes `1f`; FNA's use of the current viewport maximum is a lower-authority
   divergence. A depth-rendered discriminator first proves that an explicit 0.25 clear rejects a

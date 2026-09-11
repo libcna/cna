@@ -187,6 +187,25 @@ namespace
         return n == 0 || (n > 0 && (n & (n - 1)) == 0);
     }
 
+    /**
+     * @brief Returns the complete clear mask supported by a target with @p depth.
+     *
+     * Microsoft XNA rejects an explicit request for a missing depth or stencil plane. Matrix cells
+     * therefore clear exactly the attachments whose construction they are intended to exercise.
+     *
+     * @param depth The target's requested depth/stencil format.
+     * @return The color, depth and stencil bits backed by that format.
+     */
+    constexpr ClearOptions ClearOptionsForDepthFormat(DepthFormat depth)
+    {
+        ClearOptions options = ClearOptions::Target;
+        if (depth != DepthFormat::None)
+            options = options | ClearOptions::DepthBuffer;
+        if (depth == DepthFormat::Depth24Stencil8)
+            options = options | ClearOptions::Stencil;
+        return options;
+    }
+
     /// Far-apart flat colours. Any two differ by >= 100 on at least one channel, far outside kTol,
     /// so a wrong destination or a dropped draw can never be mistaken for a tolerance miss.
     const Color kClear(20, 20, 90, 255);
@@ -505,9 +524,8 @@ class RenderTargetMsaaDepthContractTest : public Game
 
         step(label + ": SetRenderTarget");
         dev.SetRenderTarget(rt.get());
-        step(label + ": Clear(Target|DepthBuffer|Stencil)");
-        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-                  kClear, 1.0f, 0);
+        step(label + ": Clear(available attachments)");
+        dev.Clear(ClearOptionsForDepthFormat(depth), kClear, 1.0f, 0);
         if (kRasterizes)
         {
             step(label + ": DrawUserPrimitives");
@@ -694,7 +712,7 @@ class RenderTargetMsaaDepthContractTest : public Game
                                  RenderTargetUsage::DiscardContents,
                                  std::string("S3 ") + cells[i].name);
             dev.SetRenderTarget(rt.get());
-            dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, kFlat, 1.0f, 0);
+            dev.Clear(ClearOptionsForDepthFormat(cells[i].depth), kFlat, 1.0f, 0);
             dev.SetRenderTarget(nullptr);
             bool failed = false;
             const Color c = SampleThroughBackbuffer(dev, *rt, failed);
@@ -749,7 +767,7 @@ class RenderTargetMsaaDepthContractTest : public Game
                                const Color& second, float secondZ)
     {
         dev.SetRenderTarget(&rt);
-        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+        dev.Clear(ClearOptionsForDepthFormat(rt.getDepthStencilFormatProperty()),
                   kClear, 1.0f, 0);
         dev.setDepthStencilStateProperty(state);
         DrawQuadAt(dev, first, firstZ);
