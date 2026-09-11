@@ -252,8 +252,25 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT [[nodiscard]] std::shared_ptr<const void> RetainProgramIdentityEXT(
             std::uint64_t programIdentity) const;
 
+        /**
+         * @brief Reports whether renderer teardown released this runtime's native effect.
+         *
+         * Test-only lifetime introspection: a compiled runtime may outlive its `GraphicsDevice`,
+         * but its MojoShader effect and context must not. A true result guarantees that the later
+         * runtime destructor has no renderer-owned native state left to address.
+         *
+         * @return True after the owning SDL GPU renderer detached this runtime.
+         */
+        CNAEXT [[nodiscard]] bool IsDetachedFromRendererEXT() const
+        {
+            return !registeredWithRenderer_ && context_ == nullptr && effectData_ == nullptr;
+        }
+
     private:
+        friend class SdlGpuRenderer;
+
         SdlGpuCompiledEffect(SdlGpuRenderer& renderer, const SdlGpuCompiledEffect& cloneSource);
+        void ReleaseForRendererTeardownEXT();
 
         SdlGpuRenderer& renderer_;
         MOJOSHADER_sdlContext* context_ = nullptr;
@@ -287,6 +304,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             vertexSamplerAssigned_{};
         /// One owning cache lease per linked program this live Effect has actually drawn with.
         mutable std::unordered_map<std::uint64_t, std::shared_ptr<const void>> programLeases_;
+        bool registeredWithRenderer_ = false;
     };
 }
 

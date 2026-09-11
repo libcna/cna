@@ -2501,6 +2501,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             for (auto& [key, entry] : pipelines)
                 ReleaseGraphicsPipeline(entry.pipeline);
         compiledEffectPipelines_.clear();
+        // A public compiled Effect/runtime may outlive its GraphicsDevice. Delete every native
+        // effect while its callbacks can still address the shared MojoShader context and device;
+        // the surviving wrapper is detached and its later destructor becomes native-state-free.
+        ReleaseCompiledEffectsForRendererTeardownEXT();
         compiledProgramLeases_.clear();
         compiledProgramLifetimeState_->owner = nullptr;
         // plans/plan_fx.md FX-061: released after its queued leases and pipelines, but before the

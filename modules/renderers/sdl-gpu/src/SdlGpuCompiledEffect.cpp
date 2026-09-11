@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -187,6 +188,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 MojoShaderEffect::BuildSamplerTextureParameterMap(effectData_);
             textures_.resize(static_cast<std::size_t>(effectData_->param_count), nullptr);
             SetTechnique(0);
+            renderer_.RegisterCompiledEffectEXT(this);
+            registeredWithRenderer_ = true;
         }
         catch (...)
         {
@@ -220,6 +223,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             samplerAssigned_ = cloneSource.samplerAssigned_;
             vertexSamplerAssigned_ = cloneSource.vertexSamplerAssigned_;
             SetTechnique(techniqueIndex_);
+            renderer_.RegisterCompiledEffectEXT(this);
+            registeredWithRenderer_ = true;
         }
         catch (...)
         {
@@ -234,6 +239,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SdlGpuCompiledEffect::~SdlGpuCompiledEffect()
     {
+        if (registeredWithRenderer_)
+        {
+            renderer_.UnregisterCompiledEffectEXT(this);
+            registeredWithRenderer_ = false;
+        }
         if (effectData_ != nullptr)
         {
             if (passActive_) MOJOSHADER_effectEndPass(effectData_);
@@ -241,6 +251,22 @@ namespace CNA::Internal::Renderers::SdlGpu
                 MOJOSHADER_deleteEffect(effectData_);
             effectData_ = nullptr;
         }
+    }
+
+    void SdlGpuCompiledEffect::ReleaseForRendererTeardownEXT()
+    {
+        registeredWithRenderer_ = false;
+        if (effectData_ != nullptr && passActive_)
+            MOJOSHADER_effectEndPass(effectData_);
+        passActive_ = false;
+        programLeases_.clear();
+        if (effectData_ != nullptr &&
+            MojoShaderEffect::CanSafelyDeleteNativeEffect(effectData_))
+        {
+            MOJOSHADER_deleteEffect(effectData_);
+        }
+        effectData_ = nullptr;
+        context_ = nullptr;
     }
 
     std::unique_ptr<ICompiledEffectRuntime> SdlGpuCompiledEffect::Clone() const
@@ -616,6 +642,34 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::uint8_t* effectCode, std::size_t effectCodeBytes)
     {
         return std::make_unique<SdlGpuCompiledEffect>(*this, effectCode, effectCodeBytes);
+    }
+
+    void SdlGpuRenderer::RegisterCompiledEffectEXT(SdlGpuCompiledEffect* effect)
+    {
+        if (effect == nullptr ||
+            std::find(compiledEffects_.begin(), compiledEffects_.end(), effect) !=
+                compiledEffects_.end())
+        {
+            return;
+        }
+        compiledEffects_.push_back(effect);
+    }
+
+    void SdlGpuRenderer::UnregisterCompiledEffectEXT(SdlGpuCompiledEffect* effect)
+    {
+        compiledEffects_.erase(
+            std::remove(compiledEffects_.begin(), compiledEffects_.end(), effect),
+            compiledEffects_.end());
+    }
+
+    void SdlGpuRenderer::ReleaseCompiledEffectsForRendererTeardownEXT()
+    {
+        for (SdlGpuCompiledEffect* effect : compiledEffects_)
+        {
+            if (effect != nullptr)
+                effect->ReleaseForRendererTeardownEXT();
+        }
+        compiledEffects_.clear();
     }
 }
 

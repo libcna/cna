@@ -248,6 +248,36 @@ TEST(SdlGpuCompiledEffectTest, CloneCarriesItsOwnValuesAndSurvivesTheSource)
     EXPECT_NO_THROW(clone->ApplyPass(0, deviceState, changes));
 }
 
+TEST(SdlGpuCompiledEffectTest, RuntimeCanBeDestroyedAfterItsGraphicsDevice)
+{
+    std::unique_ptr<ICompiledEffectRuntime> runtime;
+    std::unique_ptr<ICompiledEffectRuntime> clone;
+    CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect* concrete = nullptr;
+    CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect* concreteClone = nullptr;
+    {
+        GraphicsDevice device;
+        runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+        ASSERT_NE(runtime, nullptr) << "this build did not select the SDL_GPU renderer";
+        clone = runtime->Clone();
+        ASSERT_NE(clone, nullptr);
+        concrete = dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(
+            runtime.get());
+        concreteClone = dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(
+            clone.get());
+        ASSERT_NE(concrete, nullptr);
+        ASSERT_NE(concreteClone, nullptr);
+        EXPECT_FALSE(concrete->IsDetachedFromRendererEXT());
+        EXPECT_FALSE(concreteClone->IsDetachedFromRendererEXT());
+    }
+
+    ASSERT_NE(concrete, nullptr);
+    ASSERT_NE(concreteClone, nullptr);
+    EXPECT_TRUE(concrete->IsDetachedFromRendererEXT());
+    EXPECT_TRUE(concreteClone->IsDetachedFromRendererEXT());
+    EXPECT_NO_THROW(clone.reset());
+    EXPECT_NO_THROW(runtime.reset());
+}
+
 // ---- plans/plan_fx.md FX-071: vertex-attribute builder and uniform snapshot capture ------------------
 
 TEST(SdlGpuCompiledEffectVertexLayoutTest, EveryFormatAndUsageMapsToADistinctNativeValue)

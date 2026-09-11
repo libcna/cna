@@ -3565,6 +3565,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// Makes a lease callback harmless after renderer teardown, even if an Effect outlives it.
         std::shared_ptr<CompiledProgramLifetimeStateEXT> compiledProgramLifetimeState_ =
             std::make_shared<CompiledProgramLifetimeStateEXT>();
+        /// Live runtimes whose native effects must be released before the shared MojoShader
+        /// context and SDL_GPU device. The public Effect/runtime wrapper itself may outlive both.
+        std::vector<SdlGpuCompiledEffect*> compiledEffects_;
+        void RegisterCompiledEffectEXT(SdlGpuCompiledEffect* effect);
+        void UnregisterCompiledEffectEXT(SdlGpuCompiledEffect* effect);
+        void ReleaseCompiledEffectsForRendererTeardownEXT();
         std::vector<CompiledEffectDrawCommand> compiledEffectDrawCommands_;
 #endif
 
