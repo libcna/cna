@@ -1113,11 +1113,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     # executable a developer/script runs by hand.
     cna_software_test(cna_diag_software ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
 
-    # SOFTWARE-343: renderer-neutral real-XNA scene-corpus measurement. This is deliberately not
-    # a CTest: hardware floating-point and edge precision make exact image identity diagnostic
-    # evidence rather than a portable pass/fail contract.
+    # SOFTWARE-343: renderer-neutral real-XNA scene-corpus measurement. The complete corpus remains
+    # diagnostic because hardware floating-point and edge precision make universal exact identity
+    # an invalid portable gate. SOFTWARE-344 promotes the two measured aliased-line scenes to an
+    # exact Software regression now that their D3D/GDI diamond-exit rule is implemented explicitly.
     cna_software_test(cna_oracle_render_software
         ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp)
+    cna_register_renderer_test(NAME Software_XnaLineCoverage
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-oracle-corpus-diff-software.sh
+            $<TARGET_FILE:cna_oracle_render_software> 0
+            colored_linelist_quad colored_linestrip_quad
+        TIMEOUT 30 LABELS "Software")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

@@ -570,7 +570,15 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   a display and reports every pixel delta. All 39 scenes render; 8 are byte-exact, 26 match within
   one byte per channel and 28 within two. Independent real-XNA probes classify the nine remaining
   point-texture boundary deltas as interpolation precision rather than a point-sampler rule defect.
-  The two remaining line-coverage deltas are not waived and are tracked by `SOFTWARE-344`.
+  The two line-coverage deltas were not waived: `SOFTWARE-344` replaced the generic DDA with the
+  D3D/GDI directed pixel-diamond exit rule. Both 256x256 line references are now byte-exact, raising
+  the corpus totals to 10 exact, 28 within one byte and 30 within two.
+- **Classic aliased lines follow the inclusive/exclusive D3D/GDI diamond rule** (`SOFTWARE-344`).
+  Horizontal, fractional diagonal and reversed segments cover a pixel only when the directed line
+  exits its half-pixel diamond before the ending vertex. The implementation walks the dominant axis
+  in linear time and tests bounded neighbouring diamonds; a segment wholly inside one diamond emits
+  no fragment. Five isolated Microsoft XNA 4.0 probes and both checked corpus scenes match Software
+  byte-for-byte, and the same seven references match current Mesa EasyGL.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

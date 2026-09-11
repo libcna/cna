@@ -85,6 +85,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # a script) is what judges this binary's PNG output against the checked-in reference
         # images.
         cna_easygl_test(cna_oracle_render_easygl ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp)
+        # SOFTWARE-344: the fractional horizontal and diagonal aliased-line scenes are byte-exact
+        # against Microsoft XNA on current EasyGL and Software. Keep both renderer halves as an
+        # explicit shared regression rather than relying on the historical whole-corpus report.
+        cna_register_renderer_test(NAME EasyGL_XnaLineCoverage
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-oracle-corpus-diff-easygl.sh
+                $<TARGET_FILE:cna_oracle_render_easygl>
+                colored_linelist_quad colored_linestrip_quad
+            TIMEOUT 30 LABELS "EasyGL"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 461: canary proving the new shared PixelTestGame helper (modules/graphics/examples/common/) works
         cna_easygl_test(cna_test_easygl_pixeltestgame_smoke

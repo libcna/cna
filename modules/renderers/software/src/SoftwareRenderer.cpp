@@ -2078,34 +2078,121 @@ namespace CNA::Internal::Renderers::Software
             return t0 <= t1;
         }
 
-        /// REMED-GFX-082: walks the integer pixels of a wire edge between two screen-space
-        /// RasterVertices, invoking `emit(x, y, t)` per pixel with the ORIGINAL segment parameter t
-        /// (so the caller interpolates depth/color/uv perspective-correctly at t). The segment is first
-        /// clipped to `clip`, then sampled with a DDA at unit-pixel spacing so the line is gap-free; the
-        /// per-pixel float-bounds guard also rejects any non-finite coordinate before the int cast.
+        /// SOFTWARE-344: applies the D3D/GDI aliased-line diamond-exit coverage test to one pixel.
+        /// The CPU framebuffer uses corner-origin coordinates, so its pixel diamond is centred at
+        /// `(x + 0.5, y + 0.5)` with four half-pixel diagonal planes. A directed line covers the
+        /// pixel only when it exits that diamond before reaching its ending vertex; an endpoint
+        /// which remains inside the diamond is the inclusive/exclusive line rule, not a fragment.
+        /// `interpolationT` is evaluated at the pixel centre and remains relative to the original
+        /// unclipped segment.
+        bool SegmentExitsPixelDiamond(const RasterVertex& a, const RasterVertex& b,
+                                      int x, int y, float& interpolationT)
+        {
+            if (!std::isfinite(a.x) || !std::isfinite(a.y) ||
+                !std::isfinite(b.x) || !std::isfinite(b.y))
+                return false;
+
+            const double ax = static_cast<double>(a.x);
+            const double ay = static_cast<double>(a.y);
+            const double dx = static_cast<double>(b.x) - ax;
+            const double dy = static_cast<double>(b.y) - ay;
+            const double lengthSquared = dx * dx + dy * dy;
+            if (!(lengthSquared > 0.0) || !std::isfinite(lengthSquared))
+                return false;
+
+            const double centerX = static_cast<double>(x) + 0.5;
+            const double centerY = static_cast<double>(y) + 0.5;
+            double enterT = 0.0;
+            double exitT = 1.0;
+            constexpr double normals[4][2] = {
+                { 1.0,  1.0}, { 1.0, -1.0},
+                {-1.0,  1.0}, {-1.0, -1.0},
+            };
+            for (const auto& normal : normals)
+            {
+                const double velocity = normal[0] * dx + normal[1] * dy;
+                const double allowance = 0.5 -
+                    (normal[0] * (ax - centerX) + normal[1] * (ay - centerY));
+                if (velocity == 0.0)
+                {
+                    if (allowance < 0.0)
+                        return false;
+                    continue;
+                }
+                const double boundaryT = allowance / velocity;
+                if (velocity > 0.0)
+                    exitT = std::min(exitT, boundaryT);
+                else
+                    enterT = std::max(enterT, boundaryT);
+                if (enterT > exitT)
+                    return false;
+            }
+
+            // Reaching a diamond only at/after the ending vertex is not an exit by this line.
+            if (exitT < 0.0 || enterT > 1.0 || !(exitT < 1.0))
+                return false;
+
+            interpolationT = static_cast<float>(std::clamp(
+                ((centerX - ax) * dx + (centerY - ay) * dy) / lengthSquared,
+                0.0, 1.0));
+            return true;
+        }
+
+        /// REMED-GFX-082 / SOFTWARE-344: walks the aliased pixels of a wire edge between two
+        /// screen-space RasterVertices, invoking `emit(x, y, t)` with the ORIGINAL segment
+        /// parameter. D3D9 defines non-antialiased lines by the GDI rule; sampling a ceil/floor DDA
+        /// picked adjacent pixels on fractional diagonals and included endpoints which never left
+        /// their final diamond. Iterate along the dominant axis, test the bounded neighbouring
+        /// diamonds exactly, and therefore remain O(line length) rather than scanning its box.
         template <typename EmitFn>
         void WalkWireEdge(const RasterClipRect& clip, const RasterVertex& a, const RasterVertex& b,
                           EmitFn&& emit)
         {
-            float t0, t1;
-            if (!ClipSegmentToRect(a.x, a.y, b.x, b.y, clip, t0, t1))
+            if (!std::isfinite(a.x) || !std::isfinite(a.y) ||
+                !std::isfinite(b.x) || !std::isfinite(b.y))
                 return;
             const float dx = b.x - a.x, dy = b.y - a.y;
-            const float cax = a.x + t0 * dx, cay = a.y + t0 * dy;
-            const float cbx = a.x + t1 * dx, cby = a.y + t1 * dy;
-            int steps = static_cast<int>(std::ceil(std::max(std::fabs(cbx - cax), std::fabs(cby - cay))));
-            if (steps < 1)
-                steps = 1;
-            for (int i = 0; i <= steps; ++i)
+            if (!(dx != 0.0f || dy != 0.0f))
+                return;
+
+            const auto testAndEmit = [&](int x, int y)
             {
-                const float s = static_cast<float>(i) / static_cast<float>(steps);
-                const float t = t0 + s * (t1 - t0);
-                const float px = a.x + t * dx;
-                const float py = a.y + t * dy;
-                if (!(px >= static_cast<float>(clip.minX) && px <= static_cast<float>(clip.maxX) + 1.0f &&
-                      py >= static_cast<float>(clip.minY) && py <= static_cast<float>(clip.maxY) + 1.0f))
-                    continue;  // also rejects NaN/inf (all comparisons false) before the int cast
-                emit(static_cast<int>(std::floor(px)), static_cast<int>(std::floor(py)), t);
+                if (x < clip.minX || x > clip.maxX || y < clip.minY || y > clip.maxY)
+                    return;
+                float t = 0.0f;
+                if (SegmentExitsPixelDiamond(a, b, x, y, t))
+                    emit(x, y, t);
+            };
+
+            if (std::fabs(dx) >= std::fabs(dy))
+            {
+                const int firstX = std::max(
+                    clip.minX, static_cast<int>(std::floor(std::min(a.x, b.x) - 1.0f)));
+                const int lastX = std::min(
+                    clip.maxX, static_cast<int>(std::ceil(std::max(a.x, b.x) + 1.0f)));
+                for (int x = firstX; x <= lastX; ++x)
+                {
+                    const float projectedT = std::clamp(
+                        ((static_cast<float>(x) + 0.5f) - a.x) / dx, 0.0f, 1.0f);
+                    const int centerY = static_cast<int>(std::floor(a.y + projectedT * dy));
+                    for (int y = centerY - 2; y <= centerY + 2; ++y)
+                        testAndEmit(x, y);
+                }
+            }
+            else
+            {
+                const int firstY = std::max(
+                    clip.minY, static_cast<int>(std::floor(std::min(a.y, b.y) - 1.0f)));
+                const int lastY = std::min(
+                    clip.maxY, static_cast<int>(std::ceil(std::max(a.y, b.y) + 1.0f)));
+                for (int y = firstY; y <= lastY; ++y)
+                {
+                    const float projectedT = std::clamp(
+                        ((static_cast<float>(y) + 0.5f) - a.y) / dy, 0.0f, 1.0f);
+                    const int centerX = static_cast<int>(std::floor(a.x + projectedT * dx));
+                    for (int x = centerX - 2; x <= centerX + 2; ++x)
+                        testAndEmit(x, y);
+                }
             }
         }
 

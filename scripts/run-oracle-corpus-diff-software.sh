@@ -6,7 +6,7 @@
 # can legitimately differ within Direct3D's precision allowances. A scene that does not render is
 # nevertheless a hard failure. Never widen a tolerance merely to turn a reported delta green.
 #
-# Usage: scripts/run-oracle-corpus-diff-software.sh <path-to-cna_oracle_render_software> [tolerance]
+# Usage: scripts/run-oracle-corpus-diff-software.sh <path-to-cna_oracle_render_software> [tolerance] [scene ...]
 
 set -uo pipefail
 
@@ -14,11 +14,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 if [ $# -lt 1 ]; then
-    echo "usage: $0 <path-to-cna_oracle_render_software> [tolerance]" >&2
+    echo "usage: $0 <path-to-cna_oracle_render_software> [tolerance] [scene ...]" >&2
     exit 2
 fi
 CNA_ORACLE_RENDER_EXE="$1"
 TOLERANCE="${2:-0}"
+if [ $# -ge 2 ]; then
+    shift 2
+else
+    shift 1
+fi
 
 if [ ! -x "$CNA_ORACLE_RENDER_EXE" ]; then
     echo "oracle renderer is not executable: $CNA_ORACLE_RENDER_EXE" >&2
@@ -34,6 +39,15 @@ REFERENCE_DIR="$REPO_ROOT/tools/xna-oracle/reference"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
+SCENES=()
+if [ $# -gt 0 ]; then
+    for name in "$@"; do
+        SCENES+=("$SCENES_DIR/$name.scene")
+    done
+else
+    SCENES=("$SCENES_DIR"/*.scene)
+fi
+
 TOTAL=0
 MATCHED=0
 DIFFERENT=0
@@ -42,7 +56,7 @@ RENDER_FAILED=0
 printf '%-34s %s\n' "SCENE" "RESULT"
 printf '%-34s %s\n' "----------------------------------" "------"
 
-for scene in "$SCENES_DIR"/*.scene; do
+for scene in "${SCENES[@]}"; do
     name="$(basename "$scene" .scene)"
     reference="$REFERENCE_DIR/$name.png"
     TOTAL=$((TOTAL + 1))
