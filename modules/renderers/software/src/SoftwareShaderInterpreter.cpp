@@ -1193,22 +1193,15 @@ namespace CNA::Internal::Renderers::Software
                     break;
                 case 36:
                 {
-                    float squaredLength = 0.0f;
+                    const float squaredLength = source0[0] * source0[0] +
+                                                source0[1] * source0[1] +
+                                                source0[2] * source0[2];
+                    const float factor = squaredLength == 0.0f
+                                             ? std::numeric_limits<float>::max()
+                                             : 1.0f / std::sqrt(squaredLength);
                     for (int component = 0; component < 4; ++component)
-                    {
-                        if ((destination.writeMask & (1u << component)) != 0u)
-                        {
-                            squaredLength += source0[static_cast<std::size_t>(component)] *
-                                             source0[static_cast<std::size_t>(component)];
-                        }
-                    }
-                    const float length = std::sqrt(squaredLength);
-                    if (length == 0.0f)
-                        result.fill(0.0f);
-                    else
-                        for (int component = 0; component < 4; ++component)
-                            result[static_cast<std::size_t>(component)] =
-                                source0[static_cast<std::size_t>(component)] / length;
+                        result[static_cast<std::size_t>(component)] =
+                            source0[static_cast<std::size_t>(component)] * factor;
                     break;
                 }
                 case 37:

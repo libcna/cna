@@ -479,12 +479,12 @@ namespace
               "DP3 result differs");
         Check(varying(2) == std::array<float, 4>{0.5f, 0.5f, 0.5f, 0.5f},
               "RSQ scalar replication differs");
-        constexpr float normalizedLength = 9.433981132056603f;
+        constexpr float normalizedLength = 5.0f;
         Check(std::abs(varying(3)[0] - 3.0f / normalizedLength) < 0.00001f &&
                   std::abs(varying(3)[1] - 4.0f / normalizedLength) < 0.00001f &&
                   varying(3)[2] == 0.0f &&
                   std::abs(varying(3)[3] - 8.0f / normalizedLength) < 0.00001f,
-              "NRM write-mask dimensionality differs");
+              "vertex NRM did not use the fixed XYZ source length");
         Check(varying(4) == std::array<float, 4>{22.0f, 23.0f, 24.0f, 25.0f},
               "MOVA/relative constant result differs");
         Check(varying(5) == std::array<float, 4>{1.0f, 1.0f, 1.0f, 1.0f},
@@ -665,6 +665,8 @@ namespace
         setConstant(33, {1.0f, 2.0f, 3.0f, 4.0f});
         setConstant(34, {5.0f, 6.0f, 7.0f, 8.0f});
         setConstant(35, {-2.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(36, {3.0f, 4.0f, 12.0f, 26.0f});
+        setConstant(37, {0.0f, 0.0f, 0.0f, 1.0f});
         const auto executeArithmetic = [&](std::uint16_t opcode, std::uint32_t writeMask,
                                            std::initializer_list<std::uint32_t> sources,
                                            const std::string& label,
@@ -752,6 +754,17 @@ namespace
             {-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(),
              -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max()},
             "pixel LOG zero result is finite -FLT_MAX");
+        const auto normalized = executeArithmetic(
+            36u, 0x3u, {source(constant, 36)},
+            "pixel NRM uses XYZ length despite an XY destination mask");
+        Check(normalized.colorWriteMask == 1u &&
+                  std::abs(normalized.colors[0][0] - 3.0f / 13.0f) < 0.000001f &&
+                  std::abs(normalized.colors[0][1] - 4.0f / 13.0f) < 0.000001f &&
+                  normalized.colors[0][2] == 0.0f && normalized.colors[0][3] == 0.0f,
+              "pixel NRM uses XYZ length despite an XY destination mask result differs");
+        checkArithmetic(36u, 0x8u, {source(constant, 37)},
+                        {0.0f, 0.0f, 0.0f, std::numeric_limits<float>::max()},
+                        "pixel NRM zero-XYZ factor scales W by finite FLT_MAX");
         checkArithmetic(80u, 0xFu,
                         {source(constant, 32), source(constant, 33), source(constant, 34)},
                         {5.0f, 2.0f, 7.0f, 4.0f}, "pixel Shader Model 1 CND", 1u);
@@ -1747,6 +1760,28 @@ namespace
         Check(result.colorWriteMask == 1u &&
                   result.colors[0] == std::array<float, 4>{1.0f, 1.0f, 0.0f, 1.0f},
               "parsed pixel LOG did not ignore sign or keep its zero result finite");
+    }
+
+    void CheckParsedNrmWriteMaskEffect(SoftwareRenderer& renderer)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesNrmWriteMask = true;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        auto runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+        const float tint[4] = {3.0f, 4.0f, 12.0f, 26.0f};
+        runtime->SetParameterValue(FindParameter(*runtime, "Tint"), tint, sizeof(tint));
+        runtime->SetTechnique(0u);
+        CompiledEffectPassStateChanges changes;
+        runtime->ApplyPass(1u, {}, changes);
+        auto* software = dynamic_cast<SoftwareCompiledEffect*>(runtime.get());
+        Check(software != nullptr, "parsed NRM write-mask Effect has the wrong backend type");
+        if (software == nullptr)
+            return;
+        const auto result = software->ExecutePixelEXT({});
+        Check(result.colorWriteMask == 1u &&
+                  result.colors[0] == std::array<float, 4>{1.0f, 1.0f, 1.0f, 1.0f},
+              "parsed pixel NRM derived its length from the destination mask");
     }
 
     void CheckCompiledRelativeTextureCoordinate()
@@ -4251,6 +4286,7 @@ int main()
         CheckSubroutineValidation();
         CheckParsedSubroutineEffect(renderer);
         CheckParsedSignedLogEffect(renderer);
+        CheckParsedNrmWriteMaskEffect(renderer);
         CheckCompiledRelativeTextureCoordinate();
         CheckCompiledDependentTemporaryTextureCoordinate();
         CheckCompiledDependentTemporaryCubeCoordinate();

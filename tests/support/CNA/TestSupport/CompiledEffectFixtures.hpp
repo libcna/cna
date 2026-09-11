@@ -358,6 +358,9 @@ namespace CNA::TestSupport
         /// Emits a Shader Model 2 program that makes LOG's sign-ignore and zero-result rules
         /// visible as exact red/green output channels.
         bool pixelShaderUsesSignedLog = false;
+        /// Emits a Shader Model 2 program that distinguishes NRM's fixed XYZ length from
+        /// destination-write-mask dimensionality.
+        bool pixelShaderUsesNrmWriteMask = false;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -424,7 +427,8 @@ namespace CNA::TestSupport
         bool usesRelativeTextureCoordinate = false,
         bool usesDependentTemporaryTextureCoordinate = false,
         bool swizzlesSampleResult = false,
-        bool usesSignedLog = false)
+        bool usesSignedLog = false,
+        bool usesNrmWriteMask = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -1144,6 +1148,43 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 1, 0x00u));
             AppendUInt32(shader, 0x0000001Du); // endloop
             AppendUInt32(shader, 0x00000001u | (2u << 24));
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+        }
+        else if (usesNrmWriteMask)
+        {
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c1, .5, .5, 0, 1
+            AppendUInt32(shader, destination(regConst, 1, 0xFu));
+            AppendUInt32(shader, FloatBits(0.5f));
+            AppendUInt32(shader, FloatBits(0.5f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c2, 0, 0, 0, 1
+            AppendUInt32(shader, destination(regConst, 2, 0xFu));
+            for (int i = 0; i < 3; ++i) AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c3, 2, 0, 0, 0
+            AppendUInt32(shader, destination(regConst, 3, 0xFu));
+            AppendUInt32(shader, FloatBits(2.0f));
+            for (int i = 0; i < 3; ++i) AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, 0x00000024u | (2u << 24)); // nrm r0.xy, c0
+            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x0000000Cu | (3u << 24)); // slt r0.xy, r0, c1
+            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+            AppendUInt32(shader, source(regTemp, 0));
+            AppendUInt32(shader, source(regConst, 1));
+            AppendUInt32(shader, 0x00000024u | (2u << 24)); // nrm r0.w, c2
+            AppendUInt32(shader, destination(regTemp, 0, 0x8u));
+            AppendUInt32(shader, source(regConst, 2));
+            AppendUInt32(shader, 0x0000000Du | (3u << 24)); // sge r0.z, r0.w, c3.x
+            AppendUInt32(shader, destination(regTemp, 0, 0x4u));
+            AppendUInt32(shader, source(regTemp, 0, 0xFFu));
+            AppendUInt32(shader, source(regConst, 3, 0x00u));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.w, c1.w
+            AppendUInt32(shader, destination(regTemp, 0, 0x8u));
+            AppendUInt32(shader, source(regConst, 1, 0xFFu));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
         }
@@ -2055,7 +2096,8 @@ namespace CNA::TestSupport
             options.pixelShaderUsesRelativeTextureCoordinate,
             options.pixelShaderUsesDependentTemporaryTextureCoordinate,
             options.pixelShaderSwizzlesSampleResult,
-            options.pixelShaderUsesSignedLog);
+            options.pixelShaderUsesSignedLog,
+            options.pixelShaderUsesNrmWriteMask);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

@@ -1789,16 +1789,14 @@ private:
         result[i] = std::abs(source0[i]);
       break;
     case 36: {
-      float squaredLength = 0.0f;
-      for (int component = 0; component < 4; ++component) {
-        if ((destination.writeMask & (1u << component)) != 0u)
-          squaredLength += source0[component] * source0[component];
-      }
-      const float length = std::sqrt(squaredLength);
-      result.fill(0.0f);
-      if (length != 0.0f)
-        for (int component = 0; component < 4; ++component)
-          result[component] = source0[component] / length;
+      const float squaredLength = source0[0] * source0[0] +
+                                  source0[1] * source0[1] +
+                                  source0[2] * source0[2];
+      const float factor = squaredLength == 0.0f
+                               ? std::numeric_limits<float>::max()
+                               : 1.0f / std::sqrt(squaredLength);
+      for (int component = 0; component < 4; ++component)
+        result[component] = source0[component] * factor;
       break;
     }
     case 37:

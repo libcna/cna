@@ -601,6 +601,14 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9LogIgnoresSignAndReturnsFiniteValueForZer
     CNA::TestSupport::RunCompiledEffectSignedLogContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9NrmUsesXYZLengthRegardlessOfDestinationMask)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectNrmWriteMaskContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9RelativeConstantTextureCoordinates)
 {
     GraphicsDevice device;

@@ -1019,6 +1019,49 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Contract: D3D9 NRM always derives its reciprocal length from source XYZ.
+     *
+     * A two-channel destination mask must not turn the operation into a two-dimensional
+     * normalization. Correct XYZ normalization puts both written components below one half; a
+     * second W-only operation with zero XYZ must use the finite FLT_MAX factor. The shader emits
+     * opaque white only when both rules hold; write-mask-driven normalization emits black.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectNrmWriteMaskContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesNrmWriteMask = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(3.0f, 4.0f, 12.0f, 26.0f));
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        EXPECT_EQ(centre, Color::White);
+    }
+
+    /**
      * @brief Draws an SM3 texture load whose coordinate is the relatively addressed `c0[aL]`.
      *
      * `aL` is zero for the fixture's single loop iteration, so the lookup must use the reflected
