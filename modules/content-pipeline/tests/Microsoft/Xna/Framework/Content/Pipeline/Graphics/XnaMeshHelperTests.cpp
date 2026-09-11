@@ -18,6 +18,8 @@
 
 #include <array>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -694,6 +696,71 @@ TEST(XnaMeshHelper, SwapWindingOrderReversesEachTriangle)
     std::shared_ptr<MeshContent> mesh = Quad();
     MeshHelper::SwapWindingOrder(mesh);
     EXPECT_EQ(DescribeMeshFull(mesh), Expected("meshhelper/swap_winding_order"));
+}
+
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-234: the normalization `TransformScene` applies is
+// not `Vector3::Normalize`'s.
+//
+// It is the wide divide -- the sum of squares accumulated wider than `float`, the square root
+// narrowed when it is stored, each component divided by it -- which is the same shape the `.x`
+// importer applies to a declared normal. `Vector3::Normalize` multiplies by a `float` reciprocal
+// and answers a different last bit on most vectors.
+//
+// The three vectors and the bits below are the genuine `MeshHelper.TransformScene`'s own, read
+// through `tools/xna-pipeline-oracle/model/MeshNormalizeOracle.cs` and recorded in
+// `tests/reference/xna40/model/mesh-normalize-oracle.json`. The first is SAMPLE-014's own normal,
+// 4.2e-07 longer than unit; the second is already unit to a ulp, which is the case a model's own
+// normals are in; the third is four orders of magnitude off it.
+TEST(XnaMeshHelper, TransformSceneNormalizesWideAndDivides)
+{
+    const auto bits = [](const float value)
+    {
+        std::uint32_t raw = 0;
+        std::memcpy(&raw, &value, sizeof raw);
+        return raw;
+    };
+    const auto fromBits = [](const std::uint32_t raw)
+    {
+        float value = 0.0f;
+        std::memcpy(&value, &raw, sizeof value);
+        return value;
+    };
+    struct Case { std::uint32_t in[3]; std::uint32_t out[3]; };
+    static const Case cases[] = {
+        {{0x3F5B0E3Du, 0x00000000u, 0x3F047A9Eu}, {0x3F5B0E38u, 0x00000000u, 0x3F047A9Bu}},
+        {{0x3E42CCB9u, 0x3F25E00Cu, 0xBF3CCFB7u}, {0x3E42CCB9u, 0x3F25E00Cu, 0xBF3CCFB7u}},
+        {{0x449A5000u, 0xC512999Au, 0x45580B33u}, {0x3E911A39u, 0xBF09D9AAu, 0x3F4B2637u}},
+    };
+    for (const Case& one : cases)
+    {
+        auto mesh = std::make_shared<MeshContent>();
+        mesh->setNameProperty("Probe");
+        mesh->getPositionsProperty().Add(Vector3(0, 0, 0));
+        mesh->getPositionsProperty().Add(Vector3(1, 0, 0));
+        mesh->getPositionsProperty().Add(Vector3(0, 1, 0));
+        auto geometry = std::make_shared<GeometryContent>();
+        for (SharpRuntime::intcs i = 0; i < 3; ++i)
+        {
+            geometry->getVerticesProperty().Add(i);
+            geometry->getIndicesProperty().Add(i);
+        }
+        geometry->getVerticesProperty().getChannelsProperty().Add<Vector3>(
+            VertexChannelNames::Normal(),
+            std::vector<Vector3>(3, Vector3(fromBits(one.in[0]), fromBits(one.in[1]),
+                                            fromBits(one.in[2]))));
+        mesh->getGeometryProperty().Add(geometry);
+        auto root = std::make_shared<NodeContent>();
+        root->getChildrenProperty().Add(mesh);
+        MeshHelper::TransformScene(root, Matrix::getIdentityProperty());
+        const std::shared_ptr<VertexChannel<Vector3>> normals =
+            geometry->getVerticesProperty().getChannelsProperty().Get<Vector3>(
+                VertexChannelNames::Normal());
+        ASSERT_NE(normals, nullptr);
+        const Vector3 answer = normals->At(0);
+        EXPECT_EQ(bits(answer.X), one.out[0]);
+        EXPECT_EQ(bits(answer.Y), one.out[1]);
+        EXPECT_EQ(bits(answer.Z), one.out[2]);
+    }
 }
 
 TEST(XnaMeshHelper, TransformSceneMovesTheGeometryAndReExpressesTheNodes)

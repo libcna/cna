@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshHelper.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <vector>
@@ -104,6 +105,34 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
                 result.push_back(channels[i]);
             }
             return result;
+        }
+    }
+
+    namespace
+    {
+        /**
+         * @brief The normalization the pipeline applies to a normal, which is not `Vector3`'s.
+         *
+         * The sum of squares is accumulated wider than `float`, the square root is narrowed when
+         * it is stored, and each component is *divided* by it -- the same shape the `.x` importer
+         * applies to a declared normal (`XNASWEEP-170`). `Vector3::Normalize` multiplies by a
+         * `float` reciprocal instead, and the two differ by a ulp on most vectors: over nine
+         * normals through the genuine `MeshHelper.TransformScene`, this answers all nine and the
+         * reciprocal multiply four (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-234`,
+         * `tests/reference/xna40/model/mesh-normalize-oracle.json`).
+         *
+         * @param value The vector to normalize.
+         * @return It, normalized, or unchanged when its length is zero.
+         */
+        [[nodiscard]] Vector3 NormalizeWide(const Vector3 value)
+        {
+            const double square = (static_cast<double>(value.X) * value.X) +
+                                  (static_cast<double>(value.Y) * value.Y) +
+                                  (static_cast<double>(value.Z) * value.Z);
+            if (square <= 0.0) { return value; }
+            const float length = static_cast<float>(std::sqrt(square));
+            if (length == 0.0f) { return value; }
+            return Vector3(value.X / length, value.Y / length, value.Z / length);
         }
     }
 
@@ -654,8 +683,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
                         }
                         for (SharpRuntime::intcs i = 0; i < typed->getCountProperty(); ++i)
                         {
-                            Vector3 value = Vector3::TransformNormal(typed->At(i), transform);
-                            value.Normalize();
+                            const Vector3 value =
+                                NormalizeWide(Vector3::TransformNormal(typed->At(i), transform));
                             typed->SetAt(i, value);
                         }
                     }
