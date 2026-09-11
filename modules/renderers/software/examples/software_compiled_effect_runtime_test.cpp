@@ -2229,6 +2229,39 @@ namespace
               "compiled ps_1_4 TEXLD did not sample stage r1 from projected TEXCOORD0");
         Check(zero == Color::White,
               "compiled ps_1_4 TEXLD _dw did not map a zero divisor to x/y=1");
+
+        Texture2D mipTexture(device, 8, 8, true, SurfaceFormat::Color);
+        const std::vector<Color> base(64, Color::Red);
+        const Rectangle baseRectangle(0, 0, 8, 8);
+        mipTexture.SetData(0, &baseRectangle, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < mipTexture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            const std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            mipTexture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect->getParametersProperty()["FxTexture"]->SetValue(&mipTexture);
+        const Vertex projectedQuad[6] = {
+            {-1,  1, 0, .25f, .25f, .5f, 1.0f},
+            {-1, -1, 0, .25f, .25f, .5f, 1.0f},
+            { 1, -1, 0, .25f, .25f, .5f, .125f},
+            {-1,  1, 0, .25f, .25f, .5f, 1.0f},
+            { 1, -1, 0, .25f, .25f, .5f, .125f},
+            { 1,  1, 0, .25f, .25f, .5f, .125f},
+        };
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(projectedQuad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color projectedMip;
+        const Rectangle centreRectangle(2, 2, 1, 1);
+        target.GetData(0, &centreRectangle, &projectedMip, 0, 1);
+        Check(projectedMip == Color::Blue,
+              "compiled ps_1_4 TEXLD LOD ignored projected-coordinate derivatives");
     }
 
     void CheckCompiledShaderModel14Phase()

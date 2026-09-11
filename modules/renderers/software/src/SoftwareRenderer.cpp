@@ -2005,7 +2005,10 @@ namespace CNA::Internal::Renderers::Software
                     const std::uint32_t registerType =
                         ((coordinateToken >> 28u) & 0x7u) |
                         ((coordinateToken >> 8u) & 0x18u);
-                    return registerType == 0u;
+                    const std::uint32_t sourceModifier =
+                        (coordinateToken >> 24u) & 0xFu;
+                    return registerType == 0u || sourceModifier == 9u ||
+                           sourceModifier == 10u;
                 });
         }
 

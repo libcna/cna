@@ -1017,7 +1017,9 @@ private:
     request.gradientX = gradientX;
     request.gradientY = gradientY;
     if (lodMode == SoftwareTextureLodModeEXT::Implicit &&
-        coordinateOperand.type == RegisterType::Temporary &&
+        (coordinateOperand.type == RegisterType::Temporary ||
+         coordinateOperand.sourceModifier == 9u ||
+         coordinateOperand.sourceModifier == 10u) &&
         implicitSampleSources_ != nullptr) {
       implicitSampleSources_->push_back(
           ImplicitSampleSource{currentInstruction_, samplerRegister, coordinate});
