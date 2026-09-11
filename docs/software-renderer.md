@@ -200,6 +200,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   operations, None/Solid for cull/fill and Linear/Wrap for sampler filter/addressing. Exact pixel
   tests cover blend, opposite windings, depth, two-sided stencil and SpriteBatch filtering/wrap on
   Software and EasyGL; a recording test also protects SpriteBatch's private sampler channel.
+- **Stencil references retain their signed public value but consume the effective low byte**
+  (`SOFTWARE-326`). Microsoft XNA forwards the full `Int32` through its D3D9 DWORD state while its
+  only stencil surface is eight-bit `Depth24Stencil8`. The common device boundary now supplies the
+  low eight bits for whole-state and independent `GraphicsDevice.ReferenceStencil` application,
+  preventing OpenGL's saturating reference clamp from changing negative or greater-than-255 values.
+  Software and EasyGL share exact rendered `-1`/255 and 256/0 comparison proof, while getters retain
+  `-1` and 256 exactly.
 - **Static and dynamic vertex/index buffers share EasyGL's public contract** (`SOFTWARE-109`,
   `SOFTWARE-294`). The complete fixed-size resource exists at construction, so readable buffers
   support `GetData` and valid draw ranges before their first upload, matching XNA/FNA native

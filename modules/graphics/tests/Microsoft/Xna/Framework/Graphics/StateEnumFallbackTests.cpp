@@ -310,3 +310,94 @@ TEST(StateEnumFallbackTest, InvalidSpriteSamplerFilterRendersAsLinear)
     EXPECT_EQ(sample.getBProperty(), 0);
     EXPECT_EQ(sample.getAProperty(), 255);
 }
+
+TEST(StateNumericFallbackTest, ReferenceStencilUsesTheLowEightBits)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    GraphicsDevice device = MakeDevice(DepthFormat::Depth24Stencil8);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setBlendStateProperty(BlendState::Opaque);
+    const auto runProbe = [&device](const int writtenReference, const int comparedReference) {
+        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+                     Color::Black, 1.0f, 0);
+
+        DepthStencilState stamp;
+        stamp.setDepthBufferEnableProperty(false);
+        stamp.setDepthBufferWriteEnableProperty(false);
+        stamp.setStencilEnableProperty(true);
+        stamp.setStencilFunctionProperty(CompareFunction::Always);
+        stamp.setStencilPassProperty(StencilOperation::Replace);
+        stamp.setReferenceStencilProperty(writtenReference);
+        device.setDepthStencilStateProperty(stamp);
+        EXPECT_EQ(device.getDepthStencilStateProperty().getReferenceStencilProperty(),
+                  writtenReference);
+        DrawFullScreen(device, Color::Red, 0.0f);
+
+        DepthStencilState compare;
+        compare.setDepthBufferEnableProperty(false);
+        compare.setDepthBufferWriteEnableProperty(false);
+        compare.setStencilEnableProperty(true);
+        compare.setStencilFunctionProperty(CompareFunction::Equal);
+        compare.setStencilPassProperty(StencilOperation::Keep);
+        compare.setReferenceStencilProperty(comparedReference);
+        device.setDepthStencilStateProperty(compare);
+        DrawFullScreen(device, Color::Green, 0.0f);
+        return ReadPixel(device, 4, 4);
+    };
+
+    EXPECT_EQ(runProbe(-1, 255), Color::Green);
+    EXPECT_EQ(runProbe(-1, 0), Color::Red);
+    EXPECT_EQ(runProbe(256, 255), Color::Red);
+    EXPECT_EQ(runProbe(256, 0), Color::Green);
+
+    device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+                 Color::Black, 1.0f, 0);
+    DepthStencilState stamp255;
+    stamp255.setDepthBufferEnableProperty(false);
+    stamp255.setDepthBufferWriteEnableProperty(false);
+    stamp255.setStencilEnableProperty(true);
+    stamp255.setStencilFunctionProperty(CompareFunction::Always);
+    stamp255.setStencilPassProperty(StencilOperation::Replace);
+    stamp255.setReferenceStencilProperty(255);
+    device.setDepthStencilStateProperty(stamp255);
+    DrawFullScreen(device, Color::Red, 0.0f);
+
+    DepthStencilState equal;
+    equal.setDepthBufferEnableProperty(false);
+    equal.setDepthBufferWriteEnableProperty(false);
+    equal.setStencilEnableProperty(true);
+    equal.setStencilFunctionProperty(CompareFunction::Equal);
+    equal.setStencilPassProperty(StencilOperation::Keep);
+    equal.setReferenceStencilProperty(0);
+    device.setDepthStencilStateProperty(equal);
+    device.setReferenceStencilProperty(-1);
+    EXPECT_EQ(device.getReferenceStencilProperty(), -1);
+    DrawFullScreen(device, Color::Green, 0.0f);
+    EXPECT_EQ(ReadPixel(device, 4, 4), Color::Green);
+
+    device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+                 Color::Black, 1.0f, 0);
+    DepthStencilState stampZero;
+    stampZero.setDepthBufferEnableProperty(false);
+    stampZero.setDepthBufferWriteEnableProperty(false);
+    stampZero.setStencilEnableProperty(true);
+    stampZero.setStencilFunctionProperty(CompareFunction::Always);
+    stampZero.setStencilPassProperty(StencilOperation::Replace);
+    stampZero.setReferenceStencilProperty(0);
+    device.setDepthStencilStateProperty(stampZero);
+    DrawFullScreen(device, Color::Red, 0.0f);
+
+    DepthStencilState equal255;
+    equal255.setDepthBufferEnableProperty(false);
+    equal255.setDepthBufferWriteEnableProperty(false);
+    equal255.setStencilEnableProperty(true);
+    equal255.setStencilFunctionProperty(CompareFunction::Equal);
+    equal255.setStencilPassProperty(StencilOperation::Keep);
+    equal255.setReferenceStencilProperty(255);
+    device.setDepthStencilStateProperty(equal255);
+    device.setReferenceStencilProperty(256);
+    EXPECT_EQ(device.getReferenceStencilProperty(), 256);
+    DrawFullScreen(device, Color::Green, 0.0f);
+    EXPECT_EQ(ReadPixel(device, 4, 4), Color::Green);
+}

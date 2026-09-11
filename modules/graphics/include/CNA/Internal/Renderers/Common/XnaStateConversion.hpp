@@ -90,4 +90,15 @@ namespace CNA::Internal::Renderers
     {
         return value >= 0 && value <= 2 ? value : 0;
     }
+
+    /**
+     * @brief Converts XNA's signed stencil reference to its effective Depth24Stencil8 value.
+     *
+     * @param value Caller-visible 32-bit ReferenceStencil value.
+     * @return The low eight bits consumed by the classic XNA stencil buffer.
+     */
+    [[nodiscard]] constexpr int NormalizeXnaReferenceStencil(const int value) noexcept
+    {
+        return static_cast<int>(static_cast<unsigned int>(value) & 0xFFu);
+    }
 }

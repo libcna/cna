@@ -4304,7 +4304,8 @@ namespace Microsoft::Xna::Framework::Graphics
                     static_cast<int>(value.getStencilDepthBufferFailProperty())),
                 value.getStencilMaskProperty(),
                 value.getStencilWriteMaskProperty(),
-                value.getReferenceStencilProperty(),
+                CNA::Internal::Renderers::NormalizeXnaReferenceStencil(
+                    value.getReferenceStencilProperty()),
                 value.getTwoSidedStencilModeProperty(),
                 CNA::Internal::Renderers::NormalizeXnaCompareFunctionOrdinal(
                     static_cast<int>(value.getCounterClockwiseStencilFunctionProperty())),
@@ -4314,7 +4315,9 @@ namespace Microsoft::Xna::Framework::Graphics
                     static_cast<int>(value.getCounterClockwiseStencilFailProperty())),
                 CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
                     static_cast<int>(value.getCounterClockwiseStencilDepthBufferFailProperty())));
-            renderer_->SetReferenceStencil(value.getReferenceStencilProperty());
+            renderer_->SetReferenceStencil(
+                CNA::Internal::Renderers::NormalizeXnaReferenceStencil(
+                    value.getReferenceStencilProperty()));
         }
         // Commit only after both native operations succeed, so the public cache never describes a
         // depth/stencil configuration that a failed renderer update did not install.
@@ -4436,7 +4439,8 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         ThrowIfDisposed();
         if (renderer_)
-            renderer_->SetReferenceStencil(value);
+            renderer_->SetReferenceStencil(
+                CNA::Internal::Renderers::NormalizeXnaReferenceStencil(value));
         // Match the other state setters: a renderer rejection must not leave the public cache
         // describing state that was never installed.
         referenceStencil_ = value;
