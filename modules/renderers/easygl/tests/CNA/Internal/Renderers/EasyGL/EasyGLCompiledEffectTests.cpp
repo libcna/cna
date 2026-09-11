@@ -657,6 +657,18 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14Phase)
     CNA::TestSupport::RunCompiledEffectShaderModel14PhaseContract(device);
 }
 
+TEST(EasyGLCompiledEffectTest, RejectsDuplicateD3D9ShaderModel14Phase)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderDuplicatesShaderModel14Phase = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;

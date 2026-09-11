@@ -326,6 +326,8 @@ namespace CNA::TestSupport
         /// Emits a legacy texture-stage bump-environment instruction.
         SyntheticLegacyBumpEnvironment pixelShaderLegacyBumpEnvironment =
             SyntheticLegacyBumpEnvironment::None;
+        /// Emits a second ps_1_4 PHASE marker so parser validation can reject it.
+        bool pixelShaderDuplicatesShaderModel14Phase = false;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -393,13 +395,14 @@ namespace CNA::TestSupport
         SyntheticLegacyDependentTexture legacyDependentTexture =
             SyntheticLegacyDependentTexture::None,
         SyntheticLegacyBumpEnvironment legacyBumpEnvironment =
-            SyntheticLegacyBumpEnvironment::None)
+            SyntheticLegacyBumpEnvironment::None,
+        bool duplicatesShaderModel14Phase = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill;
         const bool usesShaderModel14 = usesProjectiveModifiers || usesShaderModel14TextureLoad ||
-                                       usesShaderModel14Phase ||
+                                       usesShaderModel14Phase || duplicatesShaderModel14Phase ||
                                        legacyDepthOutput == SyntheticLegacyDepthOutput::Register ||
                                        legacyBumpEnvironment ==
                                            SyntheticLegacyBumpEnvironment::Arithmetic;
@@ -736,7 +739,7 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(regTexture, 3));
         }
-        else if (usesShaderModel14Phase)
+        else if (usesShaderModel14Phase || duplicatesShaderModel14Phase)
         {
             // RGB temporary components persist across the ps_1_4 phase transition. Alpha does not,
             // so the valid phase-2 program initializes the output's z/w channels independently.
@@ -744,6 +747,8 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regTemp, 1, 0x3u));
             AppendUInt32(shader, source(regTexture, 0));
             AppendUInt32(shader, 0x0000FFFDu); // phase
+            if (duplicatesShaderModel14Phase)
+                AppendUInt32(shader, 0x0000FFFDu); // invalid duplicate phase
             AppendUInt32(shader, 0x00000001u); // mov r0.xy, r1
             AppendUInt32(shader, destination(regTemp, 0, 0x3u));
             AppendUInt32(shader, source(regTemp, 1));
@@ -1825,7 +1830,8 @@ namespace CNA::TestSupport
             options.pixelShaderLegacyDepthOutput,
             options.pixelShaderLegacyDepthZeroDivisor,
             options.pixelShaderLegacyDependentTexture,
-            options.pixelShaderLegacyBumpEnvironment);
+            options.pixelShaderLegacyBumpEnvironment,
+            options.pixelShaderDuplicatesShaderModel14Phase);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -1838,6 +1844,7 @@ namespace CNA::TestSupport
                     options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
                     options.pixelShaderUsesShaderModel14Phase ||
+                    options.pixelShaderDuplicatesShaderModel14Phase ||
                     options.pixelShaderLegacyTextureRemap !=
                         SyntheticLegacyTextureRemap::None ||
                     options.pixelShaderLegacyDependentTexture !=
@@ -1869,6 +1876,7 @@ namespace CNA::TestSupport
                 options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
                     options.pixelShaderUsesShaderModel14Phase ||
+                    options.pixelShaderDuplicatesShaderModel14Phase ||
                     options.pixelShaderLegacyTextureRemap !=
                         SyntheticLegacyTextureRemap::None,
                 options.pixelShaderUsesLegacyTextureMatrix,

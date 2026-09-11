@@ -118,7 +118,7 @@ diff --git a/mojoshader.c b/mojoshader.c
  static void state_DP2ADD(Context *ctx)
  {
      if (!replicate_swizzle(ctx->source_args[2].swizzle))
-@@ -3030,13 +3050,15 @@ static int parse_phase_token(Context *ctx)
+@@ -3030,13 +3050,17 @@ static int parse_phase_token(Context *ctx)
  {
 -    // !!! FIXME: needs state; allow only one phase token per shader, I think?
      if (SWAP32(*(ctx->tokens)) != 0x0000FFFD) // phase token always 0x0000FFFD.
@@ -126,6 +126,8 @@ diff --git a/mojoshader.c b/mojoshader.c
  
      if ( (!shader_is_pixel(ctx)) || (!shader_version_exactly(ctx, 1, 4)) )
          fail(ctx, "phase token only available in 1.4 pixel shaders");
++    else if (ctx->phase_count != 0)
++        fail(ctx, "phase token may appear only once per shader");
  
      if (!isfail(ctx))
 +    {
