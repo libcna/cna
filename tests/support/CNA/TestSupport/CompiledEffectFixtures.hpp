@@ -369,6 +369,9 @@ namespace CNA::TestSupport
         /// Emits a Shader Model 2 program that distinguishes NRM's fixed XYZ length from
         /// destination-write-mask dimensionality.
         bool pixelShaderUsesNrmWriteMask = false;
+        /// Prepends `mov r0, r0` before r0 has been initialized. D3D9 shader validation must
+        /// reject the self-read even though the same instruction also names r0 as its destination.
+        bool pixelShaderReadsUninitializedDestination = false;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -436,7 +439,8 @@ namespace CNA::TestSupport
         bool usesDependentTemporaryTextureCoordinate = false,
         bool swizzlesSampleResult = false,
         bool usesSignedLog = false,
-        bool usesNrmWriteMask = false)
+        bool usesNrmWriteMask = false,
+        bool readsUninitializedDestination = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -590,6 +594,13 @@ namespace CNA::TestSupport
             return 0x80000000u | registerBits(type) | number | (swizzle << 16) |
                    (modifier << 24);
         };
+
+        if (readsUninitializedDestination)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, r0
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+        }
 
         if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic)
         {
@@ -2173,7 +2184,8 @@ namespace CNA::TestSupport
             options.pixelShaderUsesDependentTemporaryTextureCoordinate,
             options.pixelShaderSwizzlesSampleResult,
             options.pixelShaderUsesSignedLog,
-            options.pixelShaderUsesNrmWriteMask);
+            options.pixelShaderUsesNrmWriteMask,
+            options.pixelShaderReadsUninitializedDestination);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

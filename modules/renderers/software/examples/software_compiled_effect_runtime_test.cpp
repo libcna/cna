@@ -2638,6 +2638,26 @@ namespace
         Check(rejected, "compiled ps_1_4 parser accepted a duplicate PHASE marker");
     }
 
+    void CheckCompiledUninitializedTemporaryValidation(SoftwareRenderer& renderer)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = false;
+        options.pixelShaderReadsUninitializedDestination = true;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        bool rejected = false;
+        try
+        {
+            static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+        }
+        catch (const std::runtime_error&)
+        {
+            rejected = true;
+        }
+        Check(rejected,
+              "compiled Effect parser accepted a temporary self-read before initialization");
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4414,6 +4434,7 @@ int main()
         CheckCompiledShaderModel14TextureLoad();
         CheckCompiledShaderModel14Phase();
         CheckCompiledShaderModel14PhaseValidation(renderer);
+        CheckCompiledUninitializedTemporaryValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();
