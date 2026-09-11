@@ -73,16 +73,17 @@ TEST(ColorTest, FloatRgbConstructorScalesToByteRange)
     Color c(1.0f, 0.0f, 0.5f);
     EXPECT_EQ(c.getRProperty(), 255);
     EXPECT_EQ(c.getGProperty(), 0);
+    EXPECT_EQ(c.getBProperty(), 128);
     EXPECT_EQ(c.getAProperty(), 255);
 }
 
 TEST(ColorTest, FloatRgbaConstructorScalesToByteRange)
 {
-    Color c(0.0f, 1.0f, 0.0f, 1.0f);
+    Color c(0.0f, 1.0f, 0.0f, 0.5f);
     EXPECT_EQ(c.getRProperty(), 0);
     EXPECT_EQ(c.getGProperty(), 255);
     EXPECT_EQ(c.getBProperty(), 0);
-    EXPECT_EQ(c.getAProperty(), 255);
+    EXPECT_EQ(c.getAProperty(), 128);
 }
 
 // --- Static named colors ---
@@ -296,8 +297,8 @@ TEST(ColorTest, FromNonPremultipliedVector4ScalesRgbByAlpha)
 {
     // alpha=0.5 → each channel * 0.5
     Color c = Color::FromNonPremultiplied(Vector4(1.0f, 0.0f, 0.0f, 0.5f));
-    EXPECT_EQ(c.getAProperty(), 127);
-    EXPECT_GT(c.getRProperty(), 0);
+    EXPECT_EQ(c.getAProperty(), 128);
+    EXPECT_EQ(c.getRProperty(), 128);
     EXPECT_EQ(c.getGProperty(), 0);
     EXPECT_EQ(c.getBProperty(), 0);
 }
@@ -308,6 +309,7 @@ TEST(ColorTest, Vector4ConstructorSetsAllComponents)
 {
     Color c(Vector4(1.0f, 0.5f, 0.0f, 1.0f));
     EXPECT_EQ(c.getRProperty(), 255);
+    EXPECT_EQ(c.getGProperty(), 128);
     EXPECT_EQ(c.getBProperty(), 0);
     EXPECT_EQ(c.getAProperty(), 255);
 }
@@ -317,6 +319,7 @@ TEST(ColorTest, Vector3ConstructorSetsRgbAndOpaqueAlpha)
     Color c(Vector3(0.0f, 1.0f, 0.5f));
     EXPECT_EQ(c.getRProperty(), 0);
     EXPECT_EQ(c.getGProperty(), 255);
+    EXPECT_EQ(c.getBProperty(), 128);
     EXPECT_EQ(c.getAProperty(), 255);
 }
 
@@ -431,11 +434,8 @@ TEST(ColorTest, PackFromVector4SetsComponents)
     EXPECT_EQ(c.getAProperty(), 255);
 }
 
-// REMED-CORE-004: PackFromVector4's own IPackedVector contract (Color.cs's
-// "R = (byte)(vector.X * 255.0f);") does NOT clamp like the Color(Vector4) constructor does --
-// out-of-range components truncate/wrap instead of saturating at 0/255. These pin the exact,
-// documented, UB-free wraparound values CNA now produces, matching FNA's truncating (not
-// clamping) semantics for in-range-ish overflow while remaining well-defined for every input.
+// Microsoft XNA 4.0 uses the same PackUNorm helper for IPackedVector and constructors: components
+// clamp to [0,255], midpoint ties round to even, NaN becomes zero, and infinities saturate.
 TEST(ColorTest, PackFromVector4AtZeroGivesZero)
 {
     Color c(255, 255, 255, 255);
@@ -456,20 +456,29 @@ TEST(ColorTest, PackFromVector4AtOneGivesTwoFiftyFive)
     EXPECT_EQ(c.getAProperty(), 255);
 }
 
-TEST(ColorTest, PackFromVector4JustOutsideRangeWrapsRatherThanClamping)
+TEST(ColorTest, PackFromVector4JustOutsideRangeClamps)
 {
-    // 2.0 * 255 = 510 -> truncated int 510 -> low byte 510 mod 256 = 254.
     Color c(0, 0, 0, 0);
     c.PackFromVector4(Vector4(2.0f, 0.0f, 0.0f, 0.0f));
-    EXPECT_EQ(c.getRProperty(), 254);
+    EXPECT_EQ(c.getRProperty(), 255);
 }
 
-TEST(ColorTest, PackFromVector4NegativeWrapsRatherThanClampingToZero)
+TEST(ColorTest, PackFromVector4NegativeClampsToZero)
 {
-    // -1.0 * 255 = -255 -> truncated int -255 -> low byte (-255 mod 256) = 1.
     Color c(0, 0, 0, 0);
     c.PackFromVector4(Vector4(-1.0f, 0.0f, 0.0f, 0.0f));
-    EXPECT_EQ(c.getRProperty(), 1);
+    EXPECT_EQ(c.getRProperty(), 0);
+}
+
+TEST(ColorTest, PackFromVector4RoundsMidpointToEven)
+{
+    Color c(0, 0, 0, 0);
+    const float evenLowerTie = 128.5f / 255.0f;
+    c.PackFromVector4(Vector4(0.5f, evenLowerTie, 0.5f, evenLowerTie));
+    EXPECT_EQ(c.getRProperty(), 128);
+    EXPECT_EQ(c.getGProperty(), 128);
+    EXPECT_EQ(c.getBProperty(), 128);
+    EXPECT_EQ(c.getAProperty(), 128);
 }
 
 TEST(ColorTest, PackFromVector4NaNIsDefinedNotUndefinedBehavior)
@@ -483,7 +492,7 @@ TEST(ColorTest, PackFromVector4PositiveInfinityIsDefinedNotUndefinedBehavior)
 {
     Color c(0, 0, 0, 0);
     c.PackFromVector4(Vector4(std::numeric_limits<float>::infinity(), 0.0f, 0.0f, 0.0f));
-    EXPECT_EQ(c.getRProperty(), 0);
+    EXPECT_EQ(c.getRProperty(), 255);
 }
 
 TEST(ColorTest, PackFromVector4NegativeInfinityIsDefinedNotUndefinedBehavior)
@@ -497,7 +506,7 @@ TEST(ColorTest, PackFromVector4ExtremeFiniteValueIsDefinedNotUndefinedBehavior)
 {
     Color c(0, 0, 0, 0);
     c.PackFromVector4(Vector4(1e30f, -1e30f, 0.0f, 0.0f));
-    EXPECT_EQ(c.getRProperty(), 0);
+    EXPECT_EQ(c.getRProperty(), 255);
     EXPECT_EQ(c.getGProperty(), 0);
 }
 
