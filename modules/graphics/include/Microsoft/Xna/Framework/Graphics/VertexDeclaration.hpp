@@ -49,6 +49,18 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         explicit VertexDeclaration(std::vector<VertexElement> elements);
 
+        /** @brief Copy-constructs another wrapper for the same XNA declaration resource. */
+        CNAEXT VertexDeclaration(const VertexDeclaration& other);
+
+        /** @brief Copy-assigns another wrapper for the same XNA declaration resource. */
+        CNAEXT VertexDeclaration& operator=(const VertexDeclaration& other);
+
+        /** @brief Move-constructs a declaration wrapper. */
+        CNAEXT VertexDeclaration(VertexDeclaration&& other) noexcept = default;
+
+        /** @brief Move-assigns a declaration wrapper. */
+        CNAEXT VertexDeclaration& operator=(VertexDeclaration&& other) noexcept = default;
+
         /**
          * @brief Constructs a VertexDeclaration with an explicit stride and element list.
          * @param vertexStride Size in bytes of one vertex.
@@ -91,6 +103,7 @@ namespace Microsoft::Xna::Framework::Graphics
         friend class VertexBuffer;
 
         void ValidateForProfile(GraphicsProfile graphicsProfile) const;
+        void BindToDevice(GraphicsDevice& device);
 
         int vertexStride_ = 0;
         std::vector<VertexElement> elements_;

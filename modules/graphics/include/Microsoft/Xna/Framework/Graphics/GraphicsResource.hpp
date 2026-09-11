@@ -76,6 +76,25 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsResource& operator=(GraphicsResource&& other) noexcept;
 
         /**
+         * @brief Makes this C++ wrapper share the source resource's managed identity.
+         *
+         * XNA resource properties hold object references. CNA normally keeps C++ value-copy
+         * construction independent, but reference-valued public properties use this opt-in seam
+         * so stack objects and temporaries remain lifetime-safe while their Name, Tag, device,
+         * disposal state and Disposing subscriptions behave as one resource.
+         *
+         * @param other Source wrapper whose resource identity is retained.
+         */
+        void ShareResourceIdentityWith(const GraphicsResource& other);
+
+        /**
+         * @brief Rebinds a shared resource identity to a graphics device.
+         *
+         * @param device New owning device, or nullptr to detach it.
+         */
+        void BindSharedResourceIdentityToDevice(GraphicsDevice* device);
+
+        /**
          * @brief Releases managed and native resources.
          *
          * Derived classes should override this to clean up their own resources.
@@ -85,6 +104,13 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         virtual void Dispose(bool disposing);
 
+    private:
+        struct SharedIdentity;
+
+        [[nodiscard]] std::shared_ptr<SharedIdentity> EnsureSharedIdentity() const;
+        void DetachSharedIdentity();
+
+    protected:
         GraphicsDevice* graphicsDevice_;
         // The raw device pointer preserves XNA's public ownership identity after Dispose. This
         // separate non-owning token says whether that C++ object still exists before a resource
@@ -93,5 +119,8 @@ namespace Microsoft::Xna::Framework::Graphics
         std::string name_;
         System::Object* tag_ = nullptr;
         bool isDisposed_ = false;
+
+    private:
+        mutable std::shared_ptr<SharedIdentity> sharedIdentity_;
     };
 }

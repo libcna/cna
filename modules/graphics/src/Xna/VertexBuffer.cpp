@@ -144,6 +144,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , bufferUsage_(bufferUsage)
         , vertexCount_(vertexCount)
     {
+        vertexDeclaration_.BindToDevice(device);
         const int stride = vertexDeclaration_.getVertexStrideProperty();
         if (stride > 0)
         {

@@ -94,7 +94,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Returns the vertex declaration describing the layout of each vertex.
-         * @return Const reference to the stored VertexDeclaration.
+         * @return Mutable reference to the retained VertexDeclaration resource.
+         */
+        [[nodiscard]] VertexDeclaration& getVertexDeclarationProperty() { return vertexDeclaration_; }
+
+        /**
+         * @brief Returns the vertex declaration describing the layout of each vertex.
+         * @return Const reference to the retained VertexDeclaration resource.
          */
         [[nodiscard]] const VertexDeclaration& getVertexDeclarationProperty() const { return vertexDeclaration_; }
 

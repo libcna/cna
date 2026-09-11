@@ -131,6 +131,26 @@ namespace Microsoft::Xna::Framework::Graphics
         Validate(vertexStride_, elements_);
     }
 
+    VertexDeclaration::VertexDeclaration(const VertexDeclaration& other)
+        : GraphicsResource(other)
+        , vertexStride_(other.vertexStride_)
+        , elements_(other.elements_)
+    {
+        ShareResourceIdentityWith(other);
+    }
+
+    VertexDeclaration& VertexDeclaration::operator=(const VertexDeclaration& other)
+    {
+        if (this != &other)
+        {
+            GraphicsResource::operator=(other);
+            vertexStride_ = other.vertexStride_;
+            elements_ = other.elements_;
+            ShareResourceIdentityWith(other);
+        }
+        return *this;
+    }
+
     VertexDeclaration::VertexDeclaration(
         int vertexStride,
         std::initializer_list<VertexElement> elements)
@@ -196,5 +216,10 @@ namespace Microsoft::Xna::Framework::Graphics
                     "vertexElements");
             }
         }
+    }
+
+    void VertexDeclaration::BindToDevice(GraphicsDevice& device)
+    {
+        BindSharedResourceIdentityToDevice(&device);
     }
 }

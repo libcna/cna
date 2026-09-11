@@ -3,6 +3,7 @@
 // binds, rather than rejecting profile-neutral declarations in their constructors.
 
 #include <cstdint>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -25,7 +26,9 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/EventArgs.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -42,9 +45,20 @@ using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
 using Microsoft::Xna::Framework::Graphics::VertexElement;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 namespace
 {
+    class TestTag final : public System::Object
+    {
+    public:
+        [[nodiscard]] const std::string& GetTypeName() const override
+        {
+            static const std::string name = "TestTag";
+            return name;
+        }
+    };
+
     GraphicsDevice MakeDevice(GraphicsProfile profile)
     {
         PresentationParameters parameters;
@@ -178,6 +192,140 @@ TEST(VertexDeclarationProfileTest, DisposedDeclarationCannotBindToVertexBuffers)
                  System::ObjectDisposedException);
     EXPECT_THROW((void)DynamicVertexBuffer(device, declaration, 1, BufferUsage::None),
                  System::ObjectDisposedException);
+}
+
+TEST(VertexDeclarationProfileTest, VertexBufferRetainsTheDeclarationResourceIdentity)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    auto device = MakeDevice(GraphicsProfile::HiDef);
+    VertexDeclaration declaration = SingleElement(VertexElementFormat::Single);
+    TestTag firstTag;
+    TestTag secondTag;
+    declaration.setNameProperty("before");
+    declaration.setTagProperty(&firstTag);
+
+    VertexBuffer buffer(device, declaration, 1, BufferUsage::None);
+    VertexDeclaration& retained = buffer.getVertexDeclarationProperty();
+
+    EXPECT_EQ(declaration.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(retained.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(retained.getNameProperty(), "before");
+    EXPECT_EQ(retained.getTagProperty(), &firstTag);
+
+    declaration.setNameProperty("after");
+    declaration.setTagProperty(&secondTag);
+    EXPECT_EQ(retained.getNameProperty(), "after");
+    EXPECT_EQ(retained.getTagProperty(), &secondTag);
+
+    int sourceDisposingCount = 0;
+    int retainedDisposingCount = 0;
+    System::Object* disposingSender = nullptr;
+    declaration.Disposing += [&](System::Object* sender, const System::EventArgs&)
+    {
+        ++sourceDisposingCount;
+        disposingSender = sender;
+    };
+    retained.Disposing += [&](System::Object* sender, const System::EventArgs&)
+    {
+        ++retainedDisposingCount;
+        disposingSender = sender;
+    };
+    retained.Dispose();
+    EXPECT_TRUE(declaration.getIsDisposedProperty());
+    EXPECT_TRUE(retained.getIsDisposedProperty());
+    EXPECT_EQ(sourceDisposingCount, 1);
+    EXPECT_EQ(retainedDisposingCount, 1);
+    EXPECT_EQ(disposingSender, &declaration);
+}
+
+TEST(VertexDeclarationProfileTest, RetainedDeclarationOutlivesTheSourceCppWrapper)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    auto device = MakeDevice(GraphicsProfile::HiDef);
+    std::unique_ptr<VertexBuffer> buffer;
+    {
+        VertexDeclaration declaration = SingleElement(VertexElementFormat::Single);
+        declaration.setNameProperty("temporary-scope");
+        buffer = std::make_unique<VertexBuffer>(
+            device, declaration, 1, BufferUsage::None);
+    }
+
+    const VertexDeclaration& retained = buffer->getVertexDeclarationProperty();
+    EXPECT_EQ(retained.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(retained.getNameProperty(), "temporary-scope");
+    EXPECT_FALSE(retained.getIsDisposedProperty());
+    EXPECT_EQ(retained.getVertexStrideProperty(), 4);
+    ASSERT_EQ(retained.GetVertexElements().size(), 1U);
+    EXPECT_EQ(retained.GetVertexElements()[0].getVertexElementFormatProperty(),
+              VertexElementFormat::Single);
+}
+
+TEST(VertexDeclarationProfileTest, DeclarationOwnershipRebindsAcrossDevices)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    auto firstDevice = MakeDevice(GraphicsProfile::HiDef);
+    auto secondDevice = MakeDevice(GraphicsProfile::HiDef);
+    VertexDeclaration declaration = SingleElement(VertexElementFormat::Single);
+
+    VertexBuffer first(firstDevice, declaration, 1, BufferUsage::None);
+    EXPECT_EQ(declaration.getGraphicsDeviceProperty(), &firstDevice);
+    EXPECT_EQ(first.getVertexDeclarationProperty().getGraphicsDeviceProperty(), &firstDevice);
+
+    {
+        VertexBuffer second(secondDevice, declaration, 1, BufferUsage::None);
+        EXPECT_EQ(declaration.getGraphicsDeviceProperty(), &secondDevice);
+        EXPECT_EQ(first.getVertexDeclarationProperty().getGraphicsDeviceProperty(), &secondDevice);
+        EXPECT_EQ(second.getVertexDeclarationProperty().getGraphicsDeviceProperty(), &secondDevice);
+    }
+
+    EXPECT_EQ(declaration.getGraphicsDeviceProperty(), &secondDevice);
+    VertexBuffer rebound(firstDevice, declaration, 1, BufferUsage::None);
+    EXPECT_EQ(declaration.getGraphicsDeviceProperty(), &firstDevice);
+    EXPECT_EQ(first.getVertexDeclarationProperty().getGraphicsDeviceProperty(), &firstDevice);
+    EXPECT_EQ(rebound.getVertexDeclarationProperty().getGraphicsDeviceProperty(), &firstDevice);
+}
+
+TEST(VertexDeclarationProfileTest, DeviceDisposalDoesNotDisposeDeclarationAliases)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    auto device = MakeDevice(GraphicsProfile::HiDef);
+    VertexDeclaration declaration = SingleElement(VertexElementFormat::Single);
+    VertexBuffer buffer(device, declaration, 1, BufferUsage::None);
+    VertexDeclaration& retained = buffer.getVertexDeclarationProperty();
+    int sourceDisposingCount = 0;
+    int retainedDisposingCount = 0;
+    declaration.Disposing += [&](System::Object*, const System::EventArgs&)
+    {
+        ++sourceDisposingCount;
+    };
+    retained.Disposing += [&](System::Object*, const System::EventArgs&)
+    {
+        ++retainedDisposingCount;
+    };
+
+    device.Dispose();
+
+    EXPECT_FALSE(declaration.getIsDisposedProperty());
+    EXPECT_FALSE(retained.getIsDisposedProperty());
+    EXPECT_EQ(sourceDisposingCount, 0);
+    EXPECT_EQ(retainedDisposingCount, 0);
+}
+
+TEST(VertexDeclarationProfileTest, StaticDeclarationsSurviveCompletedCppDeviceScopes)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+    const VertexDeclaration& declaration = VertexPositionColor::getVertexDeclarationStatic();
+
+    {
+        auto device = MakeDevice(GraphicsProfile::HiDef);
+        VertexBuffer buffer(device, declaration, 1, BufferUsage::None);
+        EXPECT_EQ(declaration.getGraphicsDeviceProperty(), &device);
+    }
+    EXPECT_FALSE(declaration.getIsDisposedProperty());
+
+    auto reboundDevice = MakeDevice(GraphicsProfile::HiDef);
+    EXPECT_NO_THROW(VertexBuffer(reboundDevice, declaration, 1, BufferUsage::None));
+    EXPECT_EQ(declaration.getGraphicsDeviceProperty(), &reboundDevice);
 }
 
 TEST(VertexDeclarationProfileTest, DrawUserValidatesProfileBeforeReadingVertexData)

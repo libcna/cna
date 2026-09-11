@@ -597,6 +597,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   pixels that already matched XNA, including an entire 29-pixel constant-green row. Other stock
   effects also moved in opposing directions. The experiment was reverted rather than trading one
   set of one-byte residuals for another without an XNA rule that supports the change.
+- **`VertexBuffer.VertexDeclaration` preserves observable resource identity** (`SOFTWARE-348`).
+  Microsoft XNA binds and returns the caller's declaration object. CNA's lifetime-safe C++ wrapper
+  aliases now share its device, Name, Tag, disposal and disposal-event delivery, including stack/temporary
+  sources and cross-device ownership rebinding. Literal caller-address equality remains the
+  explicitly tracked ownership-model limitation `SOFTWARE-207`; it is not emulated with a dangling
+  borrowed pointer.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared
