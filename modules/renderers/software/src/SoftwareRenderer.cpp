@@ -421,6 +421,8 @@ namespace CNA::Internal::Renderers::Software
             /// World-space position/normal (SOFTWARE-82/113).
             float wpx = 0.0f, wpy = 0.0f, wpz = 0.0f;
             float nx = 0.0f, ny = 0.0f, nz = 1.0f;
+            /// SpriteBatch viewport-local homogeneous position before its orthographic projection.
+            float spriteX = 0.0f, spriteY = 0.0f;
         };
 
         /// Reads a packed little-endian RGBA8 Color (Microsoft::Xna::Framework::Color's own
@@ -483,6 +485,8 @@ namespace CNA::Internal::Renderers::Software
             out.nx = a.nx + t * (b.nx - a.nx);
             out.ny = a.ny + t * (b.ny - a.ny);
             out.nz = a.nz + t * (b.nz - a.nz);
+            out.spriteX = a.spriteX + t * (b.spriteX - a.spriteX);
+            out.spriteY = a.spriteY + t * (b.spriteY - a.spriteY);
             return out;
         }
 
@@ -695,7 +699,15 @@ namespace CNA::Internal::Renderers::Software
         RasterVertex SpriteClipVertexToRasterVertex(
             const ClipVertex& cv, const ViewportTransform& vp)
         {
-            return ClipVertexToRasterVertexWithOffset(cv, vp, 0.0f);
+            RasterVertex out = ClipVertexToRasterVertexWithOffset(cv, vp, 0.0f);
+            const float invW = 1.0f / cv.w;
+            // The orthographic projection and viewport transform algebraically cancel for X/Y.
+            // Recover the preserved pre-projection coordinates directly so an ordinary W=1
+            // SpriteBatch transform does not acquire a rounding displacement at half-pixel edges.
+            // Clipped W!=1 vertices still receive the required perspective divide.
+            out.x = cv.spriteX * invW + vp.x;
+            out.y = cv.spriteY * invW + vp.y;
+            return out;
         }
 
         float EdgeFunction(float ax, float ay, float bx, float by, float px, float py)
@@ -4269,6 +4281,8 @@ namespace CNA::Internal::Renderers::Software
             out.r = r; out.g = g; out.b = b; out.a = a;
             out.u = u; out.v = v;
             out.u1 = u; out.v1 = v;
+            out.spriteX = position.X;
+            out.spriteY = position.Y;
             return out;
         };
         const ClipVertex cv0 = makeClipVertex(c0, u1, v1);

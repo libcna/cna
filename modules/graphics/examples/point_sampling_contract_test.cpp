@@ -1112,6 +1112,24 @@ private:
         g2.transScaleY = 2.5;
         g2.transTx = 3.0;
         g2.transTy = 1.0;
+        // SOFTWARE-342: the transformed left edge is exactly x=4.5. A corner-origin rasterizer
+        // therefore includes pixel-center x=4.5. The homogeneous SpriteBatch path must preserve
+        // that coordinate instead of round-tripping it through projection and viewport arithmetic
+        // to 4.5000005, which dropped this entire 14-pixel edge on Software.
+        RenderTarget2D edgeRt(dev, 28, 20, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::DiscardContents);
+        const std::vector<Color> edgePixels = RenderSprite(
+            dev, edgeRt, 28, 20, t3x2_, g2,
+            MakeSampler(TextureFilter::Point, TextureAddressMode::Clamp,
+                        TextureAddressMode::Clamp),
+            Color(255, 255, 255, 255));
+        int coveredLeftEdge = 0;
+        for (int y = 6; y < 20; ++y)
+            coveredLeftEdge += !SameColor(edgePixels[static_cast<std::size_t>(y) * 28u + 4u],
+                                          kSentinel) ? 1 : 0;
+        check(coveredLeftEdge == 14,
+              "J2 homogeneous round-trip guard: the exact x=4.5 left edge covers all 14 visible "
+              "pixel centers (covered=" + std::to_string(coveredLeftEdge) + ")");
         ExactLeg(dev, "J2 anisotropic transform scale + translation", p3x2_, t3x2_, 28, 20, g2,
                  TextureAddressMode::Clamp, TextureAddressMode::Clamp, false);
     }

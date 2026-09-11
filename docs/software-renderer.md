@@ -559,6 +559,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   and sample the opposite texture edge. Software and EasyGL now retain the separately converted
   origin/extent used by Microsoft XNA/FNA; an exact two-axis PointClamp case matches a measured
   Microsoft XNA 4.0 Reach render at `INT_MAX + 1` without invoking signed-integer undefined behavior.
+- **Homogeneous SpriteBatch clipping preserves exact screen placement** (`SOFTWARE-342`). The CPU
+  clip vertex carries the caller-transformed viewport-local X/Y alongside projected clip position,
+  so the final raster conversion performs only the required W divide and viewport-origin addition.
+  Ordinary W=1 half-pixel edges no longer drift through an algebraically cancelling projection/
+  viewport round trip, while transformed/clipped varying-W sprites retain perspective semantics.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared
