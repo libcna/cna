@@ -182,6 +182,19 @@ namespace CNA::TestSupport
         GreenBlue,
     };
 
+    /** @brief Legacy dependent texture/dot instruction emitted by the synthetic pixel shader. */
+    enum class SyntheticLegacyDependentTexture
+    {
+        /** @brief Do not emit a legacy dependent texture/dot instruction. */
+        None,
+        /** @brief Emit `TEXREG2RGB`, using source RGB as a dependent texture coordinate. */
+        RegisterRgb,
+        /** @brief Emit `TEXDP3TEX`, using a texture-coordinate dot product for a 1D lookup. */
+        DotSample,
+        /** @brief Emit `TEXDP3`, replicating a texture-coordinate dot product to RGBA. */
+        Dot,
+    };
+
     /** @brief Legacy pixel-depth instruction emitted by the synthetic pixel shader. */
     enum class SyntheticLegacyDepthOutput
     {
@@ -293,6 +306,9 @@ namespace CNA::TestSupport
         /// Emits Shader Model 1.2 `TEXREG2AR` or `TEXREG2GB` against the destination stage.
         SyntheticLegacyTextureRemap pixelShaderLegacyTextureRemap =
             SyntheticLegacyTextureRemap::None;
+        /// Emits Shader Model 1.2 dependent RGB/dot texture operations.
+        SyntheticLegacyDependentTexture pixelShaderLegacyDependentTexture =
+            SyntheticLegacyDependentTexture::None;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -356,7 +372,9 @@ namespace CNA::TestSupport
         bool usesLegacyTextureMatrix3Specular = false,
         bool usesLegacyTextureMatrix3VertexSpecular = false,
         SyntheticLegacyDepthOutput legacyDepthOutput = SyntheticLegacyDepthOutput::None,
-        bool legacyDepthZeroDivisor = false)
+        bool legacyDepthZeroDivisor = false,
+        SyntheticLegacyDependentTexture legacyDependentTexture =
+            SyntheticLegacyDependentTexture::None)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -375,7 +393,9 @@ namespace CNA::TestSupport
                                                          usesLegacyTextureMatrix3Specular ||
                                                          usesLegacyTextureMatrix3VertexSpecular ||
                                                          legacyTextureRemap !=
-                                                             SyntheticLegacyTextureRemap::None
+                                                             SyntheticLegacyTextureRemap::None ||
+                                                         legacyDependentTexture !=
+                                                             SyntheticLegacyDependentTexture::None
                                                      ? 0xFFFF0102u
                                                      : usesShaderModel3 ? 0xFFFF0300u : 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
@@ -440,7 +460,8 @@ namespace CNA::TestSupport
                           usesLegacyTextureMatrix3Sample ||
                           usesLegacyTextureMatrix3Specular ||
                           usesLegacyTextureMatrix3VertexSpecular ||
-                          legacyTextureRemap != SyntheticLegacyTextureRemap::None
+                          legacyTextureRemap != SyntheticLegacyTextureRemap::None ||
+                          legacyDependentTexture != SyntheticLegacyDependentTexture::None
                       ? "ps_1_2"
                       : usesShaderModel3 ? "ps_3_0" : "ps_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
@@ -500,7 +521,27 @@ namespace CNA::TestSupport
                    (modifier << 24);
         };
 
-        if (legacyDepthOutput == SyntheticLegacyDepthOutput::TextureMatrix2)
+        if (legacyDependentTexture != SyntheticLegacyDependentTexture::None)
+        {
+            const std::uint32_t destinationRegister = samplerRegister == 0u ? 1u : samplerRegister;
+            const std::uint32_t opcode =
+                legacyDependentTexture == SyntheticLegacyDependentTexture::RegisterRgb
+                    ? 0x00000052u
+                    : legacyDependentTexture == SyntheticLegacyDependentTexture::DotSample
+                          ? 0x00000053u
+                          : 0x00000055u;
+            AppendUInt32(shader, opcode); // texreg2rgb/texdp3tex/texdp3 t#, t0
+            AppendUInt32(shader, destination(regTexture, destinationRegister, 0xFu));
+            // ps_1_2/1_3 permit signed scaling on texture-address sources. Exercising it on the
+            // RGB path proves both the sampled coordinate and its implicit derivatives use _bx2.
+            AppendUInt32(shader, source(
+                regTexture, 0, swizzleIdentity,
+                legacyDependentTexture == SyntheticLegacyDependentTexture::RegisterRgb ? 4u : 0u));
+            AppendUInt32(shader, 0x00000001u); // mov r0, t#
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTexture, destinationRegister));
+        }
+        else if (legacyDepthOutput == SyntheticLegacyDepthOutput::TextureMatrix2)
         {
             AppendUInt32(shader, 0x00000040u); // texcrd t0
             AppendUInt32(shader, destination(regTexture, 0, 0xFu));
@@ -1014,7 +1055,8 @@ namespace CNA::TestSupport
                                                                 bool forwardsLegacyTextureMatrix3Sample = false,
                                                                 bool forwardsLegacyTextureMatrix3Specular = false,
                                                                 bool forwardsLegacyTextureMatrix3VertexSpecular = false,
-                                                                bool legacyTextureMatrix2ZeroDivisor = false)
+                                                                bool legacyTextureMatrix2ZeroDivisor = false,
+                                                                bool forwardsLegacyDependentTexture = false)
     {
         const std::uint32_t versionToken = usesPredication ? 0xFFFE0300u : 0xFFFE0200u;
         const std::uint32_t constantCount = readsSecondStream ? 2u : 1u;
@@ -1188,6 +1230,18 @@ namespace CNA::TestSupport
             appendDef(242u, 0.0f, 1.0f, 0.0f, 0.2f); // second matrix row / eye y
             appendDef(243u, 0.0f, 0.0f, 1.0f, 1.0f); // third matrix row / eye z
         }
+        if (forwardsLegacyDependentTexture)
+        {
+            const auto appendDef = [&](std::uint32_t number, float x, float y, float z, float w) {
+                AppendUInt32(shader, 0x00000051u | (5u << 24));
+                AppendUInt32(shader, destination(regConst, number));
+                AppendUInt32(shader, FloatBits(x));
+                AppendUInt32(shader, FloatBits(y));
+                AppendUInt32(shader, FloatBits(z));
+                AppendUInt32(shader, FloatBits(w));
+            };
+            appendDef(241u, 1.0f, 0.0f, 0.0f, 1.0f); // t1 dot-product row
+        }
 
         // dcl_position v0
         AppendUInt32(shader, 0x0000001Fu | (2u << 24));
@@ -1299,6 +1353,12 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, destination(regTexCoordOut, 3, 0x8u));
                 AppendUInt32(shader, source(regInput, 1));
             }
+        }
+        if (forwardsLegacyDependentTexture)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oT1, c241
+            AppendUInt32(shader, destination(regTexCoordOut, 1));
+            AppendUInt32(shader, source(regConst, 241u));
         }
         AppendUInt32(shader, 0x0000FFFFu);
         return shader;
@@ -1686,7 +1746,8 @@ namespace CNA::TestSupport
             options.pixelShaderUsesLegacyTextureMatrix3Specular,
             options.pixelShaderUsesLegacyTextureMatrix3VertexSpecular,
             options.pixelShaderLegacyDepthOutput,
-            options.pixelShaderLegacyDepthZeroDivisor);
+            options.pixelShaderLegacyDepthZeroDivisor,
+            options.pixelShaderLegacyDependentTexture);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -1698,9 +1759,11 @@ namespace CNA::TestSupport
                 options.pixelShaderSamplesTexture || options.pixelShaderUsesDerivatives ||
                     options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
-                options.pixelShaderUsesShaderModel14Phase ||
+                    options.pixelShaderUsesShaderModel14Phase ||
                     options.pixelShaderLegacyTextureRemap !=
                         SyntheticLegacyTextureRemap::None ||
+                    options.pixelShaderLegacyDependentTexture !=
+                        SyntheticLegacyDependentTexture::None ||
                     options.pixelShaderUsesLegacyTextureMatrix2 ||
                     options.pixelShaderUsesLegacyTextureMatrix3Sample ||
                     options.pixelShaderUsesLegacyTextureMatrix3Specular ||
@@ -1708,6 +1771,8 @@ namespace CNA::TestSupport
                     options.pixelShaderLegacyDepthOutput ==
                         SyntheticLegacyDepthOutput::TextureMatrix2,
                 options.samplerKind != SyntheticSamplerKind::Sampler2D ||
+                    options.pixelShaderLegacyDependentTexture !=
+                        SyntheticLegacyDependentTexture::None ||
                     options.pixelShaderUsesLegacyTextureMatrix2 ||
                     options.pixelShaderUsesLegacyTextureMatrix3Sample ||
                     options.pixelShaderUsesLegacyTextureMatrix3Specular ||
@@ -1727,7 +1792,9 @@ namespace CNA::TestSupport
                 options.pixelShaderUsesLegacyTextureMatrix3Sample,
                 options.pixelShaderUsesLegacyTextureMatrix3Specular,
                 options.pixelShaderUsesLegacyTextureMatrix3VertexSpecular,
-                options.pixelShaderLegacyDepthZeroDivisor);
+                options.pixelShaderLegacyDepthZeroDivisor,
+                options.pixelShaderLegacyDependentTexture !=
+                    SyntheticLegacyDependentTexture::None);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

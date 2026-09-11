@@ -2046,14 +2046,20 @@ namespace CNA::Internal::Renderers::Software
                         program, *vertices[vertex], request.coordinateRegister,
                         source[vertex]))
                     return false;
+            for (int vertex = 0; vertex < 3; ++vertex)
+            {
+                const std::array<float, 4> raw = source[vertex];
+                for (int component = 0; component < 3; ++component)
+                    source[vertex][component] =
+                        raw[request.coordinateComponents[component]] * request.coordinateScale +
+                        request.coordinateBias;
+            }
 
             int matrixRows = 0;
             while (matrixRows < 3 && request.legacyMatrixRowRegisters[matrixRows] >= 0)
                 ++matrixRows;
             if (matrixRows != 0)
             {
-                if (matrixRows < 2)
-                    return false;
                 std::array<float, 3> eyes[3]{};
                 if (request.legacyReflection ==
                     SoftwareLegacyTextureReflectionEXT::ConstantEye)
@@ -2101,8 +2107,7 @@ namespace CNA::Internal::Renderers::Software
 
             for (int vertex = 0; vertex < 3; ++vertex)
                 for (int component = 0; component < 3; ++component)
-                    coordinates[vertex][component] =
-                        source[vertex][request.coordinateComponents[component]];
+                    coordinates[vertex][component] = source[vertex][component];
             return true;
         }
 

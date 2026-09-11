@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
+
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
@@ -1877,6 +1879,128 @@ namespace CNA::TestSupport
 
         EXPECT_EQ(render(SyntheticLegacyTextureRemap::AlphaRed), Color::Red);
         EXPECT_EQ(render(SyntheticLegacyTextureRemap::GreenBlue), Color::Green);
+    }
+
+    /**
+     * @brief Proves the Shader Model 1.2 dependent RGB and texture-coordinate dot operations.
+     *
+     * @param device HiDef device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyDependentTextureContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        using Operation = SyntheticLegacyDependentTexture;
+
+        const auto makeEffect = [&](Operation operation, SyntheticSamplerKind samplerKind,
+                                    bool samplesTexture)
+        {
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = samplesTexture;
+            options.samplerRegister = 1;
+            options.samplerKind = samplerKind;
+            options.pixelShaderLegacyDependentTexture = operation;
+            if (samplesTexture)
+            {
+                options.samplerStates = {
+                    {Fx::SampMagFilter, Fx::FilterPoint},
+                    {Fx::SampMinFilter, Fx::FilterPoint},
+                    {Fx::SampMipFilter, Fx::FilterPoint},
+                    {Fx::SampAddressU, Fx::AddressClamp},
+                    {Fx::SampAddressV, Fx::AddressClamp},
+                    {Fx::SampAddressW, Fx::AddressClamp},
+                };
+            }
+            auto effect = std::make_unique<Effect>(device, BuildSyntheticEffect(options));
+            effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            return effect;
+        };
+
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](Effect& effect, const Vector3& left, const Vector3& right)
+        {
+            const Vertex vertices[6] = {
+                {-1,  1, 0, left.X, left.Y, left.Z},
+                {-1, -1, 0, left.X, left.Y, left.Z},
+                { 1, -1, 0, right.X, right.Y, right.Z},
+                {-1,  1, 0, left.X, left.Y, left.Z},
+                { 1, -1, 0, right.X, right.Y, right.Z},
+                { 1,  1, 0, right.X, right.Y, right.Z},
+            };
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        Texture3D volume(device, 8, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> volumeBase(512, Color::Red);
+        for (int z = 4; z < 8; ++z)
+            for (int y = 4; y < 8; ++y)
+                for (int x = 0; x < 4; ++x)
+                    volumeBase[static_cast<std::size_t>(z * 64 + y * 8 + x)] = Color::Green;
+        volume.SetData(volumeBase.data(), static_cast<int>(volumeBase.size()));
+        for (int level = 1; level < volume.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent * extent), Color::Blue);
+            volume.SetData(level, 0, 0, extent, extent, 0, extent,
+                           mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        auto registerRgb = makeEffect(Operation::RegisterRgb,
+                                      SyntheticSamplerKind::Sampler3D, true);
+        registerRgb->getParametersProperty()["FxTexture"]->SetValue(&volume);
+        EXPECT_EQ(render(*registerRgb, Vector3(.625f, .875f, .875f),
+                                       Vector3(.625f, .875f, .875f)), Color::Green)
+            << "TEXREG2RGB must use all three source colour components for a volume lookup";
+        EXPECT_EQ(render(*registerRgb, Vector3(.625f, .875f, .5f),
+                                       Vector3(.625f, .875f, 4.5f)), Color::Blue)
+            << "TEXREG2RGB implicit LOD must include the _bx2 dependent blue coordinate";
+
+        Texture2D texture(device, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> base(64, Color::Red);
+        for (int y = 0; y < 8; ++y)
+            for (int x = 0; x < 4; ++x)
+                base[static_cast<std::size_t>(y * 8 + x)] = Color::Green;
+        const Rectangle wholeBase(0, 0, 8, 8);
+        texture.SetData(0, &wholeBase, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        auto dotSample = makeEffect(Operation::DotSample,
+                                    SyntheticSamplerKind::Sampler2D, true);
+        dotSample->getParametersProperty()["FxTexture"]->SetValue(&texture);
+        EXPECT_EQ(render(*dotSample, Vector3(.25f, 1.0f, 1.0f),
+                                     Vector3(.25f, 1.0f, 1.0f)), Color::Green)
+            << "TEXDP3TEX must sample stage 1 at (dot(t1,t0),0)";
+        EXPECT_EQ(render(*dotSample, Vector3(0.0f, 1.0f, 1.0f),
+                                     Vector3(8.0f, 1.0f, 1.0f)), Color::Blue)
+            << "TEXDP3TEX implicit LOD must use the dot-product coordinate";
+
+        auto dot = makeEffect(Operation::Dot, SyntheticSamplerKind::Sampler2D, false);
+        EXPECT_EQ(render(*dot, Vector3(.5f, 1.0f, 1.0f),
+                              Vector3(.5f, 1.0f, 1.0f)), Color(128, 128, 128, 128))
+            << "TEXDP3 must replicate the three-component dot product to RGBA";
     }
 
     /**
@@ -4009,6 +4133,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectLegacyTextureMatrix3SpecularContract` -- reflected cube lookups
      * - `RunCompiledEffectLegacyDepthOutputContract` -- ps_1_3/1_4 depth replacement and zero divide
      * - `RunCompiledEffectLegacyTextureRemapContract` -- ps_1_2 AR/GB sampling and implicit LOD
+     * - `RunCompiledEffectLegacyDependentTextureContract` -- ps_1_2 RGB/dot dependent sampling
      * - `RunCompiledEffectMultiStreamDrawContract` -- several streams, and their own offsets
      * - `RunCompiledEffectInstancingDrawContract` -- instanced draws, offsets and divisor reset
      * - `RunCompiledEffectSpriteBatchContract` -- SpriteBatch runs the effect, or refuses by name

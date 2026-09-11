@@ -44,7 +44,7 @@ Those are real parser, vertex and sampled-pixel phases, not complete execution p
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
 continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
 is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371/373/374/375/376/377/378/379/380/381/382/383` are complete: the opt-in runtime now includes compiled MRT,
+`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371/373/374/375/376/377/378/379/380/381/382/383/384` are complete: the opt-in runtime now includes compiled MRT,
 render-target/cube sampling, SpriteBatch custom-effect routing and classic line/wireframe rasterization. `SOFTWARE-164/165` remain the
 encompassing shader-profile, lifecycle and content-conformance backlog.
 The independent EasyGL challenge in `SOFTWARE-367` also repaired MojoShader's invalid writemask-
@@ -175,7 +175,7 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 
 - **Classic compiled XNA Effects are not yet executable** (`SOFTWARE-161`). The public bytecode
   constructor accepts XNA/FNA Direct3D 9 Effect Framework bytes only on renderers whose real
-  runtime implements them. Opt-in EasyGL passes 51 tests covering reflection, techniques/passes,
+  runtime implements them. Opt-in EasyGL passes 56 tests covering reflection, techniques/passes,
   parameters, draw pixels, state, SpriteBatch, instancing, multi-stream input and 2D/cube/volume
   sampling plus loop/subroutine control flow. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software can parse and reflect those real
   binaries, apply their pass state, run their preshaders, retain validated D3D9 token/register IR
@@ -240,8 +240,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   `TEXM3X2DEPTH` and ps_1_4 `TEXDEPTH`, including the specified zero-divisor result of one;
   shader depth reaches the existing output merger before depth/stencil tests and is replicated to
   every covered MSAA sample. Its managed MojoShader patch adds equivalent `gl_FragDepth` emission
-  and validates the permitted profile/register/matrix sequence. Invalid marker placement/count and
-  other unimplemented legacy stateful texture operations remain in the explicit profile backlog.
+  and validates the permitted profile/register/matrix sequence. SOFTWARE-384 then executes the
+  ps_1_2/1.3 `TEXREG2RGB`, `TEXDP3TEX` and `TEXDP3` dependent operations. The shared fixture proves
+  `_bx2` RGB volume coordinates and their implicit mip footprint, a dot-derived 1D lookup and mip,
+  and exact scalar-to-RGBA replication; a managed MojoShader patch gives EasyGL the same bounded
+  translation and profile/register validation. Invalid marker placement/count and the remaining
+  bump-environment operations stay in the explicit profile backlog.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.

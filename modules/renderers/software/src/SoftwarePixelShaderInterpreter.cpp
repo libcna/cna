@@ -935,7 +935,7 @@ private:
                               const Vector &gradientX = {},
                               const Vector &gradientY = {},
                               const std::array<std::uint8_t, 3> &coordinateComponents =
-                                  {0u, 1u, 2u},
+                                  {0xFFu, 0xFFu, 0xFFu},
                               const std::array<std::int8_t, 3> &legacyMatrixRows =
                                   {-1, -1, -1},
                               SoftwareLegacyTextureReflectionEXT legacyReflection =
@@ -951,7 +951,23 @@ private:
     request.samplerRegister = static_cast<std::uint8_t>(samplerRegister);
     request.coordinateRegister =
         static_cast<std::uint8_t>(coordinateOperand.number);
-    request.coordinateComponents = coordinateComponents;
+    if (coordinateComponents[0] == 0xFFu) {
+      for (int component = 0; component < 3; ++component)
+        request.coordinateComponents[static_cast<std::size_t>(component)] =
+            static_cast<std::uint8_t>(
+                (coordinateOperand.swizzle >> static_cast<unsigned>(component * 2)) & 0x3u);
+    } else {
+      request.coordinateComponents = coordinateComponents;
+    }
+    if (coordinateOperand.sourceModifier == 1u) {
+      request.coordinateScale = -1.0f;
+    } else if (coordinateOperand.sourceModifier == 4u) {
+      request.coordinateScale = 2.0f;
+      request.coordinateBias = -1.0f;
+    } else if (coordinateOperand.sourceModifier == 5u) {
+      request.coordinateScale = -2.0f;
+      request.coordinateBias = 1.0f;
+    }
     request.legacyMatrixRowRegisters = legacyMatrixRows;
     request.legacyReflection = legacyReflection;
     request.legacyReflectionEye = legacyReflectionEye;
@@ -1044,6 +1060,12 @@ private:
     if (operand.sourceModifier == 1u)
       for (float &component : value)
         component = -component;
+    else if (operand.sourceModifier == 4u)
+      for (float &component : value)
+        component = 2.0f * (component - 0.5f);
+    else if (operand.sourceModifier == 5u)
+      for (float &component : value)
+        component = -2.0f * (component - 0.5f);
     else if (operand.sourceModifier != 0u && operand.sourceModifier != 9u &&
              operand.sourceModifier != 10u)
       throw std::runtime_error(
@@ -1164,6 +1186,46 @@ private:
       Write(destination,
             Sample(source, coordinate, destination.number,
                    SoftwareTextureLodModeEXT::Implicit, 0.0f, {}, {}, components));
+      return;
+    }
+    if (instruction.opcode == 82u || instruction.opcode == 83u ||
+        instruction.opcode == 85u) {
+      if (program_.majorVersion != 1u || program_.minorVersion < 2u ||
+          program_.minorVersion > 3u || tokens.size() != 3u)
+        throw std::runtime_error(
+            "Software pixel shader: malformed legacy dependent texture instruction.");
+      const Operand destination = DecodeDestination(tokens[1]);
+      std::size_t cursor = 2u;
+      RegisterType relativeType;
+      int relativeComponent = 0;
+      const Operand source = DecodeSource(tokens, cursor, program_.majorVersion,
+                                          relativeType, relativeComponent);
+      if (destination.type != RegisterType::Texture || source.relative ||
+          source.type != RegisterType::Texture || destination.number <= source.number ||
+          (source.sourceModifier != 0u && source.sourceModifier != 4u &&
+           source.sourceModifier != 5u) ||
+          cursor != tokens.size())
+        throw std::runtime_error(
+            "Software pixel shader: invalid legacy dependent texture operands.");
+      const Vector sourceValue = ReadSourceFromOperand(source);
+      if (instruction.opcode == 82u) {
+        Write(destination,
+              Sample(source, sourceValue, destination.number,
+                     SoftwareTextureLodModeEXT::Implicit, 0.0f));
+        return;
+      }
+      const float dot = Dot(ReadRaw(destination.type, destination.number),
+                            sourceValue, 3);
+      if (instruction.opcode == 85u) {
+        Write(destination, {dot, dot, dot, dot});
+        return;
+      }
+      const Vector coordinate = {dot, 0.0f, 0.0f, 1.0f};
+      Write(destination,
+            Sample(source, coordinate, destination.number,
+                   SoftwareTextureLodModeEXT::Implicit, 0.0f, {}, {},
+                   {0xFFu, 0xFFu, 0xFFu},
+                   {static_cast<std::int8_t>(destination.number), -1, -1}));
       return;
     }
     if (instruction.opcode == 71u) {

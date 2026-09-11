@@ -159,6 +159,10 @@ namespace CNA::Internal::Renderers::Software
         std::uint8_t coordinateRegister = 0;
         /** @brief Source-register components that become the sampled u/v/w coordinates. */
         std::array<std::uint8_t, 3> coordinateComponents{0u, 1u, 2u};
+        /** @brief Affine scale applied to legacy source coordinates before sampling/dot products. */
+        float coordinateScale = 1.0f;
+        /** @brief Affine bias applied after @ref coordinateScale. */
+        float coordinateBias = 0.0f;
         /** @brief Legacy matrix-row texture registers, or `-1` when no matrix transform applies. */
         std::array<std::int8_t, 3> legacyMatrixRowRegisters{-1, -1, -1};
         /** @brief Optional reflection performed after the legacy matrix product. */
