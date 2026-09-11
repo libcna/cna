@@ -529,6 +529,8 @@ namespace CNA::TestSupport
         /** @brief Emits the selected dynamic-flow or predication feature in an exact 2.0 shader. */
         SyntheticInvalidShaderModel20DynamicFeature shaderModel20InvalidDynamicFeature =
             SyntheticInvalidShaderModel20DynamicFeature::None;
+        /** @brief Emits a `LOOP` block in a pixel Shader Model 2.x program. */
+        bool pixelShaderModel2xUsesInvalidLoop = false;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -612,7 +614,8 @@ namespace CNA::TestSupport
         SyntheticInvalidPixelShaderModel20Opcode shaderModel20InvalidOpcode =
             SyntheticInvalidPixelShaderModel20Opcode::None,
         SyntheticInvalidShaderModel20DynamicFeature shaderModel20InvalidDynamicFeature =
-            SyntheticInvalidShaderModel20DynamicFeature::None)
+            SyntheticInvalidShaderModel20DynamicFeature::None,
+        bool shaderModel2xUsesInvalidLoop = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -644,6 +647,8 @@ namespace CNA::TestSupport
                                                          legacyBumpEnvironment !=
                                                              SyntheticLegacyBumpEnvironment::None
                                                      ? 0xFFFF0102u
+                                                     : shaderModel2xUsesInvalidLoop
+                                                           ? 0xFFFF02FFu
                                                      : usesShaderModel3 ? 0xFFFF0300u : 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
         std::vector<std::uint8_t> ctab;
@@ -711,6 +716,8 @@ namespace CNA::TestSupport
                           legacyDependentTexture != SyntheticLegacyDependentTexture::None ||
                           legacyBumpEnvironment != SyntheticLegacyBumpEnvironment::None
                       ? "ps_1_2"
+                      : shaderModel2xUsesInvalidLoop
+                            ? "ps_2_x"
                       : usesShaderModel3 ? "ps_3_0" : "ps_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
         while ((ctab.size() & 3u) != 0) ctab.push_back(0);
@@ -1474,7 +1481,7 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
         }
-        else if (usesLoop)
+        else if (usesLoop || shaderModel2xUsesInvalidLoop)
         {
             // def c1, 0.25, 0, 0, 0
             AppendUInt32(shader, 0x00000051u | (5u << 24));
@@ -2721,7 +2728,8 @@ namespace CNA::TestSupport
             options.pixelShaderUsesInvalidExpSwizzle,
             options.pixelShaderModel1InvalidOpcode,
             options.pixelShaderModel20InvalidOpcode,
-            options.shaderModel20InvalidDynamicFeature);
+            options.shaderModel20InvalidDynamicFeature,
+            options.pixelShaderModel2xUsesInvalidLoop);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

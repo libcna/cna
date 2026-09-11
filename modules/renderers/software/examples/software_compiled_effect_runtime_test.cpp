@@ -2906,6 +2906,24 @@ namespace
         }
     }
 
+    void CheckCompiledPixelShaderModel2xOpcodeValidation(SoftwareRenderer& renderer)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderModel2xUsesInvalidLoop = true;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        bool rejected = false;
+        try
+        {
+            static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+        }
+        catch (const std::runtime_error&)
+        {
+            rejected = true;
+        }
+        Check(rejected, "compiled Effect parser accepted LOOP in pixel Shader Model 2.x");
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4691,6 +4709,7 @@ int main()
         CheckCompiledVertexShaderModel1OpcodeValidation(renderer);
         CheckCompiledPixelShaderModel20OpcodeValidation(renderer);
         CheckCompiledShaderModel20DynamicFeatureValidation(renderer);
+        CheckCompiledPixelShaderModel2xOpcodeValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();
