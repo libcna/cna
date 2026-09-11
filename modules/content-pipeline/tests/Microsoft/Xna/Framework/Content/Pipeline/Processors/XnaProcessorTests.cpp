@@ -1895,6 +1895,70 @@ TEST(XnaModelProcessor, MeshesComeOutChildFirstAndShareOnePairOfBuffers)
     EXPECT_EQ(offsets, (std::vector<SharpRuntime::intcs>{0, 3, 6}));
 }
 
+// plans/plan_xna_sample_xnb_sweep.md XNASWEEP-235: a batch joins whichever buffer already carries
+// its own declaration, not the one the batch before it used.
+//
+// SAMPLE-142's `Yager.FBX` is the shape: five 32-byte meshes, then a 40-byte one, then seven more
+// 32-byte ones. XNA's own build answers **two** vertex buffers for the thirteen and puts the last
+// seven back into the first at offset 1,118; taking only the most recent answers three, and the
+// seven parts then address a buffer XNA does not have. Here the same shape in three meshes: two
+// channels, then three, then two again.
+TEST(XnaModelProcessor, ABatchJoinsWhicheverBufferCarriesItsDeclaration)
+{
+    const auto meshNamed = [](const char* name, float x, bool extraChannel)
+    {
+        auto mesh = std::make_shared<Graphics::MeshContent>();
+        mesh->setNameProperty(name);
+        mesh->getPositionsProperty().Add(Vector3(x, 0, 0));
+        mesh->getPositionsProperty().Add(Vector3(x + 1, 0, 0));
+        mesh->getPositionsProperty().Add(Vector3(x, 1, 0));
+        auto geometry = std::make_shared<Graphics::GeometryContent>();
+        mesh->getGeometryProperty().Add(geometry);
+        geometry->getVerticesProperty().AddRange({0, 1, 2});
+        geometry->getIndicesProperty().AddRange({0, 1, 2});
+        geometry->getVerticesProperty().getChannelsProperty().Add<Vector3>(
+            Graphics::VertexChannelNames::Normal(),
+            std::vector<Vector3>(3, Vector3(0, 0, 1)));
+        if (extraChannel)
+        {
+            geometry->getVerticesProperty().getChannelsProperty().Add<Vector2>(
+                Graphics::VertexChannelNames::TextureCoordinate(0),
+                std::vector<Vector2>(3, Vector2(0, 0)));
+        }
+        return mesh;
+    };
+    const std::shared_ptr<Graphics::MeshContent> first = meshNamed("first", 0.0f, false);
+    const std::shared_ptr<Graphics::MeshContent> wider = meshNamed("wider", 10.0f, true);
+    const std::shared_ptr<Graphics::MeshContent> third = meshNamed("third", 20.0f, false);
+    first->getChildrenProperty().Add(wider);
+    wider->getChildrenProperty().Add(third);
+
+    Processors::ModelProcessor processor;
+    RecordingContext context;
+    const std::shared_ptr<Processors::ModelContent> model = processor.Process(first, context);
+    ASSERT_NE(model, nullptr);
+
+    std::map<std::string, const void*> buffers;
+    std::map<std::string, SharpRuntime::intcs> offsets;
+    for (const auto& mesh : model->getMeshesProperty())
+    {
+        for (const auto& part : mesh->getMeshPartsProperty())
+        {
+            buffers[mesh->getNameProperty()] = part->getVertexBufferProperty().get();
+            offsets[mesh->getNameProperty()] = part->getVertexOffsetProperty();
+        }
+    }
+    ASSERT_EQ(buffers.size(), 3u);
+    // The two that share a declaration share a buffer, and one of them is appended to the other
+    // rather than starting a buffer of its own. `ModelProcessor` walks the meshes child first, so
+    // the *third* mesh is the one at offset zero and the first is the one appended.
+    EXPECT_EQ(buffers["first"], buffers["third"]);
+    EXPECT_NE(buffers["first"], buffers["wider"]);
+    EXPECT_EQ(offsets["wider"], 0);
+    EXPECT_EQ(offsets["third"], 0);
+    EXPECT_EQ(offsets["first"], 3);
+}
+
 TEST(XnaVertexBufferContent, WritesAndSizesAsXnaDoes)
 {
     Processors::VertexBufferContent buffer(24);

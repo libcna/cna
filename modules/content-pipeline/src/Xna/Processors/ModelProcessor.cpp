@@ -219,7 +219,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         // XNA's own `tank.xnb` as four shared resources, one vertex buffer, one index buffer and
         // the two distinct effects, where a buffer per mesh would be twenty-six
         // (plans/plan_xna_sample_xnb_sweep.md XNASWEEP-126).
-        std::shared_ptr<VertexBufferContent> vertexBuffer;
+        // ...and one *per declaration*: a batch joins whichever buffer already carries its own
+        // layout rather than the one the batch before it used. SAMPLE-142's `Yager.FBX` has five
+        // 32-byte meshes, then a 40-byte one, then seven more 32-byte ones, and XNA's own build
+        // puts the last seven back into the first buffer at offset 1,118 -- two vertex buffers for
+        // thirteen meshes where taking only the most recent answers three
+        // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-235`).
+        std::vector<std::shared_ptr<VertexBufferContent>> vertexBuffers;
         std::shared_ptr<Graphics::IndexCollection> indexBuffer;
         // Every node becomes a bone, in the order a depth-first walk reaches them (measured,
         // modelprocessor/bone_hierarchy).
@@ -322,11 +328,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                                    ? SharpRuntime::intcs{0}
                                    : declaration->getVertexStrideProperty().value_or(0);
                     };
-                    const bool mergeable =
-                        vertexBuffer != nullptr && stride(vertexBuffer) == stride(batchBuffer) &&
-                        stride(batchBuffer) > 0 &&
-                        SameDeclaration(*vertexBuffer->getVertexDeclarationProperty(),
-                                        *batchBuffer->getVertexDeclarationProperty());
+                    std::shared_ptr<VertexBufferContent> vertexBuffer;
+                    for (const std::shared_ptr<VertexBufferContent>& candidate : vertexBuffers)
+                    {
+                        if (stride(candidate) == stride(batchBuffer) && stride(batchBuffer) > 0 &&
+                            SameDeclaration(*candidate->getVertexDeclarationProperty(),
+                                            *batchBuffer->getVertexDeclarationProperty()))
+                        {
+                            vertexBuffer = candidate;
+                            break;
+                        }
+                    }
+                    const bool mergeable = vertexBuffer != nullptr;
                     if (!mergeable)
                     {
                         // A new *vertex* buffer, not a new index buffer: the index buffer is one
@@ -337,6 +350,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                         // through the second vertex buffer's meshes
                         // (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-157`).
                         vertexBuffer = batchBuffer;
+                        vertexBuffers.push_back(vertexBuffer);
                     }
                     if (indexBuffer == nullptr)
                     {
