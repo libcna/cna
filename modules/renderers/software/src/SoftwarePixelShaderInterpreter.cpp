@@ -357,6 +357,25 @@ private:
     return value;
   }
 
+  [[nodiscard]] Vector ReadMatrixRow(Operand base, int row) const {
+    base.number += row;
+    const Vector raw = ReadRaw(base.type, base.number);
+    Vector value{};
+    for (int component = 0; component < 4; ++component) {
+      const auto selected = static_cast<std::size_t>(
+          (base.swizzle >> static_cast<unsigned>(component * 2)) & 0x3u);
+      value[static_cast<std::size_t>(component)] = raw[selected];
+    }
+    if (base.sourceModifier == 1u) {
+      for (float &component : value)
+        component = -component;
+    } else if (base.sourceModifier != 0u) {
+      throw std::runtime_error(
+          "Software pixel shader: unsupported matrix source modifier.");
+    }
+    return value;
+  }
+
   void Write(const Operand &destination, Vector value) {
     if (destination.resultShift >= 1u && destination.resultShift <= 3u) {
       const float factor = static_cast<float>(1u << destination.resultShift);
@@ -664,6 +683,11 @@ private:
     case 12:
     case 13:
     case 17:
+    case 20:
+    case 21:
+    case 22:
+    case 23:
+    case 24:
     case 32:
     case 33:
       source1 = ReadSource(tokens, cursor);
@@ -672,8 +696,15 @@ private:
     case 18:
     case 34:
     case 88:
+    case 90:
       source1 = ReadSource(tokens, cursor);
       source2 = ReadSource(tokens, cursor);
+      break;
+    case 37:
+      if (program_.majorVersion < 3u) {
+        source1 = ReadSource(tokens, cursor);
+        source2 = ReadSource(tokens, cursor);
+      }
       break;
     default:
       break;
@@ -764,6 +795,32 @@ private:
       for (int i = 0; i < 4; ++i)
         result[i] = source0[i] - std::floor(source0[i]);
       break;
+    case 20:
+    case 21:
+    case 22:
+    case 23:
+    case 24: {
+      std::size_t sourceCursor = 2u;
+      const Vector vector = ReadSource(tokens, sourceCursor);
+      RegisterType relativeType;
+      int relativeComponent = 0;
+      Operand rowBase = DecodeSource(tokens, sourceCursor, program_.majorVersion,
+                                     relativeType, relativeComponent);
+      if (rowBase.relative) {
+        const Vector relative = ReadRaw(relativeType, 0);
+        rowBase.number += static_cast<int>(
+            relative[static_cast<std::size_t>(relativeComponent)]);
+      }
+      const int sourceComponents =
+          instruction.opcode == 20u || instruction.opcode == 21u ? 4 : 3;
+      const int rows = instruction.opcode == 20u || instruction.opcode == 22u
+                           ? 4
+                           : instruction.opcode == 24u ? 2 : 3;
+      for (int row = 0; row < rows; ++row)
+        result[static_cast<std::size_t>(row)] =
+            Dot(vector, ReadMatrixRow(rowBase, row), sourceComponents);
+      break;
+    }
     case 32:
       result.fill(std::pow(std::abs(source0[0]), source1[0]));
       break;
@@ -793,9 +850,16 @@ private:
           result[component] = source0[component] / length;
       break;
     }
+    case 37:
+      result[0] = std::cos(source0[0]);
+      result[1] = std::sin(source0[0]);
+      break;
     case 88:
       for (int i = 0; i < 4; ++i)
         result[i] = source0[i] >= 0.0f ? source1[i] : source2[i];
+      break;
+    case 90:
+      result.fill(source0[0] * source1[0] + source0[1] * source1[1] + source2[0]);
       break;
     default:
       throw std::runtime_error("Software pixel shader: unsupported opcode " +

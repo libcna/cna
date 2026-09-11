@@ -416,6 +416,8 @@ namespace
         add(13, {13u, destination(textureOutput, 6), source(temporary, 2), source(constant, 19)});
         add(1, {1u, destination(attributeOutput, 0), source(constant, 23)});
         add(1, {1u, destination(textureOutput, 7), source(constant, 10, 0xE4u, 1u)});
+        add(37, {37u, destination(textureOutput, 7, 0x3u), source(constant, 24, 0x00u),
+                 source(constant, 25), source(constant, 26)});
 
         std::array<float, 256u * 4u> floats{};
         const auto setConstant = [&](std::size_t index, std::array<float, 4> value)
@@ -438,6 +440,9 @@ namespace
         setConstant(19, {-2.0f, 7.0f, 0.0f, 9.0f});
         setConstant(22, {22.0f, 23.0f, 24.0f, 25.0f});
         setConstant(23, {-1.0f, 0.5f, 2.0f, 1.0f});
+        setConstant(24, {0.5f, 0.0f, 0.0f, 0.0f});
+        setConstant(25, {1.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(26, {0.0f, 1.0f, 0.0f, 0.0f});
         const std::array<int, 16u * 4u> integers{};
         const std::array<unsigned char, 16> booleans{};
         const SoftwareShaderSemanticValueEXT inputs[] = {
@@ -478,8 +483,10 @@ namespace
                   "EXP/LOG round trip differs");
         Check(varying(6) == std::array<float, 4>{1.0f, 0.0f, 1.0f, 1.0f},
               "MIN/MAX/SGE result differs");
-        Check(varying(7) == std::array<float, 4>{-2.0f, 1.0f, -0.5f, -3.0f},
-              "source negate result differs");
+        Check(std::abs(varying(7)[0] - std::cos(0.5f)) < 0.00001f &&
+                  std::abs(varying(7)[1] - std::sin(0.5f)) < 0.00001f &&
+                  varying(7)[2] == -0.5f && varying(7)[3] == -3.0f,
+              "vertex SINCOS or partial destination write differs");
         const auto color = std::find_if(result.varyings.begin(), result.varyings.end(),
                                         [](const auto& value)
                                         {
@@ -564,6 +571,84 @@ namespace
         Check(result.depthWritten && result.depth == 0.375f,
               "pixel depth-output result differs");
         Check(!result.discarded, "ordinary pixel invocation was discarded");
+
+        setConstant(20, {1.0f, 2.0f, 3.0f, 4.0f});
+        setConstant(21, {1.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(22, {0.0f, 1.0f, 0.0f, 0.0f});
+        setConstant(23, {0.0f, 0.0f, 1.0f, 0.0f});
+        setConstant(24, {0.0f, 0.0f, 0.0f, 1.0f});
+        setConstant(25, {5.0f, 6.0f, 0.0f, 0.0f});
+        setConstant(26, {7.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(27, {0.5f, 0.0f, 0.0f, 0.0f});
+        setConstant(28, {1.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(29, {0.0f, 1.0f, 0.0f, 0.0f});
+        const auto executeArithmetic = [&](std::uint16_t opcode, std::uint32_t writeMask,
+                                           std::initializer_list<std::uint32_t> sources,
+                                           const std::string& label,
+                                           std::uint8_t majorVersion = 2u)
+        {
+            SoftwareShaderProgramEXT arithmeticProgram;
+            arithmeticProgram.stage = SoftwareShaderStageEXT::Pixel;
+            arithmeticProgram.majorVersion = majorVersion;
+            arithmeticProgram.minorVersion = 0;
+            SoftwareShaderInstructionEXT operation;
+            operation.opcode = opcode;
+            operation.tokens = {opcode, destination(temporary, 0, writeMask)};
+            operation.tokens.insert(operation.tokens.end(), sources.begin(), sources.end());
+            arithmeticProgram.instructions.push_back(std::move(operation));
+            SoftwareShaderInstructionEXT output;
+            output.opcode = 1u;
+            output.tokens = {1u, destination(colorOutput, 0), source(temporary, 0)};
+            arithmeticProgram.instructions.push_back(std::move(output));
+            try
+            {
+                return ExecuteSoftwarePixelShaderEXT(
+                    arithmeticProgram, floats, integers, booleans, inputs);
+            }
+            catch (const std::runtime_error& error)
+            {
+                Check(false, label + " was rejected: " + error.what());
+                return CNA::Internal::Renderers::Software::SoftwarePixelShaderResultEXT{};
+            }
+        };
+        const auto checkArithmetic = [&](std::uint16_t opcode, std::uint32_t writeMask,
+                                         std::initializer_list<std::uint32_t> sources,
+                                         const std::array<float, 4>& expected,
+                                         const std::string& label)
+        {
+            const auto arithmetic = executeArithmetic(opcode, writeMask, sources, label);
+            Check(arithmetic.colorWriteMask == 1u && arithmetic.colors[0] == expected,
+                  label + " result differs");
+        };
+        checkArithmetic(20u, 0xFu, {source(constant, 20), source(constant, 21)},
+                        {1.0f, 2.0f, 3.0f, 4.0f}, "pixel M4X4");
+        checkArithmetic(21u, 0x7u, {source(constant, 20), source(constant, 21)},
+                        {1.0f, 2.0f, 3.0f, 0.0f}, "pixel M4X3");
+        checkArithmetic(22u, 0xFu, {source(constant, 20), source(constant, 21)},
+                        {1.0f, 2.0f, 3.0f, 0.0f}, "pixel M3X4");
+        checkArithmetic(23u, 0x7u, {source(constant, 20), source(constant, 21)},
+                        {1.0f, 2.0f, 3.0f, 0.0f}, "pixel M3X3");
+        checkArithmetic(24u, 0x3u, {source(constant, 20), source(constant, 21)},
+                        {1.0f, 2.0f, 0.0f, 0.0f}, "pixel M3X2");
+        checkArithmetic(90u, 0xFu,
+                        {source(constant, 20), source(constant, 25),
+                         source(constant, 26, 0x00u)},
+                        {24.0f, 24.0f, 24.0f, 24.0f}, "pixel DP2ADD");
+        const auto sincos = executeArithmetic(
+            37u, 0x3u,
+            {source(constant, 27, 0x00u), source(constant, 28), source(constant, 29)},
+            "pixel SINCOS");
+        Check(sincos.colorWriteMask == 1u &&
+                  std::abs(sincos.colors[0][0] - std::cos(0.5f)) < 0.00001f &&
+                  std::abs(sincos.colors[0][1] - std::sin(0.5f)) < 0.00001f &&
+                  sincos.colors[0][2] == 0.0f && sincos.colors[0][3] == 0.0f,
+              "pixel SINCOS result differs");
+        const auto sincosSm3 = executeArithmetic(
+            37u, 0x3u, {source(constant, 27, 0x00u)}, "pixel Shader Model 3 SINCOS", 3u);
+        Check(sincosSm3.colorWriteMask == 1u &&
+                  std::abs(sincosSm3.colors[0][0] - std::cos(0.5f)) < 0.00001f &&
+                  std::abs(sincosSm3.colors[0][1] - std::sin(0.5f)) < 0.00001f,
+              "pixel Shader Model 3 SINCOS result differs");
 
         constexpr std::uint32_t samplerRegisterType = 10u;
         constexpr std::uint32_t predicateRegisterType = 19u;

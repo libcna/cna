@@ -565,6 +565,13 @@ namespace CNA::Internal::Renderers::Software
                     source1 = ReadSource(tokens, cursor);
                     source2 = ReadSource(tokens, cursor);
                     break;
+                case 37: // SINCOS
+                    if (program_.majorVersion < 3u)
+                    {
+                        source1 = ReadSource(tokens, cursor);
+                        source2 = ReadSource(tokens, cursor);
+                    }
+                    break;
                 default:
                     break;
                 }
@@ -721,6 +728,10 @@ namespace CNA::Internal::Renderers::Software
                                 source0[static_cast<std::size_t>(component)] / length;
                     break;
                 }
+                case 37:
+                    result[0] = std::cos(source0[0]);
+                    result[1] = std::sin(source0[0]);
+                    break;
                 case 46:
                     for (int i = 0; i < 4; ++i)
                     {
