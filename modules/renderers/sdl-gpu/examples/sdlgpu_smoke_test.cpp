@@ -60,7 +60,12 @@ using namespace CNA::Internal::Renderers::SdlGpu;
 namespace
 {
     constexpr int kTotalFrames = 60;
+#if defined(CNA_SDL_GPU_SHADER_EFFECTS)
     constexpr int kExpectedChecks = 30;
+#else
+    // Unsupported-compiler builds also verify the diagnostic returned by CreateEffectRenderer.
+    constexpr int kExpectedChecks = 31;
+#endif
 
     int RunHeadlessGraphicsDeviceProbe(const char* requestedDriver)
     {
