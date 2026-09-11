@@ -1458,6 +1458,14 @@ namespace CNA::Internal::Renderers::Software
                               int count) override;
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
+        /**
+         * @brief Creates the staged Software compiled-effect runtime when its build option is on.
+         * @param effectCode Effect Framework bytes.
+         * @param effectCodeBytes Number of bytes at @p effectCode.
+         * @return A reflected token runtime, or null in the dependency-free default build.
+         */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap,
                                                             int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap,

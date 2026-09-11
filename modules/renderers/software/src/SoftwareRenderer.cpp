@@ -1,4 +1,7 @@
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/Software/SoftwareCompiledEffect.hpp"
+#endif
 #include "SoftwareTextureFormat.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
@@ -4588,6 +4591,18 @@ namespace CNA::Internal::Renderers::Software
         auto effect = std::make_unique<SoftwareEffectRenderer>();
         effect->CompileProgram(vertSrc, fragSrc);
         return effect;
+#endif
+    }
+
+    std::unique_ptr<ICompiledEffectRuntime> SoftwareRenderer::CreateCompiledEffect(
+        const std::uint8_t* effectCode, std::size_t effectCodeBytes)
+    {
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        return std::make_unique<SoftwareCompiledEffect>(effectCode, effectCodeBytes);
+#else
+        static_cast<void>(effectCode);
+        static_cast<void>(effectCodeBytes);
+        return nullptr;
 #endif
     }
 

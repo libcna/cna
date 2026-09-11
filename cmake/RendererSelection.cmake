@@ -788,6 +788,15 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     set(RENDERER_TARGET "cna_renderer_software")
     list(APPEND _cna_identity_defines CNA_RENDERER_SOFTWARE)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SOFTWARE")
+    # SOFTWARE-162: the first compiled-Effect phase is a headless parser/token-IR runtime. Keep it
+    # opt-in while shader execution is incomplete, so the ordinary dependency-free CPU renderer
+    # neither fetches MojoShader nor advertises a capability it cannot yet execute.
+    option(CNA_SOFTWARE_COMPILED_EFFECTS
+           "Build Software's staged compiled-XNA-Effect parser runtime" OFF)
+    if(CNA_SOFTWARE_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "STUB")
     message(STATUS "CNA: Using STUB (no-op) graphics renderer")
     set(RENDERER_DIR "modules/renderers/stub")

@@ -35,6 +35,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         endif()
     endmacro()
 
+    if(CNA_SOFTWARE_COMPILED_EFFECTS)
+        cna_software_test(cna_test_software_compiled_effect_runtime
+            software_compiled_effect_runtime_test.cpp)
+        target_compile_definitions(cna_test_software_compiled_effect_runtime PRIVATE
+            CNA_SOFTWARE_COMPILED_EFFECTS)
+        target_compile_definitions(cna_test_software_compiled_effect_runtime PRIVATE
+            "CNA_SOFTWARE_STOCK_EFFECT_DIRECTORY=\"${CMAKE_SOURCE_DIR}/modules/renderers/fna3d/effects\"")
+        target_compile_definitions(cna_test_software_compiled_effect_runtime PRIVATE
+            "CNA_SOFTWARE_COMPILED_EFFECT_FIXTURE_DIRECTORY=\"${CMAKE_SOURCE_DIR}/tests/fixtures/compiled-effects\"")
+        target_link_libraries(cna_test_software_compiled_effect_runtime PRIVATE
+            cna_renderer_mojoshader_effect)
+        cna_register_renderer_test(NAME Software_CompiledEffectRuntime
+            COMMAND cna_test_software_compiled_effect_runtime
+            TIMEOUT 60 LABELS "Software;CompiledEffects")
+    endif()
+
     cna_software_test(cna_test_software_smoke software_smoke_test.cpp)
     cna_register_renderer_test(NAME Software_Smoke COMMAND cna_test_software_smoke
         TIMEOUT 30 LABELS "Software")
