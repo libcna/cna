@@ -8047,47 +8047,6 @@ if (!ProfileIsEs2ApiGeneration())
         // by ApplyRasterizerState via RasterizerState.ScissorTestEnable.
     }
 
-#if defined(CNA_EASYGL_COMPILED_EFFECTS)
-    void EasyGLRenderer::SetCompiledEffectDepthRangeEXT(bool begin)
-    {
-        if (metagl::IsContextLost()) return;
-        if (begin)
-        {
-            const float midpoint =
-                0.5f * (viewportMinDepth_ + viewportMaxDepth_);
-            device.set_depth_range(midpoint, viewportMaxDepth_);
-        }
-        else
-        {
-            device.set_depth_range(viewportMinDepth_, viewportMaxDepth_);
-        }
-    }
-
-    namespace
-    {
-        // Scope guard so every early return and every throw out of a compiled-effect draw still
-        // restores the viewport's own depth range.
-        class CompiledEffectDepthRangeScope
-        {
-        public:
-            explicit CompiledEffectDepthRangeScope(EasyGLRenderer& renderer)
-                : renderer_(renderer)
-            {
-                renderer_.SetCompiledEffectDepthRangeEXT(true);
-            }
-            ~CompiledEffectDepthRangeScope()
-            {
-                renderer_.SetCompiledEffectDepthRangeEXT(false);
-            }
-            CompiledEffectDepthRangeScope(const CompiledEffectDepthRangeScope&) = delete;
-            CompiledEffectDepthRangeScope& operator=(const CompiledEffectDepthRangeScope&) = delete;
-
-        private:
-            EasyGLRenderer& renderer_;
-        };
-    }
-#endif
-
     void EasyGLRenderer::SetBlendFactor(float r, float g, float b, float a)
     {
         if (metagl::IsContextLost()) return;
@@ -8140,8 +8099,6 @@ if (!ProfileIsEs2ApiGeneration())
         }
         device.set_viewport(x, fbH - y - h, w, h);
         device.set_depth_range(minDepth, maxDepth);
-        viewportMinDepth_ = minDepth;
-        viewportMaxDepth_ = maxDepth;
     }
 
     void EasyGLRenderer::ApplySamplerState(int slot, int filter,
@@ -9331,26 +9288,33 @@ else
 
     namespace
     {
-        [[nodiscard]] std::string DefineStockPointSize(const char* source)
+        [[nodiscard]] std::string AdaptStockVertexShaderForOpenGL(const char* source)
         {
             std::string result(source);
-            if (result.find("gl_PointSize") != std::string::npos)
-                return result;
-
             const std::size_t position = result.find("gl_Position");
             if (position == std::string::npos)
                 return result;
 
             const std::size_t terminator = result.find(';', position);
             if (terminator != std::string::npos)
-                result.insert(terminator + 1, "\n    gl_PointSize=1.0;");
+            {
+                // SOFTWARE-336: every matrix exposed by XNA produces Direct3D clip depth in
+                // [0,w], while OpenGL accepts [-w,w]. MojoShader applies this same conversion to
+                // classic compiled Effects. Applying it to all renderer-owned 3D programs makes
+                // the near plane, viewport depth range, and mixed stock/compiled draws agree.
+                std::string additions =
+                    "\n    gl_Position.z=gl_Position.z*2.0-gl_Position.w;";
+                if (result.find("gl_PointSize") == std::string::npos)
+                    additions += "\n    gl_PointSize=1.0;";
+                result.insert(terminator + 1, additions);
+            }
             return result;
         }
 
         void CompileAndLink(::easygl::Program& prog, const char* vsrc, const char* fsrc,
                             const char* label)
         {
-            const std::string definedVsrc = DefineStockPointSize(vsrc);
+            const std::string definedVsrc = AdaptStockVertexShaderForOpenGL(vsrc);
             const std::string adaptedVsrc =
                 AdaptGlslEs300ForActiveProfile(definedVsrc.c_str(), GlShaderStageKind::Vertex);
             const std::string adaptedFsrc = AdaptGlslEs300ForActiveProfile(fsrc, GlShaderStageKind::Fragment);
@@ -12889,7 +12853,6 @@ else
             RequireCompiledEffectDeclarations(compiledStreams);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
-            const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime, nullptr,
                                          params.compiledDeviceTextures,
@@ -12990,7 +12953,6 @@ else
                 ApplyCompiledEffectBaseVertex(compiledStreams, params.baseVertex);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
-            const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime, nullptr,
                                          params.compiledDeviceTextures,
@@ -13131,7 +13093,6 @@ else
                 ApplyCompiledEffectBaseVertex(compiledStreams, params.baseVertex);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
-            const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime, nullptr,
                                          params.compiledDeviceTextures,

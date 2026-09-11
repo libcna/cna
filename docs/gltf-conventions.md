@@ -694,22 +694,18 @@ The raster backends do not all implement that input in the same native clip volu
 | Backend | Native/effective rule | Consequence for CNA/glTF draws |
 |---|---|---|
 | Vulkan | Native `0 <= z <= w`; stock vertex shaders flip clip Y once and leave Z unchanged. `VkViewport` applies `MinDepth..MaxDepth`. | Exact XNA depth convention. |
-| EasyGL / OpenGL ES | Native `-w <= z <= w`; stock shaders pass the XNA projection's Z through. With the default GL depth range, XNA `z/w` in `[0,1]` occupies window depth `[0.5,1]`. | Visibility and depth ordering are unchanged because the mapping is monotonic, but only half of the available depth interval/precision is used. A custom shader emitting negative clip Z is OpenGL-specific and is outside the stock XNA effect contract. |
-| SOFTWARE | Divides by W and applies `MinDepth + (z/w)*(MaxDepth-MinDepth)` directly. Its CPU polygon clip currently cuts only at `w > 1e-5` (the eye plane), then clips raster bounds; it does not implement every homogeneous X/Y/Z frustum plane. | XNA depth mapping is exact for in-frustum geometry. Geometry between the configured projection near plane and the eye, or beyond another homogeneous plane, is a documented CPU-renderer limitation rather than an import conversion. |
+| EasyGL / OpenGL ES | Native `-w <= z <= w`; every renderer-owned 3D vertex shader converts XNA/D3D depth with `z'=2z-w`, exactly as MojoShader does for compiled Effects. | Exact XNA near/far clipping and full `MinDepth..MaxDepth` window-depth mapping. |
+| SOFTWARE | Clips every primitive against the six homogeneous XNA/D3D planes, divides by W, and applies `MinDepth + (z/w)*(MaxDepth-MinDepth)` directly. | Exact XNA clip-volume and depth-range convention. |
 | HEADLESS / STUB | No rasterisation. | No clip/depth claim; capability/refusal tests are the oracle. |
 
-This difference is harmless to the current corpus for a concrete reason, not because L7 was
-assumed: all fixture positions remain object/world-space through L5, L6 compares identical stock
-effect matrices, and the application/test camera supplies the same XNA projection on every
-backend. Every current `*Gltf*` test is green on HEADLESS, OPENGLES3, Vulkan and SOFTWARE.
-Renderer pixel controls separately prove the part that must agree: EasyGL and Vulkan each pass the
-shared 39/39 viewport suite, including two `MinDepth/MaxDepth` depth-order checks; SOFTWARE passes
-its 25/25 viewport/depth suite and the 4/4 public depth-state contract. None of those results makes
-out-of-contract negative-Z custom clip coordinates portable.
+Every rasterizing backend now owns the conversion required by its native clip volume; import data
+and XNA projection matrices remain renderer-neutral. The shared stock-effect discriminator proves
+that clip `z=0` maps to the near depth endpoint and that `z<0` is rejected on both Software and
+EasyGL. Existing viewport, clipping and glTF corpus tests retain the wider matrix/output coverage.
 
 Therefore a future image that differs because of clipping or window-depth mapping is owned by the
-renderer. Adding a Z remap, near-plane cut or Y flip to glTF import would corrupt L1-L6 for every
-other backend and violate the shared-defect rule below.
+renderer. Adding a Z remap, near-plane cut or Y flip to glTF import would double-convert correct
+backends, corrupt L1-L6, and violate the shared-defect rule below.
 
 ---
 

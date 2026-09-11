@@ -347,22 +347,20 @@ gl_Position.z = gl_Position.z * 2.0 - gl_Position.w;
 ```
 
 because OpenGL's clip volume is `z ∈ [-w, w]` where Direct3D's is `[0, w]`. **EasyGL's own
-stock shaders do not do this** -- they emit the XNA projection's Direct3D-style z unchanged,
-so all ordinary geometry occupies the upper half of the depth range.
-
-Left alone, the two encodings disagree: geometry from a compiled effect is depth-tested
-against everything else on a different scale, and wins where it should lose. EasyGL
-therefore narrows the GL depth range to `[(min+max)/2, max]` for the duration of a
-compiled-effect draw, which makes the two produce identical window-space depth:
+stock shaders now apply the same conversion** (`SOFTWARE-336`). Both paths therefore consume
+XNA's Direct3D-style clip depth and use the viewport's complete `[min,max]` window-depth range:
 
 ```text
-stock     d = min + (max-min)/2 + z·(max-min)/2
-compiled  d = min' + z·(max'-min')    with min' = (min+max)/2, max' = max
+stock     d = min + z·(max-min)
+compiled  d = min + z·(max-min)
 ```
 
-Found on `ColorReplacementSample_4_0`, where the car body -- a compiled effect -- swallowed
-the headlight lens and thin window edges that ordinary `BasicEffect` parts draw in front of
-it. `EasyGLCompiledEffectDrawTest.IsDepthTestedOnTheSameScaleAsStockGeometry` pins it.
+The older SAMPLE-028 repair narrowed only compiled-effect draws to the stock path's incorrect
+upper-half scale. That restored relative ordering on `ColorReplacementSample_4_0`, but left stock
+`z=0` at window depth 0.5, admitted stock geometry behind XNA's near plane, and discarded half the
+depth precision. `BackBufferDepthStencilContractTest.StockEffectUsesXnaClipDepthConvention` pins
+both absolute failures; `EasyGLCompiledEffectDrawTest.IsDepthTestedOnTheSameScaleAsStockGeometry`
+retains the mixed-path ordering proof after the workaround's removal.
 
 This is EasyGL-specific: `FNA3D` runs MojoShader's own OpenGL device end to end, and
 `SDL_GPU` and `VULKAN` have their own conventions.

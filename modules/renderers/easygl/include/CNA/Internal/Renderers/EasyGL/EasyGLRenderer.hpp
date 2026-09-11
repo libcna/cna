@@ -1085,12 +1085,6 @@ namespace CNA::Internal::Renderers::EasyGL
         // platform context is still current and alive.
         std::unique_ptr<EasyGLPlatformContext> platformContext_;
         std::recursive_mutex threadContextMutex_;
-        // The viewport's own depth range. SetViewport() writes it unconditionally, so it cannot
-        // live behind CNA_EASYGL_COMPILED_EFFECTS -- a build without compiled effects, which is
-        // the default, would not compile. Compiled-effect draws narrow it and put it back
-        // (see SetCompiledEffectDepthRangeEXT).
-        float viewportMinDepth_ = 0.0f;
-        float viewportMaxDepth_ = 1.0f;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         friend class EasyGLCompiledEffect;
         // plans/plan_fx.md FX-062: one MojoShader GL context per this renderer's whole lifetime, created
@@ -1657,30 +1651,6 @@ namespace CNA::Internal::Renderers::EasyGL
          *         consumes, the vertex shader itself samples a texture, or a reflected pixel-stage
          *         sampler has no 2D texture bound.
          */
-        /**
-         * @brief CNAEXT. Narrows the GL depth range for the duration of a compiled-effect draw.
-         *
-         * plans/plan_fx.md: MojoShader's generated GLSL ends every vertex shader with Direct3D 9's
-         * clip-space depth conversion, `gl_Position.z = gl_Position.z * 2.0 - gl_Position.w`,
-         * because OpenGL's clip volume is z in [-w, w] where Direct3D's is [0, w]. EasyGL's own
-         * stock shaders do NOT do that: they emit the XNA projection's Direct3D-style z unchanged,
-         * so all ordinary geometry lands in the upper half of the depth range.
-         *
-         * The two conventions therefore disagree, and geometry from a compiled effect is depth-
-         * tested against everything else on a different scale. Measured on
-         * ColorReplacementSample_4_0: the car body (a compiled effect) swallowed the headlight
-         * lens and thin window edges drawn by ordinary BasicEffect parts, which the XNA original
-         * renders in front of it.
-         *
-         * Setting the GL depth range to [(min+max)/2, max] while a compiled effect draws makes
-         * the two encodings produce identical window-space depth:
-         *   stock   d = min + (max-min)/2 + z*(max-min)/2
-         *   compiled d = min' + z*(max'-min'), with min' = (min+max)/2 and max' = max
-         *
-         * @param begin True to narrow the range, false to restore the viewport's own.
-         */
-        CNAEXT void SetCompiledEffectDepthRangeEXT(bool begin);
-
         CNAEXT void BindCompiledEffectForDrawEXT(
             const CompiledEffectStreamEXT* streams, std::size_t streamCount,
             ICompiledEffectRuntime& runtime,

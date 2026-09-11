@@ -1035,12 +1035,11 @@ TEST(EasyGLCompiledEffectDrawTest, SharedTruncationContract)
 }
 
 
-// SAMPLE-028: MojoShader ends every generated vertex shader with Direct3D 9's clip-space depth
-// conversion (`gl_Position.z = gl_Position.z * 2.0 - gl_Position.w`), because OpenGL's clip volume
-// is z in [-w, w] where Direct3D's is [0, w]. EasyGL's own stock shaders do NOT do that -- they
-// emit the XNA projection's Direct3D-style z unchanged. Without a compensating GL depth range the
-// two encodings disagree, and compiled-effect geometry is depth-tested against everything else on
-// a different scale: it wins where it should lose.
+// SAMPLE-028/SOFTWARE-336: MojoShader ends every generated vertex shader with Direct3D 9's
+// clip-space depth conversion (`gl_Position.z = gl_Position.z * 2.0 - gl_Position.w`), because
+// OpenGL's clip volume is z in [-w, w] where Direct3D's is [0, w]. EasyGL's stock shaders now apply
+// the same conversion. This mixed-path test prevents either route from returning to a different
+// depth scale.
 //
 // Found on ColorReplacementSample_4_0, where the car body (a compiled effect) swallowed the
 // headlight lens and thin window edges that ordinary BasicEffect parts draw in front of it. This
@@ -1080,12 +1079,9 @@ TEST(EasyGLCompiledEffectDrawTest, IsDepthTestedOnTheSameScaleAsStockGeometry)
         VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
     });
 
-    // 1. Stock geometry at z = 0.6. The two z values are chosen so the encodings disagree about
-    //    the ORDER, which is the whole defect: stock lands at (0.6+1)/2 = 0.800, and a compiled
-    //    quad at z = 0.7 lands at 0.700 without the compensation (wrongly nearer) but at
-    //    0.5 + 0.5*0.7 = 0.850 with it (correctly farther). Any pair with
-    //    z_stock < z_fx < (z_stock+1)/2 exposes it; this one is the sample's own situation, a lens
-    //    sitting just in front of the body.
+    // 1. Stock geometry at z = 0.6. Both paths must map this D3D-style coordinate to window depth
+    //    0.6; the compiled quad at z = 0.7 below is strictly farther. These values retain the
+    //    sample's own situation, a lens sitting just in front of the body.
     const auto nearQuad = fullScreenQuad(0.6f);
     auto stockVb = renderer->CreateVertexBuffer(6);
     stockVb->SetVertexDeclaration(stockDeclaration);

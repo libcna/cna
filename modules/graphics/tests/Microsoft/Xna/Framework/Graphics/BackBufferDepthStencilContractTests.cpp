@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-181: selected backbuffer depth/stencil storage must affect fragment acceptance.
+// SOFTWARE-181/SOFTWARE-336: selected depth storage and XNA clip-depth semantics must affect
+// fragment acceptance.
 
 #include <gtest/gtest.h>
 
@@ -302,6 +303,32 @@ TEST(BackBufferDepthStencilContractTest, ExplicitDepthClearSaturatesLikeMicrosof
     const float nan = std::numeric_limits<float>::quiet_NaN();
     EXPECT_EQ(RenderClearDepthProbe(nan, CompareFunction::Greater, 0.5f), Color::Red);
     EXPECT_EQ(RenderClearDepthProbe(nan, CompareFunction::Less, 0.5f), Color::Black);
+}
+
+TEST(BackBufferDepthStencilContractTest, StockEffectUsesXnaClipDepthConvention)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        BackbufferParameters(DepthFormat::Depth24));
+
+    DepthStencilState equal;
+    equal.setDepthBufferEnableProperty(true);
+    equal.setDepthBufferWriteEnableProperty(true);
+    equal.setDepthBufferFunctionProperty(CompareFunction::Equal);
+    PrepareDraw(device, equal);
+    device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                 Color::Black, 0.0f, 0);
+    DrawFullScreen(device, Color::Red, 0.0f);
+    EXPECT_EQ(ReadCenter(device), Color::Red)
+        << "XNA clip z=0 is the near depth endpoint, not OpenGL window depth 0.5";
+
+    PrepareDraw(device, DepthStencilState::None);
+    device.Clear(Color::Black);
+    DrawFullScreen(device, Color::Red, -0.5f);
+    EXPECT_EQ(ReadCenter(device), Color::Black)
+        << "XNA clips stock-effect geometry with clip z below zero";
 }
 
 TEST(BackBufferDepthStencilContractTest, UnknownClearOptionBitsAreIgnored)

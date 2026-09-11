@@ -528,6 +528,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Explicit depth clears reproduce XNA/D3D normalized-depth saturation** (`SOFTWARE-335`):
   finite values and infinities clamp to `[0,1]`, NaN becomes `0`, and no managed range exception
   is synthesized.
+- **EasyGL stock effects use XNA/D3D clip depth exactly** (`SOFTWARE-336`). Every renderer-owned
+  3D vertex shader converts `[0,w]` to OpenGL's `[-w,w]`, so `z=0` reaches the near depth endpoint,
+  `z<0` is clipped, the full viewport depth interval is used, and MojoShader compiled Effects no
+  longer need a per-draw depth-range workaround.
   Microsoft XNA hardcodes `1f`; FNA's use of the current viewport maximum is a lower-authority
   divergence. A depth-rendered discriminator first proves that an explicit 0.25 clear rejects a
   fragment at the viewport maximum, then requires the single-color overload to admit it. The same
