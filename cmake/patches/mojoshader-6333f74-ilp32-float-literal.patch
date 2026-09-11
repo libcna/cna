@@ -1,0 +1,65 @@
+diff --git a/mojoshader_common.c b/mojoshader_common.c
+--- a/mojoshader_common.c
++++ b/mojoshader_common.c
+@@ -1006,7 +1006,34 @@
+     else if (arg)
+     {
+         /* This isn't especially accurate, but hey, it's easy. :) */
+-        unsigned long value;
++        /* `unsigned long` is 64 bits on LP64 and 32 on wasm32 and every other ILP32 target, so a
++         * perfectly ordinary shader constant -- ShipGame's Particle.fx says `Pos.xyz = 1e10` --
++         * converted out of range here. That is undefined behaviour; in practice the value
++         * saturated, the fractional loop below then printed nine more full-width numbers, and the
++         * caller's 32-byte buffer overflowed with "BUG: internal buffer is too small". The effect
++         * therefore compiled on x86-64 and failed under Emscripten. A fixed-width type makes the
++         * two agree; a magnitude no integer type can hold takes the plain decimal route below,
++         * which is defined and still carries the '.' floatstr() requires. -CNA
++         */
++        uint64 value;
++
++        if (!(fabs((double) arg) < 18446744073709551616.0))  /* the sign is handled below */
++        {
++            if (arg < 0)
++            {
++                if (left > 1)
++                {
++                    *text = '-';
++                    --left;
++                } // if
++                ++text;
++                arg = -arg;
++            } // if
++            len = (text < textend) ? (size_t) snprintf(text, left, "%.1f", (double) arg)
++                                   : (size_t) snprintf(NULL, 0, "%.1f", (double) arg);
++            text += len;
++            return (text - textstart);
++        } // if
+ 
+         if (arg < 0)
+         {
+@@ -1018,9 +1045,9 @@
+             ++text;
+             arg = -arg;
+         } // if
+-        value = (unsigned long) arg;
+-        len = (text < textend) ? (size_t) snprintf(text, left, "%lu", value)
+-                               : (size_t) snprintf(NULL, 0, "%lu", value);
++        value = (uint64) arg;
++        len = (text < textend) ? (size_t) snprintf(text, left, "%llu", (unsigned long long) value)
++                               : (size_t) snprintf(NULL, 0, "%llu", (unsigned long long) value);
+         text += len;
+         if (len >= left)
+             left = (left < 1) ? left : 1;
+@@ -1037,9 +1064,9 @@
+         ++text;
+         while (precision-- > 0)
+         {
+-            value = (unsigned long) (arg * mult);
+-            len = (text < textend) ? (size_t) snprintf(text, left, "%lu", value)
+-                                   : (size_t) snprintf(NULL, 0, "%lu", value);
++            value = (uint64) (arg * mult);
++            len = (text < textend) ? (size_t) snprintf(text, left, "%llu", (unsigned long long) value)
++                                   : (size_t) snprintf(NULL, 0, "%llu", (unsigned long long) value);
+             text += len;
+             if (len >= left)
+                 left = (left < 1) ? left : 1;

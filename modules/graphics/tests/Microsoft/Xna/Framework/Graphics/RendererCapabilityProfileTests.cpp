@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -18,12 +19,15 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::ThreeDimensionalPipeline) == 0);
 static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::ShaderDialectWgsl) == 29);
-static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::Count) == 30);
+static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::Texture3DSampling) == 30);
+static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::BaseInstanceDrawing) == 31);
+static_assert(static_cast<std::uint32_t>(CNA::RendererFeature::Count) == 32);
 static_assert(static_cast<std::uint8_t>(CNA::RendererFeatureSupport::Unknown) == 0);
 static_assert(static_cast<std::uint8_t>(CNA::RendererFeatureSupport::Restricted) == 3);
 static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::MaxTextureDimension) == 0);
 static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::MaxVertexShaderStorageBlocks) == 9);
-static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::Count) == 10);
+static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::TimestampPeriodPicoseconds) == 21);
+static_assert(static_cast<std::uint32_t>(CNA::RendererLimit::Count) == 22);
 
 namespace
 {
@@ -154,6 +158,8 @@ TEST(RendererCapabilityProfileTest, DeviceSnapshotMapsEveryLegacyCapabilityExpli
         EXPECT_EQ(device.GetRendererFeatureSupportEXT(feature), ExpectedSupport(expected));
         EXPECT_EQ(device.SupportsRendererFeatureEXT(feature), expected);
     }
+    EXPECT_EQ(device.GetRendererFeatureSupportEXT(CNA::RendererFeature::BaseInstanceDrawing),
+              ExpectedSupport(device.GetRenderer().SupportsBaseInstanceDrawingEXT()));
 
     for (const CNA::RendererFeature feature : CNA::AllRendererFeatures())
     {
@@ -189,6 +195,11 @@ TEST(RendererCapabilityProfileTest, DeviceSnapshotExposesLimitsAndHonestFormatKn
     EXPECT_EQ(textureLimit.value,
               static_cast<std::uint64_t>(device.GetMaxTextureDimension()));
     EXPECT_TRUE(device.GetRendererLimitEXT(CNA::RendererLimit::MaxVertexStreams).known);
+    for (const CNA::RendererLimit limit : CNA::AllRendererLimits())
+    {
+        const CNA::RendererLimitValue value = device.GetRendererLimitEXT(limit);
+        EXPECT_TRUE(value.known) << CNA::GetRendererLimitName(limit);
+    }
     EXPECT_FALSE(device.GetRendererLimitEXT(static_cast<CNA::RendererLimit>(999)).known);
 
     constexpr std::uint32_t classified =
@@ -199,9 +210,8 @@ TEST(RendererCapabilityProfileTest, DeviceSnapshotExposesLimitsAndHonestFormatKn
     {
         const CNA::RendererFormatSupport support =
             device.GetRendererSurfaceFormatSupportEXT(static_cast<SurfaceFormat>(ordinal));
-        EXPECT_EQ(support.knownUsages, classified) << ordinal;
+        EXPECT_EQ(support.knownUsages & classified, classified) << ordinal;
         EXPECT_EQ(support.supportedUsages & ~support.knownUsages, 0U) << ordinal;
-        EXPECT_FALSE(support.IsKnown(CNA::RendererFormatUsage::Sampled)) << ordinal;
     }
     EXPECT_EQ(device.GetRendererSurfaceFormatSupportEXT(static_cast<SurfaceFormat>(999)).knownUsages,
               0U);

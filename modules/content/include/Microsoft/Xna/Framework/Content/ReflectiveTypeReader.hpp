@@ -13,6 +13,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Point.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -565,6 +566,12 @@ namespace Microsoft::Xna::Framework::Content
                 return input.ReadQuaternion();
             else if constexpr (std::is_same_v<TMember, Color>)
                 return input.ReadColor();
+            else if constexpr (std::is_same_v<TMember, Point>)
+            {
+                const std::int32_t x = input.ReadInt32();
+                const std::int32_t y = input.ReadInt32();
+                return Point(x, y);
+            }
             else if constexpr (std::is_same_v<TMember, System::TimeSpan>)
                 // A .NET TimeSpan is a value type written as its Int64 tick count.
                 return System::TimeSpan::FromTicks(input.ReadInt64());

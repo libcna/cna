@@ -83,6 +83,27 @@ std::unique_ptr<Texture2D> MakeContactDepth(GraphicsDevice& gd)
     return texture;
 }
 
+/// The same contact rotated into screen Y and copied into the kind of render target a real
+/// DepthNormalPrepass supplies. Low readback rows are the +Y side of the XNA camera.
+std::unique_ptr<RenderTarget2D> MakeVerticalContactDepth(GraphicsDevice& gd)
+{
+    auto uploaded = std::make_unique<Texture2D>(gd, kSize, kSize);
+    std::vector<Color> texels;
+    texels.reserve(static_cast<std::size_t>(kSize) * kSize);
+    for (int y = 0; y < kSize; ++y)
+        for (int x = 0; x < kSize; ++x)
+        {
+            const float depth = (y < kPatchColumns ? kPatchDepth : kWallDepth) / kFarPlane;
+            texels.push_back(DepthTexel(gd, depth));
+        }
+    uploaded->SetData(texels.data(), static_cast<int>(texels.size()));
+
+    auto target = std::make_unique<RenderTarget2D>(gd, kSize, kSize);
+    FullscreenPass blit(gd);
+    blit.draw(uploaded.get(), target.get(), nullptr, kSize, kSize);
+    return target;
+}
+
 std::unique_ptr<Texture2D> MakeFlatScene(GraphicsDevice& gd, const int level)
 {
     auto texture = std::make_unique<Texture2D>(gd, kSize, kSize);
@@ -90,6 +111,15 @@ std::unique_ptr<Texture2D> MakeFlatScene(GraphicsDevice& gd, const int level)
                               Color(level, level, level, 255));
     texture->SetData(texels.data(), static_cast<int>(texels.size()));
     return texture;
+}
+
+std::unique_ptr<RenderTarget2D> MakeFlatSceneTarget(GraphicsDevice& gd, const int level)
+{
+    auto uploaded = MakeFlatScene(gd, level);
+    auto target = std::make_unique<RenderTarget2D>(gd, kSize, kSize);
+    FullscreenPass blit(gd);
+    blit.draw(uploaded.get(), target.get(), nullptr, kSize, kSize);
+    return target;
 }
 
 PostProcessContext MakeContext(Texture2D* scene, Texture2D* depth, RenderTarget2D* destination)
@@ -138,6 +168,15 @@ float ColumnMean(const std::vector<Color>& pixels, const int column)
     float total = 0.0f;
     for (int y = 0; y < kSize; ++y)
         total += static_cast<float>(pixels[static_cast<std::size_t>(y) * kSize + column]
+                                        .getRProperty());
+    return total / static_cast<float>(kSize);
+}
+
+float RowMean(const std::vector<Color>& pixels, const int row)
+{
+    float total = 0.0f;
+    for (int x = 0; x < kSize; ++x)
+        total += static_cast<float>(pixels[static_cast<std::size_t>(row) * kSize + x]
                                         .getRProperty());
     return total / static_cast<float>(kSize);
 }
@@ -404,12 +443,13 @@ TEST(ContactShadowPassTest, ARunThatSucceedsNamesNoReason)
 {
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     auto scene = MakeFlatScene(gd, 200);
     auto depth = MakeContactDepth(gd);
     RenderTarget2D destination(gd, kSize, kSize);
     ContactShadowPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the contact shadow shader package";
     AimTheRay(pass, 12.0f);
 
     PostProcessContext context = MakeContext(scene.get(), depth.get(), &destination);
@@ -428,7 +468,6 @@ TEST(ContactShadowPassTest, TheWallBesideTheObjectDarkensAndTheWallBeyondTheRayD
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     auto scene = MakeFlatScene(gd, 200);
     auto depth = MakeContactDepth(gd);
@@ -457,12 +496,43 @@ TEST(ContactShadowPassTest, TheWallBesideTheObjectDarkensAndTheWallBeyondTheRayD
         << ", distant " << distant;
 }
 
+TEST(ContactShadowPassTest, AVerticalRayMarchesTowardTheSameScreenSideOnEveryBackend)
+{
+    // The original contact fixture varies only X, so a renderer can invert camera Y and still
+    // pass every image assertion. This is its ninety-degree rotation through a render target: the
+    // ray travels toward low rows (+Y in the XNA camera), darkening the near wall but not the far
+    // one. It guards the explicit texture-UV/camera-NDC bridge in the Vulkan payload.
+    GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    auto scene = MakeFlatSceneTarget(gd, 200);
+    auto depth = MakeVerticalContactDepth(gd);
+    RenderTarget2D destination(gd, kSize, kSize);
+
+    ContactShadowPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run the contact shadow shader package";
+    AimTheRay(pass, 12.0f);
+    // Light travels down in camera Y, so the shadow ray travels up toward the low-row patch.
+    pass.setLightDirection(Vector3(0.0f, -1.0f, 0.0f));
+
+    PostProcessContext context = MakeContext(scene.get(), depth.get(), &destination);
+    pass.apply(context);
+    ASSERT_TRUE(pass.getFallbackReason().empty()) << pass.getFallbackReason();
+
+    const std::vector<Color> pixels = ReadTarget(destination);
+    const float contact = RowMean(pixels, kPatchColumns + 2);
+    const float distant = RowMean(pixels, kPatchColumns + 30);
+    EXPECT_LT(contact, 100.0f) << "the ray marched toward the wrong vertical screen side";
+    EXPECT_NEAR(distant, 200.0f, 4.0f) << "the ray exceeded its configured screen distance";
+}
+
 TEST(ContactShadowPassTest, TheObjectItselfDoesNotShadowItself)
 {
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     auto scene = MakeFlatScene(gd, 200);
     auto depth = MakeContactDepth(gd);
@@ -486,7 +556,6 @@ TEST(ContactShadowPassTest, TheIntensityScalesHowMuchLightAHitRemoves)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     auto scene = MakeFlatScene(gd, 200);
     auto depth = MakeContactDepth(gd);
@@ -513,7 +582,6 @@ TEST(ContactShadowPassTest, AShortenedRayGivesUpTheContactItCanNoLongerReach)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     auto scene = MakeFlatScene(gd, 200);
     auto depth = MakeContactDepth(gd);
@@ -551,7 +619,6 @@ TEST(ContactShadowPassTest, AThicknessTooThinForTheGapLosesTheShadowEntirely)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     auto scene = MakeFlatScene(gd, 200);
     auto depth = MakeContactDepth(gd);
@@ -588,7 +655,6 @@ TEST(ContactShadowPassTest, APixelAlreadyBlackFromTheShadowMapStaysBlack)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     auto scene = MakeFlatScene(gd, 0);
     auto depth = MakeContactDepth(gd);
@@ -615,7 +681,6 @@ TEST(ContactShadowPassTest, TheDarkeningIsAProductOfTheImageItIsGiven)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
 
     auto depth = MakeContactDepth(gd);
     RenderTarget2D destination(gd, kSize, kSize);

@@ -67,7 +67,11 @@ namespace CNA::Graphics {
          */
         void apply(const PostProcessContext& context) override;
 
-        /** @brief Returns `"SSAO"`. */
+        /**
+         * @brief Returns the stable pass name.
+         *
+         * @return `"SSAO"`.
+         */
         [[nodiscard]] const std::string& getName() const override;
 
         /**
@@ -79,23 +83,48 @@ namespace CNA::Graphics {
         [[nodiscard]] bool isSupported(
             Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) const override;
 
-        /** @brief Returns the sampling radius in world units, used when no settings are supplied. */
+        /**
+         * @brief Returns the sampling radius used when no settings are supplied.
+         *
+         * @return The screen-space sampling radius in normalised texture coordinates.
+         */
         [[nodiscard]] float getRadius() const;
-        /** @brief Sets the sampling radius in world units. */
+
+        /**
+         * @brief Sets the sampling radius used when no settings are supplied.
+         *
+         * @param value The screen-space radius in normalised texture coordinates.
+         */
         void setRadius(float value);
 
-        /** @brief Returns the occlusion strength multiplier. */
+        /**
+         * @brief Returns the occlusion strength multiplier.
+         *
+         * @return The multiplier applied while composing the occlusion image.
+         */
         [[nodiscard]] float getIntensity() const;
-        /** @brief Sets the occlusion strength multiplier. */
+
+        /**
+         * @brief Sets the occlusion strength multiplier.
+         *
+         * @param value The multiplier to apply while composing the occlusion image.
+         */
         void setIntensity(float value);
 
-        /** @brief Returns the number of hemisphere samples per pixel. */
+        /**
+         * @brief Returns the requested number of hemisphere samples per pixel.
+         *
+         * @return The requested sample count before apply-time clamping.
+         */
         [[nodiscard]] int getSampleCount() const;
+
         /**
          * @brief Sets the number of hemisphere samples per pixel.
          *
          * Clamped to 8..64 on use. Fewer samples are noisier rather than wrong, which the blur
          * then has to hide; more cost linearly.
+         *
+         * @param value The requested sample count.
          */
         void setSampleCount(int value);
 
@@ -184,6 +213,7 @@ namespace CNA::Graphics {
         float intensity_   = 1.0f;
         int   sampleCount_ = 16;
         bool  halfResolution_ = false;
+        bool  packedDepth_ = true;
     };
 
 /** @} */ // end of cnaext_engine

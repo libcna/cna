@@ -12,7 +12,13 @@
 set -u
 REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
 B="${CNA_PROBE_DIR:-$REPO/build-probe/cmake-probe-selector}"
+# There is exactly ONE physical ccache, at ~/.cache/ccache (100 GB, compressed). /rv/cnaccache
+# is a deliberate, load-bearing symlink to it -- never replaced by a directory, and never
+# duplicated. Name the physical path here so nothing depends on the symlink resolving.
+# CCACHE_BASEDIR is the half that actually unifies hashes across the ~548 build trees on
+# this machine: without it the same translation unit compiled from two trees hashes twice.
 export CCACHE_DIR="${CCACHE_DIR:-$HOME/.cache/ccache}"
+export CCACHE_BASEDIR="${CCACHE_BASEDIR:-/rv}"
 LOGDIR="${CNA_PROBE_LOGDIR:-$REPO/build-probe/selector-probes}"
 mkdir -p "$LOGDIR"
 

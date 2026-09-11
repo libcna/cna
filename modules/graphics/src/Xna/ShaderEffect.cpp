@@ -44,6 +44,42 @@ namespace Microsoft::Xna::Framework::Graphics
         return effectRenderer_->GetCompileError();
     }
 
+    std::vector<CNA::ShaderDiagnosticEXT> ShaderEffect::GetShaderDiagnosticsEXT() const
+    {
+        if (IsEffectValid()) return {};
+        std::vector<CNA::ShaderDiagnosticEXT> parsed =
+            CNA::ShaderDiagnosticEXT::parseCompilerLog(
+                GetCompileErrorEXT(), CNA::ShaderStageEXT::Unknown);
+        if (parsed.empty())
+        {
+            parsed.emplace_back(
+                CNA::ShaderDiagnosticSeverityEXT::Error, CNA::ShaderStageEXT::Unknown,
+                std::string(), 0, 0,
+                "renderer did not provide compiler diagnostic text");
+            return parsed;
+        }
+
+        std::vector<CNA::ShaderDiagnosticEXT> result;
+        result.reserve(parsed.size());
+        for (const auto& diagnostic : parsed)
+        {
+            std::string label;
+            if (diagnostic.getStage() == CNA::ShaderStageEXT::Vertex)
+                label = selectedVertexLabelEXT_;
+            else if (diagnostic.getStage() == CNA::ShaderStageEXT::Fragment)
+                label = selectedFragmentLabelEXT_;
+            result.emplace_back(
+                diagnostic.getSeverity(), diagnostic.getStage(), std::move(label),
+                diagnostic.getLine(), diagnostic.getColumn(), diagnostic.getMessage());
+        }
+        return result;
+    }
+
+    CNA::ShaderLanguageEXT ShaderEffect::GetSelectedShaderLanguageEXT() const noexcept
+    {
+        return selectedShaderLanguageEXT_;
+    }
+
     void ShaderEffect::SetUniformMat4(const char* name, const float* matrix)
     {
         if (effectRenderer_) effectRenderer_->SetUniformMat4(name, matrix);
@@ -149,6 +185,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Effect* ShaderEffect::Clone()
     {
-        return new ShaderEffect(*device_, vertSrc_, fragSrc_);
+        auto* clone = new ShaderEffect(*device_, vertSrc_, fragSrc_);
+        clone->selectedVertexLabelEXT_ = selectedVertexLabelEXT_;
+        clone->selectedFragmentLabelEXT_ = selectedFragmentLabelEXT_;
+        clone->selectedShaderLanguageEXT_ = selectedShaderLanguageEXT_;
+        return clone;
     }
 }

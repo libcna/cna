@@ -23,6 +23,28 @@ namespace {
 
         ~LocalGamerFixture() { session->Dispose(); }
     };
+
+    struct SystemLinkGamerFixture {
+        SignedInGamer signedIn = MakeSignedInGamer();
+        NetworkSession* session = NetworkSession::Create(
+            NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&signedIn}, 8, 0, NetworkSessionProperties{}
+        );
+        LocalNetworkGamer* gamer = session->getLocalGamersProperty()[0];
+
+        SystemLinkGamerFixture() { session->Update(); }
+        ~SystemLinkGamerFixture() { session->Dispose(); }
+    };
+
+    std::vector<SharpRuntime::bytecs> ReceivePendingPacket(SystemLinkGamerFixture& fixture) {
+        fixture.session->Update();
+        EXPECT_TRUE(fixture.gamer->getIsDataAvailableProperty());
+        std::vector<SharpRuntime::bytecs> buffer(16);
+        NetworkGamer* sender = nullptr;
+        const int length = fixture.gamer->ReceiveData(buffer, sender);
+        buffer.resize(static_cast<std::size_t>(length));
+        EXPECT_EQ(sender, fixture.gamer);
+        return buffer;
+    }
 }
 
 TEST(LocalNetworkGamerTest, IsLocalIsTrue) {
@@ -127,6 +149,34 @@ TEST(LocalNetworkGamerTest, SendDataFromPacketWriterToRecipient) {
     PacketWriter writer;
     writer.Write(static_cast<int32_t>(42));
     fixture.gamer->SendData(writer, SendDataOptions::Reliable, fixture.gamer);
+}
+
+TEST(LocalNetworkGamerTest, ReusedPacketWriterBroadcastDoesNotSendStaleTrailingBytes) {
+    SystemLinkGamerFixture fixture;
+    PacketWriter writer;
+    writer.Write(static_cast<int32_t>(0x04030201));
+    fixture.gamer->SendData(writer, SendDataOptions::Reliable);
+    EXPECT_EQ(ReceivePendingPacket(fixture),
+              (std::vector<SharpRuntime::bytecs>{1, 2, 3, 4}));
+
+    writer.Write(static_cast<SharpRuntime::bytecs>(9));
+    fixture.gamer->SendData(writer, SendDataOptions::Reliable);
+    EXPECT_EQ(ReceivePendingPacket(fixture),
+              (std::vector<SharpRuntime::bytecs>{9}));
+}
+
+TEST(LocalNetworkGamerTest, ReusedPacketWriterRecipientSendDoesNotSendStaleTrailingBytes) {
+    SystemLinkGamerFixture fixture;
+    PacketWriter writer;
+    writer.Write(static_cast<int32_t>(0x04030201));
+    fixture.gamer->SendData(writer, SendDataOptions::Reliable, fixture.gamer);
+    EXPECT_EQ(ReceivePendingPacket(fixture),
+              (std::vector<SharpRuntime::bytecs>{1, 2, 3, 4}));
+
+    writer.Write(static_cast<SharpRuntime::bytecs>(9));
+    fixture.gamer->SendData(writer, SendDataOptions::Reliable, fixture.gamer);
+    EXPECT_EQ(ReceivePendingPacket(fixture),
+              (std::vector<SharpRuntime::bytecs>{9}));
 }
 
 TEST(LocalNetworkGamerTest, ReceiveDataIntoPacketReaderReturnsZero) {

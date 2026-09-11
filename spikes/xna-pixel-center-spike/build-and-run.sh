@@ -3,7 +3,7 @@
 set -u
 export WINEPREFIX="$HOME/.wine-cna-xna40"
 unset WAYLAND_DISPLAY            # Wine hijacks the window through Wayland otherwise
-export DISPLAY="${DISPLAY:-:131}"
+export DISPLAY="${DISPLAY:-:0}"
 export WINEDEBUG=-all
 
 G='C:\windows\Microsoft.NET\assembly'

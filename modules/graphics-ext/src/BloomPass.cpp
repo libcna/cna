@@ -10,7 +10,10 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "PostProcessShaderPackages.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -22,6 +25,7 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
     using Microsoft::Xna::Framework::Graphics::SamplerState;
     using Microsoft::Xna::Framework::Graphics::ShaderEffect;
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
 
     namespace {
 
@@ -39,125 +43,57 @@ namespace CNA::Graphics {
         constexpr int kLevelSlotBase     = 100;
         constexpr int kUpsampleSlotBase  = 200;
 
-        constexpr const char* kVertexSource = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aTexCoord;
-layout(location = 2) in vec4 aColor;
-out vec2 TexCoord;
-uniform mat4 projection;
-void main() {
-    gl_Position = projection * vec4(aPos, 0.0, 1.0);
-    TexCoord = aTexCoord;
-}
-)";
+        class ScopedSamplerStateOverride final
+        {
+        public:
+            ScopedSamplerStateOverride(GraphicsDevice& device, const int slot,
+                                       const SamplerState& replacement)
+                : device_(device), slot_(slot), previous_(device.getSamplerStatesProperty()[slot])
+            {
+                device_.getSamplerStatesProperty()[slot_] = replacement;
+            }
 
-        // Extract with a soft knee. A hard cut-off makes bloom pop in and out as a highlight
-        // crosses the threshold, which is far more visible in motion than the missing energy just
-        // below it; the knee trades a little correctness for that stability.
-        constexpr const char* kExtractSource = R"(#version 300 es
-precision highp float;
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform float uThreshold;
-void main() {
-    vec3 c = texture(texture1, TexCoord).rgb;
-    float luminance = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    float knee = max(uThreshold * 0.5, 1e-4);
-    float contribution = clamp((luminance - uThreshold + knee) / (2.0 * knee), 0.0, 1.0);
-    contribution *= contribution;
-    FragColor = vec4(c * contribution, 1.0);
-}
-)";
+            ~ScopedSamplerStateOverride()
+            {
+                device_.getSamplerStatesProperty()[slot_] = previous_;
+            }
 
-        // A separable Gaussian: one pass horizontal, one vertical, driven by a direction uniform,
-        // because two 9-tap passes cost 18 samples where one 9x9 kernel costs 81.
-        constexpr const char* kBlurSource = R"(#version 300 es
-precision highp float;
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform vec2 uTexelDirection;
-void main() {
-    // Normalized 9-tap Gaussian (sigma ~= 2).
-    const float w0 = 0.2270270270;
-    const float w1 = 0.1945945946;
-    const float w2 = 0.1216216216;
-    const float w3 = 0.0540540541;
-    const float w4 = 0.0162162162;
-    vec3 sum = texture(texture1, TexCoord).rgb * w0;
-    sum += texture(texture1, TexCoord + uTexelDirection * 1.0).rgb * w1;
-    sum += texture(texture1, TexCoord - uTexelDirection * 1.0).rgb * w1;
-    sum += texture(texture1, TexCoord + uTexelDirection * 2.0).rgb * w2;
-    sum += texture(texture1, TexCoord - uTexelDirection * 2.0).rgb * w2;
-    sum += texture(texture1, TexCoord + uTexelDirection * 3.0).rgb * w3;
-    sum += texture(texture1, TexCoord - uTexelDirection * 3.0).rgb * w3;
-    sum += texture(texture1, TexCoord + uTexelDirection * 4.0).rgb * w4;
-    sum += texture(texture1, TexCoord - uTexelDirection * 4.0).rgb * w4;
-    FragColor = vec4(sum, 1.0);
-}
-)";
+            ScopedSamplerStateOverride(const ScopedSamplerStateOverride&) = delete;
+            ScopedSamplerStateOverride& operator=(const ScopedSamplerStateOverride&) = delete;
 
-        // Upsample-and-add: the larger level arrives in texture1 and the smaller, blurred one in
-        // slot 1, and the result is their sum. Reading the smaller level at the larger level's
-        // resolution *is* the upsample -- the sampler's bilinear filter does it, which is why
-        // MOD-407's fallback below matters where that filter is unavailable.
-        constexpr const char* kUpsampleSource = R"(#version 300 es
-precision highp float;
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform sampler2D uSmallerSampler;
-uniform vec2 uSmallerTexel;
-uniform int uManualFilter;
-void main() {
-    vec3 larger = texture(texture1, TexCoord).rgb;
-    vec3 smaller;
-    if (uManualFilter == 0) {
-        smaller = texture(uSmallerSampler, TexCoord).rgb;
-    } else {
-        // MOD-407: four taps averaged by hand, for renderers whose float textures cannot be
-        // linearly filtered. It is a box filter rather than the hardware's bilinear one, so the
-        // result is slightly blockier -- documented, and better than the alternative of a nearest
-        // sample, which makes the upsample visibly stair-step.
-        vec2 h = uSmallerTexel * 0.5;
-        smaller  = texture(uSmallerSampler, TexCoord + vec2(-h.x, -h.y)).rgb;
-        smaller += texture(uSmallerSampler, TexCoord + vec2( h.x, -h.y)).rgb;
-        smaller += texture(uSmallerSampler, TexCoord + vec2(-h.x,  h.y)).rgb;
-        smaller += texture(uSmallerSampler, TexCoord + vec2( h.x,  h.y)).rgb;
-        smaller *= 0.25;
-    }
-    FragColor = vec4(larger + smaller, 1.0);
-}
-)";
+        private:
+            GraphicsDevice& device_;
+            int slot_;
+            SamplerState previous_;
+        };
 
-        // Additive composite. The scene arrives in texture1 (SpriteBatch's own slot) and the
-        // blurred bloom in slot 1, so an intensity of zero reproduces the scene exactly -- which
-        // is what makes "bloom disabled" and "bloom at zero" the same image.
-        constexpr const char* kCombineSource = R"(#version 300 es
-precision highp float;
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform sampler2D uBloomSampler;
-uniform float uIntensity;
-void main() {
-    vec4 scene = texture(texture1, TexCoord);
-    vec3 bloom = texture(uBloomSampler, TexCoord).rgb;
-    FragColor = vec4(scene.rgb + bloom * uIntensity, scene.a);
-}
-)";
+        void SetGlDualSamplerOrientation(ShaderEffect& effect, const Texture2D* primary,
+                                         const Texture2D* secondary)
+        {
+            const CNA::ShaderLanguageEXT language = effect.GetSelectedShaderLanguageEXT();
+            if (language != CNA::ShaderLanguageEXT::GlslEs
+                && language != CNA::ShaderLanguageEXT::GlslDesktop)
+                return;
+
+            const float primaryFlip = dynamic_cast<const RenderTarget2D*>(primary) ? 1.0f : 0.0f;
+            const float secondaryFlip = dynamic_cast<const RenderTarget2D*>(secondary) ? 1.0f : 0.0f;
+            effect.SetUniformVec4("uRtFlipV", primaryFlip, secondaryFlip, 0.0f, 0.0f);
+        }
 
     } // namespace
 
     BloomPass::BloomPass(GraphicsDevice& device)
         : fullscreen_(std::make_unique<FullscreenPass>(device)), pool_(device)
     {
-        extractEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kExtractSource);
-        blurEffect_    = std::make_unique<ShaderEffect>(device, kVertexSource, kBlurSource);
-        upsampleEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kUpsampleSource);
-        combineEffect_  = std::make_unique<ShaderEffect>(device, kVertexSource, kCombineSource);
+        const auto makeEffect = [&device](const ShaderPackageEXT& package) {
+            return package.selectFor(device).isUsable()
+                ? std::make_unique<ShaderEffect>(device, package)
+                : nullptr;
+        };
+        extractEffect_  = makeEffect(detail::CreateBloomExtractShaderPackage());
+        blurEffect_     = makeEffect(detail::CreateBloomBlurShaderPackage());
+        upsampleEffect_ = makeEffect(detail::CreateBloomUpsampleShaderPackage());
+        combineEffect_  = makeEffect(detail::CreateBloomCombineShaderPackage());
 
         // MOD-407: whether the hardware can filter the float textures this chain is built from.
         // Asked once, at construction: it is a property of the renderer, not of the frame.
@@ -202,6 +138,7 @@ void main() {
 
         const bool shadersReady = extractEffect_ && extractEffect_->IsEffectValid()
                                && blurEffect_ && blurEffect_->IsEffectValid()
+                               && upsampleEffect_ && upsampleEffect_->IsEffectValid()
                                && combineEffect_ && combineEffect_->IsEffectValid();
         if (!shadersReady)
         {
@@ -228,6 +165,17 @@ void main() {
         SamplerState* const linearClamp =
             const_cast<SamplerState*>(&SamplerState::LinearClamp);
 
+        // SpriteBatch publishes the sampler passed to Begin only in slot 0. Bloom's upsample and
+        // combine shaders also read slot 1, whose XNA default is LinearWrap. Leaving that default
+        // in place wraps an edge highlight onto the opposite edge and makes a narrow pyramid look
+        // frame-wide. The manual-filter fallback needs point sampling; otherwise both inputs use
+        // the linear clamp the algorithm promises. Restore the game's slot after the queued draws
+        // have captured it so an internal post-process choice does not leak into later rendering.
+        GraphicsDevice* const device = extractEffect_->getGraphicsDeviceProperty();
+        const SamplerState& secondarySampler =
+            manualFilter_ ? SamplerState::PointClamp : SamplerState::LinearClamp;
+        ScopedSamplerStateOverride secondarySamplerScope(*device, 1, secondarySampler);
+
         // Intermediates carry the source's format so an HDR scene stays HDR through the chain;
         // clamping here would remove exactly the highlights bloom exists to spread.
         const auto format = context.source->getFormatProperty();
@@ -248,7 +196,7 @@ void main() {
         RenderTarget2D* extracted =
             pool_.acquire(chainWidth, chainHeight, format, DepthFormat::None, kExtractSlot);
         extractEffect_->Apply();
-        extractEffect_->SetUniformFloat("uThreshold", threshold);
+        extractEffect_->SetUniformVec4("uBloomParams", threshold, 0.0f, 0.0f, 0.0f);
         fullscreen_->draw(context.source, extracted, extractEffect_.get(), chainWidth, chainHeight,
                           linearClamp);
         levels.push_back({extracted, chainWidth, chainHeight});
@@ -264,14 +212,18 @@ void main() {
             RenderTarget2D* horizontal =
                 pool_.acquire(nextWidth, nextHeight, format, DepthFormat::None, kBlurSlot);
             blurEffect_->Apply();
-            blurEffect_->SetUniformVec2("uTexelDirection", 1.0f / static_cast<float>(nextWidth), 0.0f);
+            blurEffect_->SetUniformVec4("uBloomParams",
+                                        1.0f / static_cast<float>(nextWidth), 0.0f,
+                                        0.0f, 0.0f);
             fullscreen_->draw(levels.back().target, horizontal, blurEffect_.get(), nextWidth,
                               nextHeight, linearClamp);
 
             RenderTarget2D* vertical =
                 pool_.acquire(nextWidth, nextHeight, format, DepthFormat::None, slot);
             blurEffect_->Apply();
-            blurEffect_->SetUniformVec2("uTexelDirection", 0.0f, 1.0f / static_cast<float>(nextHeight));
+            blurEffect_->SetUniformVec4("uBloomParams", 0.0f,
+                                        1.0f / static_cast<float>(nextHeight),
+                                        0.0f, 0.0f);
             fullscreen_->draw(horizontal, vertical, blurEffect_.get(), nextWidth, nextHeight,
                               linearClamp);
 
@@ -300,10 +252,12 @@ void main() {
                 upsampleEffect_->Apply();
                 upsampleEffect_->SetUniformInt("uSmallerSampler", 1);
                 upsampleEffect_->SetTexture(1, *accumulated);
-                upsampleEffect_->SetUniformVec2("uSmallerTexel",
-                                                1.0f / static_cast<float>(smaller.width),
-                                                1.0f / static_cast<float>(smaller.height));
-                upsampleEffect_->SetUniformInt("uManualFilter", manualFilter_ ? 1 : 0);
+                upsampleEffect_->SetUniformVec4(
+                    "uBloomParams", 1.0f / static_cast<float>(smaller.width),
+                    1.0f / static_cast<float>(smaller.height), manualFilter_ ? 1.0f : 0.0f,
+                    0.0f);
+                SetGlDualSamplerOrientation(
+                    *upsampleEffect_, larger.target, accumulated);
                 fullscreen_->draw(larger.target, summed, upsampleEffect_.get(), larger.width,
                                   larger.height, linearClamp);
                 accumulated = summed;
@@ -314,7 +268,8 @@ void main() {
         combineEffect_->Apply();
         combineEffect_->SetUniformInt("uBloomSampler", 1);
         combineEffect_->SetTexture(1, *accumulated);
-        combineEffect_->SetUniformFloat("uIntensity", intensity);
+        combineEffect_->SetUniformVec4("uBloomParams", intensity, 0.0f, 0.0f, 0.0f);
+        SetGlDualSamplerOrientation(*combineEffect_, context.source, accumulated);
         fullscreen_->draw(context.source, context.destination, combineEffect_.get(),
                           context.width, context.height, linearClamp);
     }
@@ -339,9 +294,10 @@ void main() {
 
     bool BloomPass::isSupported(GraphicsDevice& device) const
     {
-        return PostProcessPass::isSupported(device)
+        return device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
             && extractEffect_ && extractEffect_->IsEffectValid()
             && blurEffect_ && blurEffect_->IsEffectValid()
+            && upsampleEffect_ && upsampleEffect_->IsEffectValid()
             && combineEffect_ && combineEffect_->IsEffectValid();
     }
 

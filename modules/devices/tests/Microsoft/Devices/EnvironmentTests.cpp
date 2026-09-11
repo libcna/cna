@@ -16,8 +16,16 @@ TEST(EnvironmentTests, DeviceTypeDefinesDeviceAndEmulatorAsDistinctValues)
 
 TEST(EnvironmentTests, DeviceTypePropertyMatchesTheCurrentHostKind)
 {
-    const DeviceType expected = CNA::getCurrentPlatform() == CNA::TargetPlatform::Web
-        ? DeviceType::Emulator
-        : DeviceType::Device;
+    const DeviceType expected = CNA::isMobilePlatform()
+        ? DeviceType::Device
+        : DeviceType::Emulator;
     EXPECT_EQ(Environment::getDeviceTypeProperty(), expected);
+}
+
+TEST(EnvironmentTests, DesktopUsesTheEmulatorInputPath)
+{
+    if (CNA::getCurrentPlatform() == CNA::TargetPlatform::Desktop)
+    {
+        EXPECT_EQ(Environment::getDeviceTypeProperty(), DeviceType::Emulator);
+    }
 }

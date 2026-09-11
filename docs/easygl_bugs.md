@@ -79,6 +79,66 @@ constraint), **diverges** (differs from XNA/FNA, but may be intentional).
 
 ---
 
+## DepthBias is not in units of r (found and fixed in EasyGL 2026-09-08)
+
+**Status: fixed here, open in five other renderers.**
+
+CNA was written on the premise that "XNA's `RasterizerState.DepthBias` is a float already
+expressed in units of `r`, the depth buffer format's minimum resolvable difference". That premise
+is false. XNA is D3D9, and `D3DRS_DEPTHBIAS` there is a **normalized depth value in [0,1] added
+straight to the depth**. D3D10 and later changed to the `r`-scaled integer convention the premise
+describes; it appears to be that later convention read back onto XNA.
+
+**Measured**, against real XNA on D3D9 under Wine/DXVK, with SAMPLE-073 (SoccerPitch): the sample
+lifts its flattened ball shadow off the pitch with `DepthBias = -0.0001f`. Real XNA draws a solid
+shadow. EasyGL passed the value straight to `glPolygonOffset`'s `units`, where it means multiples
+of `2^-24`, so about `-6e-12` of offset reached the rasterizer -- and the shadow z-fought with the
+pitch into horizontal scanlines with grass showing through. Scaling by the depth buffer's own
+resolution makes it solid and indistinguishable in character from the original's.
+
+Fixed in EasyGL by `EasyGLDepthBiasToPolygonOffsetUnits(depthBias, bits)`, with `bits` taken from
+whatever depth buffer is bound: a render target's own `DepthFormat` through
+`IRenderTargetRenderer::DepthBufferBitsEXT()`, otherwise the backbuffer's, tracked from
+`UpdatePresentationFormatEXT`. Tests: `EasyGLDepthBias.IsScaledByTheDepthBuffersOwnResolution`
+and `EasyGLDepthBias.DepthFormatOrdinalsMapToTheirRealPrecision`.
+
+**Still carrying the old premise**, all with the same one-line correction available and none of
+them verifiable on this host:
+
+| Renderer | Where | Effect on the sample's `-0.0001f` |
+|---|---|---|
+| `directx11` | `D3D11StateObjectCache.cpp` `GetOrCreate` | `lround(-0.0001)` is **0** -- the bias is dropped entirely |
+| `vulkan` | `VulkanRenderer::ApplyRasterizerState` | unscaled into `vkCmdSetDepthBias`'s `depthBiasConstantFactor` |
+| `magnum` | `MagnumRenderer.cpp:874` | unscaled into `Renderer::setPolygonOffset` |
+| `opengl2` | `OpenGL2Renderer.cpp:3831` | unscaled into `glPolygonOffset` |
+| `opengl1` | `OpenGL1Renderer.cpp:377` | unscaled into `glPolygonOffset` |
+| `portablegl` | `PortableGLRenderer.cpp:1348` | unscaled into `glPolygonOffset` |
+
+`opengles1` is exempt: ES 1.1 has no `glPolygonOffset` and it already discards both values.
+
+## Browser fullscreen reports a drawable the browser does not present (found 2026-09-08)
+
+**Status: bug, open.** Under Emscripten, with the page in browser fullscreen, the drawable size
+EasyGL letterboxes into does not match what the browser actually puts on screen, so the picture is
+scaled for one rectangle and presented in another. Measured with SAMPLE-071 (Yacht, a 480x800
+backbuffer) on a headless Chrome whose screen is 800x600: the canvas reports `width`/`height`
+800x600 while its CSS box is 800x544, and the game came out covering about 71 % of its own logical
+area in both axes -- uniformly scaled, so the aspect is right, but the bottom and right of the
+frame are outside what the browser shows.
+
+It is not a Letterbox bug: `EasyGLSurfaceState` computes the rectangle correctly from whatever
+drawable it is given (`EasyGLSurfaceState.LetterboxKeepsTheLogicalSizeAtTheBackbufferAndCentresTheRect`
+pins the exact numbers). The wrong input is the drawable itself, which comes from
+`Sdl3Window::GetPixelSize()` and its `webDrawableOverride_` path -- the same code that already has
+a special case for leaving web fullscreen.
+
+The previous default presentation mode, `FixedHeightDynamicWidth`, hid this completely: its
+viewport rectangle is always the whole drawable, so a drawable that is the wrong size still
+covers whatever is presented. Letterbox became the default on 2026-09-08 and made it visible.
+
+Not reproducible natively here: X11 fullscreen needs a window manager to resize the window, and
+none is installed, so the window stays at the backbuffer size and the letterbox is the identity.
+
 ## Viewport / coordinate system notes
 
 - **`GetViewportSize` returns the LOGICAL size, not the physical framebuffer size.**

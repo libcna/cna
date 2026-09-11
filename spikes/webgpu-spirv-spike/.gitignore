@@ -1,0 +1,5 @@
+webgpu_spirv_spike
+obj/
+*.o
+*.exe
+*.spv

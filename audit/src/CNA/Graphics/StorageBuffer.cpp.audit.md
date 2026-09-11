@@ -4,46 +4,59 @@
 
 - Source file: `src/CNA/Graphics/StorageBuffer.cpp`
 - Physical location: `modules/graphics-ext/src/StorageBuffer.cpp`
-- Audit status: PENDING
+- Audit status: COMPLETE
 - Subsystem: `cna-graphics` shard — the `CNA::Graphics` engine layer
 - File type: C++ source
 - XNA/FNA relevance: N/A — `CNA::Graphics`, not `Microsoft::Xna`. The whole layer is behind the
   `CNA_CNAEXT` CMake option (default OFF) and every file in it is `#ifdef CNA_CNAEXT`-guarded,
   which `scripts/check_cnaext_guards.sh` enforces.
 - Graphics renderer relevance: none directly — the engine layer talks to `GraphicsDevice` and the renderer contracts, never to a renderer implementation
-- Plan rows: not recorded in the file
+- Plan rows: `MOD-1520`, `MOD-2229`, `MOD-2231`
 
 ## Purpose
 
-A GPU buffer a compute shader reads and writes.
+Validation, renderer allocation, exact transfers, copying and tracked disposal for StorageBuffer.
 
 ## Executive Verdict
 
-Not yet audited. This entry is a work-queue placeholder created by `plans/plan_modern.md` `MOD-12` so the
-engine layer's files are tracked rather than invisible to the audit inventory; the file itself
-landed with its own tests and build verification under the plan row(s) named above.
+Complete for `MOD-2229` and `MOD-2231`. Intrinsic descriptor errors,
+disposed/cross-device resources, missing usage/CPU access, applicable live size limits and invalid
+ranges are rejected before renderer mutation.
 
 ## Checklist Results
 
-Pending.
+- Failed construction allocates the renderer record before `GraphicsResource` registration, so no
+  half-registered resource escapes.
+- The compatible path deliberately uses the legacy factory and default mask; descriptor creation
+  uses the separate false-by-default factory.
+- CPU-none upload/readback refuses before dereferencing a mapping.
+- GPU copy validates both usage halves, devices, ranges and same-buffer overlap.
+- Explicit and device disposal are idempotent and release renderer work first.
 
 ## Detailed Findings
 
-Pending.
+`ComputeShader` checks the storage role and `GraphicsDevice` checks the indirect-argument role. The
+Vulkan backend maps every usage bit exactly and performs GPU-only transfers with `vkCmdCopyBuffer`.
 
 ## Cross-File Observations
 
-Pending.
+Construction reads the already-cached renderer facts through `GraphicsDevice` and never queries a
+native API directly. The storage-byte limit is applied only when the descriptor declares `Storage`;
+it is not a valid bound for an indirect-only native buffer. The legacy factory remains separate so
+existing callers keep their source and behavior.
 
 ## Missing or Weak Tests
 
-Pending. Note that the plan requires tests with each row, so the starting point for an audit here is
-`modules/graphics-ext/tests/CNA/Graphics/`, not an empty slate.
+No known gap for these rows. Shared validation/tracking tests compile as their own object; the
+Vulkan native oracle distinguishes CPU-written indirect-only buffers from compute-written mixed
+buffers and passes on both physical RADV and llvmpipe with zero validation messages.
 
 ## Positive Findings
 
-Pending.
+The prefix overloads delegate to the range overloads, keeping one validation path. Both zero-length
+and maximum-size offsets are handled without arithmetic wraparound.
 
 ## Final Assessment
 
-Pending.
+Complete for `MOD-2229` and `MOD-2231`; automatic deferred ordering is provided by the later Vulkan
+synchronization rows.

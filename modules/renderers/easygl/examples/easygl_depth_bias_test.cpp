@@ -20,14 +20,14 @@
 //   read back with one GetBackBufferData capture per strip.
 //
 //   Strip 0 — flat,   B DepthBias = 0            → RED   (B fails the equal-depth test)
-//   Strip 1 — flat,   B DepthBias = -1e6         → GREEN (constant bias pulls B in front)
+//   Strip 1 — flat,   B DepthBias = -1e-4        → GREEN (constant bias pulls B in front)
 //   Strip 2 — tilted, B SlopeScaleDepthBias = 0  → RED   (B fails the equal-depth test)
-//   Strip 3 — tilted, B SlopeScaleDepthBias=-2e3 → GREEN (slope bias pulls B in front)
+//   Strip 3 — tilted, B SlopeScaleDepthBias=-2    → GREEN (slope bias pulls B in front)
 //
-// Bias magnitudes are deliberately large: glPolygonOffset scales the constant factor ("units") by
-// the depth format's minimum resolvable difference and the slope factor ("factor") by the
-// primitive's own depth slope, both small, so a large negative factor gives an unambiguous,
-// format-independent result. Overshoot is harmless -- a depth clamped to 0 still passes LESS.
+// XNA's constant bias is a normalized depth offset, not glPolygonOffset's native "units" count.
+// FNA3D multiplies it by (2^depthBits - 1) for both modern D3D and GL backends. The flat geometry
+// sits at z=0.5: z=0 is OpenGL depth 0.5 but D3D's near plane 0, where a negative offset clamps and
+// cannot pass LESS. The magnitudes below are large enough to be unambiguous without saturation.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -65,12 +65,13 @@ class EasyGLDepthBiasTest : public Game
     }
 
     // CW-winding triangle (front face under default CullCounterClockwiseFace), centred at
-    // NDC x = cx. tilted=false → all vertices at z=0 (depth 0.5, slope 0); tilted=true →
-    // top at z=-0.6 (depth 0.2), base at z=+0.6 (depth 0.8): depth slopes top-to-bottom.
+    // NDC x = cx. All z values are inside both D3D's [0,1] and GL's [-1,1] clip ranges, so the
+    // fixture does not depend on an API-specific clip convention. tilted=false has zero slope;
+    // tilted=true slopes from z=0.2 at the top to z=0.8 at the base.
     static void drawTri(GraphicsDevice& dev, float cx, bool tilted, const Color& col)
     {
-        const float zt = tilted ? -0.6f : 0.0f;
-        const float zb = tilted ?  0.6f : 0.0f;
+        const float zt = tilted ? 0.2f : 0.5f;
+        const float zb = tilted ? 0.8f : 0.5f;
         const VertexPositionColor verts[3] = {
             { Vector3(cx,         0.8f, zt), col },
             { Vector3(cx + 0.15f, -0.8f, zb), col },
@@ -130,9 +131,9 @@ protected:
         dev.setDepthStencilStateProperty(dss);
 
         RasterizerState rsNoBias;                          // DepthBias = 0
-        RasterizerState rsConst;  rsConst.setDepthBiasProperty(-1000000.0f);
+        RasterizerState rsConst;  rsConst.setDepthBiasProperty(-0.0001f);
         RasterizerState rsSlope0;                          // SlopeScaleDepthBias = 0
-        RasterizerState rsSlope;  rsSlope.setSlopeScaleDepthBiasProperty(-2000.0f);
+        RasterizerState rsSlope;  rsSlope.setSlopeScaleDepthBiasProperty(-2.0f);
 
         dev.Clear(Color(0, 0, 0, 255));
         dev.setBlendStateProperty(BlendState::Opaque);
@@ -152,13 +153,13 @@ protected:
         std::snprintf(buf, sizeof(buf), "DepthBias=0 (flat): (%d,%d,%d) expected RED",
                       p0.getRProperty(), p0.getGProperty(), p0.getBProperty());
         check(isRed(p0), buf);
-        std::snprintf(buf, sizeof(buf), "DepthBias=-1e6 (flat): (%d,%d,%d) expected GREEN",
+        std::snprintf(buf, sizeof(buf), "DepthBias=-1e-4 (flat): (%d,%d,%d) expected GREEN",
                       p1.getRProperty(), p1.getGProperty(), p1.getBProperty());
         check(isGreen(p1), buf);
         std::snprintf(buf, sizeof(buf), "SlopeScale=0 (tilted): (%d,%d,%d) expected RED",
                       p2.getRProperty(), p2.getGProperty(), p2.getBProperty());
         check(isRed(p2), buf);
-        std::snprintf(buf, sizeof(buf), "SlopeScale=-2000 (tilted): (%d,%d,%d) expected GREEN",
+        std::snprintf(buf, sizeof(buf), "SlopeScale=-2 (tilted): (%d,%d,%d) expected GREEN",
                       p3.getRProperty(), p3.getGProperty(), p3.getBProperty());
         check(isGreen(p3), buf);
 

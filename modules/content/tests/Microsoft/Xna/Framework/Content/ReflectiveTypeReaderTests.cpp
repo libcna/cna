@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Point.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -26,6 +27,7 @@
 #include "System/IO/MemoryStream.hpp"
 
 using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Point;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
@@ -49,6 +51,7 @@ namespace
         float Speed = 0;
         Mood Temper = Mood::Calm;
         Vector2 Home;
+        Point FrameSize;
     };
 
     void WriteBytes(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes)
@@ -89,7 +92,7 @@ namespace
         System::IO::MemoryStream body;
         System::IO::BinaryWriter w(&body, true);
 
-        w.Write7BitEncodedInt(5); // five table entries
+        w.Write7BitEncodedInt(6); // six table entries
         w.Write(std::string("Microsoft.Xna.Framework.Content.ReflectiveReader`1"
                             "[[Bestiary.CreatureSettings, Bestiary, Version=1.0.0.0, "
                             "Culture=neutral, PublicKeyToken=null]]"));
@@ -104,6 +107,8 @@ namespace
                             "[[Bestiary.Mood, Bestiary, Version=1.0.0.0, "
                             "Culture=neutral, PublicKeyToken=null]]"));
         w.Write(static_cast<std::int32_t>(0));
+        w.Write(std::string("Microsoft.Xna.Framework.Content.PointReader"));
+        w.Write(static_cast<std::int32_t>(0));
 
         w.Write7BitEncodedInt(0); // no shared resources
         w.Write7BitEncodedInt(1); // root object -> the reflective reader
@@ -115,6 +120,8 @@ namespace
         w.Write(static_cast<std::int32_t>(2));       // Temper = Furious, inline
         w.Write(-1.5f);                              // Home.X
         w.Write(9.25f);                              // Home.Y
+        w.Write(static_cast<std::int32_t>(192));     // FrameSize.X, inline value type
+        w.Write(static_cast<std::int32_t>(128));     // FrameSize.Y
         w.Flush();
         const auto bodyBytes = body.ToArray();
 
@@ -142,6 +149,7 @@ namespace
             .Field(&CreatureSettings::Speed)
             .EnumField(&CreatureSettings::Temper, "Bestiary.Mood")
             .Field(&CreatureSettings::Home)
+            .Field(&CreatureSettings::FrameSize)
             .Register();
     }
 
@@ -156,7 +164,11 @@ namespace
         // RegisterPrimitiveXnbReaders(), not lazily per ContentManager, so a test that loads a
         // file naming Int32Reader has to ask for them -- the same thing the other content
         // fixtures do.
-        void SetUp() override { CNA::Internal::Xnb::RegisterPrimitiveXnbReaders(); }
+        void SetUp() override
+        {
+            CNA::Internal::Xnb::RegisterPrimitiveXnbReaders();
+            CNA::Internal::Xnb::RegisterMathXnbReaders();
+        }
 
         void TearDown() override
         {
@@ -186,6 +198,9 @@ namespace
         EXPECT_EQ(Mood::Furious, loaded.Temper) << "an enum is written inline as an Int32";
         EXPECT_FLOAT_EQ(-1.5f, loaded.Home.X);
         EXPECT_FLOAT_EQ(9.25f, loaded.Home.Y);
+        EXPECT_EQ(192, loaded.FrameSize.X);
+        EXPECT_EQ(128, loaded.FrameSize.Y)
+            << "Point is an XNA value type and must not consume a reader-dispatch index";
     }
 
     // The registration key is the canonical name, with the assembly qualifiers stripped -- which

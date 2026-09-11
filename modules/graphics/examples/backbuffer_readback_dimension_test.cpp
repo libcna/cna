@@ -40,6 +40,15 @@
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/NotSupportedException.hpp"
 
+#if defined(CNA_RENDERER_VULKAN)
+// plan_vulkan.md VULKAN-404: this fixture is the only place that reads the backbuffer back across a
+// runtime resize, and that is the exact shape in which the Vulkan renderer mapped the NEW swapchain
+// extent's byte count out of the OLD extent's staging allocation. Every leg's pixel checks passed
+// while it did so, on this driver -- only the Khronos layer noticed. Judging the layer here is what
+// turns those passing pixel checks into a defence.
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
+#endif
+
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -52,9 +61,12 @@
 #include <cstring>
 #include <sys/wait.h>
 #include <unistd.h>
-#define CNA_GFX165_CAN_FORK 1
+#define CNA_GFX165_CAN_ISOLATE 1
+#elif defined(_WIN32)
+#include "common/WindowsProcessIsolation.hpp"
+#define CNA_GFX165_CAN_ISOLATE 1
 #else
-#define CNA_GFX165_CAN_FORK 0
+#define CNA_GFX165_CAN_ISOLATE 0
 #endif
 
 using namespace Microsoft::Xna::Framework;
@@ -563,8 +575,32 @@ class BackbufferReadbackDimensionTest : public Game
         Finish();
     }
 
+    /**
+     * @brief VULKAN-404 -- the Khronos layer's verdict on everything this leg just did.
+     *
+     * Asserted per leg rather than per suite, because the defect this guards is reachable from one
+     * leg only (G1, the growing resize) and a suite-wide count would not say which. The layer's own
+     * liveness is asserted first: an empty message list from a layer that never loaded is not
+     * evidence.
+     */
+    void CheckValidationClean()
+    {
+#if defined(CNA_RENDERER_VULKAN)
+        using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
+        check(VulkanRenderer::IsValidationActiveEXT(),
+              "V1 VK_LAYER_KHRONOS_validation is loaded, so the count below means something");
+        auto* vk = dynamic_cast<VulkanRenderer*>(&getGraphicsDeviceProperty().GetRenderer());
+        if (!vk) { check(false, "V2 Vulkan renderer not reachable"); return; }
+        const auto& msgs = vk->GetValidationMessagesEXT();
+        check(msgs.empty(),
+              "V2 no Vulkan validation message" +
+                  (msgs.empty() ? std::string{} : std::string(" -- first: ") + msgs.front()));
+#endif
+    }
+
     void Finish()
     {
+        CheckValidationClean();
         std::printf("[INFO] %s: %d/%d checks passed\n", kRendererName, passCount_, totalCount_);
         std::fflush(stdout);
         result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;
@@ -590,7 +626,7 @@ namespace
 {
     const char* const kLegIds[] = { "A1", "A2", "B1", "C1", "D1", "F1", "G1", "G2" };
 
-#if CNA_GFX165_CAN_FORK
+#if CNA_GFX165_CAN_ISOLATE
     constexpr unsigned kLegTimeoutSeconds = 180;
 
     // Matches CNA::Examples::kSkipExitCode (common/PixelTestGame.hpp) -- a leg that exits with this
@@ -605,6 +641,7 @@ namespace
         crashed = false;
         skipped = false;
         std::string arg = std::string("--leg=") + legId;
+#if defined(__unix__) || defined(__APPLE__)
         const pid_t pid = fork();
         if (pid < 0) { std::printf("[FAIL] supervisor: fork() failed for leg %s\n", legId); return false; }
         if (pid == 0)
@@ -649,6 +686,37 @@ namespace
         std::printf("[FAIL] leg %s: neither exited nor signalled (status %d)\n", legId, status);
         std::fflush(stdout);
         return false;
+#else
+        const auto child = CNA::Examples::RunWindowsChild(
+            exePath, arg, kLegTimeoutSeconds * 1000u);
+        if (child.outcome == CNA::Examples::WindowsChildOutcome::TimedOut)
+        {
+            std::printf("[TIMEOUT] leg %s: no result within %u s\n",
+                        legId, kLegTimeoutSeconds);
+            std::fflush(stdout);
+            return false;
+        }
+        if (child.outcome != CNA::Examples::WindowsChildOutcome::Exited)
+        {
+            std::printf("[FAIL] supervisor: Win32 child operation failed for leg %s (error %lu)\n",
+                        legId, static_cast<unsigned long>(child.systemError));
+            std::fflush(stdout);
+            return false;
+        }
+        if (child.exitCode == 0) return true;
+        if (child.exitCode == kLegSkipExitCode)
+        {
+            skipped = true;
+            std::printf("[SKIP] leg %s: exited %d\n", legId, kLegSkipExitCode);
+            std::fflush(stdout);
+            return false;
+        }
+        crashed = CNA::Examples::IsWindowsAbnormalExit(child.exitCode);
+        std::printf("[%s] leg %s: exited %lu\n", crashed ? "CRASH" : "FAIL", legId,
+                    static_cast<unsigned long>(child.exitCode));
+        std::fflush(stdout);
+        return false;
+#endif
     }
 #endif
 }
@@ -662,7 +730,7 @@ int main(int argc, char** argv)
         if (a.rfind("--leg=", 0) == 0) onlyLeg = a.substr(6);
     }
 
-#if CNA_GFX165_CAN_FORK
+#if CNA_GFX165_CAN_ISOLATE
     if (onlyLeg.empty())
     {
         std::printf("[INFO] REMED-GFX-165 supervisor: %zu legs, each in its own process\n",

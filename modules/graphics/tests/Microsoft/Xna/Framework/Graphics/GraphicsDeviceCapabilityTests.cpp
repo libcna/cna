@@ -217,14 +217,26 @@ struct CapabilityExpectation
 
 // FNA3D has no separate compiled-effects opt-in: MojoShader is already its own graphics
 // dependency, so support is unconditional whenever this renderer is selected at all. SDL_GPU,
-// EasyGL and Vulkan all pull MojoShader in only as an extra, off-by-default dependency none of
-// them otherwise needs (CNA_SDL_GPU_COMPILED_EFFECTS / CNA_EASYGL_COMPILED_EFFECTS /
-// CNA_VULKAN_COMPILED_EFFECTS) -- selecting the renderer alone is not enough to expect the
-// capability true for any of those three.
+// EasyGL, Vulkan, WebGPU and DirectX 9/11/12 all pull MojoShader in only as an extra,
+// off-by-default dependency none of them otherwise needs (CNA_SDL_GPU_COMPILED_EFFECTS /
+// CNA_EASYGL_COMPILED_EFFECTS / CNA_VULKAN_COMPILED_EFFECTS / CNA_WEBGPU_COMPILED_EFFECTS /
+// CNA_DIRECTX9_COMPILED_EFFECTS / CNA_DIRECTX11_COMPILED_EFFECTS /
+// CNA_DIRECTX12_COMPILED_EFFECTS) -- selecting the renderer alone is not enough to expect the
+// capability true for any of those seven.
+//
+// plans/plan_webgpu.md WEBGPU-171 added the WebGPU arm. Its route is MojoShader's SPIR-V profile
+// plus the combined-image-sampler rewrite WGSL's shading model requires. WEBGPU-203 removed the
+// "native-only" half of that sentence: browser WebGPU still ingests WGSL and nothing else, but CNA
+// now translates this route's SPIR-V into WGSL, so an Emscripten build configures the option and
+// answers true here for the same reason a native one does.
 #if defined(CNA_RENDERER_FNA3D) || \
     (defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS)) || \
-    (defined(CNA_RENDERER_VULKAN) && defined(CNA_VULKAN_COMPILED_EFFECTS))
+    (defined(CNA_RENDERER_VULKAN) && defined(CNA_VULKAN_COMPILED_EFFECTS)) || \
+    (defined(CNA_RENDERER_WEBGPU) && defined(CNA_WEBGPU_COMPILED_EFFECTS)) || \
+    (defined(CNA_RENDERER_DIRECTX9) && defined(CNA_DIRECTX9_COMPILED_EFFECTS)) || \
+    (defined(CNA_RENDERER_DIRECTX11) && defined(CNA_DIRECTX11_COMPILED_EFFECTS)) || \
+    (defined(CNA_RENDERER_DIRECTX12) && defined(CNA_DIRECTX12_COMPILED_EFFECTS))
 constexpr bool kExpectCompiledEffects = true;
 #else
 constexpr bool kExpectCompiledEffects = false;
@@ -366,6 +378,56 @@ TEST(GraphicsDeviceCapabilityTest, MultiSampleAntiAliasingQueryDoesNotThrow)
     EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing); });
 }
 
+// plans/plan_webgpu.md WEBGPU-195: the value is device-dependent and this test still does not
+// assert one -- what it asserts is that the DECLARATION and its CONSUMER agree, which is a claim
+// that holds on any machine and fails on exactly the divergence the row exists to stop: a
+// capability reporting true while every requested sample count silently became 1.
+//
+// The direction matters. `applied <= requested` is the shared contract, so a renderer may honour
+// 4x, 2x, or refuse and give 1 -- but if the capability says false, no target may come back
+// multisampled at all, and if a target DOES come back multisampled, the capability cannot be
+// claiming the device has no MSAA.
+TEST(GraphicsDeviceCapabilityTest, MultiSampleAntiAliasingAgreesWithWhatARenderTargetGets)
+{
+    using Microsoft::Xna::Framework::Graphics::DepthFormat;
+    using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+    using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+    GraphicsDevice gd;
+    const bool capability = gd.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing);
+
+    RenderTarget2D target(gd, 32, 32, false, SurfaceFormat::Color, DepthFormat::None, 4,
+                          RenderTargetUsage::DiscardContents);
+    const int applied = target.getMultiSampleCountProperty();
+
+    EXPECT_LE(applied, 4) << "the applied sample count may never exceed the requested one";
+    EXPECT_GE(applied, 1);
+    if (!capability)
+    {
+        EXPECT_EQ(applied, 1)
+            << "a renderer that reports no MSAA support must not hand back a multisampled target";
+    }
+    if (applied > 1)
+    {
+        EXPECT_TRUE(capability)
+            << "a renderer that hands back a multisampled target must not report that it has no "
+               "MSAA support";
+    }
+    // The strong arm, and the one that catches the divergence WEBGPU-195 is about -- a capability
+    // reporting true while every requested count silently becomes 1. It is asserted only where the
+    // row establishes that both answers come from the SAME probe: on WEBGPU,
+    // SupportsCapability(MultiSampleAntiAliasing) and PickSampleCount() both call Supports4xMsaa(),
+    // so they cannot legitimately disagree. Renderers that report the shared permissive default
+    // while giving 1 sample are not covered by it, because for them the two are not yet one answer.
+    if (CNA_RENDERER_IS(WebGPU) && capability)
+    {
+        EXPECT_GT(applied, 1)
+            << "WEBGPU-195: this renderer's capability and its applied sample count come from one "
+               "probe, so a true capability must produce a multisampled target";
+    }
+}
+
 TEST(GraphicsDeviceCapabilityTest, AnisotropicFilteringQueryDoesNotThrow)
 {
     GraphicsDevice gd;
@@ -459,11 +521,15 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
         << "the EasyGL-family renderers under-report WireFrame again -- REMED-GFX-219's corrected "
            "report is gone while the GL_LINES emulation still renders a measured-correct wireframe";
 #elif defined(CNA_RENDERER_WEBGPU)
-    // WEBGPU-115: asserted, not inherited. wgpu-native has no polygon mode at all, so
-    // WebGPURenderer::SupportsCapability answers false and the draw-time guard refuses.
-    EXPECT_FALSE(reported)
-        << "WebGPU claims WireFrame support again -- WEBGPU-115's capability override is gone, and "
-           "the renderer has no polygon mode to back the claim with";
+    // plans/plan_webgpu.md WEBGPU-153: true, for exactly the reason the EasyGL arm above is true and
+    // by the same mechanism. WEBGPU-115 asserted false here on the grounds that "wgpu-native has no
+    // polygon mode at all" -- true of the API and irrelevant to the question, since a wireframe is
+    // produced by expanding triangle edges into a line list and needs no polygon mode on any
+    // target. WebGPU now does that on every 3D route, and the pixel oracle below measures it:
+    // interior 0/1089 with all three edges present, against Solid's 1089/1089.
+    EXPECT_TRUE(reported)
+        << "WebGPU under-reports WireFrame again -- WEBGPU-153's edge-expansion implementation is "
+           "still in place while the capability claims the renderer cannot do it";
 #elif defined(CNA_RENDERER_DIRECTX1)
     // DIRECTX1 is 2D-only by design -- DirectX 1 has no Direct3D at all, so there is no polygon fill
     // mode to report on and DirectX1Renderer::SupportsCapability answers false for every

@@ -34,6 +34,19 @@ namespace Microsoft::Xna::Framework::Graphics
         explicit VertexDeclaration(std::initializer_list<VertexElement> elements);
 
         /**
+         * @brief Constructs a VertexDeclaration from an element vector, deriving the stride.
+         *
+         * The vector counterpart of the initializer-list constructor above: XNA's
+         * `VertexDeclaration(params VertexElement[] elements)` accepts an array variable as
+         * readily as an array literal, and a C++ game holding its elements in a vector -- what
+         * `GetVertexElements()` hands back -- has no literal to spell.
+         *
+         * @param elements Vector of vertex attribute descriptors (moved).
+         * @throws System::ArgumentNullException if @p elements is empty.
+         */
+        explicit VertexDeclaration(std::vector<VertexElement> elements);
+
+        /**
          * @brief Constructs a VertexDeclaration with an explicit stride and element list.
          * @param vertexStride Size in bytes of one vertex.
          * @param elements     Initializer list of vertex attribute descriptors.

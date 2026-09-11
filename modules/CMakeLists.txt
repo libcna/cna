@@ -257,6 +257,11 @@ if(EMSCRIPTEN)
         target_link_options(cna_build_config INTERFACE
             -pthread
             -sOFFSCREEN_FRAMEBUFFER=1
+            # Legacy JS FS proxies every pthread syscall to the browser main thread. That can
+            # deadlock a background Content.Load while the game loop is active (notably in
+            # Firefox). WasmFS keeps preloaded-file stat/open/read operations inside Wasm and is
+            # the Emscripten filesystem designed for multithreaded builds.
+            -sWASMFS=1
             -Wno-pthreads-mem-growth)
     endif()
 endif()
@@ -319,6 +324,7 @@ add_subdirectory(content-pipeline)
 add_subdirectory(storage)
 add_subdirectory(runtime)
 add_subdirectory(devices)
+add_subdirectory(phone)
 add_subdirectory(devices-ext)
 add_subdirectory(graphics-ext)
 if(CNA_ENABLE_NET)
@@ -379,7 +385,7 @@ endif()
 set(_cna_framework_modules
     c-api core math platform runtime graphics input audio media video-ffmpeg content
     content-pipeline storage
-    devices devices-ext graphics-ext gamer-services net)
+    devices devices-ext graphics-ext gamer-services net phone)
 set(_cna_renderer_modules
     bgfx blend2d canvas diligent direct2d directx1 directx2 directx3 directx5 directx6
     directx7 directx8 directx9 directx10 directx11 directx12

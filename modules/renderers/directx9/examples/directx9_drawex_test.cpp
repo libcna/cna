@@ -659,18 +659,20 @@ protected:
             check(threw, "DrawPrimitivesEx: an unsupported BasicEffect flag/stride combination throws "
                          "(no matching CNA vertex layout) rather than silently drawing wrong");
 
-            // No matching CNA vertex layout: DualTextureEffect with vertexColorEnabled=true (needs
-            // VSInputTx2Vc, 32 bytes, which collides with the existing Position+Normal+TexCoord
-            // layout -- D9-82d's own honest gap).
+            // A stride-20 Position+TexCoord declaration still cannot feed the four inputs of the
+            // vertex-colour DualTexture shader. D9-127 made the valid stride-32 declaration work;
+            // this remains the negative shape check.
             GpuDrawParams dualTexBadCombo;
             dualTexBadCombo.dualTexture = true;
             dualTexBadCombo.vertexColorEnabled = true;
+            dualTexBadCombo.texture0 = tex.get();
+            dualTexBadCombo.texture1 = tex.get();
             threw = false;
             try { renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                            Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dualTexBadCombo); }
             catch (const std::exception&) { threw = true; }
-            check(threw, "DrawPrimitivesEx: an unsupported DualTextureEffect flag combination throws "
-                         "(no matching CNA vertex layout)");
+            check(threw, "DrawPrimitivesEx: a DualTextureEffect declaration missing TEXCOORD1 and "
+                         "COLOR0 throws rather than drawing wrong");
 
             // No matching CNA vertex layout: EnvironmentMapEffect requires stride 32
             // (VSInputNmTx), and this vb is stride 20.

@@ -920,7 +920,7 @@ namespace CNA::Internal::Renderers::DirectX10
         ID3D10DepthStencilView* depthStencilView = nullptr;
         int width = 0, height = 0;               // real physical window/back-buffer size
         int virtualWidth = 0, virtualHeight = 0; // inert bookkeeping only (design decision 6)
-        CnaPresentationMode presentationMode = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode = CnaPresentationMode::Letterbox;
 
         // Currently-bound render targets (nullptr entries in colorTargets beyond count mean the
         // default back buffer). Supports real MRT (design decision 3/5).

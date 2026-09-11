@@ -50,7 +50,7 @@
 // PROCESS ISOLATION
 // -----------------
 // A bgfx BX_ASSERT raises SIGTRAP and takes the whole binary with it, so a single red leg would
-// otherwise destroy every other result in the shard. Each leg runs in its own forked child and the
+// otherwise destroy every other result in the shard. Each leg runs in its own child process and the
 // supervisor classifies SIGTRAP, SIGABRT, SIGSEGV, SIGALRM (hang), a non-zero exit (checks
 // disagreed) and a clean exit distinctly. No leg is permitted to abort: the fix is what makes the
 // matrix survivable, and there is no expected-fatal gate anywhere in this file.
@@ -90,9 +90,12 @@
 #include <csignal>
 #include <sys/wait.h>
 #include <unistd.h>
-#define CNA_GFX163_CAN_FORK 1
+#define CNA_GFX163_CAN_ISOLATE 1
+#elif defined(_WIN32)
+#include "common/WindowsProcessIsolation.hpp"
+#define CNA_GFX163_CAN_ISOLATE 1
 #else
-#define CNA_GFX163_CAN_FORK 0
+#define CNA_GFX163_CAN_ISOLATE 0
 #endif
 
 using namespace Microsoft::Xna::Framework;
@@ -124,6 +127,12 @@ namespace
     constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
+    constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr const char* kRendererName = "DIRECTX11";
+    constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr const char* kRendererName = "DIRECTX12";
     constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-163: this renderer has no declared MSAA/depth attachment contract."
@@ -172,18 +181,12 @@ namespace
     /**
      * @brief Whether a render target may be built with a mip chain here.
      *
-     * False on WEBGPU, whose `RenderTarget2D` constructor raises
-     * `std::runtime_error("... mip-chain regeneration (mipMap=true) is not implemented on this
-     * renderer yet -- see plans/plan_webgpu.md WEBGPU-53/54")`. That is a deliberate, separately tracked
-     * boundary and -- importantly for this file -- it is a CATCHABLE public refusal rather than a
-     * process abort, which is exactly the contract leg M14 asserts there.
+     * True everywhere. It was false on WEBGPU while that renderer's `RenderTarget2D` constructor
+     * raised `std::runtime_error("... mip-chain regeneration (mipMap=true) is not implemented ...")`;
+     * `plans/plan_webgpu.md` `WEBGPU-164` implemented the chain, so leg M14 measures a mipped
+     * multisampled target there instead of measuring the shape of its refusal.
      */
-    constexpr bool kMipMappedTargetSupported =
-#if defined(CNA_RENDERER_WEBGPU)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kMipMappedTargetSupported = true;
 
     /** @brief 0, or a power of two. */
     constexpr bool IsLegalSampleCount(int n)
@@ -489,8 +492,29 @@ class RenderTargetMsaaDepthContractTest : public Game
         auto& dev = getGraphicsDeviceProperty();
         auto rt = MakeTarget(dev, depth, samples, mipMap, RenderTargetUsage::DiscardContents, label);
 
-        check(rt->getDepthStencilFormatProperty() == depth,
-              label + ": reports the requested DepthFormat back");
+        // plan_vulkan.md VULKAN-184: what a target reports is the format it APPLIED, not the one
+        // it was asked for, and those differ on a device that cannot give you what you asked for.
+        //
+        // This leg used to require them equal. That held everywhere it had ever run -- llvmpipe
+        // supports both `D16_UNORM` and `X8_D24_UNORM_PACK32`, GL is more forgiving still, so
+        // nothing was ever substituted -- and it is false on AMD, where `D24_UNORM_S8_UINT` does
+        // not exist and `Depth24` legitimately becomes something else. `VULKAN-348`/`VULKAN-215`
+        // settled that CNA reports what it applied; asserting the request back contradicts the
+        // contract this project chose, and it failed a renderer that was behaving correctly.
+        //
+        // What IS universal, and what a silent drop to no depth at all would violate: a request
+        // for a depth format yields SOME depth format, and a request for none yields none.
+        const DepthFormat reported = rt->getDepthStencilFormatProperty();
+        const bool consistent = (depth == DepthFormat::None)
+                                    ? (reported == DepthFormat::None)
+                                    : (reported != DepthFormat::None);
+        check(consistent,
+              label + ": reports a depth format consistent with the request (asked " +
+                  std::to_string(static_cast<int>(depth)) + ", reports " +
+                  std::to_string(static_cast<int>(reported)) +
+                  (reported == depth ? ")"
+                                     : ") -- a substitution, which VULKAN-348 requires to be "
+                                       "reported rather than hidden"));
 
         // The APPLIED count is device- and renderer-dependent and the XNA contract permits rounding
         // DOWN to the nearest supported count: Vulkan and WebGPU gate render-target MSAA on the
@@ -1106,7 +1130,7 @@ namespace
         "X1",
     };
 
-#if CNA_GFX163_CAN_FORK
+#if CNA_GFX163_CAN_ISOLATE
     /// A leg that hangs must be reported as a TIMEOUT, not waited on forever.
     constexpr unsigned kLegTimeoutSeconds = 180;
 
@@ -1126,6 +1150,7 @@ namespace
         skipped = false;
         const std::string arg = std::string("--leg=") + legId;
 
+#if defined(__unix__) || defined(__APPLE__)
         const pid_t pid = fork();
         if (pid < 0)
         {
@@ -1189,6 +1214,37 @@ namespace
         std::printf("[FAIL] leg %s: neither exited nor signalled (status %d)\n", legId, status);
         std::fflush(stdout);
         return false;
+#else
+        const auto child = CNA::Examples::RunWindowsChild(
+            exePath, arg, kLegTimeoutSeconds * 1000u);
+        if (child.outcome == CNA::Examples::WindowsChildOutcome::TimedOut)
+        {
+            std::printf("[TIMEOUT] leg %s: no result within %u s (hang or modal dialog)\n",
+                        legId, kLegTimeoutSeconds);
+            std::fflush(stdout);
+            return false;
+        }
+        if (child.outcome != CNA::Examples::WindowsChildOutcome::Exited)
+        {
+            std::printf("[FAIL] supervisor: Win32 child operation failed for leg %s (error %lu)\n",
+                        legId, static_cast<unsigned long>(child.systemError));
+            std::fflush(stdout);
+            return false;
+        }
+        if (child.exitCode == CNA::Examples::kSkipExitCode)
+        {
+            skipped = true;
+            std::printf("[SKIP] leg %s: no usable display\n", legId);
+            std::fflush(stdout);
+            return true;
+        }
+        if (child.exitCode == 0) return true;
+        std::printf("[%s] leg %s: exited %lu\n",
+                    CNA::Examples::IsWindowsAbnormalExit(child.exitCode) ? "FATAL" : "FAIL",
+                    legId, static_cast<unsigned long>(child.exitCode));
+        std::fflush(stdout);
+        return false;
+#endif
     }
 #endif
 }
@@ -1202,7 +1258,7 @@ int main(int argc, char** argv)
         if (a.rfind("--leg=", 0) == 0) onlyLeg = a.substr(6);
     }
 
-#if CNA_GFX163_CAN_FORK
+#if CNA_GFX163_CAN_ISOLATE
     if (onlyLeg.empty())
     {
         const int total = static_cast<int>(sizeof(kLegs) / sizeof(kLegs[0]));

@@ -73,7 +73,17 @@ option(CNA_USE_CCACHE "Use ccache for CNA and sharp-runtime builds when availabl
 set(CNA_ENABLE_FONT_PIPELINE "AUTO" CACHE STRING
     "SpriteFont source pipeline: OFF, AUTO or ON (requires FreeType)")
 set_property(CACHE CNA_ENABLE_FONT_PIPELINE PROPERTY STRINGS OFF AUTO ON)
-set(CNA_CCACHE_BASEDIR "${CMAKE_CURRENT_SOURCE_DIR}/.." CACHE PATH
+# CCACHE_BASEDIR is what makes one translation unit hash the same from every build tree, so the
+# environment's own value wins when the invoking shell sets one. Without that, the launcher below
+# would override an exported CCACHE_BASEDIR with this default and the shared cache would keep a
+# separate key per source root (owner instruction, 2026-09-06 -- the machine has 548 build trees
+# under /rv and the intended value there is /rv).
+if(DEFINED ENV{CCACHE_BASEDIR} AND NOT "$ENV{CCACHE_BASEDIR}" STREQUAL "")
+    set(_cna_ccache_basedir_default "$ENV{CCACHE_BASEDIR}")
+else()
+    set(_cna_ccache_basedir_default "${CMAKE_CURRENT_SOURCE_DIR}/..")
+endif()
+set(CNA_CCACHE_BASEDIR "${_cna_ccache_basedir_default}" CACHE PATH
     "Stable source parent supplied to ccache for path normalization")
 if(CNA_USE_CCACHE)
     find_program(CNA_CCACHE_PROGRAM ccache)

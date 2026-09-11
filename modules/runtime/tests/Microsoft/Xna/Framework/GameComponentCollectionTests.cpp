@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+
+#include <memory>
+#include <stdexcept>
+#include <utility>
 #include "Microsoft/Xna/Framework/GameComponentCollection.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollectionEventArgs.hpp"
 #include "Microsoft/Xna/Framework/IGameComponent.hpp"
+#include "System/Object.hpp"
 
 using Microsoft::Xna::Framework::GameComponentCollection;
 using Microsoft::Xna::Framework::GameComponentCollectionEventArgs;
@@ -14,6 +19,98 @@ namespace
     {
         void Initialize() override {}
     };
+
+    /// Reports its own destruction, so a test can state when the collection let go.
+    struct TracedComponent final : IGameComponent
+    {
+        explicit TracedComponent(bool& aliveFlag) : alive_(aliveFlag) { alive_ = true; }
+        ~TracedComponent() override { alive_ = false; }
+        void Initialize() override {}
+
+    private:
+        bool& alive_;
+    };
+}
+
+// XNA's collection is a Collection<IGameComponent> and holds a strong reference, so a component
+// stays alive for exactly as long as it is registered and a game that drops its own last
+// reference leaves a live component rather than a dangling one. SAMPLE-065 needs that: the
+// original NinjAcademy menu abandons a loading screen -- and with it a GameplayScreen that has
+// already registered its components -- on every frame it is still transitioning off.
+TEST(GameComponentCollectionTest, AnAddedSharedComponentOutlivesTheCallersOwnReference)
+{
+    bool alive = false;
+    GameComponentCollection c;
+    {
+        auto component = std::make_shared<TracedComponent>(alive);
+        c.Add(component);
+        ASSERT_TRUE(alive);
+    }
+
+    // The caller's reference is gone; the registration still holds one.
+    EXPECT_TRUE(alive);
+    EXPECT_EQ(c.getCountProperty(), 1u);
+}
+
+TEST(GameComponentCollectionTest, RemovingASharedComponentReleasesItAfterTheEvent)
+{
+    bool alive = false;
+    GameComponentCollection c;
+    auto component = std::make_shared<TracedComponent>(alive);
+    IGameComponent* const raw = component.get();
+    c.Add(std::move(component));
+
+    bool aliveInsideHandler = false;
+    c.ComponentRemoved += [&](System::Object*, const GameComponentCollectionEventArgs&)
+    {
+        aliveInsideHandler = alive;
+    };
+
+    EXPECT_TRUE(c.Remove(raw));
+    EXPECT_TRUE(aliveInsideHandler) << "a ComponentRemoved handler must still see a live component";
+    EXPECT_FALSE(alive);
+}
+
+TEST(GameComponentCollectionTest, ClearReleasesEverySharedComponent)
+{
+    bool first = false;
+    bool second = false;
+    GameComponentCollection c;
+    c.Add(std::make_shared<TracedComponent>(first));
+    c.Add(std::make_shared<TracedComponent>(second));
+    ASSERT_TRUE(first);
+    ASSERT_TRUE(second);
+
+    c.Clear();
+    EXPECT_FALSE(first);
+    EXPECT_FALSE(second);
+    EXPECT_EQ(c.getCountProperty(), 0u);
+}
+
+TEST(GameComponentCollectionTest, ARejectedSharedAddLeavesNoOwnershipBehind)
+{
+    bool alive = false;
+    GameComponentCollection c;
+    auto component = std::make_shared<TracedComponent>(alive);
+    c.Add(component);
+
+    // The same component twice is the raw overload's error and must stay so here.
+    EXPECT_THROW(c.Add(component), std::invalid_argument);
+
+    EXPECT_TRUE(c.Remove(component.get()));
+    component.reset();
+    EXPECT_FALSE(alive) << "the rejected add must not have left a second reference behind";
+}
+
+TEST(GameComponentCollectionTest, TheCollectionReleasesWhatItStillOwnsWhenItGoesAway)
+{
+    bool alive = false;
+    {
+        GameComponentCollection c;
+        c.Add(std::make_shared<TracedComponent>(alive));
+        ASSERT_TRUE(alive);
+    }
+    EXPECT_FALSE(alive);
 }
 
 TEST(GameComponentCollectionTest, DefaultCountIsZero)

@@ -47,6 +47,25 @@ cmake --build cmake-build-webgl2-threads --parallel 8
 - enables `SHARP_RUNTIME_ENABLE_EMSCRIPTEN_THREADS` for `System.Threading`;
 - enables Emscripten's `OFFSCREEN_FRAMEBUFFER` GL proxy so resource creation from a loading pthread
   reaches the browser thread that owns the WebGL context; and
+
+`OFFSCREEN_FRAMEBUFFER` proxies **each individual GL call** to the browser thread, where every
+thread's calls execute against the same context. What keeps a loading pthread from interleaving
+with the frame is therefore not the proxy but the renderer's thread-context lease
+(`IGraphicsRenderer::AcquireThreadContextLeaseEXT`), which `GraphicsDeviceManager::BeginDraw` holds
+for a whole frame and `ContentReader` for a whole asset. Until 2026-09-06 EasyGL returned a null
+lease on Emscripten, on the grounds that the web has no thread-affine context ownership to hand
+over; that is true of the binding half of the contract but not of the exclusion half, and without
+it a loader's `glBindTexture`/`glTexImage2D` pair could be split by the frame's own binds. The
+symptom was a texture that came out empty with no GL error anywhere -- a different subset of
+background-loaded textures rendered black in 2 of 5 Firefox and 1 of 5 Chrome runs of SAMPLE-067
+CatapultWars, and in none of 10 runs after the lease was restored. A background load and a frame
+therefore now exclude each other on the web exactly as they do natively: the frame waits for a
+whole `Content.Load<T>()` to finish, and the loading screen it draws is frozen while that happens,
+which is the native behaviour too.
+
+The main thread waits by blocking on a mutex, which is safe here specifically because Emscripten's
+main-thread `emscripten_futex_wait` keeps servicing the proxy queue while it spins -- that is what
+lets the loader's proxied GL calls complete and release the lease.
 - uses `.sdl-prebuilt-emscripten-pthreads`, separate from the incompatible single-threaded
   `.sdl-prebuilt-emscripten` SDL archive cache.
 

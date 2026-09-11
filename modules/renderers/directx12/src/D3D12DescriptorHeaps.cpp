@@ -156,7 +156,7 @@ namespace CNA::Internal::Renderers::DirectX12
         if (!IndexOf(handle, index)) return;
         ++frees_;
         if (liveCount_ > 0) --liveCount_;
-        pendingFree_.push_back({index, clock_ ? clock_->lastSubmitted : 0});
+        pendingFree_.push_back({index, clock_ ? clock_->ProtectUntil() : 0});
         Trace("free", index);
     }
 
@@ -305,7 +305,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
         // The heaps being replaced may still be bound by a submitted command list, so they are
         // retired against the newest submission rather than released here.
-        retired_.push_back({stagingHeap_, gpuHeap_, clock_ ? clock_->lastSubmitted : 0});
+        retired_.push_back({stagingHeap_, gpuHeap_, clock_ ? clock_->ProtectUntil() : 0});
         stagingHeap_ = newStaging;
         gpuHeap_ = newGpu;
         capacity_ = newCapacity;
@@ -343,7 +343,7 @@ namespace CNA::Internal::Renderers::DirectX12
         if (index == kInvalidIndex || index >= nextIndex_) return;
         ++frees_;
         if (liveCount_ > 0) --liveCount_;
-        pendingFree_.push_back({index, clock_ ? clock_->lastSubmitted : 0});
+        pendingFree_.push_back({index, clock_ ? clock_->ProtectUntil() : 0});
         Trace("free", index);
     }
 

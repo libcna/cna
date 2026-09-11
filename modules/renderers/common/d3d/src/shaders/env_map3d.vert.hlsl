@@ -39,6 +39,7 @@ struct VSOutput
     float3 EyeDir       : TEXCOORD1;
     float2 UV           : TEXCOORD2;
     float  FogFactor    : TEXCOORD3;
+    float  Fresnel      : TEXCOORD4;
 };
 
 // Returns transpose(inverse(m)) directly (the cofactor matrix over the determinant) -- see
@@ -62,6 +63,12 @@ VSOutput main(VSInput input)
     output.WorldNormal = normalize(mul(input.Normal, nm));
     output.EyeDir = EyePosPad.xyz - worldPos;
     output.UV = input.UV;
+    // XNA computes this before interpolation. Saturating here reproduces D3D9 COLOR-output
+    // clamping; saturating in the pixel shader would produce a different Gouraud gradient.
+    float viewAngle = dot(normalize(output.EyeDir), output.WorldNormal);
+    output.Fresnel = saturate((Light0DiffPad.w > 0.5)
+        ? pow(max(1.0 - abs(viewAngle), 0.0), EnvMapSpecPad.w) * EmissiveEm.w
+        : EmissiveEm.w);
     // REMED-GFX-005/010/061: FNA view-space fog. FogVector carries EffectHelpers.SetFogVector
     // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the
     // corrected (non-mirrored) FNA factor in eye-space Z, not object-space. Zero vector = no fog.

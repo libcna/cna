@@ -498,7 +498,7 @@ TEST(HostProcessTest, OutputLargerThanAPipeBufferIsNotTruncatedOrDeadlocked)
         ADD_FAILURE() << "RunHostProcess did not return within 60 seconds; the two output "
                          "streams are not being drained concurrently.";
         std::cerr.flush();
-        std::quick_exit(1);
+        ::_Exit(1);
     }
     pending.get();
     ASSERT_TRUE(result.started) << result.failure;

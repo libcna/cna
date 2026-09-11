@@ -171,6 +171,47 @@ TEST(BloomPassTest, ABrightSpotSpreadsIntoPixelsThatWereBlack)
         << "the highlight did not spread; the blur or the composite is not running";
 }
 
+TEST(BloomPassTest, AnUploadedTopHighlightKeepsItsGlowAtTheTop)
+{
+    // The scene texture is top-down while every generated bloom level is a render target. A
+    // two-sampler composite that assumes both GL textures have the same row order mirrors only
+    // the glow, an error the centred fixtures cannot reveal.
+    GraphicsDevice gd;
+    BloomPass bloom(gd);
+    if (!bloom.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot run custom effects";
+
+    Texture2D source(gd, kSize, kSize);
+    std::vector<Color> input(static_cast<std::size_t>(kSize) * kSize, Color::Black);
+    for (int y = 2; y < 6; ++y)
+        for (int x = kSize / 2 - 2; x < kSize / 2 + 2; ++x)
+            input[static_cast<std::size_t>(y) * kSize + x] = Color::White;
+    source.SetData(input.data(), static_cast<int>(input.size()));
+
+    RenderTarget2D destination(gd, kSize, kSize);
+    RenderPipelineSettings settings;
+    settings.setBloomThreshold(0.5f);
+    settings.setBloomIntensity(2.0f);
+    settings.setBloomIterations(2);
+
+    PostProcessContext context;
+    context.source      = &source;
+    context.destination = &destination;
+    context.width       = kSize;
+    context.height      = kSize;
+    context.settings    = &settings;
+    bloom.apply(context);
+
+    const std::vector<Color> output = ReadTarget(destination);
+    const int topGlow = output[static_cast<std::size_t>(9) * kSize + kSize / 2].getRProperty();
+    const int mirrored = output[static_cast<std::size_t>(kSize - 1 - 9) * kSize
+                                + kSize / 2].getRProperty();
+    EXPECT_GT(topGlow, 0) << "the off-source sample received no bloom";
+    EXPECT_GT(topGlow, mirrored)
+        << "the generated glow was mirrored away from its uploaded source: "
+        << topGlow << " against " << mirrored;
+}
+
 TEST(BloomPassTest, AHigherIntensityProducesMoreGlow)
 {
     GraphicsDevice gd;

@@ -173,6 +173,185 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_identities.py")
 
+        # plans/plan_modern.md MOD-2216: checked-in packages must remain derivable from their
+        # declared source files. This is deliberately an offline authoring gate: the generator
+        # exits 77 when shaderc is absent and no CNA runtime target links or loads the compiler.
+        add_test(NAME ShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics/examples/common/shaders/portable_tint/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics/examples/common/PortableTintShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(ShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME ConstantBufferShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/tests/CNA/Graphics/shaders/constant_buffer/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/tests/CNA/Graphics/ConstantBufferShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(ConstantBufferShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME GpuInstanceCullerShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/gpu_instance_culler/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/gpu_instance_culler/GpuInstanceCullerShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(GpuInstanceCullerShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME GpuInstanceCullerTestShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/tests/CNA/Graphics/shaders/gpu_instance_culler/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/tests/CNA/Graphics/GpuInstanceCullerTestShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(GpuInstanceCullerTestShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME ParticleSystemShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/particle_system/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/particle_system/ParticleSystemShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(ParticleSystemShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME AutoExposureShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/auto_exposure/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/auto_exposure/AutoExposureShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(AutoExposureShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME ClusteredLightComputeShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/clustered_light_compute/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/clustered_light_compute/ClusteredLightComputeShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(ClusteredLightComputeShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME ClusteredForwardShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/clustered_forward/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/clustered_forward/ClusteredForwardShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(ClusteredForwardShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME ComputeParticlesExampleShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/examples/shaders/compute_particles/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/examples/ComputeParticlesShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(ComputeParticlesExampleShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME TransparencyShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/tests/CNA/Graphics/shaders/transparency/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/tests/CNA/Graphics/TransparencyShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(TransparencyShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME TransparencyExampleShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/examples/shaders/transparency/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/examples/TransparencyExampleShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(TransparencyExampleShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME SkyboxShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/skybox/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/skybox/SkyboxShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(SkyboxShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME AtmosphericSkyShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/atmospheric_sky/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/atmospheric_sky/AtmosphericSkyShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(AtmosphericSkyShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME VolumetricFogShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/volumetric_fog/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/volumetric_fog/VolumetricFogShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(VolumetricFogShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME PostProcessShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/post_process/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/post_process/PostProcessShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(PostProcessShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
+        add_test(NAME DepthNormalPrepassShaderPackageReproducibility
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1
+                "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/shader_package/generate_shader_package.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/depth_normal_prepass/package.json"
+                --output
+                "${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics-ext/src/shaders/depth_normal_prepass/DepthNormalPrepassShaderPackage.generated.hpp"
+                --check)
+        set_tests_properties(DepthNormalPrepassShaderPackageReproducibility PROPERTIES
+            SKIP_RETURN_CODE 77 LABELS "graphics;shader;generator")
+
         # plans/plan_binding.md CBIND-043: the C API coverage matrix is a GATE, not a report.
         #
         # The complete inventory is generated from every public Microsoft/** and CNA/** header.

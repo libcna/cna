@@ -64,6 +64,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -74,6 +75,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -134,6 +136,22 @@ namespace
             { Vector3(-1.0f,  1.0f, z), color },
             { Vector3( 1.0f, -1.0f, z), color },
             { Vector3( 1.0f,  1.0f, z), color },
+        };
+        ApplyBasicEffect(dev);
+        dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
+    }
+
+    /// WEBGPU-164: an axis-aligned clip-space rectangle, so a target can be given two different
+    /// halves and a regenerated mip level can be checked for both of them.
+    void DrawQuad(GraphicsDevice& dev, float x0, float y0, float x1, float y1, const Color& color)
+    {
+        const VertexPositionColor verts[6] = {
+            { Vector3(x0, y1, 0.0f), color },
+            { Vector3(x0, y0, 0.0f), color },
+            { Vector3(x1, y0, 0.0f), color },
+            { Vector3(x0, y1, 0.0f), color },
+            { Vector3(x1, y0, 0.0f), color },
+            { Vector3(x1, y1, 0.0f), color },
         };
         ApplyBasicEffect(dev);
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
@@ -277,39 +295,106 @@ protected:
                   "Check E (other half): the render target itself really did receive Clear(Red)");
         }
 
-        // Check F: MultiSampleCount property fidelity -- this test's GraphicsDeviceManager never
-        // enables PreferMultiSampling, so the renderer's own global MSAA sample count (WEBGPU-58)
-        // stays disabled throughout; a RenderTarget2D unconditionally mirrors that renderer-global
-        // state (not its own per-instance request), so requesting 4 here must still honestly
-        // report 0. See examples/webgpu_msaa_test.cpp for the counterpart with MSAA actually
-        // engaged.
+        // Check F: MultiSampleCount property fidelity. This test's GraphicsDeviceManager never
+        // enables PreferMultiSampling, so the renderer's own global MSAA (WEBGPU-58) is off
+        // throughout -- and that is exactly what makes this check worth having since WEBGPU-165.
+        // A target used to mirror the renderer-global state and report 0 here whatever it asked
+        // for; it now honours its own request, so a 4x target and a single-sample one can be alive
+        // at once on a renderer that is itself single-sample.
         {
             RenderTarget2D rtMsaaRequest(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
                                         DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
-            check(rtMsaaRequest.getMultiSampleCountProperty() == 0,
-                  "Check F: RenderTarget2D MultiSampleCount request 4 -> honestly reports 0 "
-                  "(renderer's own global MSAA is disabled in this test -- see webgpu_msaa_test.cpp)");
+            RenderTarget2D rtNoMsaa(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                    DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+            const int appliedMsaa = rtMsaaRequest.getMultiSampleCountProperty();
+            const int appliedNone = rtNoMsaa.getMultiSampleCountProperty();
+            std::printf("[INFO] Check F: request 4 -> applied %d, request 0 -> applied %d "
+                        "(renderer global MSAA is off)\n", appliedMsaa, appliedNone);
+            check(appliedMsaa == 4 || appliedMsaa == 0,
+                  ("Check F: a RenderTarget2D requesting 4 reports a legal applied count: got " +
+                   std::to_string(appliedMsaa)).c_str());
+            check(appliedNone == 0,
+                  ("Check F: a RenderTarget2D requesting 0 reports 0, whatever its sibling asked "
+                   "for: got " + std::to_string(appliedNone)).c_str());
+            check(appliedMsaa >= appliedNone,
+                  "Check F: the two targets' counts are independent -- the 4x request is not "
+                  "dragged down to its single-sample sibling's, nor the reverse");
         }
 
-        // Check G: mipMap=true is a deliberate, documented scope cut -- must throw a clear
-        // exception rather than silently under-delivering a requested mip chain.
+        // Check G (plans/plan_webgpu.md WEBGPU-164): mipMap=true used to be a documented scope cut
+        // and this leg asserted the refusal. The chain is now allocated and regenerated from level
+        // 0 on unbind, so what is asserted is the CONTENT of a level the game never wrote: half of
+        // a 32x32 target is cleared Red and half Blue, and level 4 (2x2) must show both halves,
+        // filtered from level 0 rather than left as whatever the allocation happened to contain.
         {
-            bool threw = false;
+            RenderTarget2D rtMip(dev, kRTSize, kRTSize, true, SurfaceFormat::Color,
+                                 DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+            check(rtMip.getLevelCountProperty() == 6,
+                  ("Check G: a mipMap=true 32x32 RenderTarget2D reports a 6-level chain: got=" +
+                   std::to_string(rtMip.getLevelCountProperty())).c_str());
+
+            // Restated rather than inherited: the checks above leave SpriteBatch's and the
+            // depth leg's own states behind, and a culled or depth-rejected quad would look
+            // exactly like a mip chain that was never regenerated.
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setDepthStencilStateProperty(DepthStencilState::None);
+            dev.SetRenderTarget(&rtMip);
+            dev.Clear(Color(255, 0, 0, 255));
+            // A blue right half, drawn as an unlit quad in NDC x in [0, 1].
+            DrawQuad(dev, 0.0f, -1.0f, 1.0f, 1.0f, Color(0, 0, 255, 255));
+            dev.SetRenderTarget(nullptr);
+
+            Color level0Left(0, 0, 0, 0), level0Right(0, 0, 0, 0);
+            const Rectangle leftPixel(kRTSize / 4, kRTSize / 2, 1, 1);
+            const Rectangle rightPixel(kRTSize * 3 / 4, kRTSize / 2, 1, 1);
+            rtMip.GetData(0, &leftPixel, &level0Left, 0, 1);
+            rtMip.GetData(0, &rightPixel, &level0Right, 0, 1);
+            check(Matches(level0Left, Color(255, 0, 0, 255)) &&
+                      Matches(level0Right, Color(0, 0, 255, 255)),
+                  ("Check G: level 0 holds the two halves the game drew: left=(" +
+                   std::to_string(level0Left.getRProperty()) + ',' +
+                   std::to_string(level0Left.getGProperty()) + ',' +
+                   std::to_string(level0Left.getBProperty()) + ") right=(" +
+                   std::to_string(level0Right.getRProperty()) + ',' +
+                   std::to_string(level0Right.getGProperty()) + ',' +
+                   std::to_string(level0Right.getBProperty()) + ')').c_str());
+
+            // Level 4 is 2x2: one texel per quadrant, each the average of an 8x8 block of level 0,
+            // so the left column must still be red and the right column blue. This is the check
+            // that fails if the chain is allocated but never regenerated -- an unwritten level
+            // reads as transparent black, which matches neither.
+            std::array<Color, 4> level4{};
+            rtMip.GetData(4, nullptr, level4.data(), 0, 4);
+            check(Matches(level4[0], Color(255, 0, 0, 255), 24) &&
+                      Matches(level4[1], Color(0, 0, 255, 255), 24),
+                  ("Check G: level 4 was regenerated from level 0 and keeps both halves: "
+                   "texel0=(" + std::to_string(level4[0].getRProperty()) + ',' +
+                   std::to_string(level4[0].getGProperty()) + ',' +
+                   std::to_string(level4[0].getBProperty()) + ") texel1=(" +
+                   std::to_string(level4[1].getRProperty()) + ',' +
+                   std::to_string(level4[1].getGProperty()) + ',' +
+                   std::to_string(level4[1].getBProperty()) + ')').c_str());
+
+            // And a level outside the chain is still a caller error that says so, rather than
+            // reading from nothing -- the property the old refusal protected, kept.
+            bool threwOutside = false;
             try
             {
-                RenderTarget2D rtMip(dev, kRTSize, kRTSize, true, SurfaceFormat::Color,
-                                     DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+                Color ignored(0, 0, 0, 0);
+                const Rectangle one(0, 0, 1, 1);
+                rtMip.GetData(rtMip.getLevelCountProperty(), &one, &ignored, 0, 1);
             }
             catch (const std::exception&)
             {
-                threw = true;
+                threwOutside = true;
             }
-            check(threw, "Check G: RenderTarget2D(mipMap=true) throws a clear exception "
-                        "(mip regeneration not yet implemented, WEBGPU-53/54)");
+            check(threwOutside,
+                  "Check G: a level past the end of the chain still throws");
         }
 
-        std::printf("=== %d/8 PASS ===\n", passCount_);
-        result_ = (passCount_ == 8) ? 0 : 1;
+        std::printf("=== %d/13 PASS ===\n", passCount_);
+        result_ = (passCount_ == 13) ? 0 : 1;
         Exit();
     }
 

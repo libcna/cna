@@ -164,6 +164,14 @@ namespace CNA::Internal::Renderers
         bool (*isBackBufferFormatSupported)(int graphicsProfile, int surfaceFormat) = nullptr;
 
         /**
+         * @brief Selects the depth-stencil format the renderer really creates for its back buffer.
+         *
+         * Null means the requested format is preserved. A renderer with a fixed default depth
+         * resource supplies this hook so the adapter query agrees with device creation.
+         */
+        int (*selectBackBufferDepthStencilFormat)(int requestedDepthFormat) = nullptr;
+
+        /**
          * @brief Clamps a requested MSAA count to what the device supports for a format.
          *
          * Null means "no renderer-specific answer"; GraphicsAdapter reports 0, as before.

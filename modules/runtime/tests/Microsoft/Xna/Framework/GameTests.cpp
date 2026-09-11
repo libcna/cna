@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
+#include "Microsoft/Xna/Framework/DrawableGameComponent.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IGraphicsDeviceService.hpp"
 #include "System/EventArgs.hpp"
@@ -17,7 +18,9 @@
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "RuntimePlatformTestSupport.hpp"
 
+#include <atomic>
 #include <memory>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -127,6 +130,159 @@ namespace
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceResetEvent() override { return DeviceResetEvt; }
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceResettingEvent() override { return DeviceResettingEvt; }
     };
+}
+
+namespace
+{
+    // SAMPLE-065/SAMPLE-061: the XNA loading-screen pattern builds the next screen's components on
+    // a background thread and adds them to Game.Components while the game keeps drawing the
+    // loading art, so Game's two ordered component lists are written from one thread and iterated
+    // from another. Before they were guarded, a NinjAcademy resume reproducibly aborted inside
+    // Game::Update with "pure virtual method called": the frame's snapshot copy was reading
+    // updateableComponents_ while the loader thread's insert reallocated it.
+    class ComponentAddingGame : public Game
+    {
+    public:
+        using Game::Draw;
+        using Game::Update;
+    };
+
+    class CountingComponent final : public DrawableGameComponent
+    {
+    public:
+        explicit CountingComponent(Game& game) : DrawableGameComponent(game) { }
+
+        void Update(GameTime& gameTime) override
+        {
+            (void) gameTime;
+            ++updates;
+        }
+
+        void Draw(const GameTime& gameTime) override
+        {
+            (void) gameTime;
+            ++draws;
+        }
+
+        std::atomic<int> updates{0};
+        std::atomic<int> draws{0};
+    };
+}
+
+// SAMPLE-065: a component removed while the frame that snapshotted it is still running must not
+// be called afterwards. XNA can leave it in the snapshot because the snapshot holds a strong
+// reference; CNA's snapshot is raw pointers, and the code that removes a component is usually the
+// same code that owns and frees it -- here a screen's Update() dropping the screen that owns them,
+// which is what NinjAcademy's menu does every frame while it transitions to its loading screen.
+TEST(GameTest, AComponentRemovedMidFrameIsNotCalledLaterInThatSameFrame)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+    {
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
+    }
+
+    ComponentAddingGame game;
+    game.RunOneFrame();
+
+    auto victim = std::make_unique<CountingComponent>(game);
+
+    // Removes the victim from inside its own Update()/Draw(), then frees it, exactly as a screen
+    // manager does when the update it is running drops the screen that owns the components.
+    class RemovingComponent final : public DrawableGameComponent
+    {
+    public:
+        RemovingComponent(Game& game, std::unique_ptr<CountingComponent>& target)
+            : DrawableGameComponent(game), target_(target) { }
+
+        void Update(GameTime& gameTime) override
+        {
+            (void) gameTime;
+            Drop();
+        }
+
+        void Draw(const GameTime& gameTime) override
+        {
+            (void) gameTime;
+            Drop();
+        }
+
+    private:
+        void Drop()
+        {
+            if (target_)
+            {
+                getGameProperty().getComponentsProperty().Remove(target_.get());
+                target_.reset();
+            }
+        }
+
+        std::unique_ptr<CountingComponent>& target_;
+    };
+
+    RemovingComponent remover(game, victim);
+    remover.setUpdateOrderProperty(-1);
+    remover.setDrawOrderProperty(-1);
+
+    game.getComponentsProperty().Add(&remover);
+    game.getComponentsProperty().Add(victim.get());
+
+    GameTime gameTime;
+    ASSERT_NO_FATAL_FAILURE(game.Update(gameTime));
+    ASSERT_NO_FATAL_FAILURE(game.Draw(gameTime));
+    EXPECT_EQ(victim, nullptr);
+
+    game.getComponentsProperty().Remove(&remover);
+}
+
+TEST(GameTest, ComponentsAddedFromALoadingThreadSurviveTheFrameThatIsIteratingThem)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+    {
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
+    }
+
+    ComponentAddingGame game;
+    game.RunOneFrame();
+
+    constexpr int componentCount = 200;
+    std::vector<std::unique_ptr<CountingComponent>> components;
+    components.reserve(componentCount);
+    for (int i = 0; i < componentCount; ++i)
+    {
+        components.push_back(std::make_unique<CountingComponent>(game));
+    }
+
+    std::atomic<bool> adding{true};
+    std::thread loader([&]
+    {
+        for (auto& component : components)
+        {
+            game.getComponentsProperty().Add(component.get());
+        }
+        adding = false;
+    });
+
+    GameTime gameTime;
+    while (adding)
+    {
+        game.Update(gameTime);
+        game.Draw(gameTime);
+    }
+    loader.join();
+
+    // Drain whatever the last additions missed, then every component must be live in both lists.
+    game.Update(gameTime);
+    game.Draw(gameTime);
+    for (const auto& component : components)
+    {
+        EXPECT_GT(component->updates.load(), 0);
+        EXPECT_GT(component->draws.load(), 0);
+    }
+
+    for (const auto& component : components)
+    {
+        game.getComponentsProperty().Remove(component.get());
+    }
 }
 
 TEST(GameTest, ConstructionRegistersBuiltInXnbReadersBeforeLoadContent)

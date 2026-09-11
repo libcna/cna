@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <stdexcept>
+#include <utility>
 
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
@@ -27,6 +28,36 @@ namespace Microsoft::Xna::Framework
     void GameComponentCollection::Insert(size_type index, IGameComponent* item)
     {
         InsertItem(index, item);
+    }
+
+    void GameComponentCollection::Add(std::shared_ptr<IGameComponent> item)
+    {
+        Insert(items_.size(), std::move(item));
+    }
+
+    void GameComponentCollection::Insert(size_type index, std::shared_ptr<IGameComponent> item)
+    {
+        IGameComponent* const raw = item.get();
+        if (raw != nullptr)
+        {
+            // Taken before the insert so a ComponentAdded handler that removes the component
+            // again already finds the reference to release; put back on failure so a rejected
+            // add leaves no ownership behind.
+            owned_.insert_or_assign(raw, std::move(item));
+        }
+
+        try
+        {
+            InsertItem(index, raw);
+        }
+        catch (...)
+        {
+            if (raw != nullptr)
+            {
+                owned_.erase(raw);
+            }
+            throw;
+        }
     }
 
     bool GameComponentCollection::Remove(IGameComponent* item)
@@ -109,6 +140,7 @@ namespace Microsoft::Xna::Framework
         }
 
         items_.clear();
+        owned_.clear();
     }
 
     void GameComponentCollection::InsertItem(size_type index, IGameComponent* item)
@@ -144,6 +176,9 @@ namespace Microsoft::Xna::Framework
         if (gameComponent != nullptr)
         {
             OnComponentRemoved(GameComponentCollectionEventArgs(gameComponent));
+            // After the event, not before: a handler must still see a live component. Dropping
+            // the reference here may be what destroys it.
+            owned_.erase(gameComponent);
         }
     }
 

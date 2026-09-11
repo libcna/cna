@@ -61,17 +61,36 @@ namespace Microsoft::Xna::Framework::Graphics
                 "TextureCube: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
                 " is not available for a cube on the selected GraphicsProfile.");
         }
-        switch (device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)))
+        // plans/plan_webgpu.md WEBGPU-163: the CUBE verdict, not the 2D one. A renderer may store a
+        // format in a Texture2D and have no cube allocation path for it, and asking the 2D question
+        // here is how a format got promised at construction and refused by every SetData.
+        switch (device.GetRenderer().ClassifyTextureCubeFormatEXT(static_cast<int>(format)))
         {
             case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
                 return;
             case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
                 throw System::NotSupportedException(
-                    "TextureCube: this SurfaceFormat is not supported by the active renderer.");
+                    "TextureCube: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
+                    " is not supported for a cube texture by the active renderer, even where the "
+                    "same format is supported for a Texture2D.");
             case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
                 Texture::ValidateFormat(format);
                 return;
         }
+    }
+
+    static bool IsColorTransferFormatEXT(const GraphicsDevice* device, SurfaceFormat format) noexcept
+    {
+        if (device != nullptr)
+        {
+            switch (device->GetRenderer().ClassifyColorTransferFormatEXT(static_cast<int>(format)))
+            {
+                case CNA::Internal::Renderers::RendererFormatVerdict::Supported: return true;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported: return false;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Defer: break;
+            }
+        }
+        return Texture::GetFormatSizeEXT(format) % 4 == 0;
     }
 
     TextureCube::~TextureCube() = default;
@@ -193,6 +212,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("TextureCube");
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
+            throw std::invalid_argument(
+                "TextureCube::SetData: Color data requires a Color-compatible 32-bit format");
         if (!IsValidCubeMapFace(face))
             throw std::out_of_range("TextureCube::SetData: face is not a valid CubeMapFace value");
         if (!data)
@@ -342,6 +364,12 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("TextureCube");
+        const bool isCompressedTransfer = graphicsDevice_ != nullptr &&
+            graphicsDevice_->GetRenderer().IsCompressedCubeTransferFormatEXT(
+                static_cast<int>(format_));
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_) && !isCompressedTransfer)
+            throw std::invalid_argument(
+                "TextureCube::GetData: Color data requires a Color-compatible 32-bit format");
         if (!IsValidCubeMapFace(face))
             throw std::out_of_range("TextureCube::GetData: face is not a valid CubeMapFace value");
         if (!data)

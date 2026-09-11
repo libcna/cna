@@ -1,0 +1,273 @@
+diff --git a/mojoshader_opengl.c b/mojoshader_opengl.c
+index d4ac441..2d158a1 100644
+--- a/mojoshader_opengl.c
++++ b/mojoshader_opengl.c
+@@ -773,6 +773,221 @@ static GLint impl_GLSL_GetAttribLocation(MOJOSHADER_glProgram *program, int idx)
+ } // impl_GLSL_GetAttribLocation
+ 
+ 
++/* Direct3D 9 links a vertex and a pixel shader by REGISTER, so a pixel shader may read an input
++ * its vertex shader never writes; the value is simply undefined. GLSL links by NAME and refuses
++ * the pair outright ("fragment shader input `io_5_0' has no matching output in the previous
++ * stage"). Point-sprite shaders reach this routinely -- the pixel shader reads TEXCOORD0 because
++ * Direct3D generated it in the rasterizer, so no vertex shader ever declares it -- and an effect
++ * that pairs one pixel shader with several vertex shaders can reach it for one pairing and not
++ * another.
++ *
++ * Give those inputs a producer-free definition instead: a zero-initialised global reads as a
++ * defined value in GLSL and leaves every other declaration, uniform and sampler exactly where the
++ * profile put it. Which inputs are unmatched is decided by the PAIRING, not by the shader, so the
++ * rewritten source belongs to this link; the caller compiles it into a temporary shader object
++ * and deletes it once the program has linked.
++ *
++ * Returns NULL when nothing needs rewriting -- overwhelmingly the common case -- and also on
++ * failure, where the caller links the source as emitted and GL reports whatever it reports. -CNA
++ */
++static char *glsl_append(char *dst, const char *text, const size_t len)
++{
++    memcpy(dst, text, len);
++    return dst + len;
++} // glsl_append
++
++
++/* "io_<usage>_<index>;", exactly as the GLSL profile emits a varying's name. */
++static int glsl_parse_io_name(const char *name, const size_t namelen, int *usage, int *index)
++{
++    size_t i = 3;  /* past "io_" */
++    int values[2] = { 0, 0 };
++    int which;
++
++    for (which = 0; which < 2; which++)
++    {
++        const size_t first = i;
++        while ((i < namelen) && (name[i] >= '0') && (name[i] <= '9'))
++        {
++            if (values[which] > ((0x7FFFFFFF - 9) / 10))
++                return 0;
++            values[which] = (values[which] * 10) + (name[i] - '0');
++            i++;
++        } // while
++        if (i == first)
++            return 0;
++        if (name[i] != ((which == 0) ? '_' : ';'))
++            return 0;
++        i++;
++    } // for
++
++    if (i != namelen)
++        return 0;
++
++    *usage = values[0];
++    *index = values[1];
++    return 1;
++} // glsl_parse_io_name
++
++
++static int glsl_input_is_unmatched(const MOJOSHADER_parseData *vpd,
++                                   const MOJOSHADER_attribute *attribute)
++{
++    int i;
++    for (i = 0; i < vpd->output_count; i++)
++    {
++        if ((vpd->outputs[i].usage == attribute->usage) &&
++            (vpd->outputs[i].index == attribute->index))
++            return 0;
++    } // for
++    return 1;
++} // glsl_input_is_unmatched
++
++
++static char *glsl_source_without_unmatched_inputs(const MOJOSHADER_parseData *vpd,
++                                                  const MOJOSHADER_parseData *ppd)
++{
++    int i;
++    int unmatched = 0;
++    const char *src;
++    const char *end;
++    char *retval;
++    char *dst;
++
++    if ((vpd == NULL) || (ppd == NULL) || (ppd->output == NULL) || (ppd->output_len <= 0))
++        return NULL;
++    if (ppd->shader_type != MOJOSHADER_TYPE_PIXEL)
++        return NULL;
++    if ((ppd->attribute_count <= 0) || (ppd->attributes == NULL))
++        return NULL;
++    if ((vpd->output_count < 0) || ((vpd->output_count > 0) && (vpd->outputs == NULL)))
++        return NULL;
++
++    for (i = 0; i < ppd->attribute_count; i++)
++    {
++        if (glsl_input_is_unmatched(vpd, &ppd->attributes[i]))
++            unmatched++;
++    } // for
++
++    if (unmatched == 0)
++        return NULL;
++
++    /* " = ivec4(0)" is the longest initializer inserted, and dropping the storage qualifier only
++     * ever shortens a line, so the original length plus one initializer per unmatched input is a
++     * safe bound. */
++    retval = (char *) Malloc(((size_t) ppd->output_len) + (((size_t) unmatched) * 16) + 1);
++    if (retval == NULL)
++        return NULL;
++
++    src = ppd->output;
++    end = src + ppd->output_len;
++    dst = retval;
++
++    while (src < end)
++    {
++        const char *line = src;
++        const char *linend = line;
++        const char *decl = line;
++        const char *name = NULL;
++        const char *type = NULL;
++        size_t namelen = 0;
++        size_t typelen = 0;
++        const char *cursor;
++        int rewrite = 0;
++
++        while ((linend < end) && (*linend != '\n'))
++            linend++;
++
++        /* A declaration this rewrite applies to is a whole line of the profile's own making: a
++         * storage qualifier, an optional precision qualifier, a type, and the io_<usage>_<index>
++         * name the emitter derives from the semantic. Anything else is copied through untouched. */
++        if ((((size_t) (linend - line)) > 3) && (strncmp(line, "in ", 3) == 0))
++            decl = line + 3;
++        else if ((((size_t) (linend - line)) > 8) && (strncmp(line, "varying ", 8) == 0))
++            decl = line + 8;
++
++        if (decl != line)
++        {
++            /* the last two whitespace-delimited tokens are the type and the variable name */
++            cursor = decl;
++            while (cursor < linend)
++            {
++                const char *token;
++                while ((cursor < linend) && (*cursor == ' '))
++                    cursor++;
++                if (cursor >= linend)
++                    break;
++                token = cursor;
++                while ((cursor < linend) && (*cursor != ' '))
++                    cursor++;
++                type = name;
++                typelen = namelen;
++                name = token;
++                namelen = (size_t) (cursor - token);
++            } // while
++        } // if
++
++        if ((name != NULL) && (type != NULL) && (namelen > 4) &&
++            (strncmp(name, "io_", 3) == 0) && (name[namelen - 1] == ';'))
++        {
++            int usage = -1;
++            int index = -1;
++            if (glsl_parse_io_name(name, namelen, &usage, &index))
++            {
++                for (i = 0; i < ppd->attribute_count; i++)
++                {
++                    if (((int) ppd->attributes[i].usage != usage) ||
++                        (ppd->attributes[i].index != index))
++                        continue;
++                    rewrite = glsl_input_is_unmatched(vpd, &ppd->attributes[i]);
++                    break;
++                } // for
++            } // if
++        } // if
++
++        if (rewrite)
++        {
++            /* everything from the type up to, but not including, the terminating semicolon */
++            const size_t declaration = (size_t) ((name + namelen - 1) - decl);
++            memcpy(dst, decl, declaration);
++            dst += declaration;
++            if ((typelen == 5) && (strncmp(type, "float", 5) == 0))
++                dst = glsl_append(dst, " = 0.0;", 7);
++            else
++            {
++                const char *zero = "(0.0);";
++                size_t zerolen = 6;
++                if ((typelen > 4) && (strncmp(type, "ivec", 4) == 0))
++                {
++                    zero = "(0);";
++                    zerolen = 4;
++                } // if
++                else if ((typelen > 4) && (strncmp(type, "uvec", 4) == 0))
++                {
++                    zero = "(0u);";
++                    zerolen = 5;
++                } // else if
++                dst = glsl_append(dst, " = ", 3);
++                dst = glsl_append(dst, type, typelen);
++                dst = glsl_append(dst, zero, zerolen);
++            } // else
++        } // if
++        else
++        {
++            memcpy(dst, line, (size_t) (linend - line));
++            dst += (linend - line);
++        } // else
++
++        if (linend < end)
++            *(dst++) = *(linend++);
++        src = linend;
++    } // while
++
++    *dst = '\0';
++    return retval;
++} // glsl_source_without_unmatched_inputs
++
++
+ static GLuint impl_GLSL_LinkProgram(MOJOSHADER_glShader *vshader,
+                                     MOJOSHADER_glShader *pshader)
+ {
+@@ -781,12 +996,45 @@ static GLuint impl_GLSL_LinkProgram(MOJOSHADER_glShader *vshader,
+     if (ctx->have_opengl_2)
+     {
+         const GLuint program = ctx->glCreateProgram();
++        GLuint patched_fragment = 0;
++        char *patched_source = NULL;
++
++        /* -CNA: see glsl_source_without_unmatched_inputs. */
++        if ((vshader != NULL) && (pshader != NULL))
++            patched_source = glsl_source_without_unmatched_inputs(vshader->parseData,
++                                                                  pshader->parseData);
++        if (patched_source != NULL)
++        {
++            GLint compiled = 0;
++            const GLint patched_len = (GLint) strlen(patched_source);
++            patched_fragment = ctx->glCreateShader(GL_FRAGMENT_SHADER);
++            ctx->glShaderSource(patched_fragment, 1,
++                                (const GLchar **) &patched_source, &patched_len);
++            ctx->glCompileShader(patched_fragment);
++            ctx->glGetShaderiv(patched_fragment, GL_COMPILE_STATUS, &compiled);
++            if (!compiled)
++            {
++                /* fall back to the shader as emitted, so GL reports the real error */
++                ctx->glDeleteShader(patched_fragment);
++                patched_fragment = 0;
++            } // if
++            Free(patched_source);
++        } // if
+ 
+         if (vshader != NULL) ctx->glAttachShader(program, vshader->handle);
+-        if (pshader != NULL) ctx->glAttachShader(program, pshader->handle);
++        if (pshader != NULL)
++        {
++            ctx->glAttachShader(program,
++                                (patched_fragment != 0) ? patched_fragment : pshader->handle);
++        } // if
+ 
+         ctx->glLinkProgram(program);
+ 
++        /* GL keeps a linked program's code alive on its own, so the pairing-specific shader
++         * object is not needed past this point. -CNA */
++        if (patched_fragment != 0)
++            ctx->glDeleteShader(patched_fragment);
++
+         ctx->glGetProgramiv(program, GL_LINK_STATUS, &ok);
+         if (!ok)
+         {

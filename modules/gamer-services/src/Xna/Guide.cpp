@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -110,6 +111,15 @@ namespace Microsoft::Xna::Framework::GamerServices
         // response, never owns/frees it itself.
         GuideMessageBoxAction* pendingMessageBox_ = nullptr;
 
+        // The click that answers a message box is a press and a release. Lifting the touch
+        // withhold on the press would let the release arrive as a tap on whatever the box was
+        // covering -- on a phone the shell owns the whole gesture, not just its first half -- so
+        // the withhold outlives the answer until that button comes back up.
+        bool suppressTouchUntilMouseRelease_ = false;
+
+        // Defined below, once both pending pointers are in scope.
+        void SyncTouchInputSuppression();
+
         // Shared completion path for both the real mouse-driven click (RenderPendingMessageBoxEXT)
         // and the headless/test-only SimulateMessageBoxClickEXT. Captures the action pointer and
         // clears pendingMessageBox_ *before* invoking the callback, not after - a re-entrant
@@ -122,6 +132,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             action->SelectedButton = buttonIndex;
             action->setIsCompletedProperty(true);
             pendingMessageBox_ = nullptr;
+            SyncTouchInputSuppression();
             if (action->Callback)
             {
                 action->Callback(*action);
@@ -269,6 +280,18 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         GuideKeyboardInputAction* pendingKeyboardInput_ = nullptr;
 
+        // A visible Guide is drawn and driven by the system shell on every real XNA platform, so
+        // it owns the screen and the game's own touch panel reports nothing behind it. CNA draws
+        // its overlay inside the game's own Draw(), so that ownership is stated explicitly here:
+        // touch input is withheld for exactly as long as getIsVisibleProperty() is true. Called
+        // wherever either pending pointer changes.
+        void SyncTouchInputSuppression()
+        {
+            Input::Touch::TouchPanel::setInputSuppressedEXT(
+                pendingMessageBox_ != nullptr || pendingKeyboardInput_ != nullptr ||
+                suppressTouchUntilMouseRelease_);
+        }
+
         // audit_net.md remediation (2026-07-18): the actual masking decision, shared by
         // RenderPendingKeyboardInputEXT (the real on-screen draw) and
         // GetPendingKeyboardInputDisplayTextForTestingEXT (the test-only accessor exposing that
@@ -317,6 +340,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             Input::TextInputEXT::TextInput.Remove(action->SubscriptionToken);
             Microsoft::Xna::Framework::Input::TextInputEXT::StopTextInput();
             pendingKeyboardInput_ = nullptr;
+            SyncTouchInputSuppression();
             if (canceled)
             {
                 action->Canceled = true;
@@ -404,6 +428,7 @@ namespace Microsoft::Xna::Framework::GamerServices
                                                       description, usePasswordMode);
         action->Buffer = DecodeUtf8ToUtf16(defaultText);
         pendingKeyboardInput_ = action;
+        SyncTouchInputSuppression();
 
         action->SubscriptionToken = Microsoft::Xna::Framework::Input::TextInputEXT::TextInput.Add(
             [](Input::charcs c)
@@ -604,6 +629,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         {
             Microsoft::Xna::Framework::Input::TextInputEXT::TextInput.Remove(pendingKeyboardInput_->SubscriptionToken);
             pendingKeyboardInput_ = nullptr;
+            SyncTouchInputSuppression();
         }
     }
 
@@ -633,6 +659,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             std::move(state), std::move(callback), title, text, buttons, focusButton, icon
         );
         pendingMessageBox_ = action;
+        SyncTouchInputSuppression();
         return action;
     }
 
@@ -677,6 +704,13 @@ namespace Microsoft::Xna::Framework::GamerServices
         Graphics::SpriteFont& font,
         Graphics::Texture2D& whitePixel
     ) {
+        if (suppressTouchUntilMouseRelease_ &&
+            Input::Mouse::GetState().getLeftButtonProperty() != Input::ButtonState::Pressed)
+        {
+            suppressTouchUntilMouseRelease_ = false;
+            SyncTouchInputSuppression();
+        }
+
         if (pendingMessageBox_ == nullptr)
         {
             return;
@@ -769,6 +803,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             {
                 if (buttonRects[i].Contains(mouse.getXProperty(), mouse.getYProperty()))
                 {
+                    suppressTouchUntilMouseRelease_ = true;
                     CompletePendingMessageBox(static_cast<int>(i));
                     return;
                 }
@@ -792,6 +827,8 @@ namespace Microsoft::Xna::Framework::GamerServices
     void Guide::ResetPendingMessageBoxForTestingEXT()
     {
         pendingMessageBox_ = nullptr;
+        suppressTouchUntilMouseRelease_ = false;
+        SyncTouchInputSuppression();
     }
 
     int Guide::GetPendingMessageBoxFocusButtonForTestingEXT()

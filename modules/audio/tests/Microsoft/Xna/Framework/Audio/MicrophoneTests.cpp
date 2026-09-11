@@ -79,14 +79,21 @@ TEST(MicrophoneTest, AllReflectsTheSelectedRecordingCapability)
 #endif
 }
 
-TEST(MicrophoneTest, DefaultDeviceEntryIsNamedDefaultDevice)
+// XNA's Microphone.All is the machine's device list and Microphone.Default is a real device
+// reporting the driver's own name. CNA used to prepend a synthetic entry literally named
+// "Default Device", reproducing FNA; SAMPLE-098 caught the difference on screen against the real
+// XNA runtime, and CLAUDE.md makes XNA the tie-break. No entry may carry that invented name.
+TEST(MicrophoneTest, AllContainsOnlyRealDevicesWithNoInventedDefaultEntry)
 {
-    const auto& all = Microphone::getAllProperty();
 #if defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL)
     GTEST_SKIP() << "selected audio backend has no recording capability";
 #endif
+    const auto& all = Microphone::getAllProperty();
     ASSERT_FALSE(all.empty());
-    EXPECT_EQ(all[0]->Name, "Default Device");
+    for (const Microphone* microphone : all)
+    {
+        EXPECT_NE(microphone->Name, "Default Device");
+    }
 }
 
 TEST(MicrophoneTest, DefaultPropertyIsFirstEntryOrNullWhenRecordingIsUnsupported)
@@ -169,11 +176,36 @@ TEST(MicrophoneTest, BufferDurationTooSmallThrows)
 
 TEST(MicrophoneTest, BufferDurationNotMultipleOfTenThrows)
 {
-    // getMillisecondsProperty() is the sub-second component ([-999, 999]), so the setter's
-    // ">1000" branch is unreachable — not tested here since no TimeSpan value can trigger it.
     Microphone mic = MakeMic();
     EXPECT_THROW(mic.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(105)),
                  System::ArgumentOutOfRangeException);
+}
+
+// BINDFIX-032. The setter reads TotalMilliseconds, as XNA's IL does, not the sub-second
+// `Milliseconds` component FNA reads. These four cases are exactly what that changes, and the
+// comment that used to sit above the test before this one asserted the opposite.
+TEST(MicrophoneTest, BufferDurationUsesTotalMillisecondsAsXnaDoes)
+{
+    Microphone mic = MakeMic();
+
+    // The whole point: 1000 ms is the value the property REPORTS on an unconfigured microphone,
+    // so `mic.BufferDuration = mic.BufferDuration` has to work. Reading the sub-second component
+    // makes 1000 ms read as 0 and throw.
+    EXPECT_NO_THROW(mic.setBufferDurationProperty(mic.getBufferDurationProperty()));
+    EXPECT_NO_THROW(mic.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(1000)));
+    EXPECT_DOUBLE_EQ(mic.getBufferDurationProperty().getTotalMillisecondsProperty(), 1000.0);
+
+    // And the upper branch is reachable now. Under the sub-second reading these three were
+    // accepted, because their `Milliseconds` components are 100, 500 and 500.
+    EXPECT_THROW(mic.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(1100)),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(mic.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(1500)),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(mic.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(2500)),
+                 System::ArgumentOutOfRangeException);
+
+    // The refusals left the property untouched.
+    EXPECT_DOUBLE_EQ(mic.getBufferDurationProperty().getTotalMillisecondsProperty(), 1000.0);
 }
 
 // ===================== GetSampleDuration / GetSampleSizeInBytes =====================

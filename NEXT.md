@@ -12,6 +12,65 @@ The current C ABI backlog is measured at **663 planned rows** under open `CBIND-
 `CBIND-121`, and `CBIND-122`; the latter owns five untyped XNB loading seams exposed by this fresh
 regeneration. See `plans/plan_binding.md` for the authoritative current status.
 
+## Vulkan renderer parity reached (`plans/plan_vulkan.md` `VULKAN-239`, 2026-09-08)
+
+**The classic (non-CNAEXT) CNA Vulkan renderer has reached EasyGL parity.** The authoritative
+statement, with every measurement and every exclusion, is `plans/plan_vulkan.md` §28.1; this entry
+exists so a reader of `NEXT.md` sees the verdict and its boundary without having to find it.
+
+- Commit `49819d567`, branch `vulkan`. **`ctest -R '^Vulkan_'` → 371/371**, no skips, from 254/254
+  at the `VULKAN-482` entry below. Full `ctest` **9215/9232**; `--rerun-failed -j1` leaves the 16
+  that entry already names, and **none of them is a `Vulkan_*` test**.
+- **Vulkan validation: zero CNA-attributable messages, and it is gated rather than asserted.** Since
+  `VULKAN-393`/`VULKAN-408` every CTest in the configuration that can create a `VkDevice` fails on
+  any `[Vulkan Validation]` line, with an **empty** exemption list, and four tests refuse to pass if
+  the layer never loaded — so 371/371 is the evidence.
+- **228 tasks ✅, 5 ⛔, none ⬜ or 🟨.** The five are classified individually in §28.1 and none is a
+  classic Vulkan parity blocker: four need a renderer build or a CNAEXT configuration this tree does
+  not have, and one is a public C-ABI enumerator owned by `plans/plan_binding.md`. The Vulkan half of
+  every one is already closed and tested.
+- **The last implementation row was instancing** (`VULKAN-218`, closed through `VULKAN-227`–`-234`).
+  The renderer no longer has a separate instanced program family: as on EasyGL, the per-instance
+  matrix is an optional input to *every* stock program, so instancing composes with the whole effect
+  set — every family, every vertex shape, fog on all of them, and `World`/bone composition. The
+  shared corpus `instanced_textured_draw_test.cpp` went **17/17 → 37/37 on each renderer**.
+
+**What this does not say, and the boundary matters more than the headline.** The **CNAEXT /
+`graphics-ext` engine layer is out of scope entirely** and remains `plans/plan_modern.md`'s —
+`CNA_CNAEXT` is OFF in `cmake-build-vulkan/`, so none of it is compiled here. So are compiled XNA
+`.fx` bytecode (`plans/plan_fx.md`), the C ABI (`plans/plan_binding.md`) and every other renderer's
+own capability claims. And the numbers are **llvmpipe (LLVM 19.1.7)** under Xvfb `:99`, for the
+reason the entry below gives: under Xvfb, RADV reports no DRI3 and the renderer's own
+present-capable-queue check rejects it. A hardware run needs the real display and the owner's
+go-ahead.
+
+## Vulkan renderer baseline, measured (`plans/plan_vulkan.md` `VULKAN-482`, 2026-09-06)
+
+The authoritative running record is `plans/plan_vulkan.md` §7.5, one row per completed task with
+both suite numbers. This entry exists so a reader of `NEXT.md` is not left with the older figure
+further down the file.
+
+- **`ctest -R '^Vulkan_'` → 254/254**, no skips at all. The dedicated suite grew from 218 at the
+  start of that plan's implementation phase.
+- **Full `ctest` → 9095/9111**, 16 failures. Every one of the sixteen is *named* in `VULKAN-475`
+  and **reproduces identically under EasyGL**, so none is caused by this renderer. That attribution
+  found three that were: a startup diagnostic on stdout (`VULKAN-402`) and two `.cnj` effect tests
+  gating on `CustomEffects` where the question is `ExecutesShaderEffectSourceEXT()` (`VULKAN-403`).
+
+**The device, because a suite number without one says less than it looks.** These ran on
+**`llvmpipe (LLVM 19.1.7)`** under Xvfb `:99`, not on the machine's `AMD Radeon 780M (RADV
+PHOENIX)`. That is not a choice: under Xvfb, RADV reports `No DRI3 support detected - required for
+presentation`, so the renderer's own present-capable-queue check rejects it. A hardware run needs
+the real display and the owner's go-ahead; `VULKAN-008`'s capability snapshot is built for it,
+classifying its 93 entries `Fixed` or `Device` so a different adapter *compares* rather than fails.
+
+**What this supersedes:** the earlier line in this file reading `VULKAN 211 = 210 pass + the
+accepted Vulkan_DepthBias llvmpipe residual`. It is left where it is — history is not rewritten
+here — but two things about it are now known: the suite is much larger, and `Vulkan_DepthBias` was
+never a renderer defect. §7.4 of the plan measured it as a **test** written against OpenGL's depth
+range; the renderer drives real dynamic `vkCmdSetDepthBias` from ten pipeline sites.
+
+
 ## Historical handoff — the sixth merge reopened the matrix by 506 rows (`CBIND-102`, 2026-08-28)
 
 `origin/next` merged into `feature/bindings` on 2026-08-28: 150 commits carrying the CNB content
@@ -3399,7 +3458,7 @@ evidence is in `integration/FINAL_RECONCILIATION.md`.
 > and **`MAGNUM` is missing from `README.md`'s `CNA_GRAPHICS_BACKEND` list**, a gap in the eleventh
 > lane's own registration union noticed while adding the SOKOL entry beside it.
 >
-> **Build trees (owner-designated partition `build-probe/`):** created
+> **Build trees (the shared in-repo build directory `build-probe/`):** created
 > `cmake-build-sokol-pre` (711 M, the pre-adaptation baseline), `cmake-build-sokol` (2.9 G),
 > `cmake-build-sokol-asan` (6.4 G) and `cmake-build-sokol-easygl` (control); reused the shared
 > `ccache/` and `~/deps` (sokol cloned once at its pin, 11 M). Max parallelism **`-j6`**; the 8-job
@@ -3422,7 +3481,7 @@ evidence is in `integration/FINAL_RECONCILIATION.md`.
 > rebuilt from their documented specs. Fresh trees live on the owner-designated build partition
 > **`build-probe/`** (`cmake-build-wicked` + `wicked-repro/` evidence,
 > `cmake-build-wicked-asan`, `cmake-build-magnum`, `cmake-build-noxna`, shared `ccache/` — export
-> `CCACHE_DIR=~/.cache/ccache` or everything recompiles cold). The
+> `CCACHE_DIR=/rv/cnaccache` or everything recompiles cold). The
 > in-repo `.sdl-prebuilt-Linux-x86_64` survived and is reused.
 >
 > **Ownership settled by the prescribed raw control: classification B — pinned upstream Wicked

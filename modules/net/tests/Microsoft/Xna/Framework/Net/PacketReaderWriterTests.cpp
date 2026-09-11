@@ -151,14 +151,19 @@ TEST(PacketWriterTest, WriteColorWritesFourBytes) {
     EXPECT_EQ(w.getLengthProperty(), 4);
 }
 
-TEST(PacketReaderTest, ReadColorReadsSixteenBytesAsFloats) {
-    PacketReader r;
-    float payload[] = {0.1f, 0.2f, 0.3f, 0.4f};
-    r.getBaseStreamProperty()->Write(reinterpret_cast<uint8_t*>(payload), 0, sizeof(payload));
-    r.setPositionProperty(0);
+// ReadColor consumes the four bytes Write(Color) emits; the two are inverses. This test used to
+// assert the opposite (sixteen bytes read as four floats) and was left behind when PacketReader.cpp
+// was corrected -- see the comment at PacketReader::ReadColor for why the old shape meant a packet
+// holding one colour could not be read back at all.
+TEST(PacketReaderTest, ReadColorReadsFourBytesAndInvertsWriteColor) {
+    PacketWriter w;
+    w.Write(Color(10, 20, 30, 40));
+    EXPECT_EQ(w.getLengthProperty(), 4);
+
+    PacketReader r = MakeReaderFromWriter(w);
     Color result = r.ReadColor();
-    EXPECT_EQ(r.getPositionProperty(), 16);
-    EXPECT_EQ(result, Color(0.1f, 0.2f, 0.3f, 0.4f));
+    EXPECT_EQ(r.getPositionProperty(), 4);
+    EXPECT_EQ(result, Color(10, 20, 30, 40));
 }
 
 TEST(PacketReaderWriterTest, MatrixRoundtrip) {

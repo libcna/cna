@@ -42,6 +42,9 @@ using CNA::GraphicsMemoryBarrier;
 using CNA::IndirectDrawArguments;
 using CNA::IndirectDrawIndexedArguments;
 using CNA::Graphics::StorageBuffer;
+using CNA::Graphics::StorageBufferCpuAccess;
+using CNA::Graphics::StorageBufferDescriptor;
+using CNA::Graphics::StorageBufferUsage;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
@@ -74,13 +77,18 @@ int CountLitPixels(RenderTarget2D& target)
     return lit;
 }
 
-/// True when this renderer can run the whole route: the draw itself, and a buffer to put the
-/// arguments in. On EasyGL the second is the narrower of the two -- a storage buffer is an SSBO,
-/// which is GL ES 3.1 / desktop GL 4.3, while the indirect draw itself is GL 4.0.
+/// True when this renderer can run the complete indirect route. The argument-only descriptor does
+/// not require compute or an SSBO, so the draw capability is the only feature gate.
 bool CanRunIndirect(GraphicsDevice& device)
 {
-    return device.SupportsCapability(GraphicsCapability::IndirectDraw) &&
-           device.SupportsCapability(GraphicsCapability::ComputeShaders);
+    return device.SupportsCapability(GraphicsCapability::IndirectDraw);
+}
+
+StorageBufferDescriptor CpuIndirectDescriptor(const std::size_t byteSize)
+{
+    return StorageBufferDescriptor(
+        byteSize, StorageBufferUsage::IndirectArguments,
+        StorageBufferCpuAccess::Write);
 }
 
 TEST(IndirectDrawTest, TheArgumentLayoutIsTheOneEveryApiReads)
@@ -132,7 +140,7 @@ TEST(IndirectDrawTest, TheArgumentRangeIsCheckedEvenThoughTheCountsCannotBe)
     GraphicsDevice device;
     if (!CanRunIndirect(device)) GTEST_SKIP() << "this renderer has no indirect draw route";
 
-    StorageBuffer arguments(device, sizeof(IndirectDrawArguments));
+    StorageBuffer arguments(device, CpuIndirectDescriptor(sizeof(IndirectDrawArguments)));
     const auto triangle = CoveringTriangle();
     VertexBuffer buffer(device, 3);
     buffer.SetData(triangle.data(), 3);
@@ -160,7 +168,7 @@ TEST(IndirectDrawTest, ADrawWithNothingBoundStillRefusesBeforeTheGpuSeesIt)
     GraphicsDevice device;
     if (!CanRunIndirect(device)) GTEST_SKIP() << "this renderer has no indirect draw route";
 
-    StorageBuffer arguments(device, sizeof(IndirectDrawArguments));
+    StorageBuffer arguments(device, CpuIndirectDescriptor(sizeof(IndirectDrawArguments)));
     device.SetVertexBuffer(nullptr);
     EXPECT_THROW(device.DrawPrimitivesIndirectEXT(PrimitiveType::TriangleList,
                                                   *arguments.getRendererEXT(), 0),
@@ -178,7 +186,7 @@ TEST(IndirectDrawTest, TheCountsReallyComeFromTheBuffer)
     BasicEffect effect(device);
     effect.VertexColorEnabled = true;
     RenderTarget2D target(device, kSize, kSize);
-    StorageBuffer arguments(device, sizeof(IndirectDrawArguments));
+    StorageBuffer arguments(device, CpuIndirectDescriptor(sizeof(IndirectDrawArguments)));
 
     const auto draw = [&](const IndirectDrawArguments& args) {
         arguments.setBytes(&args, sizeof(args));
@@ -243,7 +251,7 @@ TEST(IndirectDrawTest, TheArgumentsCanSitAtAnOffsetInsideTheBuffer)
     commands[1].VertexCount = 3;
     commands[1].InstanceCount = 1;
 
-    StorageBuffer arguments(device, sizeof(commands));
+    StorageBuffer arguments(device, CpuIndirectDescriptor(sizeof(commands)));
     arguments.setBytes(commands.data(), sizeof(commands));
 
     device.SetVertexBuffer(&buffer);
@@ -276,7 +284,8 @@ TEST(IndirectDrawTest, TheIndexedRouteReadsItsOwnFiveWordCommand)
     BasicEffect effect(device);
     effect.VertexColorEnabled = true;
     RenderTarget2D target(device, kSize, kSize);
-    StorageBuffer arguments(device, sizeof(IndirectDrawIndexedArguments));
+    StorageBuffer arguments(
+        device, CpuIndirectDescriptor(sizeof(IndirectDrawIndexedArguments)));
 
     const auto draw = [&](const IndirectDrawIndexedArguments& args) {
         arguments.setBytes(&args, sizeof(args));
@@ -314,7 +323,8 @@ TEST(IndirectDrawTest, TheIndexedRouteRefusesWithoutAnIndexBuffer)
     vertices.SetData(triangle.data(), 3);
     BasicEffect effect(device);
     effect.VertexColorEnabled = true;
-    StorageBuffer arguments(device, sizeof(IndirectDrawIndexedArguments));
+    StorageBuffer arguments(
+        device, CpuIndirectDescriptor(sizeof(IndirectDrawIndexedArguments)));
 
     device.SetVertexBuffer(&vertices);
     device.SetIndexBuffer(nullptr);

@@ -10,6 +10,9 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
+#include <cmath>
+#include <limits>
+
 namespace CNA::Internal::Renderers::D3DCommon
 {
     using namespace Microsoft::Xna::Framework::Graphics;
@@ -66,13 +69,13 @@ namespace CNA::Internal::Renderers::D3DCommon
 
     D3D11_CULL_MODE CullModeToD3D11(int cullMode)
     {
-        // See this function's own header doc: FrontCounterClockwise = FALSE (D3D11's default,
-        // matching D3D's native clockwise-is-front convention) is assumed by the caller.
+        // See this function's own header doc: callers use FNA3D's FrontCounterClockwise = TRUE
+        // convention so rasterizer culling and two-sided stencil classify faces identically.
         switch (static_cast<CullMode>(cullMode))
         {
             case CullMode::None:                     return D3D11_CULL_NONE;
-            case CullMode::CullClockwiseFace:        return D3D11_CULL_FRONT;
-            case CullMode::CullCounterClockwiseFace: return D3D11_CULL_BACK;
+            case CullMode::CullClockwiseFace:        return D3D11_CULL_BACK;
+            case CullMode::CullCounterClockwiseFace: return D3D11_CULL_FRONT;
             default:                                   return D3D11_CULL_NONE;
         }
     }
@@ -113,6 +116,38 @@ namespace CNA::Internal::Renderers::D3DCommon
             case TextureFilter::MinPointMagLinearMipPoint:   return D3D11_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT;
             default:                                           return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
         }
+    }
+
+    std::int32_t XnaDepthBiasToD3D(float depthBias, DXGI_FORMAT depthFormat) noexcept
+    {
+        double scale = 0.0;
+        switch (depthFormat)
+        {
+            case DXGI_FORMAT_D16_UNORM:
+                scale = 65535.0;
+                break;
+            case DXGI_FORMAT_D24_UNORM_S8_UINT:
+                scale = 16777215.0;
+                break;
+            case DXGI_FORMAT_D32_FLOAT:
+            case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+                scale = 8388607.0;
+                break;
+            default:
+                return 0;
+        }
+
+        if (std::isnan(depthBias))
+            return 0;
+
+        const double scaled = static_cast<double>(depthBias) * scale;
+        if (scaled >= static_cast<double>(std::numeric_limits<std::int32_t>::max()))
+            return std::numeric_limits<std::int32_t>::max();
+        if (scaled <= static_cast<double>(std::numeric_limits<std::int32_t>::min()))
+            return std::numeric_limits<std::int32_t>::min();
+
+        // FNA3D uses C's float-to-int conversion here, which truncates toward zero.
+        return static_cast<std::int32_t>(scaled);
     }
 
     D3D11_STENCIL_OP StencilOperationToD3D11(int stencilOperation)

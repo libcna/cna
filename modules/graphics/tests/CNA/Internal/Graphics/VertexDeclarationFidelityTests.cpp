@@ -173,9 +173,11 @@ TEST(VertexDeclarationFidelityTest, PositionOnlyAtAListedStrideIsRepresentable)
 
 TEST(VertexDeclarationFidelityTest, ARendererThatRefusesTheStrideKeepsItsOwnRejection)
 {
-    // Software, WebGPU's ordinary route and the three D3D renderers throw on an out-of-table stride
-    // themselves. The guard must abstain there rather than substitute its own message for an
-    // established boundary -- including for a declaration it could not otherwise represent.
+    // Software, the three D3D renderers and WebGPU's remaining stride-derived routes (skinned, PBR,
+    // instanced -- plans/plan_webgpu.md WEBGPU-155 converted its stock families to bind by semantic
+    // and they no longer reach this predicate) throw on an out-of-table stride themselves. The
+    // guard must abstain there rather than substitute its own message for an established
+    // boundary -- including for a declaration it could not otherwise represent.
     EXPECT_EQ("", Verdict(Elements({Pos(), Col(12)}), 28));
     EXPECT_EQ("", Verdict(Elements({Col(0), Pos(4)}), 28));
 }

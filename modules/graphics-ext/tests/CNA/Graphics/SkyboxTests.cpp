@@ -114,11 +114,6 @@ class SkyboxTest : public ::testing::Test
 {
 protected:
     GraphicsDevice device;
-
-    void SetUp() override
-    {
-        CNA_SKIP_WITHOUT_SHADER_EXECUTION(device);
-    }
 };
 
 // =====================================================================================

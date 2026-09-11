@@ -108,11 +108,13 @@ path used everywhere else, so no browser-specific input code exists in CNA. Brow
   - **SDL_Renderer** — `SDL_RenderCoordinatesToWindow`, which is **offset-aware**, so a true
     letterbox (centering bars) maps correctly, not just scaled (verified with a non-square 200×100
     window in task 858).
-  - **EasyGL** — `IGraphicsRenderer::TransformLogicalToWindow`, a uniform height-scale with **no
-    offset**. That is exact for EasyGL's default `FixedHeightDynamicWidth` presentation, which fixes
-    the logical height and derives the logical *width* from the window aspect — so the viewport
-    fills the window and there are no bars to offset. EasyGL does **not** implement true
-    letterbox-with-bars for input; it doesn't need to for this model.
+  - **EasyGL** — `IGraphicsRenderer::TransformLogicalToWindow`, which is **offset-aware**: it
+    maps through `EasyGLSurfaceState::GetDefaultViewportRect()`, the same rectangle the GL
+    viewport is set from, so a centred letterbox subtracts its bars before scaling. That is what
+    the default `Letterbox` presentation needs, and it is also correct under
+    `FixedHeightDynamicWidth`, where the rectangle is the whole drawable and the offsets are zero.
+    (This bullet used to say EasyGL had no offset and did not need one; that stopped being true
+    when the renderer gained its own `GetDefaultViewportRect()` override.)
   - **Vulkan / bgfx** — pass-through (no logical-presentation scaling).
 
   The conversion is unit-tested; the OS-cursor *landing* pixel is verifiable only where global-mouse

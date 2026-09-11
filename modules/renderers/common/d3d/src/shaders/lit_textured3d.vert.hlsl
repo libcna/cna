@@ -39,7 +39,12 @@ struct VSInput
 {
     float3 Position : POSITION0;
     float3 Normal   : NORMAL0;
+#ifndef CNA_LIT_UNTEXTURED_INPUT
     float2 UV       : TEXCOORD0;
+#ifdef CNA_LIT_VERTEX_COLOR_INPUT
+    float4 Color    : COLOR0;
+#endif
+#endif
 };
 
 struct VSOutput
@@ -50,6 +55,9 @@ struct VSOutput
     float4 Tint      : TEXCOORD2;
     float3 WorldPos  : TEXCOORD3;
     float  FogFactor : TEXCOORD4;
+#ifdef CNA_LIT_VERTEX_COLOR_INPUT
+    float4 Color     : TEXCOORD5;
+#endif
 };
 
 // Returns transpose(inverse(m)) directly (the cofactor matrix over the determinant) -- see
@@ -70,7 +78,14 @@ VSOutput main(VSInput input)
 
     float4 pos = mul(float4(input.Position, 1.0), Mvp);
     output.Position = pos;
+#ifdef CNA_LIT_UNTEXTURED_INPUT
+    output.UV = float2(0.0, 0.0);
+#else
     output.UV = input.UV;
+#ifdef CNA_LIT_VERTEX_COLOR_INPUT
+    output.Color = input.Color;
+#endif
+#endif
 
     // Task 898 fix: transform by World's inverse-transpose upper-left 3x3, not the full MVP
     // (mirrors EnvironmentMapEffect's own already-correct env_map3d.vert.hlsl pattern) -- an

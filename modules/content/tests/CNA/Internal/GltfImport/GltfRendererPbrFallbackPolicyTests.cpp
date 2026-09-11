@@ -323,7 +323,7 @@ namespace
               srvTextures[6] = params.pbrSpecularColorMap ? params.pbrSpecularColorMap : GetOrCreateDefaultWhiteTextureEXT();)",
            R"(range.BaseShaderRegister = static_cast<UINT>(t))",
            R"(cmdList->SetGraphicsRootDescriptorTable(numCbvs + i, srvHandles[i]))",
-           R"(cmdList->SetGraphicsRootDescriptorTable(numCbvs + numSrvs + i, GetSamplerGpuHandleEXT(i)))",
+           R"(cmdList->SetGraphicsRootDescriptorTable(numCbvs + numSrvs + i, samplerHandles[i]))",
            R"(Texture2D uTexture : register(t0);
               SamplerState uTextureSampler : register(s0);
               Texture2D uNormalMap : register(t1);
@@ -476,12 +476,13 @@ namespace
               layout(set = 2, binding = 5) uniform sampler2D uSpecularMap;
               layout(set = 2, binding = 6) uniform sampler2D uSpecularColorMap;)"}}},
         {"vulkan", "descriptor set 0 bindings 0,1,2,3,4",
-         {{R"(VkImageView views[7] = { baseColor, normalMap, metallicRoughness, emissive, occlusion,
-                                      specular, specularColor })",
+         {{R"(VkImageView views[10] = { baseColor, normalMap, metallicRoughness, emissive, occlusion,
+                                       specular, specularColor, iblIrradiance,
+                                       iblPrefilteredSpecular, iblBrdfLut })",
            R"(writes[i].dstBinding = i)",
            R"(GetOrCreatePbrDescSet(
                 currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
-                                    PbrSlotSamplersRawEXT().s))",
+                    vIrr, vIblSpec, vBrdf, PbrSlotSamplersRawEXT().s))",
            R"(layout(set = 0, binding = 0) uniform sampler2D uTexture;
               layout(set = 0, binding = 1) uniform sampler2D uNormalMap;
               layout(set = 0, binding = 2) uniform sampler2D uMetallicRoughnessMap;
@@ -1193,13 +1194,13 @@ namespace
          "vout.Position = mul(float4(vin.Position, 1.0), WorldViewProj)",
          "vout.Position = mul(float4(skinnedPos, 1.0), WorldViewProj)"},
         {"directx11",
-         "const Matrix wvp = world * view * projection",
+         "const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection)",
          "D3DCommon::D3DPbrPerDrawConstants perDraw{}; wvp.ToColumnMajor(perDraw.Mvp)",
          "world.ToColumnMajor(perDraw.World)",
          "output.Position = mul(float4(input.Position, 1.0), Mvp)",
          "output.Position = mul(skinnedPos, Mvp)"},
         {"directx12",
-         "const Matrix wvp = world * view * projection",
+         "const Matrix wvp = ApplyXnaPixelCenterEXT(world * view * projection)",
          "D3DPbrPerDrawConstants perDraw{}; wvp.ToColumnMajor(perDraw.Mvp)",
          "world.ToColumnMajor(perDraw.World)",
          "output.Position = mul(float4(input.Position, 1.0), Mvp)",
@@ -1246,11 +1247,16 @@ namespace
          "for (int wi = 0; wi < 16; ++wi) out[20 + wi] = p.worldColMajor[wi]",
          "gl_Position = pc.mvp * vec4(inPos, 1.0)",
          "gl_Position = pc.mvp * skinnedPos"},
+        // plans/plan_vulkan.md VULKAN-232: the Vulkan PBR vertex shaders are compiled twice from
+        // one source, and the per-instance transform is spelled CNA_INSTANCE_POSITION() -- the
+        // identity without CNA_INSTANCED, so the ordinary module's SPIR-V is byte-identical to
+        // what this row's literal used to describe. Same evidence, current spelling; `magnum`
+        // below already carries its own instancing spelling for the same reason.
         {"vulkan",
          "const Matrix wvp = world * view * projection",
          "FillExtPushConst(d.pushConst, wvp, params)",
          "for (int wi = 0; wi < 16; ++wi) out[16 + wi] = p.worldColMajor[wi]",
-         "gl_Position = pc.mvp * vec4(aPos, 1.0)",
+         "gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(aPos, 1.0))",
          "gl_Position = pc.mvp * skinnedPos"},
         {"webgpu",
          "const Matrix wvp = world * view * projection",
@@ -1461,11 +1467,15 @@ namespace
          "command.lightUniforms[39] = static_cast<float>(params.weightsPerVertex)",
          "if (weightsPerVertex >= 2.0) skinMat += bb.bones[inBoneIndices.y] * inBoneWeights.y",
          "if (weightsPerVertex >= 4.0) skinMat += bb.bones[inBoneIndices.z] * inBoneWeights.z"},
+        // plans/plan_vulkan.md VULKAN-151: `aBoneIndices` is a `vec4` here now, not a `uvec4`, so the
+        // palette subscript carries an `int()` -- the same shape the EasyGL row two entries above
+        // has had all along. What this evidence asserts is unchanged: the shader really does read
+        // the palette and gate the second and fourth influences on the weight count.
         {"vulkan",
          "d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16)",
          "FillPbrUboData(d.pbrUboData, params, static_cast<float>(params.weightsPerVertex))",
-         "if (weightsPerVertex >= 2.0) skinMat += bb.bones[aBoneIndices.y] * aBoneWeights.y",
-         "if (weightsPerVertex >= 4.0) skinMat += bb.bones[aBoneIndices.z] * aBoneWeights.z"},
+         "if (weightsPerVertex >= 2.0) skinMat += bb.bones[int(aBoneIndices.y)] * aBoneWeights.y",
+         "if (weightsPerVertex >= 4.0) skinMat += bb.bones[int(aBoneIndices.z)] * aBoneWeights.z"},
         {"webgpu",
          "out[4 + i] = p.boneTransforms[i]",
          "out[0] = static_cast<float>(p.weightsPerVertex)",
@@ -2213,7 +2223,7 @@ TEST(GltfRendererPbrFallbackPolicy, VulkanSamplesBothKhrMaterialsSpecularTexture
     ASSERT_FALSE(source.empty());
 
     for (const char* evidence : {
-             "float pbrUboData[124]",
+             "float pbrUboData[128]",
              "out[60] = p.pbrDielectricF0Unclamped[0]",
              "out[63] = p.pbrSpecularFactor",
              "p.pbrSpecularColorTextureIsSrgb ? 1.f : 0.f",
@@ -2221,7 +2231,7 @@ TEST(GltfRendererPbrFallbackPolicy, VulkanSamplesBothKhrMaterialsSpecularTexture
              "p.pbrTextureCoordinateSetMask & 0x7fu",
              "params.pbrSpecularMap",
              "params.pbrSpecularColorMap",
-             "VkImageView views[7] = { baseColor, normalMap, metallicRoughness, emissive, occlusion, specular, specularColor }",
+             "VkImageView views[10] = { baseColor, normalMap, metallicRoughness, emissive, occlusion, specular, specularColor, iblIrradiance, iblPrefilteredSpecular, iblBrdfLut }",
              "slotSamplers_[4], slotSamplers_[5], slotSamplers_[6]",
              "layout(set = 0, binding = 6) uniform sampler2D uSpecularMap",
              "layout(set = 0, binding = 7) uniform sampler2D uSpecularColorMap",
@@ -2556,9 +2566,14 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererHonorsCallerOwnedCullState)
                  {"MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode,",
                   "VkCullModeFlags vkCull = VK_CULL_MODE_NONE",
                   "rs.cullMode = vkCull"});
+    // plans/plan_vulkan.md VULKAN-234: the end marker was
+    // `VkPipeline VulkanRenderer::GetOrCreatePipelineInstanced3D(`, which no longer exists --
+    // instancing stopped having a program family of its own, and every instanced draw takes its
+    // effect family's pipelines. The scope this marker delimits is unchanged: it is still the next
+    // member definition after the skinned-PBR factory.
     expectScoped(vulkan,
                  "VkPipeline VulkanRenderer::GetOrCreatePipelinePbrSkinned3D(",
-                 "VkPipeline VulkanRenderer::GetOrCreatePipelineInstanced3D(",
+                 "uint32_t VulkanRenderer::FindMemoryType(",
                  {"MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode,",
                   "VkCullModeFlags vkCull = VK_CULL_MODE_NONE",
                   "rs.cullMode = vkCull"});
@@ -2711,8 +2726,12 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
         {"sdl-gpu",
          "inTangent.w * cnaDirectionHandedness(mat3(lp.world))",
          "* cnaDirectionHandedness(skinNormalMat)"},
+        // plans/plan_vulkan.md VULKAN-232: the instance matrix is folded into World here, so the
+        // determinant this evidence is about now covers a mirroring INSTANCE too --
+        // sign(det(World x Instance)) == sign(det World) * sign(det Instance). Without
+        // CNA_INSTANCED the macro is the identity and the expression is the one that was here.
         {"vulkan",
-         "aTangent.w * cnaDirectionHandedness(mat3(pbr.world))",
+         "aTangent.w * cnaDirectionHandedness(mat3(CNA_INSTANCE_WORLD(pbr.world)))",
          "* cnaDirectionHandedness(skinNormalMat)"},
         {"webgpu",
          "input.tangent.w * directionHandedness(worldMat3)",
@@ -2744,10 +2763,21 @@ TEST(GltfRendererPbrFallbackPolicy, DirectX11SkinnedEffectUsesOpaqueWhiteForMiss
     // the same opaque-white fallback used by the other full renderers.
     const std::string directx11 = RendererText(
         RepositoryRoot() / "modules" / "renderers" / "directx11");
-    EXPECT_EQ(2u, CountOccurrences(directx11, Normalize(R"(
+    const std::string kOpaqueWhiteTexture0 = Normalize(R"(
         srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
                                   : GetOrCreateDefaultWhiteSrvEXT();
-    )"))) << "both the PBR and plain-skinned bindings require opaque-white texture0 fallbacks";
+    )");
+    // plans/plan_dx.md DX-230 extended the SAME fallback to the dual-texture and default branches,
+    // because an unbound D3D11 SRV samples transparent black in every branch, not only these two.
+    // An exact count therefore no longer states this test's guarantee -- it would go red whenever
+    // an unrelated branch adopted the correct behaviour. What must hold is that the PBR and the
+    // plain-skinned bindings both have it, and the PBR one is pinned by its adjacent normal-map
+    // slot so this cannot be satisfied by two arbitrary branches.
+    EXPECT_GE(CountOccurrences(directx11, kOpaqueWhiteTexture0), 2u)
+        << "both the PBR and plain-skinned bindings require opaque-white texture0 fallbacks";
+    EXPECT_EQ(1u, CountOccurrences(directx11, kOpaqueWhiteTexture0 + Normalize(R"(
+        srvs[1] = params.pbrNormalMap ? GetSrvForTextureEXT(params.pbrNormalMap) : GetOrCreateDefaultFlatNormalSrvEXT();
+    )"))) << "the PBR branch specifically must keep the opaque-white texture0 fallback";
 }
 
 // --- plans/plan_gltf.md GLTF-462/GLTF-465: the stride-60 record, per renderer ---------------------------
@@ -3433,12 +3463,13 @@ TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFa
 TEST(GltfRendererPointTopologyPolicy, Direct3DBackendsMapPointsOrRejectBeforeSubmission)
 {
     // GLTF-394 closes the last known silent POINTS reinterpretations. D3D9 duplicates its native
-    // mapper in five independently compiled draw implementations, so checking only the ordinary
-    // path would leave PBR (the glTF path), stock, skinned-colour or instanced draws behind.
+    // mapper in six independently compiled draw implementations, so checking only the ordinary
+    // path would leave PBR (the glTF path), stock, skinned-colour, instanced or compiled-effect
+    // draws behind. The sixth is D3D9CompiledEffect.cpp, added by plans/plan_fx.md FX-070.
     const std::filesystem::path renderers =
         RepositoryRoot() / "modules" / "renderers";
     const std::string d3d9 = RendererText(renderers / "directx9");
-    EXPECT_EQ(5u, CountOccurrences(
+    EXPECT_EQ(6u, CountOccurrences(
                       d3d9,
                       "casePrimitiveType::PointListEXT:returnD3DPT_POINTLIST;"));
 
@@ -3464,23 +3495,34 @@ TEST(GltfRendererPointTopologyPolicy, Direct3DBackendsMapPointsOrRejectBeforeSub
             << renderer << " must remain in the shared point framebuffer suite";
     }
 
-    // D3D12's current PSO cache fixes PrimitiveTopologyType to TRIANGLE. Mapping IA topology to
-    // POINTLIST/LINELIST/LINESTRIP would therefore trade an approximation for a validation error.
-    // Its honest contract is a named refusal, reached by all four ordinary/instanced native paths.
+    // D3D12 used to REFUSE these three by name, because a pipeline state's PrimitiveTopologyType
+    // was hardcoded to TRIANGLE and D3D12 requires it to agree with the topology the command list
+    // sets -- so mapping IA topology would have traded an approximation for a validation error.
+    // plans/plan_dx.md DX-208 made the topology CLASS part of the PSO key
+    // (D3D12PipelineStateCache.cpp: `psoDesc.PrimitiveTopologyType = desc.topologyType`), which is
+    // what the refusal existed to protect, so the honest contract is now a native mapping.
+    //
+    // The guarantee this test exists for is unchanged and is asserted below: no D3D12 path may
+    // SILENTLY reinterpret points or lines as triangles. Only the branch that satisfies it moved
+    // from "refuse by name" to "map natively".
     const std::string d3d12 = RendererText(renderers / "directx12");
     for (const std::string_view topology : {"LineList", "LineStrip", "PointListEXT"})
     {
         EXPECT_NE(std::string::npos, d3d12.find(
             "casePrimitiveType::" + std::string(topology) + ":"));
-        EXPECT_NE(std::string::npos, d3d12.find(
-            "DirectX12rendererdoesnotsupportPrimitiveType::" +
-            std::string(topology) + ":"));
     }
+    EXPECT_NE(std::string::npos, d3d12.find(
+        "casePrimitiveType::LineList:returnD3D_PRIMITIVE_TOPOLOGY_LINELIST;"));
+    EXPECT_NE(std::string::npos, d3d12.find(
+        "casePrimitiveType::LineStrip:returnD3D_PRIMITIVE_TOPOLOGY_LINESTRIP;"));
+    EXPECT_NE(std::string::npos, d3d12.find(
+        "casePrimitiveType::PointListEXT:returnD3D_PRIMITIVE_TOPOLOGY_POINTLIST;"));
     EXPECT_EQ(4u, CountOccurrences(d3d12, "ToD3D12Topology(primitive)"));
+    // The silent-reinterpretation guard, which is the whole point of GLTF-394.
     EXPECT_EQ(std::string::npos, d3d12.find(
         "casePrimitiveType::PointListEXT:returnD3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;"));
     EXPECT_EQ(std::string::npos, d3d12.find(
-        "casePrimitiveType::LineList:returnD3D_PRIMITIVE_TOPOLOGY_LINELIST;"));
+        "casePrimitiveType::LineList:returnD3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;"));
     EXPECT_EQ(std::string::npos, d3d12.find(
-        "casePrimitiveType::LineStrip:returnD3D_PRIMITIVE_TOPOLOGY_LINESTRIP;"));
+        "casePrimitiveType::LineStrip:returnD3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;"));
 }

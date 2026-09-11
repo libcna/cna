@@ -275,8 +275,13 @@ namespace Microsoft::Xna::Framework::Graphics
         // a real range: every mode between 1.334 and 1.6 -- 3:2 and 5:3 among them -- is
         // widescreen to FNA and not to XNA, and 16:10 is widescreen to FNA while XNA's strict
         // `>` excludes it. CLAUDE.md now settles that direction: XNA wins.
+        return IsWideScreenAspectRatioEXT(getCurrentDisplayModeProperty().getAspectRatioProperty());
+    }
+
+    bool GraphicsAdapter::IsWideScreenAspectRatioEXT(float aspectRatio)
+    {
         constexpr float limit = 1.6f;
-        return getCurrentDisplayModeProperty().getAspectRatioProperty() > limit;
+        return aspectRatio > limit;
     }
 
     GraphicsAdapter::IntPtr GraphicsAdapter::getMonitorHandleProperty() const
@@ -408,7 +413,10 @@ namespace Microsoft::Xna::Framework::Graphics
                        static_cast<int>(graphicsProfile), static_cast<int>(format))
             ? format
             : SurfaceFormat::Color;
-        selectedDepthFormat = depthFormat;
+        selectedDepthFormat = queries.selectBackBufferDepthStencilFormat != nullptr
+            ? static_cast<DepthFormat>(
+                  queries.selectBackBufferDepthStencilFormat(static_cast<int>(depthFormat)))
+            : depthFormat;
         selectedMultiSampleCount = queries.clampMultiSampleCount != nullptr
             ? queries.clampMultiSampleCount(
                   static_cast<int>(selectedFormat), static_cast<int>(multiSampleCount))

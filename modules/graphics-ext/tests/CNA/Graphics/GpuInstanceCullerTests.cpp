@@ -13,13 +13,18 @@
 
 #include "CNA/Graphics/FrustumCullerEXT.hpp"
 #include "CNA/Graphics/GpuInstanceCuller.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
+#include "GpuInstanceCullerTestShaderPackage.generated.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -27,6 +32,7 @@
 #include "System/NotSupportedException.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -42,8 +48,10 @@ using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+using Microsoft::Xna::Framework::Graphics::RasterizerState;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
@@ -75,26 +83,46 @@ Matrix SceneView() { return Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 10.0f), Vec
                                                  Vector3(0.0f, 1.0f, 0.0f)); }
 Matrix SceneProjection() { return Matrix::CreateOrthographic(8.0f, 10.0f, 0.1f, 100.0f); }
 
-std::string VertexSource()
+template <std::size_t N>
+std::vector<std::uint8_t> ToBytes(const std::uint32_t (&words)[N])
 {
-    return std::string("#version 310 es\nprecision highp float;\n") +
-           GpuInstanceCuller::getInstanceLookupGlsl() +
-           R"(
-layout(location = 0) in vec3 aPos;
-uniform mat4 World;
-uniform mat4 View;
-uniform mat4 Projection;
-void main() {
-    gl_Position = Projection * View * cnaInstanceWorld() * vec4(aPos, 1.0);
-}
-)";
+    const auto* begin = reinterpret_cast<const std::uint8_t*>(words);
+    return std::vector<std::uint8_t>(begin, begin + sizeof(words));
 }
 
-const char* const kFragmentSource = R"(#version 310 es
-precision highp float;
-out vec4 FragColor;
-void main() { FragColor = vec4(1.0, 1.0, 1.0, 1.0); }
-)";
+[[nodiscard]] CNA::Graphics::ShaderPackageEXT DrawPackage()
+{
+    using CNA::Graphics::ShaderBindingRequirementEXT;
+    using CNA::Graphics::ShaderBindingTypeEXT;
+    using CNA::Graphics::ShaderCodeEXT;
+    using CNA::Graphics::ShaderPackageEXT;
+    using namespace CNA::Tests::GpuInstanceCullerGenerated;
+    return ShaderPackageEXT(
+        {
+            ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
+                          "main", "gpu_instance_culler/draw.es.vert.glsl",
+                          std::string(kDrawEsVertexSource)),
+            ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Fragment,
+                          "main", "gpu_instance_culler/draw.es.frag.glsl",
+                          std::string(kDrawEsFragmentSource)),
+            ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop, CNA::ShaderStageEXT::Vertex,
+                          "main", "gpu_instance_culler/draw.desktop.vert.glsl",
+                          std::string(kDrawDesktopVertexSource)),
+            ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop, CNA::ShaderStageEXT::Fragment,
+                          "main", "gpu_instance_culler/draw.desktop.frag.glsl",
+                          std::string(kDrawDesktopFragmentSource)),
+            ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Vertex,
+                          "main", "gpu_instance_culler/draw.vulkan.vert.spv",
+                          ToBytes(kDrawVulkanVertexSpirV)),
+            ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment,
+                          "main", "gpu_instance_culler/draw.vulkan.frag.spv",
+                          ToBytes(kDrawVulkanFragmentSpirV)),
+        },
+        {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
+        {ShaderBindingRequirementEXT(
+            "CnaVisibleInstances", GpuInstanceCuller::kInstanceBinding,
+            ShaderBindingTypeEXT::StorageBuffer, CNA::ShaderStageEXT::Vertex)});
+}
 
 /// How many separated lit runs the middle row contains: one per instance that was actually drawn.
 int CountBands(RenderTarget2D& target)
@@ -116,7 +144,10 @@ int CountBands(RenderTarget2D& target)
 /// A unit quad in model space, wound clockwise so the default rasterizer keeps it.
 struct Quad
 {
-    explicit Quad(GraphicsDevice& device) : vertices(device, 4), indices(device, 6)
+    explicit Quad(GraphicsDevice& device)
+        : vertices(device, VertexPositionColor::getVertexDeclarationStatic(), 4,
+                   Microsoft::Xna::Framework::Graphics::BufferUsage::None)
+        , indices(device, 6)
     {
         const std::array<VertexPositionColor, 4> corners{
             VertexPositionColor(Vector3(-0.5f, -0.5f, 0.0f), Color::White),
@@ -184,11 +215,8 @@ TEST(GpuInstanceCullerTest, EachSurvivorIsDrawnOnceAndTheRestAreNot)
     GpuInstanceCuller culler(device);
     if (!culler.isSupported()) GTEST_SKIP() << culler.getUnsupportedReason();
 
-    ShaderEffect effect(device, VertexSource(), kFragmentSource);
+    ShaderEffect effect(device, DrawPackage());
     ASSERT_TRUE(effect.IsEffectValid()) << "the instance-lookup shader did not compile";
-    effect.setWorldProperty(Matrix::getIdentityProperty());
-    effect.setViewProperty(SceneView());
-    effect.setProjectionProperty(SceneProjection());
 
     const auto instances = Scene();
     culler.setInstances(instances);
@@ -200,6 +228,8 @@ TEST(GpuInstanceCullerTest, EachSurvivorIsDrawnOnceAndTheRestAreNot)
     device.SetIndexBuffer(&quad.indices);
     device.SetRenderTarget(&target);
     device.Clear(Color::Black);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
     effect.Apply();
     culler.draw(PrimitiveType::TriangleList);
     device.SetRenderTarget(nullptr);

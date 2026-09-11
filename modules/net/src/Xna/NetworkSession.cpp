@@ -4,6 +4,7 @@
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
@@ -20,6 +21,32 @@
 namespace Microsoft::Xna::Framework::Net
 {
     using GamerServices::SignedInGamer;
+
+    namespace
+    {
+        /// PlayerMatch and Ranked are Xbox LIVE matchmaking session types: the service
+        /// finds the peers, not the local machine. CNA has no such service, so these two
+        /// are refused rather than accepted into a session no peer can ever reach.
+        /// Real XNA refuses them too when the signed-in profile is not LIVE-eligible;
+        /// here the reason is that no eligible profile can exist at all, so the message
+        /// says that instead of imitating XNA's profile wording.
+        void ThrowIfSessionTypeNeedsMatchmakingService(NetworkSessionType sessionType)
+        {
+            if (sessionType == NetworkSessionType::PlayerMatch
+                || sessionType == NetworkSessionType::Ranked)
+            {
+                throw GamerServices::GamerServicesNotAvailableException(
+                    "NetworkSessionType::"
+                    + std::string(sessionType == NetworkSessionType::PlayerMatch
+                                      ? "PlayerMatch"
+                                      : "Ranked")
+                    + " requires an online matchmaking service, which this platform does "
+                      "not have. Use NetworkSessionType::SystemLink for a local network "
+                      "session, or NetworkSessionType::Local for a single-machine one."
+                );
+            }
+        }
+    }
 
     NetworkSession::NetworkSessionAction* NetworkSession::activeAction_ = nullptr;
     NetworkSession* NetworkSession::activeSession_ = nullptr;
@@ -690,6 +717,8 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentOutOfRangeException("maxGamers");
         }
+        ThrowIfSessionTypeNeedsMatchmakingService(sessionType);
+
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
             throw System::InvalidOperationException();
@@ -724,6 +753,8 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentOutOfRangeException("privateGamerSlots");
         }
+        ThrowIfSessionTypeNeedsMatchmakingService(sessionType);
+
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
             throw System::InvalidOperationException();
@@ -754,6 +785,8 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentOutOfRangeException("privateGamerSlots");
         }
+        ThrowIfSessionTypeNeedsMatchmakingService(sessionType);
+
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
             throw System::InvalidOperationException();
@@ -867,6 +900,8 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentOutOfRangeException("maxLocalGamers");
         }
+        ThrowIfSessionTypeNeedsMatchmakingService(sessionType);
+
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
             throw System::InvalidOperationException();
@@ -891,6 +926,8 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentException("sessionType");
         }
+        ThrowIfSessionTypeNeedsMatchmakingService(sessionType);
+
         if (activeAction_ != nullptr || activeSession_ != nullptr)
         {
             throw System::InvalidOperationException();
@@ -1109,8 +1146,8 @@ namespace Microsoft::Xna::Framework::Net
 
     System::IAsyncResult* NetworkSession::BeginJoinInvited(
         int maxLocalGamers,
-        System::AsyncCallback callback,
-        std::any asyncState
+        System::AsyncCallback,
+        std::any
     )
     {
         if (maxLocalGamers < 1 || maxLocalGamers > 4)
@@ -1122,18 +1159,22 @@ namespace Microsoft::Xna::Framework::Net
             throw System::InvalidOperationException();
         }
 
-        activeAction_ = new NetworkSessionAction(
-            std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, 0,
-            NetworkSessionProperties{}, // FNA passes null here (marked FIXME upstream); see BeginJoin.
-            NetworkSessionType::PlayerMatch // FIXME upstream
+        // CNA has no invitation service, so no invitation can ever be pending and there is
+        // no session to join. Nothing raises NetworkSession::InviteAccepted either, which is
+        // the only place XNA's own contract calls this from. Refusing here is what keeps the
+        // two consistent: previously this fabricated a PlayerMatch session with no host
+        // address and no transport, so a caller following XNA's contract got an object back
+        // and simply never saw another gamer.
+        throw GamerServices::GamerServicesNotAvailableException(
+            "NetworkSession::JoinInvited requires an invitation delivered by an online "
+            "service, which this platform does not have; no invitation can be pending."
         );
-        return InvokeActiveActionCallback();
     }
 
     System::IAsyncResult* NetworkSession::BeginJoinInvited(
-        const std::vector<SignedInGamer*>& localGamers,
-        System::AsyncCallback callback,
-        std::any asyncState
+        const std::vector<SignedInGamer*>&,
+        System::AsyncCallback,
+        std::any
     )
     {
         if (activeAction_ != nullptr || activeSession_ != nullptr)
@@ -1141,35 +1182,26 @@ namespace Microsoft::Xna::Framework::Net
             throw System::InvalidOperationException();
         }
 
-        activeAction_ = new NetworkSessionAction(
-            std::move(asyncState), std::move(callback), 0, localGamers, 0,
-            NetworkSessionProperties{}, // FNA passes null here (marked FIXME upstream); see BeginJoin.
-            NetworkSessionType::PlayerMatch // FIXME upstream
+        // CNA has no invitation service, so no invitation can ever be pending and there is
+        // no session to join. Nothing raises NetworkSession::InviteAccepted either, which is
+        // the only place XNA's own contract calls this from. Refusing here is what keeps the
+        // two consistent: previously this fabricated a PlayerMatch session with no host
+        // address and no transport, so a caller following XNA's contract got an object back
+        // and simply never saw another gamer.
+        throw GamerServices::GamerServicesNotAvailableException(
+            "NetworkSession::JoinInvited requires an invitation delivered by an online "
+            "service, which this platform does not have; no invitation can be pending."
         );
-        return InvokeActiveActionCallback();
     }
 
-    NetworkSession* NetworkSession::EndJoinInvited(System::IAsyncResult* result)
+    NetworkSession* NetworkSession::EndJoinInvited(System::IAsyncResult*)
     {
-        if (result != activeAction_)
-        {
-            throw System::ArgumentException("result");
-        }
-
-        int actionMaxLocalGamers = activeAction_->MaxLocalGamers;
-        auto actionLocalGamers = activeAction_->LocalGamers;
-        delete activeAction_; // Task 3.2
-        activeAction_ = nullptr;
-
-        activeSession_ = new NetworkSession(
-            NetworkSessionProperties{}, // FNA passes null here (marked FIXME upstream); see BeginJoin.
-            NetworkSessionType::PlayerMatch, // FIXME upstream
-            MaxSupportedGamers,              // FIXME upstream
-            4,                                // FIXME upstream
-            actionMaxLocalGamers,
-            actionLocalGamers,
-            false // EndJoinInvited: this machine is joining someone else's session (see DEFERRED.md item #20)
-        );
-        return activeSession_;
+        // BeginJoinInvited always refuses, so no IAsyncResult can ever have come from it. Any
+        // result reaching here was produced by a different Begin* call, which is exactly what
+        // XNA's ArgumentException for this parameter means. Completing it as an invited join --
+        // as this used to, by hardcoding a PlayerMatch session -- would have made EndJoinInvited
+        // a way around the refusal, since a BeginCreate result also compares equal to
+        // activeAction_.
+        throw System::ArgumentException("result");
     }
 }

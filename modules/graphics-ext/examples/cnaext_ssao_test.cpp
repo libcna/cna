@@ -40,6 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -108,12 +109,32 @@ class SsaoExample : public Game
     /// where occlusion must appear; a frame with no step must come back unoccluded.
     static std::unique_ptr<Texture2D> MakeDepth(GraphicsDevice& device, bool withStep)
     {
+        const auto depthTexel = [&](const float depth)
+        {
+            if (!CNA::Graphics::DepthNormalPrepass::usesPackedDepthEXT(device))
+            {
+                const int value = static_cast<int>(std::clamp(depth, 0.0f, 1.0f) * 255.0f + 0.5f);
+                return Color(value, value, value, 255);
+            }
+            float r = 0.0f;
+            float g = 0.0f;
+            float b = 0.0f;
+            float a = 0.0f;
+            CNA::Graphics::DepthNormalPrepass::packDepth(depth, r, g, b, a);
+            const auto channel = [](const float value)
+            {
+                return static_cast<int>(std::clamp(value, 0.0f, 1.0f) * 255.0f + 0.5f);
+            };
+            return Color(channel(r), channel(g), channel(b), channel(a));
+        };
+
         auto texture = std::make_unique<Texture2D>(device, kFrame, kFrame);
-        std::vector<Color> pixels(static_cast<std::size_t>(kFrame) * kFrame, Color::White);
+        std::vector<Color> pixels(
+            static_cast<std::size_t>(kFrame) * kFrame, depthTexel(1.0f));
         if (withStep)
             for (int y = 0; y < kFrame; ++y)
                 for (int x = 0; x < kFrame / 2; ++x)
-                    pixels[static_cast<std::size_t>(y) * kFrame + x] = Color(60, 60, 60, 255);
+                    pixels[static_cast<std::size_t>(y) * kFrame + x] = depthTexel(60.0f / 255.0f);
         texture->SetData(pixels.data(), static_cast<int>(pixels.size()));
         return texture;
     }

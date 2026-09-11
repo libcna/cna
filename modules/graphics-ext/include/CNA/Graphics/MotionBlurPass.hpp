@@ -26,11 +26,11 @@ namespace CNA::Graphics {
      * image and the camera, and putting that position through the *previous* frame's camera says
      * where it used to be on screen. The difference is its velocity, and the pass blurs along it.
      *
-     * **This is camera motion only.** A turning or advancing camera blurs correctly; a car crossing
-     * a static shot does not, because nothing in the depth image says the car moved rather than the
-     * world. Per-object velocity needs a third prepass output and a previous world matrix per draw,
-     * which is a contract change on the application -- `plans/plan_modern.md` `MOD-2033` -- rather than
-     * something this pass can infer.
+     * Camera motion works from depth alone. Per-object motion is an opt-in upgrade: when
+     * @ref PostProcessContext::sourceVelocity is supplied, written texels replace camera
+     * reconstruction with the prepass's combined object-and-camera velocity. Producing that image
+     * requires a third prepass output and a previous world matrix per draw, the application
+     * contract described by `plans/plan_modern.md` `MOD-2033`.
      *
      * The first frame after a start or a resize has no history, and the pass leaves it alone rather
      * than blurring it along an arbitrary direction.
@@ -38,20 +38,41 @@ namespace CNA::Graphics {
     class MotionBlurPass final : public PostProcessPass
     {
     public:
-        /** @brief Creates the pass and compiles its shader. @param device The device to render with. */
+        /**
+         * @brief Creates the pass and selects its portable shader package.
+         *
+         * @param device The device to render with.
+         */
         explicit MotionBlurPass(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device);
         /** @brief Destroys the pass and its shader. */
         ~MotionBlurPass() override;
 
-        /** @brief Blurs @ref PostProcessContext::source along its motion. @param context The images, cameras and size. */
+        /**
+         * @brief Blurs @ref PostProcessContext::source along its motion.
+         *
+         * @param context The images, cameras and size.
+         */
         void apply(const PostProcessContext& context) override;
-        /** @brief Returns `"MotionBlur"`. */
+        /**
+         * @brief Returns the stable pass name.
+         *
+         * @return `"MotionBlur"`.
+         */
         [[nodiscard]] const std::string& getName() const override;
-        /** @brief Returns whether this renderer can run the pass. @param device The device queried. @return True when its shader compiled. */
+        /**
+         * @brief Returns whether this renderer can run the pass.
+         *
+         * @param device The device queried.
+         * @return True when the renderer selects and accepts the packaged shader.
+         */
         [[nodiscard]] bool isSupported(
             Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) const override;
 
-        /** @brief Returns how much of a pixel's movement is smeared. */
+        /**
+         * @brief Returns how much of a pixel's movement is smeared.
+         *
+         * @return The current shutter fraction.
+         */
         [[nodiscard]] float getStrength() const;
         /**
          * @brief Sets how much of a pixel's movement is smeared.
@@ -64,7 +85,11 @@ namespace CNA::Graphics {
          */
         void setStrength(float value);
 
-        /** @brief Returns the furthest a pixel may be smeared, in screen fractions. */
+        /**
+         * @brief Returns the furthest a pixel may be smeared, in screen fractions.
+         *
+         * @return The current maximum distance.
+         */
         [[nodiscard]] float getMaxDistance() const;
         /**
          * @brief Sets the furthest a pixel may be smeared, in screen fractions.
@@ -82,6 +107,7 @@ namespace CNA::Graphics {
     private:
         std::unique_ptr<FullscreenPass> fullscreen_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> effect_;
+        bool packedDepth_ = true;
         float strength_    = 0.0f;
         float maxDistance_ = 0.05f;
     };

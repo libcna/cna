@@ -84,13 +84,13 @@ Before the smaller caveats below — these two are the ones most likely to block
 - **`.xnb` is supported for the registered built-in readers**, including the general
   `EffectReader`. Reflective custom readers and some media/surface formats remain explicit gaps;
   consult `docs/xnb-content-pipeline-support.md` before assuming every asset type is portable.
-- **`Effect(GraphicsDevice&, byte[])` is implemented on FNA3D.** The input must be compiled
+- **`Effect(GraphicsDevice&, byte[])` is implemented on five renderer families.** The input must be compiled
   Direct3D 9 Effect Framework bytecode (`.fxb` or an XNB Effect payload), not HLSL `.fx` source and
   not MonoGame MGFX. Public parameters, techniques/passes, cloning, pass state, general 3D draws,
-  and `SpriteBatch` use the native FNA3D/MojoShader runtime. Other renderers currently report
-  `CompiledEffects == false`, so use FNA3D, SDL_GPU or the EasyGL/OpenGL family (the latter two
-  need `CNA_SDL_GPU_COMPILED_EFFECTS`/`CNA_EASYGL_COMPILED_EFFECTS` at configure time), or keep a
-  renderer-specific CNAEXT `ShaderEffect` path.
+  and `SpriteBatch` use the native MojoShader-backed runtime. Use FNA3D (always enabled), or enable
+  `CNA_SDL_GPU_COMPILED_EFFECTS`, `CNA_EASYGL_COMPILED_EFFECTS`,
+  `CNA_VULKAN_COMPILED_EFFECTS`, or `CNA_DIRECTX11_COMPILED_EFFECTS` for the matching renderer.
+  Otherwise keep a renderer-specific CNAEXT `ShaderEffect` path.
 
 ## What has caveats — read this before porting anything using these
 
@@ -118,7 +118,12 @@ Real, currently-open caveats worth knowing about instead:
   garbage state.
 - **EasyGL: a full-backbuffer `SpriteBatch` draw before any 3D draw in the same frame breaks that
   frame's 3D rendering** (Task 933) — investigated, root cause not yet isolated.
-- **Vulkan `RasterizerState.DepthBias` has no effect** — one isolated, unresolved case.
+- ~~**Vulkan `RasterizerState.DepthBias` has no effect**~~ — **withdrawn 2026-09-06.** Measured in
+  `plans/plan_vulkan.md` §7.4: `Vulkan_DepthBias` was a **test** written against OpenGL's depth
+  range, not a renderer defect. The renderer drives real dynamic `vkCmdSetDepthBias` from ten
+  pipeline sites. Kept struck through rather than deleted: a known-issues list that warns readers
+  away from a working feature does the same harm as one that hides a broken one, and someone who
+  remembers this entry should be able to see it was retracted (`VULKAN-481`).
 - **Bgfx: `DrawIndexedPrimitivesEx`'s non-wireframe path silently discards `startIndex`/`baseVertex`**
   (Task 954) — not hit by any current CNA sample (every `Model`/`ModelMeshPart` owns its own buffer
   starting at 0), but affects a genuine sub-range indexed draw if your game does one.

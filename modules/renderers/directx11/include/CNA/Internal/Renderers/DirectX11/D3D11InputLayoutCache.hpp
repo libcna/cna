@@ -13,13 +13,16 @@
 // (design decision 4: D3DCommon only holds what's genuinely shared).
 
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DVertexFormatHelper.hpp"
 
 #include <d3d11.h>
 #include <wrl/client.h>
 
 #include <cstddef>
 #include <map>
+#include <tuple>
 #include <utility>
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX11
 {
@@ -40,11 +43,28 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11InputLayout> GetOrCreate(ID3D11Device* device, D3DShaderVariant variant,
                                               std::size_t strideInBytes);
 
+        /// Returns a cached layout built from the caller's declaration, keyed by its complete
+        /// value so equal strides with different element semantics cannot alias.
+        ComPtr<ID3D11InputLayout> GetOrCreate(
+            ID3D11Device* device, D3DShaderVariant variant, std::size_t strideInBytes,
+            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements);
+
+        /// Returns a cached layout whose elements already carry their native stream slots and
+        /// per-instance step rates. The complete stream shape participates in the cache key.
+        ComPtr<ID3D11InputLayout> GetOrCreate(
+            ID3D11Device* device, D3DShaderVariant variant, std::size_t strideInBytes,
+            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& elements,
+            const std::vector<CNA::Internal::Renderers::D3DCommon::D3DVertexInputElement>&
+                inputElements);
+
         /// Drops every cached layout (CNAEXT -- device-lost recovery, DX-27, will need this once
         /// it does full three-lifetime-group teardown/recreation).
         void Clear() { cache_.clear(); }
 
     private:
-        std::map<std::pair<int, std::size_t>, ComPtr<ID3D11InputLayout>> cache_;
+        using Key = std::tuple<int, std::size_t,
+            CNA::Internal::Renderers::D3DCommon::D3DVertexDeclarationKey,
+            CNA::Internal::Renderers::D3DCommon::D3DVertexInputLayoutKey>;
+        std::map<Key, ComPtr<ID3D11InputLayout>> cache_;
     };
 }

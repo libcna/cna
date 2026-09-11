@@ -135,7 +135,7 @@ namespace CNA::Internal::Renderers::Canvas
         RendererSurfaceInfo surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         std::shared_ptr<CanvasRendererState> state_ = std::make_shared<CanvasRendererState>();
     };
 }

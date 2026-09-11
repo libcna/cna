@@ -171,10 +171,11 @@ namespace
     constexpr Contract kContract{"BGFX", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_RENDERER_VULKAN)
-    // `msaaCubeTargets` false: Task 903 deliberately piggybacks a cube target's sample count on
-    // the renderer's own global `sampleCount_`, so a cube target multisamples only when the
-    // BACKBUFFER was created multisampled -- which this test does not request. The applied count is
-    // still asserted against this claim below rather than assumed.
+    // `msaaCubeTargets` true since plan_vulkan.md VULKAN-216: a cube target's sample count is its
+    // OWN. Task 903 piggybacked it on the renderer's global `sampleCount_`, so a cube multisampled
+    // only when the BACKBUFFER was created multisampled -- which this test does not request, and
+    // the applied count came back 0. It is now whatever the DEVICE can give for the count this
+    // target asked for. The applied count is still asserted against the claim rather than assumed.
     // `preservesOnRebind` true since REMED-GFX-136: IGraphicsRenderer::CreateRenderTargetCube now
     // carries a `preserveContents` flag, so VulkanRenderTargetCubeRenderer builds its face
     // framebuffers against GetOrCreateRTRenderPass(depthFmt, !preserveContents) instead of
@@ -182,7 +183,7 @@ namespace
     // own full battery; what U1/U2 below keep is the single check that a preserved face is exactly
     // what GetData reports.
     constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
-                                 true, false, Support::Exact, MipTargets::Real, true, true, false, false, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_RENDERER_WEBGPU)
     // `mipMapCubeTargets` Real / `mipLevel` Exact: WEBGPU-114 builds a real mip chain for a
     // mipMap=true RenderTargetCube -- the colour texture carries the full chain and each face is
@@ -190,8 +191,12 @@ namespace
     // so GetData at level > 0 returns real downsampled content. `preservesOnRebind` true since
     // REMED-GFX-136: RenderPendingDrawsToRenderTargetCubeFace() no longer hardcodes WGPULoadOp_Clear,
     // it uses the same `clearPending || !preserveContents` choice as its RenderTarget2D sibling.
+    // `msaaCubeTargets` TRUE as of WEBGPU-165: the per-instance multiSampleCount argument used to be
+    // discarded (every pipeline baked one renderer-global count until WEBGPU-197), so a standalone
+    // MSAA request degraded to single-sample; it is now honoured, clamped down to a count the
+    // adapter offers.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Exact,
-                                 true, false, Support::Exact, MipTargets::Real, true, true, false, false, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};

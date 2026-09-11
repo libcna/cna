@@ -153,12 +153,27 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// rather than reinterpreted. All five GL profiles share that one implementation; the reading was
 /// taken on OPENGLES3, and a profile that diverges fails its own run and says so.
 ///
-/// This is not the same as "the stock program is chosen from the declaration". It is not --
-/// REMED-GFX-217 is still open, and the stride cases that can be ambiguous have to ask the
-/// declaration by hand (see REMED-GFX-234's stride-32 case).
+/// This is not the same as "the stock program is chosen from the declaration". On the GL profiles
+/// it is not -- REMED-GFX-217 is still open there, and the stride cases that can be ambiguous have
+/// to ask the declaration by hand (see REMED-GFX-234's stride-32 case).
+///
+/// plans/plan_webgpu.md WEBGPU-155 added WebGPU, and there it IS both: `SelectStockVertexShapeEXT`
+/// chooses the stock family from the declaration's semantics and
+/// `ResolveStockVertexLayoutForDrawEXT` binds each of that family's inputs at the declared
+/// element's own offset and format, with the stride surviving only as the pipeline's arrayStride.
+/// The skinned, PBR and instanced routes were deliberately left on the stride table and keep the
+/// guard; none of the cases in this matrix reaches them.
+///
+/// plans/plan_vulkan.md VULKAN-146: Vulkan now does the same. Its BasicEffect-family pipelines
+/// take their VkVertexInputAttributeDescription offsets from the declaration's own elements,
+/// matched by (usage, usageIndex), and the layout is part of the pipeline key so two declarations
+/// of one stride cannot share a pipeline. Stride 32 asks the declaration for a normal, exactly as
+/// REMED-GFX-234 describes above. The families this plan has not converted yet -- alpha test, dual
+/// texture, environment map, skinned, PBR, instanced -- still infer from the stride and still
+/// refuse by name what they cannot express; none of the cases below reaches them.
 [[nodiscard]] inline bool TranslatesDeclarations()
 {
-    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2);
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan);
 }
 
 

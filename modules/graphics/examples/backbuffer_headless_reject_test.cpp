@@ -51,9 +51,12 @@
 #include <cstring>
 #include <sys/wait.h>
 #include <unistd.h>
-#define CNA_GFX162_CAN_FORK 1
+#define CNA_GFX162_CAN_ISOLATE 1
+#elif defined(_WIN32)
+#include "common/WindowsProcessIsolation.hpp"
+#define CNA_GFX162_CAN_ISOLATE 1
 #else
-#define CNA_GFX162_CAN_FORK 0
+#define CNA_GFX162_CAN_ISOLATE 0
 #endif
 
 using namespace Microsoft::Xna::Framework;
@@ -81,6 +84,18 @@ namespace
     constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
+    constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_SDL_RENDERER)
+    constexpr const char* kRendererName = "SDL_RENDERER";
+    constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_DIRECTX9)
+    constexpr const char* kRendererName = "DIRECTX9";
+    constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_DIRECTX11)
+    constexpr const char* kRendererName = "DIRECTX11";
+    constexpr bool kRasterizes = true;
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr const char* kRendererName = "DIRECTX12";
     constexpr bool kRasterizes = true;
 #elif defined(CNA_RENDERER_LLGL)
     constexpr const char* kRendererName = "LLGL";
@@ -533,7 +548,7 @@ namespace
         "R1", "R2", "R3", "R4", "R5", "R6", "D1", "P1", "P2", "P3", "P4", "P5"
     };
 
-#if CNA_GFX162_CAN_FORK
+#if CNA_GFX162_CAN_ISOLATE
     constexpr unsigned kLegTimeoutSeconds = 180;
 
     // Matches CNA::Examples::kSkipExitCode (common/PixelTestGame.hpp) -- a leg that exits with this
@@ -548,6 +563,7 @@ namespace
         crashed = false;
         skipped = false;
         std::string arg = std::string("--leg=") + legId;
+#if defined(__unix__) || defined(__APPLE__)
         const pid_t pid = fork();
         if (pid < 0) { std::printf("[FAIL] supervisor: fork() failed for leg %s\n", legId); return false; }
         if (pid == 0)
@@ -592,6 +608,37 @@ namespace
         std::printf("[FAIL] leg %s: neither exited nor signalled (status %d)\n", legId, status);
         std::fflush(stdout);
         return false;
+#else
+        const auto child = CNA::Examples::RunWindowsChild(
+            exePath, arg, kLegTimeoutSeconds * 1000u);
+        if (child.outcome == CNA::Examples::WindowsChildOutcome::TimedOut)
+        {
+            std::printf("[TIMEOUT] leg %s: no result within %u s\n",
+                        legId, kLegTimeoutSeconds);
+            std::fflush(stdout);
+            return false;
+        }
+        if (child.outcome != CNA::Examples::WindowsChildOutcome::Exited)
+        {
+            std::printf("[FAIL] supervisor: Win32 child operation failed for leg %s (error %lu)\n",
+                        legId, static_cast<unsigned long>(child.systemError));
+            std::fflush(stdout);
+            return false;
+        }
+        if (child.exitCode == 0) return true;
+        if (child.exitCode == kLegSkipExitCode)
+        {
+            skipped = true;
+            std::printf("[SKIP] leg %s: exited %d\n", legId, kLegSkipExitCode);
+            std::fflush(stdout);
+            return false;
+        }
+        crashed = CNA::Examples::IsWindowsAbnormalExit(child.exitCode);
+        std::printf("[%s] leg %s: exited %lu\n", crashed ? "CRASH" : "FAIL", legId,
+                    static_cast<unsigned long>(child.exitCode));
+        std::fflush(stdout);
+        return false;
+#endif
     }
 #endif
 }
@@ -605,7 +652,7 @@ int main(int argc, char** argv)
         if (a.rfind("--leg=", 0) == 0) onlyLeg = a.substr(6);
     }
 
-#if CNA_GFX162_CAN_FORK
+#if CNA_GFX162_CAN_ISOLATE
     if (onlyLeg.empty())
     {
         std::printf("[INFO] REMED-GFX-162 supervisor: %zu legs, each in its own process\n",

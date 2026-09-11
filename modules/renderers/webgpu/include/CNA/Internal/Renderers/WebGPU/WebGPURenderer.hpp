@@ -1,8 +1,16 @@
 #pragma once
 
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+// plans/plan_webgpu.md WEBGPU-167: the compiled-effect runtime's types appear in this renderer's own
+// members and signatures. Same arrangement VulkanRenderer.hpp uses, and for the same reason: the
+// runtime header depends on no renderer type, so there is no cycle.
+#include "CNA/Internal/Renderers/WebGPU/WebGPUCompiledEffect.hpp"
+#endif
+
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "CNA/Internal/Graphics/StockVertexSemantics.hpp"
 
 #if __has_include(<webgpu/webgpu.h>)
 #include <webgpu/webgpu.h>
@@ -15,6 +23,7 @@
 #endif
 
 #include <array>
+#include <functional>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -131,7 +140,31 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] virtual WebGPUSampledTextureEXT SampledCube() const = 0;
     };
 
-    class WebGPUTextureRenderer final : public ITextureRenderer, public IWebGPUSamplable
+    /**
+     * @brief A renderer-owned object holding native handles that belong to the current `WGPUDevice`.
+     *
+     * `WEBGPU-182`. A device loss destroys the device, and every handle made from it dies with it.
+     * The renderer keeps one registry of these so a loss can release them all and a restore can
+     * rebuild them, and so a resource that OUTLIVES the renderer can be told to stop pointing at it.
+     *
+     * A class implements this only when it can genuinely rebuild itself from data CNA still holds.
+     * The kinds that cannot are counted instead, and `DebugSimulateContextLoss()` refuses by name
+     * while any of them is alive rather than leaving a dead handle for a caller to trip over.
+     */
+    class IWebGPUDeviceResourceEXT
+    {
+    public:
+        virtual ~IWebGPUDeviceResourceEXT() = default;
+        /** @brief Releases every native handle made from the current device. */
+        virtual void ReleaseDeviceObjectsEXT() = 0;
+        /** @brief Rebuilds those handles on the new device, from the data CNA retained. */
+        virtual void RecreateAfterDeviceLossEXT() = 0;
+        /** @brief Forgets the renderer, for a resource that outlives it. */
+        virtual void DetachOwnerEXT() = 0;
+    };
+
+    class WebGPUTextureRenderer final : public ITextureRenderer, public IWebGPUSamplable,
+                                        public IWebGPUDeviceResourceEXT
     {
     public:
         WebGPUTextureRenderer(WebGPURenderer& owner, const ImageData& data);
@@ -145,6 +178,32 @@ namespace CNA::Internal::Renderers::WebGPU
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        /**
+         * @brief Keeps a reference to the framework's own CPU pixel buffer for this texture.
+         *
+         * `WEBGPU-181`: the bytes a device recreate would re-upload. `Texture2D` owns the buffer and
+         * hands it here; holding a `shared_ptr` to it costs nothing while the texture lives, because
+         * it is the SAME allocation `Texture2D::cpuPixels_` already holds -- no copy is made. The
+         * reference is dropped when `SetContextRecoveryEnabled(false)` says nothing will ever need
+         * re-uploading, which is what lets a game that never wants recovery pay nothing for it.
+         *
+         * @param pixels The shared level-0 RGBA buffer, or null.
+         */
+        void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override;
+
+        /** @brief The shared CPU pixels, or null. @return The retained buffer. */
+        [[nodiscard]] const std::shared_ptr<std::vector<uint8_t>>& SharedCpuPixelsEXT() const
+        {
+            return cpuPixels_;
+        }
+
+        /** @brief `WEBGPU-182`: releases the native handles this object made from the device. */
+        void ReleaseDeviceObjectsEXT() override;
+        /** @brief `WEBGPU-182`: rebuilds them on the new device. */
+        void RecreateAfterDeviceLossEXT() override;
+        /** @brief `WEBGPU-182`: forgets the renderer. */
+        void DetachOwnerEXT() override { owner_ = nullptr; }
+
         /// WEBGPU-51: real CPU readback of an arbitrary Texture2D renderer, via the same staged
         /// MAP_READ-buffer/aligned-row/async-map-and-poll technique WEBGPU-91's ReadBackbuffer()
         /// and WebGPURenderTargetRenderer::GetData() already established -- copies the WHOLE
@@ -171,6 +230,9 @@ namespace CNA::Internal::Renderers::WebGPU
         /// REMED-GFX-167: built once, at construction; handed to every deferred command that
         /// samples this texture so the native handles outlive this object when one does.
         std::shared_ptr<const WebGPUSampledResourceEXT> sampled_;
+        /// WEBGPU-181: the framework's own level-0 pixels, shared rather than copied. Empty unless
+        /// Texture2D handed them over AND context recovery is enabled.
+        std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
@@ -215,11 +277,12 @@ namespace CNA::Internal::Renderers::WebGPU
     /// itself does not touch any already-live VulkanRenderTargetRenderer either. This is expected
     /// to be rare in practice (games normally finish GraphicsDeviceManager.ApplyChanges() before
     /// LoadContent() creates any RenderTarget2D instances).
-    class WebGPURenderTargetRenderer final : public IRenderTargetRenderer, public IWebGPUSamplable
+    class WebGPURenderTargetRenderer final : public IRenderTargetRenderer, public IWebGPUSamplable, public IWebGPUDeviceResourceEXT
     {
     public:
         WebGPURenderTargetRenderer(WebGPURenderer& owner, int width, int height,
-                                  int depthFormat, bool preserveContents);
+                                  int depthFormat, bool preserveContents, bool mipMap = false,
+                                  int multiSampleCount = 0, int surfaceFormat = 0);
         ~WebGPURenderTargetRenderer() override;
 
         WebGPURenderTargetRenderer(const WebGPURenderTargetRenderer&) = delete;
@@ -245,19 +308,51 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUTextureView View() const override { return colorView_; }
         [[nodiscard]] WebGPUSampledTextureEXT Sampled() const override { return {colorView_, sampled_}; }
         [[nodiscard]] WGPUTextureView DepthView() const { return depthView_; }
+        /**
+         * @brief WEBGPU-164: this target's mip-chain length; 1 unless it was created with mipMap.
+         *
+         * `RenderPendingDrawsToRenderTarget` regenerates levels 1.. from the just-rendered level 0
+         * when this is greater than one, which is FNA3D's `ResolveTarget` timing and the same rule
+         * `WebGPURenderTargetCubeRenderer` already follows per face.
+         */
+        [[nodiscard]] int LevelCount() const { return levelCount_; }
+        /** @brief WEBGPU-164: the colour texture itself, for the mip-regeneration cascade. */
+        [[nodiscard]] WGPUTexture ColorTexture() const { return colorTexture_; }
         [[nodiscard]] bool PreserveContents() const { return preserveContents_; }
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
         /// WEBGPU-58: the actual render-pass colour attachment to draw into -- the multisampled
         /// texture's view when this instance is multisampled, otherwise the same single-sample
         /// colorView_ that View() returns (identical to before MSAA existed).
-        [[nodiscard]] WGPUTextureView ColorAttachmentView() const { return msaaColorView_ != nullptr ? msaaColorView_ : colorView_; }
+        /// WEBGPU-164: `colorLevel0View_`, not `colorView_`. A render-pass colour attachment must
+        /// name exactly one mip level, and `colorView_` spans the whole chain so it can be SAMPLED.
+        /// They are the same view's worth of texels on a single-level target, which is why this
+        /// distinction did not exist before mipped targets did.
+        [[nodiscard]] WGPUTextureView ColorAttachmentView() const { return msaaColorView_ != nullptr ? msaaColorView_ : colorLevel0View_; }
         /// WEBGPU-58: the render pass's resolveTarget -- colorView_ when multisampled (wgpu-native
         /// resolves into it automatically as the pass ends), or nullptr otherwise (no resolve
         /// needed/possible for a single-sample attachment).
-        [[nodiscard]] WGPUTextureView ResolveTargetView() const { return msaaColorView_ != nullptr ? colorView_ : nullptr; }
+        [[nodiscard]] WGPUTextureView ResolveTargetView() const { return msaaColorView_ != nullptr ? colorLevel0View_ : nullptr; }
         /// REMED-GFX-102: exact colour-attachment format captured by this target object. Sprite
         /// pipeline identity uses format compatibility, never this target object's identity.
         [[nodiscard]] WGPUTextureFormat ColorFormat() const { return colorFormat_; }
+
+        /** @brief `WEBGPU-182`: releases every native handle this target made from the device. */
+        void ReleaseDeviceObjectsEXT() override;
+        /** @brief `WEBGPU-182`: rebuilds them, EMPTY, which is XNA's own rule for a device reset. */
+        void RecreateAfterDeviceLossEXT() override;
+        /** @brief `WEBGPU-182`: forgets the renderer. */
+        void DetachOwnerEXT() override { owner_ = nullptr; }
+
+    private:
+        /** @brief `WEBGPU-182`: the native-object creation the constructor and a recreate share. */
+        void CreateNativeObjectsEXT();
+        /// The four constructor arguments, kept so a recreate can build the same objects again.
+        int requestedDepthFormat_ = 0;
+        bool requestedMipMap_ = false;
+        int requestedMultiSampleCount_ = 0;
+        int requestedSurfaceFormat_ = 0;
+
+    public:
         /// WEBGPU-39: this target's depth attachment WGPU format (Undefined for DepthFormat::None) and
         /// whether it carries a stencil aspect. Pipelines drawn into this target declare exactly this.
         [[nodiscard]] WGPUTextureFormat DepthFormat() const { return depthFormat_; }
@@ -270,7 +365,12 @@ namespace CNA::Internal::Renderers::WebGPU
         bool preserveContents_ = false;
         WGPUTextureFormat colorFormat_ = WGPUTextureFormat_Undefined;
         WGPUTexture colorTexture_ = nullptr;
+        /// The SAMPLING view: every mip level, so a shader reading this target sees the whole chain.
         WGPUTextureView colorView_ = nullptr;
+        /// WEBGPU-164: the RENDER-ATTACHMENT (and MSAA resolve) view, level 0 only.
+        WGPUTextureView colorLevel0View_ = nullptr;
+        /// WEBGPU-164: `CalculateMipLevels(width, height)` when created with mipMap, else 1.
+        int levelCount_ = 1;
         /// WEBGPU-39: mapped depth attachment format (Undefined = None, no depth texture created).
         WGPUTextureFormat depthFormat_ = WGPUTextureFormat_Depth24PlusStencil8;
         bool depthHasStencil_ = true;
@@ -304,7 +404,8 @@ namespace CNA::Internal::Renderers::WebGPU
     class WebGPUTextureCubeRenderer final : public ITextureCubeRenderer, public IWebGPUCubeSamplable
     {
     public:
-        WebGPUTextureCubeRenderer(WebGPURenderer& owner, int size, bool mipMap);
+        WebGPUTextureCubeRenderer(WebGPURenderer& owner, int size, bool mipMap,
+                                  int surfaceFormat = 0);
         ~WebGPUTextureCubeRenderer() override;
 
         WebGPUTextureCubeRenderer(const WebGPUTextureCubeRenderer&) = delete;
@@ -316,6 +417,26 @@ namespace CNA::Internal::Renderers::WebGPU
         /// Those rejections used to be `std::out_of_range`/`std::invalid_argument` thrown from a
         /// renderer, which escaped the public API as raw std exceptions instead of the shared
         /// layer's own deterministic `System::NotSupportedException`.
+        /**
+         * @brief WEBGPU-206: uploads one cube face's mip level as raw block-compressed blocks.
+         *
+         * `TextureCube::SetData`'s compressed overload has already validated block alignment and
+         * computed the exact payload size, so this performs the native copy and keeps the blocks as
+         * the authoritative store a readback would need.
+         *
+         * @param face Cube face index, 0..5.
+         * @param level Mip level.
+         * @param x Left edge in texels; must be 0.
+         * @param y Top edge in texels; must be 0.
+         * @param w Width in texels; must be the level's full size.
+         * @param h Height in texels; must be the level's full size.
+         * @param data The blocks.
+         * @param dataLength Size of @p data in bytes.
+         * @return Whether the whole level was stored.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(int face, int level, int x, int y, int w, int h,
+                                                const void* data, int dataLength) override;
+
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
         /// WEBGPU-113: real per-face CPU readback, closing this class's former no-op
@@ -336,14 +457,49 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUTextureView CubeView() const override { return cubeView_; }
         [[nodiscard]] WebGPUSampledTextureEXT SampledCube() const override { return {cubeView_, sampled_}; }
 
+        /**
+         * @brief Keeps a reference to the framework's own CPU pixels for one cube face.
+         *
+         * `WEBGPU-181`, the per-face spelling of `WebGPUTextureRenderer::ShareCpuPixels()` -- same
+         * purpose, same no-copy sharing, same drop when context recovery is off.
+         *
+         * @param face The cube face index, 0..5.
+         * @param pixels That face's shared level-0 RGBA buffer, or null.
+         */
+        void ShareCpuPixels(int face, std::shared_ptr<std::vector<uint8_t>> pixels) override;
+
+        /**
+         * @brief One face's shared CPU pixels, or null.
+         * @param face The cube face index, 0..5.
+         * @return The retained buffer for that face.
+         */
+        [[nodiscard]] const std::shared_ptr<std::vector<uint8_t>>& SharedCpuPixelsEXT(int face) const;
+
     private:
         WebGPURenderer* owner_ = nullptr;
         WGPUTexture texture_ = nullptr;
         WGPUTextureView cubeView_ = nullptr;
+        /// WEBGPU-181: the framework's own level-0 pixels, one entry per face, shared not copied.
+        std::array<std::shared_ptr<std::vector<uint8_t>>, 6> cpuPixels_{};
         /// REMED-GFX-167: see WebGPUTextureRenderer::sampled_.
         std::shared_ptr<const WebGPUSampledResourceEXT> sampled_;
         int size_ = 0;
         int mipLevels_ = 1;
+        /**
+         * @brief WEBGPU-206: this cube's requested `SurfaceFormat` and what it means natively.
+         *
+         * A cube used to be RGBA8 whatever it was asked for, which is why `WEBGPU-163` had to stop
+         * the format query promising otherwise. The pieces mirror `WebGPUTextureRenderer`'s exactly:
+         * `blockBytes_` is bytes per 4x4 block (8 for BC1, 16 for BC2/3/7) and `compressedLevels_`
+         * is the authoritative per-face, per-mip block store the framework's `GetData` reads back,
+         * because a compressed level cannot be recovered from the GPU as blocks on every backend.
+         */
+        int surfaceFormat_ = 0;
+        WGPUTextureFormat wgpuFormat_ = WGPUTextureFormat_RGBA8Unorm;
+        bool compressed_ = false;
+        int blockBytes_ = 4;
+        /// Indexed `[face * mipLevels_ + level]`, so one flat vector covers all six faces.
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 
     /// WEBGPU-114: off-screen render target backing a RenderTargetCube -- the cube-map sibling of
@@ -378,7 +534,8 @@ namespace CNA::Internal::Renderers::WebGPU
     {
     public:
         WebGPURenderTargetCubeRenderer(WebGPURenderer& owner, int size, int depthFormat,
-                                      bool preserveContents, bool mipMap);
+                                      bool preserveContents, bool mipMap,
+                                      int multiSampleCount = 0, int surfaceFormat = 0);
         ~WebGPURenderTargetCubeRenderer() override;
 
         WebGPURenderTargetCubeRenderer(const WebGPURenderTargetCubeRenderer&) = delete;
@@ -509,17 +666,31 @@ namespace CNA::Internal::Renderers::WebGPU
                                    void* data, int dataLength) const override;
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        /**
+         * @brief WEBGPU-160/169: the whole-volume view a shader samples this texture through.
+         *
+         * Created lazily, because until a compiled effect could sample a `Texture3D` no route in
+         * this renderer needed one -- which is exactly why `SamplerState.AddressW` had no
+         * observable pixel effect before `WEBGPU-169`.
+         */
+        [[nodiscard]] WGPUTextureView SampledView() const;
+#endif
 
     private:
         WebGPURenderer* owner_ = nullptr;
         WGPUTexture texture_ = nullptr;
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        mutable WGPUTextureView sampledView_ = nullptr;
+#endif
         int width_ = 0;
         int height_ = 0;
         int depth_ = 0;
         int mipLevels_ = 1;
     };
 
-    class WebGPUVertexBufferRenderer final : public IVertexBufferRenderer
+    class WebGPUVertexBufferRenderer final : public IVertexBufferRenderer,
+                                             public IWebGPUDeviceResourceEXT
     {
     public:
         WebGPUVertexBufferRenderer(WebGPURenderer& owner, int vertexCapacity);
@@ -551,6 +722,14 @@ namespace CNA::Internal::Renderers::WebGPU
         // per-frame render actually runs, so the bytes must be copied out now, not referenced.
         [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
 
+        /** @brief `WEBGPU-182`: releases the native handles this object made from the device. */
+        void ReleaseDeviceObjectsEXT() override;
+        /** @brief `WEBGPU-182`: rebuilds them on the new device. */
+        void RecreateAfterDeviceLossEXT() override;
+        /** @brief `WEBGPU-182`: forgets the renderer. */
+        void DetachOwnerEXT() override { owner_ = nullptr; }
+
+
     private:
         WebGPURenderer* owner_ = nullptr;
         WGPUBuffer buffer_ = nullptr;
@@ -562,7 +741,8 @@ namespace CNA::Internal::Renderers::WebGPU
         CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
     };
 
-    class WebGPUIndexBufferRenderer final : public IIndexBufferRenderer
+    class WebGPUIndexBufferRenderer final : public IIndexBufferRenderer,
+                                            public IWebGPUDeviceResourceEXT
     {
     public:
         WebGPUIndexBufferRenderer(WebGPURenderer& owner, int indexCapacity, bool thirtyTwoBit);
@@ -578,6 +758,14 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUBuffer Buffer() const { return buffer_; }
         // See WebGPUVertexBufferRenderer::ShadowData() for why this exists.
         [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
+
+        /** @brief `WEBGPU-182`: releases the native handles this object made from the device. */
+        void ReleaseDeviceObjectsEXT() override;
+        /** @brief `WEBGPU-182`: rebuilds them on the new device. */
+        void RecreateAfterDeviceLossEXT() override;
+        /** @brief `WEBGPU-182`: forgets the renderer. */
+        void DetachOwnerEXT() override { owner_ = nullptr; }
+
 
     private:
         void Upload(const void* data, int indexCount, bool dataIsThirtyTwoBit);
@@ -960,15 +1148,17 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
+            /// WEBGPU-154: `RasterizerState.FillMode == WireFrame` at this sprite's own public
+            /// Draw call, captured by value like every other per-sprite state. A wireframe sprite
+            /// is drawn as a 12-index line list over its own six vertices rather than as two
+            /// filled triangles; see `EnsureSpriteWireIndexBufferEXT`.
+            bool wireframe = false;
             // REMED-GFX-102: complete per-Begin BlendState + BlendFactor capture by value. No
             // BlendState pointer, live renderer state, texture identity, sprite identity, or target
             // object identity participates in replay or pipeline selection.
             WebGPUSpriteBlendSnapshot blend{};
-            // REMED-GFX-072: true when the Viewport active at enqueue time was a genuine
-            // sub-region of the target, in which case the vertices above are baked VIEWPORT-LOCAL
-            // (normalized by Viewport.Width/Height) instead of target-relative. This is purely the
-            // NDC-baking decision; where the sprite LANDS is driven by the snapshot below.
-            bool viewportCustom = false;
             // REMED-GFX-116: the complete Viewport active at this sprite's own public Draw call,
             // captured unconditionally. GFX-072 captured it only for a genuine sub-region, so a
             // sprite baked target-relative was still replayed under whatever viewport was live at
@@ -1002,6 +1192,9 @@ namespace CNA::Internal::Renderers::WebGPU
             /// WEBGPU-39: the active pass's depth attachment format (Undefined for DepthFormat::None).
             /// A sprite pipeline must declare the same depth format as the pass it draws into.
             WGPUTextureFormat depthFormat = WGPUTextureFormat_Depth24PlusStencil8;
+            /// WEBGPU-154: a wireframe sprite needs a LINE-LIST pipeline, which is a different
+            /// pipeline object rather than a different draw call, so it belongs in the key.
+            bool wireframe = false;
 
             [[nodiscard]] bool operator==(const SpritePipelineKey& other) const noexcept
             {
@@ -1013,7 +1206,8 @@ namespace CNA::Internal::Renderers::WebGPU
                     multiSampleMask == other.multiSampleMask &&
                     targetFormat == other.targetFormat && sampleCount == other.sampleCount &&
                     colorAttachmentCount == other.colorAttachmentCount &&
-                    depthFormat == other.depthFormat;
+                    depthFormat == other.depthFormat &&
+                    wireframe == other.wireframe;
             }
         };
 
@@ -1040,6 +1234,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 mix(static_cast<std::size_t>(key.sampleCount));
                 mix(static_cast<std::size_t>(key.colorAttachmentCount));
                 mix(static_cast<std::size_t>(key.depthFormat));
+                mix(key.wireframe ? 1u : 0u);
                 return hash;
             }
         };
@@ -1124,6 +1319,22 @@ namespace CNA::Internal::Renderers::WebGPU
             return transientBuffersCreatedEXT_;
         }
         /// WEBGPU-12/59: lifetime count of transient per-draw buffers served from the pool (reuses).
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-160: how many distinct native samplers the slot cache holds.
+         *
+         * `SamplerState.AddressW` is observable in PIXELS only where a renderer samples a volume
+         * texture, and this one has no public route that does (`IEffectRenderer::BindTexture3D` is
+         * unimplemented here). This counter is what makes the state's arrival measurable anyway:
+         * three draws that differ only in `AddressW` must create three distinct samplers, and a
+         * fourth repeating one of them must create none. Before the fix they collided onto a single
+         * cache entry, because `addressW` was in neither the key nor the descriptor.
+         *
+         * @return The number of cached slot samplers.
+         */
+        [[nodiscard]] std::size_t GetSlotSamplerCacheSizeEXT() const noexcept
+        {
+            return slotSamplerCache_.size();
+        }
         [[nodiscard]] std::size_t GetTransientBufferReuseCountEXT() const noexcept
         {
             return transientBuffersReusedEXT_;
@@ -1158,10 +1369,132 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
+        /**
+         * @brief WEBGPU-198: whether a `RenderTarget2D` may be created with @p surfaceFormat here.
+         *
+         * Probed, not tabulated: a 1x1 `WGPUTextureUsage_RenderAttachment` texture of the real
+         * native format is created inside a `WGPUErrorFilter_Validation` scope, the same technique
+         * `Supports4xMsaa()` uses, so the answer describes the adapter in front of us rather than a
+         * spec table. `Color` is `Supported` without a probe -- it is the swap chain's own format,
+         * which the renderer is already rendering into.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported, Unsupported, or Defer for a format with no render-target mapping.
+         */
+        [[nodiscard]] CNA::Internal::Renderers::RendererFormatVerdict
+        ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
+
+        /**
+         * @brief WEBGPU-198: the cached render-attachment probe behind
+         *        @ref ClassifyRenderTargetFormatEXT.
+         *
+         * @param format The native format to probe.
+         * @return Whether the device will create a render-attachment texture of it.
+         */
+        [[nodiscard]] bool ProbeRenderTargetFormatEXT(WGPUTextureFormat format) const;
+
+        /**
+         * @brief WEBGPU-200: whether 32-bit float colour targets may be blended into.
+         *
+         * The device feature, unless a test has forced it off -- see
+         * @ref DebugForceFloat32FeaturesAbsentEXT.
+         *
+         * @return Whether blending into an R32/RG32/RGBA32Float target is available.
+         */
+        [[nodiscard]] bool Float32BlendableEXT() const
+        {
+            return float32Blendable_ && !forceFloat32FeaturesAbsent_;
+        }
+
+        /**
+         * @brief WEBGPU-200: whether 32-bit float textures may be sampled with a filtering sampler.
+         *
+         * @return Whether `WGPUFeatureName_Float32Filterable` is in effect.
+         */
+        [[nodiscard]] bool Float32FilterableEXT() const
+        {
+            return float32Filterable_ && !forceFloat32FeaturesAbsent_;
+        }
+
+        /**
+         * @brief WEBGPU-200: makes this renderer behave as if the two float32 features were absent.
+         *
+         * Every adapter available to this project has both, so the refusal paths that depend on
+         * their absence would otherwise be unreachable code that no test ever executes -- a branch
+         * asserted only by reading it. This forces the flags off so those paths run; it does not
+         * remove the real device features, and what it therefore tests is CNA's own behaviour,
+         * which is the part that can be wrong.
+         *
+         * @param absent Whether to report both features absent.
+         */
+        CNAEXT void DebugForceFloat32FeaturesAbsentEXT(bool absent)
+        {
+            forceFloat32FeaturesAbsent_ = absent;
+        }
+
+        /**
+         * @brief WEBGPU-198: creates a `RenderTarget2D` in the format it was actually asked for.
+         *
+         * `IGraphicsRenderer`'s default forwards to the format-less overload and drops the
+         * argument, which is what let a target be classified in one format and allocated in
+         * another. A format this adapter refuses is refused here by name.
+         *
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param depthFormat XNA DepthFormat ordinal.
+         * @param preserveContents Whether the target's contents survive a rebind.
+         * @param mipMap Whether to allocate and regenerate a mip chain.
+         * @param multiSampleCount This target's own requested sample count.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return The target renderer.
+         */
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
+
+        /**
+         * @brief WEBGPU-198: the cube twin of @ref CreateRenderTarget2DEXT.
+         *
+         * @param size Edge length in pixels.
+         * @param depthFormat XNA DepthFormat ordinal.
+         * @param preserveContents Whether the target's contents survive a rebind.
+         * @param mipMap Whether to allocate and regenerate a mip chain per face.
+         * @param multiSampleCount This target's own requested sample count.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return The cube target renderer.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
+
+        /**
+         * @brief WEBGPU-172: how many `VertexBufferBinding`s of one input rate this device takes.
+         *
+         * Derived from the device's own `maxVertexBuffers` limit, less the one slot reserved for
+         * the neutral record, and clamped to the resolver's stream table so a binding array is
+         * never silently truncated.
+         *
+         * @return The maximum number of streams of a single input rate.
+         */
+        [[nodiscard]] int GetMaxVertexStreams() const override;
+
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void GetViewportSize(int& width, int& height) override;
+        /**
+         * @brief `WEBGPU-162`: the PHYSICAL rectangle the default viewport occupies.
+         *
+         * `GetViewportSize()` answers with the LOGICAL size, which is what `GraphicsDevice.Viewport`
+         * reports to a game. This is its physical counterpart -- the rectangle
+         * `GraphicsDevice::UpdateViewportFromWindow()` pushes at the rasterizer. The inherited
+         * default returns `(0, 0, GetViewportSize())`, i.e. the logical size used as if it were
+         * physical pixels, which is correct only for a renderer that has no virtual resolution --
+         * and this one always has one, because `GraphicsDevice::Reset()` sets it to the backbuffer
+         * size on every device creation and the default presentation mode is
+         * `FixedHeightDynamicWidth`.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
@@ -1226,6 +1559,46 @@ namespace CNA::Internal::Renderers::WebGPU
         // reaches the same table. Storage-only here; actually read by every texture-consuming Queue*Draw() at
         // queue time for slot 0 (see each command's textureFilter/addressU/addressV capture).
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-160: the third addressing axis of a `SamplerState`.
+         *
+         * Separate from `ApplySamplerState` in the interface because it is observable only where a
+         * renderer samples a volume texture, so each renderer adopts it explicitly. It was not
+         * overridden here, so `SamplerState.AddressW` was discarded in silence -- including for
+         * `Texture3D`, where it is the only axis that matters.
+         *
+         * @param slot The texture slot, 0-15.
+         * @param addressW The raw `TextureAddressMode` ordinal for W.
+         */
+        void ApplySamplerAddressW(int slot, int addressW) override;
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-161: `SamplerState.MaxMipLevel` reaches the sampler.
+         *
+         * `ApplySamplerMipState` was not overridden, so `MaxMipLevel` was discarded in silence.
+         * XNA's `MaxMipLevel` is the highest-resolution mip level sampling may use -- level 0 means
+         * "no restriction" -- which is `WGPUSamplerDescriptor::lodMinClamp`, the same mapping the
+         * reference renderer makes to `GL_TEXTURE_MIN_LOD` and FNA3D's SDL_GPU driver to `min_lod`.
+         *
+         * The `lodBias` argument is deliberately NOT consumed here: `WEBGPU-205` owns it, and it is
+         * an implementation task rather than a limitation, so nothing in this renderer may claim
+         * LOD bias is unsupported.
+         *
+         * @param slot The texture slot, 0-15.
+         * @param maxMipLevel The highest-resolution mip level sampling may use.
+         * @param lodBias `WEBGPU-205`'s, not consumed yet.
+         */
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-205: the routes that do not apply a sampler LOD bias.
+         *
+         * The state is implemented on every stock 3D route by WGSL `textureSampleBias`. Three
+         * routes do not carry it, and the row's rule is that no route may ignore it in silence --
+         * so they are named here rather than left for a caller to discover from pixels.
+         *
+         * @return The renderer-specific limitations text.
+         */
+        [[nodiscard]] std::string_view GetAdditionalLimitationsTextEXT() const override;
         // WEBGPU-80/81/29/30: scissor rect, viewport, blend constant and stencil reference are all
         // genuinely dynamic wgpu-native render-pass state (wgpuRenderPassEncoderSetScissorRect/
         // SetViewport/SetBlendConstant/SetStencilReference), exactly like Vulkan's own
@@ -1255,6 +1628,28 @@ namespace CNA::Internal::Renderers::WebGPU
         // other effects (alpha test/dual texture/env map/skinned) fall back to
         // DrawColoredPrimitives()/DrawIndexedColoredPrimitives(), replicating exactly what
         // IGraphicsRenderer's own default implementation already did before this override existed.
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-155: the ONE stock dispatch, shared by the indexed and
+         *        non-indexed entry points.
+         *
+         * Selects the stock family from the vertex declaration's semantics plus the effect state,
+         * then queues the matching draw. The skinned and PBR families were deliberately not
+         * converted by that task and keep the stride cascade plus the REMED-GFX-DECL-GUARD refusal.
+         *
+         * @param vb The draw's vertex buffer.
+         * @param ib The index buffer, or null for a non-indexed draw.
+         * @param world The world matrix.
+         * @param view The view matrix.
+         * @param projection The projection matrix.
+         * @param primitive The primitive type.
+         * @param primitiveCount How many primitives to draw.
+         * @param params The draw's effect state.
+         * @param route The route's name, for the declaration-guard diagnostic.
+         */
+        void DispatchStockDrawEXT(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+                                  const Matrix& world, const Matrix& view, const Matrix& projection,
+                                  PrimitiveType primitive, int primitiveCount,
+                                  const GpuDrawParams& params, const char* route);
         void DrawPrimitivesEx(const IVertexBufferRenderer& vb,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount,
@@ -1332,6 +1727,116 @@ namespace CNA::Internal::Renderers::WebGPU
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                               const std::string& fragSrc) override;
 
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-171: compiled XNA Effect Framework bytecode runs here.
+         *
+         * True only because the whole draw route exists: MojoShader's SPIR-V profile, the
+         * combined-image-sampler rewrite WGSL's shading model requires, MojoShader's four fixed
+         * descriptor sets as WebGPU bind groups, and the deferred-replay uniform snapshot. A
+         * capability that said true while a compiled draw fell through to a stock shader is exactly
+         * the defect `plans/plan_fx.md` `FX-080` removed from the other backends.
+         */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
+
+        /**
+         * @brief Creates the device-bound runtime for one compiled effect binary.
+         * @param effectCode Compiled Effect Framework bytes.
+         * @param effectCodeBytes Number of bytes at @p effectCode.
+         * @return The runtime; never null (it throws instead).
+         */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /**
+         * @brief CNAEXT. The shared MojoShader effect-backend context this renderer owns.
+         * @return The context, created on first use.
+         */
+        CNAEXT [[nodiscard]] WebGPUMojoShaderContextEXT* GetMojoShaderContextEXT();
+
+        /**
+         * @brief CNAEXT. How a compiled effect's finished SPIR-V is handed to WebGPU.
+         *
+         * plans/plan_webgpu.md WEBGPU-203. This is the ONE place the native and browser
+         * compiled-effect routes differ; everything above it -- Effect parsing, MojoShader,
+         * reflection, constants, samplers, techniques, vertex declarations, parameter snapshots,
+         * SpriteBatch, multi-pass -- is the same code.
+         */
+        enum class CompiledEffectShaderLanguageEXT
+        {
+            /**
+             * @brief Chained `WGPUShaderSourceSPIRV`. Native only; browser WebGPU has no such
+             *        shader source, because SPIR-V is not part of the WebGPU specification.
+             */
+            Spirv,
+            /** @brief WGSL translated from the same SPIR-V. The only route a browser can take. */
+            Wgsl,
+        };
+
+        /**
+         * @brief CNAEXT. The shader-module representation compiled effects currently use.
+         * @return `Wgsl` under Emscripten, where it is the only possibility; otherwise whatever
+         *         SetCompiledEffectShaderLanguageEXT() last selected, `Spirv` by default.
+         */
+        CNAEXT [[nodiscard]] CompiledEffectShaderLanguageEXT
+        GetCompiledEffectShaderLanguageEXT() const;
+
+        /**
+         * @brief CNAEXT. Selects the shader-module representation for compiled effects.
+         *
+         * Exists so a NATIVE build can execute the browser's route against the same fixtures,
+         * the same draws and the same expected pixels -- wgpu-native accepts WGSL, so the SPIR-V
+         * route is a usable oracle for the WGSL one. Under Emscripten the selection is fixed at
+         * `Wgsl` and this refuses anything else rather than silently ignoring it.
+         *
+         * @param language Representation to use for modules created after this call.
+         * @throws System::NotSupportedException if @p language cannot be executed by this build.
+         */
+        CNAEXT void SetCompiledEffectShaderLanguageEXT(CompiledEffectShaderLanguageEXT language);
+
+        /**
+         * @brief CNAEXT. Returns a shader module over @p words, creating it once per distinct body.
+         *
+         * Linking patches MojoShader's SPIR-V in place and the combined-sampler split rewrites it
+         * again, so the finished bytes -- not the shader object -- identify a module. A module
+         * copies its source, so one made here stays correct for a draw replayed at `Present()`.
+         *
+         * The words are SPIR-V in both routes: WGSL translation, when selected, happens here, so
+         * the caller never learns which language the module was built from.
+         *
+         * @param words Finished SPIR-V words.
+         * @param wordCount Number of words at @p words.
+         * @param hash Caller-computed identity of those words.
+         * @return The cached or newly created module.
+         * @throws std::runtime_error if the module cannot be created.
+         */
+        CNAEXT [[nodiscard]] WGPUShaderModule GetOrCreateCompiledEffectShaderModuleEXT(
+            const std::uint32_t* words, std::size_t wordCount, std::uint64_t hash);
+
+        /**
+         * @brief CNAEXT. The WGSL a compiled effect's SPIR-V translates to, for tests and tooling.
+         *
+         * @param words Finished SPIR-V words.
+         * @param wordCount Number of words at @p words.
+         * @return The WGSL source.
+         * @throws std::runtime_error naming the construct that could not be translated.
+         */
+        CNAEXT [[nodiscard]] static std::string TranslateCompiledEffectSpirvToWgslEXT(
+            const std::uint32_t* words, std::size_t wordCount);
+
+        /**
+         * @brief CNAEXT. Whether this renderer created @p texture and can sample it.
+         *
+         * `ITextureRenderer`, `ITexture3DRenderer` and `ITextureCubeRenderer` are three unrelated
+         * interfaces, so this cannot be answered by one pointer cast.
+         *
+         * @param texture Public texture to test.
+         * @return True if this renderer owns it.
+         */
+        CNAEXT [[nodiscard]] bool OwnsSampleableTextureEXT(
+            Microsoft::Xna::Framework::Graphics::Texture* texture) const;
+#endif
+
         /**
          * @brief WEBGPU-76: this renderer genuinely compiles and runs the WGSL source a
          * `ShaderEffect` carries (unlike Vulkan, which takes SPIR-V, or SOFTWARE/HEADLESS, which
@@ -1354,6 +1859,19 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
 
         /**
+         * @brief WEBGPU-206: whether a `TextureCube` transfers @p surfaceFormat as raw BC blocks.
+         *
+         * The same answer as the 2D query. A cube in WebGPU is a six-layer 2D texture plus a cube
+         * view, and the BC feature does not restrict block-compressed storage to non-array 2D, so
+         * there is no reason for the two to differ -- and while they did, `WEBGPU-163` had to refuse
+         * a BC cube at construction to stop the format query promising what `SetData` would refuse.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Whether a cube stores this format as blocks here.
+         */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(int surfaceFormat) const override;
+
+        /**
          * @brief WEBGPU-144 Phase 2: WebGPU keeps loaded block-compressed content compressed.
          *
          * The `Texture2D::FromStream` (DDS) and `.xnb` content loaders keep the raw DXT/BC blocks
@@ -1367,6 +1885,23 @@ namespace CNA::Internal::Renderers::WebGPU
 
         /** @brief WEBGPU-144: the BC formats this renderer stores natively are Supported; else Defer. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-163: the CUBE storage verdict, which is narrower here.
+         *
+         * `WEBGPU-144` made block-compressed `Texture2D` real, and `ClassifySurfaceFormatEXT`
+         * answers `Supported` for BC whenever the device enabled the feature. That one classifier
+         * served both kinds, but `CreateTextureCube` discards the format and
+         * `WebGPUTextureCubeRenderer` is RGBA8-only -- so `TextureCube(device, size, mipMap,
+         * SurfaceFormat::Dxt1)` CONSTRUCTED and then threw from every `SetData`. Refusing at
+         * construction is the interim honest state; `WEBGPU-206` is the parity state, because a
+         * cube is a six-layer 2D texture plus a cube view and nothing in
+         * `WGPUFeatureName_TextureCompressionBC` restricts it. This override must not outlive that
+         * row, and must never be cited as a platform limitation.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return `Unsupported` for a block-compressed format, otherwise the 2D verdict.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(int surfaceFormat) const override;
 
     private:
         friend class WebGPURenderTargetRenderer;
@@ -1388,12 +1923,40 @@ namespace CNA::Internal::Renderers::WebGPU
 
         void CreateSurface();
         void RequestAdapterAndDevice();
+
+        /**
+         * @brief Requests a fresh device and queue from the adapter this renderer already holds.
+         *
+         * `WEBGPU-182`, split out of @ref RequestAdapterAndDevice so a recovery can re-run the
+         * device half alone. `WEBGPU-180` measured that the instance, the adapter and the surface
+         * all survive a device replace, so a recovery never has to rebuild them.
+         */
+        void RequestDeviceOnlyEXT();
+
+        /**
+         * @brief Releases every native object this renderer owns that belongs to the current device.
+         *
+         * `WEBGPU-182`. Everything created FROM `device_`: the stock shader modules and their
+         * pipeline caches, the mip-blit set, the depth and MSAA attachments, the sampler cache, the
+         * transient buffer pool, the readback and occlusion buffers, and the default textures.
+         * Every pointer it releases is also nulled, so the ordinary lazy re-creation paths rebuild
+         * them on the next use -- which is what makes this reusable by both the destructor and a
+         * device recreate. The instance, adapter and surface are NOT touched.
+         */
+        void ReleaseDeviceOwnedObjectsEXT();
         void ConfigureSurface(bool force = false);
         void CreateSpriteResources();
         void DestroySpriteResources();
         [[nodiscard]] WebGPUSpriteBlendSnapshot CaptureSpriteBlendSnapshot() const;
         [[nodiscard]] WGPURenderPipeline GetOrCreateSpritePipeline(
-            const WebGPUSpriteBlendSnapshot& snapshot);
+            const WebGPUSpriteBlendSnapshot& snapshot, bool wireframe);
+        /// WEBGPU-154: the shared 12-entry line-index buffer a wireframe sprite draws through.
+        /// Six vertices per sprite form two triangles (0,1,2) and (3,4,5); the six edges are the
+        /// quad's outline plus its shared diagonal, drawn twice exactly as
+        /// `ExpandTriangleEdgesForWireframeEXT` draws a shared interior edge twice, so a wireframe
+        /// sprite matches a wireframe quad. Created once, indexed with `baseVertex = sprite * 6`,
+        /// so a wireframe batch allocates nothing per sprite.
+        [[nodiscard]] WGPUBuffer EnsureSpriteWireIndexBufferEXT();
         void CreateColoredResources();
         void DestroyColoredResources();
         void RecreateDepthTexture();
@@ -1418,7 +1981,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // this concrete adapter/device/surfaceFormat_ combination can really create a
         // sampleCount=4 RENDER_ATTACHMENT texture. Cached after the first call (a real GPU
         // round-trip, not free) since ApplyMultiSampleCount() may be called more than once.
-        [[nodiscard]] bool Supports4xMsaa();
+        [[nodiscard]] bool Supports4xMsaa() const;
         // WEBGPU-58: clamps a requested MultiSampleCount to this renderer's only two legal
         // WGPUMultisampleState.count values (1 or 4 -- unlike Vulkan's 1/2/4/8/16/32/64 range,
         // wgpu-native/WebGPU has no adjustable per-device "max sample count" limit at all; see
@@ -1460,7 +2023,8 @@ namespace CNA::Internal::Renderers::WebGPU
             Pbr,          ///< pbrDrawCommands_
             Skinned,      ///< skinnedDrawCommands_
             SkinnedPbr,   ///< skinnedPbrDrawCommands_
-            CustomEffect  ///< customEffectDrawCommands_ (WEBGPU-76)
+            CustomEffect, ///< customEffectDrawCommands_ (WEBGPU-76)
+            CompiledEffect ///< compiledEffectDrawCommands_ (WEBGPU-169)
         };
 
         /**
@@ -1653,6 +2217,19 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         void RequireSupportedFillModeEXT(PrimitiveType primitive, const char* route) const;
 
+        /**
+         * @brief WEBGPU-200: refuses a filtering sample of a 32-bit float target by name.
+         *
+         * `WGPUFeatureName_Float32Filterable` is what makes a filtering sampler legal on an
+         * R32/RG32/RGBA32Float texture. Without it wgpu-native raises a validation error naming the
+         * native format, which is true but names neither the XNA `SurfaceFormat` the caller chose
+         * nor the `SamplerState` that made the sample a filtering one.
+         *
+         * @param params The draw's parameters, whose texture slots are examined.
+         * @param route The public route name, for the diagnostic.
+         */
+        void RequireFloat32SamplingAllowedEXT(const GpuDrawParams& params, const char* route) const;
+
         /** @brief Appends @p index of @p family to the ordered stream at its public call. */
         void RecordDrawOrder(DrawFamily family, std::size_t index);
 
@@ -1745,6 +2322,49 @@ namespace CNA::Internal::Renderers::WebGPU
         /// WEBGPU-142: the custom-WGSL ShaderEffect bound by the currently-open `SpriteBatch.Begin`
         /// (set via `WebGPUSpriteBatchRenderer::SetCustomEffect`), captured into each queued sprite.
         WebGPUEffectRenderer* activeSpriteCustomEffect_ = nullptr;
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-170: one sprite vertex of a compiled-effect batch.
+         *
+         * Deliberately NOT the stock `SpriteVertex`: that one carries clip-space positions baked at
+         * enqueue, and a compiled effect's own vertex shader expects the sprite's coordinates in the
+         * space its `Transform` parameter maps from. The conformance fixture makes this observable --
+         * it sets `Transform` to `CreateOrthographicOffCenter(0, size, size, 0, -1, 1)`, so handing
+         * it clip space would square the transform and draw nothing recognisable.
+         */
+        struct CompiledSpriteVertexEXT
+        {
+            float position[2];
+            float uv[2];
+            float color[4];
+        };
+        /// The compiled Effect bound by the currently-open `SpriteBatch.Begin`, or null.
+        Microsoft::Xna::Framework::Graphics::Effect* activeSpriteCompiledEffect_ = nullptr;
+        /// The sprites accumulated for the current same-texture run, six vertices each.
+        std::vector<CompiledSpriteVertexEXT> pendingCompiledSpriteVertices_;
+        /// The texture that run samples, resolved at enqueue and kept alive for the replay.
+        WebGPUSampledTextureEXT pendingCompiledSpriteTexture_;
+        /// Identity of that texture, so a change of texture flushes the run the way XNA does.
+        const ITextureRenderer* pendingCompiledSpriteTextureId_ = nullptr;
+        /// The sampler state the batch asked for, applied to the run's draws.
+        int pendingCompiledSpriteFilter_ = 0;
+        int pendingCompiledSpriteAddressU_ = 1;
+        int pendingCompiledSpriteAddressV_ = 1;
+        /// Retained across flushes: a buffer created per flush would re-allocate every batch.
+        std::unique_ptr<IVertexBufferRenderer> compiledSpriteVertexBuffer_;
+        /**
+         * @brief WEBGPU-170: draws the accumulated run once per pass of the effect's technique.
+         *
+         * XNA runs a compiled Effect's passes at FLUSH granularity over a whole contiguous run of
+         * same-texture sprites (`plans/plan_fx.md` `FX-102`), so the submission order is pass-major.
+         */
+        void FlushCompiledSpriteBatchEXT();
+        /// WEBGPU-170: appends one sprite's six vertices to the current run, flushing on a texture change.
+        void QueueCompiledSprite(const ITextureRenderer& texture, const IWebGPUSamplable& samplable,
+                                 const std::array<Vector2, 4>& points,
+                                 const std::array<Vector2, 4>& uv, const float (&rgba)[4],
+                                 int textureFilter, int addressU, int addressV);
+#endif
         /**
          * @brief REMED-GFX-116: the complete GraphicsDevice.Viewport as it stands right now.
          *
@@ -1813,6 +2433,316 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         void ApplyDrawScissor(WGPURenderPassEncoder pass, const WebGPUScissorSnapshot& snapshot);
 
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-155: which stock shader family one draw is bound to.
+         *
+         * Chosen from the DECLARATION's semantics plus the effect state, never from the buffer's
+         * byte stride: 24 bytes is `VertexPositionColorTexture` and also `Position+Normal`, 32 is
+         * `VertexPositionNormalTexture` and also a padded `Position+Colour`, and the stock
+         * `ModelProcessor` emits a 36-byte vertex that used to match nothing at all. A declaration
+         * is the only thing that answers "is this a lit vertex" or "does it carry a second UV set".
+         */
+        enum class StockVertexShapeEXT
+        {
+            Colored,             ///< Position + Color.
+            Textured,            ///< Position + TexCoord0.
+            ColoredTextured,     ///< Position + Color + TexCoord0.
+            /// Position + Normal, with TexCoord0 and Color optional -- per-pixel lighting.
+            ///
+            /// WEBGPU-156/157: this ONE family covers `VertexPositionNormal` (stride 24),
+            /// `VertexPositionNormalTexture` (32) and the stock `ModelProcessor`'s
+            /// Position+Normal+Colour+UV vertex (36). It does not need three shaders, because a
+            /// semantic the declaration does not name is supplied by the neutral record and the
+            /// existing `textureEnabled` / `vertexColorEnabled` uniforms already gate its use.
+            Lit,
+            LitVertexLit,        ///< The Gouraud sibling of Lit.
+            AlphaTest,           ///< Position + TexCoord0, alpha-tested.
+            AlphaTestColored,    ///< Position + Color + TexCoord0, alpha-tested.
+            DualTextured,        ///< Position + TexCoord0 + TexCoord1.
+            DualTexturedColored, ///< Position + Color + TexCoord0 + TexCoord1.
+            EnvMapped,           ///< Position + Normal + TexCoord0, reflection-mapped.
+            /// WEBGPU-172: Position + the per-instance world matrix as TEXCOORD1..TEXCOORD4.
+            ///
+            /// Never returned by `SelectStockVertexShapeEXT` -- the instanced route is entered
+            /// through `DrawInstancedPrimitivesEx`, not chosen from a declaration -- but resolved by
+            /// exactly the same code as every other family, which is what lets an instance stream
+            /// be split across bindings.
+            Instanced,
+            InstancedColored,    ///< The Instanced family with a per-vertex COLOR0.
+            /// Not converted by WEBGPU-155: skinned and PBR draws keep the stride-derived layout
+            /// and the REMED-GFX-DECL-GUARD refusal that makes it safe. See WEBGPU-177.
+            StrideDerived
+        };
+
+        /**
+         * @brief WEBGPU-155: picks the stock family for a draw from its declaration and effect state.
+         *
+         * WEBGPU-172 widened the question from one declaration to the whole bound set: a semantic
+         * counts as present when ANY per-vertex stream declares it, because `SetVertexBuffers` lets
+         * a vertex's elements be split across bindings and asking only slot 0 would pick an unlit
+         * program for a mesh whose normals are simply in another buffer.
+         *
+         * @param streams The draw's per-vertex streams, in public binding order. Never null.
+         * @param streamCount How many entries @p streams holds; at least 1.
+         * @param stride Stream 0's byte stride, used only for the families this task did not convert.
+         * @param params The draw's effect state.
+         * @return The selected family, or `StrideDerived` when the draw belongs to an unconverted route.
+         */
+        [[nodiscard]] static StockVertexShapeEXT SelectStockVertexShapeEXT(
+            const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
+            std::size_t streamCount,
+            std::size_t stride,
+            const GpuDrawParams& params);
+
+        /**
+         * @brief WEBGPU-172: one bound per-vertex stream, as the queue path needs it.
+         *
+         * The resolver only wants a declaration and a stride; capturing the bytes also needs the
+         * buffer itself and the binding's own `VertexOffset`, so both views are collected together
+         * and stay index-aligned.
+         */
+        /**
+         * @brief WEBGPU-172: one bound vertex stream, captured at queue time.
+         *
+         * This renderer is deferred: a queued draw owns a copy of the bytes it will read, because
+         * the public buffer may be written again before the frame is flushed. A multi-stream draw
+         * therefore needs one copy per stream, each already sliced by ITS own stride and
+         * `VertexBufferBinding.VertexOffset` -- which is also why the replay binds every stream at
+         * native byte offset zero and needs no per-binding offset channel.
+         */
+        struct CapturedVertexStreamEXT
+        {
+            /** @brief The stream's bytes, from its own first selected record onward. */
+            std::vector<std::uint8_t> data;
+            /** @brief The stream's own byte stride. Never another stream's. */
+            std::uint32_t stride = 0;
+        };
+
+        struct PerVertexStreamSourceEXT
+        {
+            const WebGPUVertexBufferRenderer* buffer = nullptr;  ///< The stream's buffer. Never null.
+            int stride = 0;              ///< The binding's own stride.
+            int vertexOffset = 0;        ///< `VertexBufferBinding.VertexOffset`, in elements.
+            int slot = 0;                ///< The public `SetVertexBuffers` slot, for diagnostics.
+            int instanceFrequency = 0;   ///< `InstanceFrequency`; 0 means the stream steps per vertex.
+            int vertexCount = 0;         ///< Records the stream's buffer holds, for the range gate.
+        };
+
+        /** @brief WEBGPU-172: every per-vertex stream of one draw, in public binding order. */
+        struct DrawVertexStreamsEXT
+        {
+            /// The declarations, as `ResolveStockVertexLayoutAcrossStreamsEXT` wants them.
+            std::array<CNA::Internal::Graphics::StockVertexStreamEXT,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> declarations{};
+            /// The matching buffers and offsets, at the same indices.
+            std::array<PerVertexStreamSourceEXT,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> sources{};
+            /**
+             * @brief Storage for a stream whose buffer carries no declaration of its own.
+             *
+             * The low-level `IGraphicsRenderer::CreateVertexBuffer(count)` entry point makes
+             * buffers with no declaration at all, and the instanced examples use it. When a stream
+             * arrives that way a canonical declaration is synthesized here and
+             * `declarations[i].elements` points at this entry, which is why this struct is filled
+             * through an out-parameter and never returned by value: moving it would move the vector
+             * objects these pointers name.
+             */
+            std::array<std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> synthesized{};
+            /// How many entries of the arrays are valid; at least 1.
+            std::size_t count = 0;
+        };
+
+        /**
+         * @brief WEBGPU-172: collects a draw's per-vertex streams.
+         *
+         * A draw that bound no `GpuDrawParams` -- the legacy `DrawColoredPrimitives` entry points --
+         * has exactly one stream, which is @p vb itself; that is the single-stream shape this
+         * renderer has always had, spelled through the same type so there is one code path.
+         *
+         * @param vb The buffer named by the draw call, which is always stream 0.
+         * @param params The draw's parameters, or null for a legacy entry point.
+         * @param includePerInstance Whether per-INSTANCE bindings are collected too. False on the
+         *        ordinary routes, whose pipelines have no instance step mode at all; true on the
+         *        instanced route, where an instance binding is simply a stream whose
+         *        `InstanceFrequency` is greater than zero.
+         * @return The collected streams; `count` is at least 1.
+         */
+        static void CollectPerVertexStreamsEXT(
+            const WebGPUVertexBufferRenderer& vb, const GpuDrawParams* params,
+            DrawVertexStreamsEXT& out, bool includePerInstance = false);
+
+        /**
+         * @brief WEBGPU-172: fills in a canonical declaration for any stream that carries none.
+         *
+         * Only the instanced route needs this, and only because its examples build their buffers
+         * through the low-level `CreateVertexBuffer(count)` entry point, which propagates no
+         * declaration. A per-vertex stream gets the canonical layout for its stride (position-only
+         * for a stride the table does not list, which is what this route has always assumed); a
+         * per-instance stream gets the four `Vector4` world-matrix columns at 0/16/32/48, which is
+         * exactly the attribute array the family used to hardcode.
+         *
+         * @param streams The collected streams, modified in place.
+         */
+        static void SynthesizeMissingStreamDeclarationsEXT(DrawVertexStreamsEXT& streams);
+
+        /**
+         * @brief WEBGPU-172: the instanced family's resolved layout.
+         *
+         * Its per-VERTEX inputs are resolved by semantic like every other family. Its per-INSTANCE
+         * columns are **not**: they are taken positionally, the k-th element across the
+         * concatenated per-instance declarations feeding world-matrix column k. That is the
+         * reference renderer's own rule (`EasyGLRenderer::PlaceInstanceStreams` assigns consecutive
+         * locations from `kStockInstanceBaseLocation` in declaration order, whatever semantic each
+         * element names), and it is the only rule both existing corpora satisfy: the shared oracle
+         * spells the columns `TEXCOORD1`-`TEXCOORD4` while this renderer's own instanced examples
+         * spell them `POSITION1`-`POSITION4`. A world matrix has no XNA-defined semantic to be
+         * faithful to, so matching the reference is the answer rather than picking one spelling and
+         * breaking the other.
+         *
+         * @param streams The collected streams, already given synthesized declarations.
+         * @param hasVertexColor Whether a per-vertex stream declares COLOR0.
+         * @return The resolved layout.
+         */
+        [[nodiscard]] static CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
+        ResolveInstancedVertexLayoutEXT(const DrawVertexStreamsEXT& streams, bool hasVertexColor);
+
+        /**
+         * @brief WEBGPU-155: the ordered input list one stock family declares.
+         *
+         * @param shape The family.
+         * @param inputs Receives the input list, in shader-location order.
+         * @param count Receives the number of inputs.
+         * @param programName Receives the family's WGSL name, for a diagnostic.
+         */
+        static void StockVertexInputsForShapeEXT(
+            StockVertexShapeEXT shape,
+            const CNA::Internal::Graphics::StockProgramInput*& inputs,
+            std::size_t& count,
+            const char*& programName);
+
+        /**
+         * @brief WEBGPU-155: validates and resolves one draw's vertex layout against its declaration.
+         *
+         * Raises the shared format diagnostic first (nothing native exists yet if it throws), then
+         * binds each of the family's inputs at the declared element's own offset and format. A
+         * buffer that carries no declaration keeps this renderer's historical stride-derived layout,
+         * which is what every existing stock draw already relies on.
+         *
+         * @param vb The draw's vertex buffer -- stream 0, and the only stream of a legacy draw.
+         * @param streams The draw's per-vertex streams, from `CollectPerVertexStreamsEXT`.
+         * @param streamCount How many entries @p streams holds.
+         * @param shape The selected stock family.
+         * @return The resolved layout.
+         */
+        [[nodiscard]] CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT ResolveStockVertexLayoutForDrawEXT(
+            const WebGPUVertexBufferRenderer& vb,
+            const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
+            std::size_t streamCount,
+            StockVertexShapeEXT shape) const;
+
+        /**
+         * @brief WEBGPU-172: copies each resolved stream's own bytes into a queued draw.
+         *
+         * Stream 0 lands in @p stream0Data, exactly as before this task, so a single-stream draw's
+         * captured bytes are byte-identical to their pre-172 form and @p extra stays empty. Every
+         * further resolved stream is sliced by ITS own stride and `VertexOffset`, so the replay can
+         * bind all of them at native byte offset zero.
+         *
+         * @param layout The draw's resolved layout, whose stream table says which bindings are read.
+         * @param streams The draw's collected per-vertex streams.
+         * @param vertexStart The draw's shared first-vertex, already folded out of the per-stream
+         *        offsets by `GraphicsDevice`.
+         * @param stream0Data Receives the bytes of the layout's first resolved stream.
+         * @param extra Receives one entry per further resolved stream, in native slot order.
+         * @param instanceCount How many instances the draw submits. A per-instance stream is
+         *        materialized as exactly this many records, because WebGPU's `Instance` step mode
+         *        has an implicit divisor of one and no step rate: XNA's `InstanceFrequency` is
+         *        honoured by repeating each source record @c frequency times here, which keeps the
+         *        divisor a data-preparation concern that never reaches the pipeline or its key.
+         */
+        static void CaptureStockVertexStreamsEXT(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout,
+            const DrawVertexStreamsEXT& streams,
+            int vertexStart,
+            std::vector<std::uint8_t>& stream0Data,
+            std::vector<CapturedVertexStreamEXT>& extra,
+            int instanceCount = 1);
+
+        /**
+         * @brief WEBGPU-172: binds a replayed draw's further vertex streams at slots 1..n.
+         *
+         * Slot 0 is bound by the caller, which already owns the transient buffer for it. Each
+         * further stream gets its own transient buffer here, released with the frame like every
+         * other deferred allocation.
+         *
+         * @param pass The render pass encoder being recorded.
+         * @param label A debug label for the created buffers.
+         * @param extra The draw's captured further streams; empty for a single-stream draw.
+         */
+        void BindExtraVertexStreamsEXT(WGPURenderPassEncoder pass, const char* label,
+                                       const std::vector<CapturedVertexStreamEXT>& extra);
+
+        /// WEBGPU-155: the assembled native vertex state for one resolved layout. Two buffer slots:
+        /// slot 0 is the draw's own vertex record, slot 1 the zero-stride neutral record that
+        /// supplies any semantic the declaration does not name.
+        struct StockVertexStateEXT
+        {
+            /**
+             * @brief Every record attribute, grouped by the native slot that reads it.
+             *
+             * WEBGPU-172: one `WGPUVertexBufferLayout` may only point at a contiguous run of
+             * attributes, so the attributes are grouped here rather than kept in shader-location
+             * order. A single-stream draw has exactly one group and is therefore laid out
+             * identically to its pre-172 form.
+             */
+            std::array<WGPUVertexAttribute,
+                       CNA::Internal::Graphics::kMaxStockVertexAttributes> recordAttributes{};
+            std::array<WGPUVertexAttribute,
+                       CNA::Internal::Graphics::kMaxStockVertexAttributes> neutralAttributes{};
+            /// One per resolved stream, plus one for the neutral record when the draw needs it.
+            std::array<WGPUVertexBufferLayout,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT + 1> buffers{};
+            std::size_t bufferCount = 0;
+        };
+
+
+        /**
+         * @brief WEBGPU-155: turns a resolved layout into `WGPUVertexBufferLayout`s for a pipeline.
+         *
+         * @param layout The resolved layout.
+         * @param out Receives the assembled attribute arrays and buffer layouts; it must outlive the
+         *            `Build3DPipelineEXT` call, because the descriptor points into it.
+         */
+        static void BuildStockVertexStateEXT(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout,
+            StockVertexStateEXT& out);
+
+        /**
+         * @brief WEBGPU-155: the shared zero-stride buffer holding the `(0, 0, 0, 1)` neutral record.
+         *
+         * Created once and reused, because a neutral value is the same for every draw. WebGPU's own
+         * `arrayStride = 0` is what makes every vertex read it.
+         *
+         * @return The neutral vertex buffer.
+         */
+        [[nodiscard]] WGPUBuffer GetOrCreateNeutralVertexBufferEXT();
+
+        /**
+         * @brief WEBGPU-155: binds the neutral record when a draw's layout needs it.
+         *
+         * WEBGPU-172: at the slot AFTER the draw's real streams, not at slot 1 -- a two-stream draw
+         * uses slots 0 and 1 for its own buffers, so the neutral record moves to slot 2. Its slot is
+         * `layout.streamCount`, which is 1 for every single-stream draw and therefore leaves that
+         * case exactly where it was.
+         *
+         * @param pass The render pass encoder being recorded.
+         * @param layout The draw's resolved layout.
+         */
+        void BindNeutralVertexBufferEXT(
+            WGPURenderPassEncoder pass,
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout);
+
         /// WEBGPU-29: the inputs that vary between the 12 GetOrCreatePipeline*3D families. Everything
         /// else in a 3D WGPURenderPipelineDescriptor -- colour target (surfaceFormat_ + CurrentWriteMask
         /// + MRT via InitStockColorTargetsEXT), fragment/vertex entry points, CCW front face,
@@ -1850,14 +2780,16 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);  // WEBGPU-83
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);  // WEBGPU-83
         // params == nullptr: the legacy DrawColoredPrimitives path (hardcoded white diffuse,
         // vertexColorEnabled=true, vertexStart=0). params != nullptr: DrawPrimitivesEx's real
         // GpuDrawParams dispatch (stride-16 only -- caller must have already verified the stride).
         void QueueColoredDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount,
-                              const GpuDrawParams* params = nullptr);
+                              const GpuDrawParams* params = nullptr,
+                              StockVertexShapeEXT shape = StockVertexShapeEXT::Colored);
         void CaptureReadback(WGPUCommandEncoder encoder, WGPUTexture surfaceTexture);
         // Acquires a swapchain texture if none is currently held, and renders any pending
         // Clear()/sprite work into it. Called on demand by both Present() and ReadBackbuffer()
@@ -1891,6 +2823,103 @@ namespace CNA::Internal::Renderers::WebGPU
         // that, mirroring the pre-existing SetRenderTarget2D() call-then-assign structure.
         void FlushCurrentRenderTarget();
         [[nodiscard]] LogicalViewport ComputeLogicalViewport() const;
+
+    public:
+        /**
+         * @brief Whether a game `Draw`/`Present` pair may begin.
+         *
+         * `WEBGPU-181`. False while the device is lost, and on this renderer that is a safety
+         * mechanism rather than a convenience: `WEBGPU-180` measured that
+         * `wgpuSurfaceGetCurrentTexture` on a surface whose device is lost does not return a failure
+         * status -- it panics inside wgpu-native and, because the panic cannot unwind across the C
+         * ABI, aborts the process. There is nothing to catch, so the loss has to be a gate BEFORE
+         * the acquire.
+         *
+         * @return True when the device is usable.
+         */
+        [[nodiscard]] bool CanBeginDrawEXT() const override { return !deviceLost_; }
+
+        /**
+         * @brief Turns CPU shadow retention for context recovery on or off.
+         *
+         * `WEBGPU-181`. With recovery enabled (the default) each texture renderer keeps a reference
+         * to the buffer `Texture2D`/`TextureCube` already owns, so a device recreate has bytes to
+         * re-upload without the game re-supplying them. Disabling it drops those references and
+         * stops future ones being taken, which is the whole cost of recovery on this renderer --
+         * no copy is ever made either way, only a `shared_ptr` held or not held.
+         *
+         * @param enabled True to retain CPU shadows.
+         */
+        void SetContextRecoveryEnabled(bool enabled) override;
+
+        /** @brief Whether CPU shadows are being retained. @return The current setting. */
+        [[nodiscard]] bool IsContextRecoveryEnabledEXT() const { return contextRecoveryEnabled_; }
+
+        /**
+         * @brief Destroys the native device, as a driver-reported loss would.
+         *
+         * `WEBGPU-182`. Releases every device-owned object, destroys the `WGPUDevice`, sets the
+         * lost flag so @ref CanBeginDrawEXT reports false, and raises `RendererDeviceEvent::Lost`.
+         * The instance, adapter and surface survive (`WEBGPU-180`).
+         *
+         * On this pin the device-lost CALLBACK never fires for an application-initiated destroy --
+         * `WEBGPU-180` measured that under four different callback modes and pump strategies -- so
+         * the flag is set here rather than from the callback, and the callback stays wired for a
+         * real driver-reported loss it may one day deliver.
+         */
+        void DebugSimulateContextLoss() override;
+
+        /**
+         * @brief Requests a new device and rebuilds everything that lived on the old one.
+         *
+         * `WEBGPU-182`. Raises `DeviceResetting`, requests a device from the surviving adapter,
+         * re-configures the surface with it, clears the lost flag and raises `DeviceReset`.
+         * Recreating the game's own resources is `WEBGPU-182`'s second half and is not done here.
+         */
+        void DebugRestoreContext() override;
+
+        /** @brief `WEBGPU-182`: adds a resource to the device-loss registry. @param resource The resource. */
+        void RegisterDeviceResourceEXT(IWebGPUDeviceResourceEXT* resource);
+        /** @brief `WEBGPU-182`: removes one. @param resource The resource. */
+        void UnregisterDeviceResourceEXT(IWebGPUDeviceResourceEXT* resource);
+        /** @brief `WEBGPU-182`: counts a resource kind that cannot survive a loss. @param delta +1 or -1. */
+        void CountUnrecoverableResourceEXT(int delta) { unrecoverableResourceCount_ += delta; }
+
+    private:
+        /// WEBGPU-181: set while the device is unusable; the only thing standing between a lost
+        /// device and the process abort WEBGPU-180 measured. WEBGPU-182 is what will set it from a
+        /// real destroy and clear it from a real recreate.
+        bool deviceLost_ = false;
+        /// WEBGPU-181: whether texture renderers keep a reference to the framework's CPU pixels.
+        bool contextRecoveryEnabled_ = true;
+        /// WEBGPU-182: every live resource holding handles made from the current device, so a loss
+        /// can release them all and a restore can rebuild them. Raw pointers, because each entry
+        /// registers in its own constructor and unregisters in its own destructor.
+        std::vector<IWebGPUDeviceResourceEXT*> liveDeviceResources_;
+        /// WEBGPU-182: live resources of a kind that CANNOT rebuild itself -- a TextureCube,
+        /// RenderTargetCube, Texture3D, occlusion query or custom effect. A loss refuses by name
+        /// while any of them exists rather than leaving a dead handle behind.
+        int unrecoverableResourceCount_ = 0;
+        /// WEBGPU-182: how a device-loss/reset reaches `GraphicsDevice`'s own public events. Kept
+        /// from `GraphicsRendererCreateArgs` because this renderer raises them itself -- the pinned
+        /// wgpu-native never delivers the device-lost callback for an application-initiated
+        /// destroy, which `WEBGPU-180` measured under four different modes.
+        std::function<void(CNA::Internal::Renderers::RendererDeviceEvent)> deviceEventCallback_;
+
+
+        /**
+         * @brief The logical viewport a given PHYSICAL surface size would produce.
+         *
+         * Split out of @ref ComputeLogicalViewport for `WEBGPU-178`: the size the renderer has
+         * last CONFIGURED and the size the platform has last REPORTED are not the same thing for
+         * one call, and `GetViewportSize()` has to answer with the reported one.
+         *
+         * @param physicalWidth The surface width to reason about, in physical pixels.
+         * @param physicalHeight The surface height to reason about, in physical pixels.
+         * @return The presentation rectangle and logical extent for that surface.
+         */
+        [[nodiscard]] LogicalViewport ComputeLogicalViewportForEXT(int physicalWidth,
+                                                                   int physicalHeight) const;
         // WEBGPU-82: full SamplerState cache (filter + address mode + anisotropy), keyed on the
         // COMPLETE description and filled by FillWGPUSamplerDescriptor's explicit ordinal table.
         // REMED-GFX-170: this is now the renderer's ONE sampler translation. SpriteBatch used to
@@ -1899,6 +2928,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // descriptor and the cache key were wrong in the same way. `family` names the public draw
         // family for CNA_WEBGPU_SAMPLER_TRACE and has no effect on the cache key.
         [[nodiscard]] WGPUSampler GetOrCreateSlotSampler(int filter, int addressU, int addressV,
+                                                        int addressW, int maxMipLevel,
                                                         int maxAnisotropy, const char* family);
         /** @brief Releases every native sampler in slotSamplerCache_ and empties it. */
         void ReleaseSamplerCache();
@@ -1955,6 +2985,9 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUAdapter adapter_ = nullptr;
         WGPUDevice device_ = nullptr;
         WGPUQueue queue_ = nullptr;
+        /// WEBGPU-172: the device's own `maxVertexBuffers` limit, read once at device creation.
+        /// 8 is WebGPU's guaranteed floor and stands in until the real value is known.
+        int maxVertexBuffers_ = 8;
         /// WEBGPU-144: true when the adapter advertised WGPUFeatureName_TextureCompressionBC and it
         /// was requested at device creation, so BC1/2/3/7 textures upload natively.
         bool bcSupported_ = false;
@@ -1992,7 +3025,35 @@ namespace CNA::Internal::Renderers::WebGPU
         int sampleCount_ = 1;
         // Cached result of Supports4xMsaa()'s own real device-capability probe: -1 = not probed
         // yet, 0 = unsupported, 1 = supported.
-        int msaa4xSupported_ = -1;
+        /// WEBGPU-195: the probe's cached answer. Mutable because the probe is a
+        /// question about the device, not a change to the renderer, and
+        /// `SupportsCapability()` is const and has to be able to ask it.
+        mutable int msaa4xSupported_ = -1;
+
+        /// WEBGPU-200: whether the device was created with `WGPUFeatureName_Float32Filterable`.
+        /// Without it a 32-bit float texture may only be sampled with a NON-filtering sampler --
+        /// the format is still renderable, so this gates the sampler, never the target.
+        bool float32Filterable_ = false;
+        /// WEBGPU-200: whether the device was created with `WGPUFeatureName_Float32Blendable`.
+        /// Without it a 32-bit float colour target may not be blended into; a blend state on such a
+        /// target is refused by name rather than silently ignored.
+        bool float32Blendable_ = false;
+        /// WEBGPU-201: whether the device was created with wgpu-native's TextureFormat16bitNorm,
+        /// which is what makes `RGBA16Unorm` (`SurfaceFormat::Rgba64`) usable. Always false in the
+        /// browser, where the feature does not exist.
+        bool rgba16UnormSupported_ = false;
+        /// Composed lazily by `GetAdditionalLimitationsTextEXT()`, which returns a `string_view` and
+        /// therefore needs storage that outlives the call. Its inputs are fixed once the device
+        /// exists, so it is built once.
+        mutable std::string additionalLimitations_;
+        /// WEBGPU-200: test-only override making both float32 features report absent. See
+        /// `DebugForceFloat32FeaturesAbsentEXT`.
+        bool forceFloat32FeaturesAbsent_ = false;
+
+        /// WEBGPU-198: cached results of the render-attachment probe, one entry per native format
+        /// actually asked about. Empty until something asks; a probe costs a 1x1 texture creation
+        /// inside a validation error scope, so it is worth caching but not worth pre-warming.
+        mutable std::unordered_map<std::uint32_t, bool> renderTargetFormatProbe_;
         // WEBGPU-58: the backbuffer's own multisampled colour attachment, only non-null while
         // sampleCount_ > 1 -- the swapchain's own per-frame texture (acquiredTexture_) becomes the
         // RESOLVE target every frame instead of being drawn into directly (see
@@ -2019,6 +3080,11 @@ namespace CNA::Internal::Renderers::WebGPU
         std::array<std::uint64_t, kSpriteVertexRing> spriteVertexRingCapacity_{};
         std::size_t spriteVertexRingIndex_ = 0;
         WGPUBuffer spriteVertexBuffer_ = nullptr;        ///< Non-owning alias of the active ring slot.
+        /// WEBGPU-154: the shared 12-index line list every wireframe sprite draws through.
+        WGPUBuffer spriteWireIndexBuffer_ = nullptr;
+        /// WEBGPU-155: the shared 16-byte (0,0,0,1) neutral vertex record, bound at array stride 0
+        /// for any stock shader input the draw's declaration does not name. Created on first use.
+        WGPUBuffer neutralVertexBuffer_ = nullptr;
         std::uint64_t spriteVertexCapacityBytes_ = 0;    ///< Active slot's capacity.
         /// REMED-GFX-159: bytes UploadSpriteVertices() wrote for the cycle being replayed. The
         /// sprite vertex buffer used to be bound once for the whole sprite run; interleaved 3D
@@ -2060,7 +3126,7 @@ namespace CNA::Internal::Renderers::WebGPU
         int physicalHeight_ = 0;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         int swapInterval_ = 1;
         bool surfaceConfigured_ = false;
         bool clearColorPending_ = true;
@@ -2201,10 +3267,24 @@ namespace CNA::Internal::Renderers::WebGPU
             int filter = 0;    ///< XNA TextureFilter::Linear
             int addressU = 1;  ///< matches every *DrawCommand struct's own textureFilter/addressU/
             int addressV = 1;  ///< addressV default (Clamp) -- this file's established convention.
+            /// WEBGPU-160: the third addressing axis. Observable wherever a volume texture is
+            /// sampled, and Clamp by default like the other two.
+            int addressW = 1;
+            /// WEBGPU-161: `SamplerState.MaxMipLevel` -- the highest-resolution mip level sampling
+            /// may use. XNA's default is 0, i.e. no restriction.
+            int maxMipLevel = 0;
+            /// WEBGPU-205: `SamplerState.MipMapLevelOfDetailBias`. NOT a sampler-descriptor field --
+            /// `WGPUSamplerDescriptor` has no `lodBias` -- so it travels in the per-draw uniform
+            /// block and is applied by WGSL's `textureSampleBias` in the fragment stage.
+            float lodBias = 0.0f;
             int maxAnisotropy = 4;
         };
         std::array<SlotSamplerState, 16> slotSamplers_{};
-        std::unordered_map<std::uint32_t, WGPUSampler> slotSamplerCache_;
+        /// WEBGPU-160: keyed 64-bit, because the 32-bit key was exactly full -- filter, addressU,
+        /// addressV and anisotropy took one byte each -- and the W axis lives above bit 32. A
+        /// uint32_t map here silently TRUNCATED it, so three states with different W hashed to one
+        /// entry and the first sampler was handed to all three.
+        std::unordered_map<std::uint64_t, WGPUSampler> slotSamplerCache_;
 
         WGPUBuffer readbackBuffer_ = nullptr;
         std::uint64_t readbackBufferCapacity_ = 0;
@@ -2257,6 +3337,32 @@ namespace CNA::Internal::Renderers::WebGPU
         /// Depth16 target is distinct from one for Depth24PlusStencil8 (WebGPU rejects a format mismatch
         /// between pipeline and attachment). Set from the active target's own depth format at replay.
         WGPUTextureFormat replayDepthFormat_ = WGPUTextureFormat_Depth24PlusStencil8;
+
+        /**
+         * @brief WEBGPU-197: the COLOUR format of the render pass currently being replayed.
+         *
+         * A WebGPU render pipeline bakes `WGPUColorTargetState.format`, and every 3D family used to
+         * read the swap-chain `surfaceFormat_` -- which is why no non-`Color` target could ever be
+         * drawn into. It is set from the pass's own destination at replay, exactly as
+         * @ref replayDepthFormat_ is, and folded into every 3D pipeline key so a pipeline built for
+         * one target format is never handed to a pass using another. `Undefined` means "not inside a
+         * replay", and the builders fall back to `surfaceFormat_` then.
+         *
+         * The SpriteBatch path has always done this (`WebGPUSpriteBlendSnapshot::targetFormat`);
+         * this is the 3D side catching up.
+         */
+        WGPUTextureFormat replayColorFormat_ = WGPUTextureFormat_Undefined;
+        /**
+         * @brief WEBGPU-197: the SAMPLE COUNT of the render pass currently being replayed.
+         *
+         * The pipeline's other baked target property, and the reason a `RenderTarget2D` could not
+         * honour its own `multiSampleCount` (`WEBGPU-165`). 0 means "not inside a replay", and the
+         * builders fall back to the renderer-global `sampleCount_` then.
+         */
+        std::uint32_t replaySampleCount_ = 0;
+        /// WEBGPU-197: the extra MRT slots' own colour formats for the pass being replayed. Index 0
+        /// is unused; slot 0's format is @ref replayColorFormat_.
+        std::array<WGPUTextureFormat, 4> replayMrtColorFormats_{};
         /// WEBGPU-39: whether the active pass's depth format carries a stencil aspect (only the combined
         /// Depth24PlusStencil8 does). Stencil ops (WEBGPU-83) are baked only when true; the depth pass's
         /// own stencil load/store ops are likewise omitted for a depth-only format.
@@ -2279,7 +3385,20 @@ namespace CNA::Internal::Renderers::WebGPU
         // untextured) Model/BasicEffect draws going through that fallback.
         struct ColoredDrawCommand
         {
+            /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
+            /// queue time. Captured per command for the same reason the pipeline state is: a later
+            /// SetVertexBuffer must not retroactively relayout an already-queued draw.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             std::vector<std::uint8_t> vertexData;
+            /**
+             * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
+             *
+             * Empty for every single-stream draw, which is all this renderer accepted before this
+             * task; `vertexData` above is always the first resolved stream, so nothing about the
+             * one-buffer case moved. Each entry is already sliced by its own stride and
+             * `VertexOffset`, so the replay binds it at native byte offset zero.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
             std::vector<std::uint8_t> indexData;   ///< empty for a non-indexed draw
             bool indexed = false;
             bool index32 = false;
@@ -2288,7 +3407,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
@@ -2327,10 +3448,23 @@ namespace CNA::Internal::Renderers::WebGPU
         // own WEBGPU-N task).
         struct TexturedDrawCommand
         {
+            /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
+            /// queue time. Captured per command for the same reason the pipeline state is: a later
+            /// SetVertexBuffer must not retroactively relayout an already-queued draw.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /**
+             * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
+             *
+             * Empty for every single-stream draw, which is all this renderer accepted before this
+             * task; `vertexData` above is always the first resolved stream, so nothing about the
+             * one-buffer case moved. Each entry is already sliced by its own stride and
+             * `VertexOffset`, so the replay binds it at native byte offset zero.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -2339,7 +3473,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2371,6 +3507,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             // WEBGPU-21: stride 24 (VertexPositionColorTexture) instead of stride 20
             // (VertexPositionTexture) -- selects coloredTexturedShader_/
@@ -2388,7 +3526,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColoredTextured3D(WGPUPrimitiveTopology topology,
                                                                                WGPUIndexFormat stripIndexFormat,
                                                                                bool depthTest, bool depthWrite,
@@ -2396,10 +3535,12 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                const Matrix& world, const Matrix& view, const Matrix& projection,
-                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                               StockVertexShapeEXT shape);
         void IssueTexturedDraw(WGPURenderPassEncoder pass, const TexturedDrawCommand& command,
                               ReplayState& state);
 
@@ -2452,10 +3593,23 @@ namespace CNA::Internal::Renderers::WebGPU
         // sampler + texture) unchanged. No fog (same deliberate deferral as the other 3D shaders).
         struct LitTexturedDrawCommand
         {
+            /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
+            /// queue time. Captured per command for the same reason the pipeline state is: a later
+            /// SetVertexBuffer must not retroactively relayout an already-queued draw.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /**
+             * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
+             *
+             * Empty for every single-stream draw, which is all this renderer accepted before this
+             * task; `vertexData` above is always the first resolved stream, so nothing about the
+             * one-buffer case moved. Each entry is already sliced by its own stride and
+             * `VertexOffset`, so the replay binds it at native byte offset zero.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -2464,7 +3618,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             std::array<float, 68> lightUniforms{};
             bool depthTest = false;
             bool depthWrite = false;
@@ -2489,6 +3645,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             /// Task 1105 (plans/plan_graphics.md Phase 80): true selects the per-vertex-lit sibling
             /// pipeline/shader (XNA's real BasicEffect.PreferPerPixelLighting==false default);
@@ -2506,7 +3664,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         /// Task 1105: real per-vertex-lit sibling to GetOrCreatePipelineLitTextured3D above --
         /// identical Blinn-Phong math (FNA's Lighting.fxh ComputeLights()), moved into the vertex
         /// stage and passed to the fragment shader as litRGB/specularRGB varyings instead of being
@@ -2520,10 +3679,12 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueLitTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
-                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                  StockVertexShapeEXT shape);
         void IssueLitTexturedDraw(WGPURenderPassEncoder pass, const LitTexturedDrawCommand& command,
                               ReplayState& state);
 
@@ -2551,10 +3712,23 @@ namespace CNA::Internal::Renderers::WebGPU
         // for stride 24. No fog (same deliberate deferral as the other 3D shaders).
         struct AlphaTestDrawCommand
         {
+            /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
+            /// queue time. Captured per command for the same reason the pipeline state is: a later
+            /// SetVertexBuffer must not retroactively relayout an already-queued draw.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /**
+             * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
+             *
+             * Empty for every single-stream draw, which is all this renderer accepted before this
+             * task; `vertexData` above is always the first resolved stream, so nothing about the
+             * one-buffer case moved. Each entry is already sliced by its own stride and
+             * `VertexOffset`, so the replay binds it at native byte offset zero.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -2563,7 +3737,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2587,13 +3763,15 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             std::size_t stride = 20;   ///< 20, 24, or 32 -- selects vertex layout + shader module
             bool hasVertexColor = false;
         };
         void CreateAlphaTestResources();
         void DestroyAlphaTestResources();
-        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineAlphaTest3D(std::size_t stride,
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineAlphaTest3D(bool colored,
                                                                         WGPUPrimitiveTopology topology,
                                                                         WGPUIndexFormat stripIndexFormat,
                                                                         bool depthTest, bool depthWrite,
@@ -2601,10 +3779,12 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueAlphaTestDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                 const Matrix& world, const Matrix& view, const Matrix& projection,
-                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                StockVertexShapeEXT shape);
         void IssueAlphaTestDraw(WGPURenderPassEncoder pass, const AlphaTestDrawCommand& command,
                               ReplayState& state);
 
@@ -2628,10 +3808,23 @@ namespace CNA::Internal::Renderers::WebGPU
         // No fog (same deliberate deferral as the other 3D shaders).
         struct DualTextureDrawCommand
         {
+            /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
+            /// queue time. Captured per command for the same reason the pipeline state is: a later
+            /// SetVertexBuffer must not retroactively relayout an already-queued draw.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /**
+             * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
+             *
+             * Empty for every single-stream draw, which is all this renderer accepted before this
+             * task; `vertexData` above is always the first resolved stream, so nothing about the
+             * one-buffer case moved. Each entry is already sliced by its own stride and
+             * `VertexOffset`, so the replay binds it at native byte offset zero.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -2640,7 +3833,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2666,6 +3861,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             ///@}
             ///@{ REMED-GFX-172: `DualTextureEffect.Texture2`'s own GraphicsDevice.SamplerStates[1],
@@ -2676,13 +3873,15 @@ namespace CNA::Internal::Renderers::WebGPU
             int texture1Filter = 0;
             int texture1AddressU = 1;
             int texture1AddressV = 1;
+            int texture1AddressW = 1;  ///< WEBGPU-160.
+            int texture1MaxMipLevel = 0;  ///< WEBGPU-161.
             int texture1MaxAnisotropy = 4;
             ///@}
             bool hasVertexColor = false;   ///< stride 24 vs stride 20
         };
         void CreateDualTextureResources();
         void DestroyDualTextureResources();
-        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineDualTexture3D(std::size_t stride,
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineDualTexture3D(bool colored,
                                                                           WGPUPrimitiveTopology topology,
                                                                           WGPUIndexFormat stripIndexFormat,
                                                                           bool depthTest, bool depthWrite,
@@ -2690,10 +3889,12 @@ namespace CNA::Internal::Renderers::WebGPU
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueDualTextureDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
-                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                  StockVertexShapeEXT shape);
         void IssueDualTextureDraw(WGPURenderPassEncoder pass, const DualTextureDrawCommand& command,
                               ReplayState& state);
 
@@ -2726,10 +3927,23 @@ namespace CNA::Internal::Renderers::WebGPU
         // support already exists in the reference GLSL this was ported from, so it is wired in.
         struct EnvMapDrawCommand
         {
+            /// WEBGPU-155: this draw's vertex layout, resolved from its own VertexDeclaration at
+            /// queue time. Captured per command for the same reason the pipeline state is: a later
+            /// SetVertexBuffer must not retroactively relayout an already-queued draw.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
             /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
             StencilKeyParams stencil{};
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
+            /**
+             * @brief WEBGPU-172: the draw's SECOND and further per-vertex streams, if any.
+             *
+             * Empty for every single-stream draw, which is all this renderer accepted before this
+             * task; `vertexData` above is always the first resolved stream, so nothing about the
+             * one-buffer case moved. Each entry is already sliced by its own stride and
+             * `VertexOffset`, so the replay binds it at native byte offset zero.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -2739,7 +3953,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> transformUniforms{};  ///< group 0 binding 0: mvp (16) + world (16)
-            std::array<float, 60> envMapUniforms{};     ///< group 0 binding 1: 15 vec4f (240 bytes)
+            /// WEBGPU-205: 16 vec4f (256 bytes). The sixteenth carries the per-slot LOD bias --
+            /// [60]=slot 0 (the base texture), [61]=slot 1 (the environment cube).
+            std::array<float, 64> envMapUniforms{};     ///< group 0 binding 1: 16 vec4f (256 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2774,6 +3990,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             ///@}
             ///@{ REMED-GFX-172: the reflection cube's own GraphicsDevice.SamplerStates[1], captured
@@ -2784,6 +4002,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int envMapFilter = 0;
             int envMapAddressU = 1;
             int envMapAddressV = 1;
+            int envMapAddressW = 1;  ///< WEBGPU-160.
+            int envMapMaxMipLevel = 0;  ///< WEBGPU-161.
             int envMapMaxAnisotropy = 4;
             ///@}
         };
@@ -2802,10 +4022,12 @@ namespace CNA::Internal::Renderers::WebGPU
                                                    bool blend, const BlendKeyParams& blendParams,
                                                    int cullMode, bool wireframe,
                                                    float depthBias, float slopeScaleDepthBias,
-                                                       const StencilKeyParams& stencil);
+                                                       const StencilKeyParams& stencil,
+                                                       const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueEnvMapDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
-                             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                             StockVertexShapeEXT shape);
         void IssueEnvMapDraw(WGPURenderPassEncoder pass, const EnvMapDrawCommand& command,
                               ReplayState& state);
 
@@ -2837,7 +4059,21 @@ namespace CNA::Internal::Renderers::WebGPU
             int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
-            std::vector<std::uint8_t> instVbData;
+            /**
+             * @brief WEBGPU-172: every stream after the first, per-vertex and per-instance alike.
+             *
+             * The classic instanced draw resolves to exactly two streams -- the geometry buffer
+             * and the world-matrix buffer -- so `vertexData` is the geometry and `extraStreams[0]`
+             * is the instance data, at native slots 0 and 1, which is precisely where this family
+             * has always bound them. What is new is only that a THIRD stream is now possible, and
+             * that the slot each stream lands in is decided by the resolved layout rather than by
+             * the pair of names this struct used to carry.
+             */
+            std::vector<CapturedVertexStreamEXT> extraStreams;
+            /// WEBGPU-172: the semantic layout the pipeline and every binding are built from.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout{};
+            /// WEBGPU-172: whether the resolved layout supplies COLOR0, which picks the WGSL module.
+            bool instancedHasColor = false;
             bool indexed = false;
             bool index32 = false;
             std::uint32_t vertexCount = 0;
@@ -2853,9 +4089,10 @@ namespace CNA::Internal::Renderers::WebGPU
             /// only because every existing caller happens to always use a plain mat4-only instance
             /// declaration).
             std::size_t pvStride = 16;
-            std::size_t instVbStride = 64;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2875,7 +4112,9 @@ namespace CNA::Internal::Renderers::WebGPU
         };
         void CreateInstancedResources();
         void DestroyInstancedResources();
-        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, std::size_t instVbStride,
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineInstanced3D(
+                                                                         const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+                                                                         bool hasVertexColor,
                                                                          WGPUPrimitiveTopology topology,
                                                                          WGPUIndexFormat stripIndexFormat,
                                                                          bool depthTest, bool depthWrite, int depthFunc,
@@ -2929,7 +4168,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             std::array<float, 68> lightUniforms{};
             /// plans/plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
             /// and the two specular map transforms.
@@ -2964,6 +4205,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
         };
         void CreatePbrResources();
@@ -3037,7 +4280,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             std::array<float, 68> lightUniforms{};
             /// SkinningParams UBO: [0] = WeightsPerVertex (Task 895's 1/2/4 convention, stored as a
             /// float in the x component of a padding vec4), [4 .. 4+72*16) = 72 column-major bone
@@ -3066,6 +4311,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             std::size_t stride = 52;   ///< 52 (no vertex colour) or 56 (vertex colour appended)
             bool preferVertexLit = false;
@@ -3123,7 +4370,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 40> uniforms{};
+            /// WEBGPU-205: 44 floats. The 40-float block was exactly full (128 base
+            /// + 32 fog tail), and the per-slot LOD bias needs a channel of its own.
+            std::array<float, 44> uniforms{};
             std::array<float, 68> lightUniforms{};
             /// plans/plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
             /// and the two specular map transforms.
@@ -3159,6 +4408,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
+            int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
         };
         void CreateSkinnedPbrResources();
@@ -3221,12 +4472,131 @@ namespace CNA::Internal::Renderers::WebGPU
             /// effect that writes N outputs honours each attachment's own BlendState mask.
             std::array<int, 4> colorWriteChannels{15, 15, 15, 15};
             int cullMode = 0;
+            /// WEBGPU-153: this draw's own FillMode, captured like every other pipeline
+            /// input. A custom WGSL effect draws triangles like any other route, so a
+            /// wireframe request must reach it too rather than silently filling.
+            bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
             WebGPUViewportSnapshot viewport{};
             WebGPUScissorSnapshot scissor{};
         };
         std::vector<CustomEffectDrawCommand> customEffectDrawCommands_;
+
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        /**
+         * @brief plans/plan_webgpu.md WEBGPU-169: one deferred compiled-XNA-effect draw.
+         *
+         * Everything a compiled pass decided is captured BY VALUE here, because the draw is
+         * recorded at `Present()` long after `ApplyPass()` ran and the MojoShader register files
+         * are shared by every compiled effect this renderer owns. The `LinkedPassEXT` carries the
+         * two shader modules (owned by the renderer's module cache, so they outlive the effect),
+         * the vertex layout the pass's own reflection produced, and the split sampler bindings.
+         */
+        struct CompiledEffectDrawCommand
+        {
+            /// One captured stream of vertex bytes, in the order the draw bound them.
+            struct Stream
+            {
+                std::vector<std::uint8_t> data;
+                std::uint64_t arrayStride = 0;
+                bool perInstance = false;
+            };
+            /// One resolved sampler slot: the view, its keep-alive, and the native sampler.
+            struct SamplerBinding
+            {
+                std::uint32_t textureBinding = 0;
+                std::uint32_t samplerBinding = 0;
+                WebGPUSampledTextureEXT texture;
+                WGPUSampler sampler = nullptr;
+                /// WEBGPU-208: the D3D9 register this pair came from, which is the index its LOD
+                /// bias occupies in the injected uniform block.
+                std::uint32_t slot = 0;
+                /// WEBGPU-208: `SamplerState.MipMapLevelOfDetailBias` as the pass set it, captured
+                /// by VALUE here because this draw is replayed at Present() and the effect's
+                /// sampler state may have moved on by then.
+                float lodBias = 0.0f;
+            };
+            std::vector<Stream> streams;
+            std::vector<std::uint8_t> indexData;   ///< empty for a non-indexed draw
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
+            std::uint32_t instanceCount = 1;
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::vector<std::uint8_t> vertexUniforms;  ///< the pass's vertex register file, by value
+            std::vector<std::uint8_t> pixelUniforms;   ///< the pass's pixel register file, by value
+            std::vector<SamplerBinding> pixelSamplers;
+            /// WEBGPU-208: the pixel stage's LOD-bias uniform block, one float4 per D3D9 sampler
+            /// register with the bias in `.x`. Empty when the pass samples nothing.
+            std::vector<std::uint8_t> pixelLodBias;
+            WebGPUCompiledEffect::LinkedPassEXT linked;
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            std::array<int, 4> colorWriteChannels{15, 15, 15, 15};
+            int cullMode = 0;
+            bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
+            WebGPUViewportSnapshot viewport{};
+            WebGPUScissorSnapshot scissor{};
+        };
+        std::vector<CompiledEffectDrawCommand> compiledEffectDrawCommands_;
+        /// WEBGPU-169: builds the deferred compiled-effect command from a public draw whose
+        /// `params.compiledEffectRuntime` is set. `instanceCount` is 1 for an ordinary draw.
+        /// @param spriteTextureOverride WEBGPU-170: the texture a SpriteBatch assigned to the
+        ///        device's slot 0 for this run. XNA assigns it AFTER applying the pass, so it
+        ///        OVERRIDES whatever the effect bound to sampler register 0 rather than filling in
+        ///        for it. Null for an ordinary 3D draw, where the effect's own assignment stands and
+        ///        the shared default white texture is the fallback for an unassigned register.
+        void QueueCompiledEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+                                     PrimitiveType primitive, int primitiveCount, int instanceCount,
+                                     const GpuDrawParams& params,
+                                     const WebGPUSampledTextureEXT* spriteTextureOverride = nullptr);
+        /// WEBGPU-169: replays one compiled-effect command -- builds/fetches its bind-group layouts
+        /// and pipeline (keyed by the linked pass plus the concrete pass state) and issues the draw.
+        void IssueCompiledEffectDraw(WGPURenderPassEncoder pass,
+                                     const CompiledEffectDrawCommand& command,
+                                     const PassDestination& destination, ReplayState& state);
+        /// WEBGPU-168: the four bind-group layouts one linked pass needs, cached per pass shape.
+        struct CompiledEffectLayoutsEXT
+        {
+            std::array<WGPUBindGroupLayout, 4> groups{};
+            WGPUPipelineLayout pipelineLayout = nullptr;
+        };
+        [[nodiscard]] const CompiledEffectLayoutsEXT& GetOrCreateCompiledEffectLayoutsEXT(
+            const CompiledEffectDrawCommand& command);
+        /// The shared MojoShader effect backend, created on first compiled-effect construction.
+        std::unique_ptr<WebGPUMojoShaderContextEXT> mojoShaderContext_;
+        /// One WGPUShaderModule per distinct finished SPIR-V body. The key folds in the shader
+        /// language, because the same body yields a different module through each route and a
+        /// native test may exercise both in one process.
+        std::unordered_map<std::uint64_t, WGPUShaderModule> compiledEffectShaderModules_;
+        /// WEBGPU-203: SPIR-V natively by default, WGSL always under Emscripten.
+        CompiledEffectShaderLanguageEXT compiledEffectShaderLanguage_ =
+#if defined(__EMSCRIPTEN__)
+            CompiledEffectShaderLanguageEXT::Wgsl;
+#else
+            CompiledEffectShaderLanguageEXT::Spirv;
+#endif
+        /// One layout set per distinct pass shape (which sampler bindings, which uniform blocks).
+        std::unordered_map<std::uint64_t, CompiledEffectLayoutsEXT> compiledEffectLayouts_;
+        /// One pipeline per (linked pass, vertex layout, render-pass state).
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> compiledEffectPipelines_;
+        /// Releases every cached compiled-effect module, layout and pipeline.
+        void ReleaseCompiledEffectCachesEXT();
+        /// WEBGPU-169: resolves a public texture of ANY of the three kinds a compiled sampler can
+        /// name to its sampleable view plus keep-alive, at queue time while it is unambiguously
+        /// alive. Returns an empty value for a texture this renderer does not own.
+        [[nodiscard]] WebGPUSampledTextureEXT ResolveCompiledEffectTextureEXT(
+            Microsoft::Xna::Framework::Graphics::Texture* texture) const;
+#endif
         /// WEBGPU-76: builds the deferred custom-effect command from a `DrawPrimitivesEx` /
         /// `DrawIndexedPrimitivesEx` call whose `params.customEffectRenderer` is set.
         void QueueCustomEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,

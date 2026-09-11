@@ -2,16 +2,16 @@
 
 // plans/plan_dx.md Phase DIRECTX6 (DX-40/DX-41/DX-42): real D3D11 texture renderers.
 //
-// RGBA8 storage only (DXGI_FORMAT_R8G8B8A8_UNORM) -- matches this project's own established
-// simplification: EasyGL/Vulkan/Software all treat every ITextureRenderer/ITextureCubeRenderer/
-// ITexture3DRenderer as RGBA8 regardless of the XNA SurfaceFormat/`surfaceFormat` ordinal the
-// caller passed (CreateTexture3D/CreateTextureCube's own `surfaceFormat` parameter is accepted
-// for interface-signature compatibility but not yet honored by any renderer, this one included).
+// DX-214/DX-225: storage and transfer pitches follow the requested core XNA SurfaceFormat.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/ID3DDeviceRecoverableEXT.hpp"
 
 #include <d3d11.h>
 #include <wrl/client.h>
+
+#include <vector>
+#include <memory>
 
 namespace CNA::Internal::Renderers::DirectX11
 {
@@ -22,16 +22,23 @@ namespace CNA::Internal::Renderers::DirectX11
     /// until the caller uploads them via UpdatePixelsLevel(), matching Texture2D's own content-
     /// pipeline usage pattern (mirrors EasyGLTextureRenderer's identical level-0-then-later-levels
     /// convention).
-    class D3D11TextureRenderer final : public ITextureRenderer
+    class DirectX11Renderer;
+
+    class D3D11TextureRenderer final : public ITextureRenderer,
+                                       public D3DCommon::ID3DDeviceRecoverableEXT
     {
     public:
-        D3D11TextureRenderer(ID3D11Device* device, ID3D11DeviceContext* context, const ImageData& data);
+        D3D11TextureRenderer(DirectX11Renderer* owner, const ImageData& data);
+        ~D3D11TextureRenderer() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         /// Real mip level count this texture was allocated with (CNAEXT diagnostics).
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
@@ -40,7 +47,16 @@ namespace CNA::Internal::Renderers::DirectX11
         /// Raw SRV for Phase DIRECTX8's shader texture binding (CNAEXT).
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
 
+        void ReleaseDeviceResourcesEXT() noexcept override;
+        void RecreateDeviceResourcesEXT() override;
+
     private:
+        void CreateDeviceResources();
+        void StoreLevel(int level, const std::uint8_t* data, int width, int height,
+                        int sourceStride);
+
+        DirectX11Renderer* owner_ = nullptr;
+        std::weak_ptr<void> ownerLifetime_;
         ComPtr<ID3D11Device> device_;
         ComPtr<ID3D11DeviceContext> context_;
         ComPtr<ID3D11Texture2D> texture_;
@@ -48,6 +64,12 @@ namespace CNA::Internal::Renderers::DirectX11
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
+        bool compressed_ = false;
+        int bytesPerBlock_ = 0;
+        std::vector<std::vector<std::uint8_t>> cpuLevels_;
     };
 
     /// Real D3D11 cube-map texture renderer (DX-41). A single 6-slice ID3D11Texture2D array with
@@ -67,6 +89,22 @@ namespace CNA::Internal::Renderers::DirectX11
         /// caller's memory before it returns, so the source is never retained past this call.
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+        /**
+         * @brief Uploads an exact DXT block payload to a cube face region.
+         *
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Source block payload.
+         * @param dataLength Source payload size in bytes.
+         * @return true when the complete region was stored.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
         /// REMED-GFX-130: true only once the whole requested face rectangle has been copied out of
         /// the STAGING mirror; false for an out-of-range face/level or a failed staging
         /// creation/Map, so the shared layer rejects the read instead of fabricating a face.
@@ -74,6 +112,7 @@ namespace CNA::Internal::Renderers::DirectX11
                                    void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
         [[nodiscard]] ID3D11Texture2D* GetTextureEXT() const { return texture_.Get(); }
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
@@ -85,6 +124,12 @@ namespace CNA::Internal::Renderers::DirectX11
         ComPtr<ID3D11ShaderResourceView> srv_;
         int size_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
+        bool compressed_ = false;
+        int bytesPerBlock_ = 0;
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 
     /// Real D3D11 volume (3D) texture renderer (DX-42).
@@ -106,6 +151,7 @@ namespace CNA::Internal::Renderers::DirectX11
         [[nodiscard]] int GetWidthEXT() const { return width_; }
         [[nodiscard]] int GetHeightEXT() const { return height_; }
         [[nodiscard]] int GetDepthEXT() const { return depth_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         [[nodiscard]] ID3D11Texture3D* GetTextureEXT() const { return texture_.Get(); }
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
 
@@ -118,5 +164,11 @@ namespace CNA::Internal::Renderers::DirectX11
         int height_ = 0;
         int depth_ = 0;
         int mipLevels_ = 1;
+        int surfaceFormat_ = 0;
+        DXGI_FORMAT dxgiFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int bytesPerTexel_ = 4;
+        bool compressed_ = false;
+        int bytesPerBlock_ = 0;
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 }

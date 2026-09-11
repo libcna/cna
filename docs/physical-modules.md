@@ -29,6 +29,7 @@ umbrella targets and the physical source-partition validator.
 | modules/storage | base | `cna_storage` (`CNA::Storage`) | core-headers (headers-only: PlayerIndex/CNAEXT/PathContainment) | Core.Base, IO, Runtime, Threading |
 | modules/devices | base | `cna_devices` (`CNA::Devices`) | runtime, graphics, core, math | Core.Base |
 | modules/devices-ext | extension | `cna_devices_ext` (`CNA::DevicesExt`) | runtime, graphics, core, math (never the devices base) | Core.Base |
+| modules/phone | base | `cna_phone` (`CNA::Phone`) | runtime, core-headers | Core.Base, Collections.Core |
 | modules/graphics-ext | extension | `cna_graphics_ext` (`CNA::GraphicsExt`) | graphics | Core.Base |
 | modules/gamer-services | base (optional, `CNA_ENABLE_NET`) | `CNA_GamerServices` (`CNA::GamerServices`) | runtime, storage | Core.Base, IO, Collections.Core, Globalization, Runtime, Threading |
 | modules/net | base (optional, `CNA_ENABLE_NET`) | `CNA_Net` (`CNA::Net`) | gamer-services, enet | Core.Base, IO, Collections.Core, Runtime, Threading |

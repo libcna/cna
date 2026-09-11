@@ -52,6 +52,23 @@ namespace CNA.FnaReference
                 return EffectStateReference.Run(args[1], statesOutput);
             }
 
+            // plans/plan_fx.md FX-005: the pixel half of the oracle -- deterministic render-target
+            // samples produced by FNA's public Effect and GraphicsDevice APIs.
+            if (args.Length > 0 && args[0] == "--effect-pixels")
+            {
+                if (args.Length < 2)
+                {
+                    Console.Error.WriteLine(
+                        "usage: FnaReference.exe --effect-pixels <directory-of-fxb> [output.json]");
+                    return 2;
+                }
+                string pixelsOutput = args.Length > 2
+                    ? args[2]
+                    : Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+                                   "effect-pixels.json");
+                return EffectPixelReference.Run(args[1], pixelsOutput);
+            }
+
             string outputPath = args.Length > 0
                 ? args[0]
                 : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "reference-values.json");

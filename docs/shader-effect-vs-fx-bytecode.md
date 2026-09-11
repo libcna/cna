@@ -6,7 +6,7 @@ for one never implies support for the other.
 | API | Input | Capability | Current renderer support |
 |---|---|---|---|
 | `CNAEXT::ShaderEffect` | Caller-authored GLSL, SPIR-V, or another backend-native source pair | `CustomEffects` | Renderer-specific |
-| `Effect(GraphicsDevice&, byte[])` | XNA/FNA Direct3D 9 Effect Framework binary (`.fxb`, normally stored in XNB) | `CompiledEffects` | FNA3D; SDL_GPU and the EasyGL/OpenGL family behind their own build options |
+| `Effect(GraphicsDevice&, byte[])` | XNA/FNA Direct3D 9 Effect Framework binary (`.fxb`, normally stored in XNB) | `CompiledEffects` | FNA3D; SDL_GPU, EasyGL/OpenGL, Vulkan, and DirectX 11 behind their own build options |
 
 The six stock effects remain portable CNA APIs and do not require either custom-effect capability.
 
@@ -74,12 +74,12 @@ format/backend mismatch. The XNB reader translates either into an asset-scoped
 
 ## The other renderers
 
-**Updated 2026-08-17.** Two more backends have since passed the gate: `SDL_GPU`
-(`CNA_SDL_GPU_COMPILED_EFFECTS`) and the EasyGL/OpenGL family (`CNA_EASYGL_COMPILED_EFFECTS`), both
-opt-in at configure time because MojoShader is a fetched dependency neither renderer otherwise
-needs. With the option off they report `CompiledEffects == false` and refuse, exactly like any
-unsupported backend. `fx-compiled-effects.md` §10 carries the current matrix and each backend's
-remaining refusals.
+**Updated 2026-09-09.** Four opt-in backends have now passed the gate: `SDL_GPU`
+(`CNA_SDL_GPU_COMPILED_EFFECTS`), the EasyGL/OpenGL family (`CNA_EASYGL_COMPILED_EFFECTS`), Vulkan
+(`CNA_VULKAN_COMPILED_EFFECTS`), and DirectX 11 (`CNA_DIRECTX11_COMPILED_EFFECTS`). MojoShader is a
+fetched dependency those renderers do not otherwise need. With the option off they report
+`CompiledEffects == false` and refuse, exactly like any unsupported backend.
+`fx-compiled-effects.md` §10 carries the current matrix and each backend's remaining refusals.
 
 Every other renderer inherits the common `CreateCompiledEffect()` refusal and reports
 `CompiledEffects == false`. This is the correct quality gate: parsing metadata alone, translating

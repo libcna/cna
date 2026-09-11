@@ -197,9 +197,17 @@
       "category": "platform-sdl3-integration",
       "max_references": 23
     },
+    "modules/platform/tests/CNA/Platform/Sdl3PlatformExitUnderLockTests.cpp": {
+      "category": "platform-sdl3-integration",
+      "max_references": 1
+    },
     "modules/platform/tests/CNA/Platform/Sdl3PlatformTests.cpp": {
       "category": "platform-sdl3-integration",
       "max_references": 18
+    },
+    "modules/platform/tests/CNA/Platform/Sdl3XErrorHandlerTests.cpp": {
+      "category": "platform-sdl3-integration",
+      "max_references": 2
     },
     "modules/platform/tests/CNA/Platform/TerminalPresenterTests.cpp": {
       "category": "containment-assertion",
@@ -369,17 +377,13 @@
       "category": "renderer-integration-executable",
       "max_references": 2
     },
-    "modules/renderers/directx10/examples/directx10_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
     "modules/renderers/directx11/examples/directx11_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 5
     },
     "modules/renderers/directx12/examples/directx12_swapchain_diag.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 12
+      "max_references": 19
     },
     "modules/renderers/directx2/examples/directx2_logical_transform_test.cpp": {
       "category": "renderer-integration-executable",
@@ -1088,42 +1092,6 @@
     "modules/renderers/sdl-renderer/examples/sdlrenderer_viewport_project_unproject_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 2
-    },
-    "modules/renderers/skia/examples/skia_display_scale_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 9
-    },
-    "modules/renderers/skia/examples/skia_ganesh_backbuffer_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 42
-    },
-    "modules/renderers/skia/examples/skia_ganesh_mode_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 23
-    },
-    "modules/renderers/skia/examples/skia_ganesh_resource_budget_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 21
-    },
-    "modules/renderers/skia/examples/skia_lifecycle_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 22
-    },
-    "modules/renderers/skia/examples/skia_ownership_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 19
-    },
-    "modules/renderers/skia/examples/skia_presentation_modes_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 24
-    },
-    "modules/renderers/skia/examples/skia_raster_mode_coherence_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 17
-    },
-    "modules/renderers/skia/examples/skia_window_lifecycle_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 24
     },
     "modules/renderers/software/examples/software_smoke_test.cpp": {
       "category": "renderer-integration-executable",

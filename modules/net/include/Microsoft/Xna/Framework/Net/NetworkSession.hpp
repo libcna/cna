@@ -66,9 +66,9 @@ namespace Microsoft::Xna::Framework::Net
     {
     public:
         /** @brief The maximum number of gamers supported by any session. */
-        CNAEXT static constexpr int MaxSupportedGamers = 31;
+        static constexpr int MaxSupportedGamers = 31;
         /** @brief The maximum number of previous gamers tracked by a session. */
-        CNAEXT static constexpr int MaxPreviousGamers = 100;
+        static constexpr int MaxPreviousGamers = 100;
 
         /**
          * @brief Identifies the kind of queued NetworkSession event.
@@ -384,8 +384,14 @@ namespace Microsoft::Xna::Framework::Net
         /** @brief Declared for API parity; never raised (leaderboards/TrueSkill unimplemented upstream). */
         System::EventHandler<WriteLeaderboardsEventArgs> WriteTrueSkill;
 
-        /** @brief Declared for API parity; never raised upstream. */
-        CNAEXT static System::EventHandler<GamerServices::InviteAcceptedEventArgs> InviteAccepted;
+        /**
+         * @brief Raised when the user accepts a game invitation.
+         *
+         * Declared for API parity and never raised here: CNA has no invitation service to
+         * deliver one. `JoinInvited` refuses for the same reason, so a handler subscribed to
+         * this event is unreachable rather than merely idle.
+         */
+        static System::EventHandler<GamerServices::InviteAcceptedEventArgs> InviteAccepted;
 
         /**
          * @brief Disposes the session, flushing queued packets on all local gamers.
