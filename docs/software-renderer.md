@@ -525,6 +525,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   Software and isolated EasyGL tests prove both missing-plane exception types, depth-only success,
   failure atomicity, and backbuffer/render-target behavior.
 - **`Clear(Color)` clears depth to 1.0 independently of `Viewport.MaxDepth`** (`SOFTWARE-334`).
+- **Explicit depth clears reproduce XNA/D3D normalized-depth saturation** (`SOFTWARE-335`):
+  finite values and infinities clamp to `[0,1]`, NaN becomes `0`, and no managed range exception
+  is synthesized.
   Microsoft XNA hardcodes `1f`; FNA's use of the current viewport maximum is a lower-authority
   divergence. A depth-rendered discriminator first proves that an explicit 0.25 clear rejects a
   fragment at the viewport maximum, then requires the single-color overload to admit it. The same

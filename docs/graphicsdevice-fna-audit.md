@@ -93,8 +93,8 @@ CNA also has a fourth overload `Reset(const PresentationParameters&, GraphicsAda
 | FNA signature | CNA status |
 |---|---|
 | `Clear(Color color)` | ✅ (`SOFTWARE-333`: selects only real active attachments; `SOFTWARE-334`: Microsoft depth 1.0 rather than FNA `Viewport.MaxDepth`) |
-| `Clear(ClearOptions, Color, float depth, int stencil)` | ✅ (`SOFTWARE-333`: Microsoft missing-attachment exception, intentionally stricter than FNA masking) |
-| `Clear(ClearOptions, Vector4 color, float depth, int stencil)` | ✅ (`SOFTWARE-327/332/333`) |
+| `Clear(ClearOptions, Color, float depth, int stencil)` | ✅ (`SOFTWARE-333`: Microsoft missing-attachment exception; `SOFTWARE-335`: measured native depth saturation) |
+| `Clear(ClearOptions, Vector4 color, float depth, int stencil)` | ✅ (`SOFTWARE-327/332/333/335`) |
 
 The `Vector4` overload is XNA 4.0 API, but Microsoft and FNA differ in its implementation.
 Recovered Microsoft XNA constructs `Color(color)` and calls the packed-color overload, so even a
@@ -104,6 +104,10 @@ two non-XNA convenience overloads, explicitly tagged `CNAEXT`:
 
 - `Clear(float r, float g, float b, float a)`
 - `Clear(const Color& color, float depth)`
+
+Microsoft performs no managed depth-range validation. Isolated XNA/D3D output measurements show
+that the native clear path converts finite values and infinities to `[0,1]` and converts NaN to
+zero. CNA reproduces this at the common renderer boundary (`SOFTWARE-335`).
 
 ### Dispose
 

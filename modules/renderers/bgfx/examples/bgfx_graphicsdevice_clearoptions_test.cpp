@@ -273,7 +273,7 @@ class BgfxGraphicsDeviceClearOptionsTest final : public Game
     std::size_t caseIndex_ = 0;
     int passed_ = 0;
     int failed_ = 0;
-    bool depthlessInvalidDepthChecked_ = false;
+    bool depthlessExplicitDepthChecked_ = false;
     bool nativeVulkanUnavailable_ = false;
 
     static RasterizerState ExplicitRasterizer(bool scissorEnabled)
@@ -845,11 +845,11 @@ class BgfxGraphicsDeviceClearOptionsTest final : public Game
             suite_ = Suite::IsolationPrepare;
     }
 
-    void CheckDepthlessInvalidDepth(GraphicsDevice& device)
+    void CheckDepthlessExplicitDepth(GraphicsDevice& device)
     {
-        if (depthlessInvalidDepthChecked_)
+        if (depthlessExplicitDepthChecked_)
             return;
-        depthlessInvalidDepthChecked_ = true;
+        depthlessExplicitDepthChecked_ = true;
         bool threw = false;
         try
         {
@@ -860,7 +860,7 @@ class BgfxGraphicsDeviceClearOptionsTest final : public Game
             threw = true;
         }
         Check(threw,
-              "RenderTarget2D None / invalid requested depth is validated before unavailable-buffer masking");
+              "RenderTarget2D None rejects an explicit unavailable depth clear");
     }
 
     void RunTargetSuite(GraphicsDevice& device)
@@ -884,7 +884,7 @@ class BgfxGraphicsDeviceClearOptionsTest final : public Game
         {
             device.SetRenderTarget(&target);
             if (!hasDepth)
-                CheckDepthlessInvalidDepth(device);
+                CheckDepthlessExplicitDepth(device);
             RenderRequestedCase(
                 device, clearCase, kTargetWidth, kTargetHeight,
                 hasDepth, hasStencil, true);

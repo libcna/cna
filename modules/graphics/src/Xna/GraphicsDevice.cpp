@@ -70,6 +70,18 @@ namespace Microsoft::Xna::Framework::Graphics
                 static_cast<std::int64_t>((std::numeric_limits<int>::max)())));
         }
 
+        [[nodiscard]] float NormalizeClearDepth(float depth) noexcept
+        {
+            // Direct3D's clear path saturates the public Single to its normalized depth range.
+            // Its observed NaN conversion is the lower endpoint rather than an unordered stored
+            // value; CPU renderers need this explicit normalization instead of a native API call.
+            if (std::isnan(depth))
+            {
+                return 0.0f;
+            }
+            return std::clamp(depth, 0.0f, 1.0f);
+        }
+
         constexpr std::array<SurfaceFormat, 27> CapabilitySurfaceFormats = {
             SurfaceFormat::Color,
             SurfaceFormat::Bgr565,
@@ -649,14 +661,6 @@ namespace Microsoft::Xna::Framework::Graphics
                 "or stencil buffer.");
         }
 
-        if (hasClearFlag(options, ClearOptions::DepthBuffer))
-        {
-            if (depth < 0.0f || depth > 1.0f)
-                throw System::ArgumentOutOfRangeException(
-                    "depth", std::to_string(depth),
-                    "'depth' must be between 0.0 and 1.0.");
-        }
-
         const Vector4 normalizedColor = color.ToVector4();
         const float r = normalizedColor.X;
         const float g = normalizedColor.Y;
@@ -669,14 +673,15 @@ namespace Microsoft::Xna::Framework::Graphics
         // against `options` nor threaded through to any renderer, so a requested stencil clear
         // silently did nothing on every renderer.
         const bool clearStencil = hasClearFlag(options, ClearOptions::Stencil);
+        const float normalizedDepth = clearDepth ? NormalizeClearDepth(depth) : depth;
 
         if (clearTarget && clearDepth && clearStencil)
         {
-            renderer_->ClearColorDepthAndStencil(r, g, b, a, depth, stencil);
+            renderer_->ClearColorDepthAndStencil(r, g, b, a, normalizedDepth, stencil);
         }
         else if (clearTarget && clearDepth)
         {
-            renderer_->ClearColorAndDepth(r, g, b, a, depth);
+            renderer_->ClearColorAndDepth(r, g, b, a, normalizedDepth);
         }
         else if (clearTarget && clearStencil)
         {
@@ -684,7 +689,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         else if (clearDepth && clearStencil)
         {
-            renderer_->ClearDepthAndStencil(depth, stencil);
+            renderer_->ClearDepthAndStencil(normalizedDepth, stencil);
         }
         else if (clearTarget)
         {
@@ -692,7 +697,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         else if (clearDepth)
         {
-            renderer_->ClearDepth(depth);
+            renderer_->ClearDepth(normalizedDepth);
         }
         else if (clearStencil)
         {

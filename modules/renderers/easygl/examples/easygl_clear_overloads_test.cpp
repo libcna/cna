@@ -7,18 +7,17 @@
 //   3.  Clear(ClearOptions::DepthBuffer, …) → color does NOT change
 //   4.  Clear(Target|DepthBuffer, …)     → color changes, valid depth accepted
 //   5.  Clear(Target|DepthBuffer|Stencil, …) → color changes
-//   6.  depth < 0.0f with DepthBuffer    → ArgumentOutOfRangeException
-//   7.  depth > 1.0f with DepthBuffer    → ArgumentOutOfRangeException
-//   8.  depth out-of-range, Target only  → no throw (guard is depth-flag-gated)
+//   6.  depth < 0.0f with DepthBuffer    → accepted and saturated
+//   7.  depth > 1.0f with DepthBuffer    → accepted and saturated
+//   8.  depth out-of-range, Target only  → accepted and ignored
 //   9.  Clear(Color,float)               → color changes (convenience overload)
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
-#include "System/ArgumentOutOfRangeException.hpp"
-
 #include <cstdio>
 #include <cmath>
 #include <memory>
@@ -54,14 +53,6 @@ class ClearOverloadsTest : public Game
     {
         std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
         if (ok) ++pass_; else ++fail_;
-    }
-
-    template<typename F>
-    bool throwsAOOR(F&& fn)
-    {
-        try { fn(); return false; }
-        catch (const System::ArgumentOutOfRangeException&) { return true; }
-        catch (...) { return false; }
     }
 
 protected:
@@ -100,25 +91,24 @@ protected:
         check(colorNear(readCenter(dev), Color::Black),
               "Clear(Target|DepthBuffer|Stencil, Black, 1.0, 0) sets pixel to black");
 
-        // ── 6. depth < 0.0 with DepthBuffer flag → ArgumentOutOfRangeException
-        check(throwsAOOR([&]{
+        // ── 6/7. Out-of-range depth is accepted and saturated by the clear path ──
+        {
+            bool threw = false;
+            try
+            {
                 dev.Clear(ClearOptions::DepthBuffer, Color::Red, -0.1f, 0);
-              }),
-              "Clear with depth=-0.1 and DepthBuffer throws ArgumentOutOfRangeException");
-
-        // ── 7. depth > 1.0 with DepthBuffer flag → ArgumentOutOfRangeException
-        check(throwsAOOR([&]{
                 dev.Clear(ClearOptions::DepthBuffer, Color::Red, 1.1f, 0);
-              }),
-              "Clear with depth=1.1 and DepthBuffer throws ArgumentOutOfRangeException");
+            }
+            catch (...) { threw = true; }
+            check(!threw, "Clear depth outside [0,1] is accepted and saturated");
+        }
 
-        // ── 8. depth out-of-range, Target only — guard is depth-flag-gated ───
-        //   No DepthBuffer flag → no validation → no throw.
+        // ── 8. Target-only ignores the depth argument completely ────────────
         {
             bool threw = false;
             try { dev.Clear(ClearOptions::Target, Color::Cyan, -99.0f, 0); }
             catch (...) { threw = true; }
-            check(!threw, "Clear(Target only, depth=-99) does not throw");
+            check(!threw, "Clear(Target only, depth=-99) ignores depth and does not throw");
         }
 
         // ── 9. Clear(Color, float) convenience overload ──────────────────────
@@ -135,6 +125,7 @@ public:
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
+        gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
     }
 
     int getResult() const { return fail_ > 0 ? 1 : 0; }

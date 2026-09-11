@@ -3,6 +3,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "CNA/RendererTestGate.hpp"
 
 using namespace CNA::Testing::Renderers;
@@ -129,6 +131,29 @@ namespace
         DrawFullScreen(device, Color::Green, 0.5f);
         return ReadCenter(device);
     }
+
+    Color RenderClearDepthProbe(float clearDepth, CompareFunction function, float fragmentDepth)
+    {
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            BackbufferParameters(DepthFormat::Depth24));
+        DepthStencilState state;
+        state.setDepthBufferEnableProperty(true);
+        state.setDepthBufferWriteEnableProperty(true);
+        state.setDepthBufferFunctionProperty(function);
+        PrepareDraw(device, state);
+
+        // Collapse the viewport depth range so both Direct3D-style and OpenGL-style clip-space
+        // conventions produce the exact endpoint needed by this clear-value discriminator.
+        Viewport viewport = device.getViewportProperty();
+        viewport.setMinDepthProperty(fragmentDepth);
+        viewport.setMaxDepthProperty(fragmentDepth);
+        device.setViewportProperty(viewport);
+        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                     Color::Black, clearDepth, 0);
+        DrawFullScreen(device, Color::Red, 0.5f);
+        return ReadCenter(device);
+    }
 }
 
 TEST(BackBufferDepthStencilContractTest, NoneAndDepth24SelectDepthFragmentAcceptance)
@@ -168,8 +193,8 @@ TEST(BackBufferDepthStencilContractTest, ExplicitMissingDepthOrStencilThrowsAtom
         System::InvalidOperationException);
     EXPECT_EQ(ReadCenter(device), Color::Red);
 
-    // Recovered Microsoft code classifies the absent attachment before any other native clear
-    // failure; an invalid depth value therefore cannot replace the missing-buffer exception.
+    // The missing attachment is still invalid even when the supplied depth would otherwise be
+    // saturated by the native clear path.
     EXPECT_THROW(
         device.Clear(ClearOptions::DepthBuffer, Color::Blue, -1.0f, 0),
         System::InvalidOperationException);
@@ -262,4 +287,38 @@ TEST(BackBufferDepthStencilContractTest, SingleArgumentClearUsesOneInsteadOfView
     device.Clear(Color::Blue);
     DrawFullScreen(device, Color::Red, 1.0f);
     EXPECT_EQ(ReadCenter(device), Color::Red);
+}
+
+TEST(BackBufferDepthStencilContractTest, ExplicitDepthClearSaturatesLikeMicrosoftXna)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    const float infinity = std::numeric_limits<float>::infinity();
+    EXPECT_EQ(RenderClearDepthProbe(-0.25f, CompareFunction::Greater, 0.0f), Color::Black);
+    EXPECT_EQ(RenderClearDepthProbe(1.25f, CompareFunction::Less, 1.0f), Color::Black);
+    EXPECT_EQ(RenderClearDepthProbe(-infinity, CompareFunction::Greater, 0.0f), Color::Black);
+    EXPECT_EQ(RenderClearDepthProbe(infinity, CompareFunction::Less, 1.0f), Color::Black);
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_EQ(RenderClearDepthProbe(nan, CompareFunction::Greater, 0.5f), Color::Red);
+    EXPECT_EQ(RenderClearDepthProbe(nan, CompareFunction::Less, 0.5f), Color::Black);
+}
+
+TEST(BackBufferDepthStencilContractTest, UnknownClearOptionBitsAreIgnored)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        BackbufferParameters(DepthFormat::Depth24));
+    device.Clear(Color::Red);
+
+    EXPECT_NO_THROW(device.Clear(static_cast<ClearOptions>(8), Color::Blue,
+                                 std::numeric_limits<float>::quiet_NaN(), 0));
+    EXPECT_EQ(ReadCenter(device), Color::Red);
+
+    const auto targetAndUnknown = static_cast<ClearOptions>(
+        static_cast<int>(ClearOptions::Target) | 8);
+    EXPECT_NO_THROW(device.Clear(targetAndUnknown, Color::Blue, -99.0f, 0));
+    EXPECT_EQ(ReadCenter(device), Color::Blue);
 }
