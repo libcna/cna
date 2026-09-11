@@ -58,6 +58,7 @@ using CNA::Internal::Renderers::Software::SoftwareShaderSamplerEXT;
 using CNA::Internal::Renderers::Software::SoftwareShaderSamplerTypeEXT;
 using CNA::Internal::Renderers::Software::SoftwareTextureLodModeEXT;
 using CNA::Internal::Renderers::Software::ExecuteSoftwarePixelShaderEXT;
+using CNA::Internal::Renderers::Software::ExecuteSoftwarePixelShaderQuadEXT;
 using CNA::Internal::Renderers::Software::ExecuteSoftwareVertexShaderEXT;
 using Microsoft::Xna::Framework::Graphics::Blend;
 using Microsoft::Xna::Framework::Graphics::BlendState;
@@ -762,6 +763,102 @@ namespace
             killProgram, floats, integers, booleans, killInputs);
         Check(killed.discarded && killed.colorWriteMask == 0u,
               "TEXKILL did not suppress the Shader Model 1 r0 output");
+    }
+
+    void CheckPixelDerivativeSemantics()
+    {
+        constexpr std::uint32_t temporary = 0u;
+        constexpr std::uint32_t input = 1u;
+        constexpr std::uint32_t colorOutput = 8u;
+        const auto registerBits = [](std::uint32_t type)
+        {
+            return ((type & 0x7u) << 28u) | ((type >> 3u) << 11u);
+        };
+        const auto destination = [&](std::uint32_t type, std::uint32_t number)
+        {
+            return 0x80000000u | registerBits(type) | number | (0xFu << 16u);
+        };
+        const auto source = [&](std::uint32_t type, std::uint32_t number)
+        {
+            return 0x80000000u | registerBits(type) | number | (0xE4u << 16u);
+        };
+        SoftwareShaderProgramEXT program;
+        program.stage = SoftwareShaderStageEXT::Pixel;
+        program.majorVersion = 3u;
+        program.inputSemantics.push_back(
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, 0u, static_cast<std::uint8_t>(input)});
+        const auto append = [&](std::uint16_t opcode,
+                                std::initializer_list<std::uint32_t> tokens)
+        {
+            SoftwareShaderInstructionEXT instruction;
+            instruction.opcode = opcode;
+            instruction.tokens.assign(tokens);
+            program.instructions.push_back(std::move(instruction));
+        };
+        append(5u, {5u, destination(temporary, 0u), source(input, 0u), source(input, 0u)});
+        append(91u, {91u, destination(temporary, 1u), source(temporary, 0u)});
+        append(92u, {92u, destination(temporary, 2u), source(temporary, 0u)});
+        append(5u, {5u, destination(temporary, 3u), source(temporary, 1u), source(input, 0u)});
+        append(91u, {91u, destination(temporary, 4u), source(temporary, 3u)});
+        append(1u, {1u, destination(colorOutput, 0u), source(temporary, 1u)});
+        append(1u, {1u, destination(colorOutput, 1u), source(temporary, 2u)});
+        append(1u, {1u, destination(colorOutput, 2u), source(temporary, 4u)});
+
+        const std::array<std::array<float, 4>, 4> laneValues = {{
+            {1.0f, 2.0f, 3.0f, 4.0f},
+            {3.0f, 5.0f, 7.0f, 11.0f},
+            {2.0f, 4.0f, 8.0f, 16.0f},
+            {6.0f, 10.0f, 14.0f, 22.0f},
+        }};
+        std::array<std::array<SoftwareShaderSemanticValueEXT, 1>, 4> laneInputs{};
+        std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4> inputSpans{};
+        for (std::size_t lane = 0; lane < laneInputs.size(); ++lane)
+        {
+            laneInputs[lane][0] =
+                {MOJOSHADER_USAGE_TEXCOORD, 0u, laneValues[lane]};
+            inputSpans[lane] = laneInputs[lane];
+        }
+        const std::array<float, 256u * 4u> floats{};
+        const std::array<int, 16u * 4u> integers{};
+        const std::array<unsigned char, 16u> booleans{};
+        const auto result = ExecuteSoftwarePixelShaderQuadEXT(
+            program, floats, integers, booleans, inputSpans);
+        const std::array<std::array<float, 4>, 4> expectedDx = {{
+            {8.0f, 21.0f, 40.0f, 105.0f}, {8.0f, 21.0f, 40.0f, 105.0f},
+            {32.0f, 84.0f, 132.0f, 228.0f}, {32.0f, 84.0f, 132.0f, 228.0f},
+        }};
+        const std::array<std::array<float, 4>, 4> expectedDy = {{
+            {3.0f, 12.0f, 55.0f, 240.0f}, {27.0f, 75.0f, 147.0f, 363.0f},
+            {3.0f, 12.0f, 55.0f, 240.0f}, {27.0f, 75.0f, 147.0f, 363.0f},
+        }};
+        const std::array<std::array<float, 4>, 4> expectedDependentDx = {{
+            {16.0f, 63.0f, 160.0f, 735.0f}, {16.0f, 63.0f, 160.0f, 735.0f},
+            {128.0f, 504.0f, 792.0f, 1368.0f}, {128.0f, 504.0f, 792.0f, 1368.0f},
+        }};
+        for (std::size_t lane = 0; lane < result.size(); ++lane)
+        {
+            Check(result[lane].colorWriteMask == 0x7u,
+                  "DSX/DSY quad did not write all three diagnostic outputs");
+            Check(result[lane].colors[0] == expectedDx[lane],
+                  "DSX did not use the adjacent lock-step x lane");
+            Check(result[lane].colors[1] == expectedDy[lane],
+                  "DSY did not use the adjacent lock-step y lane");
+            Check(result[lane].colors[2] == expectedDependentDx[lane],
+                  "a later DSX did not observe the earlier derivative result");
+        }
+
+        bool scalarRejected = false;
+        try
+        {
+            static_cast<void>(ExecuteSoftwarePixelShaderEXT(
+                program, floats, integers, booleans, laneInputs[0]));
+        }
+        catch (const std::runtime_error& error)
+        {
+            scalarRejected = std::string(error.what()).find("2x2 quad") != std::string::npos;
+        }
+        Check(scalarRejected,
+              "scalar execution silently approximated an adjacent-lane derivative");
     }
 
     void CheckVertexConditionalSemantics()
@@ -1535,6 +1632,66 @@ namespace
               "parsed pixel CALL/CALLNZ/LABEL/RET program produced the wrong result");
     }
 
+    void CheckCompiledDerivativeRasterization()
+    {
+        GraphicsDevice device;
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesDerivatives = true;
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect->getParametersProperty()["Tint"]->SetValue(Vector4::One);
+        struct PositionUv
+        {
+            float x, y, z;
+            float u, v;
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(PositionUv)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const PositionUv quad[6] = {
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+            {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+            { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+            { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+            { 1.0f,  1.0f, 0.0f, 1.0f, 0.0f},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        std::array<Color, 16> pixels{};
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        const auto expect = [&](int x, int y, int red, int green)
+        {
+            const Color& pixel = pixels[static_cast<std::size_t>(y * 4 + x)];
+            Check(std::abs(static_cast<int>(pixel.getRProperty()) - red) <= 2 &&
+                      std::abs(static_cast<int>(pixel.getGProperty()) - green) <= 2 &&
+                      pixel.getBProperty() == 0 && pixel.getAProperty() == 255,
+                  "compiled DSX/DSY raster result differs at " +
+                      std::to_string(x) + "," + std::to_string(y) + " (actual " +
+                      std::to_string(pixel.getRProperty()) + "," +
+                      std::to_string(pixel.getGProperty()) + "," +
+                      std::to_string(pixel.getBProperty()) + "," +
+                      std::to_string(pixel.getAProperty()) + ")");
+        };
+        expect(0, 0, 16, 16);
+        expect(1, 1, 16, 16);
+        expect(2, 0, 80, 16);
+        expect(0, 2, 16, 80);
+        expect(3, 3, 80, 80);
+    }
+
     void CheckCompiledSamplerRasterization(SoftwareRenderer& renderer)
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
@@ -2251,6 +2408,7 @@ int main()
         SoftwareRenderer renderer(16, 16);
         CheckVertexInstructionSemantics();
         CheckPixelInstructionSemantics();
+        CheckPixelDerivativeSemantics();
         CheckVertexConditionalSemantics();
         CheckPixelConditionalSemantics();
         CheckVertexLoopSemantics();
@@ -2259,6 +2417,7 @@ int main()
         CheckPixelSubroutineSemantics();
         CheckSubroutineValidation();
         CheckParsedSubroutineEffect(renderer);
+        CheckCompiledDerivativeRasterization();
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
         CheckCompiledLineAndWireframeRasterization(renderer);

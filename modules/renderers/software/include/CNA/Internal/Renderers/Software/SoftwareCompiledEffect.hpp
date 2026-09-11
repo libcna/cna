@@ -210,6 +210,25 @@ namespace CNA::Internal::Renderers::Software
         std::span<const SoftwareShaderSemanticValueEXT> inputs,
         const ISoftwarePixelSamplerEXT* sampler = nullptr);
 
+    /**
+     * @brief Executes four lock-step Direct3D pixel invocations in one 2x2 quad.
+     * @param program Pixel program token IR.
+     * @param floatRegisters Direct3D float4 constant register storage.
+     * @param integerRegisters Direct3D int4 constant register storage.
+     * @param booleanRegisters Direct3D Boolean constant register storage.
+     * @param inputs Perspective-correct semantic inputs in top-left, top-right,
+     * bottom-left, bottom-right order.
+     * @param sampler Renderer-side texture provider, or null for texture-free programs.
+     * @return Colour/depth outputs and discard state for the four lanes in input order.
+     */
+    CNAEXT [[nodiscard]] std::array<SoftwarePixelShaderResultEXT, 4>
+    ExecuteSoftwarePixelShaderQuadEXT(
+        const SoftwareShaderProgramEXT& program, std::span<const float> floatRegisters,
+        std::span<const int> integerRegisters,
+        std::span<const unsigned char> booleanRegisters,
+        const std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4>& inputs,
+        const ISoftwarePixelSamplerEXT* sampler = nullptr);
+
     /** @brief A validated Direct3D 9 shader program prepared for the later CPU
      * execution phases. */
     struct SoftwareShaderProgramEXT
@@ -369,6 +388,17 @@ namespace CNA::Internal::Renderers::Software
          */
         CNAEXT [[nodiscard]] SoftwarePixelShaderResultEXT ExecutePixelEXT(
             std::span<const SoftwareShaderSemanticValueEXT> inputs,
+            const ISoftwarePixelSamplerEXT* sampler = nullptr) const;
+
+        /**
+         * @brief Executes the selected pixel program on one lock-step 2x2 fragment quad.
+         * @param inputs Perspective-correct semantic inputs in top-left, top-right,
+         * bottom-left, bottom-right order.
+         * @param sampler Renderer-side texture provider, or null for texture-free programs.
+         * @return Colour/depth outputs and discard state for all four lanes.
+         */
+        CNAEXT [[nodiscard]] std::array<SoftwarePixelShaderResultEXT, 4> ExecutePixelQuadEXT(
+            const std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4>& inputs,
             const ISoftwarePixelSamplerEXT* sampler = nullptr) const;
 
         /**

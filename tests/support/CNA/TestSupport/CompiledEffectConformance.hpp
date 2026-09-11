@@ -55,6 +55,7 @@
 #include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <filesystem>
@@ -1001,6 +1002,83 @@ namespace CNA::TestSupport
         EXPECT_NEAR(centre.getGProperty(), 64, 2);
         EXPECT_NEAR(centre.getBProperty(), 64, 2);
         EXPECT_EQ(centre.getAProperty(), 255);
+    }
+
+    /**
+     * @brief Proves that D3D9 `DSX`/`DSY` observe adjacent lock-step register contents.
+     *
+     * The shader squares its interpolated texture coordinate before taking each derivative, so
+     * the two aligned 2x2 quads have different rates. This rejects both scalar execution and a
+     * shortcut that differentiates only the original interpolator.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     * @param effect Prepared derivative fixture owned by the caller.
+     */
+    inline void RunCompiledEffectDerivativeDrawContract(GraphicsDevice& device, Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4::One);
+        struct PositionUv
+        {
+            float x, y, z;
+            float u, v;
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(PositionUv)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const PositionUv quad[6] = {
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+            {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+            { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+            { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+            { 1.0f,  1.0f, 0.0f, 1.0f, 0.0f},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        std::array<Color, 16> pixels{};
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        const auto expect = [&](int x, int y, int red, int green)
+        {
+            const Color& pixel = pixels[static_cast<std::size_t>(y * 4 + x)];
+            EXPECT_NEAR(pixel.getRProperty(), red, 2) << "at " << x << ',' << y;
+            EXPECT_NEAR(pixel.getGProperty(), green, 2) << "at " << x << ',' << y;
+            EXPECT_EQ(pixel.getBProperty(), 0) << "at " << x << ',' << y;
+            EXPECT_EQ(pixel.getAProperty(), 255) << "at " << x << ',' << y;
+        };
+        // XNA/D3D9 evaluates ordinary 3D geometry at integer pixel centres. CNA's
+        // corner-origin rasterizers express that as the established 63/128-pixel correction,
+        // producing u/v values 0, .25, .5 and .75 here. The adjacent squared differences are
+        // therefore 1/16 and 5/16, quantized to 16 and 80 in the Color target.
+        expect(0, 0, 16, 16);
+        expect(1, 1, 16, 16);
+        expect(2, 0, 80, 16);
+        expect(0, 2, 16, 80);
+        expect(3, 3, 80, 80);
+    }
+
+    /**
+     * @brief Builds and runs the shared D3D9 derivative fixture.
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectDerivativeContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesDerivatives = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        RunCompiledEffectDerivativeDrawContract(device, effect);
     }
 
     /**

@@ -2948,16 +2948,15 @@ namespace CNA::Internal::Renderers::Software
 
 #ifndef CNA_SOFTWARE_2D_ONLY
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
-        void WriteCompiledFragment(
+        void WriteCompiledPixelResult(
             const std::array<SoftwareFramebuffer*, 4>& colorTargets, int colorTargetCount,
             const RasterDepthState& depthState, const RasterStencilState& stencilState,
             const SoftwareBlendState& blendState, const std::array<float, 4>& blendFactor,
             const std::array<int, 4>& colorWriteMasks, unsigned int multiSampleMask,
-            SoftwareOcclusionQueryRenderer* occlusionQuery, SoftwareCompiledEffect& runtime,
+            SoftwareOcclusionQueryRenderer* occlusionQuery,
             int x, int y, float depth, unsigned int coverageMask,
             const std::array<float, 4>* sampleDepths,
-            std::span<const SoftwareShaderSemanticValueEXT> inputs,
-            const ISoftwarePixelSamplerEXT* sampler)
+            const SoftwarePixelShaderResultEXT& pixel)
         {
             SoftwareFramebuffer& depthTarget = *colorTargets[0];
             const unsigned int availableSamples =
@@ -2967,7 +2966,6 @@ namespace CNA::Internal::Renderers::Software
             if (activeSamples == 0u)
                 return;
 
-            const SoftwarePixelShaderResultEXT pixel = runtime.ExecutePixelEXT(inputs, sampler);
             if (pixel.discarded)
                 return;
 
@@ -3039,6 +3037,24 @@ namespace CNA::Internal::Renderers::Software
                         writeColor(sample);
                 }
             }
+        }
+
+        void WriteCompiledFragment(
+            const std::array<SoftwareFramebuffer*, 4>& colorTargets, int colorTargetCount,
+            const RasterDepthState& depthState, const RasterStencilState& stencilState,
+            const SoftwareBlendState& blendState, const std::array<float, 4>& blendFactor,
+            const std::array<int, 4>& colorWriteMasks, unsigned int multiSampleMask,
+            SoftwareOcclusionQueryRenderer* occlusionQuery, SoftwareCompiledEffect& runtime,
+            int x, int y, float depth, unsigned int coverageMask,
+            const std::array<float, 4>* sampleDepths,
+            std::span<const SoftwareShaderSemanticValueEXT> inputs,
+            const ISoftwarePixelSamplerEXT* sampler)
+        {
+            WriteCompiledPixelResult(
+                colorTargets, colorTargetCount, depthState, stencilState, blendState,
+                blendFactor, colorWriteMasks, multiSampleMask, occlusionQuery,
+                x, y, depth, coverageMask, sampleDepths,
+                runtime.ExecutePixelEXT(inputs, sampler));
         }
 
         void RasterizeLineCompiled(
@@ -3166,6 +3182,163 @@ namespace CNA::Internal::Renderers::Software
                 if ((edgeMask & kEdgeV2V0) != 0u) drawEdge(v2, v0);
                 return;
             }
+
+            if (v0.compiledVaryingCount != v1.compiledVaryingCount ||
+                v0.compiledVaryingCount != v2.compiledVaryingCount)
+            {
+                throw std::runtime_error(
+                    "SoftwareRenderer: compiled varying counts disagree within a triangle.");
+            }
+            for (std::size_t varying = 0; varying < v0.compiledVaryingCount; ++varying)
+            {
+                const auto& first = v0.compiledVaryings[varying];
+                const auto& second = v1.compiledVaryings[varying];
+                const auto& third = v2.compiledVaryings[varying];
+                if (first.usage != second.usage || first.usage != third.usage ||
+                    first.usageIndex != second.usageIndex ||
+                    first.usageIndex != third.usageIndex)
+                {
+                    throw std::runtime_error(
+                        "SoftwareRenderer: compiled varying semantics disagree within a triangle.");
+                }
+            }
+
+            const bool usesDerivatives = std::any_of(
+                pixelProgram->instructions.begin(), pixelProgram->instructions.end(),
+                [](const SoftwareShaderInstructionEXT& instruction)
+                { return instruction.opcode == 91u || instruction.opcode == 92u; });
+            if (usesDerivatives)
+            {
+                struct QuadLane
+                {
+                    int x = 0;
+                    int y = 0;
+                    float depth = 0.0f;
+                    unsigned int coverageMask = 0u;
+                    std::array<float, 4> sampleDepths{};
+                    std::array<SoftwareShaderSemanticValueEXT, 16> inputs{};
+                };
+                const int quadMinX = minX & ~1;
+                const int quadMinY = minY & ~1;
+                for (int quadY = quadMinY; quadY <= maxY; quadY += 2)
+                {
+                    for (int quadX = quadMinX; quadX <= maxX; quadX += 2)
+                    {
+                        std::array<QuadLane, 4> lanes{};
+                        bool anyCoverage = false;
+                        for (std::size_t laneIndex = 0; laneIndex < lanes.size(); ++laneIndex)
+                        {
+                            QuadLane& lane = lanes[laneIndex];
+                            lane.x = quadX + static_cast<int>(laneIndex & 1u);
+                            lane.y = quadY + static_cast<int>(laneIndex >> 1u);
+                            const float px = static_cast<float>(lane.x) + 0.5f;
+                            const float py = static_cast<float>(lane.y) + 0.5f;
+                            const float w0 = EdgeFunction(
+                                v1.x, v1.y, v2.x, v2.y, px, py);
+                            const float w1 = EdgeFunction(
+                                v2.x, v2.y, v0.x, v0.y, px, py);
+                            const float w2 = EdgeFunction(
+                                v0.x, v0.y, v1.x, v1.y, px, py);
+                            const float lambda0 = w0 / area;
+                            const float lambda1 = w1 / area;
+                            lane.depth = BarycentricInterpolate(
+                                v0.depth, v1.depth, v2.depth, lambda0, lambda1);
+                            if (hasBias)
+                                lane.depth = std::clamp(lane.depth + biasOffset, 0.0f, 1.0f);
+                            const float invW = BarycentricInterpolate(
+                                v0.invW, v1.invW, v2.invW, lambda0, lambda1);
+                            for (std::size_t varying = 0;
+                                 varying < v0.compiledVaryingCount; ++varying)
+                            {
+                                const auto& first = v0.compiledVaryings[varying];
+                                const auto& second = v1.compiledVaryings[varying];
+                                const auto& third = v2.compiledVaryings[varying];
+                                lane.inputs[varying].usage = first.usage;
+                                lane.inputs[varying].usageIndex = first.usageIndex;
+                                for (std::size_t component = 0; component < 4; ++component)
+                                {
+                                    lane.inputs[varying].value[component] =
+                                        BarycentricInterpolate(
+                                            first.value[component], second.value[component],
+                                            third.value[component], lambda0, lambda1) / invW;
+                                }
+                            }
+
+                            if (lane.x < minX || lane.x > maxX ||
+                                lane.y < minY || lane.y > maxY)
+                                continue;
+                            if (!primary.HasMultiSampleColor())
+                            {
+                                lane.coverageMask = TriangleContainsSample(
+                                    v0, v1, v2, area, w0, w1, w2) ? 1u : 0u;
+                            }
+                            else if (!multiSampleAntiAlias)
+                            {
+                                if (TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
+                                {
+                                    lane.coverageMask = 0xFu;
+                                    lane.sampleDepths.fill(lane.depth);
+                                }
+                            }
+                            else
+                            {
+                                for (int sample = 0; sample < 4; ++sample)
+                                {
+                                    const MultiSamplePosition& samplePosition =
+                                        kStandardFourSamplePositions[
+                                            static_cast<std::size_t>(sample)];
+                                    const float sampleX = static_cast<float>(lane.x) +
+                                        samplePosition.x;
+                                    const float sampleY = static_cast<float>(lane.y) +
+                                        samplePosition.y;
+                                    const float sampleW0 = EdgeFunction(
+                                        v1.x, v1.y, v2.x, v2.y, sampleX, sampleY);
+                                    const float sampleW1 = EdgeFunction(
+                                        v2.x, v2.y, v0.x, v0.y, sampleX, sampleY);
+                                    const float sampleW2 = EdgeFunction(
+                                        v0.x, v0.y, v1.x, v1.y, sampleX, sampleY);
+                                    if (!TriangleContainsSample(v0, v1, v2, area,
+                                                                sampleW0, sampleW1, sampleW2))
+                                        continue;
+                                    lane.coverageMask |= 1u << sample;
+                                    float sampleDepth =
+                                        (sampleW0 * v0.depth + sampleW1 * v1.depth +
+                                         sampleW2 * v2.depth) / area;
+                                    if (hasBias)
+                                        sampleDepth = std::clamp(
+                                            sampleDepth + biasOffset, 0.0f, 1.0f);
+                                    lane.sampleDepths[static_cast<std::size_t>(sample)] =
+                                        sampleDepth;
+                                }
+                            }
+                            anyCoverage = anyCoverage || lane.coverageMask != 0u;
+                        }
+                        if (!anyCoverage)
+                            continue;
+                        std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4>
+                            inputSpans{};
+                        for (std::size_t lane = 0; lane < lanes.size(); ++lane)
+                        {
+                            inputSpans[lane] = std::span(
+                                lanes[lane].inputs.data(), v0.compiledVaryingCount);
+                        }
+                        const auto pixels = runtime.ExecutePixelQuadEXT(inputSpans, &sampler);
+                        for (std::size_t laneIndex = 0; laneIndex < lanes.size(); ++laneIndex)
+                        {
+                            const QuadLane& lane = lanes[laneIndex];
+                            if (lane.coverageMask == 0u)
+                                continue;
+                            WriteCompiledPixelResult(
+                                colorTargets, colorTargetCount, depthState, faceStencil,
+                                blendState, blendFactor, colorWriteMasks, multiSampleMask,
+                                occlusionQuery, lane.x, lane.y, lane.depth, lane.coverageMask,
+                                primary.HasMultiSampleColor() ? &lane.sampleDepths : nullptr,
+                                pixels[laneIndex]);
+                        }
+                    }
+                }
+                return;
+            }
             for (int y = minY; y <= maxY; ++y)
             {
                 for (int x = minX; x <= maxX; ++x)
@@ -3229,26 +3402,12 @@ namespace CNA::Internal::Renderers::Software
                     const float invW = BarycentricInterpolate(
                         v0.invW, v1.invW, v2.invW, lambda0, lambda1);
 
-                    if (v0.compiledVaryingCount != v1.compiledVaryingCount ||
-                        v0.compiledVaryingCount != v2.compiledVaryingCount)
-                    {
-                        throw std::runtime_error(
-                            "SoftwareRenderer: compiled varying counts disagree within a triangle.");
-                    }
                     std::array<SoftwareShaderSemanticValueEXT, 16> inputs{};
                     for (std::size_t varying = 0; varying < v0.compiledVaryingCount; ++varying)
                     {
                         const auto& first = v0.compiledVaryings[varying];
                         const auto& second = v1.compiledVaryings[varying];
                         const auto& third = v2.compiledVaryings[varying];
-                        if (first.usage != second.usage || first.usage != third.usage ||
-                            first.usageIndex != second.usageIndex ||
-                            first.usageIndex != third.usageIndex)
-                        {
-                            throw std::runtime_error(
-                                "SoftwareRenderer: compiled varying semantics disagree within a "
-                                "triangle.");
-                        }
                         inputs[varying].usage = first.usage;
                         inputs[varying].usageIndex = first.usageIndex;
                         for (std::size_t component = 0; component < 4; ++component)

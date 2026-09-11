@@ -235,6 +235,9 @@ namespace CNA::TestSupport
         /// Emits a Shader Model 3 pixel program with unconditional, Boolean-conditional and
         /// nested forward subroutine calls. Mutually exclusive with the loop/sampling/MRT forms.
         bool pixelShaderUsesSubroutine = false;
+        /// Emits a Shader Model 3 pixel program that squares TEXCOORD0 before applying `DSX` and
+        /// `DSY`. The output exposes horizontal and vertical 2x2-quad changes independently.
+        bool pixelShaderUsesDerivatives = false;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -283,9 +286,10 @@ namespace CNA::TestSupport
         std::int32_t loopCount = 3,
         std::int32_t loopInitial = 10,
         std::int32_t loopStep = 2,
-        bool usesSubroutine = false)
+        bool usesSubroutine = false,
+        bool usesDerivatives = false)
     {
-        const bool usesShaderModel3 = usesLoop || usesSubroutine;
+        const bool usesShaderModel3 = usesLoop || usesSubroutine || usesDerivatives;
         const std::uint32_t versionToken = usesShaderModel3 ? 0xFFFF0300u : 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
         std::vector<std::uint8_t> ctab;
@@ -370,6 +374,7 @@ namespace CNA::TestSupport
         // modules/renderers/fna3d/effects/CnaConformanceEffect.fx, whose MainPixelShader is the
         // same `tex2D(sampler, texcoord) * constant` shape.
         constexpr std::uint32_t regTemp = 0;
+        constexpr std::uint32_t regInput = 1;      // ps_3_0 interpolated input v#
         constexpr std::uint32_t regTexture = 3;    // ps_2_0 texture-coordinate input t#
         constexpr std::uint32_t regConst = 2;
         constexpr std::uint32_t regConstInt = 7;
@@ -393,7 +398,49 @@ namespace CNA::TestSupport
             return 0x80000000u | registerBits(type) | number | (swizzle << 16);
         };
 
-        if (usesSubroutine)
+        if (usesDerivatives)
+        {
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c1, 0, 0, 0, 1
+            AppendUInt32(shader, destination(regConst, 1, 0xFu));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(1.0f));
+            // dcl_texcoord0 v0.xy
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+            AppendUInt32(shader, 0x80000000u | 5u);
+            AppendUInt32(shader, destination(regInput, 0, 0x3u));
+            // r0 = v0², so each aligned 2x2 quad has a different finite change and a scalar
+            // interpolation-gradient shortcut cannot accidentally satisfy the contract.
+            AppendUInt32(shader, 0x00000005u | (3u << 24));
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, 0x0000005Bu | (2u << 24)); // dsx r1, r0
+            AppendUInt32(shader, destination(regTemp, 1, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+            AppendUInt32(shader, 0x0000005Cu | (2u << 24)); // dsy r2, r0
+            AppendUInt32(shader, destination(regTemp, 2, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+            // The y sign depends on render-target orientation, but D3D/GL both define the rate
+            // per native target direction. Magnitude is the portable observable here.
+            AppendUInt32(shader, 0x00000023u | (2u << 24)); // abs r1, r1
+            AppendUInt32(shader, destination(regTemp, 1, 0xFu));
+            AppendUInt32(shader, source(regTemp, 1));
+            AppendUInt32(shader, 0x00000023u | (2u << 24)); // abs r2, r2
+            AppendUInt32(shader, destination(regTemp, 2, 0xFu));
+            AppendUInt32(shader, source(regTemp, 2));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, c1
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 1));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0.x, r1.x
+            AppendUInt32(shader, destination(regColorOut, 0, 0x1u));
+            AppendUInt32(shader, source(regTemp, 1, 0x00u));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0.y, r2.y
+            AppendUInt32(shader, destination(regColorOut, 0, 0x2u));
+            AppendUInt32(shader, source(regTemp, 2, 0x55u));
+        }
+        else if (usesSubroutine)
         {
             // Local constants make the called writes independent from reflected parameter data.
             AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c1, .25, .25, .25, 0
@@ -1065,7 +1112,7 @@ namespace CNA::TestSupport
             options.pixelShaderSamplesTexture, /*swizzleTint=*/false, options.samplerKind,
             options.pixelShaderWritesMrt, options.pixelShaderUsesLoop,
             options.pixelLoopCount, options.pixelLoopInitial, options.pixelLoopStep,
-            options.pixelShaderUsesSubroutine);
+            options.pixelShaderUsesSubroutine, options.pixelShaderUsesDerivatives);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -1073,7 +1120,8 @@ namespace CNA::TestSupport
         if (includeVertexShader)
         {
             const std::vector<std::uint8_t> vertexShader = BuildSyntheticVertexShader(
-                options.vertexShaderReadsSecondStream, options.pixelShaderSamplesTexture,
+                options.vertexShaderReadsSecondStream,
+                options.pixelShaderSamplesTexture || options.pixelShaderUsesDerivatives,
                 options.samplerKind != SyntheticSamplerKind::Sampler2D);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));

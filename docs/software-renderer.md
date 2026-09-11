@@ -44,7 +44,7 @@ Those are real parser, vertex and sampled-pixel phases, not complete execution p
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
 continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
 is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364` are complete: the opt-in runtime now includes compiled MRT,
+`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368` are complete: the opt-in runtime now includes compiled MRT,
 render-target/cube sampling, SpriteBatch custom-effect routing and classic line/wireframe rasterization. `SOFTWARE-164/165` remain the
 encompassing shader-profile, lifecycle and content-conformance backlog.
 The independent EasyGL challenge in `SOFTWARE-367` also repaired MojoShader's invalid writemask-
@@ -200,6 +200,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   stale destination writemask, and prototypes precede definitions so nested forward calls compile.
   SOFTWARE-366 executes the corresponding Software `CALL`/`CALLNZ`/`LABEL`/`RET` programs with
   forward-label validation, Shader Model call-depth limits, conditional returns and inherited `aL`.
+  SOFTWARE-368 executes pixel `DSX`/`DSY` over aligned 2x2 Software triangle quads, including
+  uncovered helper lanes and later derivatives that consume earlier derivative results. Compiled
+  line/wireframe derivatives remain SOFTWARE-370; the EasyGL compiled path's missing XNA
+  pixel-centre correction is SOFTWARE-369.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.

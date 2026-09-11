@@ -27,6 +27,12 @@ constexpr std::size_t kFloatConstantRegisterCount = 256;
 constexpr std::size_t kIntegerConstantRegisterCount = 16;
 constexpr std::size_t kBooleanConstantRegisterCount = 16;
 
+struct DerivativeValue {
+  std::size_t instruction = 0;
+  std::uint16_t opcode = 0;
+  Vector value{};
+};
+
 enum class RegisterType : std::uint8_t {
   Temporary = 0,
   Input = 1,
@@ -159,10 +165,13 @@ public:
                std::span<const int> integerRegisters,
                std::span<const unsigned char> booleanRegisters,
                std::span<const SoftwareShaderSemanticValueEXT> inputs,
-               const ISoftwarePixelSamplerEXT *sampler)
+               const ISoftwarePixelSamplerEXT *sampler,
+               std::span<const DerivativeValue> derivativeValues = {},
+               std::vector<DerivativeValue> *derivativeSources = nullptr)
       : program_(program), floatRegisters_(floatRegisters),
         integerRegisters_(integerRegisters),
-        booleanRegisters_(booleanRegisters), sampler_(sampler) {
+        booleanRegisters_(booleanRegisters), sampler_(sampler),
+        derivativeValues_(derivativeValues), derivativeSources_(derivativeSources) {
     if (program.stage != SoftwareShaderStageEXT::Pixel)
       throw std::invalid_argument("Software pixel shader: a vertex program "
                                   "cannot run as a pixel program.");
@@ -375,7 +384,7 @@ public:
         throw std::runtime_error(
             "Software pixel shader: LABEL reached without a CALL.");
       } else if (active) {
-        ExecuteInstruction(instruction);
+        ExecuteInstruction(instruction, pc);
         ++pc;
       } else
         ++pc;
@@ -1002,7 +1011,8 @@ private:
                  gradientY));
   }
 
-  void ExecuteInstruction(const SoftwareShaderInstructionEXT &instruction) {
+  void ExecuteInstruction(const SoftwareShaderInstructionEXT &instruction,
+                          std::size_t instructionIndex) {
     const auto &tokens = instruction.tokens;
     if (tokens.empty())
       throw std::runtime_error("Software pixel shader: empty instruction.");
@@ -1058,6 +1068,24 @@ private:
     Vector source1{};
     Vector source2{};
     Vector result{};
+    if (instruction.opcode == 91u || instruction.opcode == 92u) {
+      if (derivativeSources_ == nullptr)
+        throw std::runtime_error(
+            "Software pixel shader: DSX/DSY requires 2x2 quad execution.");
+      derivativeSources_->push_back(
+          DerivativeValue{instructionIndex, instruction.opcode, source0});
+      if (derivativeCursor_ < derivativeValues_.size()) {
+        const DerivativeValue &value = derivativeValues_[derivativeCursor_];
+        if (value.instruction != instructionIndex ||
+            value.opcode != instruction.opcode)
+          throw std::runtime_error(
+              "Software pixel shader: derivative control flow changed between quad passes.");
+        result = value.value;
+      }
+      ++derivativeCursor_;
+      Write(destination, result);
+      return;
+    }
     switch (instruction.opcode) {
     case 2:
     case 3:
@@ -1273,6 +1301,9 @@ private:
   std::span<const int> integerRegisters_;
   std::span<const unsigned char> booleanRegisters_;
   const ISoftwarePixelSamplerEXT *sampler_ = nullptr;
+  std::span<const DerivativeValue> derivativeValues_;
+  std::vector<DerivativeValue> *derivativeSources_ = nullptr;
+  std::size_t derivativeCursor_ = 0;
   std::array<Vector, kTemporaryRegisterCount> temporaryRegisters_{};
   std::array<bool, kTemporaryRegisterCount> temporaryWritten_{};
   std::array<Vector, kInputRegisterCount> inputRegisters_{};
@@ -1304,6 +1335,92 @@ SoftwarePixelShaderResultEXT ExecuteSoftwarePixelShaderEXT(
   return PixelMachine(program, floatRegisters, integerRegisters,
                       booleanRegisters, inputs, sampler)
       .Execute();
+}
+
+std::array<SoftwarePixelShaderResultEXT, 4> ExecuteSoftwarePixelShaderQuadEXT(
+    const SoftwareShaderProgramEXT &program,
+    std::span<const float> floatRegisters,
+    std::span<const int> integerRegisters,
+    std::span<const unsigned char> booleanRegisters,
+    const std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4> &inputs,
+    const ISoftwarePixelSamplerEXT *sampler) {
+  std::array<std::vector<DerivativeValue>, 4> values;
+  std::array<std::vector<DerivativeValue>, 4> sources;
+  std::array<SoftwarePixelShaderResultEXT, 4> results;
+  std::size_t maximumPasses = 2u;
+  for (std::size_t pass = 0; pass < maximumPasses; ++pass) {
+    for (std::size_t lane = 0; lane < 4u; ++lane) {
+      sources[lane].clear();
+      results[lane] = PixelMachine(program, floatRegisters, integerRegisters,
+                                   booleanRegisters, inputs[lane], sampler,
+                                   values[lane], &sources[lane])
+                          .Execute();
+    }
+
+    const std::size_t count = sources[0].size();
+    for (std::size_t lane = 1; lane < 4u; ++lane) {
+      if (sources[lane].size() != count)
+        throw std::runtime_error(
+            "Software pixel shader: DSX/DSY occurs in non-uniform quad control flow.");
+    }
+    if (pass == 0u)
+      maximumPasses = std::max<std::size_t>(2u, count + 2u);
+
+    std::array<std::vector<DerivativeValue>, 4> next;
+    for (auto &lane : next)
+      lane.reserve(count);
+    for (std::size_t occurrence = 0; occurrence < count; ++occurrence) {
+      const std::size_t instruction = sources[0][occurrence].instruction;
+      const std::uint16_t opcode = sources[0][occurrence].opcode;
+      for (std::size_t lane = 1; lane < 4u; ++lane) {
+        if (sources[lane][occurrence].instruction != instruction ||
+            sources[lane][occurrence].opcode != opcode)
+          throw std::runtime_error(
+              "Software pixel shader: DSX/DSY occurs in non-uniform quad control flow.");
+      }
+      const auto difference = [&](std::size_t high, std::size_t low) {
+        Vector result{};
+        for (std::size_t component = 0; component < result.size(); ++component)
+          result[component] = sources[high][occurrence].value[component] -
+                              sources[low][occurrence].value[component];
+        return result;
+      };
+      std::array<Vector, 4> derivative{};
+      if (opcode == 91u) {
+        derivative[0] = derivative[1] = difference(1u, 0u);
+        derivative[2] = derivative[3] = difference(3u, 2u);
+      } else {
+        derivative[0] = derivative[2] = difference(2u, 0u);
+        derivative[1] = derivative[3] = difference(3u, 1u);
+      }
+      for (std::size_t lane = 0; lane < 4u; ++lane)
+        next[lane].push_back(DerivativeValue{instruction, opcode, derivative[lane]});
+    }
+
+    const auto sameValues = [](const auto &left, const auto &right) {
+      if (left.size() != right.size())
+        return false;
+      for (std::size_t index = 0; index < left.size(); ++index) {
+        if (left[index].instruction != right[index].instruction ||
+            left[index].opcode != right[index].opcode)
+          return false;
+        for (std::size_t component = 0; component < 4u; ++component) {
+          if (std::bit_cast<std::uint32_t>(left[index].value[component]) !=
+              std::bit_cast<std::uint32_t>(right[index].value[component]))
+            return false;
+        }
+      }
+      return true;
+    };
+    bool stable = true;
+    for (std::size_t lane = 0; lane < 4u; ++lane)
+      stable = stable && sameValues(values[lane], next[lane]);
+    if (stable)
+      return results;
+    values = std::move(next);
+  }
+  throw std::runtime_error(
+      "Software pixel shader: derivative evaluation did not converge.");
 }
 } // namespace CNA::Internal::Renderers::Software
 

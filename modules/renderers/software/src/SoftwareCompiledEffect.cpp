@@ -714,6 +714,19 @@ namespace CNA::Internal::Renderers::Software
             GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs, sampler);
     }
 
+    std::array<SoftwarePixelShaderResultEXT, 4> SoftwareCompiledEffect::ExecutePixelQuadEXT(
+        const std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4>& inputs,
+        const ISoftwarePixelSamplerEXT* sampler) const
+    {
+        const SoftwareShaderProgramEXT* program = GetPixelProgramEXT();
+        if (program == nullptr)
+            throw std::runtime_error("Software compiled effect: no pixel program is selected.");
+        return ExecuteSoftwarePixelShaderQuadEXT(
+            *program, GetFloatRegistersEXT(SoftwareShaderStageEXT::Pixel),
+            GetIntegerRegistersEXT(SoftwareShaderStageEXT::Pixel),
+            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs, sampler);
+    }
+
     std::size_t SoftwareCompiledEffect::GetVertexExecutionCountEXT() const noexcept
     {
         return vertexExecutionCount_;
