@@ -1635,6 +1635,69 @@ namespace
               "parsed pixel CALL/CALLNZ/LABEL/RET program produced the wrong result");
     }
 
+    void CheckCompiledRelativeTextureCoordinate()
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            PresentationParameters());
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderUsesRelativeTextureCoordinate = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect->getParametersProperty()["Tint"]->SetValue(Vector4(0.5f, 0.5f, 0.0f, 0.0f));
+        Texture2D texture(device, 8, 8, true, SurfaceFormat::Color);
+        const std::vector<Color> base(64, Color::Green);
+        const Rectangle baseRectangle(0, 0, 8, 8);
+        texture.SetData(0, &baseRectangle, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            const std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect->getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const Vertex quad[6] = {
+            {-1,  1, 0, 0, 0}, {-1, -1, 0, 0, 8}, { 1, -1, 0, 8, 8},
+            {-1,  1, 0, 0, 0}, { 1, -1, 0, 8, 8}, { 1,  1, 0, 8, 0},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        Check(centre == Color::Green,
+              "compiled relative c0[aL] texture coordinate did not sample the uniform base mip");
+    }
+
     void CheckCompiledDerivativeRasterization()
     {
         GraphicsDevice device;
@@ -3783,6 +3846,7 @@ int main()
         CheckPixelSubroutineSemantics();
         CheckSubroutineValidation();
         CheckParsedSubroutineEffect(renderer);
+        CheckCompiledRelativeTextureCoordinate();
         CheckCompiledDerivativeRasterization();
         CheckCompiledRasterInputs();
         CheckCompiledInstructionPredication();

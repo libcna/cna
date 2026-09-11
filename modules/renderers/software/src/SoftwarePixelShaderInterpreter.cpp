@@ -532,11 +532,7 @@ private:
     int relativeComponent = 0;
     Operand operand = DecodeSource(tokens, cursor, program_.majorVersion,
                                    relativeType, relativeComponent);
-    if (operand.relative) {
-      const Vector relative = ReadRaw(relativeType, 0);
-      operand.number += static_cast<int>(
-          relative[static_cast<std::size_t>(relativeComponent)]);
-    }
+    operand = ResolveRelativeSource(operand, relativeType, relativeComponent);
     Vector raw = ReadRaw(operand.type, operand.number);
     if (operand.sourceModifier == 9u || operand.sourceModifier == 10u) {
       const float divisor = raw[operand.sourceModifier == 9u ? 2u : 3u];
@@ -604,6 +600,17 @@ private:
           "Software pixel shader: unsupported source modifier.");
     }
     return value;
+  }
+
+  [[nodiscard]] Operand ResolveRelativeSource(
+      Operand operand, RegisterType relativeType, int relativeComponent) const {
+    if (!operand.relative)
+      return operand;
+    const Vector relative = ReadRaw(relativeType, 0);
+    operand.number += static_cast<int>(
+        relative[static_cast<std::size_t>(relativeComponent)]);
+    operand.relative = false;
+    return operand;
   }
 
   [[nodiscard]] bool EvaluateConditional(
@@ -957,6 +964,10 @@ private:
     request.samplerRegister = static_cast<std::uint8_t>(samplerRegister);
     request.coordinateRegister =
         static_cast<std::uint8_t>(coordinateOperand.number);
+    request.coordinateIsUniform =
+        coordinateOperand.type == RegisterType::Constant ||
+        coordinateOperand.type == RegisterType::IntegerConstant ||
+        coordinateOperand.type == RegisterType::BooleanConstant;
     if (coordinateComponents[0] == 0xFFu) {
       for (int component = 0; component < 3; ++component)
         request.coordinateComponents[static_cast<std::size_t>(component)] =
@@ -1022,18 +1033,23 @@ private:
       return;
     }
 
-    if (tokens.size() != 4u + predicateTokens)
+    if (tokens.size() < 4u + predicateTokens)
       throw std::runtime_error(
           "Software pixel shader: malformed TEX instruction.");
     const Operand destination = DecodeDestination(tokens[1]);
     std::size_t cursor = 2u;
     RegisterType relativeType;
     int relativeComponent = 0;
-    const Operand coordinateOperand = DecodeSource(
+    Operand coordinateOperand = DecodeSource(
         tokens, cursor, program_.majorVersion, relativeType,
         relativeComponent);
+    coordinateOperand = ResolveRelativeSource(
+        coordinateOperand, relativeType, relativeComponent);
     Vector coordinate = ReadSourceFromOperand(coordinateOperand);
     const Operand sampler = DecodeSampler(tokens, cursor);
+    if (cursor + predicateTokens != tokens.size())
+      throw std::runtime_error(
+          "Software pixel shader: malformed TEX instruction.");
     float lod = 0.0f;
     if (instruction.controls == 1u) {
       const float divisor = coordinate[3];
@@ -1053,7 +1069,7 @@ private:
   [[nodiscard]] Vector ReadSourceFromOperand(const Operand &operand) const {
     if (operand.relative)
       throw std::runtime_error(
-          "Software pixel shader: relative texture coordinates require SOFTWARE-165.");
+          "Software pixel shader: unresolved relative source operand.");
     Vector raw = ReadRaw(operand.type, operand.number);
     if (operand.sourceModifier == 9u || operand.sourceModifier == 10u) {
       const float divisor = raw[operand.sourceModifier == 9u ? 2u : 3u];
@@ -1085,21 +1101,26 @@ private:
   void ExecuteTextureLodInstruction(
       const SoftwareShaderInstructionEXT &instruction) {
     const auto &tokens = instruction.tokens;
-    const std::size_t expected =
+    const std::size_t minimum =
         (instruction.opcode == 93u ? 6u : 4u) + (instruction.predicated ? 1u : 0u);
-    if (tokens.size() != expected)
+    if (tokens.size() < minimum)
       throw std::runtime_error(
           "Software pixel shader: malformed explicit-LOD texture instruction.");
     const Operand destination = DecodeDestination(tokens[1]);
     std::size_t cursor = 2u;
     RegisterType relativeType;
     int relativeComponent = 0;
-    const Operand coordinateOperand = DecodeSource(
+    Operand coordinateOperand = DecodeSource(
         tokens, cursor, program_.majorVersion, relativeType,
         relativeComponent);
+    coordinateOperand = ResolveRelativeSource(
+        coordinateOperand, relativeType, relativeComponent);
     const Vector coordinate = ReadSourceFromOperand(coordinateOperand);
     const Operand sampler = DecodeSampler(tokens, cursor);
     if (instruction.opcode == 95u) {
+      if (cursor + (instruction.predicated ? 1u : 0u) != tokens.size())
+        throw std::runtime_error(
+            "Software pixel shader: malformed explicit-LOD texture instruction.");
       Write(destination,
             Sample(coordinateOperand, coordinate, sampler.number,
                    SoftwareTextureLodModeEXT::Explicit, coordinate[3]));
@@ -1107,6 +1128,9 @@ private:
     }
     const Vector gradientX = ReadSource(tokens, cursor);
     const Vector gradientY = ReadSource(tokens, cursor);
+    if (cursor + (instruction.predicated ? 1u : 0u) != tokens.size())
+      throw std::runtime_error(
+          "Software pixel shader: malformed explicit-LOD texture instruction.");
     Write(destination,
           Sample(coordinateOperand, coordinate, sampler.number,
                  SoftwareTextureLodModeEXT::Gradients, 0.0f, gradientX,

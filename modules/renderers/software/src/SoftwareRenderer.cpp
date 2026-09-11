@@ -2040,6 +2040,8 @@ namespace CNA::Internal::Renderers::Software
             const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
             std::array<float, 4> (&coordinates)[3])
         {
+            if (request.coordinateIsUniform)
+                return false;
             const RasterVertex* vertices[3] = {&v0, &v1, &v2};
             std::array<float, 4> source[3]{};
             for (int vertex = 0; vertex < 3; ++vertex)

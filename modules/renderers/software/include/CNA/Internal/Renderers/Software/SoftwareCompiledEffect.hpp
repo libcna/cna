@@ -157,6 +157,8 @@ namespace CNA::Internal::Renderers::Software
         std::uint8_t samplerRegister = 0;
         /** @brief Texture-coordinate register used by the instruction. */
         std::uint8_t coordinateRegister = 0;
+        /** @brief Whether the coordinate came from a uniform register rather than an interpolator. */
+        bool coordinateIsUniform = false;
         /** @brief Source-register components that become the sampled u/v/w coordinates. */
         std::array<std::uint8_t, 3> coordinateComponents{0u, 1u, 2u};
         /** @brief Affine scale applied to legacy source coordinates before sampling/dot products. */

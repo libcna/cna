@@ -332,6 +332,10 @@ namespace CNA::TestSupport
             SyntheticLegacyBumpEnvironment::None;
         /// Emits a second ps_1_4 PHASE marker so parser validation can reject it.
         bool pixelShaderDuplicatesShaderModel14Phase = false;
+        /// Emits an SM3 texture load whose coordinates are `c0[aL]` inside a one-iteration loop.
+        /// This distinguishes genuine relative constant addressing from reading TEXCOORD0 and
+        /// also requires implicit LOD to treat the resolved constant coordinate as uniform.
+        bool pixelShaderUsesRelativeTextureCoordinate = false;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -400,11 +404,12 @@ namespace CNA::TestSupport
             SyntheticLegacyDependentTexture::None,
         SyntheticLegacyBumpEnvironment legacyBumpEnvironment =
             SyntheticLegacyBumpEnvironment::None,
-        bool duplicatesShaderModel14Phase = false)
+        bool duplicatesShaderModel14Phase = false,
+        bool usesRelativeTextureCoordinate = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
-            usesPredicatedTexkill;
+            usesPredicatedTexkill || usesRelativeTextureCoordinate;
         const bool usesShaderModel14 = usesProjectiveModifiers || usesShaderModel14TextureLoad ||
                                        usesShaderModel14Phase || duplicatesShaderModel14Phase ||
                                        legacyDepthOutput == SyntheticLegacyDepthOutput::Register ||
@@ -999,6 +1004,39 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regTemp, 0));
             AppendUInt32(shader, source(regConst, 1));
             AppendUInt32(shader, 0x0000001Cu);
+        }
+        else if (usesRelativeTextureCoordinate)
+        {
+            const std::uint32_t samplerTextureType =
+                samplerKind == SyntheticSamplerKind::SamplerCube
+                    ? EffectFormat::SamplerTypeCube
+                    : samplerKind == SyntheticSamplerKind::Sampler3D
+                          ? EffectFormat::SamplerTypeVolume
+                          : EffectFormat::SamplerType2D;
+            // A one-iteration loop supplies aL=0. The coordinate source is therefore the
+            // reflected Tint vector at c0, but it still uses the complete SM3 relative-source
+            // token form accepted by D3D9 and emitted by fxc for indexed constant arrays.
+            AppendUInt32(shader, 0x00000030u | (5u << 24)); // defi i0, 1, 0, 1, 0
+            AppendUInt32(shader, destination(regConstInt, 0, 0xFu));
+            AppendUInt32(shader, 1u);
+            AppendUInt32(shader, 0u);
+            AppendUInt32(shader, 1u);
+            AppendUInt32(shader, 0u);
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_2d s#
+            AppendUInt32(shader, 0x80000000u | (samplerTextureType << 27));
+            AppendUInt32(shader, destination(regSampler, samplerRegister, 0xFu));
+            AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
+            AppendUInt32(shader, source(regLoop, 0));
+            AppendUInt32(shader, source(regConstInt, 0));
+            AppendUInt32(shader, 0x00000042u | (4u << 24)); // texld r0, c0[aL], s#
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 0) | (1u << 13u));
+            AppendUInt32(shader, source(regLoop, 0));
+            AppendUInt32(shader, source(regSampler, samplerRegister));
+            AppendUInt32(shader, 0x0000001Du); // endloop
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
         }
         else if (usesLoop)
         {
@@ -1897,7 +1935,8 @@ namespace CNA::TestSupport
             options.pixelShaderLegacyDepthZeroDivisor,
             options.pixelShaderLegacyDependentTexture,
             options.pixelShaderLegacyBumpEnvironment,
-            options.pixelShaderDuplicatesShaderModel14Phase);
+            options.pixelShaderDuplicatesShaderModel14Phase,
+            options.pixelShaderUsesRelativeTextureCoordinate);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -1908,6 +1947,7 @@ namespace CNA::TestSupport
                 options.vertexShaderReadsSecondStream,
                 options.vertexShaderSamplesTexture || options.pixelShaderSamplesTexture ||
                     options.pixelShaderUsesDerivatives ||
+                    options.pixelShaderUsesRelativeTextureCoordinate ||
                     options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
                     options.pixelShaderUsesShaderModel14Phase ||
