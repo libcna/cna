@@ -2260,13 +2260,23 @@ namespace CNA::Internal::Renderers::Software
                 if (request.samplerRegister >= 16u)
                     throw std::runtime_error(
                         "Software compiled effect: sampler register exceeds the XNA limit.");
-                if (params_.compiledDeviceTextures == nullptr)
+                const bool spriteTextureOverride =
+                    request.samplerRegister == 0u && params_.compiledSpriteTexture0 != nullptr;
+                if (!spriteTextureOverride && params_.compiledDeviceTextures == nullptr)
                     throw std::runtime_error(
                         "Software compiled effect: pixel texture collection was not provided.");
-                const Texture* texture =
-                    (*params_.compiledDeviceTextures)[request.samplerRegister];
-                if (texture == nullptr)
+                const Texture* texture = spriteTextureOverride
+                    ? nullptr
+                    : (*params_.compiledDeviceTextures)[request.samplerRegister];
+                if (!spriteTextureOverride && texture == nullptr)
                     return {0.0f, 0.0f, 0.0f, 1.0f};
+                if (spriteTextureOverride &&
+                    request.samplerType != SoftwareShaderSamplerTypeEXT::Texture2D &&
+                    request.samplerType != SoftwareShaderSamplerTypeEXT::Unknown)
+                {
+                    throw std::runtime_error(
+                        "Software compiled effect: SpriteBatch slot zero requires sampler2D.");
+                }
 
                 const SoftwareSamplerState sampler =
                     renderer_.GetSamplerState(request.samplerRegister);
@@ -2274,9 +2284,11 @@ namespace CNA::Internal::Renderers::Software
                     request.samplerType == SoftwareShaderSamplerTypeEXT::Unknown)
                 {
                     const auto* texture2D = dynamic_cast<const Texture2D*>(texture);
-                    const auto* surface = texture2D != nullptr
-                        ? dynamic_cast<const SoftwareColorSurface*>(&texture2D->GetRenderer())
-                        : nullptr;
+                    const auto* surface = spriteTextureOverride
+                        ? dynamic_cast<const SoftwareColorSurface*>(params_.compiledSpriteTexture0)
+                        : texture2D != nullptr
+                              ? dynamic_cast<const SoftwareColorSurface*>(&texture2D->GetRenderer())
+                              : nullptr;
                     if (surface == nullptr)
                         throw std::runtime_error(
                             "Software compiled effect: sampler2D requires a Software Texture2D.");
@@ -3448,21 +3460,40 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
-        ClipVertex BuildCompiledEffectClipVertex(const CombinedVertexReader& raw,
-                                                 const GpuDrawParams& params)
+        SoftwareCompiledEffect& ResolveCompiledEffectStage(
+            const GpuDrawParams& params, bool vertexStage)
         {
-            auto* runtime = dynamic_cast<SoftwareCompiledEffect*>(params.compiledEffectRuntime);
+            ICompiledEffectRuntime* selected = vertexStage
+                ? params.compiledVertexEffectRuntime
+                : params.compiledPixelEffectRuntime;
+            if (selected == nullptr)
+                selected = params.compiledEffectRuntime;
+            auto* runtime = dynamic_cast<SoftwareCompiledEffect*>(selected);
             if (runtime == nullptr)
             {
                 throw System::InvalidOperationException(
-                    "Software compiled-effect draw received a runtime from another renderer.");
+                    vertexStage
+                        ? "Software compiled-effect draw received a vertex runtime from another renderer."
+                        : "Software compiled-effect draw received a pixel runtime from another renderer.");
             }
-            const SoftwareShaderProgramEXT* program = runtime->GetVertexProgramEXT();
+            const SoftwareShaderProgramEXT* program = vertexStage
+                ? runtime->GetVertexProgramEXT()
+                : runtime->GetPixelProgramEXT();
             if (program == nullptr)
             {
                 throw System::InvalidOperationException(
-                    "Software compiled-effect draw has no applied vertex shader.");
+                    vertexStage
+                        ? "Software compiled-effect draw has no applied vertex shader."
+                        : "Software compiled-effect draw has no applied pixel shader.");
             }
+            return *runtime;
+        }
+
+        ClipVertex BuildCompiledEffectClipVertex(const CombinedVertexReader& raw,
+                                                 const GpuDrawParams& params)
+        {
+            SoftwareCompiledEffect& runtime = ResolveCompiledEffectStage(params, true);
+            const SoftwareShaderProgramEXT* program = runtime.GetVertexProgramEXT();
 
             std::array<SoftwareShaderSemanticValueEXT, 16> inputs{};
             std::size_t inputCount = 0;
@@ -3489,7 +3520,7 @@ namespace CNA::Internal::Renderers::Software
             }
 
             const SoftwareVertexShaderResultEXT vertex =
-                runtime->ExecuteVertexEXT(std::span(inputs.data(), inputCount));
+                runtime.ExecuteVertexEXT(std::span(inputs.data(), inputCount));
             ClipVertex result;
             result.x = vertex.position[0];
             result.y = vertex.position[1];
@@ -3509,26 +3540,17 @@ namespace CNA::Internal::Renderers::Software
         SoftwareCompiledEffect& RequireCompiledEffectDraw(
             const SoftwareVertexBufferRenderer& fallback, const GpuDrawParams& params)
         {
-            auto* runtime = dynamic_cast<SoftwareCompiledEffect*>(params.compiledEffectRuntime);
-            if (runtime == nullptr)
+            if (dynamic_cast<SoftwareCompiledEffect*>(params.compiledEffectRuntime) == nullptr)
             {
                 throw System::InvalidOperationException(
                     "Software compiled-effect draw received a runtime from another renderer.");
             }
-            if (runtime->GetVertexProgramEXT() == nullptr)
-            {
-                throw System::InvalidOperationException(
-                    "Software compiled-effect draw has no applied vertex shader.");
-            }
-            if (runtime->GetPixelProgramEXT() == nullptr)
-            {
-                throw System::InvalidOperationException(
-                    "Software compiled-effect draw has no applied pixel shader.");
-            }
+            static_cast<void>(ResolveCompiledEffectStage(params, true));
+            SoftwareCompiledEffect& pixelRuntime = ResolveCompiledEffectStage(params, false);
             if (params.vertexStreamCount == 0)
             {
                 if (!fallback.Declaration().IsEmpty())
-                    return *runtime;
+                    return pixelRuntime;
                 throw System::InvalidOperationException(
                     "Software compiled-effect drawing requires a VertexDeclaration.");
             }
@@ -3545,7 +3567,7 @@ namespace CNA::Internal::Renderers::Software
                     "Software compiled-effect drawing requires every active vertex stream to "
                     "carry a VertexDeclaration.");
             }
-            return *runtime;
+            return pixelRuntime;
         }
 #endif
 
@@ -5317,6 +5339,59 @@ namespace CNA::Internal::Renderers::Software
             OnSpriteRasterBounds(damageMinX, damageMinY, damageMaxX, damageMaxY);
         }
     }
+
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+    void SoftwareRenderer::RasterizeCompiledSpriteQuad(
+        const ITextureRenderer& texture,
+        const std::array<Microsoft::Xna::Framework::Vector4, 4>& corners,
+        const std::array<float, 4>& color,
+        const std::array<float, 4>& textureCoordinates,
+        const GpuDrawParams& effectParams)
+    {
+        struct CompiledSpriteVertex
+        {
+            float position[3];
+            float textureCoordinate[2];
+            float color[4];
+        };
+        static const VertexDeclaration declaration(
+            static_cast<int>(sizeof(CompiledSpriteVertex)),
+            {
+                VertexElement(0, VertexElementFormat::Vector3,
+                              Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector2,
+                              Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(20, VertexElementFormat::Vector4,
+                              Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color, 0),
+            });
+        const auto makeVertex = [&](int corner, float u, float v)
+        {
+            const auto& position = corners[static_cast<std::size_t>(corner)];
+            return CompiledSpriteVertex{
+                {position.X, position.Y, position.Z},
+                {u, v},
+                {color[0], color[1], color[2], color[3]}};
+        };
+        const float u1 = textureCoordinates[0];
+        const float v1 = textureCoordinates[1];
+        const float u2 = textureCoordinates[2];
+        const float v2 = textureCoordinates[3];
+        const CompiledSpriteVertex vertices[6] = {
+            makeVertex(0, u1, v1), makeVertex(1, u2, v1), makeVertex(2, u2, v2),
+            makeVertex(2, u2, v2), makeVertex(3, u1, v2), makeVertex(0, u1, v1),
+        };
+        SoftwareVertexBufferRenderer buffer(6);
+        buffer.SetVertexDeclaration(declaration);
+        buffer.SetData(vertices, 6, sizeof(CompiledSpriteVertex));
+        GpuDrawParams params = effectParams;
+        params.compiledSpriteTexture0 = &texture;
+        params.vertexStart = 0;
+        params.vertexStreamCount = 0;
+        const Matrix identity = Matrix::getIdentityProperty();
+        DrawPrimitivesEx(buffer, identity, identity, identity,
+                         PrimitiveType::TriangleList, 2, params);
+    }
+#endif
 
     std::unique_ptr<ITexture3DRenderer> SoftwareRenderer::CreateTexture3D(
         int w, int h, int depth, bool mipMap, int surfaceFormat)

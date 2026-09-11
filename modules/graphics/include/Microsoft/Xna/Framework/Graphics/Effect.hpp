@@ -18,6 +18,11 @@ namespace CNA::Internal::Renderers
     class ICompiledEffectRuntime;
 }
 
+namespace CNA::TestSupport
+{
+    struct CompiledEffectTestAccess;
+}
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
@@ -283,5 +288,7 @@ namespace Microsoft::Xna::Framework::Graphics
         std::unique_ptr<CNA::Internal::Renderers::ICompiledEffectRuntime> compiledRuntime_;
 
         friend class EffectPass;
+        /** @brief Allows conformance tests to exercise staged runtimes before capability enablement. */
+        CNAEXT friend struct CNA::TestSupport::CompiledEffectTestAccess;
     };
 }

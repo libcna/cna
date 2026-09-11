@@ -11,6 +11,29 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     add_library(${_cna_software_target} STATIC ${_cna_software_sources})
     cna_renderer_common_setup(${_cna_software_target})
     if(CNA_SOFTWARE_COMPILED_EFFECTS)
+        find_package(Python3 COMPONENTS Interpreter REQUIRED)
+        set(CNA_SOFTWARE_STOCK_EFFECT
+            "${CMAKE_CURRENT_SOURCE_DIR}/../fna3d/effects/SpriteEffect.fxb")
+        set(CNA_SOFTWARE_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+        set(CNA_SOFTWARE_STOCK_EFFECT_HEADER
+            "${CNA_SOFTWARE_GENERATED_DIR}/Fna3dStockEffectBlobs.hpp")
+        add_custom_command(
+            OUTPUT "${CNA_SOFTWARE_STOCK_EFFECT_HEADER}"
+            COMMAND ${Python3_EXECUTABLE}
+                    "${CMAKE_CURRENT_SOURCE_DIR}/../fna3d/effects/embed_effects.py"
+                    "${CNA_SOFTWARE_STOCK_EFFECT_HEADER}"
+                    "SpriteEffect=${CNA_SOFTWARE_STOCK_EFFECT}"
+            DEPENDS
+                    "${CMAKE_CURRENT_SOURCE_DIR}/../fna3d/effects/embed_effects.py"
+                    "${CNA_SOFTWARE_STOCK_EFFECT}"
+            COMMENT "CNA: embedding the XNA SpriteEffect for Software compiled-effect inheritance"
+            VERBATIM)
+        add_custom_target(cna_renderer_software_sprite_effect
+            DEPENDS "${CNA_SOFTWARE_STOCK_EFFECT_HEADER}")
+        add_dependencies(${_cna_software_target} cna_renderer_software_sprite_effect)
+        target_sources(${_cna_software_target} PRIVATE "${CNA_SOFTWARE_STOCK_EFFECT_HEADER}")
+        target_include_directories(${_cna_software_target} PRIVATE
+            "${CNA_SOFTWARE_GENERATED_DIR}")
         target_compile_definitions(${_cna_software_target} PRIVATE CNA_SOFTWARE_COMPILED_EFFECTS)
         target_link_libraries(${_cna_software_target} PRIVATE cna_renderer_mojoshader_effect)
     endif()

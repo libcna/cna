@@ -1572,6 +1572,15 @@ namespace CNA::Internal::Renderers
         /// from customEffectRenderer: ShaderEffect is a source pair, while a compiled effect owns
         /// reflection, techniques, passes, samplers, and state assignments.
         ICompiledEffectRuntime* compiledEffectRuntime = nullptr;
+        /// Optional runtime that owns the vertex stage retained across an Effect pass boundary.
+        /// Null means @ref compiledEffectRuntime owns the vertex stage. SpriteBatch uses this to
+        /// preserve XNA's internal SpriteEffect vertex shader when a custom pass changes only the
+        /// pixel shader.
+        ICompiledEffectRuntime* compiledVertexEffectRuntime = nullptr;
+        /// Optional runtime that owns the retained pixel stage. Null means
+        /// @ref compiledEffectRuntime owns it. This is the symmetric SpriteEffect fallback for a
+        /// custom SpriteBatch pass that changes only the vertex shader (or neither stage).
+        ICompiledEffectRuntime* compiledPixelEffectRuntime = nullptr;
         /// Current public pixel texture slots for a compiled Effect draw. EffectPass.Apply writes
         /// its assignments here and an application may legally replace them before drawing.
         const Microsoft::Xna::Framework::Graphics::TextureCollection*
@@ -1579,6 +1588,11 @@ namespace CNA::Internal::Renderers
         /// Current public pixel sampler slots paired with @ref compiledDeviceTextures.
         const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
             compiledDeviceSamplerStates = nullptr;
+        /// SpriteBatch's current source texture for compiled pixel sampler slot zero. FNA writes
+        /// this binding after applying each custom-effect pass, so it overrides a Texture
+        /// parameter assigned to sampler zero without mutating the public texture collection.
+        /// Null on ordinary compiled draws.
+        const ITextureRenderer* compiledSpriteTexture0 = nullptr;
         /// True whenever the active effect is ShaderEffect, even when this renderer returned no
         /// IEffectRenderer. Backends without custom shaders use this to refuse the draw instead of
         /// mistaking a null renderer for an ordinary fixed-function stock effect.

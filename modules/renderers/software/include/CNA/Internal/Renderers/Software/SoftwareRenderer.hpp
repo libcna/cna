@@ -1325,7 +1325,8 @@ namespace CNA::Internal::Renderers::Software
         void Begin() override;
         void End() override;
         void SetTransformMatrix(const Matrix& m) override { transformMatrix_ = m; }
-        void SetCustomEffect(Effect* effect) override { customEffect_ = effect; }
+        void SetCustomEffect(Effect* effect) override;
+        void SetImmediateMode(bool immediate) override { immediateMode_ = immediate; }
         void SetSamplerFilter(int textureFilter) override { textureFilter_ = textureFilter; }
         void SetSamplerMaxAnisotropy(int maxAnisotropy) override
         { maxAnisotropy_ = maxAnisotropy; }
@@ -1384,10 +1385,27 @@ namespace CNA::Internal::Renderers::Software
                                       maxMipLevel_, lodBias_}; }
 
     private:
+        struct PendingCompiledSprite
+        {
+            const ITextureRenderer* texture = nullptr;
+            std::array<Microsoft::Xna::Framework::Vector4, 4> corners{};
+            std::array<float, 4> color{};
+            std::array<float, 4> textureCoordinates{};
+        };
+
+        [[nodiscard]] bool UsesCompiledEffect() const noexcept;
+        void ApplyCompiledSpriteEffect();
+        void FlushCompiledBatch();
+
         SoftwareRenderer& owner_;
         bool begun_ = false;
+        bool immediateMode_ = false;
         Matrix transformMatrix_ = Matrix::getIdentityProperty();
         Effect* customEffect_ = nullptr;
+        std::unique_ptr<ICompiledEffectRuntime> compiledSpriteEffect_;
+        std::uint32_t compiledSpriteMatrixParameter_ = 0;
+        const ITextureRenderer* compiledTexture_ = nullptr;
+        std::vector<PendingCompiledSprite> pendingCompiledSprites_;
         int textureFilter_ = 0;
         int addressU_ = 1;
         int addressV_ = 1;
@@ -1821,6 +1839,14 @@ namespace CNA::Internal::Renderers::Software
                                  float u1, float v1, float u2, float v2,
                                  Effect* customEffect,
                                  const SoftwareSamplerState& spriteSampler);
+
+        /** @brief Submits one raw SpriteBatch quad through an applied compiled Effect pass. */
+        void RasterizeCompiledSpriteQuad(
+            const ITextureRenderer& texture,
+            const std::array<Microsoft::Xna::Framework::Vector4, 4>& corners,
+            const std::array<float, 4>& color,
+            const std::array<float, 4>& textureCoordinates,
+            const GpuDrawParams& effectParams);
 
         /// XNA exposes 16 texture sampler slots; ApplySamplerState validates against this.
         static constexpr int kMaxSamplerSlots = 16;

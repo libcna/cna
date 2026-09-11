@@ -5,13 +5,17 @@
 #include "CNA/TestSupport/CompiledEffectFixtures.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
@@ -27,6 +31,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -38,8 +43,11 @@ using CNA::Internal::Renderers::BlendWriteState;
 using CNA::Internal::Renderers::GpuDrawParams;
 using CNA::Internal::Renderers::GpuVertexStreamBinding;
 using CNA::Internal::Renderers::ICompiledEffectRuntime;
+using CNA::Internal::Renderers::IRenderTargetRenderer;
+using CNA::Internal::Renderers::RenderTargetBindingDescriptor;
 using CNA::Internal::Renderers::Software::SoftwareCompiledEffect;
 using CNA::Internal::Renderers::Software::ISoftwarePixelSamplerEXT;
+using CNA::Internal::Renderers::Software::SoftwareRenderTargetRenderer;
 using CNA::Internal::Renderers::Software::SoftwarePixelSampleRequestEXT;
 using CNA::Internal::Renderers::Software::SoftwareRenderer;
 using CNA::Internal::Renderers::Software::SoftwareShaderInstructionEXT;
@@ -53,14 +61,23 @@ using CNA::Internal::Renderers::Software::ExecuteSoftwarePixelShaderEXT;
 using CNA::Internal::Renderers::Software::ExecuteSoftwareVertexShaderEXT;
 using Microsoft::Xna::Framework::Graphics::Blend;
 using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::CullMode;
+using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+using Microsoft::Xna::Framework::Graphics::DepthFormat;
+using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
+using Microsoft::Xna::Framework::Rectangle;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 using Microsoft::Xna::Framework::Graphics::SamplerState;
+using Microsoft::Xna::Framework::Graphics::SpriteBatch;
+using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
@@ -73,6 +90,20 @@ using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+using Microsoft::Xna::Framework::Vector4;
+
+namespace CNA::TestSupport
+{
+    struct CompiledEffectTestAccess
+    {
+        static std::unique_ptr<Effect> Create(
+            GraphicsDevice& device, const std::vector<std::uint8_t>& bytes)
+        {
+            auto runtime = device.GetRenderer().CreateCompiledEffect(bytes.data(), bytes.size());
+            return std::unique_ptr<Effect>(new Effect(device, std::move(runtime), nullptr));
+        }
+    };
+}
 
 namespace
 {
@@ -789,6 +820,30 @@ namespace
         expectBackbuffer({255u, 255u, 0u, 255u},
                          "compiled sampler did not select the cube +X face");
 
+        RenderTargetCube renderedCube(
+            textureDevice, 4, false, SurfaceFormat::Color, DepthFormat::None);
+        Texture2D cubePaint(textureDevice, 1, 1);
+        const Microsoft::Xna::Framework::Color whitePixel[1] = {
+            Microsoft::Xna::Framework::Color::White};
+        cubePaint.SetData(whitePixel, 1);
+        textureDevice.SetRenderTarget(&renderedCube, CubeMapFace::PositiveX);
+        textureDevice.Clear(Microsoft::Xna::Framework::Color::Black);
+        {
+            SpriteBatch batch(textureDevice);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+            batch.Draw(cubePaint, Rectangle(0, 0, 2, 4), Color::Red);
+            batch.Draw(cubePaint, Rectangle(2, 0, 2, 4), Color::Blue);
+            batch.End();
+        }
+        textureDevice.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        textureDevice.getTexturesProperty()(0, &renderedCube);
+        draw(*cubeRuntime, {1.0f, 0.0f, 0.5f, 1.0f});
+        expectBackbuffer({255u, 0u, 0u, 255u},
+                         "compiled cube sampling inverted the rendered +X face's left half");
+        draw(*cubeRuntime, {1.0f, 0.0f, -0.5f, 1.0f});
+        expectBackbuffer({0u, 0u, 255u, 255u},
+                         "compiled cube sampling inverted the rendered +X face's right half");
+
         auto volumeRuntime = createRuntime(SyntheticSamplerKind::Sampler3D);
         Texture3D volume(textureDevice, 1, 1, 2, false, SurfaceFormat::Color);
         const Microsoft::Xna::Framework::Color volumePixels[2] = {
@@ -830,6 +885,265 @@ namespace
               "compiled sampler accepted a Texture2D for a samplerCUBE declaration");
     }
 
+    void CheckCompiledMrtRasterization(SoftwareRenderer& renderer)
+    {
+        constexpr int size = 8;
+        std::array<std::unique_ptr<IRenderTargetRenderer>, 4> targets;
+        std::array<SoftwareRenderTargetRenderer*, 4> softwareTargets{};
+        std::vector<RenderTargetBindingDescriptor> bindings;
+        for (std::size_t slot = 0; slot < targets.size(); ++slot)
+        {
+            targets[slot] = renderer.CreateRenderTarget2DEXT(
+                size, size, 0, false, false, 4, static_cast<int>(SurfaceFormat::Color));
+            softwareTargets[slot] =
+                dynamic_cast<SoftwareRenderTargetRenderer*>(targets[slot].get());
+            Check(softwareTargets[slot] != nullptr,
+                  "compiled MRT target did not use Software storage");
+            bindings.push_back(RenderTargetBindingDescriptor::ForRenderTarget2D(
+                targets[slot].get(), 0, size, size, 4));
+        }
+        renderer.SetRenderTargets(bindings.data(), static_cast<int>(bindings.size()));
+        renderer.ApplyRasterizerState(static_cast<int>(CullMode::None), 0, false);
+        renderer.ApplyRasterizerMultiSampleState(true);
+        renderer.ApplyDepthStencilState(
+            false, false, 0, false, 0, 0, 0, 0, 0xFF, 0xFF, 0,
+            false, 0, 0, 0, 0);
+
+        const auto bytes = CNA::TestSupport::BuildSyntheticMrtEffect();
+        auto runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+        const float tint[4] = {0.8f, 0.4f, 0.2f, 0.5f};
+        const Matrix identity = Matrix::getIdentityProperty();
+        runtime->SetParameterValue(FindParameter(*runtime, "Tint"), tint, sizeof(tint));
+        const float matrix[16] = {
+            identity.M11, identity.M21, identity.M31, identity.M41,
+            identity.M12, identity.M22, identity.M32, identity.M42,
+            identity.M13, identity.M23, identity.M33, identity.M43,
+            identity.M14, identity.M24, identity.M34, identity.M44,
+        };
+        runtime->SetParameterValue(
+            FindParameter(*runtime, "Transform"), matrix, sizeof(matrix));
+        runtime->SetTechnique(0);
+        CompiledEffectPassStateChanges changes;
+        runtime->ApplyPass(1, {}, changes);
+
+        struct Position
+        {
+            float value[4];
+        };
+        const Position vertices[3] = {
+            {{-0.75f, 0.75f, 0.5f, 1.0f}},
+            {{-0.75f, -0.75f, 0.5f, 1.0f}},
+            {{0.75f, 0.0f, 0.5f, 1.0f}},
+        };
+        const VertexDeclaration declaration(
+            sizeof(Position),
+            {VertexElement(0, VertexElementFormat::Vector4,
+                           VertexElementUsage::Position, 0)});
+        auto vertexBuffer = renderer.CreateVertexBuffer(3);
+        vertexBuffer->SetVertexDeclaration(declaration);
+        vertexBuffer->SetData(vertices, 3, sizeof(Position));
+        GpuDrawParams params;
+        params.compiledEffectRuntime = runtime.get();
+
+        BlendWriteState masks;
+        masks.colorWriteChannels[0] = 15;
+        masks.colorWriteChannels[1] = 1;
+        masks.colorWriteChannels[2] = 2;
+        masks.colorWriteChannels[3] = 4;
+        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, masks);
+        renderer.ClearColorAndDepth(0.1f, 0.3f, 0.6f, 1.0f, 1.0f);
+        renderer.DrawPrimitivesEx(*vertexBuffer, identity, identity, identity,
+                                  PrimitiveType::TriangleList, 1, params);
+
+        const std::array<std::array<float, 4>, 4> expected = {{
+            {0.8f, 0.4f, 0.2f, 0.5f},
+            {0.4f, 0.3f, 0.6f, 1.0f},
+            {0.1f, 0.8f, 0.6f, 1.0f},
+            {0.1f, 0.3f, 0.8f, 1.0f},
+        }};
+        const std::size_t pixelIndex = 4u * size + 3u;
+        for (std::size_t slot = 0; slot < softwareTargets.size(); ++slot)
+        {
+            Check(softwareTargets[slot]->Framebuffer().HasMultiSampleColor(),
+                  "compiled MRT target did not allocate four-sample storage");
+            for (int sample = 0; sample < 4; ++sample)
+            {
+                const auto actual =
+                    softwareTargets[slot]->Framebuffer().ReadColor(pixelIndex, sample);
+                for (std::size_t component = 0; component < 4; ++component)
+                    Check(std::abs(actual[component] - expected[slot][component]) < 0.002f,
+                          "compiled MRT COLOR output, mask or sample routing differs");
+            }
+        }
+
+        masks.colorWriteChannels[0] = 15;
+        masks.colorWriteChannels[1] = 15;
+        masks.colorWriteChannels[2] = 15;
+        masks.colorWriteChannels[3] = 15;
+        renderer.ApplyBlendState(4, 0, 5, 1, 0, 0, masks);
+        renderer.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, 1.0f);
+        renderer.DrawPrimitivesEx(*vertexBuffer, identity, identity, identity,
+                                  PrimitiveType::TriangleList, 1, params);
+        const auto blended = softwareTargets[0]->Framebuffer().ReadColor(pixelIndex, 0);
+        Check(std::abs(blended[0] - 0.4f) < 0.002f &&
+                  std::abs(blended[1] - 0.2f) < 0.002f &&
+                  std::abs(blended[2] - 0.6f) < 0.002f &&
+                  std::abs(blended[3] - 0.5f) < 0.002f,
+              "compiled MRT output bypassed the active blend equation");
+
+        renderer.SetRenderTargets(nullptr, 0);
+        renderer.ApplyDepthStencilState(
+            true, true, 3, false, 0, 0, 0, 0, 0xFF, 0xFF, 0,
+            false, 0, 0, 0, 0);
+    }
+
+    void CheckCompiledSpriteBatchRouting()
+    {
+        constexpr int size = 8;
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            PresentationParameters());
+        const auto setProjection = [](Effect& effect)
+        {
+            effect.getParametersProperty()["Transform"]->SetValue(
+                Matrix::CreateOrthographicOffCenter(
+                    0.0f, static_cast<float>(size), static_cast<float>(size),
+                    0.0f, -1.0f, 1.0f));
+        };
+        const Rectangle centre(size / 2, size / 2, 1, 1);
+        const auto read = [&](RenderTarget2D& target, const Rectangle& area)
+        {
+            Color pixel = Color::Transparent;
+            target.GetData(0, &area, &pixel, 0, 1);
+            return pixel;
+        };
+
+        Texture2D white(device, 1, 1);
+        const Color whitePixel[1] = {Color::White};
+        white.SetData(whitePixel, 1);
+
+        auto multiPass = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+        setProjection(*multiPass);
+        multiPass->getParametersProperty()["Tint"]->SetValue(
+            Vector4(1.0f, 0.0f, 0.0f, 0.5f));
+        RenderTarget2D multiPassTarget(device, size, size);
+        device.SetRenderTarget(&multiPassTarget);
+        device.Clear(Color::Black);
+        {
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied,
+                        nullptr, nullptr, nullptr, multiPass.get());
+            batch.Draw(white, Rectangle(0, 0, size, size), Color::White);
+            batch.Draw(white, Rectangle(0, 0, size, size), Color::White);
+            batch.End();
+        }
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        const Color multiPassPixel = read(multiPassTarget, centre);
+        Check(std::abs(static_cast<int>(multiPassPixel.getRProperty()) - 192) <= 4 &&
+                  multiPassPixel.getGProperty() <= 3,
+              "Software SpriteBatch did not execute compiled passes in pass-major order");
+
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        auto sampling = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticSamplingEffect({
+                {Fx::SampMagFilter, Fx::FilterPoint},
+                {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+                {Fx::SampAddressU, Fx::AddressClamp},
+                {Fx::SampAddressV, Fx::AddressClamp},
+            }));
+        setProjection(*sampling);
+        sampling->getParametersProperty()["Tint"]->SetValue(Vector4::One);
+        Texture2D effectTexture(device, 1, 1);
+        const Color redPixel[1] = {Color::Red};
+        effectTexture.SetData(redPixel, 1);
+        sampling->getParametersProperty()["FxTexture"]->SetValue(&effectTexture);
+
+        Texture2D spriteTexture(device, 2, 1);
+        const Color spritePixels[2] = {Color::Green, Color::Blue};
+        spriteTexture.SetData(spritePixels, 2);
+        RenderTarget2D textureTarget(device, size, size);
+        device.SetRenderTarget(&textureTarget);
+        device.Clear(Color::Black);
+        {
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque,
+                        &SamplerState::PointClamp, nullptr, nullptr, sampling.get());
+            batch.Draw(spriteTexture, Rectangle(0, 0, size, size), Color::White);
+            batch.End();
+        }
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        // Stay away from the quad's shared diagonal so this assertion isolates sampler-slot
+        // replacement from multisample edge ownership; x=6 also deterministically selects texel 1.
+        const Color sampledSprite = read(textureTarget, Rectangle(6, 2, 1, 1));
+        Check(sampledSprite.getRProperty() <= 3 && sampledSprite.getBProperty() >= 252,
+              "compiled SpriteBatch did not override effect sampler zero with its source texture "
+              "(actual RGBA=" + std::to_string(sampledSprite.getRProperty()) + "," +
+                  std::to_string(sampledSprite.getGProperty()) + "," +
+                  std::to_string(sampledSprite.getBProperty()) + "," +
+                  std::to_string(sampledSprite.getAProperty()) + ")");
+
+        auto pixelOnly = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticPixelOnlySamplingEffect({
+                {Fx::SampMagFilter, Fx::FilterPoint},
+                {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+                {Fx::SampAddressU, Fx::AddressClamp},
+                {Fx::SampAddressV, Fx::AddressClamp},
+            }));
+        pixelOnly->getParametersProperty()["Tint"]->SetValue(
+            Vector4(0.0f, 1.0f, 1.0f, 1.0f));
+        pixelOnly->getParametersProperty()["FxTexture"]->SetValue(&effectTexture);
+        RenderTarget2D inheritedVertexTarget(device, size, size);
+        device.SetRenderTarget(&inheritedVertexTarget);
+        device.Clear(Color::Black);
+        {
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque,
+                        &SamplerState::PointClamp, nullptr, nullptr, pixelOnly.get(),
+                        Matrix::CreateTranslation(4.0f, 0.0f, 0.0f));
+            batch.Draw(white, Rectangle(0, 0, 4, size), Color::White);
+            batch.End();
+        }
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        const Color untranslated = read(inheritedVertexTarget, Rectangle(1, 2, 1, 1));
+        const Color inherited = read(inheritedVertexTarget, Rectangle(5, 2, 1, 1));
+        Check(untranslated == Color::Black && inherited.getRProperty() <= 3 &&
+                  inherited.getGProperty() >= 252 && inherited.getBProperty() >= 252,
+              "compiled SpriteBatch did not inherit SpriteEffect's transformed vertex stage "
+              "for a pixel-only custom Effect");
+
+        RenderTarget2D source(device, size, size);
+        device.SetRenderTarget(&source);
+        device.Clear(Color::Black);
+        {
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+            batch.Draw(white, Rectangle(0, 0, size, size / 2), Color::Red);
+            batch.Draw(white, Rectangle(0, size / 2, size, size / 2), Color::Blue);
+            batch.End();
+        }
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        RenderTarget2D destination(device, size, size);
+        device.SetRenderTarget(&destination);
+        device.Clear(Color::Black);
+        {
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque,
+                        &SamplerState::PointClamp, nullptr, nullptr, sampling.get());
+            batch.Draw(source, Rectangle(0, 0, size, size), Color::White);
+            batch.End();
+        }
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        const Color top = read(destination, Rectangle(size / 2, 1, 1, 1));
+        const Color bottom = read(destination, Rectangle(size / 2, size - 2, 1, 1));
+        Check(top.getRProperty() >= 252 && top.getBProperty() <= 3 &&
+                  bottom.getBProperty() >= 252 && bottom.getRProperty() <= 3,
+              "compiled SpriteBatch inverted or leaked a RenderTarget2D source transition");
+    }
+
 } // namespace
 
 int main()
@@ -840,6 +1154,8 @@ int main()
         CheckVertexInstructionSemantics();
         CheckPixelInstructionSemantics();
         CheckCompiledSamplerRasterization(renderer);
+        CheckCompiledMrtRasterization(renderer);
+        CheckCompiledSpriteBatchRouting();
         Check(!renderer.SupportsCompiledEffects(),
               "incomplete SOFTWARE-164/165 path must not advertise compiled effects");
 

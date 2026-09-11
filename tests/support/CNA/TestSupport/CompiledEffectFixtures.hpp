@@ -220,6 +220,10 @@ namespace CNA::TestSupport
         /// object types, the pixel shader's `dcl_<kind>` token and its constant-table entry, and
         /// the width of the texture coordinate the vertex shader forwards.
         SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D;
+        /// Emits four distinct pixel outputs instead of COLOR0 only. The values are swizzles of
+        /// Tint, so MRT routing and per-target write masks remain observable without extra
+        /// reflected parameters. Mutually exclusive with @ref pixelShaderSamplesTexture.
+        bool pixelShaderWritesMrt = false;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -262,7 +266,8 @@ namespace CNA::TestSupport
         bool includeSampler = true,
         bool samplesTexture = false,
         bool swizzleTint = false,
-        SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D)
+        SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D,
+        bool writesMrt = false)
     {
         constexpr std::uint32_t versionToken = 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
@@ -401,6 +406,21 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
             AppendUInt32(shader, source(regConst, 0));
+        }
+        else if (writesMrt)
+        {
+            constexpr std::uint32_t swizzles[4] = {
+                swizzleIdentity,
+                1u | (0u << 2) | (2u << 4) | (3u << 6), // .yxzw
+                2u | (0u << 2) | (1u << 4) | (3u << 6), // .zxyw
+                2u | (1u << 2) | (0u << 4) | (3u << 6), // .zyxw
+            };
+            for (std::uint32_t slot = 0; slot < 4; ++slot)
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24));
+                AppendUInt32(shader, destination(regColorOut, slot, 0xFu));
+                AppendUInt32(shader, source(regConst, 0, swizzles[slot]));
+            }
         }
         else
         {
@@ -935,7 +955,8 @@ namespace CNA::TestSupport
 
         const std::vector<std::uint8_t> shader = BuildSyntheticPixelShader(
             options.samplerRegister, options.breakShaderSymbolBinding, options.includeSampler,
-            options.pixelShaderSamplesTexture, /*swizzleTint=*/false, options.samplerKind);
+            options.pixelShaderSamplesTexture, /*swizzleTint=*/false, options.samplerKind,
+            options.pixelShaderWritesMrt);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -993,6 +1014,22 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Builds a drawable fixture that emits four distinct COLOR outputs.
+     *
+     * COLOR0 is Tint, while COLOR1-3 use different RGB swizzles. This makes attachment routing,
+     * per-target channel masks, blending and multisample storage independently observable.
+     *
+     * @return Complete Effect Framework bytecode with one vertex program and four pixel outputs.
+     */
+    inline std::vector<std::uint8_t> BuildSyntheticMrtEffect()
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderWritesMrt = true;
+        return BuildSyntheticEffect(options);
+    }
+
+    /**
      * @brief plans/plan_fx.md FX-093: a drawable fixture whose pixel shader actually SAMPLES a texture.
      *
      * `StatePass` (technique 0, pass 1) binds `oPos = mul(POSITION0, Transform)` with TEXCOORD0
@@ -1037,6 +1074,25 @@ namespace CNA::TestSupport
         options.samplerStates = samplerStates;
         options.samplerRegister = samplerRegister;
         options.samplerKind = samplerKind;
+        return BuildSyntheticEffect(options);
+    }
+
+    /**
+     * @brief Builds a sampling Effect whose passes never assign a vertex shader.
+     *
+     * This is the classic SpriteBatch custom-effect shape: XNA applies its internal SpriteEffect
+     * first, then a pixel-only user pass inherits the sprite vertex stage and MatrixTransform.
+     *
+     * @param samplerStates Sampler assignments applied by the pixel-shader pass.
+     * @return Complete Effect Framework bytecode with a sampling pixel shader and no vertex shader.
+     */
+    inline std::vector<std::uint8_t> BuildSyntheticPixelOnlySamplingEffect(
+        const std::vector<SyntheticSamplerState>& samplerStates)
+    {
+        SyntheticEffectOptions options;
+        options.includeSampler = true;
+        options.pixelShaderSamplesTexture = true;
+        options.samplerStates = samplerStates;
         return BuildSyntheticEffect(options);
     }
 
