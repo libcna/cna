@@ -1844,6 +1844,61 @@ namespace
               "a true predicate did not execute compiled TEXKILL");
     }
 
+    void CheckCompiledProjectiveSourceModifiers()
+    {
+        GraphicsDevice device;
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = false;
+        options.pixelShaderUsesProjectiveModifiers = true;
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect->getParametersProperty()["Tint"]->SetValue(Vector4(0.0f, 0.0f, 0.25f, 1.0f));
+
+        struct Vertex { float x, y, z, u, v, q, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4, VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](float divisorZ, float divisorW)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .25f, .5f, divisorZ, divisorW},
+                {-1, -1, 0, .25f, .5f, divisorZ, divisorW},
+                { 1, -1, 0, .25f, .5f, divisorZ, divisorW},
+                {-1,  1, 0, .25f, .5f, divisorZ, divisorW},
+                { 1, -1, 0, .25f, .5f, divisorZ, divisorW},
+                { 1,  1, 0, .25f, .5f, divisorZ, divisorW},
+            };
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+        const Color projected = drawAndRead(0.5f, 0.25f);
+        Check(std::abs(static_cast<int>(projected.getRProperty()) - 128) <= 1 &&
+                  projected.getGProperty() == 255 &&
+                  std::abs(static_cast<int>(projected.getBProperty()) - 64) <= 1 &&
+                  projected.getAProperty() == 255,
+              "compiled ps_1_4 _dz/_dw projection produced the wrong color");
+        const Color zeroDivisors = drawAndRead(0.0f, 0.0f);
+        Check(zeroDivisors.getRProperty() == 255 && zeroDivisors.getGProperty() == 255 &&
+                  std::abs(static_cast<int>(zeroDivisors.getBProperty()) - 64) <= 1 &&
+                  zeroDivisors.getAProperty() == 255,
+              "compiled ps_1_4 projective zero divisors did not produce one");
+    }
+
     void CheckCompiledSamplerRasterization(SoftwareRenderer& renderer)
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
@@ -2653,6 +2708,7 @@ int main()
         CheckCompiledRasterInputs();
         CheckCompiledInstructionPredication();
         CheckCompiledPredicatedTexkill();
+        CheckCompiledProjectiveSourceModifiers();
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
         CheckCompiledLineAndWireframeRasterization(renderer);

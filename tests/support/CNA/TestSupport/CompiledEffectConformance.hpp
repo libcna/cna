@@ -1252,6 +1252,68 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Proves Shader Model 1.4 `TEXCRD` applies `_dz`/`_dw` projective modifiers.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectProjectiveModifierContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = false;
+        options.pixelShaderUsesProjectiveModifiers = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(0.0f, 0.0f, 0.25f, 1.0f));
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, w;
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4, VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](float divisorZ, float divisorW)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .25f, .5f, divisorZ, divisorW},
+                {-1, -1, 0, .25f, .5f, divisorZ, divisorW},
+                { 1, -1, 0, .25f, .5f, divisorZ, divisorW},
+                {-1,  1, 0, .25f, .5f, divisorZ, divisorW},
+                { 1, -1, 0, .25f, .5f, divisorZ, divisorW},
+                { 1,  1, 0, .25f, .5f, divisorZ, divisorW},
+            };
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        const Color projected = drawAndRead(0.5f, 0.25f);
+        EXPECT_NEAR(projected.getRProperty(), 128, 1);
+        EXPECT_EQ(projected.getGProperty(), 255);
+        EXPECT_NEAR(projected.getBProperty(), 64, 1);
+        EXPECT_EQ(projected.getAProperty(), 255);
+        const Color zeroDivisors = drawAndRead(0.0f, 0.0f);
+        EXPECT_EQ(zeroDivisors.getRProperty(), 255);
+        EXPECT_EQ(zeroDivisors.getGProperty(), 255);
+        EXPECT_NEAR(zeroDivisors.getBProperty(), 64, 1);
+        EXPECT_EQ(zeroDivisors.getAProperty(), 255);
+    }
+
+    /**
      * @brief Contract: a compiled effect reads attributes from more than one bound stream.
      *
      * plans/plan_fx.md FX-082. Only for backends reporting `MultiStreamVertexInput`. The fixture's
@@ -3372,6 +3434,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectSubroutineContract` -- forward, nested and conditional calls return
      * - `RunCompiledEffectPredicationContract` -- SM3 predicates mask vertex/pixel components
      * - `RunCompiledEffectPredicatedTexkillContract` -- a false predicate suppresses pixel kill
+     * - `RunCompiledEffectProjectiveModifierContract` -- ps_1_4 `_dz`/`_dw`, including zero
      * - `RunCompiledEffectMultiStreamDrawContract` -- several streams, and their own offsets
      * - `RunCompiledEffectInstancingDrawContract` -- instanced draws, offsets and divisor reset
      * - `RunCompiledEffectSpriteBatchContract` -- SpriteBatch runs the effect, or refuses by name

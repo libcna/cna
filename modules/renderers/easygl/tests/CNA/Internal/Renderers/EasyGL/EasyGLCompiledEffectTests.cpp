@@ -633,6 +633,14 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9PredicationGatesTexkill)
     CNA::TestSupport::RunCompiledEffectPredicatedTexkillContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14ProjectiveSourceModifiers)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectProjectiveModifierContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedMultiStreamDrawContract)
 {
     GraphicsDevice device;

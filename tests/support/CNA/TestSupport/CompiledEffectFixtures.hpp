@@ -247,6 +247,8 @@ namespace CNA::TestSupport
         bool shadersUsePredication = false;
         /// Emits a Shader Model 3 pixel program that predicates `TEXKILL` through replicated `p0.x`.
         bool pixelShaderUsesPredicatedTexkill = false;
+        /// Emits a Shader Model 1.4 pixel program that applies `_dz` and `_dw` to `TEXCRD`.
+        bool pixelShaderUsesProjectiveModifiers = false;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -299,12 +301,15 @@ namespace CNA::TestSupport
         bool usesDerivatives = false,
         bool usesRasterInputs = false,
         bool usesPredication = false,
-        bool usesPredicatedTexkill = false)
+        bool usesPredicatedTexkill = false,
+        bool usesProjectiveModifiers = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill;
-        const std::uint32_t versionToken = usesShaderModel3 ? 0xFFFF0300u : 0xFFFF0200u;
+        const std::uint32_t versionToken = usesProjectiveModifiers
+                                               ? 0xFFFF0104u
+                                               : usesShaderModel3 ? 0xFFFF0300u : 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
         std::vector<std::uint8_t> ctab;
         AppendUInt32(ctab, 28);           // 0  sizeof(D3DXSHADER_CONSTANTTABLE)
@@ -358,7 +363,8 @@ namespace CNA::TestSupport
         const std::uint32_t tintName =
             appendCtabString(breakSymbolBinding ? "NoSuchParameter" : "Tint");
         const std::uint32_t samplerName = appendCtabString("FxSampler");
-        const std::uint32_t target = appendCtabString(usesShaderModel3 ? "ps_3_0" : "ps_2_0");
+        const std::uint32_t target = appendCtabString(
+            usesProjectiveModifiers ? "ps_1_4" : usesShaderModel3 ? "ps_3_0" : "ps_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
         while ((ctab.size() & 3u) != 0) ctab.push_back(0);
 
@@ -416,7 +422,23 @@ namespace CNA::TestSupport
                    (modifier << 24);
         };
 
-        if (usesPredicatedTexkill)
+        if (usesProjectiveModifiers)
+        {
+            // t0=(.25,.5,.5,.25): _dz contributes .5 to red and _dw contributes 1 to green.
+            AppendUInt32(shader, 0x00000040u); // texcrd r0.xy, t0_dz
+            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+            AppendUInt32(shader, source(regTexture, 0, swizzleIdentity, 9u));
+            AppendUInt32(shader, 0x00000040u); // texcrd r1.xy, t0_dw
+            AppendUInt32(shader, destination(regTemp, 1, 0x3u));
+            AppendUInt32(shader, source(regTexture, 0, swizzleIdentity, 10u));
+            AppendUInt32(shader, 0x00000001u); // mov r0.y, r1.x
+            AppendUInt32(shader, destination(regTemp, 0, 0x2u));
+            AppendUInt32(shader, source(regTemp, 1, 0x00u));
+            AppendUInt32(shader, 0x00000001u); // mov r0.zw, c0.zw
+            AppendUInt32(shader, destination(regTemp, 0, 0xCu));
+            AppendUInt32(shader, source(regConst, 0));
+        }
+        else if (usesPredicatedTexkill)
         {
             // Tint.x controls whether p0.x enables the kill. The killed operand is negative only
             // in x, so masking that one predicate component is the complete observable contract.
@@ -744,7 +766,8 @@ namespace CNA::TestSupport
     inline std::vector<std::uint8_t> BuildSyntheticVertexShader(bool readsSecondStream,
                                                                 bool forwardsTexCoord = false,
                                                                 bool forwardsThreeComponents = false,
-                                                                bool usesPredication = false)
+                                                                bool usesPredication = false,
+                                                                bool forwardsFourComponents = false)
     {
         const std::uint32_t versionToken = usesPredication ? 0xFFFE0300u : 0xFFFE0200u;
         const std::uint32_t constantCount = readsSecondStream ? 2u : 1u;
@@ -923,7 +946,10 @@ namespace CNA::TestSupport
             // follows the sampler the pixel shader declares rather than being fixed at .xy.
             AppendUInt32(shader, 0x00000001u | (2u << 24));
             AppendUInt32(shader, destination(regTexCoordOut, 0,
-                                             forwardsThreeComponents ? 0x7u : 0x3u));
+                                             forwardsFourComponents ? 0xFu
+                                                                    : forwardsThreeComponents
+                                                                          ? 0x7u
+                                                                          : 0x3u));
             AppendUInt32(shader, source(regInput, 1));
         }
         AppendUInt32(shader, 0x0000FFFFu);
@@ -1301,7 +1327,8 @@ namespace CNA::TestSupport
             options.pixelLoopCount, options.pixelLoopInitial, options.pixelLoopStep,
             options.pixelShaderUsesSubroutine, options.pixelShaderUsesDerivatives,
             options.pixelShaderUsesRasterInputs, options.shadersUsePredication,
-            options.pixelShaderUsesPredicatedTexkill);
+            options.pixelShaderUsesPredicatedTexkill,
+            options.pixelShaderUsesProjectiveModifiers);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -1310,9 +1337,11 @@ namespace CNA::TestSupport
         {
             const std::vector<std::uint8_t> vertexShader = BuildSyntheticVertexShader(
                 options.vertexShaderReadsSecondStream,
-                options.pixelShaderSamplesTexture || options.pixelShaderUsesDerivatives,
+                options.pixelShaderSamplesTexture || options.pixelShaderUsesDerivatives ||
+                    options.pixelShaderUsesProjectiveModifiers,
                 options.samplerKind != SyntheticSamplerKind::Sampler2D,
-                options.shadersUsePredication);
+                options.shadersUsePredication,
+                options.pixelShaderUsesProjectiveModifiers);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

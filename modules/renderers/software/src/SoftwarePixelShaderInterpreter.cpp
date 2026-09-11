@@ -572,13 +572,13 @@ private:
     case 9: {
       const float divisor = value[2];
       for (float &component : value)
-        component /= divisor;
+        component = divisor == 0.0f ? 1.0f : component / divisor;
       break;
     }
     case 10: {
       const float divisor = value[3];
       for (float &component : value)
-        component /= divisor;
+        component = divisor == 0.0f ? 1.0f : component / divisor;
       break;
     }
     case 11:
@@ -1084,11 +1084,19 @@ private:
       return;
     }
     if (instruction.opcode == 64u) {
-      if (tokens.size() != 2u + (instruction.predicated ? 1u : 0u))
-        throw std::runtime_error(
-            "Software pixel shader: unsupported TEXCOORD instruction shape.");
       const Operand destination = DecodeDestination(tokens[1]);
-      Write(destination, ReadRaw(destination.type, destination.number));
+      if (program_.majorVersion == 1u && program_.minorVersion == 4u) {
+        if (tokens.size() != 3u)
+          throw std::runtime_error(
+              "Software pixel shader: malformed ps_1_4 TEXCRD instruction.");
+        std::size_t cursor = 2u;
+        Write(destination, ReadSource(tokens, cursor));
+      } else {
+        if (tokens.size() != 2u + (instruction.predicated ? 1u : 0u))
+          throw std::runtime_error(
+              "Software pixel shader: unsupported TEXCOORD instruction shape.");
+        Write(destination, ReadRaw(destination.type, destination.number));
+      }
       return;
     }
     if (instruction.opcode == 65u) {
