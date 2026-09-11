@@ -138,6 +138,13 @@ void NormalizeConstantRegister(Operand &operand) {
   return result;
 }
 
+[[nodiscard]] Vector ReflectLegacyEyeRay(const Vector &normal,
+                                         const Vector &eye) {
+  const float scale = 2.0f * Dot(normal, eye, 3) / Dot(normal, normal, 3);
+  return {scale * normal[0] - eye[0], scale * normal[1] - eye[1],
+          scale * normal[2] - eye[2], 1.0f};
+}
+
 [[nodiscard]] bool Compare(float left, float right, std::uint8_t control) {
   switch (control) {
   case 1:
@@ -930,7 +937,10 @@ private:
                               const std::array<std::uint8_t, 3> &coordinateComponents =
                                   {0u, 1u, 2u},
                               const std::array<std::int8_t, 3> &legacyMatrixRows =
-                                  {-1, -1, -1}) const {
+                                  {-1, -1, -1},
+                              SoftwareLegacyTextureReflectionEXT legacyReflection =
+                                  SoftwareLegacyTextureReflectionEXT::None,
+                              const std::array<float, 3> &legacyReflectionEye = {}) const {
     if (sampler_ == nullptr)
       throw std::runtime_error(
           "Software pixel shader: texture instruction has no sampler provider.");
@@ -943,6 +953,8 @@ private:
         static_cast<std::uint8_t>(coordinateOperand.number);
     request.coordinateComponents = coordinateComponents;
     request.legacyMatrixRowRegisters = legacyMatrixRows;
+    request.legacyReflection = legacyReflection;
+    request.legacyReflectionEye = legacyReflectionEye;
     request.samplerType = SamplerType(samplerRegister);
     request.coordinate = coordinate;
     request.lodMode = lodMode;
@@ -1241,8 +1253,10 @@ private:
               ReadSourceFromOperand(source), 3);
       return;
     }
-    if (instruction.opcode == 74u || instruction.opcode == 86u) {
-      if (tokens.size() != 3u || legacyTextureMatrixDotCount_ != 2u)
+    if (instruction.opcode == 74u || instruction.opcode == 76u ||
+        instruction.opcode == 77u || instruction.opcode == 86u) {
+      const std::size_t expectedTokens = instruction.opcode == 76u ? 4u : 3u;
+      if (tokens.size() != expectedTokens || legacyTextureMatrixDotCount_ != 2u)
         throw std::runtime_error(
             "Software pixel shader: TEXM3X3 final instruction has no matching pad pair.");
       const Operand destination = DecodeDestination(tokens[1]);
@@ -1254,6 +1268,14 @@ private:
       int relativeComponent = 0;
       const Operand source = DecodeSource(tokens, cursor, program_.majorVersion,
                                           relativeType, relativeComponent);
+      Operand eyeOperand;
+      if (instruction.opcode == 76u) {
+        eyeOperand = DecodeSource(tokens, cursor, program_.majorVersion,
+                                  relativeType, relativeComponent);
+        if (eyeOperand.relative || eyeOperand.type != RegisterType::Constant)
+          throw std::runtime_error(
+              "Software pixel shader: TEXM3X3SPEC eye ray is not a constant register.");
+      }
       if (source.relative || source.type != RegisterType::Texture ||
           source.number != legacyTextureMatrixSource_ ||
           destination.number != legacyTextureMatrixRows_[1] + 1 ||
@@ -1262,20 +1284,37 @@ private:
             "Software pixel shader: invalid TEXM3X3 final register sequence.");
       const Vector row = ReadRaw(destination.type, destination.number);
       const Vector vector = ReadSourceFromOperand(source);
-      const Vector coordinate = {legacyTextureMatrixDots_[0],
-                                 legacyTextureMatrixDots_[1],
-                                 Dot(row, vector, 3), 1.0f};
-      if (instruction.opcode == 74u) {
+      const Vector normal = {legacyTextureMatrixDots_[0],
+                             legacyTextureMatrixDots_[1],
+                             Dot(row, vector, 3), 1.0f};
+      if (instruction.opcode != 86u) {
         const std::array<std::int8_t, 3> matrixRows = {
             static_cast<std::int8_t>(legacyTextureMatrixRows_[0]),
             static_cast<std::int8_t>(legacyTextureMatrixRows_[1]),
             static_cast<std::int8_t>(destination.number)};
+        SoftwareLegacyTextureReflectionEXT reflection =
+            SoftwareLegacyTextureReflectionEXT::None;
+        Vector eye{};
+        if (instruction.opcode == 76u) {
+          reflection = SoftwareLegacyTextureReflectionEXT::ConstantEye;
+          eye = ReadSourceFromOperand(eyeOperand);
+        } else if (instruction.opcode == 77u) {
+          reflection = SoftwareLegacyTextureReflectionEXT::MatrixRowW;
+          eye = {
+              ReadRaw(RegisterType::Texture, legacyTextureMatrixRows_[0])[3],
+              ReadRaw(RegisterType::Texture, legacyTextureMatrixRows_[1])[3],
+              row[3], 0.0f};
+        }
+        const Vector coordinate = reflection == SoftwareLegacyTextureReflectionEXT::None
+                                      ? normal
+                                      : ReflectLegacyEyeRay(normal, eye);
         Write(destination,
               Sample(source, coordinate, destination.number,
                      SoftwareTextureLodModeEXT::Implicit, 0.0f, {}, {},
-                     {0u, 1u, 2u}, matrixRows));
+                     {0u, 1u, 2u}, matrixRows, reflection,
+                     {eye[0], eye[1], eye[2]}));
       } else {
-        Write(destination, coordinate);
+        Write(destination, normal);
       }
       legacyTextureMatrixDotCount_ = 0u;
       legacyTextureMatrixSource_ = -1;

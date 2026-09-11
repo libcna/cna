@@ -44,7 +44,7 @@ Those are real parser, vertex and sampled-pixel phases, not complete execution p
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
 continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
 is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371/373/374/375/376/377/378/379/380/381` are complete: the opt-in runtime now includes compiled MRT,
+`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371/373/374/375/376/377/378/379/380/381/382` are complete: the opt-in runtime now includes compiled MRT,
 render-target/cube sampling, SpriteBatch custom-effect routing and classic line/wireframe rasterization. `SOFTWARE-164/165` remain the
 encompassing shader-profile, lifecycle and content-conformance backlog.
 The independent EasyGL challenge in `SOFTWARE-367` also repaired MojoShader's invalid writemask-
@@ -233,7 +233,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   `TEXM3X2PAD`/`TEXM3X2TEX` pair and derives CPU implicit LOD from its two matrix products rather
   than the untransformed source register. SOFTWARE-381 adds `TEXM3X3TEX`, transformed cube/volume
   footprints and the Shader Model 1.x CTAB sampler map that distinguishes volume from cube in both
-  compiled paths. Invalid marker placement/count, remaining sampled matrix variants and
+  compiled paths. SOFTWARE-382 adds the constant-eye `TEXM3X3SPEC` and row-w-eye
+  `TEXM3X3VSPEC` reflection loads, including reflected CPU cube/volume footprints. Its managed
+  MojoShader patch removes an emitted trailing comma and replaces component-wise reflection with
+  Microsoft's scalar `dot(N,E) / dot(N,N)` equation. Invalid marker placement/count, the remaining
+  depth-writing matrix form and
   other unimplemented legacy stateful texture operations remain in the explicit profile backlog.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`

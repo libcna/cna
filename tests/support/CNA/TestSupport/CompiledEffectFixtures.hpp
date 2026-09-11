@@ -270,6 +270,10 @@ namespace CNA::TestSupport
         bool pixelShaderUsesLegacyTextureMatrix2 = false;
         /// Emits the sampled Shader Model 1.2 `TEXM3X3PAD`/`TEXM3X3TEX` sequence.
         bool pixelShaderUsesLegacyTextureMatrix3Sample = false;
+        /// Emits sampled Shader Model 1.2 `TEXM3X3SPEC` with a constant eye ray.
+        bool pixelShaderUsesLegacyTextureMatrix3Specular = false;
+        /// Emits sampled Shader Model 1.2 `TEXM3X3VSPEC` with a varying eye ray.
+        bool pixelShaderUsesLegacyTextureMatrix3VertexSpecular = false;
         /// Emits Shader Model 1.2 `TEXREG2AR` or `TEXREG2GB` against the destination stage.
         SyntheticLegacyTextureRemap pixelShaderLegacyTextureRemap =
             SyntheticLegacyTextureRemap::None;
@@ -332,7 +336,9 @@ namespace CNA::TestSupport
         bool usesLegacyTextureMatrix = false,
         SyntheticLegacyTextureRemap legacyTextureRemap = SyntheticLegacyTextureRemap::None,
         bool usesLegacyTextureMatrix2 = false,
-        bool usesLegacyTextureMatrix3Sample = false)
+        bool usesLegacyTextureMatrix3Sample = false,
+        bool usesLegacyTextureMatrix3Specular = false,
+        bool usesLegacyTextureMatrix3VertexSpecular = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -343,6 +349,8 @@ namespace CNA::TestSupport
                                                ? 0xFFFF0104u
                                                : usesLegacyTextureMatrix || usesLegacyTextureMatrix2 ||
                                                          usesLegacyTextureMatrix3Sample ||
+                                                         usesLegacyTextureMatrix3Specular ||
+                                                         usesLegacyTextureMatrix3VertexSpecular ||
                                                          legacyTextureRemap !=
                                                              SyntheticLegacyTextureRemap::None
                                                      ? 0xFFFF0102u
@@ -405,6 +413,8 @@ namespace CNA::TestSupport
                 ? "ps_1_4"
                 : usesLegacyTextureMatrix || usesLegacyTextureMatrix2 ||
                           usesLegacyTextureMatrix3Sample ||
+                          usesLegacyTextureMatrix3Specular ||
+                          usesLegacyTextureMatrix3VertexSpecular ||
                           legacyTextureRemap != SyntheticLegacyTextureRemap::None
                       ? "ps_1_2"
                       : usesShaderModel3 ? "ps_3_0" : "ps_2_0");
@@ -465,7 +475,48 @@ namespace CNA::TestSupport
                    (modifier << 24);
         };
 
-        if (usesLegacyTextureMatrix3Sample)
+        if (usesLegacyTextureMatrix3Specular)
+        {
+            AppendUInt32(shader, 0x00000051u); // def c1, 1, .2, .1, 0
+            AppendUInt32(shader, destination(regConst, 1, 0xFu));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, FloatBits(0.2f));
+            AppendUInt32(shader, FloatBits(0.1f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, 0x00000040u); // texcrd t0
+            AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+            for (std::uint32_t stage = 1; stage <= 2; ++stage)
+            {
+                AppendUInt32(shader, 0x00000049u); // texm3x3pad t#, t0
+                AppendUInt32(shader, destination(regTexture, stage, 0xFu));
+                AppendUInt32(shader, source(regTexture, 0));
+            }
+            AppendUInt32(shader, 0x0000004Cu); // texm3x3spec t3, t0, c1
+            AppendUInt32(shader, destination(regTexture, 3, 0xFu));
+            AppendUInt32(shader, source(regTexture, 0));
+            AppendUInt32(shader, source(regConst, 1));
+            AppendUInt32(shader, 0x00000001u); // mov r0, t3
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTexture, 3));
+        }
+        else if (usesLegacyTextureMatrix3VertexSpecular)
+        {
+            AppendUInt32(shader, 0x00000040u); // texcrd t0
+            AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+            for (std::uint32_t stage = 1; stage <= 2; ++stage)
+            {
+                AppendUInt32(shader, 0x00000049u); // texm3x3pad t#, t0
+                AppendUInt32(shader, destination(regTexture, stage, 0xFu));
+                AppendUInt32(shader, source(regTexture, 0));
+            }
+            AppendUInt32(shader, 0x0000004Du); // texm3x3vspec t3, t0
+            AppendUInt32(shader, destination(regTexture, 3, 0xFu));
+            AppendUInt32(shader, source(regTexture, 0));
+            AppendUInt32(shader, 0x00000001u); // mov r0, t3
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTexture, 3));
+        }
+        else if (usesLegacyTextureMatrix3Sample)
         {
             AppendUInt32(shader, 0x00000040u); // texcrd t0
             AppendUInt32(shader, destination(regTexture, 0, 0xFu));
@@ -903,7 +954,9 @@ namespace CNA::TestSupport
                                                                 bool forwardsFourComponents = false,
                                                                 bool forwardsLegacyTextureMatrix = false,
                                                                 bool forwardsLegacyTextureMatrix2 = false,
-                                                                bool forwardsLegacyTextureMatrix3Sample = false)
+                                                                bool forwardsLegacyTextureMatrix3Sample = false,
+                                                                bool forwardsLegacyTextureMatrix3Specular = false,
+                                                                bool forwardsLegacyTextureMatrix3VertexSpecular = false)
     {
         const std::uint32_t versionToken = usesPredication ? 0xFFFE0300u : 0xFFFE0200u;
         const std::uint32_t constantCount = readsSecondStream ? 2u : 1u;
@@ -1061,6 +1114,21 @@ namespace CNA::TestSupport
             appendDef(242u, 0.0f, 0.0f, 6.0f, 1.0f); // t2 row
             appendDef(243u, 0.0f, 0.0f, 4.0f, 1.0f); // t3 row
         }
+        if (forwardsLegacyTextureMatrix3Specular ||
+            forwardsLegacyTextureMatrix3VertexSpecular)
+        {
+            const auto appendDef = [&](std::uint32_t number, float x, float y, float z, float w) {
+                AppendUInt32(shader, 0x00000051u | (5u << 24));
+                AppendUInt32(shader, destination(regConst, number));
+                AppendUInt32(shader, FloatBits(x));
+                AppendUInt32(shader, FloatBits(y));
+                AppendUInt32(shader, FloatBits(z));
+                AppendUInt32(shader, FloatBits(w));
+            };
+            appendDef(241u, 1.0f, 0.0f, 0.0f, 0.1f); // first matrix row / eye x
+            appendDef(242u, 0.0f, 1.0f, 0.0f, 0.2f); // second matrix row / eye y
+            appendDef(243u, 0.0f, 0.0f, 1.0f, 1.0f); // third matrix row / eye z
+        }
 
         // dcl_position v0
         AppendUInt32(shader, 0x0000001Fu | (2u << 24));
@@ -1155,6 +1223,22 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oT#, c240+#
                 AppendUInt32(shader, destination(regTexCoordOut, index));
                 AppendUInt32(shader, source(regConst, 240u + index));
+            }
+        }
+        if (forwardsLegacyTextureMatrix3Specular ||
+            forwardsLegacyTextureMatrix3VertexSpecular)
+        {
+            for (std::uint32_t index = 1; index <= 3; ++index)
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oT#, c240+#
+                AppendUInt32(shader, destination(regTexCoordOut, index));
+                AppendUInt32(shader, source(regConst, 240u + index));
+            }
+            if (forwardsLegacyTextureMatrix3VertexSpecular)
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oT3.w, v1.w
+                AppendUInt32(shader, destination(regTexCoordOut, 3, 0x8u));
+                AppendUInt32(shader, source(regInput, 1));
             }
         }
         AppendUInt32(shader, 0x0000FFFFu);
@@ -1539,7 +1623,9 @@ namespace CNA::TestSupport
             options.pixelShaderUsesLegacyTextureMatrix,
             options.pixelShaderLegacyTextureRemap,
             options.pixelShaderUsesLegacyTextureMatrix2,
-            options.pixelShaderUsesLegacyTextureMatrix3Sample);
+            options.pixelShaderUsesLegacyTextureMatrix3Sample,
+            options.pixelShaderUsesLegacyTextureMatrix3Specular,
+            options.pixelShaderUsesLegacyTextureMatrix3VertexSpecular);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -1555,10 +1641,14 @@ namespace CNA::TestSupport
                     options.pixelShaderLegacyTextureRemap !=
                         SyntheticLegacyTextureRemap::None ||
                     options.pixelShaderUsesLegacyTextureMatrix2 ||
-                    options.pixelShaderUsesLegacyTextureMatrix3Sample,
+                    options.pixelShaderUsesLegacyTextureMatrix3Sample ||
+                    options.pixelShaderUsesLegacyTextureMatrix3Specular ||
+                    options.pixelShaderUsesLegacyTextureMatrix3VertexSpecular,
                 options.samplerKind != SyntheticSamplerKind::Sampler2D ||
                     options.pixelShaderUsesLegacyTextureMatrix2 ||
-                    options.pixelShaderUsesLegacyTextureMatrix3Sample,
+                    options.pixelShaderUsesLegacyTextureMatrix3Sample ||
+                    options.pixelShaderUsesLegacyTextureMatrix3Specular ||
+                    options.pixelShaderUsesLegacyTextureMatrix3VertexSpecular,
                 options.shadersUsePredication,
                 options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
@@ -1567,7 +1657,9 @@ namespace CNA::TestSupport
                         SyntheticLegacyTextureRemap::None,
                 options.pixelShaderUsesLegacyTextureMatrix,
                 options.pixelShaderUsesLegacyTextureMatrix2,
-                options.pixelShaderUsesLegacyTextureMatrix3Sample);
+                options.pixelShaderUsesLegacyTextureMatrix3Sample,
+                options.pixelShaderUsesLegacyTextureMatrix3Specular,
+                options.pixelShaderUsesLegacyTextureMatrix3VertexSpecular);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

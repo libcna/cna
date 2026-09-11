@@ -1640,6 +1640,99 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Proves the constant-eye and varying-eye legacy matrix reflection instructions.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyTextureMatrix3SpecularContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.samplerRegister = 3;
+        options.samplerKind = SyntheticSamplerKind::SamplerCube;
+        options.pixelShaderUsesLegacyTextureMatrix3Specular = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+            {Fx::SampAddressW, Fx::AddressClamp},
+        };
+        Effect constantEye(device, BuildSyntheticEffect(options));
+        constantEye.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        options.pixelShaderUsesLegacyTextureMatrix3Specular = false;
+        options.pixelShaderUsesLegacyTextureMatrix3VertexSpecular = true;
+        Effect varyingEye(device, BuildSyntheticEffect(options));
+        varyingEye.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        constexpr int cubeSize = 256;
+        TextureCube cube(device, cubeSize, /*mipMap=*/true, SurfaceFormat::Color);
+        const Color faceColors[6] = {
+            Color::Red, Color::Green, Color::Blue, Color::Cyan, Color::Magenta, Color::Yellow};
+        for (int face = 0; face < 6; ++face)
+        {
+            std::vector<Color> texels(
+                static_cast<std::size_t>(cubeSize * cubeSize), faceColors[face]);
+            cube.SetData(static_cast<CubeMapFace>(face), texels.data(),
+                         static_cast<int>(texels.size()));
+            for (int level = 1; level < cube.getLevelCountProperty(); ++level)
+            {
+                const int extent = std::max(1, cubeSize >> level);
+                std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Black);
+                cube.SetData(static_cast<CubeMapFace>(face), level, nullptr,
+                             mip.data(), 0, static_cast<int>(mip.size()));
+            }
+        }
+        constantEye.getParametersProperty()["FxTexture"]->SetValue(&cube);
+        varyingEye.getParametersProperty()["FxTexture"]->SetValue(&cube);
+
+        struct Vertex { float x, y, z, nx, ny, nz, eyeZ; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](Effect& effect, bool minifyEye)
+        {
+            const float leftEye = minifyEye ? .4f : 1.0f;
+            const float rightEye = minifyEye ? 2.0f : 1.0f;
+            const Vertex vertices[6] = {
+                {-1,  1, 0, .1f, 1, .1f, leftEye},
+                {-1, -1, 0, .1f, 1, .1f, leftEye},
+                { 1, -1, 0, .1f, 1, .1f, rightEye},
+                {-1,  1, 0, .1f, 1, .1f, leftEye},
+                { 1, -1, 0, .1f, 1, .1f, rightEye},
+                { 1,  1, 0, .1f, 1, .1f, rightEye},
+            };
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::White);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(render(constantEye, /*minifyEye=*/false), Color::Green)
+            << "TEXM3X3SPEC must reflect constant E=(1,.2,.1) around N=(.1,1,.1) to -X";
+        EXPECT_EQ(render(varyingEye, /*minifyEye=*/false), Color::Yellow)
+            << "TEXM3X3VSPEC must take E=(.1,.2,1) from the three matrix-row w components";
+        EXPECT_EQ(render(varyingEye, /*minifyEye=*/true), Color::Black)
+            << "TEXM3X3VSPEC implicit LOD must include variation in the row-w eye ray";
+    }
+
+    /**
      * @brief Proves legacy `TEXREG2AR`/`TEXREG2GB` component selection and implicit LOD.
      *
      * @param device Device whose renderer executes classic compiled Effects.
@@ -3850,6 +3943,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectLegacyTextureMatrixContract` -- ps_1_2 stateful matrix operations
      * - `RunCompiledEffectLegacyTextureMatrix2Contract` -- sampled ps_1_2 matrix + implicit LOD
      * - `RunCompiledEffectLegacyTextureMatrix3SampleContract` -- sampled 3x3 + volume LOD
+     * - `RunCompiledEffectLegacyTextureMatrix3SpecularContract` -- reflected cube lookups
      * - `RunCompiledEffectLegacyTextureRemapContract` -- ps_1_2 AR/GB sampling and implicit LOD
      * - `RunCompiledEffectMultiStreamDrawContract` -- several streams, and their own offsets
      * - `RunCompiledEffectInstancingDrawContract` -- instanced draws, offsets and divisor reset

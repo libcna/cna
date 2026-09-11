@@ -2054,6 +2054,11 @@ namespace CNA::Internal::Renderers::Software
             {
                 if (matrixRows < 2)
                     return false;
+                std::array<float, 3> eyes[3]{};
+                if (request.legacyReflection ==
+                    SoftwareLegacyTextureReflectionEXT::ConstantEye)
+                    for (auto& eye : eyes)
+                        eye = request.legacyReflectionEye;
                 for (int row = 0; row < matrixRows; ++row)
                 {
                     for (int vertex = 0; vertex < 3; ++vertex)
@@ -2068,8 +2073,29 @@ namespace CNA::Internal::Renderers::Software
                         for (int term = 0; term < 3; ++term)
                             coordinates[vertex][row] +=
                                 source[vertex][term] * rowValue[term];
+                        if (request.legacyReflection ==
+                            SoftwareLegacyTextureReflectionEXT::MatrixRowW)
+                            eyes[vertex][row] = rowValue[3];
                     }
                 }
+                if (request.legacyReflection !=
+                    SoftwareLegacyTextureReflectionEXT::None)
+                    for (int vertex = 0; vertex < 3; ++vertex)
+                    {
+                        const float normalDotEye =
+                            coordinates[vertex][0] * eyes[vertex][0] +
+                            coordinates[vertex][1] * eyes[vertex][1] +
+                            coordinates[vertex][2] * eyes[vertex][2];
+                        const float normalDotNormal =
+                            coordinates[vertex][0] * coordinates[vertex][0] +
+                            coordinates[vertex][1] * coordinates[vertex][1] +
+                            coordinates[vertex][2] * coordinates[vertex][2];
+                        const float scale = 2.0f * normalDotEye / normalDotNormal;
+                        for (int component = 0; component < 3; ++component)
+                            coordinates[vertex][component] =
+                                scale * coordinates[vertex][component] -
+                                eyes[vertex][component];
+                    }
                 return true;
             }
 

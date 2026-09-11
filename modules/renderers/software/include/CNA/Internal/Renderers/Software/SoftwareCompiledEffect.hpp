@@ -139,6 +139,17 @@ namespace CNA::Internal::Renderers::Software
         Gradients
     };
 
+    /** @brief Reflection source used by a legacy sampled texture-matrix instruction. */
+    enum class SoftwareLegacyTextureReflectionEXT : std::uint8_t
+    {
+        /** @brief Sample the matrix product directly. */
+        None,
+        /** @brief Reflect around the constant eye ray stored in the request. */
+        ConstantEye,
+        /** @brief Reflect around the eye ray in the three matrix-row w components. */
+        MatrixRowW
+    };
+
     /** @brief One texture lookup requested by the CPU pixel machine. */
     struct SoftwarePixelSampleRequestEXT
     {
@@ -150,6 +161,11 @@ namespace CNA::Internal::Renderers::Software
         std::array<std::uint8_t, 3> coordinateComponents{0u, 1u, 2u};
         /** @brief Legacy matrix-row texture registers, or `-1` when no matrix transform applies. */
         std::array<std::int8_t, 3> legacyMatrixRowRegisters{-1, -1, -1};
+        /** @brief Optional reflection performed after the legacy matrix product. */
+        SoftwareLegacyTextureReflectionEXT legacyReflection =
+            SoftwareLegacyTextureReflectionEXT::None;
+        /** @brief Constant eye ray used when @ref legacyReflection is `ConstantEye`. */
+        std::array<float, 3> legacyReflectionEye{};
         /** @brief Declared sampler dimensionality. */
         SoftwareShaderSamplerTypeEXT samplerType = SoftwareShaderSamplerTypeEXT::Unknown;
         /** @brief Texture coordinates after source swizzle/modification. */
