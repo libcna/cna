@@ -566,6 +566,7 @@ namespace
         Check(!result.discarded, "ordinary pixel invocation was discarded");
 
         constexpr std::uint32_t samplerRegisterType = 10u;
+        constexpr std::uint32_t predicateRegisterType = 19u;
         SoftwareShaderProgramEXT textureProgram;
         textureProgram.stage = SoftwareShaderStageEXT::Pixel;
         textureProgram.majorVersion = 2;
@@ -612,9 +613,9 @@ namespace
                   recordingSampler.lastRequest.lod == inputs[1].value[3],
               "TEXLDL did not publish its explicit level");
 
-        textureProgram.instructions[0].opcode = 94u;
+        textureProgram.instructions[0].opcode = 93u;
         textureProgram.instructions[0].tokens = {
-            94u, destination(temporary, 0), source(texture, 0),
+            93u, destination(temporary, 0), source(texture, 0),
             source(samplerRegisterType, 3), source(input, 0), source(constant, 0)};
         static_cast<void>(ExecuteSoftwarePixelShaderEXT(
             textureProgram, floats, integers, booleans, inputs, &recordingSampler));
@@ -623,6 +624,25 @@ namespace
                   recordingSampler.lastRequest.gradientY ==
                       std::array<float, 4>{2.0f, -1.0f, 0.5f, 1.0f},
               "TEXLDD did not publish both explicit gradients");
+
+        const int samplesBeforeSetp = recordingSampler.sampleCount;
+        textureProgram.instructions[0].opcode = 94u;
+        textureProgram.instructions[0].tokens = {
+            94u, destination(predicateRegisterType, 0),
+            source(constant, 0), source(constant, 1)};
+        bool setpRejectedAsPending = false;
+        try
+        {
+            static_cast<void>(ExecuteSoftwarePixelShaderEXT(
+                textureProgram, floats, integers, booleans, inputs, &recordingSampler));
+        }
+        catch (const std::runtime_error& error)
+        {
+            setpRejectedAsPending =
+                std::string(error.what()).find("unsupported opcode 94") != std::string::npos;
+        }
+        Check(setpRejectedAsPending && recordingSampler.sampleCount == samplesBeforeSetp,
+              "SETP opcode 94 was still misrouted through TEXLDD sampling");
 
         SoftwareShaderProgramEXT killProgram;
         killProgram.stage = SoftwareShaderStageEXT::Pixel;

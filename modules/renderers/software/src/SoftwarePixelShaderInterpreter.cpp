@@ -578,7 +578,7 @@ private:
   void ExecuteTextureLodInstruction(
       const SoftwareShaderInstructionEXT &instruction) {
     const auto &tokens = instruction.tokens;
-    const std::size_t expected = instruction.opcode == 94u ? 6u : 4u;
+    const std::size_t expected = instruction.opcode == 93u ? 6u : 4u;
     if (tokens.size() != expected)
       throw std::runtime_error(
           "Software pixel shader: malformed explicit-LOD texture instruction.");
@@ -640,7 +640,7 @@ private:
       ExecuteTextureInstruction(instruction);
       return;
     }
-    if (instruction.opcode == 94u || instruction.opcode == 95u) {
+    if (instruction.opcode == 93u || instruction.opcode == 95u) {
       ExecuteTextureLodInstruction(instruction);
       return;
     }

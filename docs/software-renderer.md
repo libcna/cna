@@ -44,7 +44,7 @@ Those are real parser, vertex and sampled-pixel phases, not complete execution p
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
 continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
 is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163/355/356/357/358` are complete: the opt-in runtime now includes compiled MRT,
+`SOFTWARE-162/163/355/356/357/358/360` are complete: the opt-in runtime now includes compiled MRT,
 render-target/cube sampling, SpriteBatch custom-effect routing and classic line/wireframe rasterization. `SOFTWARE-164/165` remain the
 encompassing shader-profile, lifecycle and content-conformance backlog.
 
@@ -192,6 +192,8 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.
+  SOFTWARE-360 also corrects gradient sampling to D3D9's real `TEXLDD` opcode 93; opcode 94 is
+  correctly left to the still-pending `SETP`/predicate phase rather than being sampled.
 - **Public vertex-stage texture/sampler collections are inert renderer-wide** (`SOFTWARE-167`).
   `GraphicsDevice.VertexTextures` and `VertexSamplerStates` have the correct public shape and
   resource-disposal bookkeeping, but common code has no operation that publishes their contents
