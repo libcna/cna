@@ -92,9 +92,9 @@ CNA also has a fourth overload `Reset(const PresentationParameters&, GraphicsAda
 
 | FNA signature | CNA status |
 |---|---|
-| `Clear(Color color)` | ✅ |
-| `Clear(ClearOptions, Color, float depth, int stencil)` | ✅ |
-| `Clear(ClearOptions, Vector4 color, float depth, int stencil)` | ✅ (`SOFTWARE-327`) |
+| `Clear(Color color)` | ✅ (`SOFTWARE-333`: selects only real active attachments) |
+| `Clear(ClearOptions, Color, float depth, int stencil)` | ✅ (`SOFTWARE-333`: Microsoft missing-attachment exception, intentionally stricter than FNA masking) |
+| `Clear(ClearOptions, Vector4 color, float depth, int stencil)` | ✅ (`SOFTWARE-327/332/333`) |
 
 The `Vector4` overload is XNA 4.0 API, but Microsoft and FNA differ in its implementation.
 Recovered Microsoft XNA constructs `Color(color)` and calls the packed-color overload, so even a

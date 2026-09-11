@@ -2765,9 +2765,7 @@ namespace CNA::Internal::Renderers
          * Most renderers are 3D-capable and honor whatever depth/stencil format the presentation
          * parameters request, so the default is `true`. A renderer that is entirely 2D-only
          * (the native 2D renderer) never has a depth/stencil buffer regardless of what was requested and
-         * overrides this to `false` — used by GraphicsDevice::Clear(ClearOptions, ...) to mask
-         * DepthBuffer/Stencil out of a clear request instead of forwarding it to a
-         * ClearColorDepthAndStencil()-style method this renderer cannot honor.
+         * overrides this to `false`.
          */
         [[nodiscard]] virtual bool SupportsDepthStencil() const { return true; }
 
@@ -2780,6 +2778,41 @@ namespace CNA::Internal::Renderers
         /// stencil; GraphicsDevice::Clear must then retain a requested depth clear and discard
         /// only the impossible stencil portion.
         [[nodiscard]] virtual bool SupportsStencilBuffer() const { return SupportsDepthStencil(); }
+
+        /**
+         * @brief Returns whether the active default back buffer has a usable depth plane.
+         *
+         * A normal combined depth/stencil renderer owns the plane only when the applied
+         * presentation format requested one. A split renderer whose aggregate
+         * SupportsDepthStencil() answer is false but whose SupportsDepthBuffer() answer is true
+         * (for example Glide) exposes an always-present standalone plane.
+         *
+         * @param depthFormatWasRequested Whether the applied back-buffer format includes depth.
+         * @return True when a public depth clear can reach real active storage.
+         */
+        [[nodiscard]] virtual bool HasRealBackBufferDepthBuffer(
+            bool depthFormatWasRequested) const
+        {
+            return SupportsDepthBuffer() &&
+                   (depthFormatWasRequested || !SupportsDepthStencil());
+        }
+
+        /**
+         * @brief Returns whether the active default back buffer has a usable stencil plane.
+         *
+         * The standalone-plane rule mirrors HasRealBackBufferDepthBuffer() and preserves
+         * renderers such as GDI whose real CPU stencil storage is independent of an XNA combined
+         * depth/stencil presentation format.
+         *
+         * @param stencilFormatWasRequested Whether the applied format is Depth24Stencil8.
+         * @return True when a public stencil clear can reach real active storage.
+         */
+        [[nodiscard]] virtual bool HasRealBackBufferStencilBuffer(
+            bool stencilFormatWasRequested) const
+        {
+            return SupportsStencilBuffer() &&
+                   (stencilFormatWasRequested || !SupportsDepthStencil());
+        }
 
         /**
          * Renderer boundary used by common public draw/model entry points before they inspect,

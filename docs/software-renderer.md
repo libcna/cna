@@ -518,6 +518,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   `SOFTWARE-312` also removes stale Software-only skips from that fixture, so its 51 checks now
   execute cube-face isolation/readback and the complete stencil clear/state matrix instead of
   merely relying on separate capability tests.
+- **Explicit clears reject unavailable depth/stencil attachments** (`SOFTWARE-333`). Recovered
+  Microsoft XNA reports `InvalidOperationException` instead of FNA's silent flag masking. The
+  shared device layer now distinguishes renderer capability from storage on the active backbuffer,
+  `RenderTarget2D`, or cube face; the single-color overload requests only planes that really exist.
+  Software and isolated EasyGL tests prove both missing-plane exception types, depth-only success,
+  failure atomicity, and backbuffer/render-target behavior.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

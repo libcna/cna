@@ -546,16 +546,68 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    ClearOptions GraphicsDevice::GetDefaultClearOptions() const
+    {
+        ClearOptions options = ClearOptions::Target;
+        bool hasRealDepthBuffer = false;
+        bool hasRealStencilBuffer = false;
+        if (!currentRenderTargets_.empty())
+        {
+            Texture* bound = currentRenderTargets_[0].getRenderTargetProperty();
+            const auto* target2D = dynamic_cast<RenderTarget2D*>(bound);
+            const auto* targetCube = target2D == nullptr
+                ? dynamic_cast<RenderTargetCube*>(bound)
+                : nullptr;
+            if (targetCube != nullptr)
+            {
+                const DepthFormat depthFormat = targetCube->getDepthStencilFormatProperty();
+                const auto* targetRenderer = targetCube->GetRenderTargetCubeRenderer();
+                hasRealDepthBuffer = targetRenderer != nullptr &&
+                    targetRenderer->HasRealDepthBuffer(depthFormat != DepthFormat::None);
+                hasRealStencilBuffer = targetRenderer != nullptr &&
+                    targetRenderer->HasRealStencilBuffer(depthFormat == DepthFormat::Depth24Stencil8);
+            }
+            else
+            {
+                const DepthFormat depthFormat = target2D != nullptr
+                    ? target2D->getDepthStencilFormatProperty()
+                    : DepthFormat::None;
+                const auto* targetRenderer = target2D != nullptr
+                    ? target2D->GetRenderTargetRenderer()
+                    : nullptr;
+                hasRealDepthBuffer = targetRenderer != nullptr &&
+                    targetRenderer->HasRealDepthBuffer(depthFormat != DepthFormat::None);
+                hasRealStencilBuffer = targetRenderer != nullptr &&
+                    targetRenderer->HasRealStencilBuffer(depthFormat == DepthFormat::Depth24Stencil8);
+            }
+        }
+        else if (renderer_ != nullptr)
+        {
+            const DepthFormat depthFormat =
+                presentationParameters_.getDepthStencilFormatProperty();
+            hasRealDepthBuffer = renderer_->HasRealBackBufferDepthBuffer(
+                depthFormat != DepthFormat::None);
+            hasRealStencilBuffer = renderer_->HasRealBackBufferStencilBuffer(
+                depthFormat == DepthFormat::Depth24Stencil8);
+        }
+
+        if (hasRealDepthBuffer)
+        {
+            options |= ClearOptions::DepthBuffer;
+        }
+        if (hasRealStencilBuffer)
+        {
+            options |= ClearOptions::Stencil;
+        }
+        return options;
+    }
+
     void GraphicsDevice::Clear(const Color& color)
     {
-        // Task 928: real XNA/FNA's single-argument overload clears the target, depth buffer,
-        // AND stencil together -- Clear(ClearOptions.Target | ClearOptions.DepthBuffer |
-        // ClearOptions.Stencil, color, Viewport.MaxDepth, 0) -- not just the color target. The
-        // depth value used is the device's own CURRENT viewport's MaxDepth (not a hardcoded 1.0),
-        // matching FNA's exact `Viewport.MaxDepth` reference (a GraphicsDevice property, not a
-        // static constant).
-        Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-              color, getViewportProperty().getMaxDepthProperty(), 0);
+        // SOFTWARE-333: Microsoft selects its active DefaultClearOptions here; FNA instead asks
+        // for all three aspects and later masks unavailable planes. The remaining MaxDepth value
+        // follows FNA and is audited separately against Microsoft's hardcoded 1.0f.
+        Clear(GetDefaultClearOptions(), color, getViewportProperty().getMaxDepthProperty(), 0);
     }
 
     void GraphicsDevice::Clear(float r, float g, float b, float a)
@@ -585,68 +637,24 @@ namespace Microsoft::Xna::Framework::Graphics
 
         auto contextLease = AcquireRendererThreadContextLease();
 
+        const ClearOptions availableOptions = GetDefaultClearOptions();
+        const bool missingDepth = hasClearFlag(options, ClearOptions::DepthBuffer) &&
+                                  !hasClearFlag(availableOptions, ClearOptions::DepthBuffer);
+        const bool missingStencil = hasClearFlag(options, ClearOptions::Stencil) &&
+                                    !hasClearFlag(availableOptions, ClearOptions::Stencil);
+        if (missingDepth || missingStencil)
+        {
+            throw System::InvalidOperationException(
+                "Cannot clear depth or stencil because the device does not have an active depth "
+                "or stencil buffer.");
+        }
+
         if (hasClearFlag(options, ClearOptions::DepthBuffer))
         {
             if (depth < 0.0f || depth > 1.0f)
                 throw System::ArgumentOutOfRangeException(
                     "depth", std::to_string(depth),
                     "'depth' must be between 0.0 and 1.0.");
-        }
-
-        // GDI-050: depth and stencil are independent attachment decisions. Historically this used
-        // one SupportsDepthStencil()/HasRealDepthBuffer() answer and reduced a target with no depth
-        // to ClearOptions::Target, silently deleting Stencil too. That made GDI's real standalone
-        // CPU stencil plane unreachable through the public GraphicsDevice API. Ask for each aspect
-        // independently and mask only the unsupported flag. Combined depth/stencil renderers retain
-        // their prior behavior through the interface's compatibility defaults.
-        bool hasRealDepthBuffer = false;
-        bool hasRealStencilBuffer = false;
-        if (!currentRenderTargets_.empty())
-        {
-            // REMED-GFX-142: a bound RenderTargetCube has to be asked too. This branch only ever
-            // recognized RenderTarget2D, so a cube binding fell through to `rt == nullptr` and
-            // both attachment flags were silently dropped, on every renderer, whatever depth
-            // format the cube actually had. SetRenderTargets already asks both target kinds (see
-            // its own `IsRenderTarget2D()` branch); this is the same question at the other call
-            // site.
-            Texture* bound = currentRenderTargets_[0].getRenderTargetProperty();
-            const auto* rt = dynamic_cast<RenderTarget2D*>(bound);
-            const auto* cube = (rt == nullptr) ? dynamic_cast<RenderTargetCube*>(bound) : nullptr;
-            if (cube != nullptr)
-            {
-                const DepthFormat depthFormat = cube->getDepthStencilFormatProperty();
-                const bool depthFormatRequested = depthFormat != DepthFormat::None;
-                const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
-                const auto* cubeRenderer = cube->GetRenderTargetCubeRenderer();
-                hasRealDepthBuffer =
-                    cubeRenderer && cubeRenderer->HasRealDepthBuffer(depthFormatRequested);
-                hasRealStencilBuffer =
-                    cubeRenderer && cubeRenderer->HasRealStencilBuffer(stencilFormatRequested);
-            }
-            else
-            {
-                const DepthFormat depthFormat =
-                    rt ? rt->getDepthStencilFormatProperty() : DepthFormat::None;
-                const bool depthFormatRequested = depthFormat != DepthFormat::None;
-                const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
-                const auto* rtRenderer = rt ? rt->GetRenderTargetRenderer() : nullptr;
-                hasRealDepthBuffer = rtRenderer && rtRenderer->HasRealDepthBuffer(depthFormatRequested);
-                hasRealStencilBuffer =
-                    rtRenderer && rtRenderer->HasRealStencilBuffer(stencilFormatRequested);
-            }
-        }
-        else
-        {
-            hasRealDepthBuffer = renderer_->SupportsDepthBuffer();
-            hasRealStencilBuffer = renderer_->SupportsStencilBuffer();
-        }
-        if (!hasRealDepthBuffer)
-        {
-            options &= ~ClearOptions::DepthBuffer;
-        }
-        if (!hasRealStencilBuffer)
-        {
-            options &= ~ClearOptions::Stencil;
         }
 
         const Vector4 normalizedColor = color.ToVector4();

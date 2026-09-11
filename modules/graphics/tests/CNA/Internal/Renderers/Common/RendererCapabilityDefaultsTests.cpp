@@ -24,7 +24,7 @@ namespace
     /// The interface's own defaults, with nothing overridden. Every one of the 23 pure virtuals is
     /// given an inert body; every method under test deliberately keeps its base implementation, so
     /// what this fixture measures is exactly what a renderer inherits by writing nothing.
-    class DefaultsOnlyRenderer final : public CNA::Internal::Renderers::IGraphicsRenderer
+    class DefaultsOnlyRenderer : public CNA::Internal::Renderers::IGraphicsRenderer
     {
     public:
         void Clear(float, float, float, float) override {}
@@ -67,6 +67,22 @@ namespace
             const Microsoft::Xna::Framework::Matrix&,
             const Microsoft::Xna::Framework::Matrix&,
             Microsoft::Xna::Framework::Graphics::PrimitiveType, int) override {}
+    };
+
+    class StandaloneDepthRenderer final : public DefaultsOnlyRenderer
+    {
+    public:
+        [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
+        [[nodiscard]] bool SupportsDepthBuffer() const override { return true; }
+        [[nodiscard]] bool SupportsStencilBuffer() const override { return false; }
+    };
+
+    class StandaloneStencilRenderer final : public DefaultsOnlyRenderer
+    {
+    public:
+        [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
+        [[nodiscard]] bool SupportsDepthBuffer() const override { return false; }
+        [[nodiscard]] bool SupportsStencilBuffer() const override { return true; }
     };
 }
 
@@ -161,4 +177,21 @@ TEST(RendererCapabilityDefaultsTest, AppliedFormatAccessorsEchoTheRequest)
         EXPECT_EQ(renderer.GetAppliedBackBufferFormatEXT(requested), requested);
         EXPECT_EQ(renderer.GetAppliedDepthStencilFormatEXT(requested), requested);
     }
+}
+
+TEST(RendererCapabilityDefaultsTest, ActiveBackBufferPlanesDistinguishRequestsAndStandaloneStorage)
+{
+    DefaultsOnlyRenderer combined;
+    EXPECT_FALSE(combined.HasRealBackBufferDepthBuffer(false));
+    EXPECT_TRUE(combined.HasRealBackBufferDepthBuffer(true));
+    EXPECT_FALSE(combined.HasRealBackBufferStencilBuffer(false));
+    EXPECT_TRUE(combined.HasRealBackBufferStencilBuffer(true));
+
+    StandaloneDepthRenderer depthOnly;
+    EXPECT_TRUE(depthOnly.HasRealBackBufferDepthBuffer(false));
+    EXPECT_FALSE(depthOnly.HasRealBackBufferStencilBuffer(true));
+
+    StandaloneStencilRenderer stencilOnly;
+    EXPECT_FALSE(stencilOnly.HasRealBackBufferDepthBuffer(true));
+    EXPECT_TRUE(stencilOnly.HasRealBackBufferStencilBuffer(false));
 }

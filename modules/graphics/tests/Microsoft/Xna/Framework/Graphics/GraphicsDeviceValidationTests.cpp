@@ -963,13 +963,9 @@ TEST(GraphicsDeviceDrawValidationTest, ValidationPrecedenceMatchesRecoveredXna)
 }
 
 // Regression test for a real reported crash (cna-template/missing.md): the single-argument
-// Clear(const Color&) overload matches FNA's own semantics by requesting
-// Target|DepthBuffer|Stencil together, which used to forward unconditionally to
-// ClearColorDepthAndStencil() — a hard throw on the native 2D renderer, since it is entirely
-// 2D-only and never has a depth/stencil buffer at all. GraphicsDevice::Clear(ClearOptions, ...)
-// now masks DepthBuffer/Stencil out of the request when IGraphicsRenderer::SupportsDepthStencil()
-// reports false, degrading to a color-only clear instead of crashing (matching FNA's own
-// dsFormat == DepthFormat.None masking behavior in GraphicsDevice.Clear(ClearOptions, ...)).
+// overload asks only for attachments that the active surface actually owns. SOFTWARE-333 removed
+// the former FNA-style masking from the explicit ClearOptions overload because recovered Microsoft
+// XNA instead reports InvalidOperationException when a caller explicitly names a missing plane.
 TEST(GraphicsDeviceValidationTest, Clear_SingleArgumentColorOverload_DoesNotThrow)
 {
     GraphicsDevice gd;

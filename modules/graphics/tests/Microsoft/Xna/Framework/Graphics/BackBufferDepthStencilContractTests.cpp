@@ -24,8 +24,12 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -80,13 +84,24 @@ namespace
         return pixel;
     }
 
+    Color ReadCenter(RenderTarget2D& target)
+    {
+        const Rectangle center(4, 4, 1, 1);
+        Color pixel;
+        target.GetData(0, &center, &pixel, 0, 1);
+        return pixel;
+    }
+
     Color RenderDepthWinner(DepthFormat format)
     {
         GraphicsDevice device(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
             BackbufferParameters(format));
         PrepareDraw(device, DepthStencilState::Default);
-        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, Color::Black, 1.0f, 0);
+        const ClearOptions options = format == DepthFormat::None
+            ? ClearOptions::Target
+            : ClearOptions::Target | ClearOptions::DepthBuffer;
+        device.Clear(options, Color::Black, 1.0f, 0);
         DrawFullScreen(device, Color::Red, 0.2f);
         DrawFullScreen(device, Color::Green, 0.8f);
         return ReadCenter(device);
@@ -106,7 +121,10 @@ namespace
         requireOne.setReferenceStencilProperty(1);
         requireOne.setStencilPassProperty(StencilOperation::Keep);
         PrepareDraw(device, requireOne);
-        device.Clear(ClearOptions::Target | ClearOptions::Stencil, Color::Black, 1.0f, 0);
+        const ClearOptions options = format == DepthFormat::Depth24Stencil8
+            ? ClearOptions::Target | ClearOptions::Stencil
+            : ClearOptions::Target;
+        device.Clear(options, Color::Black, 1.0f, 0);
         DrawFullScreen(device, Color::Green, 0.5f);
         return ReadCenter(device);
     }
@@ -132,4 +150,88 @@ TEST(BackBufferDepthStencilContractTest, MultisampleDepth24Stencil8OwnsStencilSa
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
 
     EXPECT_EQ(RenderStencilProbe(DepthFormat::Depth24Stencil8, 4), Color::Black);
+}
+
+TEST(BackBufferDepthStencilContractTest, ExplicitMissingDepthOrStencilThrowsAtomically)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        BackbufferParameters(DepthFormat::None));
+    device.Clear(Color::Red);
+
+    EXPECT_THROW(
+        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                     Color::Blue, 1.0f, 0),
+        System::InvalidOperationException);
+    EXPECT_EQ(ReadCenter(device), Color::Red);
+
+    // Recovered Microsoft code classifies the absent attachment before any other native clear
+    // failure; an invalid depth value therefore cannot replace the missing-buffer exception.
+    EXPECT_THROW(
+        device.Clear(ClearOptions::DepthBuffer, Color::Blue, -1.0f, 0),
+        System::InvalidOperationException);
+    EXPECT_THROW(
+        device.Clear(ClearOptions::Target | ClearOptions::Stencil,
+                     Color::Blue, 1.0f, 1),
+        System::InvalidOperationException);
+    EXPECT_EQ(ReadCenter(device), Color::Red);
+}
+
+TEST(BackBufferDepthStencilContractTest, DepthOnlySurfaceAllowsDepthButRejectsStencilAtomically)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        BackbufferParameters(DepthFormat::Depth24));
+    device.Clear(Color::Red);
+
+    EXPECT_NO_THROW(
+        device.Clear(ClearOptions::DepthBuffer, Color::Blue, 0.25f, 0));
+    EXPECT_EQ(ReadCenter(device), Color::Red);
+
+    EXPECT_THROW(
+        device.Clear(ClearOptions::Target | ClearOptions::Stencil,
+                     Color::Blue, 1.0f, 1),
+        System::InvalidOperationException);
+    EXPECT_EQ(ReadCenter(device), Color::Red);
+}
+
+TEST(BackBufferDepthStencilContractTest, ExplicitMissingRenderTargetAttachmentsThrowAtomically)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
+
+    GraphicsDevice device;
+    RenderTarget2D colorOnly(
+        device, 8, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
+        RenderTargetUsage::PreserveContents);
+    device.SetRenderTarget(&colorOnly);
+    device.Clear(Color::Red);
+
+    EXPECT_THROW(
+        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                     Color::Blue, 1.0f, 0),
+        System::InvalidOperationException);
+    EXPECT_THROW(
+        device.Clear(ClearOptions::Target | ClearOptions::Stencil,
+                     Color::Blue, 1.0f, 1),
+        System::InvalidOperationException);
+    device.SetRenderTarget(nullptr);
+    EXPECT_EQ(ReadCenter(colorOnly), Color::Red);
+
+    RenderTarget2D depthOnly(
+        device, 8, 8, false, SurfaceFormat::Color, DepthFormat::Depth24, 0,
+        RenderTargetUsage::PreserveContents);
+    device.SetRenderTarget(&depthOnly);
+    device.Clear(Color::Red);
+    EXPECT_NO_THROW(
+        device.Clear(ClearOptions::DepthBuffer, Color::Blue, 0.25f, 0));
+    EXPECT_THROW(
+        device.Clear(ClearOptions::Target | ClearOptions::Stencil,
+                     Color::Blue, 1.0f, 1),
+        System::InvalidOperationException);
+    device.SetRenderTarget(nullptr);
+    EXPECT_EQ(ReadCenter(depthOnly), Color::Red);
 }

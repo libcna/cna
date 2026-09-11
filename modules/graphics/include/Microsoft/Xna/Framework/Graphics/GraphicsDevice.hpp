@@ -1542,6 +1542,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                    int startIndex, int elementCount,
                                    std::size_t elementSizeInBytes, bool colorObjects);
         void GetActiveRenderDimensions(int& width, int& height) const;
+        [[nodiscard]] ClearOptions GetDefaultClearOptions() const;
         [[nodiscard]] void* AcquireUserVertexScratch(std::size_t bytes);
         [[nodiscard]] void* AcquireUserIndexScratch(std::size_t bytes);
 
