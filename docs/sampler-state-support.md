@@ -119,7 +119,7 @@ change what the GPU samples. That was true of **every** renderer except FNA3D un
 | Renderer | `MaxMipLevel` | `MipMapLevelOfDetailBias` |
 |---|---|---|
 | FNA3D | `GL_TEXTURE_BASE_LEVEL` / SDL_GPU `min_lod`, whichever driver is active | desktop GL only; FNA3D's own GL driver skips it under ES |
-| SDL_GPU | **implemented** — `SDL_GPUSamplerCreateInfo::min_lod`, and part of the sampler cache key | **implemented** — `mip_lod_bias` |
+| SDL_GPU | **implemented** — `SDL_GPUSamplerCreateInfo::min_lod`, and part of the sampler cache key | **stock XNA effects/SpriteBatch implemented on every SDL_gpu driver** — SDLGPU-121 uses SPIR-V's Bias operand because SDL documents native `mip_lod_bias` as a Metal no-op; compiled effects remain native on Vulkan/D3D12 and their Metal rewrite is tracked by SDLGPU-122 |
 | EasyGL, ES 3 profiles (`OPENGLES3`, `WEBGL2`) | **implemented** — sampler-object `GL_TEXTURE_MIN_LOD` | **not representable**: OpenGL ES has no `GL_TEXTURE_LOD_BIAS` at all |
 | EasyGL, `OPENGL33` | **implemented** — `GL_TEXTURE_MIN_LOD` | **implemented** — `GL_TEXTURE_LOD_BIAS` |
 | EasyGL, ES 2 profiles (`OPENGLES2`, `WEBGL1`) | **not representable**: no sampler objects and no `GL_TEXTURE_MIN_LOD` | not representable |
@@ -178,12 +178,18 @@ state, and CNA's contract is per **slot**. Two slots sampling one texture with d
 exactly "never resolve a level more detailed than this" and is per slot. It is also the mapping
 FNA3D's own SDL_GPU driver makes (`samplerCreateInfo.min_lod = samplerState->maxMipLevel`).
 
-**SDL GPU stock routes are complete since SDLGPU-64 (2026-09-09).** Every stock deferred command
-captures all seven sampler properties per slot and passes them into the same native sampler cache
-as compiled effects. Shared filter, MaxMipLevel and LOD-bias pixel fixtures plus the SDL GPU
-descriptor-capacity and cube-sampler contracts cover the ordinary 2D/cube paths. AddressW reaches
+**SDL GPU stock routes are complete since SDLGPU-121 (2026-09-11).** SDLGPU-64 established that
+every stock deferred command captures all seven sampler properties per slot. `MaxMipLevel`, filter,
+addressing and anisotropy remain native sampler state. The bias is deliberately different: SDL's
+vendored `SDL_gpu.h` states that `SDL_GPUSamplerCreateInfo::mip_lod_bias` is a no-op on Metal and
+must be applied in the shader. Every stock 2D/cube sample now uses SPIR-V's Bias operand supplied by
+an eight-slot per-draw fragment uniform, while its native sampler bias is zero to prevent a double
+application on Vulkan/D3D12. The same exact mip-colour fixture passes on real Vulkan and cross-
+compiled D3D12, and the SpriteBatch variant verifies its independent state path. AddressW reaches
 `SDL_GPUSamplerCreateInfo::address_mode_w`; its volume-pixel proof remains coupled to the separate
-Texture3D/compiled-effect volume work tracked by `SDLGPU-71`/`SDLGPU-79`.
+Texture3D/compiled-effect volume work tracked by `SDLGPU-71`/`SDLGPU-79`. Compiled XNA effects use
+their own MojoShader-produced sampling instructions; Metal emulation for that path is SDLGPU-122,
+not silently included in the stock claim.
 
 ### 6b.1 Sampler identity and state lifetime (plans/plan_fx.md FX-091, FX-092, 2026-08-18)
 

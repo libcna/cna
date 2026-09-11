@@ -75,10 +75,17 @@
 > two causes: EasyGL classifies the physical default presentation rectangle as a caller viewport,
 > and its backbuffer readback flips Y with the logical rather than physical height. SDL GPU passes
 > the identical public discriminator, so neither EasyGL defect is copied.
-> `SDLGPU-94`–`SDLGPU-96`
-> remain open because D3D12 swapchain presentation/recovery, Metal and Android/Vulkan still
-> require native runtime evidence. Nine EasyGL defect findings (eight distinct
-> behavior families) are deliberately not copied. The final 191/191 SDL integration, 50/50
+> `SDLGPU-121` closes a platform-specific sampler hole discovered after that sweep: SDL documents
+> native `mip_lod_bias` as a Metal no-op, so every stock SpriteBatch/XNA-effect sample now applies
+> its captured per-slot bias through the shader instead. The exact mip-colour oracle passes on real
+> Vulkan and cross-compiled D3D12; compiled XNA effects remain a separate open Metal route in
+> `SDLGPU-122`.
+> `SDLGPU-94`–`SDLGPU-96` and `SDLGPU-122`
+> remain open: D3D12 swapchain presentation/recovery, Metal and Android/Vulkan still require native
+> runtime evidence, while Metal's compiled-effect LOD-bias route still requires the bounded shader
+> rewrite in `SDLGPU-122`. Nine EasyGL defect findings (eight distinct
+> behavior families) are deliberately not copied. The last full 191/191 SDL integration sweep and
+> current 51/51
 > renderer-unit, 33/33 EasyGL
 > oracle and 32/32 two-renderer corpus gates remain green on Linux/Vulkan. This verdict supersedes historical
 > completion banners below; those remain implementation history, not current truth.
@@ -104,9 +111,9 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Item | Current evidence |
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
-| Newly created tasks | 30 (`SDLGPU-91`–`SDLGPU-120`) |
-| Completed / open | 27 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`120` complete; `SDLGPU-94`–`96` open) |
-| Ending evidence commit | `SDLGPU-120` (including the `SDLGPU-119` focused ASan follow-up) |
+| Newly created tasks | 32 (`SDLGPU-91`–`SDLGPU-122`) |
+| Completed / open | 28 / 4 (`SDLGPU-91`–`93`, `SDLGPU-97`–`121` complete; `SDLGPU-94`–`96` and `SDLGPU-122` open) |
+| Ending evidence commit | `SDLGPU-121` (including the `SDLGPU-119` focused ASan follow-up) |
 | Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, all nine shared classic stock-effect fixtures, the complete ten-fixture state/sampler matrix, the 24-test texture/format/transfer matrix, all 33 render-target registrations, all 25 buffer/draw registrations, all five model oracles and the 42-case compiled-effect corpus that existed at `SDLGPU-118`. The target evidence includes the 851-assertion mip/readback oracle and 40-assertion classic MRT matrix; the draw evidence includes instancing, multistream and declaration semantics. Six presentation/reset/resize programs, 73 individually isolated backbuffer/bound-target/Present lifecycle legs and 291/291 applicable constructor/lazy-resource rollback checks also pass through D3D12. There are now 191 registered native and 258 registered Windows SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. The expanded 43-case native compiled-effect corpus passes Vulkan, including a focused AddressSanitizer build of its test translation unit and `SdlGpuRenderer.cpp`; unchanged dependencies were reused from the stable build. |
 | Available local cross tools | MinGW-w64, Wine 10.0, DXVK v3.0.2-58 and vkd3d-proton 3.1.0 are present. There is no Apple SDK/device or `xcrun`/`xcodebuild`/`metal`. The Android PATH audit located `adb`/platform-tools but did not locate an NDK/toolchain, `sdkmanager` or `avdmanager`, and `adb devices` reported no running/attached target. The project owner subsequently confirmed that an Android emulator is available on this host outside those searched paths, so emulator absence is not a blocker; Android execution is intentionally deferred at the owner's request. No system `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found; CNA uses its pinned static ShaderCross dependency instead. |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
@@ -1084,13 +1091,78 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   EasyGL confirmation compiled one changed test object and relinked an alternate binary from its
   unchanged stable objects instead of triggering the pending 134-object configuration cascade.
 
+### SDLGPU-121 — apply stock sampler LOD bias in shaders on every SDL_gpu driver ✅
+
+- **Problem/public behavior:** ordinary `SamplerState.MipMapLevelOfDetailBias` must add to the
+  implicit mip level selected by SpriteBatch and every stock XNA effect. The renderer captured the
+  value correctly and put it in `SDL_GPUSamplerCreateInfo::mip_lod_bias`, but the vendored SDL 3.5
+  contract explicitly says that member is a no-op for the Metal driver and that Metal requires
+  shader-side bias. The prior platform verdict therefore overstated the stock route on Apple.
+- **EasyGL/SDL evidence:** desktop EasyGL applies `GL_TEXTURE_LOD_BIAS` and the shared oracle proves
+  bias 0/+1/+2 select deliberately different authored mip colours. SDL GPU passed that oracle on
+  Vulkan and D3D12 only because those drivers consume the native descriptor field. The exact
+  vendored `SDL_gpu.h` note at the sampler structure is the underlying evidence for Metal's
+  divergence; WebGPU's existing SPIR-V/WGSL implementation independently proves that an explicit
+  fragment-sample Bias operand is a reasonable renderer-side emulation.
+- **Implementation/location:** all seven sampled stock fragment programs now declare a fixed
+  eight-slot bias block in SDL_gpu fragment-uniform set 3 and every implicit 2D/cube lookup uses
+  its own slot's explicit Bias operand. Replay pushes the already captured command values for
+  stock SpriteBatch, BasicEffect (unlit/lit and SkinnedEffect's shared shader), AlphaTestEffect,
+  DualTextureEffect's two independent slots and EnvironmentMapEffect's base/cube slots. Existing
+  PbrEffect/SkinnedPbrEffect support receives the same treatment for all seven material samplers so
+  changing the shared sampler creation path cannot regress that CNA-specific route. Native sampler
+  bias is zero only for these shader-emulated paths, preventing a double application on Vulkan and
+  D3D12; custom/compiled SpriteBatch retains its previous native path.
+- **Acceptance/test:** regenerate checked-in SPIR-V; require all 26 construction shaders to reflect
+  with their exact updated layouts through the forced ShaderCross constructor route; byte-verify
+  mip selection for positive, zero and negative bias on stock 3D while a test-only guard rejects
+  every nonzero native descriptor bias (so Vulkan/D3D12 cannot make the proof vacuous), and verify
+  SpriteBatch independently; rerun the stock
+  effect/multi-slot sampler family; execute the exact LOD fixture through both real Vulkan and the
+  cross-compiled D3D12 backend; reject validation/debug diagnostics.
+- **Result (2026-09-11):** the unchanged `parity_sampler_lod_bias` discriminator passes **7/7** on
+  offscreen Vulkan and **7/7** through the authenticated headless Wine/vkd3d-proton D3D12 route:
+  bias 0/+1/+2 selects levels 0/1/2 and -1 clamps to level 0. Both CTest registrations enabled the
+  native-bias rejection guard, so neither backend could satisfy the result through its descriptor
+  field. The independent SpriteBatch fixture,
+  constructor exception/forced-ShaderCross matrix and five stock-effect/dual/environment sampler
+  contracts all pass on Vulkan (**7/7 CTests** in the focused companion run), with no Vulkan
+  validation diagnostic. D3D12 emits no wrapper-fatal debug-layer warning/error and confirms that
+  ShaderCross preserves the explicit SPIR-V Bias operand. No host display was used.
+
+### SDLGPU-122 — emulate compiled-XNA-effect LOD bias on Metal ⬜
+
+- **Problem/public behavior:** an ordinary compiled XNA Effect may declare
+  `MipMapLevelOfDetailBias` in its pass sampler state, and the same pass may be used by buffered,
+  user, instanced or SpriteBatch draws. `BuildCompiledEffectBindingEXT` captures the correct value,
+  but MojoShader emits implicit sample instructions and replay supplies the value only through
+  native `SDL_GPUSamplerCreateInfo::mip_lod_bias`. SDL documents that field as a Metal no-op, so
+  compiled effects still silently ignore this public state on that driver after SDLGPU-121.
+- **EasyGL/SDL evidence:** desktop EasyGL and SDL GPU Vulkan/D3D12 pass the shared compiled-effect
+  sampler pixel contract, including its authored-mip bias section. SDL_gpu's own header is direct
+  negative evidence for Metal. The shared `SpirvSamplerLodBias` transformer used by WebGPU already
+  rewrites `OpImageSampleImplicitLod` per D3D9 sampler register and supplies a renderer-owned bias
+  UBO, so absence of a native Metal sampler field is not a reasonable-impossibility result.
+- **Likely location:** the pinned MojoShader SDL_gpu adapter/link boundary, the shared
+  `modules/renderers/common/mojoshader` SPIR-V bias transformer and
+  `SdlGpuRenderer::BindCompiledEffectForDrawEXT`. Do not change the public Effect API or the modern
+  ShaderEffect surface.
+- **Acceptance/test:** insert a bias uniform/rewrite before the Metal ShaderCross/native-shader
+  route diverges; preserve sampler-register identity, shader lifetime and reflected resource
+  counts; make the existing shared compiled-effect sampler pixel contract pass with forced shader
+  emulation on Vulkan (so released/unreused memory or an unavailable Apple device cannot make the
+  proof vacuous); retain the Vulkan and D3D12 native-route results and validation cleanliness. A
+  real Metal run remains part of SDLGPU-95's platform evidence, not a prerequisite for testing the
+  transformation semantics locally.
+- **Status:** open; implementation begins after the independently committed SDLGPU-121 stock route.
+
 
 ## 2026-09-10 parity audit final status
 
 | Item | Current evidence |
 |---|---|
 | Starting branch / commit | `sdlgpu` / `3a44315fdffe974e02a664cacae4fd388c9728aa` |
-| Ending parity-behavior/test commit | `9285b36e39106aecd85402c6f14688a4fa2f0fcb` (`SDLGPU-89`); the Linux audit closeout is `SDLGPU-90`; the platform/adversarial closeout now includes `SDLGPU-120` and the `SDLGPU-119` focused ASan follow-up |
+| Ending parity-behavior/test commit | `9285b36e39106aecd85402c6f14688a4fa2f0fcb` (`SDLGPU-89`); the Linux audit closeout is `SDLGPU-90`; the platform/adversarial closeout now includes `SDLGPU-121` and the `SDLGPU-119` focused ASan follow-up |
 | Renderer contract | `modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp`; exact audit in `plans/sdlgpu_renderer_contract_audit.csv` |
 | Reference renderer | `modules/renderers/easygl/{include,src,examples}` |
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
@@ -1099,16 +1171,16 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | SDL GPU registered integration tests | 191 CTests (85 baseline plus 106 parity/remediation registrations) |
 | Shared EasyGL parity fixtures available | 32 renderer-neutral sources in `modules/graphics/examples/parity` |
 | Shared parity fixtures registered for SDL GPU | 32/32 (all renderer-neutral sources, including the nine classic stock-effect fixtures) |
-| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform/adversarial re-audit creates twenty-eight more (`SDLGPU-91`–`118`) |
-| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 61 / 3. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
+| Tasks created by this audit | 36 (`SDLGPU-55`–`SDLGPU-90`); the later platform/adversarial re-audit creates 32 more (`SDLGPU-91`–`122`) |
+| Completed / open / proven unavoidable | This closed Linux/Vulkan phase completed 36 / 0 tasks; the current renderer-wide ledger is 64 / 4. Three capability fields (`BlendState.MultiSampleMask`, exact half-rate `PresentInterval::Two`, and `OcclusionQuery`) are proven unavailable in current SDL_gpu; the first two are not separate tasks and the third is closed by `SDLGPU-80` |
 | SDL GPU build | Stable `cmake-build-sdlgpu`, Debug, `CNA_GRAPHICS_RENDERER=SDL_GPU`, tests/examples and `CNA_SDL_GPU_COMPILED_EFFECTS` ON |
 | EasyGL oracle build | Stable `cmake-build-debug`, Debug, `CNA_GRAPHICS_RENDERER=OPENGL33`, tests/examples ON |
 | Runtime driver | SDL 3.5.0 SDL_gpu Vulkan on AMD Radeon 780M / Mesa RADV 25.0.7; Khronos validation layer 1.4.309 present |
 | Display constraint | Sandboxed tests do not access the host display. All 191 SDL GPU registrations explicitly use `SDL_VIDEODRIVER=offscreen`, `DISPLAY=` and `WAYLAND_DISPLAY=` while still creating the real Vulkan device/swapchain; EasyGL alone uses isolated Xvfb `:179`. Native driver defaults are platform-specific rather than hard-coded to X11. |
-| Final SDL GPU verification | **191/191** registered SDL integration CTests and **50/50** focused SDL GPU renderer-unit tests pass from the stable incremental build. The expanded compiled-effect subset is **43/43** on native Vulkan (including the focused ASan run); D3D12's last recorded run is the **42/42** corpus at `SDLGPU-118`, before the refuted `SDLGPU-119` case was added. The integration total contains all 32 shared parity fixtures and 112 parity-labelled registrations. `SDLGPU-87`'s capability/lifetime regression remains **295/295**; `SDLGPU-89` adds a 21/21 multistream result and isolated slot-15 parity pixels on both renderers. |
+| Final SDL GPU verification | **191/191** registered SDL integration CTests pass from the last full stable sweep and the current focused SDL GPU renderer aggregate passes **51/51**. The expanded compiled-effect subset is **43/43** on native Vulkan (including the focused ASan run); D3D12's last recorded run is the **42/42** corpus at `SDLGPU-118`, before the refuted `SDLGPU-119` case was added. `SDLGPU-121` additionally passes the exact stock LOD-bias oracle 7/7 on Vulkan and D3D12, the SpriteBatch/constructor/stock-family companion slice 7/7 on Vulkan, and ShaderCross reflection of all 26 updated stock shaders. The integration total contains all 32 shared parity fixtures and 112 parity-labelled registrations. `SDLGPU-87`'s capability/lifetime regression remains **295/295**; `SDLGPU-89` adds a 21/21 multistream result and isolated slot-15 parity pixels on both renderers. |
 | Validation | SDL GPU debug mode is enabled. All 191 integration registrations now make `Validation Error`, `Validation Warning`, bare `VUID-`, `D3D12 ERROR:` or `D3D12 WARNING:` output fatal; the final full Vulkan sweep reported none. |
 | Final EasyGL/parity oracle | **33/33** registered EasyGL oracle CTests pass under Xvfb/llvmpipe. The direct corpus executes all 32 shared sources under both renderers: 27 frames satisfy the strict byte policy, two use renderer-local discriminating invariants, and three stay within fixed measured line/edge coverage budgets. |
-| Exact remaining EasyGL differences | Exact half-rate `PresentInterval::Two` (`⛔`) and `OcclusionQuery` (`SDLGPU-80`, `⛔`). EasyGL's non-default `MultiSampleMask` is also unimplemented, so it is an SDL_gpu limitation but not an EasyGL difference. SDL GPU intentionally differs from the nine XNA/FNA-invalid findings in `EASYGL-PARITY-1`–`9`; findings 4 and 7 are two EasyGL examples of the same bound-FBO backbuffer-readback defect. |
+| Exact remaining EasyGL differences | Exact half-rate `PresentInterval::Two` (`⛔`), `OcclusionQuery` (`SDLGPU-80`, `⛔`) and compiled-XNA-effect `MipMapLevelOfDetailBias` on Metal (`SDLGPU-122`, open). EasyGL's non-default `MultiSampleMask` is also unimplemented, so it is an SDL_gpu limitation but not an EasyGL difference. SDL GPU intentionally differs from the nine XNA/FNA-invalid findings in `EASYGL-PARITY-1`–`9`; findings 4 and 7 are two EasyGL examples of the same bound-FBO backbuffer-readback defect. |
 
 The first attempted baseline used the suite's historical hard-coded `SDL_VIDEODRIVER=x11` and
 could not reach the inaccessible host display: early programs skipped and 47 tests failed for the
@@ -1173,7 +1245,7 @@ underlying limitation with no correct reasonable emulation; `out` excluded moder
 | FillMode.WireFrame | Renderer-side triangle-edge expansion | Native `SDL_GPU_FILLMODE_LINE` in every ordinary pipeline | `=` — shared asymmetric three-edge fixture passes; `SDLGPU-61` |
 | Constant/slope depth bias | GL polygon offset with XNA normalization | Per-format normalized-to-native conversion in every immutable pipeline; SpriteBatch uses projected layer depth | `=` — expanded 67/67 pixel/cache oracle, validation clean; `SDLGPU-65` |
 | Sampler filter/address/anisotropy | All stock/effect slots | Every stock, compiled-effect and SpriteBatch command captures the complete state | `=` — shared pixel oracles plus 29/29 descriptor-capacity checks; `SDLGPU-64` |
-| MaxMipLevel/LOD bias/AddressW | Applied on ordinary draws | MaxMipLevel/bias pixel-verified on stock 3D and SpriteBatch; W reaches the native descriptor | `=` — compiled volume sampling distinguishes W=1.25 Wrap (red first slice) from Clamp (blue second slice), while retaining the disposed source through deferred replay; `SDLGPU-64/79` |
+| MaxMipLevel/LOD bias/AddressW | Applied on ordinary draws | MaxMipLevel/bias pixel-verified on stock 3D and SpriteBatch; stock bias is shader-side on every driver; W reaches the native descriptor | `~` renderer-wide — stock paths are `=` (`SDLGPU-64/121`) and compiled volume sampling distinguishes W=1.25 Wrap from Clamp (`SDLGPU-79`), but compiled-effect bias still depends on Metal's documented no-op native field (`SDLGPU-122`) |
 | Texture2D Color/mips/partial/NPOT/readback | Real upload + CPU/GPU read paths | Format-sized upload, shared CPU shadow and authored mips | `=` including 3D PointClamp, authored storage replacement and queued-source retention; `SDLGPU-69/81` |
 | Texture2D ordinary non-Color formats | Packed, DXT native-or-decode, SNORM | Exact packed/BC/SNORM storage where available; lossless packed and DXT decode fallbacks; NormalizedByte2 semantic expansion | `=` for EasyGL's exact nine-format set, including typed transfers, sampling, NPOT/partial DXT blocks and authored mips; remaining classic formats are truthfully refused by both public paths; `SDLGPU-69` |
 | Texture3D Color/mips/boxes/readback | Native RGBA8 volume path | Native RGBA8 volume path | `=` — exact EasyGL sources prove slices, asymmetric boxes/readback and authored mips; expanded SDL test proves NPOT, cumulative writes, A→B→A and exact format forwarding; `SDLGPU-71` |

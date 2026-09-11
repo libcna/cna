@@ -62,6 +62,11 @@ layout(set = 3, binding = 2) uniform PbrParams {
     vec4 specularTextureTransformRows[4];
 } pbrp;
 
+layout(set = 3, binding = 3) uniform SamplerLodBias {
+    vec4 slots0To3;
+    vec4 slots4To7;
+} samplerLodBias;
+
 vec3 cnaSrgbToLinear(vec3 c) {
     vec3 lo = c / 12.92;
     vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
@@ -119,7 +124,8 @@ vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot) {
 }
 
 void main() {
-    vec4 baseColorTex = texture(uTexture, cnaPbrTransformUV(fragUV, 0));
+    vec4 baseColorTex = texture(
+        uTexture, cnaPbrTransformUV(fragUV, 0), samplerLodBias.slots0To3.x);
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), pbrp.srgbFlags.x);
     // plans/plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the alpha
     // half is where a BLEND-mode vertex-coloured primitive's transparency comes from. The colour is
@@ -136,19 +142,23 @@ void main() {
     vec3 T = normalize(fragTangent - N * dot(N, fragTangent));
     vec3 B = cross(N, T) * fragBitangentSign;
     mat3 TBN = mat3(T, B, N);
-    vec3 sampledNormal = texture(uNormalMap, cnaPbrTransformUV(fragUV, 1)).rgb * 2.0 - 1.0;
+    vec3 sampledNormal = texture(
+        uNormalMap, cnaPbrTransformUV(fragUV, 1), samplerLodBias.slots0To3.y).rgb * 2.0 - 1.0;
     sampledNormal.xy *= pbrp.normalScale;
     vec3 finalNormal = normalize(TBN * sampledNormal);
 
-    vec4 mr = texture(uMetallicRoughnessMap, cnaPbrTransformUV(fragUV, 2));
+    vec4 mr = texture(
+        uMetallicRoughnessMap, cnaPbrTransformUV(fragUV, 2), samplerLodBias.slots0To3.z);
     float roughness = clamp(mr.g * pbrp.roughnessFactor, 0.045, 1.0);
     float metallic  = clamp(mr.b * pbrp.metallicFactor, 0.0, 1.0);
 
     vec3 V = safeNormalize(lp.eyePos_pad.xyz - fragWorldPos);
     float specularWeight = pbrp.specularFresnelInputs.w
-        * texture(uSpecularMap, cnaPbrSpecularTransformUV(fragUV, 0)).a;
+        * texture(uSpecularMap, cnaPbrSpecularTransformUV(fragUV, 0),
+                  samplerLodBias.slots4To7.y).a;
     vec3 specularColorTex = texture(
-        uSpecularColorMap, cnaPbrSpecularTransformUV(fragUV, 1)).rgb;
+        uSpecularColorMap, cnaPbrSpecularTransformUV(fragUV, 1),
+        samplerLodBias.slots4To7.z).rgb;
     specularColorTex = mix(
         specularColorTex, cnaSrgbToLinear(specularColorTex), pbrp.srgbFlags.w);
     vec3 dielectricF0 = min(
@@ -161,10 +171,12 @@ void main() {
     Lo += PbrLight(finalNormal, V, safeNormalize(-lp.light1Dir_pad.xyz), lp.light1Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, safeNormalize(-lp.light2Dir_pad.xyz), lp.light2Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
 
-    float occlusionSample = texture(uOcclusionMap, cnaPbrTransformUV(fragUV, 4)).r;
+    float occlusionSample = texture(
+        uOcclusionMap, cnaPbrTransformUV(fragUV, 4), samplerLodBias.slots4To7.x).r;
     float occlusion = 1.0 + pbrp.occlusionStrength * (occlusionSample - 1.0);
     vec3 ambient = pc.ambientColor * albedo * occlusion;
-    vec3 emissiveSample = texture(uEmissiveMap, cnaPbrTransformUV(fragUV, 3)).rgb;
+    vec3 emissiveSample = texture(
+        uEmissiveMap, cnaPbrTransformUV(fragUV, 3), samplerLodBias.slots0To3.w).rgb;
     emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), pbrp.srgbFlags.y);
     vec3 emissive = lp.emissiveColor_pad.xyz * emissiveSample;
 

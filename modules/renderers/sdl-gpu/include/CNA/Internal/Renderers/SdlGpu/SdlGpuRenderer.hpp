@@ -1557,8 +1557,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressV = 0;
             int maxAnisotropy = 4;
             /// plans/plan_fx.md FX-083: the effect's own MaxMipLevel/MipMapLevelOfDetailBias, which
-            /// SDL_GPU expresses exactly (min_lod and mip_lod_bias). Before this they were
-            /// published on GraphicsDevice.SamplerStates and then dropped on the way to the GPU.
+            /// SDL_GPU expresses through min_lod plus a native or shader-side bias. Before this
+            /// they were published on GraphicsDevice.SamplerStates and then dropped on the way to
+            /// the GPU. Compiled effects still use the native bias and therefore need SDLGPU-122's
+            /// Metal-specific shader rewrite.
             int maxMipLevel = 0;
             float lodBias = 0.0f;
             /// plans/plan_fx.md FX-091: the effect's own AddressW. Carried into the sampler cache key so
@@ -2520,11 +2522,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Records XNA's `SamplerState.MaxMipLevel`/`MipMapLevelOfDetailBias` for a slot.
          *
-         * plans/plan_fx.md FX-083. SDL_GPU expresses both exactly -- `min_lod` and `mip_lod_bias` on
-         * `SDL_GPUSamplerCreateInfo`, the same mapping FNA3D's own SDL_GPU driver makes -- and
-         * both participate in the sampler cache key so two slots asking for different LOD clamps
-         * do not share one sampler object. Stock 3D, SpriteBatch and compiled-effect commands all
-         * capture and consume both fields at public draw time.
+         * plans/plan_fx.md FX-083 and plans/plan_sdlgpu.md SDLGPU-121. `MaxMipLevel` maps to
+         * `SDL_GPUSamplerCreateInfo::min_lod`. Stock 3D and stock SpriteBatch carry the bias in a
+         * fragment uniform and apply the SPIR-V Bias image operand because SDL's Metal driver
+         * documents native `mip_lod_bias` as a no-op. Compiled effects retain the native descriptor
+         * route on Vulkan/D3D12 while their Metal rewrite is tracked by SDLGPU-122. Every command
+         * captures both fields at public draw time.
          *
          * @param slot Sampler slot.
          * @param maxMipLevel Most detailed mip level the sampler may use.
@@ -2833,7 +2836,10 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param family Public draw family, for `CNA_SDLGPU_SAMPLER_TRACE` only.
          * @param maxMipLevel Public `SamplerState.MaxMipLevel`; becomes `min_lod` (plans/plan_fx.md
          *        FX-083), the same mapping FNA3D's own SDL_GPU driver makes.
-         * @param lodBias Public `SamplerState.MipMapLevelOfDetailBias`; becomes `mip_lod_bias`.
+         * @param lodBias Native `SDL_GPUSamplerCreateInfo::mip_lod_bias`. Stock shaders pass zero
+         *        here and carry the public value in their per-draw Bias uniform instead; compiled
+         *        and custom routes pass the public value until they provide equivalent shader
+         *        emulation.
          * @param addressW Raw `TextureAddressMode` ordinal for W. SDL_GPU's compiled-effect route
          *        samples 2D textures only, so this axis never reaches the hardware today -- it is
          *        part of the key regardless, so adopting it later cannot be served a sampler built

@@ -37,6 +37,11 @@ layout(set = 3, binding = 1) uniform LitLightParams {
     vec4 specularColorPower; // xyz = material SpecularColor, w = SpecularPower
 } lp;
 
+layout(set = 3, binding = 2) uniform SamplerLodBias {
+    vec4 slots0To3;
+    vec4 slots4To7;
+} samplerLodBias;
+
 // A disabled/never-configured DirectionalLight can forward Direction=(0,0,0) (matches FNA's own
 // DirectionalLight.cs zeroing, and this codebase's WebGPU renderer's own WEBGPU-22 finding) --
 // normalize() on a true zero vector is undefined and can poison the whole light sum with NaN.
@@ -46,7 +51,8 @@ vec3 safeNormalize(vec3 v) {
 }
 
 void main() {
-    vec4 tex = (pc.textureEnabled > 0.5) ? texture(uTexture, fragUV) : vec4(1.0);
+    vec4 tex = (pc.textureEnabled > 0.5)
+        ? texture(uTexture, fragUV, samplerLodBias.slots0To3.x) : vec4(1.0);
 
     vec4 color;
     if (pc.lightingEnabled > 0.5) {

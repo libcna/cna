@@ -46,13 +46,19 @@ layout(set = 3, binding = 1) uniform LitLightParams {
     vec4 specularColorPower; // xyz = material SpecularColor, w = SpecularPower
 } lp;
 
+layout(set = 3, binding = 2) uniform SamplerLodBias {
+    vec4 slots0To3;
+    vec4 slots4To7;
+} samplerLodBias;
+
 vec3 safeNormalize(vec3 v) {
     float len2 = dot(v, v);
     return len2 > 0.0 ? v * inversesqrt(len2) : vec3(0.0);
 }
 
 void main() {
-    vec4 tex = (pc.textureEnabled > 0.5) ? texture(uTexture, fragUV) : vec4(1.0);
+    vec4 tex = (pc.textureEnabled > 0.5)
+        ? texture(uTexture, fragUV, samplerLodBias.slots0To3.x) : vec4(1.0);
 
     vec4 color;
     if (pc.lightingEnabled > 0.5) {

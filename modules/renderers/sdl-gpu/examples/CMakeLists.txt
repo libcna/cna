@@ -98,6 +98,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
         LABELS "SdlGpu;Parity"
         ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}"
         FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    # SDLGPU-121: make the exact stock LOD fixture reject every nonzero native sampler bias.
+    # Vulkan/D3D12 could otherwise pass through the native descriptor even if the Metal-required
+    # shader Bias operand or its per-draw uniform were later removed.
+    set_property(TEST SdlGpu_Parity_sampler_lod_bias APPEND PROPERTY ENVIRONMENT
+        "CNA_SDLGPU_TEST_REJECT_NATIVE_LOD_BIAS=1")
 
     # SDLGPU-85: the shared fixture proves construction-time EasyGL parity. SDL GPU also supports
     # the XNA/FNA Reset contract which EasyGL still lacks, so run the exact same source in its

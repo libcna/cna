@@ -10,9 +10,14 @@ layout(location = 0) out vec4 outColor;
 layout(set = 2, binding = 0) uniform sampler2D uTexture;
 layout(set = 2, binding = 1) uniform sampler2D uTexture2;
 
+layout(set = 3, binding = 0) uniform SamplerLodBias {
+    vec4 slots0To3;
+    vec4 slots4To7;
+} samplerLodBias;
+
 void main() {
-    vec4 tex1 = texture(uTexture, fragUV);
-    vec4 tex2 = texture(uTexture2, fragUV1);
+    vec4 tex1 = texture(uTexture, fragUV, samplerLodBias.slots0To3.x);
+    vec4 tex2 = texture(uTexture2, fragUV1, samplerLodBias.slots0To3.y);
     tex1.rgb *= 2.0;
     outColor = tex1 * tex2 * fragTint;
     // REMED-GFX-009: blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).

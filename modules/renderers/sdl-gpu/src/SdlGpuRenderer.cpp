@@ -132,6 +132,15 @@ namespace CNA::Internal::Renderers::SdlGpu
             return value != nullptr && std::strcmp(value, "1") == 0;
         }
 
+        bool TestRejectNativeLodBiasEnabled()
+        {
+            static const bool enabled = [] {
+                const char* value = std::getenv("CNA_SDLGPU_TEST_REJECT_NATIVE_LOD_BIAS");
+                return value != nullptr && std::strcmp(value, "1") == 0;
+            }();
+            return enabled;
+        }
+
         bool IsIsolatedVideoDriver(const char* driver)
         {
             return driver != nullptr &&
@@ -4678,7 +4687,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 1;
-        fsInfo.num_uniform_buffers = 1;
+        fsInfo.num_uniform_buffers = 2;  // ChannelExpansion + stock sampler LOD biases (SDLGPU-121)
         resources.CreateShader(
             ConstructionShader::SpriteFragment,
             SdlGpuFailurePointEXT::SpriteFragmentShaderCreation, fsInfo,
@@ -4794,6 +4803,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         createInfo.min_lod = minLod;
         createInfo.max_lod = std::max(createInfo.max_lod, minLod);
         createInfo.mip_lod_bias = lodBias;
+
+        // SDLGPU-121's parity fixture turns this guard on so Vulkan/D3D12 cannot satisfy the
+        // test through their working native field. A nonzero value here then fails before sampler
+        // creation, proving the observed mip shift came from the same shader route Metal needs.
+        if (TestRejectNativeLodBiasEnabled() && lodBias != 0.0f)
+            throw std::runtime_error(
+                "CNA SDL_GPU test guard: a shader-emulated draw requested native LOD bias");
 
         SDL_GPUSampler* sampler = nullptr;
         if (hit)
@@ -4967,6 +4983,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                 const std::array<float, 8> expansion = SpriteChannelExpansion(surfaceFormat);
                 SDL_PushGPUFragmentUniformData(
                     command, 0, expansion.data(), sizeof(expansion));
+                const std::array<float, 8> lodBiases{};
+                SDL_PushGPUFragmentUniformData(
+                    command, 1, lodBiases.data(), sizeof(lodBiases));
 
                 SDL_GPUViewport viewport{};
                 viewport.w = right;
@@ -5079,6 +5098,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                 int colorTargetCount,
                                                 SDL_GPUGraphicsPipeline*& boundPipeline)
     {
+        bool usesStockSpriteShader = false;
         if (command.customEffectRequested)
         {
             SDL_GPUGraphicsPipeline* pipeline = command.customPipeline;
@@ -5115,6 +5135,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 #endif
         else
         {
+            usesStockSpriteShader = true;
             SDL_GPUGraphicsPipeline* pipeline = GetOrCreateSpritePipeline(
                 colorFormat, sampleCount, depthStencilFormat, colorTargetCount, command.depthTest, command.depthWrite,
                 command.depthFunc, command.renderState);
@@ -5132,6 +5153,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                 SpriteChannelExpansion(command.surfaceFormat);
             SDL_PushGPUFragmentUniformData(
                 cmd, 0, channelExpansion.data(), sizeof(channelExpansion));
+            const std::array<float, 8> lodBiases{command.lodBias};
+            SDL_PushGPUFragmentUniformData(
+                cmd, 1, lodBiases.data(), sizeof(lodBiases));
         }
 
         SDL_GPUBufferBinding vbBinding{};
@@ -5144,7 +5168,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "SpriteBatch", command.maxMipLevel,
-                                                   command.lodBias, command.addressW);
+                                                   usesStockSpriteShader ? 0.0f : command.lodBias,
+                                                   command.addressW);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
@@ -5635,7 +5660,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 1;
-        fsInfo.num_uniform_buffers = 1;
+        fsInfo.num_uniform_buffers = 2;  // PC + stock sampler LOD biases (SDLGPU-121)
         resources.CreateShader(
             ConstructionShader::TexturedFragment,
             SdlGpuFailurePointEXT::TexturedFragmentShaderCreation, fsInfo,
@@ -5769,7 +5794,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 1;
-        fsInfo.num_uniform_buffers = 2;
+        fsInfo.num_uniform_buffers = 3;  // PC, LitLightParams + stock sampler LOD biases
         resources.CreateShader(
             ConstructionShader::LitTexturedFragment,
             SdlGpuFailurePointEXT::LitTexturedFragmentShaderCreation, fsInfo,
@@ -6036,7 +6061,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 1;
-        fsInfo.num_uniform_buffers = 1;
+        fsInfo.num_uniform_buffers = 2;  // PC + stock sampler LOD biases (SDLGPU-121)
         resources.CreateShader(
             ConstructionShader::AlphaTestFragment,
             SdlGpuFailurePointEXT::AlphaTestFragmentShaderCreation, fsInfo,
@@ -6180,6 +6205,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 2;
+        fsInfo.num_uniform_buffers = 1;  // stock sampler LOD biases (SDLGPU-121)
         resources.CreateShader(
             ConstructionShader::DualTextureFragment,
             SdlGpuFailurePointEXT::DualTextureFragmentShaderCreation, fsInfo,
@@ -6269,7 +6295,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 2;  // uTexture (2D) + uEnvMap (cube)
-        fsInfo.num_uniform_buffers = 2;
+        fsInfo.num_uniform_buffers = 3;  // PC, EnvMapParams + stock sampler LOD biases
         resources.CreateShader(
             ConstructionShader::EnvMapFragment,
             SdlGpuFailurePointEXT::EnvMapFragmentShaderCreation, fsInfo,
@@ -6434,7 +6460,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         colFsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         colFsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         colFsInfo.num_samplers = 1;
-        colFsInfo.num_uniform_buffers = 2;
+        colFsInfo.num_uniform_buffers = 3;  // PC, LitLightParams + stock sampler LOD biases
         resources.CreateShader(
             ConstructionShader::SkinnedColoredFragment,
             SdlGpuFailurePointEXT::SkinnedColoredFragmentShaderCreation, colFsInfo,
@@ -6622,7 +6648,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 7;  // core five plus specular strength and colour
-        fsInfo.num_uniform_buffers = 3;  // PC, LitLightParams, PbrParams
+        fsInfo.num_uniform_buffers = 4;  // PC, LitLightParams, PbrParams + sampler LOD biases
         resources.CreateShader(
             ConstructionShader::PbrFragment,
             SdlGpuFailurePointEXT::PbrFragmentShaderCreation, fsInfo,
@@ -7714,6 +7740,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        const std::array<float, 8> lodBiases{command.lodBias};
+        SDL_PushGPUFragmentUniformData(cmd, 1, lodBiases.data(), sizeof(lodBiases));
 
         BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
                                   command.extraVertexStreams,
@@ -7730,7 +7758,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "AlphaTest3D", command.maxMipLevel,
-                                                   command.lodBias, command.addressW);
+                                                   /*lodBias=*/0.0f, command.addressW);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -7763,6 +7791,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
+        const std::array<float, 8> lodBiases{
+            command.texture0LodBias, command.texture1LodBias};
+        SDL_PushGPUFragmentUniformData(cmd, 0, lodBiases.data(), sizeof(lodBiases));
 
         BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
                                   command.extraVertexStreams,
@@ -7778,7 +7809,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                       command.texture0MaxAnisotropy,
                                                       "DualTexture3D/slot0",
                                                       command.texture0MaxMipLevel,
-                                                      command.texture0LodBias,
+                                                      /*lodBias=*/0.0f,
                                                       command.texture0AddressW);
         samplerBindings[1].texture = command.texture1 ? command.texture1.texture
                                                       : defaultWhiteTexture_->Texture();
@@ -7787,7 +7818,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                       command.texture1MaxAnisotropy,
                                                       "DualTexture3D/slot1",
                                                       command.texture1MaxMipLevel,
-                                                      command.texture1LodBias,
+                                                      /*lodBias=*/0.0f,
                                                       command.texture1AddressW);
         SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
 
@@ -7823,6 +7854,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUVertexUniformData(cmd, 2, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
+        const std::array<float, 8> lodBiases{command.lodBias, command.envMapLodBias};
+        SDL_PushGPUFragmentUniformData(cmd, 2, lodBiases.data(), sizeof(lodBiases));
 
         BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
                                   command.extraVertexStreams,
@@ -7839,14 +7872,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         samplerBindings[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                       command.addressV, command.maxAnisotropy,
                                                       "EnvironmentMap3D", command.maxMipLevel,
-                                                      command.lodBias, command.addressW);
+                                                      /*lodBias=*/0.0f, command.addressW);
         samplerBindings[1].texture = command.envMapTexture.texture;
         samplerBindings[1].sampler = GetOrCreateSampler(command.envMapFilter, command.envMapAddressU,
                                                        command.envMapAddressV,
                                                        command.envMapMaxAnisotropy,
                                                        "EnvironmentMap3D/cube",
                                                        command.envMapMaxMipLevel,
-                                                       command.envMapLodBias,
+                                                       /*lodBias=*/0.0f,
                                                        command.envMapAddressW);
         SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
         // REMED-GFX-173: the whole two-slot binding on one line -- both public slots, both native
@@ -7905,6 +7938,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // LitLightParams-shaped block at slot 1 -- SkinnedLightParams is byte-identical to both.
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+        const std::array<float, 8> lodBiases{command.lodBias};
+        SDL_PushGPUFragmentUniformData(cmd, 2, lodBiases.data(), sizeof(lodBiases));
 
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
@@ -7926,7 +7961,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "Skinned3D", command.maxMipLevel,
-                                                   command.lodBias, command.addressW);
+                                                   /*lodBias=*/0.0f, command.addressW);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -7961,6 +7996,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
         SDL_PushGPUFragmentUniformData(cmd, 2, command.pbrParams.data(), sizeof(command.pbrParams));
+        const std::array<float, 8> lodBiases{
+            command.lodBias,
+            command.lodBias,
+            command.lodBias,
+            command.lodBias,
+            command.lodBias,
+            command.specularSampler.lodBias,
+            command.specularColorSampler.lodBias};
+        SDL_PushGPUFragmentUniformData(cmd, 3, lodBiases.data(), sizeof(lodBiases));
 
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
@@ -7986,7 +8030,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUSampler* sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                     command.addressV, command.maxAnisotropy,
                                                     "Pbr3D", command.maxMipLevel,
-                                                    command.lodBias, command.addressW);
+                                                    /*lodBias=*/0.0f, command.addressW);
         // plans/plan_gltf.md GLTF-465: slot 0 was the one PBR map with no fallback, so a material
         // with only a baseColorFactor -- glTF's own default material, and what both COLOR_0
         // corpus fixtures author -- had to be refused upstream instead of multiplying the
@@ -8007,12 +8051,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             command.specularSampler.filter, command.specularSampler.addressU,
             command.specularSampler.addressV, command.specularSampler.maxAnisotropy,
             "Pbr3D.Specular", command.specularSampler.maxMipLevel,
-            command.specularSampler.lodBias, command.specularSampler.addressW);
+            /*lodBias=*/0.0f, command.specularSampler.addressW);
         SDL_GPUSampler* specularColorSampler = GetOrCreateSampler(
             command.specularColorSampler.filter, command.specularColorSampler.addressU,
             command.specularColorSampler.addressV, command.specularColorSampler.maxAnisotropy,
             "Pbr3D.SpecularColor", command.specularColorSampler.maxMipLevel,
-            command.specularColorSampler.lodBias, command.specularColorSampler.addressW);
+            /*lodBias=*/0.0f, command.specularColorSampler.addressW);
         samplerBindings[5].texture = command.specularMap
             ? command.specularMap.texture : defaultWhiteTexture_->Texture();
         samplerBindings[5].sampler = specularSampler;
@@ -8396,6 +8440,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        const std::array<float, 8> lodBiases{command.lodBias};
+        SDL_PushGPUFragmentUniformData(cmd, 1, lodBiases.data(), sizeof(lodBiases));
 
         BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
                                   command.extraVertexStreams,
@@ -8412,7 +8458,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "Textured3D", command.maxMipLevel,
-                                                   command.lodBias, command.addressW);
+                                                   /*lodBias=*/0.0f, command.addressW);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -8447,6 +8493,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_PushGPUVertexUniformData(cmd, 2, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+        const std::array<float, 8> lodBiases{command.lodBias};
+        SDL_PushGPUFragmentUniformData(cmd, 2, lodBiases.data(), sizeof(lodBiases));
 
         BindStockVertexBuffersEXT(pass, command.uploadedVertexBuffer,
                                   command.extraVertexStreams,
@@ -8463,7 +8511,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                    command.addressV, command.maxAnisotropy,
                                                    "LitTextured3D", command.maxMipLevel,
-                                                   command.lodBias, command.addressW);
+                                                   /*lodBias=*/0.0f, command.addressW);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
