@@ -101,12 +101,15 @@ of the six, because it does not merely weaken the bias, it deletes it.
 
 ---
 
-## 2. EasyGL does not fill the letterbox rectangle with a default viewport
+## 2. EasyGL mishandles a default letterbox viewport and physical backbuffer readback
 
 **Found:** 2026-09-09, by merging `webgpu` into `next` and running that branch's
 renderer-neutral presentation tests in an EasyGL build for the first time.
-**Open in:** `easygl` (measured on the `OPENGLES3` profile).
+**Re-audited:** 2026-09-11 by `plans/plan_sdlgpu.md` `SDLGPU-120`; the original
+measurement conflated rendered pixels with failed readback bytes.
+**Open in:** `easygl` (measured on both the original `OPENGLES3` profile and current `OPENGL33`).
 **Not affected:** `webgpu`, which passes the same test (`plans/plan_webgpu.md` `WEBGPU-162`).
+SDL GPU also passes the same current test (`plans/plan_sdlgpu.md` `SDLGPU-68/120`).
 
 ### The measurement
 
@@ -120,11 +123,27 @@ Debug `build/`, Xvfb `:99`, an 800x480 drawable:
 | Rectangle the renderer itself reports | `(160,0,480x480)` — **correct** |
 | `GraphicsDevice.Viewport`, in logical units | `(0,0,240,240)` |
 | Sprite drawn | `Rectangle(0,0,240,240)`, i.e. the whole logical area |
-| Where the ink landed | `(0,245)-(792,476)` — the full width of the drawable, bottom half |
+| Coarse scanner's apparent non-clear bounds | `(0,245)-(792,476)` — **not ink**; these are zero-filled failed reads |
+| Corrected ink-matching scanner | `EMPTY`; the public readback path cannot observe the actual ink rows |
+| Centre of the expected rectangle | `(0,0,0)` instead of ink `(230,70,40)` |
 
-The renderer's own `GetDefaultViewportRect()` answer is right, which rules out the presentation
-state: the mode, the virtual resolution and the computed rectangle are all what they should be. The
-error is downstream of that, between the logical viewport and the rasterizer.
+The renderer's own `GetDefaultViewportRect()` answer is right, so the mode, virtual resolution and
+rectangle computation are sound. There are two downstream defects:
+
+1. `EasyGLSpriteBatchRenderer::FlushBatch()` calls any GL viewport different from the complete
+   physical target “custom.” A default letterbox rectangle necessarily differs. It consequently
+   uses the physical 480x480 rectangle as the sprite projection extent, so a logical 240x240 sprite
+   covers only half of that rectangle. The compiled-effect sprite route is wrong in the opposite
+   direction: it resets the viewport to the entire 800x480 drawable, including the bars.
+2. `EasyGLRenderer::ReadBackbuffer()` flips top-left coordinates using `GetViewportSize()`. That is
+   the logical 240-pixel virtual height here, not the physical 480-pixel default framebuffer. Reads
+   at public `y >= 240` therefore use a negative GL Y and leave the zero-initialised transfer bytes
+   untouched. The diagnostic scanner treated every value merely different from the clear colour as
+   ink, so those failed zero reads produced the reported `(0,245)-(792,476)` rectangle.
+
+Thus the original pass/fail verdict was correct but the reported “where the ink landed” evidence
+was not. No renderer output has been used to claim an exact ink bounding box while its own readback
+path is invalid for half of the framebuffer.
 
 ### Why it was not found before
 
@@ -135,16 +154,13 @@ Every file the test exercises — `GraphicsDevice.cpp`, `SpriteBatch.cpp` and al
 `modules/renderers/easygl` — is byte-identical to `next`, so this is `next`'s EasyGL behaviour, not
 a merge interaction.
 
-### What the correction is likely to be — **not** measured
+### Required correction — not implemented here
 
-`WEBGPU-162` names three parts, and EasyGL demonstrably has the first (`EasyGLSurfaceState::
-GetDefaultViewportRect()` predates it and its answer is correct above). The two untested candidates
-are the same row's other two: the `customViewport` discriminator asking whether the viewport *is*
-the presentation rectangle rather than whether it merely differs from the target extent, and the
-sprite bake's divisor, which must be the LOGICAL extent where the rasterizer viewport already
-carries the presentation scale. The observed shape — full drawable width, half height — is
-consistent with the rectangle not reaching the rasterizer at all, which neither candidate fully
-explains. Diagnose before changing anything.
+The stock and compiled SpriteBatch routes must both preserve the physical presentation rectangle,
+classify it as the default rather than a caller sub-viewport, and project logical sprite coordinates
+over the logical extent. `ReadBackbuffer()` must independently use the physical default-framebuffer
+height for its Y flip. These are EasyGL-local tasks; SDL GPU and WebGPU must not be changed to match
+the defects.
 
 ---
 
@@ -166,4 +182,3 @@ GL profile the build selected, so a build that cannot honour `SamplerState.MipMa
 still gets a test that asserts it does. The fix belongs to the parity framework, not to EasyGL:
 either gate these two on the profile, or give a fixture the documented-divergence route
 `fill_mode_wireframe` already uses. Until then these two are expected red in any EasyGL ES build.
-

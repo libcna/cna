@@ -71,9 +71,13 @@
 > `shared_ptr<ITextureRenderer>` through renderer `End()`. Three shared contract tests pin that
 > ordering, the real Vulkan regression survives destruction of the public wrapper, and a focused
 > ASan build of the renderer/replay boundary passes the complete 43/43 compiled-effect corpus.
+> `SDLGPU-120` independently reproduces the reported EasyGL letterbox failure and separates its
+> two causes: EasyGL classifies the physical default presentation rectangle as a caller viewport,
+> and its backbuffer readback flips Y with the logical rather than physical height. SDL GPU passes
+> the identical public discriminator, so neither EasyGL defect is copied.
 > `SDLGPU-94`–`SDLGPU-96`
 > remain open because D3D12 swapchain presentation/recovery, Metal and Android/Vulkan still
-> require native runtime evidence. Seven EasyGL defect findings (six distinct
+> require native runtime evidence. Nine EasyGL defect findings (eight distinct
 > behavior families) are deliberately not copied. The final 191/191 SDL integration, 50/50
 > renderer-unit, 33/33 EasyGL
 > oracle and 32/32 two-renderer corpus gates remain green on Linux/Vulkan. This verdict supersedes historical
@@ -100,9 +104,9 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Item | Current evidence |
 |---|---|
 | Re-audit starting branch / commit | `sdlgpu` / `8cd9ab7f45a05bef3a727598c8d9ef5cf8b04442` |
-| Newly created tasks | 29 (`SDLGPU-91`–`SDLGPU-119`) |
-| Completed / open | 26 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`119` complete; `SDLGPU-94`–`96` open) |
-| Ending evidence commit | `SDLGPU-119` (including the follow-up ASan evidence recorded in this status) |
+| Newly created tasks | 30 (`SDLGPU-91`–`SDLGPU-120`) |
+| Completed / open | 27 / 3 (`SDLGPU-91`–`93` and `SDLGPU-97`–`120` complete; `SDLGPU-94`–`96` open) |
+| Ending evidence commit | `SDLGPU-120` (including the `SDLGPU-119` focused ASan follow-up) |
 | Proven runtime configuration | Linux/Vulkan remains the complete behavioral configuration; D3D12 now has a real no-window device, all-26-stock-shader construction, stock-pipeline exact-pixel proof, a public windowless `GraphicsDevice` with exact backbuffer/RT2D clear readback, the unchanged public Game/Texture2D/SpriteBatch 2D scene for 120 frames, all nine shared classic stock-effect fixtures, the complete ten-fixture state/sampler matrix, the 24-test texture/format/transfer matrix, all 33 render-target registrations, all 25 buffer/draw registrations, all five model oracles and the 42-case compiled-effect corpus that existed at `SDLGPU-118`. The target evidence includes the 851-assertion mip/readback oracle and 40-assertion classic MRT matrix; the draw evidence includes instancing, multistream and declaration semantics. Six presentation/reset/resize programs, 73 individually isolated backbuffer/bound-target/Present lifecycle legs and 291/291 applicable constructor/lazy-resource rollback checks also pass through D3D12. There are now 191 registered native and 258 registered Windows SDL integration tests; the pre-platform full sweep plus the focused portability gates remain the Linux behavioral baseline. The D3D12 portability probes pass 2/2, 3/3, 6/6 and 3/3; the five skinned-effect/PBR executables add 25/25 discriminating assertions. The expanded 43-case native compiled-effect corpus passes Vulkan, including a focused AddressSanitizer build of its test translation unit and `SdlGpuRenderer.cpp`; unchanged dependencies were reused from the stable build. |
 | Available local cross tools | MinGW-w64, Wine 10.0, DXVK v3.0.2-58 and vkd3d-proton 3.1.0 are present. There is no Apple SDK/device or `xcrun`/`xcodebuild`/`metal`. The Android PATH audit located `adb`/platform-tools but did not locate an NDK/toolchain, `sdkmanager` or `avdmanager`, and `adb devices` reported no running/attached target. The project owner subsequently confirmed that an Android emulator is available on this host outside those searched paths, so emulator absence is not a blocker; Android execution is intentionally deferred at the owner's request. No system `dxc`, `spirv-cross`, SDL_shadercross executable or SDL_shadercross shared library was found; CNA uses its pinned static ShaderCross dependency instead. |
 | Display constraint | All further Linux SDL tests must use `SDL_VIDEODRIVER=offscreen`; Windows GUI tests must use a headless/virtual display if runnable. Never use the host display. |
@@ -1036,13 +1040,57 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   lifetime check; the stronger proof of the positive lifetime invariant remains the deferring
   cross-module test double and its injected-ordering failure described above.
 
+### SDLGPU-120 — classify the EasyGL letterbox failure without copying it ✅
+
+- **Problem/public behavior:** the newly reported
+  `PresentationRectangleTest.ALetterboxedDefaultViewportIsNotACustomSubViewport` failure appeared
+  adjacent to SDL GPU's presentation work and had no entry in this parity plan. A full-logical-size
+  sprite must fill the physical letterbox rectangle while `GetBackBufferData` addresses every
+  physical backbuffer row.
+- **EasyGL/SDL evidence:** the same unchanged test was run from the existing stable binaries, with
+  no rebuild. OPENGL33 on SDL's offscreen video driver reproduces the reported 800x480/240x240
+  failure and prints the apparent `(0,245)-(792,476)` non-clear bounds. SDL GPU on offscreen Vulkan
+  reports the same `(160,0,480x480)` presentation rectangle, renders within the coarse expected
+  `(168,0)-(636,476)` sample bounds and passes. The scanner was then hardened to count only pixels
+  matching the ink, not every value different from the clear colour. A one-translation-unit
+  alternate EasyGL relink now reports `EMPTY` rather than inventing ink from zero reads and retains
+  the expected centre failure; the incrementally rebuilt SDL test retains its same passing bounds.
+  Neither route used the host display.
+- **Diagnosis:** this is two independently observable EasyGL defects. The stock EasyGL sprite flush
+  compares the mapped physical viewport with the full target extent and therefore calls a default
+  letterbox rectangle “custom”; it then divides logical sprite coordinates by that physical
+  viewport size. Separately, EasyGL `ReadBackbuffer` obtains its default-framebuffer Y-flip height
+  from logical `GetViewportSize`, so reads at `y >= 240` ask GL for negative rows and leave zeroes
+  in the caller buffer. Those zeroes differ from the chosen clear colour and were incorrectly
+  reported by the test's coarse diagnostic scanner as the sprite's bounds; source inspection proves
+  that description was not a measurement of ink. The compiled-effect EasyGL sprite route also
+  resets the default viewport to the entire physical drawable, a distinct wrong treatment of the
+  same default presentation rectangle.
+- **Location/disposition:** `EasyGLSpriteBatchRenderer::FlushBatch`,
+  `FlushBatchWithCompiledEffect` and `EasyGLRenderer::ReadBackbuffer`; recorded as
+  `EASYGL-PARITY-8/9` and corrected in `misc/known_bugs.md`. The shared diagnostic now matches the
+  ink colour explicitly. No SDL production change is appropriate: `SDLGPU-68` already implements
+  and pixel-verifies the logical-projection/physical-viewport split, and the live public
+  discriminator remains green.
+- **Acceptance/test:** reproduce both renderer outcomes without the host display; trace the public
+  logical viewport mapping, native sprite projection and physical backbuffer readback separately;
+  document a future EasyGL-local correction rather than changing SDL to match a reference defect.
+- **Result (2026-09-11):** accepted with the exact one-test A/B, the corrected negative diagnostic
+  and source-level proof of both causes. The SDL parity matrix remains `=` for logical presentation,
+  default/custom viewport discrimination and backbuffer readback. The EasyGL defect ledger grows
+  from seven findings/six distinct families to nine findings/eight families; the example-
+  classification CSV is unchanged because this evidence is renderer-neutral rather than one of
+  the 246 EasyGL example sources. Only `CnaGraphicsTests` was requested from the SDL build; the
+  EasyGL confirmation compiled one changed test object and relinked an alternate binary from its
+  unchanged stable objects instead of triggering the pending 134-object configuration cascade.
+
 
 ## 2026-09-10 parity audit final status
 
 | Item | Current evidence |
 |---|---|
 | Starting branch / commit | `sdlgpu` / `3a44315fdffe974e02a664cacae4fd388c9728aa` |
-| Ending parity-behavior/test commit | `9285b36e39106aecd85402c6f14688a4fa2f0fcb` (`SDLGPU-89`); the Linux audit closeout is `SDLGPU-90`; the platform/adversarial closeout now includes `SDLGPU-119` and its focused ASan follow-up |
+| Ending parity-behavior/test commit | `9285b36e39106aecd85402c6f14688a4fa2f0fcb` (`SDLGPU-89`); the Linux audit closeout is `SDLGPU-90`; the platform/adversarial closeout now includes `SDLGPU-120` and the `SDLGPU-119` focused ASan follow-up |
 | Renderer contract | `modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp`; exact audit in `plans/sdlgpu_renderer_contract_audit.csv` |
 | Reference renderer | `modules/renderers/easygl/{include,src,examples}` |
 | Renderer under test | `modules/renderers/sdl-gpu/{include,src,tests,examples}` |
@@ -1060,7 +1108,7 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
 | Final SDL GPU verification | **191/191** registered SDL integration CTests and **50/50** focused SDL GPU renderer-unit tests pass from the stable incremental build. The expanded compiled-effect subset is **43/43** on native Vulkan (including the focused ASan run); D3D12's last recorded run is the **42/42** corpus at `SDLGPU-118`, before the refuted `SDLGPU-119` case was added. The integration total contains all 32 shared parity fixtures and 112 parity-labelled registrations. `SDLGPU-87`'s capability/lifetime regression remains **295/295**; `SDLGPU-89` adds a 21/21 multistream result and isolated slot-15 parity pixels on both renderers. |
 | Validation | SDL GPU debug mode is enabled. All 191 integration registrations now make `Validation Error`, `Validation Warning`, bare `VUID-`, `D3D12 ERROR:` or `D3D12 WARNING:` output fatal; the final full Vulkan sweep reported none. |
 | Final EasyGL/parity oracle | **33/33** registered EasyGL oracle CTests pass under Xvfb/llvmpipe. The direct corpus executes all 32 shared sources under both renderers: 27 frames satisfy the strict byte policy, two use renderer-local discriminating invariants, and three stay within fixed measured line/edge coverage budgets. |
-| Exact remaining EasyGL differences | Exact half-rate `PresentInterval::Two` (`⛔`) and `OcclusionQuery` (`SDLGPU-80`, `⛔`). EasyGL's non-default `MultiSampleMask` is also unimplemented, so it is an SDL_gpu limitation but not an EasyGL difference. SDL GPU intentionally differs from the seven XNA/FNA-invalid findings in `EASYGL-PARITY-1`–`7`; findings 4 and 7 are two EasyGL examples of the same bound-FBO backbuffer-readback defect. |
+| Exact remaining EasyGL differences | Exact half-rate `PresentInterval::Two` (`⛔`) and `OcclusionQuery` (`SDLGPU-80`, `⛔`). EasyGL's non-default `MultiSampleMask` is also unimplemented, so it is an SDL_gpu limitation but not an EasyGL difference. SDL GPU intentionally differs from the nine XNA/FNA-invalid findings in `EASYGL-PARITY-1`–`9`; findings 4 and 7 are two EasyGL examples of the same bound-FBO backbuffer-readback defect. |
 
 The first attempted baseline used the suite's historical hard-coded `SDL_VIDEODRIVER=x11` and
 could not reach the inaccessible host display: early programs skipped and 47 tests failed for the
@@ -1295,6 +1343,8 @@ whenever implementation evidence disproves its classification.
 | `EASYGL-PARITY-5` | Public `RenderTarget2D` inherits all `Texture2D::SetData` overloads, exactly as FNA does: FNA forwards them to `FNA3D_SetTextureData2D` even when the texture is a render target. CNA's shared target path likewise calls its existing `ITextureRenderer`, but `EasyGLRenderTargetRenderer` inherits the empty `UpdatePixels`/`UpdatePixelsLevel` defaults, so every accepted target upload is silently discarded. SDL GPU had the same 2D defect and fixed it in `SDLGPU-74`; its byte-exact regression covers full/partial level zero, authored/generated mip preservation and 2/4/8/16-byte target texels. This is intentionally not hidden to imitate EasyGL: a future EasyGL-local task must implement format-aware uploads into `colorTex_` without replacing the FBO-owned renderer. |
 | `EASYGL-PARITY-6` | `EasyGLRenderer` consumes and clamps construction-time backbuffer MSAA correctly, but inherits `ApplyMultiSampleCount`, so `GraphicsDevice::Reset`/`GraphicsDeviceManager.PreferMultiSampling` cannot change it after construction. `easygl_msaa_change_test.cpp` explicitly treats that inability as its expected result. FNA resets and writes back the device-clamped count; SDL GPU now implements that XNA/FNA contract in `SDLGPU-85`, so the EasyGL-specific expectation is classified as a defect rather than compiled under SDL GPU. The shared standalone fixture still uses the exact same ordinary construction source for both renderers. |
 | `EASYGL-PARITY-7` | `easygl_rt_roundtrip_test.cpp` repeats the bound-FBO assumption from `EASYGL-PARITY-4`: it calls `GraphicsDevice::GetBackBufferData` while each render target is active and labels the returned target pixel an RT readback. FNA defines this as backbuffer readback regardless of the active target; `RenderTarget2D::GetData` is the target API. The example is now explicitly classified as the same EasyGL defect, while SDL GPU's target/backbuffer transition and independent readback contracts remain the valid oracle. |
+| `EASYGL-PARITY-8` | EasyGL's stock SpriteBatch decides a viewport is custom whenever the current GL rectangle differs from the complete physical target. A default Letterbox viewport necessarily does differ: the reproduced 800x480/240x240 case is the correct physical `(160,0,480x480)` presentation rectangle. `EasyGLSpriteBatchRenderer::FlushBatch` therefore projects the 240x240 logical sprite over a 480x480 *physical* extent and covers only half of the presentation rectangle. Its compiled-effect branch has the opposite default-framebuffer error: it resets the viewport to the entire 800x480 drawable and therefore includes the bars. SDL GPU recovers the logical projection extent from the mapped physical viewport and passes the exact shared public test; copying either EasyGL route would regress `SDLGPU-68`. |
+| `EASYGL-PARITY-9` | `EasyGLRenderer::ReadBackbuffer` flips top-left XNA coordinates with `GetViewportSize`, which is the logical virtual height under Letterbox, instead of the physical default-framebuffer height. In the reproduced 800x480/240x240 case every request at public `y >= 240` produces a negative GL Y; the zero-filled failed reads made the shared test's old coarse scanner report `(0,245)-(792,476)` as if ink had landed there. That rectangle is a readback artifact, not rendered ink. `GraphicsDevice::GetBackBufferData` addresses the actual backbuffer and SDL GPU's proxy uses its physical extent, so SDL remains correct and the EasyGL bug is not copied. |
 
 ## Executable EasyGL-parity backlog
 
