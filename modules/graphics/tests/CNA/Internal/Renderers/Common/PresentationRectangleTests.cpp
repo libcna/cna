@@ -409,8 +409,11 @@ TEST(PresentationRectangleTest, ALetterboxedDefaultViewportIsNotACustomSubViewpo
         device.GetBackBufferData(&region, &pixel, 0, 1);
         return pixel;
     };
-    // Where the sprite ACTUALLY landed, so a failure names the transform that was applied instead
-    // of only saying the expected pixel was empty. Scanned coarsely across the whole drawable.
+    // Where public readback reports pixels matching the sprite ink, so a failure has useful spatial
+    // evidence instead of only saying the expected pixel was empty. Match the ink itself rather
+    // than merely "not clear": a failed out-of-range backend read can leave a zero-filled transfer
+    // buffer, and those zeroes are neither the clear colour nor evidence that the sprite landed
+    // there (EASYGL-PARITY-9 / SDLGPU-120).
     {
         int minX = physical.width, minY = physical.height, maxX = -1, maxY = -1;
         const int stepX = std::max(1, physical.width / 64);
@@ -419,9 +422,9 @@ TEST(PresentationRectangleTest, ALetterboxedDefaultViewportIsNotACustomSubViewpo
             for (int x = 0; x < physical.width; x += stepX)
             {
                 const Color p = read(x, y);
-                if (std::abs(int(p.getRProperty()) - int(clear.getRProperty())) <= 6 &&
-                    std::abs(int(p.getGProperty()) - int(clear.getGProperty())) <= 6 &&
-                    std::abs(int(p.getBProperty()) - int(clear.getBProperty())) <= 6)
+                if (std::abs(int(p.getRProperty()) - int(ink.getRProperty())) > 12 ||
+                    std::abs(int(p.getGProperty()) - int(ink.getGProperty())) > 12 ||
+                    std::abs(int(p.getBProperty()) - int(ink.getBProperty())) > 12)
                     continue;
                 minX = std::min(minX, x); minY = std::min(minY, y);
                 maxX = std::max(maxX, x); maxY = std::max(maxY, y);

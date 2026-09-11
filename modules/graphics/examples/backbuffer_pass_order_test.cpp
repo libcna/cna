@@ -37,11 +37,10 @@
 //      extra frame. The only readback in each check happens after every command of that check has
 //      been queued.
 //
-// Renderers whose backbuffer cannot be read publicly (SdlGpu has no `ReadBackbuffer` override at
-// all, so `GraphicsDevice::GetBackBufferData` raises) declare `backbufferReadback ==
-// Support::Unsupported` and their checks report an explicit skip naming the reason. That is a real
-// hole in the public oracle for those renderers, recorded rather than papered over: their fix is
-// measured structurally instead (native pass order and load actions under an interposer).
+// Renderers whose backbuffer cannot be read publicly declare `backbufferReadback ==
+// Support::Unsupported` and their checks report an explicit skip naming the reason. SDL_GPU left
+// that group when SDLGPU-68 added its proxy readback; unsupported renderers retain structural
+// native-pass evidence instead.
 //
 // Two behaviours that are NOT this task's subject are declared per renderer and asserted either
 // way, so a failure never gets credited to or blamed on pass ordering:
@@ -227,12 +226,11 @@ namespace
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
-    // SdlGpu has no `ReadBackbuffer` override, so `GetBackBufferData` raises and this file's
-    // backbuffer oracle cannot run here at all. REMED-GFX-143's SdlGpu half is measured
-    // structurally instead (native pass order and load actions under an interposer) and the
-    // render-target-side checks below still run.
-    constexpr Contract kContract{"SDL_GPU", Support::Unsupported, true, Support::Exact,
-                                 true, true, true, false, false, true, true, true, true, false};
+    // SDLGPU-68's proxy preserves each ordered backbuffer segment and makes its contents exactly
+    // readable. The formerly false clear-after-draw and depth-only-clear declarations are also
+    // now measured true: both operations split the logical cycle at their public position.
+    constexpr Contract kContract{"SDL_GPU", Support::Exact, true, Support::Exact,
+                                 true, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, false, false, true, false, false};

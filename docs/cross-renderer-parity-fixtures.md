@@ -10,8 +10,8 @@ either of them failing, and which have to be kept in step by hand for as long as
 
 A **parity fixture** is one renderer-neutral source that states a behaviour *and its expected
 result*, executed unchanged by every renderer that opts in. There is one oracle, so "EasyGL and
-WebGPU agree" is something the suite can actually establish rather than something a reader infers
-from two green tests.
+another renderer agree" is something the suite can actually establish rather than something a
+reader infers from two green tests.
 
 This is not a new harness. It extends the renderer-agnostic dump-and-compare mechanism that
 `modules/graphics/examples/cross_renderer_diagnostic_scene.cpp` and `cross_renderer_2d_corpus.cpp`
@@ -30,8 +30,9 @@ already used, and it writes its frames in exactly the format `cross_renderer_dia
    `modules/graphics/examples/parity/ParityFixtures.cmake`.
 
 That is the whole cost. Every renderer whose `examples/CMakeLists.txt` calls
-`cna_register_parity_fixtures()` — EasyGL and WebGPU today — builds the new source into
-`cna_parity_<name>_<renderer>` and registers `<Renderer>_Parity_<name>` as a CTest automatically.
+`cna_register_parity_fixtures()` — EasyGL, WebGPU and SDL GPU today — builds and registers the new
+source as `<Renderer>_Parity_<name>` automatically. SDL GPU uses the helper's `TARGET_PREFIX`
+option to retain its established executable names; that changes no fixture or oracle.
 
 ## Running them
 
@@ -40,6 +41,7 @@ Each renderer's own build runs its half as an ordinary test:
 ```bash
 ctest --test-dir cmake-build-debug  -R 'EasyGL_Parity'  --output-on-failure   # OPENGL33 build
 ctest --test-dir cmake-build-webgpu -R 'WebGPU_Parity' --output-on-failure    # WEBGPU build
+ctest --test-dir cmake-build-sdlgpu -R 'SdlGpu_Parity' --output-on-failure    # SDL_GPU build
 ```
 
 The cross-renderer pixel comparison needs both builds, because `CNA_GRAPHICS_RENDERER` is a
@@ -48,6 +50,7 @@ compile-time choice:
 ```bash
 scripts/run-parity-fixture.sh vertex_semantics            # both legs + cna_diag_compare
 scripts/run-parity-fixture.sh vertex_semantics cmake-build-debug cmake-build-webgpu 2
+scripts/run-parity-corpus.sh cmake-build-debug cmake-build-sdlgpu sdlgpu
 ```
 
 Each fixture executable also takes an optional output path and writes its whole backbuffer there as

@@ -14,6 +14,9 @@ set(CNA_PARITY_FIXTURE_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
 # The fixture names, without the `parity_` prefix or the `.cpp` suffix.
 set(CNA_PARITY_FIXTURES
+    # SDLGPU-85: construction-time PresentationParameters.MultiSampleCount produces a real
+    # multisample backbuffer resolve, proved by partially covered pixels on an opaque diagonal.
+    backbuffer_msaa
     # WEBGPU-155: the same mesh through declarations that differ only in element order/offset,
     # plus the semantic cases WEBGPU-156/157/158/159 each add their own leg to.
     vertex_semantics
@@ -78,6 +81,9 @@ set(CNA_PARITY_FIXTURES
     # WEBGPU-190 (stencil family): every StencilOperation, verified by gating a second quad on the
     # value the operation should have written.
     stencil_states
+    # SDLGPU-58: all eight stencil CompareFunctions, plus an Always -> Never -> Always sequence
+    # that detects incomplete immutable-pipeline cache identity and bad restoration.
+    stencil_compare
     # WEBGPU-190 (rasterizer/viewport family): cull modes with BOTH windings, the scissor, a
     # viewport sub-region, a render-target round trip, cull-state leakage and depth bias.
     rasterizer_viewport
@@ -100,20 +106,35 @@ set(CNA_PARITY_FIXTURES
 #   BUILDER        name of the renderer's own "add an example executable" macro, called as
 #                  <BUILDER>(<target> <source>) -- e.g. cna_easygl_test / cna_webgpu_test.
 #   TARGET_SUFFIX  suffix for the executable name: cna_parity_<fixture>_<suffix>.
+#   TARGET_PREFIX  optional complete target prefix. When set, executable names are
+#                  <prefix><fixture><suffix>; this lets an established renderer adopt the central
+#                  registry without renaming and rebuilding every existing parity executable.
 #   TEST_PREFIX    prefix for the CTest name: <prefix>_Parity_<fixture>.
 #   LABELS         CTest labels (multi-value, forwarded verbatim).
 #   ENVIRONMENT    CTest environment entries (multi-value, forwarded verbatim).
 #   TIMEOUT        per-fixture CTest timeout in seconds (default 60).
+#   FAIL_REGULAR_EXPRESSION optional validation/error patterns made fatal for every fixture.
 function(cna_register_parity_fixtures)
-    cmake_parse_arguments(P "" "BUILDER;TARGET_SUFFIX;TEST_PREFIX;TIMEOUT" "LABELS;ENVIRONMENT" ${ARGN})
-    if(NOT P_BUILDER OR NOT P_TARGET_SUFFIX OR NOT P_TEST_PREFIX)
-        message(FATAL_ERROR "cna_register_parity_fixtures: BUILDER, TARGET_SUFFIX and TEST_PREFIX are required")
+    cmake_parse_arguments(P ""
+        "BUILDER;TARGET_SUFFIX;TARGET_PREFIX;TEST_PREFIX;TIMEOUT"
+        "LABELS;ENVIRONMENT;FAIL_REGULAR_EXPRESSION" ${ARGN})
+    if(P_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR
+            "cna_register_parity_fixtures: unparsed arguments: ${P_UNPARSED_ARGUMENTS}")
+    endif()
+    if(NOT P_BUILDER OR NOT P_TEST_PREFIX OR (NOT P_TARGET_PREFIX AND NOT P_TARGET_SUFFIX))
+        message(FATAL_ERROR
+            "cna_register_parity_fixtures: BUILDER, TEST_PREFIX and TARGET_SUFFIX or TARGET_PREFIX are required")
     endif()
     if(NOT P_TIMEOUT)
         set(P_TIMEOUT 60)
     endif()
     foreach(_fixture IN LISTS CNA_PARITY_FIXTURES)
-        set(_target "cna_parity_${_fixture}_${P_TARGET_SUFFIX}")
+        if(P_TARGET_PREFIX)
+            set(_target "${P_TARGET_PREFIX}${_fixture}${P_TARGET_SUFFIX}")
+        else()
+            set(_target "cna_parity_${_fixture}_${P_TARGET_SUFFIX}")
+        endif()
         set(_source "${CNA_PARITY_FIXTURE_DIR}/parity_${_fixture}.cpp")
         if(NOT EXISTS "${_source}")
             message(FATAL_ERROR "cna_register_parity_fixtures: no source for fixture '${_fixture}' at ${_source}")
@@ -123,5 +144,9 @@ function(cna_register_parity_fixtures)
         cmake_language(CALL ${P_BUILDER} ${_target} "${_source}")
         cna_register_renderer_test(NAME "${P_TEST_PREFIX}_Parity_${_fixture}" COMMAND ${_target}
             TIMEOUT ${P_TIMEOUT} LABELS ${P_LABELS} ENVIRONMENT ${P_ENVIRONMENT})
+        if(P_FAIL_REGULAR_EXPRESSION)
+            set_tests_properties("${P_TEST_PREFIX}_Parity_${_fixture}" PROPERTIES
+                FAIL_REGULAR_EXPRESSION "${P_FAIL_REGULAR_EXPRESSION}")
+        endif()
     endforeach()
 endfunction()

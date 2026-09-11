@@ -99,6 +99,8 @@ def classify(record: FileRecord) -> str | None:
     if path in {
         "modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/"
         "SdlGpuCompiledEffectTests.cpp",
+        "modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/"
+        "SdlGpuShaderCrossTests.cpp",
     }:
         return "renderer-native-runtime-test"
 

@@ -520,18 +520,55 @@ protected:
         Check(Matches(discardSingularFaces[2], discardPluralFaces[2]),
               "singular and plural DiscardContents treat the selected face identically");
 
-        RenderTarget2D rt2D(device, kCubeSize, kCubeSize, false,
+        // SDLGPU-67: make this a deliberately different extent from both the cube face and the
+        // backbuffer.  Dirty public viewport/scissor state before each transition so the exact
+        // reset destination, rather than a coincidentally retained rectangle, is observable.
+        const Viewport backbufferViewport = device.getViewportProperty();
+        const Rectangle backbufferScissor = device.getScissorRectangleProperty();
+        constexpr int kPeerWidth = 19;
+        constexpr int kPeerHeight = 23;
+        RenderTarget2D rt2D(device, kPeerWidth, kPeerHeight, false,
                             SurfaceFormat::Color, DepthFormat::None, 0,
                             RenderTargetUsage::PreserveContents);
+        Viewport dirtyCubeViewport(3, 4, 7, 8);
+        dirtyCubeViewport.setMinDepthProperty(0.2f);
+        dirtyCubeViewport.setMaxDepthProperty(0.8f);
+        device.setViewportProperty(dirtyCubeViewport);
+        device.setScissorRectangleProperty(Rectangle(2, 3, 5, 6));
         device.SetRenderTargets({RenderTargetBinding(&rt2D)});
         const auto one2D = device.GetRenderTargets();
         Check(one2D.size() == 1
-              && one2D[0].getRenderTargetProperty() == &rt2D,
-              "ordinary one-binding RenderTarget2D remains intact");
+              && one2D[0].getRenderTargetProperty() == &rt2D
+              && device.getViewportProperty().getXProperty() == 0
+              && device.getViewportProperty().getYProperty() == 0
+              && device.getViewportProperty().getWidthProperty() == kPeerWidth
+              && device.getViewportProperty().getHeightProperty() == kPeerHeight
+              && device.getViewportProperty().getMinDepthProperty() == 0.0f
+              && device.getViewportProperty().getMaxDepthProperty() == 1.0f
+              && device.getScissorRectangleProperty()
+                     == Rectangle(0, 0, kPeerWidth, kPeerHeight),
+              "cube-to-different-size RenderTarget2D resets viewport, depth range and scissor");
+        Viewport dirtyPeerViewport(1, 2, 5, 7);
+        dirtyPeerViewport.setMinDepthProperty(0.25f);
+        dirtyPeerViewport.setMaxDepthProperty(0.75f);
+        device.setViewportProperty(dirtyPeerViewport);
+        device.setScissorRectangleProperty(Rectangle(1, 2, 4, 5));
         device.SetRenderTargets({});
         Check(device.GetRenderTargets().empty()
-              && device.getViewportProperty().getWidthProperty() != kCubeSize,
-              "zero plural bindings restore the backbuffer and clear public target state");
+              && device.getViewportProperty().getXProperty()
+                     == backbufferViewport.getXProperty()
+              && device.getViewportProperty().getYProperty()
+                     == backbufferViewport.getYProperty()
+              && device.getViewportProperty().getWidthProperty()
+                     == backbufferViewport.getWidthProperty()
+              && device.getViewportProperty().getHeightProperty()
+                     == backbufferViewport.getHeightProperty()
+              && device.getViewportProperty().getMinDepthProperty()
+                     == backbufferViewport.getMinDepthProperty()
+              && device.getViewportProperty().getMaxDepthProperty()
+                     == backbufferViewport.getMaxDepthProperty()
+              && device.getScissorRectangleProperty() == backbufferScissor,
+              "different-size RenderTarget2D-to-backbuffer restores exact viewport, depth range and scissor");
 
         bool nullRejected = false;
         try {

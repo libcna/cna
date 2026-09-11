@@ -8,7 +8,9 @@
 //
 // Check A -- GameWindow handle returns a real, non-null SDL_Window.
 // Check B -- SDL_GetRenderer(window) is null (this renderer does not use SDL_Renderer).
-// Check C -- GetViewportSize() reports a positive width/height matching the real window.
+// Check C -- on the first frame, both the renderer and public GraphicsDevice viewport already
+//   report the requested native backbuffer dimensions. This must not wait for the first lazy
+//   swapchain acquisition to replace the renderer's constructor-time size.
 // Check D -- a real SdlGpuVertexBufferRenderer/SdlGpuIndexBufferRenderer round-trip: SetData()
 //   followed by GetVertexCount()/GetIndexCount() reports the exact count uploaded (Phase SDLGPU-5,
 //   SDLGPU-23) -- see sdlgpu_2d_test.cpp for the fuller Texture2D/SpriteBatch vertical-slice proof.
@@ -23,23 +25,33 @@
 //   GPU stalls on in-flight reads of the old backing memory, not what ends up readable afterward),
 //   so this is a real-API-usage/no-longer-silently-ignored proof, not a visually distinguishing one.
 //
-// Exit code 0 = all checks PASS, 1 = any FAILs.
+// SDLGPU-57 additionally freezes every current public capability answer and the two numeric limits
+// that would otherwise inherit wider common defaults. Exit code 0 = all checks PASS, 1 = any FAILs.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 
 #include "common/PixelTestGame.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -48,6 +60,74 @@ using namespace CNA::Internal::Renderers::SdlGpu;
 namespace
 {
     constexpr int kTotalFrames = 60;
+#if defined(CNA_SDL_GPU_SHADER_EFFECTS)
+    constexpr int kExpectedChecks = 30;
+#else
+    // Unsupported-compiler builds also verify the diagnostic returned by CreateEffectRenderer.
+    constexpr int kExpectedChecks = 31;
+#endif
+
+    int RunHeadlessGraphicsDeviceProbe(const char* requestedDriver)
+    {
+        int passed = 0;
+        constexpr int kExpected = 6;
+        const auto check = [&](bool ok, const char* label)
+        {
+            std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
+            if (ok) ++passed;
+        };
+
+        try
+        {
+            PresentationParameters parameters;
+            parameters.setBackBufferWidthProperty(32);
+            parameters.setBackBufferHeightProperty(24);
+            parameters.setPresentationIntervalProperty(PresentInterval::Immediate);
+            parameters.setHeadlessEXTProperty(true);
+
+            GraphicsAdapter& adapter = GraphicsAdapter::getDefaultAdapterProperty();
+            GraphicsDevice device(adapter, GraphicsProfile::HiDef, parameters);
+            auto* renderer = dynamic_cast<SdlGpuRenderer*>(&device.GetRenderer());
+            check(renderer != nullptr,
+                  "headless public GraphicsDevice uses SdlGpuRenderer");
+            check(renderer != nullptr && renderer->IsHeadlessEXT(),
+                  "renderer creates no window or swapchain in HeadlessEXT mode");
+            const std::string actualDriver = renderer != nullptr
+                ? renderer->GetDriverNameEXT() : std::string{};
+            check(actualDriver == requestedDriver,
+                  "headless GraphicsDevice selects the requested native graphics driver");
+
+            const Viewport viewport = device.getViewportProperty();
+            check(viewport.getWidthProperty() == 32 && viewport.getHeightProperty() == 24,
+                  "headless public viewport preserves the requested backbuffer dimensions");
+
+            const Color backbufferColor(13, 71, 199, 233);
+            device.Clear(backbufferColor);
+            const Rectangle backbufferProbe(11, 7, 1, 1);
+            Color backbufferPixel;
+            device.GetBackBufferData(&backbufferProbe, &backbufferPixel, 0, 1);
+            check(backbufferPixel == backbufferColor,
+                  "headless public Clear/GetBackBufferData round-trips exact RGBA");
+
+            const Color targetColor(219, 41, 87, 157);
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(targetColor);
+            device.SetRenderTarget(nullptr);
+            std::array<Color, 16> targetPixels{};
+            target.GetData(targetPixels.data(), static_cast<int>(targetPixels.size()));
+            check(std::all_of(targetPixels.begin(), targetPixels.end(),
+                              [&](const Color& pixel) { return pixel == targetColor; }),
+                  "headless public RenderTarget2D clear/readback is exact on every pixel");
+        }
+        catch (const std::exception& exception)
+        {
+            std::printf("[FAIL] headless GraphicsDevice probe raised: %s\n", exception.what());
+        }
+
+        std::printf("=== %d/%d PASS ===\n", passed, kExpected);
+        return passed == kExpected ? 0 : 1;
+    }
 }
 
 class SdlGpuSmokeTest : public Game
@@ -79,6 +159,11 @@ protected:
             int height = 0;
             renderer.GetViewportSize(width, height);
             check(width > 0 && height > 0, "GetViewportSize() reports a positive size");
+            check(width == 320 && height == 240,
+                  "first-frame renderer viewport matches the requested native backbuffer");
+            const Viewport firstViewport = dev.getViewportProperty();
+            check(firstViewport.getWidthProperty() == 320 && firstViewport.getHeightProperty() == 240,
+                  "first-frame public Viewport matches the requested native backbuffer");
 
             auto vb = renderer.CreateVertexBuffer(3);
             const float verts[3 * 2] = {0, 0, 1, 0, 0, 1};
@@ -104,6 +189,76 @@ protected:
             ib->SetData16WithOptions(indicesNoOverwrite, 3, SetDataOptions::NoOverwrite);
             check(ib->GetIndexCount() == 3,
                   "IndexBuffer.SetData16WithOptions(Discard then NoOverwrite) round-trips the exact count");
+
+            check(dev.SupportsCapability(CNA::GraphicsCapability::ThreeD),
+                  "ThreeD is reported because stock 3D draws are implemented");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::DepthStencilBuffer),
+                  "DepthStencilBuffer is reported for the selected combined format");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::StencilBuffer),
+                  "StencilBuffer agrees with the selected combined format");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering),
+                  "AnisotropicFiltering is enabled by the default SDL GPU device contract");
+#if defined(CNA_SDL_GPU_SHADER_EFFECTS)
+            check(dev.SupportsCapability(CNA::GraphicsCapability::CustomEffects),
+                  "CustomEffects is reported because target-native ShaderEffect compilation is available");
+#else
+            check(!dev.SupportsCapability(CNA::GraphicsCapability::CustomEffects),
+                  "CustomEffects is refused without a target-native ShaderEffect compiler");
+            auto unavailableEffect = renderer.CreateEffectRenderer("void main() {}", "void main() {}");
+            check(!unavailableEffect->IsValid() &&
+                      unavailableEffect->GetCompileError().find("target-native") != std::string::npos,
+                  "unavailable ShaderEffect construction returns a precise diagnostic");
+#endif
+            check(dev.SupportsCapability(CNA::GraphicsCapability::Texture3D),
+                  "Texture3D is reported because storage and transfer are real");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::AdditiveBlending),
+                  "AdditiveBlending is reported because the pixel contract passes");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::CompiledEffects) ==
+                      renderer.SupportsCompiledEffects(),
+                  "CompiledEffects agrees with this build's optional runtime");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
+                  "MSAA is reported after the renderer's live color/depth format query");
+
+            check(dev.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets),
+                  "MRT is reported after independent fragment outputs and mixed-format pipelines");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::WireFrame),
+                  "WireFrame is reported because native line fill is pixel-verified");
+            check(!dev.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery),
+                  "OcclusionQuery is false because the underlying API exposes no query primitive");
+            bool queryRefused = false;
+            try
+            {
+                (void)renderer.CreateOcclusionQuery();
+            }
+            catch (const std::exception& error)
+            {
+                queryRefused = std::string_view(error.what()).find(
+                    "no occlusion-query or query-pool commands") != std::string_view::npos;
+            }
+            check(queryRefused,
+                  "OcclusionQuery factory deterministically refuses the unsupported operation");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput),
+                  "MultiStreamVertexInput is reported after split-stream pixel verification");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::Instancing),
+                  "Instancing is reported after per-instance placement verification");
+            check(dev.SupportsCapability(CNA::GraphicsCapability::FloatRenderTargets) ==
+                      dev.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4) &&
+                      dev.SupportsCapability(CNA::GraphicsCapability::HalfFloatRenderTargets) ==
+                      dev.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable),
+                  "float render-target capabilities agree with exact live format support");
+            check(!dev.SupportsCapability(
+                      CNA::GraphicsCapability::HalfFloatTextureLinearFiltering),
+                  "half-float filtering is false while half-float storage is absent");
+            check(!dev.SupportsCapability(CNA::GraphicsCapability::ComputeShaders) &&
+                      !dev.SupportsCapability(CNA::GraphicsCapability::IndirectDraw),
+                  "out-of-scope modern capabilities are not inherited as true");
+
+            check(renderer.GetMaxVertexStreams() == 16,
+                  "numeric vertex-stream limit agrees with the XNA public ceiling");
+            const std::string_view limitations = renderer.GetAdditionalLimitationsTextEXT();
+            check(limitations.find("WireFrame") == std::string_view::npos &&
+                      limitations.find("OcclusionQuery") != std::string_view::npos,
+                  "generated capability report names qualitative limitations");
         }
 
         dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
@@ -115,8 +270,8 @@ protected:
         if (frame_ == kTotalFrames)
         {
             check(true, "60 frames of Clear()+Present() completed with no exception");
-            std::printf("=== %d/%d PASS ===\n", passCount_, 8);
-            result_ = (passCount_ == 8) ? 0 : 1;
+            std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
+            result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
             Exit();
         }
     }
@@ -127,6 +282,9 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(320);
         gdm_->setPreferredBackBufferHeightProperty(240);
+        // This smoke explicitly clears and advertises stencil, so request the XNA format that
+        // actually owns a stencil plane rather than relying on the Depth24 manager default.
+        gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
         // GraphicsDeviceManager.SynchronizeWithVerticalRetrace defaults to true (the XNA
         // default); this test's virtual/headless display has no real vblank signal, so leaving
         // VSync on makes every frame wait roughly a second, blowing past this test's frame
@@ -138,8 +296,65 @@ public:
     int getResult() const { return result_; }
 };
 
-int main()
+int main(int argc, char** argv)
 {
+    if (argc == 3 && std::string_view(argv[1]) == "--headless-graphics-device")
+        return RunHeadlessGraphicsDeviceProbe(argv[2]);
+
+    if (argc == 3 && std::string_view(argv[1]) == "--headless-stock-shaders")
+    {
+        try
+        {
+            const std::string driver =
+                SdlGpuRenderer::ValidateStockShadersForDriverEXT(argv[2]);
+            std::printf("[PASS] requested native graphics driver '%s' was selected\n",
+                        driver.c_str());
+            std::printf("[PASS] all %zu production stock shaders were created and released\n",
+                        SdlGpuConstructionShaderCountEXT);
+            std::printf("=== 2/2 PASS ===\n");
+            return 0;
+        }
+        catch (const std::exception& exception)
+        {
+            std::printf("[FAIL] headless stock-shader portability probe: %s\n",
+                        exception.what());
+            return 1;
+        }
+    }
+
+    if (argc == 3 && std::string_view(argv[1]) == "--headless-stock-pixel")
+    {
+        try
+        {
+            constexpr std::array<std::uint8_t, 4> expectedDraw{17, 83, 201, 239};
+            constexpr std::array<std::uint8_t, 4> expectedClear{3, 7, 13, 255};
+            const SdlGpuHeadlessStockDrawResultEXT result =
+                SdlGpuRenderer::ValidateStockDrawForDriverEXT(argv[2]);
+            const bool driverMatches = result.driverName == argv[2];
+            const bool drawMatches = result.drawnPixel == expectedDraw;
+            const bool clearMatches = result.clearPixel == expectedClear;
+            std::printf("[%s] requested native graphics driver '%s' was selected\n",
+                        driverMatches ? "PASS" : "FAIL", result.driverName.c_str());
+            std::printf("[%s] stock colored triangle centre is RGBA=(%u,%u,%u,%u)\n",
+                        drawMatches ? "PASS" : "FAIL", result.drawnPixel[0],
+                        result.drawnPixel[1], result.drawnPixel[2], result.drawnPixel[3]);
+            std::printf("[%s] untouched corner retains clear RGBA=(%u,%u,%u,%u)\n",
+                        clearMatches ? "PASS" : "FAIL", result.clearPixel[0],
+                        result.clearPixel[1], result.clearPixel[2], result.clearPixel[3]);
+            const int passed = static_cast<int>(driverMatches) +
+                               static_cast<int>(drawMatches) +
+                               static_cast<int>(clearMatches);
+            std::printf("=== %d/3 PASS ===\n", passed);
+            return passed == 3 ? 0 : 1;
+        }
+        catch (const std::exception& exception)
+        {
+            std::printf("[FAIL] headless stock-pixel portability probe: %s\n",
+                        exception.what());
+            return 1;
+        }
+    }
+
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
 

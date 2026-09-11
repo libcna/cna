@@ -114,6 +114,15 @@ namespace
         [[nodiscard]] bool IsValid() const override { return false; }
         [[nodiscard]] std::string GetCompileError() const override { return {}; }
     };
+
+    class DefaultsOnlyCubeTarget final
+        : public CNA::Internal::Renderers::IRenderTargetCubeRenderer
+    {
+    public:
+        [[nodiscard]] int GetSize() const override { return 1; }
+        void BindAsRenderTargetFace(int) override {}
+        void UnbindAsRenderTarget() override {}
+    };
 }
 
 TEST(RendererCapabilityDefaultsTest, ProfileCeilingsDefaultToNoCeiling)
@@ -152,6 +161,9 @@ TEST(RendererCapabilityDefaultsTest, FormatClassifiersDefaultToDefer)
             << "format ordinal " << format;
         EXPECT_EQ(renderer.ClassifyRenderTargetFormatEXT(format), RendererFormatVerdict::Defer)
             << "format ordinal " << format;
+        EXPECT_EQ(renderer.ClassifyRenderTargetCubeFormatEXT(format),
+                  RendererFormatVerdict::Defer)
+            << "cube-target format ordinal " << format;
         EXPECT_EQ(renderer.ClassifyColorTransferFormatEXT(format), RendererFormatVerdict::Defer)
             << "format ordinal " << format;
     }
@@ -349,9 +361,11 @@ TEST(RendererCapabilityDefaultsTest, AppliedFormatAccessorsEchoTheRequest)
     // The pre-existing members of this family, pinned alongside the new ones so the whole
     // "renderer reports what it actually applied" surface has one consistent default.
     DefaultsOnlyRenderer renderer;
+    DefaultsOnlyCubeTarget cubeTarget;
     for (const int requested : {0, 1, 5, 19})
     {
         EXPECT_EQ(renderer.GetAppliedBackBufferFormatEXT(requested), requested);
         EXPECT_EQ(renderer.GetAppliedDepthStencilFormatEXT(requested), requested);
+        EXPECT_EQ(cubeTarget.GetAppliedDepthStencilFormatEXT(requested), requested);
     }
 }

@@ -412,7 +412,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // component order. Verified by a real sampled draw including a NEGATIVE texel
     // (Vulkan_NormalizedByteFormat), which is the only thing that distinguishes SNORM storage from
     // UNORM storage of the same bytes.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -425,7 +425,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
     // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8B8A8_SNORM.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -442,7 +442,7 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
     // VK_FORMAT_A1R5G5B5_UNORM_PACK16 field for field -- core 1.0, no extension. Verified by a real
     // sampled draw (Vulkan_Packed16Format), not by a readback, which Texture2D serves from a CPU
     // copy and which therefore cannot see a wrong channel order.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -675,21 +675,20 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // to end on both its backends, and only if its texel is a multiple of four bytes -- the
         // framework's own transfer rule, which ByteEXT, UShortEXT and HalfSingle would break.
         const bool igl = CNA_RENDERER_IS(Igl);
-        // WEBGPU-184: WEBGPU joins the signed-normalized set -- `rg8snorm`/`rgba8snorm` are core
-        // WebGPU formats, stored natively. The name keeps its EasyGL prefix only because the list
-        // began there; what it selects is "renderers that store SNORM", which now includes this one.
+        // WEBGPU-184/SDLGPU-69: these renderers provide the signed-normalized formats end to end.
+        // The name keeps its EasyGL prefix only because the list began there.
         const bool easyGlSignedNormalized =
-            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU);
+            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, SdlGpu);
         // plan_vulkan.md VULKAN-174: CNA's Vulkan renderer stores both, as VK_FORMAT_R8G8_SNORM and
         // VK_FORMAT_R8G8B8A8_SNORM. Kept as its own flag rather than folded into the EasyGL one
         // above for the reason vulkanPacked16 is separate: these two renderers promote different
         // sets, and one merged predicate would stop this sweep saying which.
-        const bool vulkanSignedNormalized = CNA_RENDERER_IS(Vulkan);
+        const bool vulkanSignedNormalized = CNA_RENDERER_IS(Vulkan, SdlGpu);
         // REMED-GFX-244: the packed 16-bit formats Reach permits, promoted on the same ES 3
         // generation the signed-normalized pair needs and verified by a real sampled draw
         // (EasyGL_Packed16Format) rather than by a readback, which this renderer serves from a CPU
         // copy and which therefore cannot see a wrong channel order.
-        const bool easyGlPacked16 = CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
+        const bool easyGlPacked16 = CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, SdlGpu);
         // plan_vulkan.md VULKAN-173: CNA's Vulkan renderer stores the two packed 16-bit formats
         // whose exact VkFormat is CORE 1.0 -- Bgr565 as VK_FORMAT_R5G6B5_UNORM_PACK16 and Bgra5551
         // as VK_FORMAT_A1R5G5B5_UNORM_PACK16, both field for field. Bgra4444 is deliberately NOT
@@ -697,7 +696,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // 1.3, while the instance asks for 1.1, so the renderer refuses it by name (VULKAN-179).
         // A separate flag rather than an addition to the line above, because the two renderers
         // promote DIFFERENT sets and merging them would hide exactly that.
-        const bool vulkanPacked16 = CNA_RENDERER_IS(Vulkan);
+        const bool vulkanPacked16 = CNA_RENDERER_IS(Vulkan, SdlGpu);
         // plan_vulkan.md VULKAN-179: Bgra4444 is the one format in this whole sweep whose
         // promotion is a DEVICE fact rather than a renderer fact, so it is the one entry derived
         // from the renderer instead of named. VK_FORMAT_A4R4G4B4_UNORM_PACK16 has no core-1.1
@@ -708,7 +707,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // the WHOLE predicate from ClassifySurfaceFormatEXT would turn this sweep into a tautology
         // against Texture2D's own gate and stop it asserting anything about the renderer.
         const bool vulkanA4R4G4B4 =
-            CNA_RENDERER_IS(Vulkan) &&
+            CNA_RENDERER_IS(Vulkan, SdlGpu) &&
             gd.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Bgra4444)) ==
                 CNA::Internal::Renderers::RendererFormatVerdict::Supported;
         // REMED-GFX-242: this fixture's device is Reach, and a format the profile excludes is
@@ -716,26 +715,18 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // not an alternative to it.
         const bool profileAllows =
             Texture::IsFormatAllowedByProfileEXT(GraphicsProfile::Reach, format);
-        // plans/plan_webgpu.md WEBGPU-144 stored block-compressed content GPU-natively on WebGPU --
-        // the raw BC blocks go to a BC texture and the GPU decodes at sample time
-        // (webgpu_compressed_texture_test proves both the sampled draw and a byte-exact GetData
-        // round-trip). This list was never told, so from that commit until now the loop demanded a
-        // throw from six formats the renderer genuinely supports, and failed on WEBGPU for exactly
-        // as long as both halves had their current contents -- the same shape of contradiction the
-        // Skia note below records.
+        // WEBGPU-144/SDLGPU-69: block-compressed support is a runtime storage decision. WebGPU and
+        // SDL GPU may upload native BC blocks; SDL GPU can instead decode them into RGBA8 while
+        // preserving the public compressed-transfer contract.
         //
         // Unlike every other clause here this one is not a hardcoded list ANDed with an identity:
-        // BC is an OPTIONAL adapter feature, so "supported" is a runtime question on this renderer
-        // and a build-time list would be wrong on an adapter without it. The renderer is asked the
-        // separate question it already answers -- "do you transfer this format as blocks?", which
-        // carries its own device-feature gate -- and the assertion is that the two halves of the
-        // contract agree: a format the renderer stores as blocks must construct, and one it does
-        // not must throw.
-        const bool webgpuBlockCompressed =
-            CNA_RENDERER_IS(WebGPU) &&
+        // BC is an OPTIONAL native adapter feature, so a hardcoded identity list would be wrong.
+        // Ask the renderer whether the public transfer layout is block-compressed; its answer may
+        // be backed by native storage or by an exact renderer-side decode fallback.
+        const bool rendererBlockCompressed =
             gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format));
         const bool supported = profileAllows && (format == SurfaceFormat::Color
-            || webgpuBlockCompressed
+            || rendererBlockCompressed
             || (easyGlSignedNormalized && (format == SurfaceFormat::NormalizedByte4
                                            || format == SurfaceFormat::NormalizedByte2))
             || (easyGlPacked16 && (format == SurfaceFormat::Bgr565

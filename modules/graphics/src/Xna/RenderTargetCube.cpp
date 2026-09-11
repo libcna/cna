@@ -66,6 +66,12 @@ namespace Microsoft::Xna::Framework::Graphics
         , usage_(usage)
     {
         rtCubeRenderer_ = static_cast<IRenderTargetCubeRenderer*>(GetRendererRaw());
+        if (rtCubeRenderer_)
+        {
+            depthFormat_ = static_cast<DepthFormat>(
+                rtCubeRenderer_->GetAppliedDepthStencilFormatEXT(
+                    static_cast<int>(preferredDepthFormat)));
+        }
         // MultiSampleCount reflects the renderer's real, device-clamped value (matching FNA's
         // FNA3D_GetMaxMultiSampleCount), not the raw constructor argument.
         if (rtCubeRenderer_)

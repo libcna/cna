@@ -31,6 +31,7 @@
 // Exit code 0 = all 5 checks PASS, 1 = any FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -79,6 +80,7 @@ namespace
 
 class DepthStencilStateCompareFunctionTest : public Game
 {
+    GraphicsDeviceManager graphics_{this};
     bool done_   = false;
     int  result_ = 1;
 

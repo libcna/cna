@@ -1219,14 +1219,13 @@ renderers, 24 of them byte-identical**:
 | localized difference, measured | `sprite_geometry` 32 px (its one half-pixel-destination cell's top and left coverage edges); `rasterizer_viewport` 276 of 12800 (the triangle hypotenuses, none in the quad cells); `fill_mode_wireframe` 367 of 32768 (the drawn line pixels themselves — GL line rules against a WebGPU line list) |
 | not compared, internal oracle | `compressed_cube` (which cube FACE a reflection lands on is convention-dependent; its oracle is a BC cube against an RGBA8 cube within one renderer); `sampler_filters` (magnification lands a linear gradient half a texel apart; its claims are point-vs-linear A/Bs within one renderer) |
 
-`sprite_sampler_state` is the newest entry and the one whose *agreement* is the finding. It asks
-whether a `SamplerState` field beyond the filter and the two address modes reaches a `SpriteBatch`
-draw, and the answer on both renderers is no: `SpriteBatch::Begin` forwards only those three through
-`ISpriteBatchRenderer`, so `MipMapLevelOfDetailBias`, `MaxMipLevel`, `MaxAnisotropy` and `AddressW`
-never leave the framework, while XNA assigns the whole state to `GraphicsDevice.SamplerStates[0]`.
-The fixture's own 3D control row proves the bias channel works where the renderer does receive it.
-Recorded as `plans/plan_graphics.md` row 1119 and deliberately NOT worked around inside this
-renderer, which could only invent a value it was never given.
+`sprite_sampler_state` was corrected by `SDLGPU-64` on 2026-09-09. `SpriteBatch::Begin` now assigns
+the complete state to `GraphicsDevice.SamplerStates[0]`, as XNA does, and the common renderer hook
+carries filter, all three address modes, anisotropy, `MaxMipLevel` and
+`MipMapLevelOfDetailBias`. The fixture now requires sprite biases +1 and -2 to select different mip
+colours, verifies every retained device property, passes on EasyGL and WebGPU, and the two complete
+frames remain byte-identical (max diff 0). WebGPU applies the bias with the same shader-side
+`textureSampleBias` semantic already used by its stock 3D paths.
 
 **Every localized difference and both internal oracles have the same single cause**: the XNA
 pixel-centre convention, which `WEBGPU-187` owns and which the two renderers do not yet agree on.
@@ -1257,12 +1256,9 @@ arriving here found no open list at all.
   linux-aarch64 wgpu-native packages. Hashes pinned, Linux x86_64 verified; the other three need
   hardware this machine does not have.
 
-Two gaps a reader will look for here are real but are **not** WebGPU's, and no WebGPU row should be
-opened for them:
+One gap a reader will look for here is real but is **not** WebGPU's, and no WebGPU row should be
+opened for it:
 
-* `plans/plan_graphics.md` row **1119** — `SpriteBatch.Begin(samplerState)` does not propagate the
-  complete sampler state through the shared CNA graphics layer, on any renderer. Measured on WEBGPU
-  and OPENGL33 alike; see the `sprite_sampler_state` fixture above.
 * `plans/plan_fx.md` **`FX-109`** — vertex-stage sampler support is absent from the shared
   renderer/device surface. A compiled pass that samples in the vertex stage is refused by name.
 

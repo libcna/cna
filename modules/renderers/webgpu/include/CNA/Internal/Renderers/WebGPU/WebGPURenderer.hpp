@@ -1068,6 +1068,19 @@ namespace CNA::Internal::Renderers::WebGPU
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override { textureFilter_ = textureFilter; }
         void SetSamplerAddressMode(int addressU, int addressV) override { addressU_ = addressU; addressV_ = addressV; }
+        /**
+         * @brief Captures every sampler property supplied to `SpriteBatch::Begin`.
+         *
+         * @param textureFilter Raw `TextureFilter` ordinal.
+         * @param addressU Raw `TextureAddressMode` ordinal for U.
+         * @param addressV Raw `TextureAddressMode` ordinal for V.
+         * @param addressW Raw `TextureAddressMode` ordinal for W.
+         * @param maxAnisotropy Requested maximum anisotropy.
+         * @param maxMipLevel Most detailed mip level the sampler may use.
+         * @param lodBias Mipmap level-of-detail bias.
+         */
+        void SetSamplerState(int textureFilter, int addressU, int addressV, int addressW,
+                             int maxAnisotropy, int maxMipLevel, float lodBias) override;
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
                   const Rectangle& destinationRectangle,
@@ -1089,6 +1102,10 @@ namespace CNA::Internal::Renderers::WebGPU
         int textureFilter_ = 0;
         int addressU_ = 1;
         int addressV_ = 1;
+        int addressW_ = 1;
+        int maxAnisotropy_ = 4;
+        int maxMipLevel_ = 0;
+        float lodBias_ = 0.0f;
         // REMED-GFX-102: captured once in Begin(), before any Draw calls are deferred/sorted.
         // Every resulting SpriteCommand receives this complete value snapshot.
         WebGPUSpriteBlendSnapshot blendSnapshot_{};
@@ -1150,6 +1167,8 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressV = 1;
             int addressW = 1;  ///< WEBGPU-160: the third addressing axis.
             int maxMipLevel = 0;  ///< WEBGPU-161: SamplerState.MaxMipLevel.
+            int maxAnisotropy = 4;
+            float lodBias = 0.0f;
             /// WEBGPU-154: `RasterizerState.FillMode == WireFrame` at this sprite's own public
             /// Draw call, captured by value like every other per-sprite state. A wireframe sprite
             /// is drawn as a 12-index line list over its own six vertices rather than as two
@@ -1682,6 +1701,10 @@ namespace CNA::Internal::Renderers::WebGPU
                          int textureFilter,
                          int addressU,
                          int addressV,
+                         int addressW,
+                         int maxAnisotropy,
+                         int maxMipLevel,
+                         float lodBias,
                          const WebGPUSpriteBlendSnapshot& blendSnapshot);
 
         [[nodiscard]] WGPUDevice Device() const { return device_; }

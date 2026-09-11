@@ -25,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -33,6 +34,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -244,6 +246,36 @@ TEST(SdlGpuCompiledEffectTest, CloneCarriesItsOwnValuesAndSurvivesTheSource)
     CompiledEffectDeviceState deviceState;
     CompiledEffectPassStateChanges changes;
     EXPECT_NO_THROW(clone->ApplyPass(0, deviceState, changes));
+}
+
+TEST(SdlGpuCompiledEffectTest, RuntimeCanBeDestroyedAfterItsGraphicsDevice)
+{
+    std::unique_ptr<ICompiledEffectRuntime> runtime;
+    std::unique_ptr<ICompiledEffectRuntime> clone;
+    CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect* concrete = nullptr;
+    CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect* concreteClone = nullptr;
+    {
+        GraphicsDevice device;
+        runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+        ASSERT_NE(runtime, nullptr) << "this build did not select the SDL_GPU renderer";
+        clone = runtime->Clone();
+        ASSERT_NE(clone, nullptr);
+        concrete = dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(
+            runtime.get());
+        concreteClone = dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(
+            clone.get());
+        ASSERT_NE(concrete, nullptr);
+        ASSERT_NE(concreteClone, nullptr);
+        EXPECT_FALSE(concrete->IsDetachedFromRendererEXT());
+        EXPECT_FALSE(concreteClone->IsDetachedFromRendererEXT());
+    }
+
+    ASSERT_NE(concrete, nullptr);
+    ASSERT_NE(concreteClone, nullptr);
+    EXPECT_TRUE(concrete->IsDetachedFromRendererEXT());
+    EXPECT_TRUE(concreteClone->IsDetachedFromRendererEXT());
+    EXPECT_NO_THROW(clone.reset());
+    EXPECT_NO_THROW(runtime.reset());
 }
 
 // ---- plans/plan_fx.md FX-071: vertex-attribute builder and uniform snapshot capture ------------------
@@ -635,6 +667,27 @@ TEST(SdlGpuCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARen
     EXPECT_NEAR(flatPixel.getAProperty(), 82, 3);
 }
 
+TEST(SdlGpuCompiledEffectDrawTest, StaticShaderCrossCompilesAndDrawsARepresentativeEffect)
+{
+    GraphicsDevice device;
+    SdlGpuRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr) << "this build did not select the SDL_GPU renderer";
+
+    const SDL_GPUShaderFormat deviceFormats = SDL_GetGPUShaderFormats(renderer->Device());
+    EXPECT_NE(MOJOSHADER_sdlGetShaderFormats() & deviceFormats, 0u);
+
+    MOJOSHADER_sdlContext* context = renderer->GetMojoShaderContextEXT();
+    ASSERT_NE(context, nullptr) << MOJOSHADER_sdlGetError(context);
+    if (!MOJOSHADER_sdlSetShaderCrossTestMode(context, 1))
+        GTEST_SKIP() << "this configuration does not link ShaderCross into MojoShader";
+
+    // The shared matrix constructs a synthetic XNA Effect, links several shader pairs, executes
+    // buffered/user and indexed/non-indexed draws, and checks distinct read-back colours. A stale
+    // dynamic-loader path cannot pass: no SDL_shadercross shared object is present in this build,
+    // and forcing this context makes every link use the statically linked compiler.
+    CNA::TestSupport::RunCompiledEffectDrawContract(device);
+}
+
 TEST(SdlGpuCompiledEffectDrawTest, RefusesADrawWithNoVertexDeclaration)
 {
     GraphicsDevice device;
@@ -698,7 +751,8 @@ TEST(SdlGpuCompiledEffectDrawTest, DrawsASpriteWithACompiledEffect)
     EXPECT_NO_THROW(renderer->QueueSprite(
         white.GetRenderer(), nativeTexture, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White,
         0.0f, Vector2::Zero, SpriteEffects::None, 0.0f, Matrix::getIdentityProperty(),
-        /*textureFilter=*/0, /*addressU=*/1, /*addressV=*/1,
+        /*textureFilter=*/0, /*addressU=*/1, /*addressV=*/1, /*addressW=*/1,
+        /*maxAnisotropy=*/4, /*maxMipLevel=*/0, /*lodBias=*/0.0f,
         /*customEffect=*/nullptr, /*compiledEffect=*/sdlGpuEffect));
 
     EXPECT_NO_THROW(renderer->Present());
@@ -849,6 +903,319 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, QueuedVolumeSamplerRetainsTextureUntilReplay)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticSamplingEffect({
+        {Fx::SampMagFilter, Fx::FilterPoint},
+        {Fx::SampMinFilter, Fx::FilterPoint},
+        {Fx::SampMipFilter, Fx::FilterPoint},
+        {Fx::SampAddressU, Fx::AddressClamp},
+        {Fx::SampAddressV, Fx::AddressClamp},
+        {Fx::SampAddressW, Fx::AddressWrap},
+    }, 0, CNA::TestSupport::SyntheticSamplerKind::Sampler3D));
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+
+    auto volume = std::make_unique<Texture3D>(
+        device, 2, 2, 2, /*mipMap=*/false, SurfaceFormat::Color);
+    const Color texels[8] = {
+        Color(255, 0, 0, 255), Color(255, 0, 0, 255),
+        Color(255, 0, 0, 255), Color(255, 0, 0, 255),
+        Color(0, 0, 255, 255), Color(0, 0, 255, 255),
+        Color(0, 0, 255, 255), Color(0, 0, 255, 255),
+    };
+    volume->SetData(texels, 8);
+    effect.getParametersProperty()["FxTexture"]->SetValue(volume.get());
+
+    CNA::TestSupport::SamplingQuadVertexXYZ quad[6];
+    // W=1.25 must wrap to the first (red) slice. A dropped/hard-coded AddressW clamps to the
+    // second (blue) slice, so this is also the missing end-to-end AddressW discriminator.
+    CNA::TestSupport::FillSamplingQuadXYZ(quad, 0.5f, 0.5f, 1.25f);
+    const VertexDeclaration declaration = CNA::TestSupport::SamplingQuadDeclarationXYZ();
+    RenderTarget2D target(device, 8, 8);
+    device.SetRenderTarget(&target);
+    device.Clear(Color(9, 19, 29, 255));
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    device.DrawUserPrimitives(
+        PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
+
+    // SDL_GPU submits the draw only when the target is consumed below. Destroying the public
+    // object here therefore proves that the queued sampler binding, rather than the wrapper,
+    // owns the native volume until replay completes.
+    volume.reset();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    Color centre(0, 0, 0, 0);
+    const Rectangle probe(4, 4, 1, 1);
+    target.GetData(0, &probe, &centre, 0, 1);
+    EXPECT_NEAR(centre.getRProperty(), 255, 3);
+    EXPECT_NEAR(centre.getGProperty(), 0, 3);
+    EXPECT_NEAR(centre.getBProperty(), 0, 3);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, QueuedDrawRetainsShadersAfterEffectDestruction)
+{
+    GraphicsDevice device;
+    SdlGpuRenderer* renderer = RendererOf(device);
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    ASSERT_NE(renderer, nullptr);
+
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    auto effect = std::make_unique<Effect>(
+        device,
+        CNA::TestSupport::BuildSyntheticSamplingEffect({
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        }));
+    effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+    effect->getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+
+    Texture2D source(device, 1, 1);
+    const Color sourcePixel[1] = {Color(227, 31, 73, 255)};
+    source.SetData(sourcePixel, 1);
+    effect->getParametersProperty()["FxTexture"]->SetValue(&source);
+
+    CNA::TestSupport::SamplingQuadVertex quad[6];
+    CNA::TestSupport::FillSamplingQuad(quad, 0.5f, 0.5f);
+    const VertexDeclaration declaration = CNA::TestSupport::SamplingQuadDeclaration();
+    RenderTarget2D target(device, 8, 8);
+    device.SetRenderTarget(&target);
+    device.Clear(Color(9, 19, 29, 255));
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    device.DrawUserPrimitives(
+        PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
+
+    // DrawUserPrimitives has already accepted the draw, but SDL_GPU will not create its pipeline
+    // or encode it until the target is consumed below. The queued command must therefore retain
+    // the applied pass's native shaders independently of the public Effect wrapper.
+    effect.reset();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    Color centre(0, 0, 0, 0);
+    const Rectangle probe(4, 4, 1, 1);
+    target.GetData(0, &probe, &centre, 0, 1);
+    EXPECT_NEAR(centre.getRProperty(), sourcePixel[0].getRProperty(), 3);
+    EXPECT_NEAR(centre.getGProperty(), sourcePixel[0].getGProperty(), 3);
+    EXPECT_NEAR(centre.getBProperty(), sourcePixel[0].getBProperty(), 3);
+    EXPECT_EQ(renderer->GetCompiledEffectPipelineCacheSizeEXT(), 0u)
+        << "the deferred command's lease must evict its pipeline after replay";
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, QueuedSpriteRetainsShadersAfterEffectDisposal)
+{
+    GraphicsDevice device;
+    SdlGpuRenderer* renderer = RendererOf(device);
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    ASSERT_NE(renderer, nullptr);
+
+    constexpr int kSize = 8;
+    auto effect = std::make_unique<Effect>(
+        device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+    effect->getParametersProperty()["Transform"]->SetValue(Matrix::CreateOrthographicOffCenter(
+        0.0f, static_cast<float>(kSize), static_cast<float>(kSize), 0.0f, -1.0f, 1.0f));
+    effect->getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+
+    Texture2D source(device, 1, 1);
+    const Color white[1] = {Color::White};
+    source.SetData(white, 1);
+    RenderTarget2D target(device, kSize, kSize);
+    device.SetRenderTarget(&target);
+    device.Clear(Color(9, 19, 29, 255));
+
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr, nullptr,
+                effect.get());
+    batch.Draw(source, Rectangle(0, 0, kSize, kSize), Color::White);
+    batch.End();
+
+    // End queues the sprite geometry but SDL_GPU still resolves the compiled pipeline at replay.
+    // Disposing and releasing the only public Effect owner must not invalidate that already-issued
+    // sprite; Dispose resets the compiled runtime immediately.
+    effect->Dispose();
+    effect.reset();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    Color centre(0, 0, 0, 0);
+    const Rectangle probe(kSize / 2, kSize / 2, 1, 1);
+    target.GetData(0, &probe, &centre, 0, 1);
+    EXPECT_NEAR(centre.getRProperty(), 64, 3);
+    EXPECT_NEAR(centre.getGProperty(), 128, 3);
+    EXPECT_NEAR(centre.getBProperty(), 191, 3);
+    EXPECT_EQ(renderer->GetCompiledEffectPipelineCacheSizeEXT(), 0u)
+        << "the deferred sprite's lease must evict its pipeline after replay";
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, RecreatedEffectsReceiveDistinctStablePipelineIdentities)
+{
+    GraphicsDevice device;
+    SdlGpuRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr ||
+        !CNA::TestSupport::SupportsCompiledEffects(device))
+    {
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    }
+
+    struct ClipVertex { float x, y, z; };
+    const ClipVertex quad[6] = {
+        {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+        {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+    };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    const auto effectBytes = CNA::TestSupport::BuildSyntheticDrawableEffect();
+    const Microsoft::Xna::Framework::Vector4 tint(0.2f, 0.5f, 0.8f, 1.0f);
+
+    std::vector<std::uint64_t> seenIdentities;
+
+    // Vulkan happens to retain shader wrappers through its pipeline objects, while the D3D12 and
+    // Metal backends free them immediately after the Effect releases its linked program.
+    // Therefore native wrapper addresses are not a cross-backend cache identity. Recreate the
+    // same Effect and alternate its two discriminating programs: pass 0 writes Tint.yzxw, while
+    // StatePass writes Tint unchanged. Every newly linked program must receive a fresh identity,
+    // and relinking it before destruction must preserve that identity.
+    for (int iteration = 0; iteration < 8; ++iteration)
+    {
+        const bool swizzled = (iteration % 2) == 0;
+        auto effect = std::make_unique<Effect>(device, effectBytes);
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect->getParametersProperty()["Tint"]->SetValue(tint);
+        effect->getTechniquesProperty()[0].getPassesProperty()[swizzled ? 0 : 1].Apply();
+
+        auto* runtime = dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(
+            effect->GetCompiledRuntimePtr());
+        ASSERT_NE(runtime, nullptr);
+
+        RenderTarget2D target(device, 8, 8);
+        device.SetRenderTarget(&target);
+        device.Clear(Color(9, 19, 29, 255));
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.DrawUserPrimitives(
+            PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
+
+        const std::uint64_t identity = runtime->LinkedProgramIdentityEXT();
+        ASSERT_NE(identity, 0u);
+        EXPECT_EQ(std::find(seenIdentities.begin(), seenIdentities.end(), identity),
+                  seenIdentities.end())
+            << "a destroyed program's cache identity was recycled at iteration " << iteration;
+        seenIdentities.push_back(identity);
+
+        // Applying and queueing the exact same pass again hits MojoShader's linker cache. Its
+        // identity must remain the one already folded into this renderer's pipeline key.
+        effect->getTechniquesProperty()[0].getPassesProperty()[swizzled ? 0 : 1].Apply();
+        device.DrawUserPrimitives(
+            PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
+        EXPECT_EQ(runtime->LinkedProgramIdentityEXT(), identity);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre(0, 0, 0, 0);
+        const Rectangle probe(4, 4, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        const Color expected = swizzled ? Color(128, 204, 51, 255)
+                                       : Color(51, 128, 204, 255);
+        EXPECT_NEAR(centre.getRProperty(), expected.getRProperty(), 3) << "iteration " << iteration;
+        EXPECT_NEAR(centre.getGProperty(), expected.getGProperty(), 3) << "iteration " << iteration;
+        EXPECT_NEAR(centre.getBProperty(), expected.getBProperty(), 3) << "iteration " << iteration;
+
+        EXPECT_EQ(renderer->GetCompiledEffectPipelineCacheSizeEXT(), 1u)
+            << "the live effect should retain and reuse its one immutable pipeline";
+        effect->Dispose();
+        effect.reset();
+        EXPECT_EQ(renderer->GetCompiledEffectPipelineCacheSizeEXT(), 0u)
+            << "a destroyed effect must not leave an unreachable GPU pipeline cached";
+    }
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, DeferredCompiledSpriteSurvivesTextureDestructionBeforeEnd)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    constexpr int kSize = 8;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::CreateOrthographicOffCenter(
+        0.0f, static_cast<float>(kSize), static_cast<float>(kSize), 0.0f, -1.0f, 1.0f));
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+
+    auto source = std::make_unique<Texture2D>(device, 1, 1);
+    const Color white[1] = {Color::White};
+    source->SetData(white, 1);
+    RenderTarget2D target(device, kSize, kSize);
+    device.SetRenderTarget(&target);
+    device.Clear(Color(9, 19, 29, 255));
+
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr, nullptr, &effect);
+    batch.Draw(*source, Rectangle(0, 0, kSize, kSize), Color::White);
+
+    // FNA's deferred textureInfo array holds a managed Texture2D reference through FlushBatch.
+    // CNA must provide the same lifetime without dereferencing a dead C++ renderer wrapper here.
+    source.reset();
+    batch.End();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color centre(0, 0, 0, 0);
+    const Rectangle probe(kSize / 2, kSize / 2, 1, 1);
+    target.GetData(0, &probe, &centre, 0, 1);
+    EXPECT_NEAR(centre.getRProperty(), 64, 3);
+    EXPECT_NEAR(centre.getGProperty(), 128, 3);
+    EXPECT_NEAR(centre.getBProperty(), 191, 3);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, AbandonedQueuedDrawReleasesShadersBeforeRendererContext)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    {
+        auto effect = std::make_unique<Effect>(
+            device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect->getParametersProperty()["Tint"]->SetValue(
+            Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+
+        struct ClipVertex { float x, y, z; };
+        const ClipVertex quad[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+            {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        RenderTarget2D target(device, 8, 8);
+        device.SetRenderTarget(&target);
+        effect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        device.DrawUserPrimitives(
+            PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
+
+        // Deliberately neither unbind nor consume the target. This leaves the lease queued after
+        // its Effect and target wrappers are gone, so GraphicsDevice teardown must discard the
+        // command while MojoShader's context is still valid.
+        effect.reset();
+    }
 }
 
 TEST(SdlGpuCompiledEffectDrawTest, SharedManyDrawsContract)

@@ -239,26 +239,25 @@ namespace Microsoft::Xna::Framework::Graphics
                 // resolved state is always (re-)applied — never left over from a previous Begin().
                 const SamplerState& effectiveSampler = samplerState ? *samplerState : SamplerState::LinearClamp;
                 effectiveSampler_ = effectiveSampler;
-                renderer_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
-                renderer_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
-                                                static_cast<int>(effectiveSampler.getAddressVProperty()));
-                renderer_->SetSamplerMipState(effectiveSampler.getMaxMipLevelProperty(),
-                                              effectiveSampler.getMipMapLevelOfDetailBiasProperty());
-                // XNA assigns the WHOLE SamplerState to GraphicsDevice.SamplerStates[0]; this layer
-                // forwarded the filter and the U/V axes and dropped W. Harmless for 2D sampling,
-                // decisive for a custom effect's sampler3D whose W can leave [0,1].
+                // ONE call carrying all seven SamplerState properties. Three hooks for this job met
+                // when `next` merged into `sdlgpu` (2026-09-11): sdlgpu's complete-state
+                // SetSamplerState, the dx branch's SetSamplerAddressW + SetSamplerMipState, and the
+                // vulkan branch's SetSamplerAddressModeWEXT. All three have implementors, so the
+                // fan-out lives in IGraphicsRenderer::SetSamplerState's default body rather than
+                // here -- a renderer that overrides the complete hook gets everything directly, one
+                // that overrides only the older names keeps being told exactly as before, and this
+                // layer no longer has to know which family implements which spelling.
                 //
-                // Two hooks carry the same value because the `dx` and `vulkan` branches each added
-                // one independently (plans/plan_dx.md DX-257 as SetSamplerAddressW, alongside the
-                // mip-state hook above; plans/plan_vulkan.md VULKAN-164 as SetSamplerAddressModeWEXT)
-                // and different renderer families override different names: DirectX 9/11/12
-                // implement the first, Vulkan the second, EasyGL both. Calling only one would
-                // silently stop delivering W to the other family, so both are called until the two
-                // hooks are unified -- a follow-up, not a merge decision. Both are idempotent
-                // setters recording the same ordinal.
-                renderer_->SetSamplerAddressW(static_cast<int>(effectiveSampler.getAddressWProperty()));
-                renderer_->SetSamplerAddressModeWEXT(
-                    static_cast<int>(effectiveSampler.getAddressWProperty()));
+                // maxAnisotropy reaches a renderer for the first time here; only sdlgpu's hook
+                // ever carried it.
+                renderer_->SetSamplerState(
+                    static_cast<int>(effectiveSampler.getFilterProperty()),
+                    static_cast<int>(effectiveSampler.getAddressUProperty()),
+                    static_cast<int>(effectiveSampler.getAddressVProperty()),
+                    static_cast<int>(effectiveSampler.getAddressWProperty()),
+                    effectiveSampler.getMaxAnisotropyProperty(),
+                    effectiveSampler.getMaxMipLevelProperty(),
+                    effectiveSampler.getMipMapLevelOfDetailBiasProperty());
                 renderer_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
                 renderer_->Begin();
                 // plan_vulkan.md VULKAN-166: FNA's PrepRenderState pushes the whole sampler state

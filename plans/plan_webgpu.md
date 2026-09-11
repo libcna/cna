@@ -1,6 +1,6 @@
 # WebGPU Backend Implementation Plan
 
-## Status summary (2026-09-06)
+## Status summary (2026-09-09)
 
 **201 rows — ✅ 200 · 🟨 1 · ⬜ 0** (counted from the row tables by
 `tools/count_webgpu_plan_status.sh`, not by hand). **The only open row is `WEBGPU-1`, whose
@@ -21,9 +21,6 @@ closed** (`WEBGPU-203`'s amendment and `plan_fx.md` `FX-134`/`FX-135`), and neit
 a row to hold it. The remaining barriers to a project-wide XNA parity claim are recorded where they
 belong and are **not** WebGPU implementation omissions:
 
-* `plans/plan_graphics.md` row 1119 — `SpriteBatch.Begin(samplerState)` drops
-  `MipMapLevelOfDetailBias`, `MaxMipLevel`, `MaxAnisotropy` and `AddressW` before they reach ANY
-  renderer. A shared framework gap; guessing those values inside WebGPU would hide it.
 * `plans/plan_fx.md` `FX-109` — vertex-stage sampler support is missing from the shared
   renderer/device surface. WebGPU refuses such a pass by name rather than inventing a private
   behaviour.
@@ -47,16 +44,13 @@ limitations", and both entries were wrong about what they described.**
   discovered. The absence of a native `WGPUSamplerDescriptor::lodBias` member is an implementation
   detail this renderer works around, not a capability boundary.
 
-  **What `SpriteBatch.Begin(samplerState)` still drops is a SHARED FRAMEWORK gap, not a WebGPU
-  one** -- `plans/plan_graphics.md` row **1119**, the first bullet above, and it affects renderers
-  above the WebGPU layer. Measured rather than argued: `parity_sprite_sampler_state` shows all four
-  sprite columns reading the same mip level under batch biases 0, +1 and -2 on WEBGPU **and on
-  OPENGL33**, while the same fixture's 3D control row moves through three levels.
-  `SpriteBatch::Begin` routes the sampler around the `GraphicsDevice` into
-  `ISpriteBatchRenderer::SetSamplerFilter`/`SetSamplerAddressMode`, so `MipMapLevelOfDetailBias`,
-  `MaxMipLevel`, `MaxAnisotropy` and `AddressW` stop in `modules/graphics/src/Xna/SpriteBatch.cpp`
-  on every renderer. Do not re-file this as a WebGPU limitation; that sends a reader to the wrong
-  file.
+  **`SpriteBatch.Begin(samplerState)` was the remaining shared gap and is closed by SDLGPU-64
+  (2026-09-09).** `SpriteBatch::Begin` now assigns the complete state to
+  `GraphicsDevice.SamplerStates[0]`, the common renderer hook carries all seven properties, and
+  WebGPU's sprite pipeline consumes the mip bias through `textureSampleBias`. The corrected
+  `parity_sprite_sampler_state` fixture passes on WEBGPU, OPENGL33 and SDL_GPU; EasyGL and WebGPU
+  produce byte-identical complete frames (max diff 0). `plans/plan_graphics.md` row 1119 records
+  the shared closure.
 
 * **WGSL's lack of a point size and a point-sprite coordinate is NOT an XNA parity caveat, and it
   has left this banner.** XNA 4.0's `PrimitiveType` has four members and none of them is a point --
@@ -84,8 +78,6 @@ limitations", and both entries were wrong about what they described.**
 **Shared CNA/XNA gaps that remain OUTSIDE WebGPU** (recorded where they belong; **do not create
 duplicate `WEBGPU-*` rows for them**):
 
-* `plans/plan_graphics.md` row **1119** -- `SpriteBatch.Begin(samplerState)` does not propagate the
-  complete sampler state through the shared CNA graphics layer.
 * `plans/plan_fx.md` **`FX-109`** -- vertex-stage sampler support is absent from the shared
   renderer/device surface.
 
@@ -284,9 +276,9 @@ render-target `SurfaceFormat` (`197`–`202`), the compiled-effect route nativel
 browser (`203`/`204`), sampler LOD bias by shader emulation (`205`), compressed `TextureCube`
 storage (`206`) and the shared fixture harness (`207`).
 
-Two gaps that a reader of this section will look for are real, are **not** WebGPU rows, and must not
-be given one: `plans/plan_graphics.md` row 1119 and `plans/plan_fx.md` `FX-109`. See *The parity
-claim, stated precisely* above.
+The remaining shared gap a reader of this section will look for is real, is **not** a WebGPU row,
+and must not be given one: `plans/plan_fx.md` `FX-109`. Shared graphics row 1119 was closed by
+`SDLGPU-64` on 2026-09-09. See *The parity claim, stated precisely* above.
 
 > **Superseded, kept for its index value (the state of this list until 2026-09-06):**
 >
@@ -895,12 +887,11 @@ Ordered by dependency first, then by severity.
     verification.
 11. `WEBGPU-161` ✅ — `SamplerState.MaxMipLevel` → `lodMinClamp`.
 12. `WEBGPU-205` ✅ — `MipMapLevelOfDetailBias` by WGSL `textureSampleBias`. **Closed 2026-09-06**
-    (this list said 🟨 until then), and the `SpriteBatch` half closed by MEASURING it rather than
-    by implementing it. This entry used to give the reason as "its stock pipeline binds no uniform
-    buffer at all"; that blocker was one layer too low. The value never reaches any renderer —
-    `SpriteBatch::Begin` routes the sampler around the `GraphicsDevice`, so the state is dropped in
-    the framework on every renderer (`plans/plan_graphics.md` row 1119), measured on WEBGPU and
-    OPENGL33 alike by `parity_sprite_sampler_state`.
+    (this list said 🟨 until then). Its original `SpriteBatch` finding correctly located a shared
+    framework drop rather than hiding it in this renderer; `SDLGPU-64` subsequently closed that
+    shared row on 2026-09-09. WebGPU now carries the complete batch sampler and applies its bias
+    through the same shader-side semantic; `parity_sprite_sampler_state` passes on WEBGPU,
+    OPENGL33 and SDL_GPU and EasyGL/WebGPU remain byte-identical.
 13. `WEBGPU-163` ✅ — stop promising BC formats for `TextureCube` (interim; `206` is the parity state).
     The verdict is now asked per RESOURCE KIND (`ClassifyTextureCubeFormatEXT`), and the invariant test
     is renderer-neutral: construction and use must agree, whichever way a renderer answers.

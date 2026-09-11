@@ -2,8 +2,19 @@
 # into the same SDL3 library every other renderer links against) -- no separate find_package
 # or FetchContent is needed, unlike VULKAN/WEBGPU/BGFX.
 cna_add_renderer()
-target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
 set_property(TARGET ${RENDERER_TARGET} PROPERTY REQUIRES_PLATFORM SDL3)
+
+# plans/plan_sdlgpu.md SDLGPU-92: the built-in shader path links SDL_shadercross statically when
+# configured. Windows and Apple default this on because their native SDL_gpu drivers consume
+# DXBC/MSL, not SPIR-V. Linux/Android retain the direct dependency-free Vulkan route by default.
+if(CNA_SDL_GPU_SHADERCROSS)
+    if(NOT TARGET cna_sdl_shadercross)
+        message(FATAL_ERROR
+            "CNA_SDL_GPU_SHADERCROSS=ON but the pinned SDL_shadercross target was not configured")
+    endif()
+    target_link_libraries(${RENDERER_TARGET} PRIVATE cna_sdl_shadercross)
+    target_compile_definitions(${RENDERER_TARGET} PRIVATE CNA_SDL_GPU_SHADERCROSS)
+endif()
 
 # plans/plan_fx.md FX-061: compiled XNA effects go through MojoShader's own SDL_GPU adapter plus the
 # translation shared with every other compiled-effect backend. Opt-in, because MojoShader is a
@@ -12,29 +23,49 @@ if(CNA_SDL_GPU_COMPILED_EFFECTS)
     target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_mojoshader_effect)
 endif()
 
-# plans/plan_sdlgpu.md SDLGPU-42/43: SdlGpuEffectRenderer needs a REAL runtime GLSL->SPIR-V compile
-# for arbitrary user ShaderEffect source (SDL_gpu only accepts precompiled bytecode) -- unlike
-# D3D11/D3D12's d3dcompiler, this environment has no libshaderc-dev package (no unversioned
-# .so symlink, no headers), only the runtime libshaderc1 package's versioned .so.1. Prefer a
-# normal find_library() first (works if a dev package IS present, e.g. other machines/CI), and
-# fall back to globbing standard library directories for the exact versioned file otherwise --
-# mirrors compile_shaders.py's own ctypes loader fallback list.
-find_library(CNA_SHADERC_LIBRARY NAMES shaderc_shared shaderc)
-if(NOT CNA_SHADERC_LIBRARY)
-    file(GLOB CNA_SHADERC_CANDIDATES
-        /usr/lib/*/libshaderc.so*
-        /usr/lib/libshaderc.so*
-        /usr/local/lib/libshaderc.so*
-    )
-    if(CNA_SHADERC_CANDIDATES)
-        list(GET CNA_SHADERC_CANDIDATES 0 CNA_SHADERC_LIBRARY)
+# SDLGPU-98: keep SDL after every static archive which calls it. GNU/MinGW resolves archives in
+# one pass; putting SDL first left SDL_shadercross's SDL_SetError/SDL_CreateGPU* references
+# unresolved even though the correct import library was present on the link line.
+target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
+
+# plans/plan_sdlgpu.md SDLGPU-42/43/97: ShaderEffect needs a target-native runtime
+# GLSL->SPIR-V compiler, and the resulting SPIR-V needs a driver that accepts it. Never let a
+# cross-build discover the build host's versioned ELF library through the Linux-only fallback:
+# the old unconditional glob made MinGW try to link x86_64-linux-gnu/libshaderc.so.1. D3D12 and
+# Metal also cannot consume ShaderEffect's raw SPIR-V path, so they truthfully leave this optional
+# CNA-specific capability disabled until that path gains native output translation. This does not
+# affect ordinary compiled XNA effects, which use the separate MojoShader/ShaderCross route.
+set(CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE OFF)
+set(_cna_sdl_gpu_shader_effect_spirv_target ON)
+if(WIN32 OR APPLE OR EMSCRIPTEN)
+    set(_cna_sdl_gpu_shader_effect_spirv_target OFF)
+endif()
+if(_cna_sdl_gpu_shader_effect_spirv_target)
+    find_library(CNA_SDL_GPU_SHADERC_LIBRARY NAMES shaderc_shared shaderc)
+    if(NOT CNA_SDL_GPU_SHADERC_LIBRARY AND NOT CMAKE_CROSSCOMPILING)
+        file(GLOB CNA_SDL_GPU_SHADERC_CANDIDATES
+            /usr/lib/*/libshaderc.so*
+            /usr/lib/libshaderc.so*
+            /usr/local/lib/libshaderc.so*
+        )
+        if(CNA_SDL_GPU_SHADERC_CANDIDATES)
+            list(GET CNA_SDL_GPU_SHADERC_CANDIDATES 0 CNA_SDL_GPU_SHADERC_LIBRARY)
+        endif()
     endif()
 endif()
-if(NOT CNA_SHADERC_LIBRARY)
-    message(FATAL_ERROR "CNA: libshaderc not found (required for SDL_GPU's runtime ShaderEffect GLSL compile, SDLGPU-42/43) -- install libshaderc1 or libshaderc-dev")
+
+if(_cna_sdl_gpu_shader_effect_spirv_target AND CNA_SDL_GPU_SHADERC_LIBRARY)
+    set(CNA_SDL_GPU_SHADER_EFFECTS_AVAILABLE ON)
+    message(STATUS
+        "CNA: SDL_GPU ShaderEffect enabled with target libshaderc at ${CNA_SDL_GPU_SHADERC_LIBRARY}")
+    target_link_libraries(${RENDERER_TARGET} PRIVATE "${CNA_SDL_GPU_SHADERC_LIBRARY}")
+    target_compile_definitions(${RENDERER_TARGET} PRIVATE CNA_SDL_GPU_SHADER_EFFECTS)
+else()
+    message(STATUS
+        "CNA: SDL_GPU ShaderEffect disabled (no target-native GLSL-to-driver shader path); "
+        "CustomEffects will report false")
 endif()
-message(STATUS "CNA: using libshaderc at ${CNA_SHADERC_LIBRARY}")
-target_link_libraries(${RENDERER_TARGET} PRIVATE "${CNA_SHADERC_LIBRARY}")
+unset(_cna_sdl_gpu_shader_effect_spirv_target)
 
 # Module-owned examples (module-examples campaign): the family's example/test
 # registration is module-local; its historical selection/platform conditions

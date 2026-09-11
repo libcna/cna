@@ -173,7 +173,7 @@ namespace
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
-                                 Support::Unsupported, false};
+                                 Support::Exact, false};
 #elif defined(CNA_RENDERER_SDL_RENDERER)
     // 2D-only by design: CreateTextureCube()/CreateTexture3D()/CreateRenderTargetCube() all keep
     // IGraphicsRenderer's own nullptr-returning defaults, so no cube/volume storage exists at all

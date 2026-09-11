@@ -684,6 +684,15 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (renderer_ != nullptr)
         {
+            // Presentation formats determine the legal multisample counts. Apply them first so a
+            // renderer never clamps the new MSAA request against the previous color/depth tuple.
+            // This is also the natural FNA3D reset order: one presentation structure carries all
+            // three values into the native reset together.
+            renderer_->UpdatePresentationFormatEXT(
+                static_cast<int>(presentationParameters_.getBackBufferFormatProperty()),
+                static_cast<int>(presentationParameters_.getDepthStencilFormatProperty()),
+                presentationParameters_.getIsFullScreenProperty());
+
             // Task 902: reconfigure the renderer's actual MSAA sample count in place, mirroring
             // FNA's own PresentationParameters.MultiSampleCount = FNA3D_GetMaxMultiSampleCount(...)
             // write-back of the real, device-clamped value after FNA3D_ResetBackbuffer().
@@ -700,14 +709,6 @@ namespace Microsoft::Xna::Framework::Graphics
             // own forwarding exactly.
             renderer_->SetSwapInterval(toSwapInterval(presentationParameters_.getPresentationIntervalProperty()));
 
-            // plans/plan_dx9.md D9-30/D9-33: same "actually reach the renderer" rationale as
-            // ApplyMultiSampleCount above, for back-buffer/depth-stencil format and fullscreen --
-            // needed because Game commonly constructs this GraphicsDevice (and its renderer) with
-            // default PresentationParameters before GraphicsDeviceManager.ApplyChanges() ever runs.
-            renderer_->UpdatePresentationFormatEXT(
-                static_cast<int>(presentationParameters_.getBackBufferFormatProperty()),
-                static_cast<int>(presentationParameters_.getDepthStencilFormatProperty()),
-                presentationParameters_.getIsFullScreenProperty());
         }
 
         UpdateViewportFromWindow();

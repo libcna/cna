@@ -14,8 +14,11 @@
 // The table is every enumerator of `SurfaceFormat`, not a curated list. A format nobody thought
 // about is exactly where the two answers drift apart.
 
+#include <algorithm>
+#include <ranges>
 #include <string>
 #include <utility>
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include <vector>
 #include <gtest/gtest.h>
@@ -38,6 +41,10 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp"
 
 namespace
 {
@@ -332,6 +339,133 @@ TEST(RenderTargetFormatAgreement, ASixteenBitFloatTargetsContentIsSamplableBack)
     EXPECT_GT(measured, 0)
         << RendererName() << " reports no 16-bit float render target at all, so this measures "
            "nothing -- if that is genuinely true here the test needs its own declared boundary";
+}
+
+// SDLGPU-72: direct transfer proof for every exact non-Color format shared with EasyGL. The
+// destination byte counts differ for the 2-, 4-, 8- and 16-byte texels, while distinct,
+// binary-exact channels expose truncation or an accidentally substituted RGBA8 target.
+TEST(RenderTargetFormatAgreement, EveryRenderableClassicNumericFormatReadsBackExactly)
+{
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Vector2;
+    using Microsoft::Xna::Framework::Vector4;
+    using Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle;
+    using Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2;
+    using Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4;
+    using Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64;
+
+    constexpr int width = 6;
+    constexpr int height = 3;
+    constexpr int texelCount = width * height;
+    GraphicsDevice device;
+    int measured = 0;
+
+    const auto clear = [&device](RenderTarget2D& target, float r, float g, float b, float a) {
+        device.SetRenderTarget(&target);
+        device.Clear(r, g, b, a);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    };
+
+    if (device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Rgba64))
+    {
+        RenderTarget2D target(device, width, height, false, SurfaceFormat::Rgba64,
+                              DepthFormat::None);
+        const Color source(17, 34, 51, 68);
+        device.SetRenderTarget(&target);
+        device.Clear(source);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        std::vector<Rgba64> values(texelCount);
+        target.GetData(values.data(), texelCount);
+        const Rgba64 expected(17.0f / 255.0f, 34.0f / 255.0f,
+                              51.0f / 255.0f, 68.0f / 255.0f);
+        EXPECT_TRUE(std::ranges::all_of(values, [&](const Rgba64& value) {
+            return value == expected;
+        }));
+        ++measured;
+    }
+
+    if (device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Single))
+    {
+        RenderTarget2D target(device, width, height, false, SurfaceFormat::Single,
+                              DepthFormat::None);
+        clear(target, 2.0f, 0.5f, 4.0f, 1.0f);
+        std::vector<float> values(texelCount, -1.0f);
+        target.GetData(values.data(), texelCount);
+        EXPECT_TRUE(std::ranges::all_of(values, [](float value) { return value == 2.0f; }));
+        ++measured;
+    }
+
+    if (device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector2))
+    {
+        RenderTarget2D target(device, width, height, false, SurfaceFormat::Vector2,
+                              DepthFormat::None);
+        clear(target, 2.0f, 0.5f, 4.0f, 1.0f);
+        std::vector<Vector2> values(texelCount, Vector2(-1.0f, -1.0f));
+        target.GetData(values.data(), texelCount);
+        EXPECT_TRUE(std::ranges::all_of(values, [](const Vector2& value) {
+            return value.X == 2.0f && value.Y == 0.5f;
+        }));
+        ++measured;
+    }
+
+    if (device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))
+    {
+        RenderTarget2D target(device, width, height, false, SurfaceFormat::Vector4,
+                              DepthFormat::None);
+        clear(target, 2.0f, 0.5f, 4.0f, 1.0f);
+        std::vector<Vector4> values(texelCount, Vector4(-1.0f, -1.0f, -1.0f, -1.0f));
+        target.GetData(values.data(), texelCount);
+        EXPECT_TRUE(std::ranges::all_of(values, [](const Vector4& value) {
+            return value.X == 2.0f && value.Y == 0.5f &&
+                   value.Z == 4.0f && value.W == 1.0f;
+        }));
+        ++measured;
+    }
+
+    if (device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfSingle))
+    {
+        RenderTarget2D target(device, width, height, false, SurfaceFormat::HalfSingle,
+                              DepthFormat::None);
+        clear(target, 2.0f, 0.5f, 4.0f, 1.0f);
+        std::vector<HalfSingle> values(texelCount);
+        target.GetData(values.data(), texelCount);
+        EXPECT_TRUE(std::ranges::all_of(values, [](const HalfSingle& value) {
+            return value.ToSingle() == 2.0f;
+        }));
+        ++measured;
+    }
+
+    if (device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfVector2))
+    {
+        RenderTarget2D target(device, width, height, false, SurfaceFormat::HalfVector2,
+                              DepthFormat::None);
+        clear(target, 2.0f, 0.5f, 4.0f, 1.0f);
+        std::vector<HalfVector2> values(texelCount);
+        target.GetData(values.data(), texelCount);
+        EXPECT_TRUE(std::ranges::all_of(values, [](const HalfVector2& value) {
+            const Vector2 unpacked = value.ToVector2();
+            return unpacked.X == 2.0f && unpacked.Y == 0.5f;
+        }));
+        ++measured;
+    }
+
+    for (const SurfaceFormat format : {SurfaceFormat::HalfVector4,
+                                       SurfaceFormat::HdrBlendable})
+    {
+        if (!device.SupportsSurfaceFormatAsRenderTargetEXT(format)) continue;
+        RenderTarget2D target(device, width, height, false, format, DepthFormat::None);
+        clear(target, 2.0f, 0.5f, 4.0f, 1.0f);
+        std::vector<HalfVector4> values(texelCount);
+        target.GetData(values.data(), texelCount);
+        EXPECT_TRUE(std::ranges::all_of(values, [](const HalfVector4& value) {
+            const Vector4 unpacked = value.ToVector4();
+            return unpacked.X == 2.0f && unpacked.Y == 0.5f &&
+                   unpacked.Z == 4.0f && unpacked.W == 1.0f;
+        }));
+        ++measured;
+    }
+
+    EXPECT_GT(measured, 0) << RendererName() << " exposes no classic numeric render target";
 }
 
 // plans/plan_webgpu.md WEBGPU-202: every transfer path must be sized from the FORMAT, at sizes that

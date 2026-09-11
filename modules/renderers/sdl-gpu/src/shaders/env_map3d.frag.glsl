@@ -5,6 +5,7 @@ layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec3 fragWorldPos;
 layout(location = 3) in vec4 fragTint;
 layout(location = 4) in vec4 fragFog;    // REMED-GFX-009
+layout(location = 5) in float fragFresnel;
 
 layout(location = 0) out vec4 outColor;
 
@@ -28,6 +29,11 @@ layout(set = 3, binding = 1) uniform EnvMapParams {
     vec4 light2Diffuse_pad;
     vec4 envMapSpecular_pad;
 } ep;
+
+layout(set = 3, binding = 2) uniform SamplerLodBias {
+    vec4 slots0To3;
+    vec4 slots4To7;
+} samplerLodBias;
 
 // A disabled/never-configured DirectionalLight can forward Direction=(0,0,0) (matches
 // lit_textured3d.frag.glsl's own established workaround) -- normalize() on a true zero vector is
@@ -58,23 +64,15 @@ void main() {
     // (== (Emissive + Ambient*Diffuse)*Alpha), the wrong form additionally squared Alpha; adding
     // emissive unscaled removes that too.
     vec3 litRGB = lightSum * fragTint.rgb + pc.emissiveAmount.xyz;
-    vec4 texColor = texture(uTexture, fragUV);
+    vec4 texColor = texture(uTexture, fragUV, samplerLodBias.slots0To3.x);
     vec3 reflDir = reflect(-E, N);
-    vec4 envSample = texture(uEnvMap, reflDir);
+    vec4 envSample = texture(uEnvMap, reflDir, samplerLodBias.slots0To3.y);
     vec3 baseColor = litRGB * texColor.rgb;
     float combinedAlpha = fragTint.a * texColor.a;
 
-    // Fresnel-weighted blend factor (matches VulkanRenderer's env_map3d.frag.glsl and
-    // FNA's real PSEnvMap/PSEnvMapSpecular): a flat envMapAmount, or edge-weighted by view angle
-    // when FresnelEnabled.
-    float viewAngle = dot(E, N);
-    float blendFactor = (ep.eyePos_fresnelEnabled.w > 0.5)
-        ? pow(max(1.0 - abs(viewAngle), 0.0), ep.light0Dir_fresnelFactor.w) * pc.emissiveAmount.w
-        : pc.emissiveAmount.w;
-
     // FNA's real PSEnvMap/PSEnvMapSpecular scale the whole envmap sample (both the base lerp
     // target and the specular term) by combinedAlpha before use.
-    vec3 rgb = mix(baseColor, envSample.rgb * combinedAlpha, blendFactor)
+    vec3 rgb = mix(baseColor, envSample.rgb * combinedAlpha, fragFresnel)
              + ep.envMapSpecular_pad.xyz * envSample.a * combinedAlpha;
     outColor = vec4(rgb, combinedAlpha);
     // REMED-GFX-009: blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).

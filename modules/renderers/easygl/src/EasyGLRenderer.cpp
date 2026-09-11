@@ -4391,28 +4391,17 @@ if (ProfileUsesGlslEs100())
         pendingAddressV_ = addressV;
     }
 
-    void EasyGLSpriteBatchRenderer::SetSamplerMipState(int maxMipLevel, float lodBias)
+    void EasyGLSpriteBatchRenderer::SetSamplerState(int textureFilter, int addressU, int addressV,
+                                                     int addressW, int maxAnisotropy,
+                                                     int maxMipLevel, float lodBias)
     {
+        pendingFilter_ = textureFilter;
+        pendingAddressU_ = addressU;
+        pendingAddressV_ = addressV;
+        pendingAddressW_ = addressW;
+        pendingMaxAnisotropy_ = maxAnisotropy;
         pendingMaxMipLevel_ = maxMipLevel;
         pendingLodBias_ = lodBias;
-    }
-
-    /// plans/plan_vulkan.md VULKAN-167: the second half of VULKAN-164's hook. XNA assigns the whole
-    /// SamplerState to GraphicsDevice.SamplerStates[0], W included; this renderer's sprite path was
-    /// given the filter and the U and V axes and derived W from U. Invisible to 2D sampling, which
-    /// never consults W -- and decisive for a `sampler3D` a custom effect binds to unit 0, where
-    /// the same GL sampler object governs both the sprite's 2D texture and the volume.
-    ///
-    /// Two entry points record the same ordinal because the `dx` and `vulkan` branches named this
-    /// hook differently and other renderer families implement one name each; see SpriteBatch.cpp.
-    void EasyGLSpriteBatchRenderer::SetSamplerAddressW(int addressW)
-    {
-        pendingAddressW_ = addressW;
-    }
-
-    void EasyGLSpriteBatchRenderer::SetSamplerAddressModeWEXT(int addressW)
-    {
-        pendingAddressW_ = addressW;
     }
 
     void EasyGLSpriteBatchRenderer::End()
@@ -4573,7 +4562,8 @@ if (ProfileUsesGlslEs100())
         ApplyChannelExpansion(prog, current_texture_->GetSurfaceFormatEXT());
         if (graphicsRenderer_)
         {
-            graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+            graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_,
+                                                pendingMaxAnisotropy_);
             graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
             // VULKAN-167: ApplySamplerState sets W = U, which is right for every XNA preset and
             // wrong for a state that set W on its own. The batch's own W, when it supplied one, wins.
@@ -4745,8 +4735,8 @@ if (ProfileUsesGlslEs100())
             if (physW > 0 && physH > 0) device_.set_viewport(0, 0, physW, physH);
             graphicsRenderer_->getLogicalSize(logicalWidth, logicalHeight);
         }
-        graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_,
-                                             pendingAddressV_, 1);
+        graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_,
+                                             pendingMaxAnisotropy_);
         graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
         // VULKAN-167: same as the stock flush above -- the batch's W overrides the W-follows-U
         // default. This is the compiled-effect path, which a custom `sampler3D` reaches too.

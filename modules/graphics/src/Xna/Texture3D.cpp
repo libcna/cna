@@ -50,19 +50,28 @@ namespace Microsoft::Xna::Framework::Graphics
 
     static void ValidateTexture3DFormatEXT(const GraphicsDevice& device, SurfaceFormat format)
     {
+        // Texture3D's public constructor carries the same XNA SurfaceFormat as Texture2D. Ask the
+        // profile first, then the resource-kind-specific renderer classifier; a 2D capability is
+        // not evidence that the renderer can allocate or transfer a volume in that format.
         if (!Texture::IsFormatAllowedByProfileEXT(device.getGraphicsProfileProperty(), format))
         {
             throw System::NotSupportedException(
                 "Texture3D: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
-                " is not available on the selected GraphicsProfile.");
+                " is not available on GraphicsProfile." +
+                (device.getGraphicsProfileProperty() == GraphicsProfile::HiDef
+                     ? std::string("HiDef")
+                     : std::string("Reach")) +
+                " -- this is the profile's own restriction, not the renderer's capability");
         }
-        switch (device.GetRenderer().ClassifySurfaceFormatEXT(static_cast<int>(format)))
+
+        switch (device.GetRenderer().ClassifyTexture3DFormatEXT(static_cast<int>(format)))
         {
             case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
                 return;
             case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
-                throw std::runtime_error(
-                    "Texture3D: this SurfaceFormat is not supported by the active renderer.");
+                throw System::NotSupportedException(
+                    "Texture3D: this SurfaceFormat is not implemented for volume storage and "
+                    "transfer by the active renderer");
             case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
                 Texture::ValidateFormat(format);
                 return;

@@ -5,8 +5,10 @@
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
 #include "mojoshader.h"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #endif
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Graphics/StockVertexSemantics.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
 #include <SDL3/SDL_gpu.h>
@@ -14,18 +16,48 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace CNA::Internal::Renderers::SdlGpu
 {
+    /** @brief Native colour formats for the four XNA MRT slots, in binding order. CNAEXT. */
+    using SdlGpuColorTargetFormatsEXT = std::array<SDL_GPUTextureFormat, 4>;
+
     class SdlGpuRenderer;
     class SdlGpuRenderTargetRenderer;
     class SdlGpuRenderTargetCubeRenderer;
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
     class SdlGpuCompiledEffect;
 #endif
+
+    /** @brief Stock-shader construction route selected for one SDL_gpu device. CNAEXT. */
+    enum class SdlGpuShaderCreationRouteEXT : std::uint8_t
+    {
+        /** @brief Submit CNA's committed SPIR-V blob directly to SDL_gpu. */
+        DirectSpirv,
+        /** @brief Reflect and compile the SPIR-V blob through SDL_shadercross. */
+        ShaderCross,
+        /** @brief Neither the device nor SDL_shadercross can consume or translate the blob. */
+        Unsupported
+    };
+
+    /**
+     * @brief Selects the stock-shader construction route from exact device/compiler formats.
+     *
+     * @param deviceFormats Formats consumed by the created SDL_gpu device.
+     * @param shaderCrossFormats Formats SDL_shadercross can produce from SPIR-V, or zero when the
+     * compiler is unavailable.
+     * @param forceShaderCross Test-only request to exercise reflection/compiler construction even
+     * when the device accepts SPIR-V directly.
+     * @return The route that can create a shader, or Unsupported when the format sets do not
+     * intersect.
+     */
+    CNAEXT [[nodiscard]] SdlGpuShaderCreationRouteEXT SelectSdlGpuShaderCreationRouteEXT(
+        SDL_GPUShaderFormat deviceFormats, SDL_GPUShaderFormat shaderCrossFormats,
+        bool forceShaderCross = false);
 
     /**
      * @brief The complete identity of one native `SDL_GPUSampler`, as a comparable value. CNAEXT.
@@ -126,11 +158,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         DualTextureFragmentShaderCreation,
         EnvMapVertexShaderCreation,
         EnvMapFragmentShaderCreation,
+        InstancedVertexShaderCreation,
         SkinnedVertexShaderCreation,
         SkinnedColoredVertexShaderCreation,
         SkinnedColoredFragmentShaderCreation,
         PbrVertexShaderCreation,
         PbrSkinnedVertexShaderCreation,
+        PbrColorVertexShaderCreation,
+        PbrSkinnedColorVertexShaderCreation,
         PbrFragmentShaderCreation,
         WindowMetricsInitialization,
         RendererRegistration,
@@ -142,6 +177,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         DefaultFlatNormalTextureCreation
     };
 
+    /** @brief Number of distinct shaders acquired during transactional renderer construction. CNAEXT. */
+    inline constexpr std::size_t SdlGpuConstructionShaderCountEXT =
+        static_cast<std::size_t>(SdlGpuFailurePointEXT::PbrFragmentShaderCreation) -
+        static_cast<std::size_t>(SdlGpuFailurePointEXT::SpriteVertexShaderCreation) + 1;
+
     /** @brief Resource categories reported by SdlGpuTestHooksEXT. CNAEXT. */
     enum class SdlGpuResourceKindEXT : std::uint8_t
     {
@@ -151,7 +191,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         FrameCommandBuffer,
         GraphicsPipeline,
         Sampler,
-        DefaultTexture
+        DefaultTexture,
+        /** @brief Process-wide SDL_shadercross compiler session. */
+        ShaderCross
     };
 
     /** @brief Acquisition/release edge reported by SdlGpuTestHooksEXT. CNAEXT. */
@@ -173,6 +215,21 @@ namespace CNA::Internal::Renderers::SdlGpu
         void* context = nullptr;
         void (*resourceEvent)(void* context, SdlGpuResourceKindEXT resource,
                               SdlGpuResourceEventEXT event) noexcept = nullptr;
+        /** @brief Forces the device-unavailable depth/stencil branch for capability testing. */
+        bool forceNoDepthStencilFormat = false;
+        /** @brief Forces stock shaders through SDL_shadercross reflection/creation when available. */
+        bool forceShaderCrossCompilation = false;
+    };
+
+    /** @brief Result of the no-window stock-pipeline portability probe. CNAEXT. */
+    struct SdlGpuHeadlessStockDrawResultEXT
+    {
+        /** @brief Exact SDL_gpu driver selected for the probe device. */
+        std::string driverName;
+        /** @brief RGBA8 texel sampled from inside the rendered stock-shader triangle. */
+        std::array<std::uint8_t, 4> drawnPixel{};
+        /** @brief RGBA8 texel sampled outside the triangle after the render-pass clear. */
+        std::array<std::uint8_t, 4> clearPixel{};
     };
 
     /**
@@ -207,7 +264,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] explicit operator bool() const noexcept { return texture != nullptr; }
     };
 
-    // The GPU handle of an ordinary uploaded texture (Texture2D, TextureCube) lives in this
+    // The GPU handle of an ordinary uploaded texture (Texture2D, Texture3D, TextureCube) lives in this
     // separately-owned struct rather than on the wrapper, for the same reason
     // SdlGpuRenderTarget2DState exists (see its own doc comment): draws are replayed at Present,
     // long after a short-lived public texture may have been destroyed, so the native handle has to
@@ -244,12 +301,32 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
+        /**
+         * @brief Returns the exact XNA SurfaceFormat ordinal represented by this texture.
+         *
+         * @return The logical SurfaceFormat ordinal, independent of native fallback storage.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /// REMED-GFX-176: uploads exactly @p level, sized by that level's own dimensions. An
         /// out-of-range level or a null source is ignored, matching VulkanTextureRenderer's
         /// established convention for this void-returning interface method.
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        /**
+         * @brief Returns exact DXT blocks for compressed textures.
+         *
+         * @param level Mip level to read.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Destination block buffer.
+         * @param dataLength Destination size in bytes.
+         * @return true when the requested compressed region was copied; otherwise false.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         /** @brief Returns the underlying `SDL_GPUTexture`. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
@@ -260,6 +337,18 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         CNAEXT [[nodiscard]] int LevelCountEXT() const { return levelCount_; }
         /**
+         * @brief Returns the SDL_gpu storage format selected for this texture. Test-only CNAEXT.
+         *
+         * @return The native SDL_gpu format, including renderer-side fallback storage.
+         */
+        CNAEXT [[nodiscard]] SDL_GPUTextureFormat NativeFormatEXT() const { return nativeFormat_; }
+        /**
+         * @brief Reports whether DXT blocks are held in native compressed GPU storage. Test-only CNAEXT.
+         *
+         * @return true for native BC storage; false for renderer-decoded RGBA8 storage.
+         */
+        CNAEXT [[nodiscard]] bool UsesNativeCompressionEXT() const { return compressedNative_; }
+        /**
          * @brief Returns this texture as a bindable, lifetime-safe sampled resource. CNAEXT.
          *
          * @return The native handle paired with the shared state that keeps it alive.
@@ -267,9 +356,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->texture, state_}; }
 
     private:
-        /// The one upload path both public entry points share (REMED-GFX-176). @p stride is the
-        /// source row pitch in bytes; the destination region is always the whole of @p level.
-        void UploadLevel(int level, const uint8_t* rgba, int levelW, int levelH, int stride);
+        /// The one upload path both public entry points share (REMED-GFX-176/SDLGPU-69). @p stride
+        /// is the logical XNA-format source row pitch; the destination is all of @p level.
+        void UploadLevel(int level, const uint8_t* pixels, int levelW, int levelH, int stride);
 
         SdlGpuRenderer* owner_ = nullptr;
         // The actual GPU handle lives in this shared_ptr-owned struct, NOT directly here -- see
@@ -279,6 +368,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         int height_ = 0;
         /// Mip levels SDL really allocated for this texture (REMED-GFX-176).
         int levelCount_ = 1;
+        /// Public XNA SurfaceFormat ordinal retained independently from the chosen native fallback.
+        int surfaceFormat_ = 0;
+        /// Actual SDL_gpu storage format, which may be RGBA8 for a renderer-side conversion.
+        SDL_GPUTextureFormat nativeFormat_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        /// Logical bytes per texel, or bytes per 4x4 block when compressed.
+        int logicalBlockBytes_ = 4;
+        bool compressed_ = false;
+        bool compressedNative_ = false;
+        /// Exact caller-authored DXT blocks, authoritative for partial updates and GetData.
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
         /// Identifies this texture in CNA_SDLGPU_TEXTURE_TRACE output; 0 when tracing is off.
         int traceId_ = 0;
     };
@@ -294,7 +393,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     class SdlGpuTexture3DRenderer final : public ITexture3DRenderer
     {
     public:
-        SdlGpuTexture3DRenderer(SdlGpuRenderer& owner, int width, int height, int depth, bool mipMap);
+        SdlGpuTexture3DRenderer(SdlGpuRenderer& owner, int width, int height, int depth,
+                                bool mipMap, int surfaceFormat);
         ~SdlGpuTexture3DRenderer() override;
 
         SdlGpuTexture3DRenderer(const SdlGpuTexture3DRenderer&) = delete;
@@ -315,12 +415,26 @@ namespace CNA::Internal::Renderers::SdlGpu
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
                                    void* data, int dataLength) const override;
 
+        /**
+         * @brief Returns the SurfaceFormat ordinal used to create this volume. Test-only CNAEXT.
+         *
+         * @return The exact format ordinal forwarded by the public Texture3D constructor.
+         */
+        CNAEXT [[nodiscard]] int GetSurfaceFormatEXT() const noexcept { return surfaceFormat_; }
+
+        /** @brief Returns this volume as a deferred-lifetime-safe sampled resource. CNAEXT. */
+        CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const
+        {
+            return {state_->texture, state_};
+        }
+
     private:
         SdlGpuRenderer* owner_ = nullptr;
-        SDL_GPUTexture* texture_ = nullptr;
+        std::shared_ptr<SdlGpuSampledTextureState> state_;
         int width_ = 0, height_ = 0, depth_ = 0;
         /// Mip levels SDL really allocated for this volume (REMED-GFX-135).
         int levelCount_ = 1;
+        int surfaceFormat_ = 0;
     };
 
     // Real architectural fix for a render-target-destroyed-before-flush use-after-free: this
@@ -343,11 +457,29 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuRenderer* owner = nullptr;
         int width = 0;
         int height = 0;
+        /// Exact public SurfaceFormat this target represents (SDLGPU-72).
+        int surfaceFormat = 0;
+        /// Native attachment format threaded into every compatible immutable pipeline.
+        SDL_GPUTextureFormat colorFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        /// Exact transfer stride of @ref colorFormat; never inferred as RGBA8 at readback.
+        Uint32 colorBytesPerPixel = 4;
+        /// Exact native depth/stencil attachment format, or INVALID for DepthFormat::None.
+        SDL_GPUTextureFormat depthFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+        /// Public DepthFormat ordinal represented by @ref depthFormat.
+        int appliedDepthFormat = 0;
+        /// Actual depth precision used when normalizing XNA DepthBias.
+        int depthBits = 0;
+        /// Whether @ref depthFormat owns a stencil plane.
+        bool hasStencil = false;
+        /// Whether multisample contents must survive the final resolve for a later bind.
+        bool preserveContents = false;
         bool mipMap = false;
         // The native `num_levels` allocated for colorTexture.  The deferred pass-finalization
         // path owns only this state (the public wrapper may already be gone), so it must use the
         // allocation fact rather than mipMap alone before asking SDL to generate a chain.
         int levelCount = 1;
+        /// Levels with deterministic uploaded or rendered content, for partial authored updates.
+        std::vector<bool> definedMipLevels;
         SDL_GPUTexture* colorTexture = nullptr;
         SDL_GPUTexture* msaaTexture = nullptr;
         SDL_GPUTexture* depthTexture = nullptr;
@@ -393,7 +525,9 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
     public:
         SdlGpuRenderTargetRenderer(SdlGpuRenderer& owner, int width, int height,
-                                  int depthFormat, bool mipMap, int multiSampleCount);
+                                  int depthFormat, bool preserveContents, bool mipMap,
+                                  int multiSampleCount,
+                                  int surfaceFormat = 0);
         ~SdlGpuRenderTargetRenderer() override;
 
         SdlGpuRenderTargetRenderer(const SdlGpuRenderTargetRenderer&) = delete;
@@ -401,13 +535,54 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         [[nodiscard]] int GetWidth() const override { return state_->width; }
         [[nodiscard]] int GetHeight() const override { return state_->height; }
+        /** @brief Returns the exact SurfaceFormat represented by the native attachment. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override
+        {
+            return state_->surfaceFormat;
+        }
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
+        /**
+         * @brief Uploads the complete public level zero into the resolved target texture.
+         * @param rgba Native-format texel bytes for the complete level.
+         * @param stride Source row stride in bytes.
+         */
+        void UpdatePixels(const uint8_t* rgba, int stride) override;
+        /**
+         * @brief Uploads one complete authored mip level into the resolved target texture.
+         * @param level Mip level to replace.
+         * @param rgba Native-format texel bytes for the complete level.
+         * @param levelW Width of the supplied level.
+         * @param levelH Height of the supplied level.
+         */
+        void UpdatePixelsLevel(int level, const uint8_t* rgba,
+                               int levelW, int levelH) override;
+        /**
+         * @brief Reports whether an authored or rendered mip can seed a partial update.
+         * @param level Mip level to query.
+         * @return True when the renderer owns deterministic readable bytes for the level.
+         */
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override
+        {
+            return level >= 0 && level < static_cast<int>(state_->definedMipLevels.size()) &&
+                   state_->definedMipLevels[static_cast<std::size_t>(level)];
+        }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
+            int /*requestedDepthStencilFormat*/) const override
+        {
+            return state_->appliedDepthFormat;
+        }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         {
             return depthFormatWasRequested && state_->depthTexture != nullptr;
+        }
+        [[nodiscard]] int DepthBufferBitsEXT() const override { return state_->depthBits; }
+        [[nodiscard]] bool HasRealStencilBuffer(bool stencilFormatWasRequested) const override
+        {
+            return stencilFormatWasRequested && state_->depthTexture != nullptr &&
+                   state_->hasStencil;
         }
 
         /** @brief Returns the sampleable (single-sample, resolved-into-if-MSAA) color texture. CNAEXT. */
@@ -461,6 +636,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT void AttachToCurrentSegment();
 
     private:
+        void UploadLevel(int level, const uint8_t* pixels,
+                         int levelW, int levelH, int stride);
         SdlGpuRenderer* owner_ = nullptr;
         bool mipMap_ = false;
         int multiSampleCount_ = 0;
@@ -479,6 +656,15 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         SdlGpuRenderer* owner = nullptr;
         int size = 0;
+        /// Exact public SurfaceFormat and corresponding native cube attachment storage.
+        int surfaceFormat = 0;
+        SDL_GPUTextureFormat colorFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        Uint32 colorBytesPerPixel = 4;
+        /// Exact per-target depth/stencil storage facts; INVALID means DepthFormat::None.
+        SDL_GPUTextureFormat depthFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+        int appliedDepthFormat = 0;
+        int depthBits = 0;
+        bool hasStencil = false;
         bool mipMap = false;
         /// REMED-GFX-188: native `num_levels` on the resolved, single-sample cube texture.
         /// Pass finalization owns only this shared state, so allocation, mip generation and
@@ -555,7 +741,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// multisampled one could not be preserved at all. Now that each face owns its own
         /// multisample texture it selects that texture's store op.
         SdlGpuRenderTargetCubeRenderer(SdlGpuRenderer& owner, int size, int depthFormat,
-                                      bool preserveContents, bool mipMap, int multiSampleCount);
+                                      bool preserveContents, bool mipMap, int multiSampleCount,
+                                      int surfaceFormat = 0);
         ~SdlGpuRenderTargetCubeRenderer() override;
 
         SdlGpuRenderTargetCubeRenderer(const SdlGpuRenderTargetCubeRenderer&) = delete;
@@ -565,6 +752,21 @@ namespace CNA::Internal::Renderers::SdlGpu
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
+            int /*requestedDepthStencilFormat*/) const override
+        {
+            return state_->appliedDepthFormat;
+        }
+        [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
+        {
+            return depthFormatWasRequested && state_->depthTexture != nullptr;
+        }
+        [[nodiscard]] int DepthBufferBitsEXT() const override { return state_->depthBits; }
+        [[nodiscard]] bool HasRealStencilBuffer(bool stencilFormatWasRequested) const override
+        {
+            return stencilFormatWasRequested && state_->depthTexture != nullptr &&
+                   state_->hasStencil;
+        }
         /**
          * @brief Real GPU readback of one face's pixels (pulled forward from `SDLGPU-39` -- this
          * targets a texture this renderer fully controls, unlike the swapchain-download path that
@@ -578,6 +780,30 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// fills the transfer buffer with whatever it finds, so the guard has to be here.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Uploads a complete Color region into one rendered cube face and mip.
+         * @param face Cube face index, zero through five.
+         * @param level Mip level to update.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Tightly packed RGBA8 source texels.
+         * @param dataLength Available source bytes.
+         * @return True when the complete region was stored; false for an unsupported request.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+        /**
+         * @brief Downloads the cube attachment's exact native texel representation.
+         *
+         * The common ITextureCubeRenderer transfer contract is RGBA8 and therefore remains
+         * available only for Color. This renderer-local diagnostic is what validates 2/4/8/16-byte
+         * target storage without pretending the public TextureCube currently has typed overloads.
+         */
+        CNAEXT [[nodiscard]] bool GetNativeDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const;
 
         /** @brief Returns the single-sample, sampleable cube texture. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUTexture* CubeTexture() const { return state_->cubeTexture; }
@@ -650,7 +876,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     class SdlGpuTextureCubeRenderer final : public ITextureCubeRenderer
     {
     public:
-        SdlGpuTextureCubeRenderer(SdlGpuRenderer& owner, int size, bool mipMap);
+        SdlGpuTextureCubeRenderer(SdlGpuRenderer& owner, int size, bool mipMap,
+                                  int surfaceFormat);
         ~SdlGpuTextureCubeRenderer() override;
 
         SdlGpuTextureCubeRenderer(const SdlGpuTextureCubeRenderer&) = delete;
@@ -659,6 +886,22 @@ namespace CNA::Internal::Renderers::SdlGpu
         /// REMED-GFX-135: same explicit completion contract as SdlGpuTexture3DRenderer::SetData.
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+        /**
+         * @brief Uploads exact DXT blocks to a cube face region.
+         *
+         * @param face Cube face index, 0 through 5.
+         * @param level Mip level to update.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Source block bytes.
+         * @param dataLength Source size in bytes.
+         * @return true when the complete logical update was stored; otherwise false.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(int face, int level, int x, int y,
+                                                int w, int h, const void* data,
+                                                int dataLength) override;
         /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
         /// face rectangle has been copied out of the transfer buffer; false for an empty request.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
@@ -667,6 +910,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         /** @brief Returns the underlying `SDL_GPUTexture`. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
         /**
+         * @brief Reports whether DXT blocks use native BC storage. Test-only CNAEXT.
+         *
+         * @return true for native BC storage; false for renderer-decoded RGBA8 storage.
+         */
+        CNAEXT [[nodiscard]] bool UsesNativeCompressionEXT() const
+        {
+            return compressedNative_;
+        }
+        /**
          * @brief Returns this cube texture as a bindable, lifetime-safe sampled resource. CNAEXT.
          *
          * @return The native handle paired with the shared state that keeps it alive.
@@ -674,6 +926,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->texture, state_}; }
 
     private:
+        [[nodiscard]] bool UploadCompressedLevel(
+            int face, int level, const std::vector<std::uint8_t>& blocks);
+
         SdlGpuRenderer* owner_ = nullptr;
         // Same rationale as SdlGpuTextureRenderer's own state_ -- see SdlGpuSampledTextureState.
         std::shared_ptr<SdlGpuSampledTextureState> state_;
@@ -681,6 +936,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool mipMap_ = false;
         /// Mip levels SDL really allocated for this cube (REMED-GFX-135).
         int levelCount_ = 1;
+        int surfaceFormat_ = 0;
+        SDL_GPUTextureFormat nativeFormat_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        int blockBytes_ = 4;
+        bool compressed_ = false;
+        bool compressedNative_ = false;
+        /// Exact DXT blocks indexed by `[face * levelCount_ + level]`.
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 
     /**
@@ -718,6 +980,15 @@ namespace CNA::Internal::Renderers::SdlGpu
     CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT ResolveSampledCubeEXT(const ITextureCubeRenderer* texture,
                                                                       const char* usage);
 
+    /**
+     * @brief Resolves a volume texture to its deferred-lifetime-safe sampled form. CNAEXT.
+     * @param texture Renderer volume texture to resolve; null yields an empty result.
+     * @param usage Public API name used in diagnostic text.
+     * @return The native volume handle plus a reference keeping its owner alive.
+     */
+    CNAEXT [[nodiscard]] SdlGpuSampledTextureEXT ResolveSampledVolumeEXT(
+        const ITexture3DRenderer* texture, const char* usage);
+
     /** @brief `SDL_gpu`-backed vertex buffer. */
     class SdlGpuVertexBufferRenderer final : public IVertexBufferRenderer
     {
@@ -727,11 +998,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         void SetData(const void* data, int vertexCount, std::size_t strideInBytes) override;
         /**
-         * @brief REMED-GFX-DECL-GUARD: remembers the declaration this buffer carries.
+         * @brief Remembers the declaration this buffer carries for semantic stock-input resolution.
          *
-         * This renderer still selects its `SDL_GPUVertexAttribute` set from the byte stride
-         * (REMED-GFX-217). Storing the declaration is what lets a draw refuse one that layout
-         * would silently reinterpret, without translating it.
+         * Ordinary stock draws translate each `(VertexElementUsage, usageIndex, offset, format)`
+         * into the immutable SDL GPU pipeline input layout. The remaining stride-derived
+         * Skinned/PBR paths retain the fidelity guard until their dedicated effect work lands.
          *
          * @param vertexDeclaration The declaration the caller propagated for this buffer.
          */
@@ -762,7 +1033,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // IVertexBufferRenderer already destroyed by then (matches WebGPUVertexBufferRenderer's own
         // ShadowData() rationale).
         CNAEXT [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
-        /** @brief The declaration this buffer carries, for REMED-GFX-DECL-GUARD. CNAEXT. */
+        /** @brief The declaration this buffer carries for stock-input resolution. CNAEXT. */
         CNAEXT [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
         {
             return declaration_;
@@ -824,7 +1095,7 @@ namespace CNA::Internal::Renderers::SdlGpu
      *
      * Fixed vertex contract, matching every other renderer's own custom-`ShaderEffect` convention
      * (`VulkanEffectRenderer`/`D3D11EffectRenderer`/`D3D12EffectRenderer`): `SpriteVertex`-shaped
-     * (pos `vec2` @0, uv `vec2` @8, color `vec4` @16, 32 bytes) -- a `SpriteBatch`-custom-shader
+     * (pos `vec3` @0, uv `vec2` @12, color `vec4` @20, 36 bytes) -- a `SpriteBatch`-custom-shader
      * facility, not a general arbitrary-vertex-format one (see
      * `ISpriteBatchRenderer::SetCustomEffect`'s own doc comment).
      *
@@ -869,11 +1140,10 @@ namespace CNA::Internal::Renderers::SdlGpu
          * `SdlGpuRenderer::QueueSprite`, mirroring every sibling `EffectRenderer`'s own
          * "set automatically by the sprite-batch runtime" convention. CNAEXT. */
         CNAEXT void SetViewportSizeEXT(float width, float height);
-        /** @brief Returns the pipeline for @p colorFormat / @p sampleCount /
+        /** @brief Returns the pipeline for @p colorFormats / @p sampleCount /
          * @p depthStencilFormat / @p colorTargetCount,
          * compiling+caching it on first use. @p colorTargetCount > 1 (real MRT, SDLGPU-37) builds
-         * a pipeline with that many `color_target_descriptions`, all sharing @p colorFormat (every
-         * `RenderTarget2D` in this renderer is `R8G8B8A8_UNORM`) -- lets a custom multi-output
+         * a pipeline with that many slot-aligned `color_target_descriptions` -- lets a custom multi-output
          * fragment shader (the only kind of shader in this codebase that can genuinely write more
          * than one attachment) really render simultaneous MRT. @p depthStencilFormat is
          * `SDL_GPU_TEXTUREFORMAT_INVALID` when the active pass is genuinely depthless; it is part
@@ -881,7 +1151,8 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @p slopeScaleDepthBias are the queued sprite's by-value rasterizer snapshot and are
          * pipeline-static identity/state (REMED-GFX-051). Null if `CompileProgram()` did not
          * succeed. CNAEXT — internal use only. */
-        CNAEXT [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(SDL_GPUTextureFormat colorFormat,
+        CNAEXT [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(
+                                                                          const SdlGpuColorTargetFormatsEXT& colorFormats,
                                                                           SDL_GPUSampleCount sampleCount,
                                                                           SDL_GPUTextureFormat depthStencilFormat,
                                                                           int colorTargetCount,
@@ -923,6 +1194,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         void SetSamplerFilter(int textureFilter) override { textureFilter_ = textureFilter; }
         void SetSamplerAddressMode(int addressU, int addressV) override { addressU_ = addressU; addressV_ = addressV; }
         /**
+         * @brief Captures every sampler property supplied to `SpriteBatch::Begin`.
+         *
+         * @param textureFilter Raw `TextureFilter` ordinal.
+         * @param addressU Raw `TextureAddressMode` ordinal for U.
+         * @param addressV Raw `TextureAddressMode` ordinal for V.
+         * @param addressW Raw `TextureAddressMode` ordinal for W.
+         * @param maxAnisotropy Requested maximum anisotropy.
+         * @param maxMipLevel Most detailed mip level the sampler may use.
+         * @param lodBias Mipmap level-of-detail bias.
+         */
+        void SetSamplerState(int textureFilter, int addressU, int addressV, int addressW,
+                             int maxAnisotropy, int maxMipLevel, float lodBias) override;
+        /**
          * @brief Records whether this batch is in `SpriteSortMode::Immediate`.
          *
          * plans/plan_fx.md FX-102: the two modes need different compiled-Effect pass granularity, and
@@ -952,6 +1236,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         int textureFilter_ = 0;
         int addressU_ = 1;
         int addressV_ = 1;
+        int addressW_ = 1;
+        int maxAnisotropy_ = 4;
+        int maxMipLevel_ = 0;
+        float lodBias_ = 0.0f;
         /// Set at Begin() time (SetCustomEffect), cleared at End() -- SDLGPU-42/43. Resolved to the
         /// concrete SdlGpuEffectRenderer* and snapshotted per-sprite at Draw() time (see QueueSprite),
         /// not read again at Present() time, so later SetUniform* calls on the same live effect
@@ -967,7 +1255,24 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         struct PendingSpriteEXT
         {
-            /** @brief The public texture renderer the sprite draws, and the run it belongs to. */
+            /**
+             * @brief The public texture renderer the sprite draws, and the run it belongs to.
+             *
+             * **Non-owning, and it is safe for a reason that lives in another module.** SDLGPU-119
+             * asked whether destroying the public `Texture2D` between `Draw` and `End` leaves this
+             * dangling, since `FlushPendingCompiledSpritesEXT` dereferences it. It does not:
+             * `SpriteBatch::pushSprite` takes a real `shared_ptr<ITextureRenderer>` copy at Draw
+             * time, and `SpriteBatch::End()` releases that queue only AFTER `renderer_->End()` has
+             * returned. So this pointer is covered for exactly as long as it can be dereferenced.
+             *
+             * That guarantee is a cross-module invariant and nothing in this file enforces it.
+             * `SpriteBatchTextureLifetimeTest` pins it against a deferring test double shaped like
+             * this queue; reordering those lines in `SpriteBatch::End()` fails those tests rather
+             * than silently reintroducing a use-after-free in every deferred renderer at once.
+             *
+             * `nativeTexture` below is a separate question and is owned: it keeps the GPU resource
+             * alive past the submit, which this pointer never did.
+             */
             const ITextureRenderer* texture = nullptr;
             /** @brief The texture resolved to its bindable native form, resolved at Draw() time. */
             SdlGpuSampledTextureEXT nativeTexture;
@@ -995,15 +1300,11 @@ namespace CNA::Internal::Renderers::SdlGpu
     /**
      * @brief `SDL_gpu`-backed graphics renderer (`CNA_GRAPHICS_RENDERER=SDL_GPU`).
      *
-     * See `plans/plan_sdlgpu.md` for the phased implementation plan. As of Phase `SDLGPU-6`, device/
-     * window/swapchain lifecycle, color+depth+stencil clear/present, `Texture2D`, vertex/index
-     * buffers, `SpriteBatch`, and the core 3D vertex formats (`colored3d`/`textured3d`/
-     * `colored_textured3d`/`lit_textured3d`, i.e. `BasicEffect`) are real and verified.
-     * `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`-specific
-     * `GpuDrawParams` fields (`alphaTest`, `dualTexture`, `envMapping`, `skinned`) are not yet
-     * checked by this renderer's `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` dispatch — such a
-     * draw currently renders as a plain `BasicEffect` draw instead (later phases add real
-     * per-effect dispatch, matching `WebGPURenderer`'s own precedent).
+     * See `plans/plan_sdlgpu.md` for the phased implementation and current parity evidence. Device,
+     * swapchain, multisampled backbuffer, all classic texture/target/buffer/draw families,
+     * `SpriteBatch`, the five XNA stock effects, Models and ordinary compiled Effects are real and
+     * discriminating-pixel verified. The renderer queues public draws and snapshots the complete
+     * target, resource, effect, uniform, sampler and immutable-pipeline state needed for replay.
      */
     class SdlGpuRenderer final : public IGraphicsRenderer
     {
@@ -1011,15 +1312,16 @@ namespace CNA::Internal::Renderers::SdlGpu
         friend class SdlGpuRenderTargetCubeRenderer;
         friend struct SdlGpuRenderTarget2DState;
         friend struct SdlGpuRenderTargetCubeState;
+        friend class SdlGpuCompiledEffect;
         // REMED-GFX-152: ordinary uploaded textures defer their native release through the same
         // QueueTextureRelease path render targets already used.
         friend struct SdlGpuSampledTextureState;
         friend class SdlGpuEffectRenderer;
     public:
-        /** @brief Vertex layout for the `sprite2d` pipeline: position, UV, RGBA color (32 bytes). */
+        /** @brief Vertex layout for the `sprite2d` pipeline: 3D position, UV, RGBA color (36 bytes). */
         struct SpriteVertex
         {
-            float x, y;
+            float x, y, z;
             float u, v;
             float r, g, b, a;
         };
@@ -1120,7 +1422,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Adversarial-review finding #4: which per-family queue a QueuedDrawRef points into.
         enum class DrawKind : Uint8
         {
-            Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Skinned, Sprite, Pbr
+            Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Instanced,
+            Skinned, Sprite, Pbr
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
             // plans/plan_fx.md FX-071: guarded like every other compiled-effect member in this header,
             // so a build without the option never declares an enumerator no switch handles.
@@ -1237,14 +1540,11 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressV = 0;
             int maxAnisotropy = 4;
             /// plans/plan_fx.md FX-083: XNA's SamplerState.MaxMipLevel and MipMapLevelOfDetailBias,
-            /// recorded by ApplySamplerMipState. Consumed by the compiled-effect draw route, which
-            /// is where an Effect's own `sampler_state` block lands.
+            /// recorded by ApplySamplerMipState and captured by every stock/compiled draw route.
             int maxMipLevel = 0;
             float lodBias = 0.0f;
             /// plans/plan_fx.md FX-091: XNA's SamplerState.AddressW, recorded by ApplySamplerAddressW.
-            /// This renderer samples 2D textures only, so W never reaches the hardware -- it is
-            /// recorded and carried into the sampler key anyway, so the day a volume texture is
-            /// sampled here it cannot be handed a sampler built for a different W mode.
+            /// Carried to SDL_gpu's native W address mode, observable for volume sampling.
             int addressW = 1;
         };
 
@@ -1258,14 +1558,32 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressV = 0;
             int maxAnisotropy = 4;
             /// plans/plan_fx.md FX-083: the effect's own MaxMipLevel/MipMapLevelOfDetailBias, which
-            /// SDL_GPU expresses exactly (min_lod and mip_lod_bias). Before this they were
-            /// published on GraphicsDevice.SamplerStates and then dropped on the way to the GPU.
+            /// SDL_GPU expresses through min_lod plus a native or shader-side bias. Before this
+            /// they were published on GraphicsDevice.SamplerStates and then dropped on the way to
+            /// the GPU. SDLGPU-122 snapshots the compiled value into its own per-register fragment
+            /// uniform and uses zero in the native descriptor so Vulkan/D3D12 cannot apply it twice.
             int maxMipLevel = 0;
             float lodBias = 0.0f;
             /// plans/plan_fx.md FX-091: the effect's own AddressW. Carried into the sampler cache key so
-            /// two passes differing only in W cannot share one native sampler, even though this
-            /// renderer's 2D-only compiled sampling never observes the axis itself.
+            /// two passes differing only in W cannot share one native sampler; volume compiled
+            /// samplers observe this axis directly.
             int addressW = 1;
+        };
+
+        /** @brief Owns the MojoShader references backing one deferred compiled-effect binding. */
+        struct CompiledEffectShaderLease
+        {
+            CompiledEffectShaderLease(MOJOSHADER_sdlContext* context,
+                                      MOJOSHADER_sdlShaderData* vertexShaderData,
+                                      MOJOSHADER_sdlShaderData* pixelShaderData);
+            ~CompiledEffectShaderLease();
+
+            CompiledEffectShaderLease(const CompiledEffectShaderLease&) = delete;
+            CompiledEffectShaderLease& operator=(const CompiledEffectShaderLease&) = delete;
+
+            MOJOSHADER_sdlContext* context = nullptr;
+            MOJOSHADER_sdlShaderData* vertexShaderData = nullptr;
+            MOJOSHADER_sdlShaderData* pixelShaderData = nullptr;
         };
 
         /**
@@ -1281,9 +1599,22 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             SDL_GPUShader* vertexShader = nullptr;
             SDL_GPUShader* pixelShader = nullptr;
+            /// SDLGPU-124: monotonic MojoShader identity; native wrapper addresses may be reused.
+            std::uint64_t programIdentity = 0;
+            /// Keeps this program's pipeline-cache entries reachable through deferred replay.
+            std::shared_ptr<const void> programLease;
+            /// Keeps both native shader modules valid until this deferred binding is discarded.
+            std::shared_ptr<CompiledEffectShaderLease> shaderLease;
             std::vector<SDL_GPUVertexAttribute> vertexAttributes;
+            std::vector<SDL_GPUVertexBufferDescription> vertexBuffers;
+            /// Dense native slot to offered source-stream index, used while capturing draw data.
+            std::vector<std::size_t> vertexStreamSourceIndices;
             std::vector<std::uint8_t> vertexUniformBytes;
             std::vector<std::uint8_t> pixelUniformBytes;
+            /// SDLGPU-122: one vec4 per D3D9 sampler register, pushed at fragment UBO slot 1 when
+            /// the linked module's implicit samples were rewritten to consume it.
+            std::vector<std::uint8_t> pixelLodBiasBytes;
+            bool pixelUsesLodBias = false;
             /// MOJOSHADER_sdlGetSamplerSlots(pixelShaderData) entries -- see
             /// CompiledEffectDrawCommand::binding's own doc comment for the unreflected-slot
             /// dummy-binding rule this follows.
@@ -1302,17 +1633,31 @@ namespace CNA::Internal::Renderers::SdlGpu
             // silent about the LIFETIME one -- this command is replayed at Present, by when a
             // short-lived public texture may already have released that handle.
             SdlGpuSampledTextureEXT texture;
+            /// SurfaceFormat captured with the sampled resource for XNA channel expansion.
+            int surfaceFormat = 0;
             std::array<SpriteVertex, 6> vertices{};
+            // SDLGPU-68: the coordinate extent the sprite shader must project over. This is the
+            // logical presentation size for the backbuffer's default letterbox/overscan/stretch
+            // viewport, and the native viewport size for a caller-defined sub-viewport. Captured
+            // with the geometry so a later resize cannot retroactively change a queued sprite.
+            // Zero means the render target's live extent (the legacy no-viewport path).
+            float projectionWidth = 0.0f;
+            float projectionHeight = 0.0f;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
             DrawTarget target;  ///< default = swapchain
-            // SDLGPU-42/43: non-null if this sprite was queued during a SetCustomEffect(effect)
-            // Begin/End cycle with a validly-compiled custom shader -- customUniforms is a snapshot
-            // of the effect's uniform state AT QUEUE TIME (see QueueSprite), not read again at
-            // Present() time, so later SetUniform* calls on the same live effect object never
-            // retroactively change this already-queued sprite's rendered result.
-            SdlGpuEffectRenderer* customEffect = nullptr;
+            // SDLGPU-81: a custom ShaderEffect's target-compatible pipeline is resolved at queue
+            // time. The public effect and its renderer may be destroyed before this whole-frame-
+            // deferred command replays, so retaining a raw SdlGpuEffectRenderer* here would be a
+            // use-after-free. The effect renderer defers releasing cached pipelines until after
+            // the frame submit, while customUniforms keeps the draw-time values by value.
+            bool customEffectRequested = false;
+            SDL_GPUGraphicsPipeline* customPipeline = nullptr;
             std::array<float, 32> customUniforms{};
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
             // plans/plan_fx.md FX-071: the compiled-effect counterpart of customEffect/customUniforms
@@ -1348,6 +1693,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             Sint32 vertexOffset = 0;  ///< SDL_DrawGPUIndexedPrimitives `vertex_offset`
         };
 
+        /** @brief One additional vertex stream captured for deferred replay. */
+        struct CapturedStockVertexStreamEXT
+        {
+            std::vector<std::uint8_t> data;
+            SDL_GPUBuffer* uploadedBuffer = nullptr;
+        };
+
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d draw commands.
         // Vertex/index data is shadow-copied at Draw-call time (see
         // SdlGpuVertexBufferRenderer::ShadowData()'s own rationale) and re-uploaded into a
@@ -1357,6 +1709,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         struct ColoredDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;  ///< empty for a non-indexed draw
             bool indexed = false;
             bool index32 = false;
@@ -1371,17 +1724,20 @@ namespace CNA::Internal::Renderers::SdlGpu
             bool depthWrite = false;
             int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;  ///< transient, set by UploadSceneDrawData
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;   ///< transient, set by UploadSceneDrawData
         };
 
-        // textured3d (stride 20, VertexPositionTexture) and colored_textured3d (stride 24,
-        // VertexPositionColorTexture) share this command shape and the same fragment shader --
-        // `hasVertexColor` selects the stride-24 vertex-input-state/pipeline vs stride-20's.
+        // textured3d and colored_textured3d share this command shape and fragment shader;
+        // `hasVertexColor` selects the shader family while `vertexLayout` supplies the declaration's
+        // actual semantic formats, offsets and stride.
         struct TexturedDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -1403,16 +1759,23 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
-            bool hasVertexColor = false;  ///< stride 24 vs stride 20
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
+            bool hasVertexColor = false;  ///< Selects the COLOR0-consuming shader family.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
-        // lit_textured3d (stride 32, VertexPositionNormalTexture) -- real Blinn-Phong lighting.
+        // lit_textured3d -- declaration-resolved POSITION0/NORMAL0/TEXCOORD0 plus optional COLOR0,
+        // with real Blinn-Phong lighting.
         struct LitTexturedDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -1435,18 +1798,22 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
-        // AlphaTestEffect (Phase SDLGPU-7) -- strides 20 (VertexPositionTexture)/32
-        // (VertexPositionNormalTexture, normal unread) share one shader (alphaTestVertexShader_);
-        // stride 24 (VertexPositionColorTexture, vertex-color tint) uses
-        // alphaTestColoredVertexShader_. `stride` selects which at render time.
+        // AlphaTestEffect (Phase SDLGPU-7/59) -- declaration-resolved POSITION0/TEXCOORD0;
+        // COLOR0 selects the tinted vertex shader while unrelated declaration elements are ignored.
         struct AlphaTestDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -1468,20 +1835,25 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
-            std::size_t stride = 20;  ///< 20, 24, or 32 -- selects vertex layout + shader
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
+            bool hasVertexColor = false;
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
-        // DualTextureEffect (Phase SDLGPU-7) -- two texture units sampled at the same UV
-        // (`tex1.rgb*=2; result=tex1*tex2*tint`). Strides 20/24 use dedicated vertex shaders
-        // (dualTextureVertexShader_/dualTextureColoredVertexShader_); the fragment shader is
-        // shared and does not need the primary PC block at all (fragTint is already resolved by
-        // the vertex stage).
+        // DualTextureEffect (Phase SDLGPU-7/59) -- two texture units sampled from independently
+        // resolved TEXCOORD0/TEXCOORD1 (`tex1.rgb*=2; result=tex1*tex2*tint`). COLOR0 selects the
+        // tinted vertex shader; the shared fragment shader consumes the two UV varyings and the
+        // tint already resolved by the vertex stage.
         struct DualTextureDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -1503,25 +1875,34 @@ namespace CNA::Internal::Renderers::SdlGpu
             int texture0AddressU = 0;
             int texture0AddressV = 0;
             int texture0MaxAnisotropy = 4;  ///< REMED-GFX-170: captured with the filter
+            int texture0MaxMipLevel = 0;
+            float texture0LodBias = 0.0f;
+            int texture0AddressW = 1;
             int texture1Filter = 0;
             int texture1AddressU = 0;
             int texture1AddressV = 0;
             int texture1MaxAnisotropy = 4;  ///< REMED-GFX-170: captured with the filter
+            int texture1MaxMipLevel = 0;
+            float texture1LodBias = 0.0f;
+            int texture1AddressW = 1;
             ///@}
-            bool hasVertexColor = false;  ///< stride 24 vs stride 20
+            bool hasVertexColor = false;  ///< Selects the COLOR0-consuming shader family.
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
-        // EnvironmentMapEffect (Phase SDLGPU-9, SDLGPU-33) -- stride 32 (VertexPositionNormalTexture,
-        // same layout lit_textured3d uses). `envMapTexture` is resolved at Queue-time to the raw
+        // EnvironmentMapEffect (Phase SDLGPU-9, SDLGPU-33/59) resolves
+        // POSITION0/NORMAL0/TEXCOORD0 by semantic. `envMapTexture` is resolved at Queue-time to the raw
         // SDL_GPUTexture* since GpuDrawParams::envMap (an ITextureCubeRenderer*) may be either a
         // plain SdlGpuTextureCubeRenderer or a SdlGpuRenderTargetCubeRenderer -- mirrors
         // SpriteBatch::Draw's own dual-renderer resolve for ITextureRenderer.
         struct EnvMapDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
             bool index32 = false;
@@ -1546,6 +1927,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
             ///@}
             ///@{ REMED-GFX-173: the reflection cube's own GraphicsDevice.SamplerStates[1], captured
             /// independently of slot 0 and by value -- exactly the shape DualTextureDrawCommand
@@ -1555,24 +1939,56 @@ namespace CNA::Internal::Renderers::SdlGpu
             int envMapAddressU = 0;
             int envMapAddressV = 0;
             int envMapMaxAnisotropy = 4;
+            int envMapMaxMipLevel = 0;
+            float envMapLodBias = 0.0f;
+            int envMapAddressW = 1;
             ///@}
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
-        // SkinnedEffect (Phase SDLGPU-7, SDLGPU-34) -- stride 52 (VertexPositionNormalTextureSkinned)
-        // or stride 56 (the same layout plus a per-vertex Color, `hasVertexColor` selects it).
+        /** @brief One ordinary XNA indexed instanced draw captured for deferred replay. */
+        struct InstancedDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
+            std::vector<std::uint8_t> indexData;
+            bool index32 = false;
+            Uint32 indexCount = 0;
+            Uint32 firstIndex = 0;
+            Sint32 vertexOffset = 0;
+            Uint32 instanceCount = 1;
+            SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            std::array<float, 32> uniforms{};
+            std::array<float, 8> fogUniforms{};
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            RenderStateSnapshot renderState;
+            CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT vertexLayout;
+            DrawTarget target;
+            SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedNeutralVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
+        };
+
+        // SkinnedEffect (Phase SDLGPU-7, SDLGPU-34, SDLGPU-77) -- compatible semantic
+        // declarations are captured into stride 52 (VertexPositionNormalTextureSkinned) or stride
+        // 56 (the same layout plus a per-vertex Color, `hasVertexColor` selects it). In particular,
+        // legal Vector4 BLENDINDICES records are converted to the native UBYTE4 input here rather
+        // than rejected or misread by stride.
         // Stride 52 draws reuse litTexturedFragmentShader_ unchanged (byte-identical varying
         // interface and UBO layout to lit_textured3d's own fragment shader). Stride 56 draws use a
         // dedicated skinnedColoredVertexShader_/skinnedColoredFragmentShader_ pair instead (see
         // skinned_colored3d.frag.glsl's own doc comment for why vertex color needs its own
         // fragment shader rather than folding into fragTint). The 72-bone palette (4608 bytes) is
-        // uploaded as a real SDL_GPUBuffer (GRAPHICS_STORAGE_READ) and bound via
-        // SDL_BindGPUVertexStorageBuffers, NOT pushed via SDL_PushGPUVertexUniformData --
-        // empirically found (SdlGpu_Skinned) that this renderer's push-uniform-data mechanism has a
-        // real ~4096-byte cap per slot on this Vulkan-backed environment, well under the full
-        // 4608-byte palette.
+        // uploaded as a 288x1 RGBA32F sampler texture and bound to the vertex stage. This avoids
+        // the uniform limit, preserves each column exactly, and is representable by SDL_gpu's
+        // Vulkan, D3D12 and Metal shader models; the former storage-buffer route made D3D12 reject
+        // the otherwise-valid graphics pipeline.
         struct SkinnedDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
@@ -1585,7 +2001,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};        ///< PC: same 32-float layout FillExtUniforms already fills
-            std::array<float, 72 * 16> boneUniforms{}; ///< BoneBlock: 72 mat4 = 1152 floats (4608 bytes), uploaded as a storage buffer
+            std::array<float, 72 * 16> boneUniforms{}; ///< 72 column-major mat4 values uploaded as a 288x1 RGBA32F vertex texture
             std::array<float, 56> lightUniforms{};   ///< SkinnedLightParams: byte-identical to LitLightParams
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
@@ -1599,18 +2015,21 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
-            bool hasVertexColor = false;  ///< stride 56 vs stride 52
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
+            bool hasVertexColor = false;  ///< normalized stride 56 vs stride 52
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
-            SDL_GPUBuffer* uploadedBoneBuffer = nullptr;
+            SDL_GPUTexture* uploadedBoneTexture = nullptr;
         };
 
         // PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF) -- stride 48
         // (VertexPositionNormalTangentTexture, unskinned) or stride 68
         // (VertexPositionNormalTangentTextureSkinned), `skinned` selects the vertex shader/pipeline
         // (pbrVertexShader_/pbrSkinnedVertexShader_) and whether boneUniforms is uploaded/bound as
-        // a storage buffer -- both variants share pbrFragmentShader_ unchanged (see
+        // a vertex-stage RGBA32F sampler texture -- both variants share pbrFragmentShader_ unchanged (see
         // pbr_skinned3d.vert.glsl's own doc comment). uniforms/lightUniforms reuse FillExtUniforms/
         // FillLitLightUniforms's/FillSkinnedLightUniforms's existing layouts unchanged; pbrParams
         // is the one genuinely new uniform block (MetallicFactor/RoughnessFactor + alpha coverage).
@@ -1650,12 +2069,15 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+            int addressW = 1;
             SamplerSlotState specularSampler;       ///< GraphicsDevice.SamplerStates[5]
             SamplerSlotState specularColorSampler;  ///< GraphicsDevice.SamplerStates[6]
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
-            SDL_GPUBuffer* uploadedBoneBuffer = nullptr;  ///< only set when skinned == true
+            SDL_GPUTexture* uploadedBoneTexture = nullptr;  ///< only set when skinned == true
         };
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
@@ -1672,13 +2094,14 @@ namespace CNA::Internal::Renderers::SdlGpu
          * already-queued draw (mirrors `SpriteCommand::texture`'s own `SdlGpuSampledTextureEXT`
          * precedent).
          *
-         * First implementation scope: one vertex stream, pixel-stage 2D-texture sampling only. A
-         * compiled effect outside that scope is refused when queued (`QueueCompiledEffectDraw`)
-         * rather than silently drawing with an unbound or wrong-dimensionality sampler.
+         * All declared per-vertex/per-instance streams and pixel-stage 2D/cube/volume samplers are
+         * captured. Vertex-stage texture sampling remains explicitly refused when queued rather
+         * than silently drawing with an unbound sampler.
          */
         struct CompiledEffectDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
+            std::vector<CapturedStockVertexStreamEXT> extraVertexStreams;
             std::vector<std::uint8_t> indexData;  ///< empty for a non-indexed draw
             bool indexed = false;
             bool index32 = false;
@@ -1688,6 +2111,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             Uint32 vertexStride = 0;
+            Uint32 instanceCount = 1;
             /// Everything BuildCompiledEffectBindingEXT captured from the applied pass -- shaders,
             /// vertex attributes, uniform bytes, sampler bindings. See its own doc comment for the
             /// unreflected-sampler-slot dummy-binding rule it applies.
@@ -1706,21 +2130,66 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Constructs the renderer against an already-created SDL window.
          *
-         * @param window SDL window to claim for `SDL_gpu` rendering. Must not be null.
+         * @param window SDL window to claim for `SDL_gpu` rendering, or null for the existing
+         * `PresentationParameters::HeadlessEXT` off-screen mode.
          * @param virtualWidth Initial virtual (game-logic) resolution width.
          * @param virtualHeight Initial virtual (game-logic) resolution height.
          * @param presentationMode Initial presentation/scaling policy.
          * @param swapInterval Initial swap interval (0=immediate, 1=VSync, 2=half-rate).
+         * @param multiSampleCount Requested backbuffer sample count; clamped to device support.
+         * @param depthStencilFormat Requested XNA DepthFormat ordinal for the backbuffer.
          */
         SdlGpuRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                              CnaPresentationMode presentationMode, int swapInterval);
+                       CnaPresentationMode presentationMode, int swapInterval,
+                       int multiSampleCount = 0, int depthStencilFormat = 3);
         /**
          * @brief Test-only constructor with scoped failure injection and destruction callbacks.
+         *
          * CNAEXT. Public renderer selection APIs continue to use the ordinary overload above.
+         *
+         * @param window SDL window to claim, or null for headless operation.
+         * @param virtualWidth Initial virtual resolution width.
+         * @param virtualHeight Initial virtual resolution height.
+         * @param presentationMode Initial presentation/scaling policy.
+         * @param swapInterval Initial swap interval.
+         * @param testHooks Scoped construction failure/destruction instrumentation.
+         * @param multiSampleCount Requested backbuffer sample count.
+         * @param depthStencilFormat Requested XNA DepthFormat ordinal for the backbuffer.
          */
         CNAEXT SdlGpuRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                    CnaPresentationMode presentationMode, int swapInterval,
-                                    const SdlGpuTestHooksEXT& testHooks);
+                              CnaPresentationMode presentationMode, int swapInterval,
+                              const SdlGpuTestHooksEXT& testHooks,
+                              int multiSampleCount = 0, int depthStencilFormat = 3);
+
+        /**
+         * @brief Creates every production stock shader on a named SDL_gpu driver without a window.
+         *
+         * This test-only portability probe uses the same device-format negotiation, ShaderCross
+         * reflection checks and 26 shader-create descriptors as ordinary renderer construction,
+         * but deliberately does not claim a window or create a swapchain.
+         *
+         * @param driverName SDL_gpu driver name, such as `direct3d12`, `metal` or `vulkan`.
+         * @return The actual driver name reported by the successfully created device.
+         * @throws std::runtime_error If the compiler session, device or any stock shader cannot be
+         * created.
+         */
+        CNAEXT [[nodiscard]] static std::string ValidateStockShadersForDriverEXT(
+            const char* driverName);
+
+        /**
+         * @brief Draws through a production stock shader pair and reads back an offscreen target.
+         *
+         * The test-only probe creates no window or swapchain. It uses the same portable shader
+         * construction as the renderer, a `VertexPositionColor` pipeline, real upload/render/copy
+         * commands and synchronous RGBA8 readback.
+         *
+         * @param driverName SDL_gpu driver name, such as `direct3d12`, `metal` or `vulkan`.
+         * @return Selected driver plus discriminating drawn and untouched target pixels.
+         * @throws std::runtime_error If any native resource, command or readback operation fails.
+         */
+        CNAEXT [[nodiscard]] static SdlGpuHeadlessStockDrawResultEXT
+        ValidateStockDrawForDriverEXT(const char* driverName);
+
         /** @brief Releases the window from the `SDL_GPUDevice` and destroys the device. */
         ~SdlGpuRenderer() override;
 
@@ -1743,11 +2212,10 @@ namespace CNA::Internal::Renderers::SdlGpu
          * conformance suite's own read-back pixel checks. The pass's declared `sampler_state`
          * block reaches the GPU, LOD clamp and bias included.
          *
-         * Still refused explicitly rather than silently mishandled: a compiled effect's vertex
-         * shader sampling a texture, and a 3D/cube (not 2D) sampler binding. Multi-stream and
-         * instanced draws are refused one level up -- this renderer reports neither
-         * `MultiStreamVertexInput` nor implements `DrawInstancedPrimitivesEx`, so `GraphicsDevice`
-         * rejects them before submission, for compiled and stock effects alike.
+         * A compiled effect's vertex shader sampling a texture remains explicitly refused because
+         * the shared renderer contract exposes only fragment-stage texture/sampler bindings.
+         * Fragment-stage 2D/cube/volume samplers and multi-stream/instanced draws are implemented
+         * and covered by the shared compiled-effect conformance suite.
          * @return true.
          */
         [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
@@ -1765,12 +2233,60 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuRenderer(const SdlGpuRenderer&) = delete;
         SdlGpuRenderer& operator=(const SdlGpuRenderer&) = delete;
 
+        /**
+         * @brief Reports only capabilities that this renderer currently implements faithfully.
+         *
+         * @param capability Capability to query.
+         * @return True only when the corresponding public operation is implemented.
+         */
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        /**
+         * @brief Reports whether the default framebuffer has a usable requested depth format.
+         *
+         * @return True when the applied backbuffer format has a depth plane.
+         */
+        [[nodiscard]] bool SupportsDepthStencil() const override
+        {
+            return depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID;
+        }
+        /**
+         * @brief Reports whether the default framebuffer has a usable requested depth plane.
+         *
+         * @return True when the applied backbuffer format has a depth plane.
+         */
+        [[nodiscard]] bool SupportsDepthBuffer() const override
+        {
+            return SupportsDepthStencil();
+        }
+        /**
+         * @brief Reports whether the default framebuffer has a usable requested stencil plane.
+         *
+         * @return True only for an applied depth/stencil format with a stencil plane.
+         */
+        [[nodiscard]] bool SupportsStencilBuffer() const override
+        {
+            return backbufferHasStencil_;
+        }
+
+        /** @brief Returns the full sixteen-stream XNA binding ceiling supported by SDL_gpu. */
+        [[nodiscard]] int GetMaxVertexStreams() const override
+        {
+            return static_cast<int>(CNA::Internal::Graphics::kMaxStockVertexStreamsEXT);
+        }
+
+        /** @brief Describes current qualitative SDL_gpu API and renderer limitations. */
+        [[nodiscard]] std::string_view GetAdditionalLimitationsTextEXT() const override;
+
         /** @brief Queues a color-only clear, consumed on the next render pass. */
         void Clear(float r, float g, float b, float a) override;
         /** @brief Renders any pending clear and presents the swapchain texture. */
         void Present() override;
+        /** @brief Adopts the platform's latest drawable size and logical-to-physical scale. */
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /** @brief Returns the current logical (virtual) viewport size. */
         void GetViewportSize(int& width, int& height) override;
+        /** @brief Returns the physical drawable rectangle used for logical presentation. */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         /**
          * @brief Reads a region of the backbuffer into a tightly packed RGBA8 buffer (REMED-GFX-165).
          *
@@ -1787,13 +2303,154 @@ namespace CNA::Internal::Renderers::SdlGpu
         void SetPresentationMode(int mode) override;
         /** @brief Updates the swap interval, reconfiguring the swapchain present mode. */
         void SetSwapInterval(int interval) override;
+        /**
+         * @brief Applies a device-supported backbuffer multisample count for subsequent frames.
+         *
+         * @param requestedMultiSampleCount Requested XNA sample count.
+         * @return The applied count, or zero when multisampling is disabled/unavailable.
+         */
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        /**
+         * @brief Returns the backbuffer's actual device-clamped sample count.
+         *
+         * @return The applied count, or zero when multisampling is disabled.
+         */
+        [[nodiscard]] int GetMultiSampleCount() const override
+        {
+            return backbufferMultiSampleCount_;
+        }
+        /**
+         * @brief Maps a requested count to the count actually selected during construction/reset.
+         *
+         * @param requestedMultiSampleCount The public request; retained for the common contract.
+         * @return The renderer's actual applied count.
+         */
+        CNAEXT [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override
+        {
+            (void)requestedMultiSampleCount;
+            return backbufferMultiSampleCount_;
+        }
+        /**
+         * @brief Applies a new ordinary backbuffer depth/stencil request during Reset.
+         *
+         * SDL_gpu chooses the swapchain color format, so @p backBufferFormat is normalized to
+         * logical Color by @ref GetAppliedBackBufferFormatEXT. Fullscreen is owned by the platform
+         * window path; this hook replaces only renderer-owned depth/MSAA attachments.
+         *
+         * @param backBufferFormat Requested SurfaceFormat ordinal.
+         * @param depthStencilFormat Requested DepthFormat ordinal.
+         * @param isFullScreen Whether fullscreen presentation was requested.
+         */
+        void UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
+                                         bool isFullScreen) override;
+        /**
+         * @brief Reports the logical Color format of the SDL_gpu RGBA8/BGRA8 backbuffer.
+         *
+         * @param requestedFormat Requested SurfaceFormat ordinal.
+         * @return SurfaceFormat::Color, the transfer contract actually implemented.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Maps a requested backbuffer depth format to a supported native representation.
+         *
+         * @param requestedFormat Requested DepthFormat ordinal.
+         * @return The equivalent applied DepthFormat, or None when no faithful storage exists.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int requestedFormat) const override;
+        /** @brief Returns the swap interval most recently requested by the XNA presentation path. */
+        CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
+        /**
+         * @brief Returns the interval the selected SDL_gpu present mode can actually provide.
+         *
+         * SDL_gpu has no half-rate mode, so a request for XNA `PresentInterval::Two` applies
+         * ordinary one-vblank VSYNC. Immediate presentation can likewise fall back to a
+         * synchronized mode when the window does not support it.
+         *
+         * @return Zero for immediate presentation or one for a synchronized present mode.
+         */
+        CNAEXT [[nodiscard]] int GetAppliedSwapIntervalEXT() const { return appliedSwapInterval_; }
         /** @brief Converts a physical window point to logical (virtual) game coordinates. */
         bool TransformWindowToLogical(float windowX, float windowY, float& logicalX, float& logicalY) const override;
         /** @brief Converts a logical (virtual) game point to physical window coordinates. */
         bool TransformLogicalToWindow(float logicalX, float logicalY, float& windowX, float& windowY) const override;
 
+        /**
+         * @brief Classifies the ordinary Texture2D SurfaceFormats this renderer stores faithfully.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to classify.
+         * @return The renderer's supported, unsupported or deferred verdict.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Classifies the classic formats implemented by the plain TextureCube path.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to classify.
+         * @return Supported for Color and DXT1/3/5, Unsupported for other classic formats, or
+         *         Defer for CNAEXT formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+        /**
+         * @brief Classifies the classic formats implemented by the Texture3D transfer path.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to classify.
+         * @return Supported for Color, Unsupported for other classic formats, or Defer for
+         *         CNAEXT formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
+            int surfaceFormat) const override;
+        /**
+         * @brief Classifies exact ordinary RenderTarget2D storage on the live SDL_gpu device.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to classify.
+         * @return Supported only when the exact color-target-and-sampler format is available,
+         *         Unsupported for the remaining classic formats, or Defer for CNAEXT formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(
+            int surfaceFormat) const override;
+        /** @brief Classifies exact cube render-target storage on the live SDL_gpu device. */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetCubeFormatEXT(
+            int surfaceFormat) const override;
+        /**
+         * @brief Classifies whether Color-shaped transfers preserve the requested format.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to classify.
+         * @return Supported only for Color, Unsupported for other classic formats, or Defer for CNAEXT formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports the classic DXT formats whose public transfers are block-compressed.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to inspect.
+         * @return true for Dxt1, Dxt3 or Dxt5; otherwise false.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports the classic DXT formats transferred as cube-face blocks.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to inspect.
+         * @return true for Dxt1, Dxt3 or Dxt5; otherwise false.
+         */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(
+            int surfaceFormat) const override;
+        /**
+         * @brief Reports whether DDS/XNB blocks can remain compressed during content loading.
+         *
+         * @return true only when the device natively stores all three classic DXT formats.
+         */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override;
+
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
+
+        /**
+         * @brief Refuses XNA occlusion queries because the SDL_gpu API has no query primitive.
+         *
+         * @return Never returns.
+         * @throws System::NotSupportedException on every call.
+         */
+        std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
         /** @brief Queues a combined color+depth clear, consumed on the next render pass. */
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
@@ -1911,12 +2568,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Records XNA's `SamplerState.MaxMipLevel`/`MipMapLevelOfDetailBias` for a slot.
          *
-         * plans/plan_fx.md FX-083. SDL_GPU expresses both exactly -- `min_lod` and `mip_lod_bias` on
-         * `SDL_GPUSamplerCreateInfo`, the same mapping FNA3D's own SDL_GPU driver makes -- and
-         * both now participate in the sampler cache key so two slots asking for different LOD
-         * clamps do not share one sampler object. The compiled-effect draw route consumes them.
-         * The stock 3D draw families still capture only filter/addressing/anisotropy into their
-         * own command structs; that pre-existing gap is recorded in docs/sampler-state-support.md.
+         * plans/plan_fx.md FX-083 and plans/plan_sdlgpu.md SDLGPU-121. `MaxMipLevel` maps to
+         * `SDL_GPUSamplerCreateInfo::min_lod`. Stock 3D and stock SpriteBatch carry the bias in a
+         * fragment uniform and apply the SPIR-V Bias image operand because SDL's Metal driver
+         * documents native `mip_lod_bias` as a no-op. SDLGPU-122 applies the same shader-side rule
+         * to compiled XNA effects after MojoShader linking. Every command captures both fields at
+         * public draw time.
          *
          * @param slot Sampler slot.
          * @param maxMipLevel Most detailed mip level the sampler may use.
@@ -1926,11 +2583,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Records XNA's `SamplerState.AddressW` for a slot.
          *
-         * plans/plan_fx.md FX-091. This renderer's compiled-effect route resolves 2D textures only, so
-         * the third addressing axis is never observable in a sampled result today -- but it IS part
-         * of a sampler's identity, and recording it keeps the cache key complete. Overriding the
-         * hook also means the device's own W selection is what an unassigned slot reports, instead
-         * of a silently invented default.
+         * plans/plan_fx.md FX-091. AddressW participates in the complete sampler identity and is
+         * observable through ordinary compiled-effect volume sampling; the parity oracle
+         * distinguishes Wrap from Clamp across deliberately different first/last slices.
          *
          * @param slot Sampler slot.
          * @param addressW Raw `TextureAddressMode` ordinal for W.
@@ -1949,6 +2604,21 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
+        /**
+         * @brief Creates an off-screen target in its exact requested SurfaceFormat.
+         *
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param depthFormat Requested DepthFormat ordinal.
+         * @param preserveContents Whether prior contents must be preserved across bindings.
+         * @param mipMap Whether to allocate and regenerate a complete mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat Requested SurfaceFormat ordinal.
+         * @return The exact-format render-target renderer.
+         */
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         /** @brief Activates the given render target (pass nullptr to restore the swapchain). */
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
 
@@ -1956,9 +2626,12 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief Creates a `RenderTargetCube` (Phase `SDLGPU-8`, `SDLGPU-36`), including real MSAA.
          */
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat,
-                                                                          bool preserveContents = false,
-                                                                          bool mipMap = false,
-                                                                          int multiSampleCount = 0) override;
+                                                                         bool preserveContents = false,
+                                                                         bool mipMap = false,
+                                                                         int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
 
         /** @brief Creates a `Texture3D` (Phase `SDLGPU-9`, `SDLGPU-40`/`SDLGPU-41`). */
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap,
@@ -1970,10 +2643,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         /**
          * @brief Creates a custom-`ShaderEffect` renderer (Phase `SDLGPU-10`, `SDLGPU-42`/`SDLGPU-43`),
-         * compiling @p vertSrc/@p fragSrc (GLSL source) to SPIR-V at runtime via `libshaderc`.
-         * Compilation failure is reported via the returned renderer's `IsValid()`/`GetCompileError()`
-         * (matches `VulkanRenderer`/`DirectX11Renderer`'s own convention), not an
-         * exception.
+         * compiling @p vertSrc/@p fragSrc (GLSL source) to SPIR-V at runtime when this build has
+         * a target-native `libshaderc` and a SPIR-V-capable SDL_gpu driver. An unavailable compiler
+         * or compilation failure is reported via the returned renderer's
+         * `IsValid()`/`GetCompileError()` (matching `VulkanRenderer`/`DirectX11Renderer`'s own
+         * convention), not an exception.
          */
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                             const std::string& fragSrc) override;
@@ -1989,7 +2663,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
 
-        /** @brief Draws stride-16 (VertexPositionColor) primitives with a hardcoded white/vertex-color-enabled BasicEffect. */
+        /** @brief Draws declared POSITION0/COLOR0 primitives with a white, vertex-color-enabled BasicEffect. */
         void DrawColoredPrimitives(const IVertexBufferRenderer& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
@@ -1998,7 +2672,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                           const IIndexBufferRenderer& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
-        /** @brief Effect-aware draw — dispatches to colored3d/textured3d/colored_textured3d/lit_textured3d by vertex stride. */
+        /** @brief Effect-aware draw that selects and binds stock inputs by declaration semantics. */
         void DrawPrimitivesEx(const IVertexBufferRenderer& vb,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount,
@@ -2008,6 +2682,26 @@ namespace CNA::Internal::Renderers::SdlGpu
                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
+        /**
+         * @brief Draws indexed primitives using per-vertex and per-instance vertex streams.
+         *
+         * @param vb The primary per-vertex buffer.
+         * @param ib The index buffer.
+         * @param world The effect world matrix; instance records supply the stock shader's worlds.
+         * @param view The view matrix.
+         * @param projection The projection matrix.
+         * @param primitive Primitive topology.
+         * @param primitiveCount Number of primitives per instance.
+         * @param instanceCount Number of instances to draw.
+         * @param params Captured effect state, draw ranges, and complete vertex binding set.
+         */
+        void DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb,
+                                       const IIndexBufferRenderer& ib,
+                                       const Matrix& world, const Matrix& view,
+                                       const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount,
+                                       int instanceCount,
+                                       const GpuDrawParams& params) override;
 
         /**
          * @brief Queues a sprite quad for drawing on the next render pass. CNAEXT — internal use
@@ -2028,6 +2722,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                                 int textureFilter,
                                 int addressU,
                                 int addressV,
+                                int addressW,
+                                int maxAnisotropy,
+                                int maxMipLevel,
+                                float lodBias,
                                 SdlGpuEffectRenderer* customEffect = nullptr,
                                 ICompiledEffectRuntime* compiledEffect = nullptr);
 
@@ -2048,20 +2746,60 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             return spritePipelines_.size();
         }
+        /** @brief Maximum number of native pipelines retained in any one state cache. CNAEXT. */
+        CNAEXT static constexpr std::size_t MaxRetainedPipelineCountPerCacheEXT = 256;
+        /** @brief Maximum number of native samplers retained across submitted frames. CNAEXT. */
+        CNAEXT static constexpr std::size_t MaxRetainedSamplerCountEXT = 256;
+        /** @brief Number of native samplers currently retained for reuse. Test-only. CNAEXT. */
+        CNAEXT [[nodiscard]] std::size_t GetSamplerCacheSizeEXT() const
+        {
+            return samplerCache_.size();
+        }
         /** @brief Number of cached stock colored-3D pipelines. Test-only pipeline-static
          * rasterizer-state introspection for REMED-GFX-051. CNAEXT. */
         CNAEXT [[nodiscard]] std::size_t GetColoredPipelineCacheSizeEXT() const
         {
             return coloredPipelines_.size();
         }
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        /** @brief Number of cached ordinary compiled-effect pipelines. Test-only. CNAEXT. */
+        CNAEXT [[nodiscard]] std::size_t GetCompiledEffectPipelineCacheSizeEXT() const;
+#endif
         /**
          * @brief Drives the ordinary lazy stock-sprite pipeline and sampler factories without
          * requiring swapchain presentation. Test-only GFX-028 failure/retry probe. CNAEXT.
          */
         CNAEXT void InitializeSpritePipelineAndSamplerForTestEXT();
+        /**
+         * @brief Makes the next successful swapchain acquisition follow SDL's documented
+         * minimized-window null-texture path. Test-only; the acquired command buffer is still
+         * submitted exactly as SDL requires. CNAEXT.
+         */
+        CNAEXT void ForceNextNullSwapchainTextureForTestEXT()
+        {
+            forceNextNullSwapchainTextureForTest_ = true;
+        }
+        /** @brief Whether this renderer was created without a window/swapchain. CNAEXT. */
+        CNAEXT [[nodiscard]] bool IsHeadlessEXT() const noexcept { return headless_; }
+        /**
+         * @brief Gets the active native graphics-driver name reported by the device. CNAEXT.
+         * @return Driver name, or an empty string if the device reports none.
+         */
+        CNAEXT [[nodiscard]] std::string GetDriverNameEXT() const;
 
     private:
         struct ConstructionResources;
+        struct CachedGraphicsPipelineEXT
+        {
+            SDL_GPUGraphicsPipeline* pipeline = nullptr;
+            std::uint64_t lastUse = 0;
+        };
+        using GraphicsPipelineCacheEXT =
+            std::unordered_map<std::size_t, CachedGraphicsPipelineEXT>;
+
+        [[nodiscard]] static std::string InitializeHeadlessStockShaders(
+            ConstructionResources& resources, const char* driverName);
+        static void CreateConstructionShaders(ConstructionResources& resources);
 
         struct LogicalViewport
         {
@@ -2080,20 +2818,27 @@ namespace CNA::Internal::Renderers::SdlGpu
         // on-demand-submit semantics.
         bool EnsureFrameRendered();
         // (Re)creates depthStencilTexture_ if it does not already match the requested size.
-        // depthStencilFormat_ itself is queried once in the constructor (QueryDepthStencilFormat),
-        // not here, since pipeline creation needs a stable answer before any frame has rendered.
+        // depthStencilFormat_ is selected at construction/Reset, not here, since pipeline creation
+        // needs a stable answer before any frame has rendered.
         void EnsureDepthStencilTexture(Uint32 width, Uint32 height);
-        // Queries the best available combined depth+stencil format once, at construction time.
-        static SDL_GPUTextureFormat QueryDepthStencilFormat(SDL_GPUDevice* device);
-        static void ConfigureSwapchain(SDL_GPUDevice* device, SDL_Window* window, int interval);
+        // Releases the renderer-owned depth and multisample attachments whose compatibility
+        // depends on either the depth format or sample count.
+        void ReleaseBackbufferDepthAndMsaaAttachments();
+        // (Re)creates the multisample colour attachment selected for the backbuffer. A sample count
+        // of one needs no intermediate attachment and therefore returns true without allocation.
+        bool EnsureBackbufferMsaaTexture(Uint32 width, Uint32 height);
+        [[nodiscard]] static int ConfigureSwapchain(
+            SDL_GPUDevice* device, SDL_Window* window, int interval);
         void MaybeFailForTest(SdlGpuFailurePointEXT point);
         void NotifyResourceEvent(SdlGpuResourceKindEXT resource,
                                  SdlGpuResourceEventEXT event) const noexcept;
         [[nodiscard]] SDL_GPUGraphicsPipeline* CreateGraphicsPipeline(
             const SDL_GPUGraphicsPipelineCreateInfo& createInfo, const char* diagnostic);
+        [[nodiscard]] SDL_GPUGraphicsPipeline* FindCachedGraphicsPipeline(
+            GraphicsPipelineCacheEXT& cache, std::size_t key);
         [[nodiscard]] SDL_GPUGraphicsPipeline* CacheGraphicsPipeline(
-            std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*>& cache,
-            std::size_t key, SDL_GPUGraphicsPipeline* pipeline);
+            GraphicsPipelineCacheEXT& cache, std::size_t key,
+            SDL_GPUGraphicsPipeline* pipeline);
         void ReleaseGraphicsPipeline(SDL_GPUGraphicsPipeline* pipeline) noexcept;
         void ReleaseShader(SDL_GPUShader*& shader) noexcept;
         void ReleaseSampler(SDL_GPUSampler*& sampler) noexcept;
@@ -2115,6 +2860,20 @@ namespace CNA::Internal::Renderers::SdlGpu
         // (whatever was pending has now been handed to the GPU, so it's safe), and one final time
         // in ~SdlGpuRenderer() in case no further frame ever renders.
         void QueueTextureRelease(SDL_GPUTexture* texture);
+        /**
+         * @brief Defers a custom-effect pipeline release until queued draws have been submitted.
+         *
+         * SDL_gpu invalidates a pipeline handle for future API calls as soon as
+         * `SDL_ReleaseGPUGraphicsPipeline` is called. A short-lived `ShaderEffect` can therefore
+         * release its cache only through this queue: already-issued SpriteBatch commands bind the
+         * captured pipeline later, at frame replay.
+         */
+        void QueueGraphicsPipelineRelease(SDL_GPUGraphicsPipeline* pipeline);
+        void SeedMultisampleTargetFromResolved(
+            SDL_GPUTexture* resolvedTexture, int resolvedLayer,
+            SDL_GPUTexture* multisampleTexture, SDL_GPUTextureFormat colorFormat,
+            SDL_GPUSampleCount sampleCount, int surfaceFormat,
+            int width, int height, const char* diagnostic);
 
         // sprite2d pipeline: shader modules, compatibility-keyed pipelines, and the renderer-wide
         // sampler cache, keyed by the COMPLETE description (filter, addressU, addressV,
@@ -2122,7 +2881,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // DepthStencilState.None disables tests/writes but does NOT erase pipeline target
         // metadata: REMED-GFX-097 therefore passes the active pass's actual depth format (or
         // INVALID for no attachment) into creation and cache selection.
-        void CreateSpriteResources(ConstructionResources& resources);
+        static void CreateSpriteResources(ConstructionResources& resources);
         void DestroySpriteResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreateSpritePipeline(SDL_GPUTextureFormat colorFormat,
                                                                           SDL_GPUSampleCount sampleCount,
@@ -2146,11 +2905,11 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param family Public draw family, for `CNA_SDLGPU_SAMPLER_TRACE` only.
          * @param maxMipLevel Public `SamplerState.MaxMipLevel`; becomes `min_lod` (plans/plan_fx.md
          *        FX-083), the same mapping FNA3D's own SDL_GPU driver makes.
-         * @param lodBias Public `SamplerState.MipMapLevelOfDetailBias`; becomes `mip_lod_bias`.
-         * @param addressW Raw `TextureAddressMode` ordinal for W. SDL_GPU's compiled-effect route
-         *        samples 2D textures only, so this axis never reaches the hardware today -- it is
-         *        part of the key regardless, so adopting it later cannot be served a sampler built
-         *        for a different W mode.
+         * @param lodBias Native `SDL_GPUSamplerCreateInfo::mip_lod_bias`. Stock and compiled-XNA
+         *        shaders pass zero here and carry the public value in Bias uniforms instead; the
+         *        CNAEXT custom-shader route still passes its caller-supplied native value.
+         * @param addressW Raw `TextureAddressMode` ordinal for W. Ordinary compiled effects observe
+         *        it through volume sampling; it remains part of every sampler cache identity.
          * @return The cached or newly created native sampler; never null.
          */
         [[nodiscard]] SDL_GPUSampler* GetOrCreateSampler(int textureFilter, int addressU,
@@ -2166,36 +2925,111 @@ namespace CNA::Internal::Renderers::SdlGpu
         // RenderQueuedDraws() in real chronological (drawOrder_) order, not grouped with every
         // other sprite (adversarial-review finding #4: draw ordering). @p index is this sprite's
         // own position in spriteCommands_, needed for its vertex-buffer offset.
-        // colorTargetCount > 1 (real MRT, SDLGPU-37) is forwarded to a customEffect's own
-        // GetOrCreatePipeline() so a real multi-output fragment shader can build a pipeline
-        // matching this pass's actual attachment count -- stock (single-output) sprites are
-        // unaffected, since GetOrCreateSpritePipeline() always builds exactly 1 color target.
+        // colorTargetCount > 1 (real MRT, SDLGPU-37) is forwarded to every pipeline family so its
+        // immutable target layout matches the pass. A custom/compiled multi-output shader can
+        // write every slot; stock single-output shaders deliberately leave slots 1..3 undefined.
         void IssueSpriteDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const SpriteCommand& command,
                              std::size_t index, const float* viewportSize, SDL_GPUTextureFormat colorFormat,
                              SDL_GPUSampleCount sampleCount, SDL_GPUTextureFormat depthStencilFormat,
                              int colorTargetCount,
                              SDL_GPUGraphicsPipeline*& boundPipeline);
 
+        /** @brief SDLGPU-59: stock shader family selected from declaration semantics plus effect state. */
+        enum class StockVertexShapeEXT
+        {
+            Colored,
+            Textured,
+            ColoredTextured,
+            Lit,
+            AlphaTest,
+            AlphaTestColored,
+            DualTextured,
+            DualTexturedColored,
+            EnvMapped,
+            StrideDerived
+        };
+
+        struct StockVertexStreamSourceEXT
+        {
+            const SdlGpuVertexBufferRenderer* buffer = nullptr;
+            int stride = 0;
+            int vertexOffset = 0;
+            int slot = 0;
+            int instanceFrequency = 0;
+            int vertexCount = 0;
+        };
+
+        struct StockDrawVertexStreamsEXT
+        {
+            std::array<CNA::Internal::Graphics::StockVertexStreamEXT,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> declarations{};
+            std::array<StockVertexStreamSourceEXT,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> sources{};
+            std::array<std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>,
+                       CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> synthesized{};
+            std::size_t count = 0;
+        };
+
+        static void CollectStockVertexStreamsEXT(
+            const SdlGpuVertexBufferRenderer& vb, const GpuDrawParams* params,
+            StockDrawVertexStreamsEXT& out, bool includePerInstance = false);
+        static void SynthesizeMissingStreamDeclarationsEXT(StockDrawVertexStreamsEXT& streams);
+        static void CaptureStockVertexStreamsEXT(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout,
+            const StockDrawVertexStreamsEXT& streams, int vertexStart,
+            std::vector<std::uint8_t>& stream0Data,
+            std::vector<CapturedStockVertexStreamEXT>& extra,
+            int instanceCount = 1);
+
+        [[nodiscard]] static StockVertexShapeEXT SelectStockVertexShapeEXT(
+            const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
+            std::size_t streamCount, std::size_t stride, const GpuDrawParams& params);
+        static void StockVertexInputsForShapeEXT(
+            StockVertexShapeEXT shape,
+            const CNA::Internal::Graphics::StockProgramInput*& inputs,
+            std::size_t& count, const char*& programName);
+        [[nodiscard]] CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
+        ResolveStockVertexLayoutForDrawEXT(
+            const SdlGpuVertexBufferRenderer& vb,
+            const CNA::Internal::Graphics::StockVertexStreamEXT* streams,
+            std::size_t streamCount, StockVertexShapeEXT shape) const;
+        [[nodiscard]] static CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT
+        ResolveInstancedVertexLayoutEXT(const StockDrawVertexStreamsEXT& streams,
+                                        bool hasVertexColor);
+        void DispatchStockDrawEXT(
+            const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        static void BindStockVertexBuffersEXT(
+            SDL_GPURenderPass* pass, SDL_GPUBuffer* vertexBuffer,
+            const std::vector<CapturedStockVertexStreamEXT>& extraVertexStreams,
+            SDL_GPUBuffer* neutralVertexBuffer,
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& layout);
+
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d.
-        void CreateColoredResources(ConstructionResources& resources);
+        static void CreateColoredResources(ConstructionResources& resources);
         void DestroyColoredResources();
-        void CreateTexturedResources(ConstructionResources& resources);   ///< also creates colored_textured3d's vertex shader (shares textured3d's fragment shader)
+        static void CreateTexturedResources(ConstructionResources& resources);   ///< also creates colored_textured3d's vertex shader (shares textured3d's fragment shader)
         void DestroyTexturedResources();
-        void CreateLitTexturedResources(ConstructionResources& resources);
+        static void CreateLitTexturedResources(ConstructionResources& resources);
         void DestroyLitTexturedResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineColored3D(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineTextured3D(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineColoredTextured3D(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineLitTextured3D(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
@@ -2204,33 +3038,45 @@ namespace CNA::Internal::Renderers::SdlGpu
         void QueueColoredDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount,
-                              const GpuDrawParams* params = nullptr);
+                              const GpuDrawParams* params,
+                              const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                const Matrix& world, const Matrix& view, const Matrix& projection,
-                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                               bool hasVertexColor,
+                               const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueLitTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
-                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                  const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
 
         // Phase SDLGPU-7: AlphaTestEffect / DualTextureEffect.
-        void CreateAlphaTestResources(ConstructionResources& resources);
+        static void CreateAlphaTestResources(ConstructionResources& resources);
         void DestroyAlphaTestResources();
-        void CreateDualTextureResources(ConstructionResources& resources);
+        static void CreateDualTextureResources(ConstructionResources& resources);
         void DestroyDualTextureResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineAlphaTest3D(
-            std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            bool hasVertexColor,
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineDualTexture3D(
-            std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            bool hasVertexColor,
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         void QueueAlphaTestDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                 const Matrix& world, const Matrix& view, const Matrix& projection,
-                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                bool hasVertexColor,
+                                const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void QueueDualTextureDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
-                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                                  bool hasVertexColor,
+                                  const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void IssueAlphaTestDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const AlphaTestDrawCommand& command,
                                SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
                                SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
@@ -2241,24 +3087,42 @@ namespace CNA::Internal::Renderers::SdlGpu
                                  SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Phase SDLGPU-9: EnvironmentMapEffect (SDLGPU-33).
-        void CreateEnvMapResources(ConstructionResources& resources);
+        static void CreateEnvMapResources(ConstructionResources& resources);
         void DestroyEnvMapResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineEnvMap3D(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         void QueueEnvMapDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
-                             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+                             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+                             const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout);
         void IssueEnvMapDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const EnvMapDrawCommand& command,
                             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
                             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                             SDL_GPUGraphicsPipeline*& boundPipeline);
 
+        static void CreateInstancedResources(ConstructionResources& resources);
+        void DestroyInstancedResources();
+        [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineInstanced3D(
+            const CNA::Internal::Graphics::ResolvedStockVertexLayoutEXT& vertexLayout,
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
+            const RenderStateSnapshot& renderState);
+        void IssueInstancedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                const InstancedDrawCommand& command,
+                                SDL_GPUTextureFormat colorFormat,
+                                SDL_GPUSampleCount sampleCount,
+                                SDL_GPUTextureFormat depthStencilFormat,
+                                int colorTargetCount,
+                                SDL_GPUGraphicsPipeline*& boundPipeline);
+
         // Phase SDLGPU-7: SkinnedEffect (SDLGPU-34). GetOrCreatePipelineSkinned3D's `hasVertexColor`
         // selects the stride-56 skinnedColoredVertexShader_/skinnedColoredFragmentShader_ pair
         // instead of the stride-52 skinnedVertexShader_/litTexturedFragmentShader_ pair.
-        void CreateSkinnedResources(ConstructionResources& resources);
+        static void CreateSkinnedResources(ConstructionResources& resources);
         void DestroySkinnedResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineSkinned3D(
             bool hasVertexColor, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
@@ -2277,7 +3141,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // EnsureDefaultPbrTextures() lazily creates the 1x1 fallback textures the 4 optional maps
         // bind when the effect leaves them unset, mirroring EasyGLRenderer::
         // EnsureDefaultWhiteTexture()/EnsureDefaultFlatNormalTexture()'s identical role.
-        void CreatePbrResources(ConstructionResources& resources);
+        static void CreatePbrResources(ConstructionResources& resources);
         void DestroyPbrResources();
         void EnsureDefaultPbrTextures();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelinePbr3D(
@@ -2298,7 +3162,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // shader pair, vertex layout and render state, all captured at queue time (see
         // CompiledEffectDrawCommand's own doc comment for why).
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineCompiledEffect(
-            const CompiledEffectBinding& binding, Uint32 vertexStride,
+            const CompiledEffectBinding& binding,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             const RenderStateSnapshot& renderState,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
@@ -2308,16 +3172,17 @@ namespace CNA::Internal::Renderers::SdlGpu
         // resolving its sampler bindings. See CompiledEffectBinding's own doc comment.
         [[nodiscard]] CompiledEffectBinding BuildCompiledEffectBindingEXT(
             CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect& effect,
-            const std::vector<VertexElement>& declaredElements);
+            const std::vector<SdlGpuCompiledEffectVertexStreamEXT>& streams,
+            const SdlGpuSampledTextureEXT* spriteTextureOverride = nullptr);
         void QueueCompiledEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                      PrimitiveType primitive, int primitiveCount,
-                                     const GpuDrawParams& params);
+                                     const GpuDrawParams& params, int instanceCount = 1);
         // Binds the pipeline, uniforms and sampler bindings a compiled-effect draw needs -- shared
         // by IssueCompiledEffectDraw (ordinary 3D draws, its own vertex/index buffer) and
         // IssueSpriteDraw's compiled-effect branch (the shared packed sprite vertex buffer).
         void BindCompiledEffectForDrawEXT(
             SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-            const CompiledEffectBinding& binding, Uint32 vertexStride,
+            const CompiledEffectBinding& binding,
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             const RenderStateSnapshot& renderState,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
@@ -2528,6 +3393,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         // draw carries the viewport and scissor it was issued under (per-draw capture, needed for
         // this deferred renderer -- see SetViewport()/SetScissorRect()).
         void PushDrawOrder(DrawKind kind, std::size_t index);
+        /**
+         * @brief Applies XNA 4.0's Direct3D 9 integer-pixel-center correction to a 3D WVP.
+         *
+         * @param wvp Unadjusted world-view-projection matrix.
+         * @return The matrix translated just under half a viewport pixel, or @p wvp unchanged
+         *         for a multisampled destination or a degenerate viewport.
+         */
+        [[nodiscard]] Matrix ApplyXnaPixelCenter(const Matrix& wvp) const;
         // REMED-GFX-064: applies SDL_SetGPUViewport for one queued draw, using the ref's captured
         // viewport if set, otherwise the pass's full render-target extents (byte-identical to the
         // pre-fix implicit full-target viewport). Called per draw from RenderQueuedDraws.
@@ -2555,14 +3428,31 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuTestHooksEXT testHooks_{};
         bool testFailureInjected_ = false;
         bool registeredForWindow_ = false;
+        bool windowClaimed_ = false;
+        bool headless_ = false;
+        bool shaderCrossAcquired_ = false;
         SDL_GPUTexture* depthStencilTexture_ = nullptr;
         SDL_GPUTextureFormat depthStencilFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+        bool backbufferHasStencil_ = false;
+        SDL_GPUSampleCount depthStencilSampleCount_ = SDL_GPU_SAMPLECOUNT_1;
+
+        // SDLGPU-85: SDL_gpu swapchain textures themselves are single-sample. A requested
+        // backbuffer MSAA mode renders into this matching multisample colour target, then each
+        // backbuffer pass resolves into the acquired swapchain or the readable proxy below.
+        SDL_GPUTexture* backbufferMsaaTexture_ = nullptr;
+        int backbufferMsaaWidth_ = 0;
+        int backbufferMsaaHeight_ = 0;
+        SDL_GPUTextureFormat backbufferMsaaFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+        SDL_GPUSampleCount backbufferSampleCount_ = SDL_GPU_SAMPLECOUNT_1;
+        int backbufferMultiSampleCount_ = 0;
+        SDL_GPUTextureFormat backbufferFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
 
         // REMED-GFX-165: the swapchain texture is write-only by permanent SDL contract
         // (SDL_WaitAndAcquireGPUSwapchainTexture cannot be a sampler/copy/blit SOURCE), so the
         // backbuffer cannot be read back directly. Once GetBackBufferData is first called, the
         // backbuffer pass renders into this self-owned SAMPLER|COLOR_TARGET proxy instead of straight
-        // into the swapchain texture, and one SDL_BlitGPUTexture(proxy -> swapchain) presents it;
+        // into the swapchain texture, and one SDL_BlitGPUTexture(proxy -> swapchain) presents it.
+        // HeadlessEXT has no swapchain, so the same proxy is its permanent off-screen backbuffer;
         // ReadBackbuffer then downloads from the proxy through the same transfer-buffer+fence path the
         // render targets already use. Lazily created on the first read, so a game that never reads the
         // backbuffer pays NOTHING (this resolves plans/plan_sdlgpu.md SDLGPU-39's per-frame-cost objection --
@@ -2582,11 +3472,18 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Keyed by (int)colorFormat -- Phase SDLGPU-8 needs more than one variant (swapchain
         // format vs. render-target R8G8B8A8_UNORM), unlike Phases 1-7 where sprites only ever
         // targeted the swapchain.
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> spritePipelines_;
-        /// REMED-GFX-170 / plans/plan_fx.md FX-091: keyed on the complete sampler description as a
-        /// struct with member-wise equality, so two states that differ in ANY component get their
-        /// own native sampler and no field can be silently truncated out of the key.
-        std::unordered_map<SamplerCacheKeyEXT, SDL_GPUSampler*, SamplerCacheKeyHashEXT> samplerCache_;
+        GraphicsPipelineCacheEXT spritePipelines_;
+        std::uint64_t graphicsPipelineUseSerial_ = 0;
+        struct CachedSamplerEXT
+        {
+            SDL_GPUSampler* sampler = nullptr;
+            std::uint64_t lastUse = 0;
+        };
+        /// REMED-GFX-170 / FX-091: complete immutable-sampler identity. SDLGPU-126 adds bounded
+        /// cross-frame LRU retention: arbitrary ordinary SamplerState values must not retain one
+        /// native object each until GraphicsDevice destruction.
+        std::unordered_map<SamplerCacheKeyEXT, CachedSamplerEXT, SamplerCacheKeyHashEXT> samplerCache_;
+        std::uint64_t samplerCacheUseSerial_ = 0;
         SDL_GPUBuffer* spriteVertexBuffer_ = nullptr;
         Uint32 spriteVertexCapacityBytes_ = 0;
         std::vector<SpriteCommand> spriteCommands_;
@@ -2607,55 +3504,57 @@ namespace CNA::Internal::Renderers::SdlGpu
         // the exact packing, mirroring WebGPURenderer's own int-keyed cache convention).
         SDL_GPUShader* coloredVertexShader_ = nullptr;
         SDL_GPUShader* coloredFragmentShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> coloredPipelines_;
+        GraphicsPipelineCacheEXT coloredPipelines_;
         std::vector<ColoredDrawCommand> coloredDrawCommands_;
 
-        SDL_GPUShader* texturedVertexShader_ = nullptr;         ///< stride 20 (VertexPositionTexture)
-        SDL_GPUShader* coloredTexturedVertexShader_ = nullptr;  ///< stride 24 (VertexPositionColorTexture)
-        SDL_GPUShader* texturedFragmentShader_ = nullptr;       ///< shared by both stride-20/24 pipelines
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> texturedPipelines_;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> coloredTexturedPipelines_;
+        SDL_GPUShader* texturedVertexShader_ = nullptr;         ///< POSITION0/TEXCOORD0 variant.
+        SDL_GPUShader* coloredTexturedVertexShader_ = nullptr;  ///< POSITION0/COLOR0/TEXCOORD0 variant.
+        SDL_GPUShader* texturedFragmentShader_ = nullptr;       ///< Shared by both semantic variants.
+        GraphicsPipelineCacheEXT texturedPipelines_;
+        GraphicsPipelineCacheEXT coloredTexturedPipelines_;
         std::vector<TexturedDrawCommand> texturedDrawCommands_;
 
         SDL_GPUShader* litTexturedVertexShader_ = nullptr;
         SDL_GPUShader* litTexturedFragmentShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> litTexturedPipelines_;
+        GraphicsPipelineCacheEXT litTexturedPipelines_;
         std::vector<LitTexturedDrawCommand> litTexturedDrawCommands_;
 
-        // Phase SDLGPU-7. alphaTestPipelines_ holds BOTH stride-20 and stride-32 pipelines
-        // (shared shader, different vertex_input_state) -- its cache key folds in the stride
-        // (see GetOrCreatePipelineAlphaTest3D's own key computation), unlike every other
-        // pipeline map here which is already stride-specific by construction.
-        SDL_GPUShader* alphaTestVertexShader_ = nullptr;         ///< strides 20/32 (no vertex colour)
-        SDL_GPUShader* alphaTestColoredVertexShader_ = nullptr;  ///< stride 24 (vertex colour tint)
+        // Phase SDLGPU-7/59. Each cache key includes the fully resolved semantic input layout;
+        // colour and non-colour variants use separate shaders and maps.
+        SDL_GPUShader* alphaTestVertexShader_ = nullptr;         ///< No COLOR0 tint.
+        SDL_GPUShader* alphaTestColoredVertexShader_ = nullptr;  ///< COLOR0 tint.
         SDL_GPUShader* alphaTestFragmentShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> alphaTestPipelines_;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> alphaTestColoredPipelines_;
+        GraphicsPipelineCacheEXT alphaTestPipelines_;
+        GraphicsPipelineCacheEXT alphaTestColoredPipelines_;
         std::vector<AlphaTestDrawCommand> alphaTestDrawCommands_;
 
-        SDL_GPUShader* dualTextureVertexShader_ = nullptr;         ///< stride 20
-        SDL_GPUShader* dualTextureColoredVertexShader_ = nullptr;  ///< stride 24
+        SDL_GPUShader* dualTextureVertexShader_ = nullptr;         ///< TEXCOORD0/1, no COLOR0 tint.
+        SDL_GPUShader* dualTextureColoredVertexShader_ = nullptr;  ///< TEXCOORD0/1 with COLOR0 tint.
         SDL_GPUShader* dualTextureFragmentShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> dualTexturePipelines_;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> dualTextureColoredPipelines_;
+        GraphicsPipelineCacheEXT dualTexturePipelines_;
+        GraphicsPipelineCacheEXT dualTextureColoredPipelines_;
         std::vector<DualTextureDrawCommand> dualTextureDrawCommands_;
 
         SDL_GPUShader* envMapVertexShader_ = nullptr;
         SDL_GPUShader* envMapFragmentShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> envMapPipelines_;
+        GraphicsPipelineCacheEXT envMapPipelines_;
         std::vector<EnvMapDrawCommand> envMapDrawCommands_;
+
+        SDL_GPUShader* instancedVertexShader_ = nullptr;
+        GraphicsPipelineCacheEXT instancedPipelines_;
+        std::vector<InstancedDrawCommand> instancedDrawCommands_;
 
         // No dedicated fragment shader for stride 52 -- reuses litTexturedFragmentShader_ (see
         // SkinnedDrawCommand's own doc comment). Stride 56 (vertex color) uses its own dedicated
         // pair below, cached separately from skinnedPipelines_ (mirrors alphaTestPipelines_/
         // alphaTestColoredPipelines_'s own separate-map-per-stride convention).
         SDL_GPUShader* skinnedVertexShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> skinnedPipelines_;
+        GraphicsPipelineCacheEXT skinnedPipelines_;
         std::vector<SkinnedDrawCommand> skinnedDrawCommands_;
 
         SDL_GPUShader* skinnedColoredVertexShader_ = nullptr;    ///< stride 56
         SDL_GPUShader* skinnedColoredFragmentShader_ = nullptr;  ///< stride 56 (see skinned_colored3d.frag.glsl)
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> skinnedColoredPipelines_;
+        GraphicsPipelineCacheEXT skinnedColoredPipelines_;
 
         // PbrEffect/SkinnedPbrEffect. pbrFragmentShader_ is shared by both the unskinned
         // (pbrVertexShader_, stride 48) and skinned (pbrSkinnedVertexShader_, stride 68)
@@ -2668,10 +3567,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         // than a runtime flag because a SPIR-V input with no matching vertex attribute is invalid.
         SDL_GPUShader* pbrColorVertexShader_ = nullptr;
         SDL_GPUShader* pbrSkinnedColorVertexShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrPipelines_;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrSkinnedPipelines_;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrColorPipelines_;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrSkinnedColorPipelines_;
+        GraphicsPipelineCacheEXT pbrPipelines_;
+        GraphicsPipelineCacheEXT pbrSkinnedPipelines_;
+        GraphicsPipelineCacheEXT pbrColorPipelines_;
+        GraphicsPipelineCacheEXT pbrSkinnedColorPipelines_;
         std::vector<PbrDrawCommand> pbrDrawCommands_;
         // 1x1 fallback textures for PbrEffect's 6 optional maps when left unbound -- lazily
         // created by EnsureDefaultPbrTextures(). default_white_ makes an absent metallic-
@@ -2683,10 +3582,34 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::unique_ptr<SdlGpuTextureRenderer> defaultFlatNormalTexture_;
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        struct CompiledProgramLifetimeStateEXT
+        {
+            SdlGpuRenderer* owner = nullptr;
+        };
+
+        [[nodiscard]] std::shared_ptr<const void> RetainCompiledProgramIdentityEXT(
+            std::uint64_t programIdentity);
+        void ExpireCompiledProgramIdentityEXT(std::uint64_t programIdentity) noexcept;
+
         // plans/plan_fx.md FX-071: unlike every stock family's cache above, this one is keyed on a
-        // linked shader pair rather than a fixed shader field, since arbitrary compiled effects
-        // share it across effect instances (see GetOrCreatePipelineCompiledEffect).
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> compiledEffectPipelines_;
+        // linked program rather than a fixed shader field, since arbitrary compiled effects share
+        // it across effect instances. The exact 64-bit program identity is the outer key; each
+        // program's immutable state/layout hash is local to that identity and cannot alias another
+        // program merely through a size_t hash collision.
+        std::unordered_map<std::uint64_t,
+                           GraphicsPipelineCacheEXT>
+            compiledEffectPipelines_;
+        /// Weak canonical lease per live program; Effects and queued draws own the strong copies.
+        std::unordered_map<std::uint64_t, std::weak_ptr<const void>> compiledProgramLeases_;
+        /// Makes a lease callback harmless after renderer teardown, even if an Effect outlives it.
+        std::shared_ptr<CompiledProgramLifetimeStateEXT> compiledProgramLifetimeState_ =
+            std::make_shared<CompiledProgramLifetimeStateEXT>();
+        /// Live runtimes whose native effects must be released before the shared MojoShader
+        /// context and SDL_GPU device. The public Effect/runtime wrapper itself may outlive both.
+        std::vector<SdlGpuCompiledEffect*> compiledEffects_;
+        void RegisterCompiledEffectEXT(SdlGpuCompiledEffect* effect);
+        void UnregisterCompiledEffectEXT(SdlGpuCompiledEffect* effect);
+        void ReleaseCompiledEffectsForRendererTeardownEXT();
         std::vector<CompiledEffectDrawCommand> compiledEffectDrawCommands_;
 #endif
 
@@ -2700,6 +3623,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // See QueueTextureRelease's own doc comment -- GPU texture handles from a destroyed
         // render target, deferred until the next successful command-buffer submit.
         std::vector<SDL_GPUTexture*> pendingTextureReleases_;
+        /// SDLGPU-81: custom-effect pipelines whose wrappers died before deferred replay.
+        std::vector<SDL_GPUGraphicsPipeline*> pendingGraphicsPipelineReleases_;
 
         // SDLGPU-36: mirrors currentRenderTarget_ for RenderTargetCube faces -- currentRenderTarget_
         // and currentRenderTargetCube_ are mutually exclusive (binding one clears the other,
@@ -2734,10 +3659,13 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         int physicalWidth_ = 0;
         int physicalHeight_ = 0;
+        float displayScale_ = 1.0f;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         int swapInterval_ = 1;
+        int appliedSwapInterval_ = 1;
+        bool forceNextNullSwapchainTextureForTest_ = false;
 
         bool framePending_ = true;
 
@@ -2758,6 +3686,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         // RenderStateSnapshot at Queue*Draw()/QueueSprite() time (see CaptureRenderState()).
         BlendKeyParams blendParams_;
         std::array<int, 4> colorWriteMasks_{{15, 15, 15, 15}};  ///< REMED-GFX-077/-098: current per-MRT-slot masks
+        /**
+         * @brief Slot-aligned formats of the native render pass currently being recorded.
+         *
+         * SDLGPU-75: pipeline creation happens only while replaying one native pass (or while an
+         * internal single-target helper explicitly seeds this value). Keeping the immutable
+         * pipeline compatibility tuple here lets every stock and compiled-effect family share the
+         * existing issue signatures while still keying/describing all four MRT slots exactly.
+         */
+        SdlGpuColorTargetFormatsEXT activeColorTargetFormats_{{
+            SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+            SDL_GPU_TEXTUREFORMAT_INVALID,
+            SDL_GPU_TEXTUREFORMAT_INVALID,
+            SDL_GPU_TEXTUREFORMAT_INVALID}};
         int cullMode_ = 2;         ///< XNA CullMode ordinal; 2 = CullCounterClockwiseFace (RasterizerState's real default)
         bool fillModeWireframe_ = false;
         StencilKeyParams stencilParams_;  ///< readMask/writeMask live here now, see StencilKeyParams's own doc comment

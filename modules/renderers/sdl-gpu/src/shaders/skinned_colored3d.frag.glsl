@@ -14,6 +14,8 @@ layout(location = 2) in vec4  fragTint;
 layout(location = 3) in vec3  fragWorldPos;
 layout(location = 4) in vec4  fragVertexColor;
 layout(location = 5) in vec4 fragFog;    // REMED-GFX-009
+layout(location = 6) in vec3 fragVertexLit;
+layout(location = 7) in vec3 fragVertexSpecular;
 
 layout(location = 0) out vec4 outColor;
 
@@ -44,34 +46,45 @@ layout(set = 3, binding = 1) uniform LitLightParams {
     vec4 specularColorPower; // xyz = material SpecularColor, w = SpecularPower
 } lp;
 
+layout(set = 3, binding = 2) uniform SamplerLodBias {
+    vec4 slots0To3;
+    vec4 slots4To7;
+} samplerLodBias;
+
 vec3 safeNormalize(vec3 v) {
     float len2 = dot(v, v);
     return len2 > 0.0 ? v * inversesqrt(len2) : vec3(0.0);
 }
 
 void main() {
-    vec4 tex = (pc.textureEnabled > 0.5) ? texture(uTexture, fragUV) : vec4(1.0);
+    vec4 tex = (pc.textureEnabled > 0.5)
+        ? texture(uTexture, fragUV, samplerLodBias.slots0To3.x) : vec4(1.0);
 
     vec4 color;
     if (pc.lightingEnabled > 0.5) {
-        vec3 N = normalize(fragNormal);
-        vec3 E = safeNormalize(lp.eyePos_pad.xyz - fragWorldPos);
-        vec3 nL0 = safeNormalize(pc.light0Dir);
-        vec3 nL1 = safeNormalize(lp.light1Dir_pad.xyz);
-        vec3 nL2 = safeNormalize(lp.light2Dir_pad.xyz);
-        float dotL0 = dot(N, -nL0); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
-        float dotL1 = dot(N, -nL1); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
-        float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
-        vec3 lightSum = pc.ambientColor + NdotL0 * pc.light0Diffuse
-                        + NdotL1 * lp.light1Diffuse_pad.xyz + NdotL2 * lp.light2Diffuse_pad.xyz;
-        vec3 h0 = safeNormalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, lp.specularColorPower.w);
-        vec3 h1 = safeNormalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, lp.specularColorPower.w);
-        vec3 h2 = safeNormalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, lp.specularColorPower.w);
-        vec3 specularRGB = (spec0 * lp.light0Specular_pad.xyz + spec1 * lp.light1Specular_pad.xyz
-                            + spec2 * lp.light2Specular_pad.xyz) * lp.specularColorPower.xyz;
-        vec3 lit = lightSum * fragTint.rgb + lp.emissiveColor_pad.xyz;
-        color = vec4(lit, fragTint.a) * tex;
-        color.rgb += specularRGB * color.a;
+        if (lp.emissiveColor_pad.w < 0.5) {
+            color = vec4(fragVertexLit, fragTint.a) * tex;
+            color.rgb += fragVertexSpecular * color.a;
+        } else {
+            vec3 N = normalize(fragNormal);
+            vec3 E = safeNormalize(lp.eyePos_pad.xyz - fragWorldPos);
+            vec3 nL0 = safeNormalize(pc.light0Dir);
+            vec3 nL1 = safeNormalize(lp.light1Dir_pad.xyz);
+            vec3 nL2 = safeNormalize(lp.light2Dir_pad.xyz);
+            float dotL0 = dot(N, -nL0); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
+            float dotL1 = dot(N, -nL1); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
+            float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
+            vec3 lightSum = pc.ambientColor + NdotL0 * pc.light0Diffuse
+                            + NdotL1 * lp.light1Diffuse_pad.xyz + NdotL2 * lp.light2Diffuse_pad.xyz;
+            vec3 h0 = safeNormalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, lp.specularColorPower.w);
+            vec3 h1 = safeNormalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, lp.specularColorPower.w);
+            vec3 h2 = safeNormalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, lp.specularColorPower.w);
+            vec3 specularRGB = (spec0 * lp.light0Specular_pad.xyz + spec1 * lp.light1Specular_pad.xyz
+                                + spec2 * lp.light2Specular_pad.xyz) * lp.specularColorPower.xyz;
+            vec3 lit = lightSum * fragTint.rgb + lp.emissiveColor_pad.xyz;
+            color = vec4(lit, fragTint.a) * tex;
+            color.rgb += specularRGB * color.a;
+        }
     } else {
         color = fragTint * tex;
     }

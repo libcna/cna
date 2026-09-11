@@ -153,7 +153,9 @@ protected:
         fx.setEncodeOutputToSrgbEXTProperty(false);
         fx.setWorldProperty(Matrix::getIdentityProperty());
         fx.setViewProperty(Matrix::getIdentityProperty());
-        fx.setProjectionProperty(Matrix::getIdentityProperty());
+        // Keep the BRDF's world-space eye vector at the deliberately chosen z=-0.5, but move
+        // clip-space Z into XNA's valid 0..W range.
+        fx.setProjectionProperty(Matrix::CreateTranslation(0.0f, 0.0f, 1.0f));
         fx.DirectionalLight0.setEnabledProperty(true);
         fx.DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
         fx.DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));

@@ -10,8 +10,9 @@
 //   AND face 0 is re-verified last (after all other 5 faces were written) -- genuinely proves
 //   multiple sequential per-face SetData() calls accumulate onto the same resource rather than
 //   the earlier faces' writes being silently orphaned.
-// Check B -- mipMap: a uniform-color full level-0 upload on one face auto-generates level 1 for
-//   that face (SDLGPU-51's "generated case"), which reads back the same color.
+// Check B -- mipMap: authored level 1 on one face survives a later level-0 upload to another
+//   face. SDL's mip generator operates on the whole cube and must not overwrite levels authored
+//   on the other five faces.
 // Check C -- mipMap: explicit authored data written directly to level 1 of a face is not
 //   clobbered by the level-0 auto-generation that already ran, and that face's level 0 remains
 //   intact afterward too.
@@ -112,22 +113,30 @@ protected:
                   "face 0 remains intact after all 5 other faces were written afterward");
         }
 
-        // Check B: mipMap "generated case" -- a full level-0 upload of a uniform color on one
-        // face auto-generates level 1 for that face, which reads back the same color.
+        // Check B: authored +X mip 1 must survive a later full -X level-0 upload. Before
+        // SDLGPU-70 every full level-0 write regenerated the WHOLE cube chain, so the second write
+        // replaced +X's authored mip from its own level 0.
         {
             TextureCube tex(dev, 8, true, SurfaceFormat::Color);
-            const auto full = SolidColors(8 * 8, Color::Orange);
-            tex.SetData(CubeMapFace::PositiveX, 0, nullptr, full.data(), 0, static_cast<int>(full.size()));
+            const auto plusX = SolidColors(8 * 8, Color::Red);
+            tex.SetData(CubeMapFace::PositiveX, 0, nullptr, plusX.data(), 0,
+                        static_cast<int>(plusX.size()));
+            const auto authored = SolidColors(4 * 4, Color::White);
+            tex.SetData(CubeMapFace::PositiveX, 1, nullptr, authored.data(), 0,
+                        static_cast<int>(authored.size()));
+            const auto minusX = SolidColors(8 * 8, Color::Green);
+            tex.SetData(CubeMapFace::NegativeX, 0, nullptr, minusX.data(), 0,
+                        static_cast<int>(minusX.size()));
 
             std::vector<Color> gotMip(4 * 4, Color(0, 0, 0, 0));
             tex.GetData(CubeMapFace::PositiveX, 1, nullptr, gotMip.data(), 0, static_cast<int>(gotMip.size()));
-            Check(AllExact(gotMip, Color::Orange),
-                  "mipMap generated case: level 1 of a uniform-color face upload reads back the same color");
+            Check(AllExact(gotMip, Color::White),
+                  "authored +X mip survives a later full -X level-0 upload");
         }
 
         // Check C: mipMap "authored mip data" case -- explicit data written directly to level 1
-        // of a face is not clobbered by the level-0 auto-generation that already ran, and level 0
-        // remains intact after this later, separate SetData call.
+        // of a face stays isolated from its level 0, and level 0 remains intact after this later,
+        // separate SetData call.
         {
             TextureCube tex(dev, 8, true, SurfaceFormat::Color);
             const auto full = SolidColors(8 * 8, Color::Orange);
@@ -138,7 +147,8 @@ protected:
 
             std::vector<Color> gotMip(4 * 4, Color(0, 0, 0, 0));
             tex.GetData(CubeMapFace::PositiveY, 1, nullptr, gotMip.data(), 0, static_cast<int>(gotMip.size()));
-            Check(AllExact(gotMip, Color::Magenta), "mipMap authored data: explicit level-1 SetData wins over auto-generation");
+            Check(AllExact(gotMip, Color::Magenta),
+                  "mipMap authored data: explicit level-1 SetData remains exact");
 
             std::vector<Color> gotLevel0(8 * 8, Color(0, 0, 0, 0));
             tex.GetData(CubeMapFace::PositiveY, 0, nullptr, gotLevel0.data(), 0, static_cast<int>(gotLevel0.size()));

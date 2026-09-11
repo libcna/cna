@@ -18,13 +18,18 @@ layout(set = 3, binding = 0) uniform PC {
     float vertexColorEnabled;
 } pc;
 
+layout(set = 3, binding = 1) uniform SamplerLodBias {
+    vec4 slots0To3;
+    vec4 slots4To7;
+} samplerLodBias;
+
 // Same encoding as EasyGL/Vulkan/WebGPU:
 //   if (alphaTol > 0) -> pass = |alpha - alphaRef| < alphaTol
 //   else              -> pass = alpha < alphaRef
 //   weight = pass ? alphaPassW : alphaFailW; weight < 0 -> discard.
 // Default {0,0,1,1} = always pass (never discard).
 void main() {
-    outColor = texture(uTexture, fragUV) * fragTint;
+    outColor = texture(uTexture, fragUV, samplerLodBias.slots0To3.x) * fragTint;
     float alpha = outColor.a;
     bool passTest = (pc.alphaTol > 0.0) ? (abs(alpha - pc.alphaRef) < pc.alphaTol) : (alpha < pc.alphaRef);
     float w = passTest ? pc.alphaPassW : pc.alphaFailW;

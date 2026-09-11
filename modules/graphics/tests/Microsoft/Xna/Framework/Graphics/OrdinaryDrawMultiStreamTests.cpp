@@ -1470,6 +1470,70 @@ TEST_F(OrdinaryDrawMultiStreamTest, ThreePerVertexStreamsEachSupplyTheirOwnEleme
 }
 
 // ---------------------------------------------------------------------------
+// Coverage item 17b: the complete XNA binding width. A stock shader consumes only POSITION0 and
+// COLOR0, but COLOR0 deliberately lives in public slot 15 behind fourteen live, uniquely-declared
+// streams the shader does not consume. This distinguishes the public binding ceiling from the
+// smaller number of inputs in one stock shader: truncating the offered list at eight either
+// refuses the draw or defaults COLOR0 to white. A correct resolver searches all sixteen public
+// slots, then binds only the two streams the shader actually reads.
+// ---------------------------------------------------------------------------
+TEST_F(OrdinaryDrawMultiStreamTest, SixteenBindingsCanSupplyAConsumedSemanticFromSlot15)
+{
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
+    RequireOrdinaryRendering();
+    CNA_REQUIRE_MULTI_STREAM_INPUT();
+
+    const GridLayout layout = TargetLayout();
+    const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
+    const std::vector<ColorRecord> colors = BuildColorStream();
+    const std::vector<float> decoys(static_cast<std::size_t>(kBufferElementCount), 0.375f);
+
+    std::vector<std::unique_ptr<VertexBuffer>> buffers;
+    std::vector<VertexBufferBinding> bindings;
+    buffers.reserve(16);
+    bindings.reserve(16);
+
+    buffers.push_back(std::make_unique<VertexBuffer>(
+        device, PositionOnlyDeclaration(), kBufferElementCount, BufferUsage::None));
+    buffers.back()->SetDataRaw(positions.data(), kBufferElementCount, kPositionStride);
+    bindings.emplace_back(buffers.back().get(), kPrefixOffset, 0);
+
+    for (int usageIndex = 1; usageIndex <= 14; ++usageIndex)
+    {
+        VertexDeclaration declaration(
+            static_cast<int>(sizeof(float)),
+            {VertexElement(0, VertexElementFormat::Single,
+                           VertexElementUsage::TextureCoordinate, usageIndex)});
+        buffers.push_back(std::make_unique<VertexBuffer>(
+            device, declaration, kBufferElementCount, BufferUsage::None));
+        buffers.back()->SetDataRaw(
+            decoys.data(), kBufferElementCount, static_cast<int>(sizeof(float)));
+        bindings.emplace_back(buffers.back().get(), kPrefixOffset, 0);
+    }
+
+    buffers.push_back(std::make_unique<VertexBuffer>(
+        device, ColorOnlyDeclaration(), kBufferElementCount, BufferUsage::None));
+    buffers.back()->SetDataRaw(colors.data(), kBufferElementCount, kColorStride);
+    bindings.emplace_back(buffers.back().get(), kPrefixOffset, 0);
+    ASSERT_EQ(bindings.size(), 16u);
+
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+    device.SetVertexBuffers(bindings);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    ApplyMeshEffect(effect);
+    device.DrawPrimitives(PrimitiveType::TriangleList, 4 * kVerticesPerSlot, 1);
+    device.SetRenderTarget(nullptr);
+
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    ExpectOnlyCellLitWithCode(
+        snapshot, layout, 4, kLiveBand, LiveCodeForSlot(4),
+        "slot 15 must supply COLOR0 through the full sixteen-binding search");
+}
+
+// ---------------------------------------------------------------------------
 // Coverage item 20: destroying the secondary stream's public wrapper and letting a new buffer take
 // its handle/address. The new binding set must be the one that renders -- a renderer that kept a
 // pointer or a cached layout keyed on the old address paints the old colour or crashes.

@@ -838,9 +838,10 @@ namespace CNA::Internal::Renderers::EasyGL
         int pendingAddressV_  = 1; // TextureAddressMode::Clamp
         // plans/plan_vulkan.md VULKAN-167: -1 means "the batch supplied no W", which keeps
         // ApplySamplerState's W-follows-U default for any caller that flushes sprites without
-        // going through SpriteBatch::Begin. SpriteBatch always supplies one, so the sentinel only
+        // going through SetSamplerState. SpriteBatch always supplies one, so the sentinel only
         // survives for those other callers.
-        int pendingAddressW_  = -1;
+        int pendingAddressW_ = -1;
+        int pendingMaxAnisotropy_ = 4;
         int pendingMaxMipLevel_ = 0;
         float pendingLodBias_ = 0.0f;
 
@@ -855,9 +856,23 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
-        void SetSamplerMipState(int maxMipLevel, float lodBias) override;
-        void SetSamplerAddressW(int addressW) override;
-        void SetSamplerAddressModeWEXT(int addressW) override;
+        /**
+         * @brief Captures every sampler property supplied to `SpriteBatch::Begin`.
+         *
+         * This renderer overrides the COMPLETE hook, so IGraphicsRenderer's default fan-out to
+         * SetSamplerMipState/SetSamplerAddressW/SetSamplerAddressModeWEXT does not run here -- this
+         * method does all of their work and carries maxAnisotropy besides, which none of them did.
+         *
+         * @param textureFilter Raw `TextureFilter` ordinal.
+         * @param addressU Raw `TextureAddressMode` ordinal for U.
+         * @param addressV Raw `TextureAddressMode` ordinal for V.
+         * @param addressW Raw `TextureAddressMode` ordinal for W.
+         * @param maxAnisotropy Requested maximum anisotropy.
+         * @param maxMipLevel Most detailed mip level the sampler may use.
+         * @param lodBias Mipmap level-of-detail bias.
+         */
+        void SetSamplerState(int textureFilter, int addressU, int addressV, int addressW,
+                             int maxAnisotropy, int maxMipLevel, float lodBias) override;
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
                   const Rectangle& destinationRectangle,

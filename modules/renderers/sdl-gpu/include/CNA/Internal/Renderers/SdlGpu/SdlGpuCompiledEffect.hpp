@@ -24,24 +24,21 @@
  * both have run since FX-071, and the capability flipped with them. `SdlGpuCompiledEffectTests.cpp`
  * runs the shared suite and every drawing section of it.
  *
- * What is still refused, explicitly and by name rather than drawn with a stock shader (plans/plan_fx.md
- * section 10.5 classifies each):
+ * What is still refused, explicitly and by name rather than drawn incorrectly (plans/plan_fx.md
+ * section 10.5 classifies it):
  *
  * - a compiled effect's vertex shader sampling a texture -- renderer-wide, since no CNA renderer
  *   implements vertex-stage sampling through the public surface at all (FX-109);
- * - a 3D or cube texture bound to a compiled sampler -- compiled-Effect-specific, since this
- *   renderer samples both in its ordinary draw families (FX-110);
- * - more than one vertex stream -- renderer-wide, and `GraphicsDevice` refuses it before this
- *   layer is reached because `MultiStreamVertexInput` is false here.
  *
- * A `RenderTarget2D` IS accepted as a compiled sampler's source since FX-099; this renderer's
- * targets store rows the same way up as an uploaded texture, so nothing has to be corrected.
+ * Render targets, cube and volume textures are accepted as compiled pixel samplers. Multiple
+ * per-vertex/per-instance streams and ordinary compiled-effect instancing are supported as well.
  */
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
 #include "mojoshader.h"
@@ -213,8 +210,67 @@ namespace CNA::Internal::Renderers::SdlGpu
             const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
             SDL_GPUShader*& vertexShader, SDL_GPUShader*& pixelShader) const;
 
+        /**
+         * @brief Links the applied shader pair against several declared vertex streams. CNAEXT.
+         *
+         * @param streams Stream-local declarations, strides and input rates in public order.
+         * @param vertexShader Receives the linked vertex shader module.
+         * @param pixelShader Receives the linked pixel shader module.
+         * @return Native attributes, buffer descriptions and the consumed source-stream mapping.
+         */
+        CNAEXT [[nodiscard]] SdlGpuCompiledEffectVertexLayoutEXT LinkAndGetShadersMultiEXT(
+            const std::vector<SdlGpuCompiledEffectVertexStreamEXT>& streams,
+            SDL_GPUShader*& vertexShader, SDL_GPUShader*& pixelShader) const;
+
+        /**
+         * @brief Reports whether the last linked pixel module consumes the injected LOD-bias UBO.
+         * @return True when the SDL_GPU MojoShader transform rewrote at least one implicit sample.
+         */
+        CNAEXT [[nodiscard]] bool LinkedPixelShaderUsesLodBiasEXT() const;
+
+        /**
+         * @brief Returns the context-lifetime identity of the currently linked SDL_gpu program.
+         *
+         * Unlike native shader wrapper addresses, this value is never recycled while the owning
+         * MojoShader context exists, so immutable pipeline caches can distinguish programs after
+         * their source Effect objects have been destroyed.
+         *
+         * @return A non-zero program identity after a successful link, otherwise zero.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t LinkedProgramIdentityEXT() const;
+
+        /**
+         * @brief Retains the currently linked program's renderer cache lifetime. CNAEXT.
+         *
+         * The returned lease is shared with every deferred draw that uses the program. The
+         * renderer evicts that program's immutable pipelines only after both this Effect and all
+         * already-issued draws have released their copies.
+         *
+         * @param programIdentity The non-zero identity returned by @ref LinkedProgramIdentityEXT.
+         * @return A non-null lifetime lease for that exact linked program.
+         */
+        CNAEXT [[nodiscard]] std::shared_ptr<const void> RetainProgramIdentityEXT(
+            std::uint64_t programIdentity) const;
+
+        /**
+         * @brief Reports whether renderer teardown released this runtime's native effect.
+         *
+         * Test-only lifetime introspection: a compiled runtime may outlive its `GraphicsDevice`,
+         * but its MojoShader effect and context must not. A true result guarantees that the later
+         * runtime destructor has no renderer-owned native state left to address.
+         *
+         * @return True after the owning SDL GPU renderer detached this runtime.
+         */
+        CNAEXT [[nodiscard]] bool IsDetachedFromRendererEXT() const
+        {
+            return !registeredWithRenderer_ && context_ == nullptr && effectData_ == nullptr;
+        }
+
     private:
+        friend class SdlGpuRenderer;
+
         SdlGpuCompiledEffect(SdlGpuRenderer& renderer, const SdlGpuCompiledEffect& cloneSource);
+        void ReleaseForRendererTeardownEXT();
 
         SdlGpuRenderer& renderer_;
         MOJOSHADER_sdlContext* context_ = nullptr;
@@ -246,6 +302,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             samplerAssigned_{};
         std::array<bool, Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             vertexSamplerAssigned_{};
+        /// One owning cache lease per linked program this live Effect has actually drawn with.
+        mutable std::unordered_map<std::uint64_t, std::shared_ptr<const void>> programLeases_;
+        bool registeredWithRenderer_ = false;
     };
 }
 

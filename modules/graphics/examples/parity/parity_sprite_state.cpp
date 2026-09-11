@@ -316,7 +316,8 @@ protected:
                             static_cast<SharpRuntime::bytecs>(kRed.getGProperty() +
                                                               kClearColor.getGProperty()),
                             static_cast<SharpRuntime::bytecs>(kRed.getBProperty() +
-                                                              kClearColor.getBProperty()), 255),
+                                                              kClearColor.getBProperty()),
+                            static_cast<SharpRuntime::bytecs>(255)),
                       4);
         // Render-target-local coordinates, both corners.
         ExpectAverage("a sprite drawn inside a RenderTarget2D uses the TARGET's coordinates",

@@ -1541,7 +1541,7 @@ class OrderedClearTest : public Game
                       "wipes its own draw");
     }
 
-    /// T4 -- an ordered Clear on a SECOND cube face leaves the first face's clear standing.
+    /// T4 -- ordered Clears on two cube faces preserve a third face's known earlier contents.
     void RunSecondCubeFaceClear(GraphicsDevice& dev)
     {
         if (!kContract.cubeTargets || !kContract.cubeReadback)
@@ -1552,6 +1552,13 @@ class OrderedClearTest : public Game
         auto cube = std::make_unique<RenderTargetCube>(dev, kRT, false, SurfaceFormat::Color,
                                                        DepthFormat::None, 0,
                                                        RenderTargetUsage::PreserveContents);
+        // SDLGPU-66: initialize the control face before the two subject cycles. Reading a face
+        // that has never been written is not an isolation oracle: XNA leaves new render-target
+        // contents undefined, so allocator reuse may legitimately resemble either later clear.
+        dev.SetRenderTarget(cube.get(), CubeMapFace::PositiveY);
+        FillTarget(kCyan);
+        dev.SetRenderTargets({});
+
         dev.SetRenderTarget(cube.get(), CubeMapFace::NegativeX);
         FillTarget(kRed);
         dev.Clear(ClearOptions::Target, kGreen, 1.0f, 0);
@@ -1569,16 +1576,9 @@ class OrderedClearTest : public Game
                      kMagenta, kYellow,
                      "T4 second cube face Clear: the second face's ordered Clear wipes only that "
                      "face's earlier draw");
-        // A face neither cycle ever bound has never been rendered into, so what it holds is this
-        // renderer's own uninitialized surface -- not something to predict. What IS asserted is the
-        // claim: neither ordered Clear reached it. K1 already asserts the positive form for a face
-        // that WAS painted.
-        Probe untouched = ReadFace(*cube, static_cast<int>(CubeMapFace::PositiveY));
-        bool leaked = untouched.threw;
-        for (const Color& c : untouched.dest)
-            if (Same(c, kGreen) || Same(c, kYellow) || Same(c, kMagenta)) { leaked = true; break; }
-        check(!leaked, "T4 second cube face Clear: a face neither cycle bound is reached by "
-                       "neither ordered Clear (got " + ColorText(untouched.dest[0]) + ")");
+        ExpectUniform(ReadFace(*cube, static_cast<int>(CubeMapFace::PositiveY)), kRT, kRT, kCyan,
+                      "T4 second cube face Clear: a face outside both subject cycles keeps its "
+                      "known earlier contents");
     }
 
     /// A1 -- consecutive Clears naming DIFFERENT aspects must compose, not replace each other.

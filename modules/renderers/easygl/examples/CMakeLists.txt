@@ -2561,6 +2561,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             LABELS "Parity;EasyGL"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SDLGPU-78 control: a shared public-API source adds the discriminating LineList/LineStrip
+        # pixel proof that EasyGL's older enum-only primitive test did not contain.
+        cna_easygl_test(cna_test_easygl_draw_line_topology
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/draw_line_topology_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_DrawLineTopology
+            COMMAND cna_test_easygl_draw_line_topology
+            TIMEOUT 180 LABELS "Parity;EasyGL"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

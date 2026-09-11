@@ -14,6 +14,8 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdlib>
+#include <cstring>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -26,7 +28,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr std::size_t kResourceKindCount = 7;
+    constexpr std::size_t kResourceKindCount = 8;
 
     struct ResourceTracker
     {
@@ -66,7 +68,7 @@ namespace
         const char* label;
     };
 
-    constexpr std::array<FailureCase, 30> kConstructionFailures{{
+    constexpr std::array<FailureCase, 33> kConstructionFailures{{
         {SdlGpuFailurePointEXT::DeviceCreation, "device creation"},
         {SdlGpuFailurePointEXT::WindowClaim, "window claiming"},
         {SdlGpuFailurePointEXT::SwapchainSetup, "swapchain setup"},
@@ -88,20 +90,26 @@ namespace
         {SdlGpuFailurePointEXT::DualTextureFragmentShaderCreation, "dual-texture fragment shader"},
         {SdlGpuFailurePointEXT::EnvMapVertexShaderCreation, "environment-map vertex shader"},
         {SdlGpuFailurePointEXT::EnvMapFragmentShaderCreation, "environment-map fragment shader"},
+        {SdlGpuFailurePointEXT::InstancedVertexShaderCreation, "instanced vertex shader"},
         {SdlGpuFailurePointEXT::SkinnedVertexShaderCreation, "skinned vertex shader"},
         {SdlGpuFailurePointEXT::SkinnedColoredVertexShaderCreation, "skinned-colored vertex shader"},
         {SdlGpuFailurePointEXT::SkinnedColoredFragmentShaderCreation, "skinned-colored fragment shader"},
         {SdlGpuFailurePointEXT::PbrVertexShaderCreation, "PBR vertex shader"},
         {SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation, "skinned PBR vertex shader"},
+        {SdlGpuFailurePointEXT::PbrColorVertexShaderCreation, "PBR vertex-color shader"},
+        {SdlGpuFailurePointEXT::PbrSkinnedColorVertexShaderCreation, "skinned PBR vertex-color shader"},
         {SdlGpuFailurePointEXT::PbrFragmentShaderCreation, "PBR fragment shader"},
         {SdlGpuFailurePointEXT::WindowMetricsInitialization, "window metrics"},
         {SdlGpuFailurePointEXT::RendererRegistration, "renderer registration"},
         {SdlGpuFailurePointEXT::AfterRendererRegistration, "post-registration commit"}
     }};
+    static_assert(kConstructionFailures.size() == SdlGpuConstructionShaderCountEXT + 7);
 
     class TestRun
     {
     public:
+        explicit TestRun(bool headless) : headless_(headless) {}
+
         void Check(bool ok, const std::string& label)
         {
             ++checks_;
@@ -174,13 +182,20 @@ namespace
             Check(usable, prefix + " permits an immediately usable succeeding renderer");
             Check(successTracker.Balanced(),
                   prefix + " succeeding renderer destroys every resource exactly once");
+            const int expectedWindowClaims = headless_ ? 0 : 1;
             Check(successTracker.Acquired(SdlGpuResourceKindEXT::Device) == 1 &&
                       successTracker.Released(SdlGpuResourceKindEXT::Device) == 1 &&
-                      successTracker.Acquired(SdlGpuResourceKindEXT::WindowClaim) == 1 &&
-                      successTracker.Released(SdlGpuResourceKindEXT::WindowClaim) == 1 &&
-                      successTracker.Acquired(SdlGpuResourceKindEXT::Shader) == 23 &&
-                      successTracker.Released(SdlGpuResourceKindEXT::Shader) == 23,
-                  prefix + " succeeding renderer owns one device/claim and 23 shaders");
+                      successTracker.Acquired(SdlGpuResourceKindEXT::WindowClaim) ==
+                          expectedWindowClaims &&
+                      successTracker.Released(SdlGpuResourceKindEXT::WindowClaim) ==
+                          expectedWindowClaims &&
+                      successTracker.Acquired(SdlGpuResourceKindEXT::Shader) ==
+                          static_cast<int>(SdlGpuConstructionShaderCountEXT) &&
+                      successTracker.Released(SdlGpuResourceKindEXT::Shader) ==
+                          static_cast<int>(SdlGpuConstructionShaderCountEXT),
+                  prefix + " succeeding renderer owns one device, " +
+                      std::to_string(expectedWindowClaims) + " window claim(s), and " +
+                      std::to_string(SdlGpuConstructionShaderCountEXT) + " shaders");
         }
 
         void ExerciseLazyFailure(SDL_Window* window, SdlGpuFailurePointEXT point,
@@ -357,7 +372,91 @@ namespace
                   "multiple renderer teardown preserves both caller-owned windows");
         }
 
+        void ExerciseNoDepthStencilCapability(SDL_Window* window)
+        {
+            ResourceTracker tracker;
+            const SdlGpuTestHooksEXT hooks{
+                SdlGpuFailurePointEXT::None, &tracker, &ResourceTracker::OnResource,
+                /*forceNoDepthStencilFormat=*/true};
+            bool usable = false;
+            try
+            {
+                {
+                    SdlGpuRenderer renderer(
+                        window, 64, 64, CnaPresentationMode::FixedHeightDynamicWidth, 0,
+                        hooks);
+                    const IGraphicsRenderer& contract = renderer;
+                    Check(!contract.SupportsDepthStencil(),
+                          "missing native format makes the aggregate depth/stencil answer false");
+                    Check(!contract.SupportsDepthBuffer(),
+                          "missing native format makes the depth-plane answer false");
+                    Check(!contract.SupportsStencilBuffer(),
+                          "missing native format makes the stencil-plane answer false");
+                    Check(!renderer.SupportsCapability(CNA::GraphicsCapability::DepthStencilBuffer),
+                          "legacy depth/stencil capability agrees with the contract answer");
+                    Check(!renderer.SupportsCapability(CNA::GraphicsCapability::StencilBuffer),
+                          "legacy stencil capability agrees with the contract answer");
+
+                    renderer.ClearColorDepthAndStencil(
+                        0.05f, 0.10f, 0.15f, 1.0f, 0.25f, 7);
+                    renderer.Present();
+                    usable = true;
+                }
+            }
+            catch (const std::exception& exception)
+            {
+                std::printf("       unexpected depthless-device exception: %s\n",
+                            exception.what());
+            }
+            Check(usable,
+                  "depth/stencil-unavailable renderer remains usable for color presentation");
+            Check(tracker.Balanced(),
+                  "depth/stencil-unavailable renderer destroys every resource exactly once");
+        }
+
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+        void ExerciseShaderCrossConstruction(SDL_Window* window)
+        {
+            ResourceTracker tracker;
+            const SdlGpuTestHooksEXT hooks{
+                SdlGpuFailurePointEXT::None, &tracker, &ResourceTracker::OnResource,
+                /*forceNoDepthStencilFormat=*/false,
+                /*forceShaderCrossCompilation=*/true};
+            bool usable = false;
+            try
+            {
+                {
+                    SdlGpuRenderer renderer(
+                        window, 64, 64, CnaPresentationMode::FixedHeightDynamicWidth, 0,
+                        hooks);
+                    renderer.Clear(0.15f, 0.10f, 0.05f, 1.0f);
+                    renderer.Present();
+                    usable = renderer.Device() != nullptr;
+                }
+            }
+            catch (const std::exception& exception)
+            {
+                std::printf("       unexpected ShaderCross construction exception: %s\n",
+                            exception.what());
+            }
+
+            Check(usable,
+                  "ShaderCross reflects and creates every construction shader on a real device");
+            Check(tracker.Acquired(SdlGpuResourceKindEXT::ShaderCross) == 1 &&
+                      tracker.Released(SdlGpuResourceKindEXT::ShaderCross) == 1,
+                  "ShaderCross session is acquired and released exactly once");
+            Check(tracker.Acquired(SdlGpuResourceKindEXT::Shader) ==
+                      static_cast<int>(SdlGpuConstructionShaderCountEXT) &&
+                      tracker.Released(SdlGpuResourceKindEXT::Shader) ==
+                      static_cast<int>(SdlGpuConstructionShaderCountEXT),
+                  "ShaderCross construction owns every reflected stock shader exactly once");
+            Check(tracker.Balanced(),
+                  "ShaderCross construction leaves every native resource balanced");
+        }
+#endif
+
     private:
+        bool headless_ = false;
         int checks_ = 0;
         int failures_ = 0;
     };
@@ -386,9 +485,23 @@ int main()
         return 1;
     }
 
-    TestRun test;
+    const char* forceHeadlessValue = std::getenv("CNA_SDLGPU_TEST_FORCE_HEADLESS");
+    const bool forceHeadless =
+        forceHeadlessValue != nullptr && std::strcmp(forceHeadlessValue, "1") == 0;
+    if (forceHeadless)
+        std::printf("[INFO] headless construction: window-claim injection is inapplicable\n");
+
+    TestRun test(forceHeadless);
     for (const FailureCase& failure : kConstructionFailures)
+    {
+        // The production constructor never attempts a window claim when its explicit test-only
+        // headless route is active. Testing that skipped stage would turn "the failure hook did
+        // not fire" into a false leak report; every stage which actually executes is still
+        // injected, and the real swapchain/window-claim route remains covered by the native run.
+        if (forceHeadless && failure.point == SdlGpuFailurePointEXT::WindowClaim)
+            continue;
         test.ExerciseConstructionFailure(firstWindow, failure);
+    }
 
     test.ExerciseLazyFailure(
         firstWindow, SdlGpuFailurePointEXT::FrameCommandBufferAcquisition,
@@ -406,6 +519,10 @@ int main()
         firstWindow, SdlGpuFailurePointEXT::DefaultFlatNormalTextureCreation,
         "default flat-normal texture creation");
     test.ExerciseIndependentInstances(firstWindow, secondWindow);
+    test.ExerciseNoDepthStencilCapability(firstWindow);
+#if defined(CNA_SDL_GPU_SHADERCROSS)
+    test.ExerciseShaderCrossConstruction(firstWindow);
+#endif
 
     SDL_DestroyWindow(secondWindow);
     SDL_DestroyWindow(firstWindow);

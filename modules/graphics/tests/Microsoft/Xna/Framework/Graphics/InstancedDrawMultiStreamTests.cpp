@@ -154,7 +154,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool MultiStreamOracle()
 {
     return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12, Magnum);
+                           DirectX9, DirectX11, DirectX12, Magnum, SdlGpu);
 }
 
 // The renderers whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
@@ -173,7 +173,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool BindingOffsetOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12, Vulkan, Bgfx, WebGPU, Magnum);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11,
+                           DirectX12, Vulkan, Bgfx, WebGPU, Magnum, SdlGpu);
 }
 
 namespace

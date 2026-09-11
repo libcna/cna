@@ -1,17 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_webgpu.md WEBGPU-205 (harness: WEBGPU-207): does a `SamplerState` field that is not
-// the filter or the two address modes reach a `SpriteBatch` draw at all?
-//
-// `WEBGPU-205` implemented `SamplerState.MipMapLevelOfDetailBias` on every stock 3D route and left
-// `SpriteBatch` open, recording the blocker as "the sprite pipeline binds no uniform buffer, so the
-// bias has no channel to travel in". That reading stops one layer too low. `ISpriteBatchRenderer`
-// carries exactly three sampler values -- `SetSamplerFilter(int)` and
-// `SetSamplerAddressMode(int, int)` -- and `SpriteBatch::Begin()` forwards only those, so
-// `MipMapLevelOfDetailBias`, `MaxMipLevel`, `MaxAnisotropy` and `AddressW` never leave the
-// framework. XNA does not narrow the state that way: `SpriteBatch.Begin(samplerState)` assigns
-// `GraphicsDevice.SamplerStates[0]`, and all six fields apply.
-//
-// This fixture measures that, on both renderers, rather than asserting it from the interface.
+// SDLGPU-64 / plans/plan_graphics.md 1119: every `SamplerState` field supplied to
+// `SpriteBatch::Begin` must reach the sprite draw. FNA's `SpriteBatch.PrepRenderState` assigns the
+// complete state to `GraphicsDevice.SamplerStates[0]`; the assignment is also observable after the
+// batch. CNA formerly forwarded only filter and U/V address modes through `ISpriteBatchRenderer`,
+// silently discarding mip bias, mip clamp, anisotropy and AddressW on every renderer.
 //
 // Row 1 is the CONTROL and is deliberately read first: the same texture, the same 1/4 scale and the
 // same three biases on a 3D quad, where `WEBGPU-205` did land. If the control is flat the fixture is
@@ -21,25 +13,8 @@
 // Row 0 is the sprite route: the same three biases handed to `SpriteBatch::Begin`, and a fourth
 // column with no bias at all as the reference the other three are compared against.
 //
-// The DEVICE route -- `GraphicsDevice.SamplerStates[0]`, which is the channel XNA's own
-// `SpriteBatch.PrepRenderState` writes through -- cannot be exercised from a sprite-only frame at
-// all, and that is itself part of the finding: `applySamplerStatesToRenderer()` is called from
-// `DrawPrimitives` and its siblings, never from a `SpriteBatch` flush, so assigning the collection
-// before a sprite draw pushes nothing. Which is why row 1's LAST column deliberately uses bias 0:
-// EasyGL applies the bias to a GL SAMPLER OBJECT bound to texture unit 0 and its sprite flush calls
-// `ApplySamplerState` (which by contract does not touch the mip state), so whatever bias the last
-// 3D draw left behind is still bound when the sprites go through. Leaving a non-zero bias there
-// would make this fixture measure that leak instead of the question it asks, and would make the two
-// renderers disagree for a reason neither of them owns.
-//
-// MEASURED 2026-09-06: the bias reaches neither renderer's sprite route, and the two renderers
-// agree pixel for pixel, so this is a shared framework gap rather than a WebGPU one -- recorded in
-// `plans/plan_graphics.md` and NOT worked around inside the renderer, which could only clone one
-// renderer's accident into the other. A related leak was probed and ruled out: EasyGL applies the
-// bias to a GL sampler object that survives a draw, but its `ApplySamplerState` writes
-// `GL_TEXTURE_LOD_BIAS = 0` unconditionally on desktop core, so a preceding 3D draw's bias does not
-// survive into a following batch on either renderer. That was checked by temporarily giving row 1's
-// last column a bias of +1 and re-running both; both stayed on the natural level.
+// Row 1's last column deliberately restores bias 0 before the sprites. That keeps the row-0 result
+// attributable to each batch's own state instead of to state leaked from the preceding 3D control.
 //
 // The mip levels are flat, distinct colours for `parity_sampler_max_mip_level`'s reason: a correct
 // chain is nearly self-similar, so a test built on one cannot tell level 2 from level 3. The texture
@@ -111,6 +86,9 @@ namespace
         state.setFilterProperty(TextureFilter::Point);
         state.setAddressUProperty(TextureAddressMode::Clamp);
         state.setAddressVProperty(TextureAddressMode::Clamp);
+        state.setAddressWProperty(TextureAddressMode::Mirror);
+        state.setMaxAnisotropyProperty(7);
+        if (bias == 1.0f) state.setMaxMipLevelProperty(1);
         state.setMipMapLevelOfDetailBiasProperty(bias);
         return state;
     }
@@ -188,6 +166,7 @@ protected:
         drawQuad(3,  0.0f);
 
         // --- Row 0: the sprite route ----------------------------------------------------------
+        bool completeStateRetained = true;
         const auto drawSprite = [&](int column, const SamplerState& batchSampler)
         {
             const int cellW = grid.getCellWidthProperty();
@@ -199,6 +178,17 @@ protected:
             batch.Draw(texture, destination, Rectangle(0, 0, kTextureSize, kTextureSize),
                        Color::White);
             batch.End();
+
+            const SamplerState& retained = device.getSamplerStatesProperty()[0];
+            completeStateRetained = completeStateRetained &&
+                retained.getFilterProperty() == batchSampler.getFilterProperty() &&
+                retained.getAddressUProperty() == batchSampler.getAddressUProperty() &&
+                retained.getAddressVProperty() == batchSampler.getAddressVProperty() &&
+                retained.getAddressWProperty() == batchSampler.getAddressWProperty() &&
+                retained.getMaxAnisotropyProperty() == batchSampler.getMaxAnisotropyProperty() &&
+                retained.getMaxMipLevelProperty() == batchSampler.getMaxMipLevelProperty() &&
+                retained.getMipMapLevelOfDetailBiasProperty() ==
+                    batchSampler.getMipMapLevelOfDetailBiasProperty();
         };
 
         // Columns 0-2: the bias handed to Begin(), which is where a game would put it.
@@ -207,6 +197,10 @@ protected:
         drawSprite(2, PointClampWithLodBias(-2.0f));
         // Column 3: no bias at all, the reference the other three are read against.
         drawSprite(3, SamplerState::PointClamp);
+
+        std::printf("[%s] SpriteBatch leaves its complete sampler in GraphicsDevice slot 0\n",
+                    completeStateRetained ? "PASS" : "FAIL");
+        if (!completeStateRetained) MarkFailedEXT();
 
         // --- The control, read first ----------------------------------------------------------
         ExpectAverage("control: a 3D quad at 1/4 scale samples the natural level 2",
@@ -219,28 +213,18 @@ protected:
                        grid.Interior(0, 1), grid.Interior(1, 1), /*minDelta=*/100);
 
         // --- The sprite route -----------------------------------------------------------------
-        // MEASURED on both renderers, 2026-09-06, and asserted as measured rather than as XNA
-        // specifies, because a fixture that failed here would be reporting a defect it cannot fix
-        // and would be red in every run forever. What XNA specifies is in the header and in
-        // plans/plan_graphics.md; what CNA does is here.
-        //
-        // The bias never arrives. All four columns read the natural level regardless of what
-        // SpriteBatch::Begin was handed -- the value stops in the framework, at an
-        // ISpriteBatchRenderer that carries the filter and the two address modes and nothing else,
-        // so no renderer ever gets the chance to apply or refuse it.
         ExpectAverage("a sprite at 1/4 scale samples the natural level 2",
                       grid.Interior(0, 0), kLevelColors[kNaturalLevel], 2);
-        ExpectAverage("SpriteBatch.Begin's MipMapLevelOfDetailBias +1 does NOT reach the sprite",
-                      grid.Interior(1, 0), kLevelColors[kNaturalLevel], 2);
-        ExpectAverage("SpriteBatch.Begin's MipMapLevelOfDetailBias -2 does NOT reach it either",
-                      grid.Interior(2, 0), kLevelColors[kNaturalLevel], 2);
-        ExpectSameRegion("a biased batch and an unbiased one are the same picture",
-                         grid.Interior(1, 0), grid.Interior(3, 0), 2);
-        // And the pairing ExpectSameRegion needs: the sprite row is not trivially equal because
-        // nothing rendered. It rendered, and it rendered the level the 3D control's first column
-        // also read, which is the level the geometry alone selects.
-        ExpectDistinct("the sprite row did render -- it differs from the -2 control column",
-                       grid.Interior(1, 0), grid.Interior(2, 1), /*minDelta=*/100);
+        ExpectAverage("SpriteBatch.Begin bias +1 moves the sprite to level 3",
+                      grid.Interior(1, 0), kLevelColors[kNaturalLevel + 1], 2);
+        ExpectAverage("SpriteBatch.Begin bias -2 moves the sprite to level 0",
+                      grid.Interior(2, 0), kLevelColors[0], 2);
+        ExpectDistinct("biased and unbiased batches sample different levels",
+                       grid.Interior(1, 0), grid.Interior(3, 0), /*minDelta=*/100);
+        ExpectSameRegion("sprite and 3D bias +1 select the same level",
+                         grid.Interior(1, 0), grid.Interior(1, 1), 2);
+        ExpectSameRegion("sprite and 3D bias -2 select the same level",
+                         grid.Interior(2, 0), grid.Interior(2, 1), 2);
         ExpectSameRegion("an unbiased sprite and an unbiased 3D quad agree on the natural level",
                          grid.Interior(0, 0), grid.Interior(0, 1), 2);
     }

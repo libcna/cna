@@ -35,6 +35,7 @@
 // Exit code 0 = both checks PASS, 1 = either FAILs.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -73,6 +74,7 @@ namespace
 
 class DepthStencilStateWriteEnableTest : public Game
 {
+    GraphicsDeviceManager graphics_{this};
     bool done_   = false;
     int  result_ = 1;
 
