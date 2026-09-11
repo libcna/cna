@@ -2020,23 +2020,63 @@ namespace CNA::Internal::Renderers::Software
             return declaration == program.inputSemantics.end() ? nullptr : &*declaration;
         }
 
+        bool CompiledTextureRegisterValue(
+            const SoftwareShaderProgramEXT& program, const RasterVertex& vertex,
+            std::uint8_t coordinateRegister, std::array<float, 4>& value)
+        {
+            const SoftwareShaderSemanticEXT* semantic =
+                CompiledCoordinateSemantic(program, coordinateRegister);
+            const MOJOSHADER_usage usage = semantic != nullptr
+                ? semantic->usage : MOJOSHADER_USAGE_TEXCOORD;
+            const std::uint8_t usageIndex = semantic != nullptr
+                ? semantic->usageIndex : coordinateRegister;
+            return CompiledVaryingValue(vertex, usage, usageIndex, value);
+        }
+
         TextureFootprint CompiledTriangleTextureFootprint(
             const SoftwareShaderProgramEXT& program,
             const SoftwarePixelSampleRequestEXT& request,
             const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
             int width, int height)
         {
-            const SoftwareShaderSemanticEXT* semantic =
-                CompiledCoordinateSemantic(program, request.coordinateRegister);
-            const MOJOSHADER_usage usage = semantic != nullptr
-                ? semantic->usage : MOJOSHADER_USAGE_TEXCOORD;
-            const std::uint8_t usageIndex = semantic != nullptr
-                ? semantic->usageIndex : request.coordinateRegister;
             std::array<float, 4> c0{}, c1{}, c2{};
-            if (!CompiledVaryingValue(v0, usage, usageIndex, c0) ||
-                !CompiledVaryingValue(v1, usage, usageIndex, c1) ||
-                !CompiledVaryingValue(v2, usage, usageIndex, c2))
+            if (!CompiledTextureRegisterValue(
+                    program, v0, request.coordinateRegister, c0) ||
+                !CompiledTextureRegisterValue(
+                    program, v1, request.coordinateRegister, c1) ||
+                !CompiledTextureRegisterValue(
+                    program, v2, request.coordinateRegister, c2))
                 return TextureFootprint{};
+
+            if (request.legacyMatrix2RowRegisters[0] >= 0 &&
+                request.legacyMatrix2RowRegisters[1] >= 0)
+            {
+                std::array<float, 4> rows[2][3]{};
+                const RasterVertex* vertices[3] = {&v0, &v1, &v2};
+                for (int row = 0; row < 2; ++row)
+                    for (int vertex = 0; vertex < 3; ++vertex)
+                        if (!CompiledTextureRegisterValue(
+                                program, *vertices[vertex],
+                                static_cast<std::uint8_t>(
+                                    request.legacyMatrix2RowRegisters[row]),
+                                rows[row][vertex]))
+                            return TextureFootprint{};
+                const std::array<float, 4>* coordinates[3] = {&c0, &c1, &c2};
+                float transformed[2][3]{};
+                for (int component = 0; component < 2; ++component)
+                    for (int vertex = 0; vertex < 3; ++vertex)
+                        for (int term = 0; term < 3; ++term)
+                            transformed[component][vertex] +=
+                                (*coordinates[vertex])[term] * rows[component][vertex][term];
+                return ScreenSpaceTextureFootprint(
+                    v0, v1, v2,
+                    transformed[0][0] * static_cast<float>(width),
+                    transformed[0][1] * static_cast<float>(width),
+                    transformed[0][2] * static_cast<float>(width),
+                    transformed[1][0] * static_cast<float>(height),
+                    transformed[1][1] * static_cast<float>(height),
+                    transformed[1][2] * static_cast<float>(height), width, height);
+            }
             return ScreenSpaceTextureFootprint(
                 v0, v1, v2,
                 c0[request.coordinateComponents[0]] * static_cast<float>(width),

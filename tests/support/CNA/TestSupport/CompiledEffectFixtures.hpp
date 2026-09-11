@@ -266,6 +266,8 @@ namespace CNA::TestSupport
         bool pixelShaderUsesShaderModel14Phase = false;
         /// Emits the Shader Model 1.2 stateful `TEXM3X3PAD`/`TEXM3X3` sequence.
         bool pixelShaderUsesLegacyTextureMatrix = false;
+        /// Emits the sampled Shader Model 1.2 `TEXM3X2PAD`/`TEXM3X2TEX` sequence.
+        bool pixelShaderUsesLegacyTextureMatrix2 = false;
         /// Emits Shader Model 1.2 `TEXREG2AR` or `TEXREG2GB` against the destination stage.
         SyntheticLegacyTextureRemap pixelShaderLegacyTextureRemap =
             SyntheticLegacyTextureRemap::None;
@@ -326,7 +328,8 @@ namespace CNA::TestSupport
         bool usesShaderModel14TextureLoad = false,
         bool usesShaderModel14Phase = false,
         bool usesLegacyTextureMatrix = false,
-        SyntheticLegacyTextureRemap legacyTextureRemap = SyntheticLegacyTextureRemap::None)
+        SyntheticLegacyTextureRemap legacyTextureRemap = SyntheticLegacyTextureRemap::None,
+        bool usesLegacyTextureMatrix2 = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -335,7 +338,7 @@ namespace CNA::TestSupport
             usesProjectiveModifiers || usesShaderModel14TextureLoad || usesShaderModel14Phase;
         const std::uint32_t versionToken = usesShaderModel14
                                                ? 0xFFFF0104u
-                                               : usesLegacyTextureMatrix ||
+                                               : usesLegacyTextureMatrix || usesLegacyTextureMatrix2 ||
                                                          legacyTextureRemap !=
                                                              SyntheticLegacyTextureRemap::None
                                                      ? 0xFFFF0102u
@@ -454,7 +457,21 @@ namespace CNA::TestSupport
                    (modifier << 24);
         };
 
-        if (legacyTextureRemap != SyntheticLegacyTextureRemap::None)
+        if (usesLegacyTextureMatrix2)
+        {
+            AppendUInt32(shader, 0x00000040u); // texcrd t0
+            AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+            AppendUInt32(shader, 0x00000047u); // texm3x2pad t1, t0
+            AppendUInt32(shader, destination(regTexture, 1, 0xFu));
+            AppendUInt32(shader, source(regTexture, 0));
+            AppendUInt32(shader, 0x00000048u); // texm3x2tex t2, t0
+            AppendUInt32(shader, destination(regTexture, 2, 0xFu));
+            AppendUInt32(shader, source(regTexture, 0));
+            AppendUInt32(shader, 0x00000001u); // mov r0, t2
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTexture, 2));
+        }
+        else if (legacyTextureRemap != SyntheticLegacyTextureRemap::None)
         {
             // The destination number selects sampler stage 1. Source t0 contributes either AR
             // or GB as the two-dimensional lookup coordinate.
@@ -859,7 +876,8 @@ namespace CNA::TestSupport
                                                                 bool forwardsThreeComponents = false,
                                                                 bool usesPredication = false,
                                                                 bool forwardsFourComponents = false,
-                                                                bool forwardsLegacyTextureMatrix = false)
+                                                                bool forwardsLegacyTextureMatrix = false,
+                                                                bool forwardsLegacyTextureMatrix2 = false)
     {
         const std::uint32_t versionToken = usesPredication ? 0xFFFE0300u : 0xFFFE0200u;
         const std::uint32_t constantCount = readsSecondStream ? 2u : 1u;
@@ -990,6 +1008,19 @@ namespace CNA::TestSupport
             appendDef(242u, 0.5f, 0.0f, 0.0f, 1.0f);  // t2 row
             appendDef(243u, 0.25f, 0.0f, 0.0f, 1.0f); // t3 row
         }
+        if (forwardsLegacyTextureMatrix2)
+        {
+            const auto appendDef = [&](std::uint32_t number, float x, float y, float z, float w) {
+                AppendUInt32(shader, 0x00000051u | (5u << 24));
+                AppendUInt32(shader, destination(regConst, number));
+                AppendUInt32(shader, FloatBits(x));
+                AppendUInt32(shader, FloatBits(y));
+                AppendUInt32(shader, FloatBits(z));
+                AppendUInt32(shader, FloatBits(w));
+            };
+            appendDef(241u, 0.0f, 0.0f, 0.25f, 1.0f); // t1 row
+            appendDef(242u, 0.0f, 0.0f, 0.75f, 1.0f); // t2 row
+        }
 
         // dcl_position v0
         AppendUInt32(shader, 0x0000001Fu | (2u << 24));
@@ -1062,6 +1093,15 @@ namespace CNA::TestSupport
         if (forwardsLegacyTextureMatrix)
         {
             for (std::uint32_t index = 0; index < 4; ++index)
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oT#, c240+#
+                AppendUInt32(shader, destination(regTexCoordOut, index));
+                AppendUInt32(shader, source(regConst, 240u + index));
+            }
+        }
+        if (forwardsLegacyTextureMatrix2)
+        {
+            for (std::uint32_t index = 1; index <= 2; ++index)
             {
                 AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oT#, c240+#
                 AppendUInt32(shader, destination(regTexCoordOut, index));
@@ -1448,7 +1488,8 @@ namespace CNA::TestSupport
             options.pixelShaderUsesShaderModel14TextureLoad,
             options.pixelShaderUsesShaderModel14Phase,
             options.pixelShaderUsesLegacyTextureMatrix,
-            options.pixelShaderLegacyTextureRemap);
+            options.pixelShaderLegacyTextureRemap,
+            options.pixelShaderUsesLegacyTextureMatrix2);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -1460,17 +1501,20 @@ namespace CNA::TestSupport
                 options.pixelShaderSamplesTexture || options.pixelShaderUsesDerivatives ||
                     options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
-                    options.pixelShaderUsesShaderModel14Phase ||
+                options.pixelShaderUsesShaderModel14Phase ||
                     options.pixelShaderLegacyTextureRemap !=
-                        SyntheticLegacyTextureRemap::None,
-                options.samplerKind != SyntheticSamplerKind::Sampler2D,
+                        SyntheticLegacyTextureRemap::None ||
+                    options.pixelShaderUsesLegacyTextureMatrix2,
+                options.samplerKind != SyntheticSamplerKind::Sampler2D ||
+                    options.pixelShaderUsesLegacyTextureMatrix2,
                 options.shadersUsePredication,
                 options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
                     options.pixelShaderUsesShaderModel14Phase ||
                     options.pixelShaderLegacyTextureRemap !=
                         SyntheticLegacyTextureRemap::None,
-                options.pixelShaderUsesLegacyTextureMatrix);
+                options.pixelShaderUsesLegacyTextureMatrix,
+                options.pixelShaderUsesLegacyTextureMatrix2);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

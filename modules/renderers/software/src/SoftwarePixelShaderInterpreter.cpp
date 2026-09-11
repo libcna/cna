@@ -928,7 +928,9 @@ private:
                               const Vector &gradientX = {},
                               const Vector &gradientY = {},
                               const std::array<std::uint8_t, 3> &coordinateComponents =
-                                  {0u, 1u, 2u}) const {
+                                  {0u, 1u, 2u},
+                              const std::array<std::int8_t, 2> &legacyMatrix2Rows =
+                                  {-1, -1}) const {
     if (sampler_ == nullptr)
       throw std::runtime_error(
           "Software pixel shader: texture instruction has no sampler provider.");
@@ -940,6 +942,7 @@ private:
     request.coordinateRegister =
         static_cast<std::uint8_t>(coordinateOperand.number);
     request.coordinateComponents = coordinateComponents;
+    request.legacyMatrix2RowRegisters = legacyMatrix2Rows;
     request.samplerType = SamplerType(samplerRegister);
     request.coordinate = coordinate;
     request.lodMode = lodMode;
@@ -1149,6 +1152,63 @@ private:
       Write(destination,
             Sample(source, coordinate, destination.number,
                    SoftwareTextureLodModeEXT::Implicit, 0.0f, {}, {}, components));
+      return;
+    }
+    if (instruction.opcode == 71u) {
+      if (program_.majorVersion != 1u || program_.minorVersion >= 4u ||
+          tokens.size() != 3u || legacyTextureMatrix2Source_ >= 0)
+        throw std::runtime_error(
+            "Software pixel shader: malformed TEXM3X2PAD sequence.");
+      const Operand destination = DecodeDestination(tokens[1]);
+      std::size_t cursor = 2u;
+      RegisterType relativeType;
+      int relativeComponent = 0;
+      const Operand source = DecodeSource(tokens, cursor, program_.majorVersion,
+                                          relativeType, relativeComponent);
+      if (destination.type != RegisterType::Texture || source.relative ||
+          source.type != RegisterType::Texture || source.sourceModifier != 0u ||
+          source.swizzle != 0xE4u || destination.number <= source.number ||
+          cursor != tokens.size())
+        throw std::runtime_error(
+            "Software pixel shader: invalid TEXM3X2PAD register sequence.");
+      legacyTextureMatrix2Dot_ =
+          Dot(ReadRaw(destination.type, destination.number),
+              ReadRaw(source.type, source.number), 3);
+      legacyTextureMatrix2Source_ = source.number;
+      legacyTextureMatrix2PadDestination_ = destination.number;
+      return;
+    }
+    if (instruction.opcode == 72u) {
+      if (program_.majorVersion != 1u || program_.minorVersion >= 4u ||
+          tokens.size() != 3u || legacyTextureMatrix2Source_ < 0)
+        throw std::runtime_error(
+            "Software pixel shader: TEXM3X2TEX has no matching pad.");
+      const Operand destination = DecodeDestination(tokens[1]);
+      std::size_t cursor = 2u;
+      RegisterType relativeType;
+      int relativeComponent = 0;
+      const Operand source = DecodeSource(tokens, cursor, program_.majorVersion,
+                                          relativeType, relativeComponent);
+      if (destination.type != RegisterType::Texture || source.relative ||
+          source.type != RegisterType::Texture || source.sourceModifier != 0u ||
+          source.swizzle != 0xE4u || source.number != legacyTextureMatrix2Source_ ||
+          destination.number != legacyTextureMatrix2PadDestination_ + 1 ||
+          cursor != tokens.size())
+        throw std::runtime_error(
+            "Software pixel shader: invalid TEXM3X2TEX register sequence.");
+      const Vector vector = ReadRaw(source.type, source.number);
+      const Vector row = ReadRaw(destination.type, destination.number);
+      const Vector coordinate = {
+          legacyTextureMatrix2Dot_, Dot(row, vector, 3), 0.0f, 1.0f};
+      const std::array<std::int8_t, 2> matrixRows = {
+          static_cast<std::int8_t>(legacyTextureMatrix2PadDestination_),
+          static_cast<std::int8_t>(destination.number)};
+      legacyTextureMatrix2Source_ = -1;
+      legacyTextureMatrix2PadDestination_ = -1;
+      Write(destination,
+            Sample(source, coordinate, destination.number,
+                   SoftwareTextureLodModeEXT::Implicit, 0.0f, {}, {},
+                   {0u, 1u, 2u}, matrixRows));
       return;
     }
     if (instruction.opcode == 73u) {
@@ -1458,6 +1518,9 @@ private:
   bool discarded_ = false;
   std::array<float, 2> legacyTextureMatrixDots_{};
   std::size_t legacyTextureMatrixDotCount_ = 0u;
+  float legacyTextureMatrix2Dot_ = 0.0f;
+  int legacyTextureMatrix2Source_ = -1;
+  int legacyTextureMatrix2PadDestination_ = -1;
   std::array<bool, 4> predicateRegister_{};
   std::uint8_t predicateWriteMask_ = 0xFu;
   int loopRegister_ = 0;

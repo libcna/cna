@@ -2040,6 +2040,78 @@ namespace
               "compiled ps_1_2 TEXM3X3 did not produce the exact matrix product");
     }
 
+    void CheckCompiledLegacyTextureMatrix2()
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        GraphicsDevice device;
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.samplerRegister = 2;
+        options.pixelShaderUsesLegacyTextureMatrix2 = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        Texture2D texture(device, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> base(64, Color::Red);
+        for (int y = 4; y < 8; ++y)
+            for (int x = 0; x < 4; ++x)
+                base[static_cast<std::size_t>(y * 8 + x)] = Color::Green;
+        const Rectangle wholeBase(0, 0, 8, 8);
+        texture.SetData(0, &wholeBase, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect->getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](bool minify)
+        {
+            const float left = minify ? 0.0f : 1.0f;
+            const float right = minify ? 8.0f : 1.0f;
+            const Vertex vertices[6] = {
+                {-1,  1, 0, 0, 0, left}, {-1, -1, 0, 0, 0, left},
+                { 1, -1, 0, 0, 0, right}, {-1,  1, 0, 0, 0, left},
+                { 1, -1, 0, 0, 0, right}, { 1,  1, 0, 0, 0, right},
+            };
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+        Check(render(/*minify=*/false) == Color::Green,
+              "compiled ps_1_2 TEXM3X2 did not sample the matrix product");
+        Check(render(/*minify=*/true) == Color::Blue,
+              "compiled ps_1_2 TEXM3X2 did not derive implicit LOD from the matrix product");
+    }
+
     void CheckCompiledLegacyTextureRemap()
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
@@ -2935,6 +3007,7 @@ int main()
         CheckCompiledShaderModel14TextureLoad();
         CheckCompiledShaderModel14Phase();
         CheckCompiledLegacyTextureMatrix();
+        CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureRemap();
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
