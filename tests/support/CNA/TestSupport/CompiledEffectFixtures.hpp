@@ -171,6 +171,17 @@ namespace CNA::TestSupport
         Sampler3D,
     };
 
+    /** @brief Legacy dependent-coordinate texture remap emitted by the synthetic pixel shader. */
+    enum class SyntheticLegacyTextureRemap
+    {
+        /** @brief Do not emit a legacy component-remap texture instruction. */
+        None,
+        /** @brief Emit `TEXREG2AR`, selecting source alpha/red as u/v. */
+        AlphaRed,
+        /** @brief Emit `TEXREG2GB`, selecting source green/blue as u/v. */
+        GreenBlue,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -255,6 +266,9 @@ namespace CNA::TestSupport
         bool pixelShaderUsesShaderModel14Phase = false;
         /// Emits the Shader Model 1.2 stateful `TEXM3X3PAD`/`TEXM3X3` sequence.
         bool pixelShaderUsesLegacyTextureMatrix = false;
+        /// Emits Shader Model 1.2 `TEXREG2AR` or `TEXREG2GB` against the destination stage.
+        SyntheticLegacyTextureRemap pixelShaderLegacyTextureRemap =
+            SyntheticLegacyTextureRemap::None;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -311,7 +325,8 @@ namespace CNA::TestSupport
         bool usesProjectiveModifiers = false,
         bool usesShaderModel14TextureLoad = false,
         bool usesShaderModel14Phase = false,
-        bool usesLegacyTextureMatrix = false)
+        bool usesLegacyTextureMatrix = false,
+        SyntheticLegacyTextureRemap legacyTextureRemap = SyntheticLegacyTextureRemap::None)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -320,7 +335,9 @@ namespace CNA::TestSupport
             usesProjectiveModifiers || usesShaderModel14TextureLoad || usesShaderModel14Phase;
         const std::uint32_t versionToken = usesShaderModel14
                                                ? 0xFFFF0104u
-                                               : usesLegacyTextureMatrix
+                                               : usesLegacyTextureMatrix ||
+                                                         legacyTextureRemap !=
+                                                             SyntheticLegacyTextureRemap::None
                                                      ? 0xFFFF0102u
                                                      : usesShaderModel3 ? 0xFFFF0300u : 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
@@ -437,7 +454,21 @@ namespace CNA::TestSupport
                    (modifier << 24);
         };
 
-        if (usesLegacyTextureMatrix)
+        if (legacyTextureRemap != SyntheticLegacyTextureRemap::None)
+        {
+            // The destination number selects sampler stage 1. Source t0 contributes either AR
+            // or GB as the two-dimensional lookup coordinate.
+            AppendUInt32(shader,
+                         legacyTextureRemap == SyntheticLegacyTextureRemap::AlphaRed
+                             ? 0x00000045u
+                             : 0x00000046u);
+            AppendUInt32(shader, destination(regTexture, samplerRegister, 0xFu));
+            AppendUInt32(shader, source(regTexture, 0));
+            AppendUInt32(shader, 0x00000001u); // mov r0, t<samplerRegister>
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTexture, samplerRegister));
+        }
+        else if (usesLegacyTextureMatrix)
         {
             // t0 is the vector and t1/t2/t3 are the three matrix rows. The paired pad
             // instructions retain the first two dot products until TEXM3X3 writes all three.
@@ -1416,7 +1447,8 @@ namespace CNA::TestSupport
             options.pixelShaderUsesProjectiveModifiers,
             options.pixelShaderUsesShaderModel14TextureLoad,
             options.pixelShaderUsesShaderModel14Phase,
-            options.pixelShaderUsesLegacyTextureMatrix);
+            options.pixelShaderUsesLegacyTextureMatrix,
+            options.pixelShaderLegacyTextureRemap);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -1428,12 +1460,16 @@ namespace CNA::TestSupport
                 options.pixelShaderSamplesTexture || options.pixelShaderUsesDerivatives ||
                     options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
-                    options.pixelShaderUsesShaderModel14Phase,
+                    options.pixelShaderUsesShaderModel14Phase ||
+                    options.pixelShaderLegacyTextureRemap !=
+                        SyntheticLegacyTextureRemap::None,
                 options.samplerKind != SyntheticSamplerKind::Sampler2D,
                 options.shadersUsePredication,
                 options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
-                    options.pixelShaderUsesShaderModel14Phase,
+                    options.pixelShaderUsesShaderModel14Phase ||
+                    options.pixelShaderLegacyTextureRemap !=
+                        SyntheticLegacyTextureRemap::None,
                 options.pixelShaderUsesLegacyTextureMatrix);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));

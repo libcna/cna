@@ -926,7 +926,9 @@ private:
                               const Vector &coordinate, int samplerRegister,
                               SoftwareTextureLodModeEXT lodMode, float lod,
                               const Vector &gradientX = {},
-                              const Vector &gradientY = {}) const {
+                              const Vector &gradientY = {},
+                              const std::array<std::uint8_t, 3> &coordinateComponents =
+                                  {0u, 1u, 2u}) const {
     if (sampler_ == nullptr)
       throw std::runtime_error(
           "Software pixel shader: texture instruction has no sampler provider.");
@@ -937,6 +939,7 @@ private:
     request.samplerRegister = static_cast<std::uint8_t>(samplerRegister);
     request.coordinateRegister =
         static_cast<std::uint8_t>(coordinateOperand.number);
+    request.coordinateComponents = coordinateComponents;
     request.samplerType = SamplerType(samplerRegister);
     request.coordinate = coordinate;
     request.lodMode = lodMode;
@@ -1114,6 +1117,38 @@ private:
     }
     if (instruction.opcode == 66u) {
       ExecuteTextureInstruction(instruction);
+      return;
+    }
+    if (instruction.opcode == 69u || instruction.opcode == 70u) {
+      if (program_.majorVersion != 1u || program_.minorVersion >= 4u ||
+          program_.minorVersion < 1u ||
+          (instruction.opcode == 70u && program_.minorVersion < 2u) ||
+          tokens.size() != 3u)
+        throw std::runtime_error(
+            "Software pixel shader: malformed TEXREG2 component remap.");
+      const Operand destination = DecodeDestination(tokens[1]);
+      if (destination.type != RegisterType::Texture)
+        throw std::runtime_error(
+            "Software pixel shader: TEXREG2 destination is not a texture register.");
+      std::size_t cursor = 2u;
+      RegisterType relativeType;
+      int relativeComponent = 0;
+      const Operand source = DecodeSource(tokens, cursor, program_.majorVersion,
+                                          relativeType, relativeComponent);
+      if (source.relative || source.type != RegisterType::Texture ||
+          source.sourceModifier != 0u || source.swizzle != 0xE4u ||
+          cursor != tokens.size())
+        throw std::runtime_error(
+            "Software pixel shader: TEXREG2 source is not an unsigned direct texture register.");
+      const Vector value = ReadRaw(source.type, source.number);
+      const std::array<std::uint8_t, 3> components = instruction.opcode == 69u
+          ? std::array<std::uint8_t, 3>{3u, 0u, 2u}
+          : std::array<std::uint8_t, 3>{1u, 2u, 0u};
+      const Vector coordinate = {
+          value[components[0]], value[components[1]], value[components[2]], 1.0f};
+      Write(destination,
+            Sample(source, coordinate, destination.number,
+                   SoftwareTextureLodModeEXT::Implicit, 0.0f, {}, {}, components));
       return;
     }
     if (instruction.opcode == 73u) {

@@ -1,0 +1,85 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1827,5 +1827,29 @@ static void state_TEXBEML(Context *ctx)
+     state_texbem(ctx, "TEXBEML");
+ } // state_TEXBEML
+ 
++static void state_texreg2(Context *ctx, const char *opcode,
++                          const int minimum_minor)
++{
++    if (shader_version_atleast(ctx, 1, 4))
++        failf(ctx, "%s opcode not available after Shader Model 1.3", opcode);
++    else if (!shader_version_atleast(ctx, 1, minimum_minor))
++        failf(ctx, "%s opcode not available in this Shader Model", opcode);
++    if (ctx->source_args[0].src_mod != SRCMOD_NONE)
++        failf(ctx, "%s source register must be unsigned and unmodified", opcode);
++    if (!no_swizzle(ctx->source_args[0].swizzle))
++        failf(ctx, "%s source register must not be swizzled", opcode);
++    state_texops(ctx, opcode, 2, 0);
++} // state_texreg2
++
++static void state_TEXREG2AR(Context *ctx)
++{
++    state_texreg2(ctx, "TEXREG2AR", 1);
++} // state_TEXREG2AR
++
++static void state_TEXREG2GB(Context *ctx)
++{
++    state_texreg2(ctx, "TEXREG2GB", 2);
++} // state_TEXREG2GB
++
+ static void state_TEXM3X2PAD(Context *ctx)
+ {
+diff --git a/mojoshader_internal.h b/mojoshader_internal.h
+--- a/mojoshader_internal.h
++++ b/mojoshader_internal.h
+@@ -743,7 +743,7 @@ INSTRUCTION_STATE(TEXLD, "TEXLD", 1, TEXLD, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(TEXBEM, "TEXBEM", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(TEXBEML, "TEXBEML", 2, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+-INSTRUCTION(TEXREG2AR, "TEXREG2AR", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+-INSTRUCTION(TEXREG2GB, "TEXREG2GB", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
++INSTRUCTION_STATE(TEXREG2AR, "TEXREG2AR", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
++INSTRUCTION_STATE(TEXREG2GB, "TEXREG2GB", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(TEXM3X2PAD, "TEXM3X2PAD", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(TEXM3X2TEX, "TEXM3X2TEX", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(TEXM3X3PAD, "TEXM3X3PAD", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -2249,7 +2249,33 @@ void emit_GLSL_TEXBEML(Context *ctx)
+ } // emit_GLSL_TEXBEML
+ 
+-EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(TEXREG2AR) // !!! FIXME
+-EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(TEXREG2GB) // !!! FIXME
++static void emit_GLSL_texreg2(Context *ctx, const int first, const int second)
++{
++    const DestArgInfo *info = &ctx->dest_arg;
++    char sampler[64];
++    char src[128];
++    char code[512];
++
++    get_GLSL_varname_in_buf(ctx, REG_TYPE_SAMPLER, info->regnum,
++                            sampler, sizeof (sampler));
++    make_GLSL_srcarg_string_full(ctx, 0, src, sizeof (src));
++    const char components[] = "xyzw";
++    make_GLSL_destarg_assign(ctx, code, sizeof (code),
++        "texture2D(%s, vec2((%s).%c, (%s).%c))",
++        sampler, src, components[first], src, components[second]);
++    output_line(ctx, "%s", code);
++} // emit_GLSL_texreg2
++
++void emit_GLSL_TEXREG2AR(Context *ctx)
++{
++    // Alpha supplies u and red supplies v.
++    emit_GLSL_texreg2(ctx, 3, 0);
++} // emit_GLSL_TEXREG2AR
++
++void emit_GLSL_TEXREG2GB(Context *ctx)
++{
++    // Green supplies u and blue supplies v.
++    emit_GLSL_texreg2(ctx, 1, 2);
++} // emit_GLSL_TEXREG2GB
+ 
+ 
+ void emit_GLSL_TEXM3X2PAD(Context *ctx)

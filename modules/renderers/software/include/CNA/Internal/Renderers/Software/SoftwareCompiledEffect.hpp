@@ -146,6 +146,8 @@ namespace CNA::Internal::Renderers::Software
         std::uint8_t samplerRegister = 0;
         /** @brief Texture-coordinate register used by the instruction. */
         std::uint8_t coordinateRegister = 0;
+        /** @brief Source-register components that become the sampled u/v/w coordinates. */
+        std::array<std::uint8_t, 3> coordinateComponents{0u, 1u, 2u};
         /** @brief Declared sampler dimensionality. */
         SoftwareShaderSamplerTypeEXT samplerType = SoftwareShaderSamplerTypeEXT::Unknown;
         /** @brief Texture coordinates after source swizzle/modification. */

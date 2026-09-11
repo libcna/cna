@@ -2021,16 +2021,17 @@ namespace CNA::Internal::Renderers::Software
         }
 
         TextureFootprint CompiledTriangleTextureFootprint(
-            const SoftwareShaderProgramEXT& program, std::uint8_t coordinateRegister,
+            const SoftwareShaderProgramEXT& program,
+            const SoftwarePixelSampleRequestEXT& request,
             const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
             int width, int height)
         {
             const SoftwareShaderSemanticEXT* semantic =
-                CompiledCoordinateSemantic(program, coordinateRegister);
+                CompiledCoordinateSemantic(program, request.coordinateRegister);
             const MOJOSHADER_usage usage = semantic != nullptr
                 ? semantic->usage : MOJOSHADER_USAGE_TEXCOORD;
             const std::uint8_t usageIndex = semantic != nullptr
-                ? semantic->usageIndex : coordinateRegister;
+                ? semantic->usageIndex : request.coordinateRegister;
             std::array<float, 4> c0{}, c1{}, c2{};
             if (!CompiledVaryingValue(v0, usage, usageIndex, c0) ||
                 !CompiledVaryingValue(v1, usage, usageIndex, c1) ||
@@ -2038,12 +2039,12 @@ namespace CNA::Internal::Renderers::Software
                 return TextureFootprint{};
             return ScreenSpaceTextureFootprint(
                 v0, v1, v2,
-                c0[0] * static_cast<float>(width),
-                c1[0] * static_cast<float>(width),
-                c2[0] * static_cast<float>(width),
-                c0[1] * static_cast<float>(height),
-                c1[1] * static_cast<float>(height),
-                c2[1] * static_cast<float>(height), width, height);
+                c0[request.coordinateComponents[0]] * static_cast<float>(width),
+                c1[request.coordinateComponents[0]] * static_cast<float>(width),
+                c2[request.coordinateComponents[0]] * static_cast<float>(width),
+                c0[request.coordinateComponents[1]] * static_cast<float>(height),
+                c1[request.coordinateComponents[1]] * static_cast<float>(height),
+                c2[request.coordinateComponents[1]] * static_cast<float>(height), width, height);
         }
 
         TextureFootprint CompiledTriangleCubeTextureFootprint(
@@ -2296,7 +2297,7 @@ namespace CNA::Internal::Renderers::Software
                     TextureFootprint footprint = request.lodMode == SoftwareTextureLodModeEXT::Gradients
                         ? ExplicitGradientFootprint(request, surface->ColorWidth(), surface->ColorHeight())
                         : CompiledTriangleTextureFootprint(
-                            program_, request.coordinateRegister, v0_, v1_, v2_,
+                            program_, request, v0_, v1_, v2_,
                             surface->ColorWidth(), surface->ColorHeight());
                     float lambda = request.lodMode == SoftwareTextureLodModeEXT::Explicit
                         ? request.lod : LodFromTexelRate(footprint.isotropicRate) + request.lod;

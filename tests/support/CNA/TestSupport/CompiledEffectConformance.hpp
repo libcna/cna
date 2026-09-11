@@ -1471,6 +1471,90 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Proves legacy `TEXREG2AR`/`TEXREG2GB` component selection and implicit LOD.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyTextureRemapContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        Texture2D texture(device, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> base(64, Color::Yellow);
+        for (int y = 0; y < 4; ++y)
+            for (int x = 4; x < 8; ++x)
+                base[static_cast<std::size_t>(y * 8 + x)] = Color::Red;
+        for (int y = 4; y < 8; ++y)
+            for (int x = 0; x < 4; ++x)
+                base[static_cast<std::size_t>(y * 8 + x)] = Color::Green;
+        const Rectangle wholeBase(0, 0, 8, 8);
+        texture.SetData(0, &wholeBase, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+
+        struct Vertex { float x, y, z, r, g, b, a; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](SyntheticLegacyTextureRemap remap)
+        {
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.samplerRegister = 1;
+            options.pixelShaderLegacyTextureRemap = remap;
+            options.samplerStates = {
+                {Fx::SampMagFilter, Fx::FilterPoint},
+                {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+                {Fx::SampAddressU, Fx::AddressClamp},
+                {Fx::SampAddressV, Fx::AddressClamp},
+            };
+            Effect effect(device, BuildSyntheticEffect(options));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+            // AR uses constant (a,r)=(.75,.25) while ignored g varies rapidly; GB uses constant
+            // (g,b)=(.25,.75) while ignored r varies. Computing LOD from raw xy would therefore
+            // select a blue smaller mip instead of the required red/green base-level quadrant.
+            const bool alphaRed = remap == SyntheticLegacyTextureRemap::AlphaRed;
+            const auto makeVertex = [alphaRed](float x, float y, float ignored)
+            {
+                return alphaRed ? Vertex{x, y, 0, .25f, ignored, .75f, .75f}
+                                : Vertex{x, y, 0, ignored, .25f, .75f, .75f};
+            };
+            const Vertex quad[6] = {
+                makeVertex(-1,  1, 0), makeVertex(-1, -1, 32),
+                makeVertex( 1, -1, 32), makeVertex(-1,  1, 0),
+                makeVertex( 1, -1, 32), makeVertex( 1,  1, 0),
+            };
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(render(SyntheticLegacyTextureRemap::AlphaRed), Color::Red);
+        EXPECT_EQ(render(SyntheticLegacyTextureRemap::GreenBlue), Color::Green);
+    }
+
+    /**
      * @brief Contract: a compiled effect reads attributes from more than one bound stream.
      *
      * plans/plan_fx.md FX-082. Only for backends reporting `MultiStreamVertexInput`. The fixture's
@@ -3595,6 +3679,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectShaderModel14TextureLoadContract` -- ps_1_4 destination-selected stage
      * - `RunCompiledEffectShaderModel14PhaseContract` -- ps_1_4 two-phase execution
      * - `RunCompiledEffectLegacyTextureMatrixContract` -- ps_1_2 stateful matrix operations
+     * - `RunCompiledEffectLegacyTextureRemapContract` -- ps_1_2 AR/GB sampling and implicit LOD
      * - `RunCompiledEffectMultiStreamDrawContract` -- several streams, and their own offsets
      * - `RunCompiledEffectInstancingDrawContract` -- instanced draws, offsets and divisor reset
      * - `RunCompiledEffectSpriteBatchContract` -- SpriteBatch runs the effect, or refuses by name
