@@ -314,6 +314,17 @@ def main(argv=None):
             # It differs. What classify.py already established comes first.
             answer = byTail.get(reference, {})
             kind = answer.get("classification")
+            # Nothing was compared. A reference whose CNA side could not be read at all is not a
+            # difference inside anyone's reason, and it must not fall through to one keyed on the
+            # asset's extension: SAMPLE-031's two diagnostic fonts were counted
+            # `ACCEPTED_DIFFERENCE` under "two rasterizers disagree about a glyph's ink" while
+            # `classify.py` was reporting `FileNotFoundError` for them
+            # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-236`).
+            if kind == "payload-unreadable":
+                assign(reference, "UNEXPLAINED",
+                       "CNA's output for it could not be read, so nothing was compared: %s"
+                       % str(answer.get("detail", ""))[:200])
+                continue
             if kind == "payload-identical":
                 assign(reference, "SEMANTICALLY_IDENTICAL",
                        "the container's decompressed payload and header are equal; the LZX stream is not")

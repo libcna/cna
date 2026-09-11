@@ -374,6 +374,11 @@ def main(argv=None):
                 "hiDef": unit["hiDef"],
                 "compressed": unit["compressed"],
                 "buildStatus": build["status"],
+                # The directory this unit's output actually went into, so `classify.py` reads it
+                # rather than deriving the name again -- a second pass's is suffixed with its
+                # project and the derivation dropped that
+                # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-236`).
+                "outputDir": os.path.basename(build["output"]),
                 "reconstructedProject": build.get("reconstructedProject"),
                 "seconds": build["seconds"],
                 "counts": counts,

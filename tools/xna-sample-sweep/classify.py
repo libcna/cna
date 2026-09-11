@@ -183,6 +183,43 @@ def _element_differs(left, right, stride, element, width):
     return False
 
 
+def unit_directory(units, unit):
+    """The directory `sweep.py` wrote this unit's output into.
+
+    A root written by more than one `BuildContent` call gets one directory per call, the later
+    ones suffixed with the project that made them (`XNASWEEP-163`). Deriving the name here from
+    the output root alone dropped that suffix, so SAMPLE-031's two diagnostic fonts were looked
+    for in the *other* unit's directory, came back `payload-unreadable` -- CNA's file not found --
+    and were then handed the sprite-font accepted reason by `taxonomy.py` without any comparison
+    having happened (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-236`).
+
+    `sweep.py` records the directory it used, so no rule is re-derived. The search below is only
+    for results written before it did; it tries the two names that rule can produce and nothing
+    else, and a run whose results carry `outputDir` never reaches it.
+    """
+    named = unit.get("outputDir")
+    if named:
+        return os.path.join(units, named)
+    plain = os.path.join(units, slug(unit["outputRoot"]))
+    if _holds_any(plain, unit):
+        return plain
+    suffixed = plain + "__" + slug(os.path.basename(unit["project"]))
+    return suffixed if _holds_any(suffixed, unit) else plain
+
+
+def _holds_any(directory, unit):
+    """Whether `directory` holds an output for any asset this unit's rows name."""
+    if not os.path.isdir(directory):
+        return False
+    for row in unit["rows"]:
+        asset = row.get("asset")
+        if not asset:
+            continue
+        if os.path.exists(os.path.join(directory, (asset + ".xnb").replace("/", os.sep))):
+            return True
+    return False
+
+
 def explain(job):
     reference, mine = job
     answer = {"reference": reference, "cna": mine}
@@ -298,7 +335,7 @@ def main(argv=None):
             relative = (relative + ".xnb") if relative else \
                 row["reference"][len(unit["outputRoot"]) + 1:]
             jobs.append((os.path.join(root, row["reference"]),
-                         os.path.join(args.units, slug(unit["outputRoot"]),
+                         os.path.join(unit_directory(args.units, unit),
                                       relative.replace("/", os.sep))))
             keys.append(row["reference"])
 

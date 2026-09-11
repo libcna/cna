@@ -115,6 +115,21 @@ def main(argv=None):
                                    "rule": rule[0].pattern})
                 continue
             fields = [one.split(":", 1)[0].strip() for one in differences]
+        # No evidence at all is not proof. A reference reaches `ACCEPTED_DIFFERENCE` because the
+        # sweep found its bytes differing, so the classifier must have found *something*; an empty
+        # field set means the comparison did not happen -- SAMPLE-031's two diagnostic fonts were
+        # accepted under the rasterizer reason while `classify.py` was answering `FileNotFoundError`
+        # for them, and this audit called them proved because there was nothing to disprove
+        # (plans/plan_xna_sample_xnb_sweep.md `XNASWEEP-236`).
+        if not fields:
+            violations.append({"reference": reference, "reason": reason,
+                               "field": "(nothing recorded as differing)",
+                               "difference": "accepted under a reason with no evidence at all: %s"
+                                             % str(answer.get("detail") or
+                                                   answer.get("classification") or
+                                                   "no classification recorded")[:200],
+                               "rule": rule[0].pattern})
+            continue
         semantic = [one for one in fields
                     if not any(pattern.match(one) for pattern in DERIVED)]
         for field in semantic:
