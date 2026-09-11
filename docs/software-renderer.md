@@ -209,6 +209,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   SOFTWARE-371 then closes the explicit `ps_3_0` raster inputs: Software supplies top-down integer
   `VPOS` and clockwise-positive `VFACE` to scalar and quad execution, while a managed MojoShader
   patch floors EasyGL's translated fragment coordinates and opt-in flips its GL-facing sign.
+  SOFTWARE-373 closes Shader Model 3 destination predication in both stages. Software validates
+  identity/replicate `p0` tokens with optional negation and masks destination components; the
+  managed MojoShader patch preserves vector pixel predicates, snapshots them before evaluating a
+  predicated result and conditionally writes correctly typed GLSL scalar/vector components. A
+  shared parsed Effect proves both stages in one exact RGBA draw. Predicated non-destination
+  instructions such as `TEXKILL` remain part of the final profile audit rather than being inferred
+  from destination coverage.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.

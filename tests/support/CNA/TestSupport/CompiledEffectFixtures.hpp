@@ -241,6 +241,10 @@ namespace CNA::TestSupport
         /// Emits a Shader Model 3 pixel program that encodes integer-centred `vPos.xy` in red/green
         /// and the clockwise-positive `vFace` sign in blue.
         bool pixelShaderUsesRasterInputs = false;
+        /// Emits Shader Model 3 vertex and pixel programs whose component writes are controlled by
+        /// `p0` (including a replicated, negated predicate). The resulting colour makes both
+        /// stages observable independently.
+        bool shadersUsePredication = false;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -291,10 +295,11 @@ namespace CNA::TestSupport
         std::int32_t loopStep = 2,
         bool usesSubroutine = false,
         bool usesDerivatives = false,
-        bool usesRasterInputs = false)
+        bool usesRasterInputs = false,
+        bool usesPredication = false)
     {
         const bool usesShaderModel3 =
-            usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs;
+            usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication;
         const std::uint32_t versionToken = usesShaderModel3 ? 0xFFFF0300u : 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
         std::vector<std::uint8_t> ctab;
@@ -389,6 +394,7 @@ namespace CNA::TestSupport
         constexpr std::uint32_t regLoop = 15;
         constexpr std::uint32_t regMiscellaneous = 17;
         constexpr std::uint32_t regLabel = 18;
+        constexpr std::uint32_t regPredicate = 19;
         constexpr std::uint32_t swizzleIdentity = 0xE4u;  // .xyzw
         // .yzxw: x<-y, y<-z, z<-x, w<-w, two bits per component, lowest component first.
         constexpr std::uint32_t swizzleYzxw = 1u | (2u << 2) | (0u << 4) | (3u << 6);
@@ -400,11 +406,52 @@ namespace CNA::TestSupport
             return 0x80000000u | registerBits(type) | number | (writeMask << 16);
         };
         const auto source = [&registerBits](std::uint32_t type, std::uint32_t number,
-                                            std::uint32_t swizzle = 0xE4u) {
-            return 0x80000000u | registerBits(type) | number | (swizzle << 16);
+                                            std::uint32_t swizzle = 0xE4u,
+                                            std::uint32_t modifier = 0u) {
+            return 0x80000000u | registerBits(type) | number | (swizzle << 16) |
+                   (modifier << 24);
         };
 
-        if (usesRasterInputs)
+        if (usesPredication)
+        {
+            // Vertex COLOR0 arrives as (.75, .625, .5, 1). Add .125 only to the x/z components
+            // selected by p0, then use (!p0.y) to replace alpha with .125.
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c1, .125, .125, .125, .125
+            AppendUInt32(shader, destination(regConst, 1, 0xFu));
+            for (int i = 0; i < 4; ++i) AppendUInt32(shader, FloatBits(0.125f));
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c2, 1, 0, 1, 0
+            AppendUInt32(shader, destination(regConst, 2, 0xFu));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c3, .5, .5, .5, .5
+            AppendUInt32(shader, destination(regConst, 3, 0xFu));
+            for (int i = 0; i < 4; ++i) AppendUInt32(shader, FloatBits(0.5f));
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_color0 v0
+            AppendUInt32(shader, 0x80000000u | 10u);
+            AppendUInt32(shader, destination(regInput, 0, 0xFu));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, v0
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, 0x0000005Eu | (1u << 16) | (3u << 24)); // setp_gt p0, c2, c3
+            AppendUInt32(shader, destination(regPredicate, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 2));
+            AppendUInt32(shader, source(regConst, 3));
+            AppendUInt32(shader, 0x10000002u | (4u << 24)); // (p0) add r0, r0, c1
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+            AppendUInt32(shader, source(regConst, 1));
+            AppendUInt32(shader, source(regPredicate, 0));
+            AppendUInt32(shader, 0x10000001u | (3u << 24)); // (!p0.y) mov r0.w, c1.x
+            AppendUInt32(shader, destination(regTemp, 0, 0x8u));
+            AppendUInt32(shader, source(regConst, 1, 0x00u));
+            AppendUInt32(shader, source(regPredicate, 0, 0x55u, 13u));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+        }
+        else if (usesRasterInputs)
         {
             // D3D9 vPos has integer-centred top-down pixel coordinates. Scale a 4x4 target into
             // normalized red/green while vFace selects blue only for clockwise/front triangles.
@@ -661,9 +708,10 @@ namespace CNA::TestSupport
      */
     inline std::vector<std::uint8_t> BuildSyntheticVertexShader(bool readsSecondStream,
                                                                 bool forwardsTexCoord = false,
-                                                                bool forwardsThreeComponents = false)
+                                                                bool forwardsThreeComponents = false,
+                                                                bool usesPredication = false)
     {
-        constexpr std::uint32_t versionToken = 0xFFFE0200u;
+        const std::uint32_t versionToken = usesPredication ? 0xFFFE0300u : 0xFFFE0200u;
         const std::uint32_t constantCount = readsSecondStream ? 2u : 1u;
 
         std::vector<std::uint8_t> ctab;
@@ -713,7 +761,7 @@ namespace CNA::TestSupport
         };
         const std::uint32_t transformName = appendCtabString("Transform");
         const std::uint32_t streamMixName = appendCtabString("StreamMix");
-        const std::uint32_t target = appendCtabString("vs_2_0");
+        const std::uint32_t target = appendCtabString(usesPredication ? "vs_3_0" : "vs_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
         while ((ctab.size() & 3u) != 0) ctab.push_back(0);
 
@@ -740,6 +788,7 @@ namespace CNA::TestSupport
         constexpr std::uint32_t regConst = 2;
         constexpr std::uint32_t regRastOut = 4;
         constexpr std::uint32_t regTexCoordOut = 6;  // vs_2_0 oT#
+        constexpr std::uint32_t regPredicate = 19;
         const auto registerBits = [](std::uint32_t type) {
             return ((type & 0x7u) << 28) | ((type >> 3) << 11);
         };
@@ -747,8 +796,11 @@ namespace CNA::TestSupport
                                                  std::uint32_t writeMask = 0xFu) {
             return 0x80000000u | registerBits(type) | number | (writeMask << 16);
         };
-        const auto source = [&registerBits](std::uint32_t type, std::uint32_t number) {
-            return 0x80000000u | registerBits(type) | number | (0xE4u << 16);
+        const auto source = [&registerBits](std::uint32_t type, std::uint32_t number,
+                                            std::uint32_t swizzle = 0xE4u,
+                                            std::uint32_t modifier = 0u) {
+            return 0x80000000u | registerBits(type) | number | (swizzle << 16) |
+                   (modifier << 24);
         };
 
         std::vector<std::uint8_t> shader;
@@ -758,10 +810,36 @@ namespace CNA::TestSupport
         AppendUInt32(shader, 0x42415443u); // 'CTAB'
         shader.insert(shader.end(), ctab.begin(), ctab.end());
 
+        if (usesPredication)
+        {
+            const auto appendDef = [&](std::uint32_t number, float x, float y, float z, float w) {
+                AppendUInt32(shader, 0x00000051u | (5u << 24));
+                AppendUInt32(shader, destination(regConst, number));
+                AppendUInt32(shader, FloatBits(x));
+                AppendUInt32(shader, FloatBits(y));
+                AppendUInt32(shader, FloatBits(z));
+                AppendUInt32(shader, FloatBits(w));
+            };
+            appendDef(240u, 1.0f, 0.0f, 1.0f, 0.0f);
+            appendDef(241u, 0.5f, 0.5f, 0.5f, 0.5f);
+            appendDef(242u, 0.125f, 0.25f, 0.375f, 1.0f);
+            appendDef(243u, 0.75f, 0.625f, 0.5f, 0.25f);
+        }
+
         // dcl_position v0
         AppendUInt32(shader, 0x0000001Fu | (2u << 24));
         AppendUInt32(shader, 0x80000000u | 0u);            // D3DDECLUSAGE_POSITION, index 0
         AppendUInt32(shader, destination(regInput, 0));
+        if (usesPredication)
+        {
+            // Shader Model 3 uses generic o# outputs, each with an explicit semantic declaration.
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_position0 o0
+            AppendUInt32(shader, 0x80000000u | 0u);
+            AppendUInt32(shader, destination(regTexCoordOut, 0));
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_color0 o1
+            AppendUInt32(shader, 0x80000000u | 10u);
+            AppendUInt32(shader, destination(regTexCoordOut, 1));
+        }
         // One declaration serves both consumers: the multi-stream fixture scales POSITION0 by it,
         // the sampling fixture forwards it, and a fixture that does both declares it once.
         if (readsSecondStream || forwardsTexCoord)
@@ -782,9 +860,27 @@ namespace CNA::TestSupport
         }
         // m4x4 oPos, <r0|v0>, c0
         AppendUInt32(shader, 0x00000014u | (3u << 24));
-        AppendUInt32(shader, destination(regRastOut, 0));
+        AppendUInt32(shader, destination(usesPredication ? regTexCoordOut : regRastOut, 0));
         AppendUInt32(shader, readsSecondStream ? source(regTemp, 0) : source(regInput, 0));
         AppendUInt32(shader, source(regConst, 0));
+        if (usesPredication)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov o1, c242
+            AppendUInt32(shader, destination(regTexCoordOut, 1));
+            AppendUInt32(shader, source(regConst, 242u));
+            AppendUInt32(shader, 0x0000005Eu | (1u << 16) | (3u << 24)); // setp_gt p0, c240, c241
+            AppendUInt32(shader, destination(regPredicate, 0));
+            AppendUInt32(shader, source(regConst, 240u));
+            AppendUInt32(shader, source(regConst, 241u));
+            AppendUInt32(shader, 0x10000001u | (3u << 24)); // (p0) mov o1, c243
+            AppendUInt32(shader, destination(regTexCoordOut, 1));
+            AppendUInt32(shader, source(regConst, 243u));
+            AppendUInt32(shader, source(regPredicate, 0));
+            AppendUInt32(shader, 0x10000001u | (3u << 24)); // (!p0.y) mov o1.y, c243.y
+            AppendUInt32(shader, destination(regTexCoordOut, 1, 0x2u));
+            AppendUInt32(shader, source(regConst, 243u, 0x55u));
+            AppendUInt32(shader, source(regPredicate, 0, 0x55u, 13u));
+        }
         if (forwardsTexCoord)
         {
             // mov oT0.xy(z), v1 -- the interpolated coordinate the sampling pixel shader reads.
@@ -1169,7 +1265,7 @@ namespace CNA::TestSupport
             options.pixelShaderWritesMrt, options.pixelShaderUsesLoop,
             options.pixelLoopCount, options.pixelLoopInitial, options.pixelLoopStep,
             options.pixelShaderUsesSubroutine, options.pixelShaderUsesDerivatives,
-            options.pixelShaderUsesRasterInputs);
+            options.pixelShaderUsesRasterInputs, options.shadersUsePredication);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -1179,7 +1275,8 @@ namespace CNA::TestSupport
             const std::vector<std::uint8_t> vertexShader = BuildSyntheticVertexShader(
                 options.vertexShaderReadsSecondStream,
                 options.pixelShaderSamplesTexture || options.pixelShaderUsesDerivatives,
-                options.samplerKind != SyntheticSamplerKind::Sampler2D);
+                options.samplerKind != SyntheticSamplerKind::Sampler2D,
+                options.shadersUsePredication);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

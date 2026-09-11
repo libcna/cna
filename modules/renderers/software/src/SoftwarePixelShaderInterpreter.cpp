@@ -610,6 +610,40 @@ private:
     return Compare(source0[0], source1[0], instruction.controls);
   }
 
+  void PrepareInstructionPredicate(
+      const SoftwareShaderInstructionEXT &instruction) {
+    predicateWriteMask_ = 0xFu;
+    if (!instruction.predicated)
+      return;
+    if (program_.majorVersion < 3u || instruction.tokens.size() < 2u)
+      throw std::runtime_error(
+          "Software pixel shader: malformed predicated instruction.");
+
+    std::size_t cursor = instruction.tokens.size() - 1u;
+    RegisterType relativeType;
+    int relativeComponent = 0;
+    const Operand predicate = DecodeSource(
+        instruction.tokens, cursor, program_.majorVersion,
+        relativeType, relativeComponent);
+    if (cursor != instruction.tokens.size() ||
+        predicate.type != RegisterType::Predicate || predicate.number != 0 ||
+        predicate.relative ||
+        (predicate.sourceModifier != 0u && predicate.sourceModifier != 13u))
+      throw std::runtime_error(
+          "Software pixel shader: invalid instruction predicate.");
+
+    predicateWriteMask_ = 0u;
+    for (int component = 0; component < 4; ++component) {
+      const auto selected = static_cast<std::size_t>(
+          (predicate.swizzle >> static_cast<unsigned>(component * 2)) & 0x3u);
+      bool enabled = predicateRegister_[selected];
+      if (predicate.sourceModifier == 13u)
+        enabled = !enabled;
+      if (enabled)
+        predicateWriteMask_ |= static_cast<std::uint8_t>(1u << component);
+    }
+  }
+
   [[nodiscard]] int ReadLabel(const std::vector<std::uint32_t> &tokens,
                               std::size_t &cursor) const {
     RegisterType relativeType;
@@ -733,6 +767,8 @@ private:
   }
 
   void Write(const Operand &destination, Vector value) {
+    const std::uint8_t writeMask =
+        static_cast<std::uint8_t>(destination.writeMask & predicateWriteMask_);
     if (destination.resultShift >= 1u && destination.resultShift <= 3u) {
       const float factor = static_cast<float>(1u << destination.resultShift);
       for (float &component : value)
@@ -780,12 +816,14 @@ private:
       }
       break;
     case RegisterType::DepthOutput:
-      depthOutput_ = value[0];
-      depthWritten_ = true;
+      if ((writeMask & 0x1u) != 0u) {
+        depthOutput_ = value[0];
+        depthWritten_ = true;
+      }
       return;
     case RegisterType::Predicate:
       for (int component = 0; component < 4; ++component) {
-        if ((destination.writeMask & (1u << component)) != 0u)
+        if ((writeMask & (1u << component)) != 0u)
           predicateRegister_[static_cast<std::size_t>(component)] =
               value[static_cast<std::size_t>(component)] != 0.0f;
       }
@@ -798,12 +836,12 @@ private:
           "Software pixel shader: unsupported destination register type " +
           std::to_string(static_cast<unsigned>(destination.type)) + ".");
     for (int component = 0; component < 4; ++component) {
-      if ((destination.writeMask & (1u << component)) != 0u) {
+      if ((writeMask & (1u << component)) != 0u) {
         (*target)[static_cast<std::size_t>(component)] =
             value[static_cast<std::size_t>(component)];
       }
     }
-    if (written != nullptr)
+    if (written != nullptr && writeMask != 0u)
       *written = true;
   }
 
@@ -915,9 +953,10 @@ private:
   void ExecuteTextureInstruction(
       const SoftwareShaderInstructionEXT &instruction) {
     const auto &tokens = instruction.tokens;
+    const std::size_t predicateTokens = instruction.predicated ? 1u : 0u;
     if (program_.majorVersion < 2u) {
       if (program_.minorVersion == 4u) {
-        if (tokens.size() != 3u)
+        if (tokens.size() != 3u + predicateTokens)
           throw std::runtime_error(
               "Software pixel shader: malformed ps_1_4 TEX instruction.");
         const Operand destination = DecodeDestination(tokens[1]);
@@ -933,7 +972,7 @@ private:
                      SoftwareTextureLodModeEXT::Implicit, 0.0f));
         return;
       }
-      if (tokens.size() != 2u)
+      if (tokens.size() != 2u + predicateTokens)
         throw std::runtime_error(
             "Software pixel shader: malformed Shader Model 1 TEX instruction.");
       const Operand destination = DecodeDestination(tokens[1]);
@@ -944,7 +983,7 @@ private:
       return;
     }
 
-    if (tokens.size() != 4u)
+    if (tokens.size() != 4u + predicateTokens)
       throw std::runtime_error(
           "Software pixel shader: malformed TEX instruction.");
     const Operand destination = DecodeDestination(tokens[1]);
@@ -995,7 +1034,8 @@ private:
   void ExecuteTextureLodInstruction(
       const SoftwareShaderInstructionEXT &instruction) {
     const auto &tokens = instruction.tokens;
-    const std::size_t expected = instruction.opcode == 93u ? 6u : 4u;
+    const std::size_t expected =
+        (instruction.opcode == 93u ? 6u : 4u) + (instruction.predicated ? 1u : 0u);
     if (tokens.size() != expected)
       throw std::runtime_error(
           "Software pixel shader: malformed explicit-LOD texture instruction.");
@@ -1030,9 +1070,7 @@ private:
     if (instruction.opcode == 0u || instruction.opcode == 31u ||
         instruction.opcode == 0xFFFEu)
       return;
-    if (instruction.predicated)
-      throw std::runtime_error("Software pixel shader: predicated instructions "
-                               "require SOFTWARE-165.");
+    PrepareInstructionPredicate(instruction);
     if (instruction.opcode == 81u) {
       DefineFloat(tokens);
       return;
@@ -1046,7 +1084,7 @@ private:
       return;
     }
     if (instruction.opcode == 64u) {
-      if (tokens.size() != 2u)
+      if (tokens.size() != 2u + (instruction.predicated ? 1u : 0u))
         throw std::runtime_error(
             "Software pixel shader: unsupported TEXCOORD instruction shape.");
       const Operand destination = DecodeDestination(tokens[1]);
@@ -1054,12 +1092,14 @@ private:
       return;
     }
     if (instruction.opcode == 65u) {
-      if (tokens.size() != 2u)
+      if (tokens.size() != 2u + (instruction.predicated ? 1u : 0u))
         throw std::runtime_error(
             "Software pixel shader: malformed TEXKILL instruction.");
       const Operand source = DecodeDestination(tokens[1]);
       const Vector value = ReadRaw(source.type, source.number);
-      discarded_ = value[0] < 0.0f || value[1] < 0.0f || value[2] < 0.0f;
+      discarded_ = ((predicateWriteMask_ & 0x1u) != 0u && value[0] < 0.0f) ||
+                   ((predicateWriteMask_ & 0x2u) != 0u && value[1] < 0.0f) ||
+                   ((predicateWriteMask_ & 0x4u) != 0u && value[2] < 0.0f);
       return;
     }
     if (instruction.opcode == 66u) {
@@ -1326,6 +1366,7 @@ private:
   bool depthWritten_ = false;
   bool discarded_ = false;
   std::array<bool, 4> predicateRegister_{};
+  std::uint8_t predicateWriteMask_ = 0xFu;
   int loopRegister_ = 0;
   std::array<Vector, kFloatConstantRegisterCount> localFloatConstants_{};
   std::array<bool, kFloatConstantRegisterCount> localFloatDefined_{};

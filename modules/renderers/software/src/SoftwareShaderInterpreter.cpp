@@ -627,6 +627,43 @@ namespace CNA::Internal::Renderers::Software
                 return Compare(source0[0], source1[0], instruction.controls);
             }
 
+            void PrepareInstructionPredicate(const SoftwareShaderInstructionEXT& instruction)
+            {
+                predicateWriteMask_ = 0xFu;
+                if (!instruction.predicated)
+                    return;
+                if (program_.majorVersion < 3u || instruction.tokens.size() < 2u)
+                    throw std::runtime_error(
+                        "Software vertex shader: malformed predicated instruction.");
+
+                std::size_t cursor = instruction.tokens.size() - 1u;
+                RegisterType relativeType;
+                int relativeComponent = 0;
+                const Operand predicate = DecodeSource(
+                    instruction.tokens, cursor, program_.majorVersion,
+                    relativeType, relativeComponent);
+                if (cursor != instruction.tokens.size() ||
+                    predicate.type != RegisterType::Predicate || predicate.number != 0 ||
+                    predicate.relative ||
+                    (predicate.sourceModifier != 0u && predicate.sourceModifier != 13u))
+                {
+                    throw std::runtime_error(
+                        "Software vertex shader: invalid instruction predicate.");
+                }
+
+                predicateWriteMask_ = 0u;
+                for (int component = 0; component < 4; ++component)
+                {
+                    const auto selected = static_cast<std::size_t>(
+                        (predicate.swizzle >> static_cast<unsigned>(component * 2)) & 0x3u);
+                    bool enabled = predicateRegister_[selected];
+                    if (predicate.sourceModifier == 13u)
+                        enabled = !enabled;
+                    if (enabled)
+                        predicateWriteMask_ |= static_cast<std::uint8_t>(1u << component);
+                }
+            }
+
             [[nodiscard]] int ReadLabel(const std::vector<std::uint32_t>& tokens,
                                         std::size_t& cursor) const
             {
@@ -767,6 +804,8 @@ namespace CNA::Internal::Renderers::Software
 
             void Write(const Operand& destination, Vector value)
             {
+                const std::uint8_t writeMask =
+                    static_cast<std::uint8_t>(destination.writeMask & predicateWriteMask_);
                 if ((destination.resultModifier & 0x1u) != 0u)
                     for (float& component : value)
                         component = std::clamp(component, 0.0f, 1.0f);
@@ -798,7 +837,7 @@ namespace CNA::Internal::Renderers::Software
                 case RegisterType::Address:
                     for (int component = 0; component < 4; ++component)
                     {
-                        if ((destination.writeMask & (1u << component)) != 0u)
+                        if ((writeMask & (1u << component)) != 0u)
                             addressRegister_[static_cast<std::size_t>(component)] =
                                 static_cast<int>(value[static_cast<std::size_t>(component)]);
                     }
@@ -806,7 +845,7 @@ namespace CNA::Internal::Renderers::Software
                 case RegisterType::Predicate:
                     for (int component = 0; component < 4; ++component)
                     {
-                        if ((destination.writeMask & (1u << component)) != 0u)
+                        if ((writeMask & (1u << component)) != 0u)
                         {
                             predicateRegister_[static_cast<std::size_t>(component)] =
                                 value[static_cast<std::size_t>(component)] != 0.0f;
@@ -822,7 +861,7 @@ namespace CNA::Internal::Renderers::Software
                         std::to_string(static_cast<unsigned>(destination.type)) + ".");
                 for (int component = 0; component < 4; ++component)
                 {
-                    if ((destination.writeMask & (1u << component)) != 0u)
+                    if ((writeMask & (1u << component)) != 0u)
                     {
                         (*target)[static_cast<std::size_t>(component)] =
                             value[static_cast<std::size_t>(component)];
@@ -885,9 +924,7 @@ namespace CNA::Internal::Renderers::Software
                 if (instruction.opcode == 0u || instruction.opcode == 31u ||
                     instruction.opcode == 0xFFFEu)
                     return;
-                if (instruction.predicated)
-                    throw std::runtime_error(
-                        "Software vertex shader: predicated instructions require SOFTWARE-165.");
+                PrepareInstructionPredicate(instruction);
                 if (instruction.opcode == 81u)
                 {
                     DefineFloat(tokens);
@@ -1210,6 +1247,7 @@ namespace CNA::Internal::Renderers::Software
             std::array<int, 4> addressRegister_{};
             int loopRegister_ = 0;
             std::array<bool, 4> predicateRegister_{};
+            std::uint8_t predicateWriteMask_ = 0xFu;
             std::array<Vector, kFloatConstantRegisterCount> localFloatConstants_{};
             std::array<bool, kFloatConstantRegisterCount> localFloatDefined_{};
             std::array<std::array<int, 4>, kIntegerConstantRegisterCount> localIntegerConstants_{};

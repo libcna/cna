@@ -617,6 +617,14 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9RasterInputsUseXnaCoordinatesAndFacing)
     CNA::TestSupport::RunCompiledEffectRasterInputContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9InstructionPredicationMasksBothShaderStages)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectPredicationContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedMultiStreamDrawContract)
 {
     GraphicsDevice device;
