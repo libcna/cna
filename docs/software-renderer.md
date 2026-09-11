@@ -201,8 +201,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   SOFTWARE-366 executes the corresponding Software `CALL`/`CALLNZ`/`LABEL`/`RET` programs with
   forward-label validation, Shader Model call-depth limits, conditional returns and inherited `aL`.
   SOFTWARE-368 executes pixel `DSX`/`DSY` over aligned 2x2 Software triangle quads, including
-  uncovered helper lanes and later derivatives that consume earlier derivative results. Compiled
-  line/wireframe derivatives remain SOFTWARE-370. SOFTWARE-369 repairs the EasyGL compiled path's
+  uncovered helper lanes and later derivatives that consume earlier derivative results.
+  SOFTWARE-370 extends those quads to compiled lines and original wireframe edges: all four lanes
+  project their logical centres onto the unclamped line so uncovered helpers extrapolate the
+  along-line varying while remaining constant across its perpendicular. SOFTWARE-369 repairs the EasyGL compiled path's
   formerly missing XNA pixel-centre correction through a viewport-scaled MojoShader uniform.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`

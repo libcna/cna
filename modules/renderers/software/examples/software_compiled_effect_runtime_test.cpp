@@ -2250,6 +2250,86 @@ namespace
         renderer.SetRenderTargets(nullptr, 0);
         renderer.ApplyRasterizerMultiSampleState(true);
         renderer.ApplyRasterizerState(static_cast<int>(CullMode::None), 0, false);
+
+        CNA::TestSupport::SyntheticEffectOptions derivativeOptions;
+        derivativeOptions.includeDrawableProgram = true;
+        derivativeOptions.pixelShaderUsesDerivatives = true;
+        const auto derivativeBytes =
+            CNA::TestSupport::BuildSyntheticEffect(derivativeOptions);
+        auto derivativeRuntime =
+            renderer.CreateCompiledEffect(derivativeBytes.data(), derivativeBytes.size());
+        derivativeRuntime->SetParameterValue(
+            FindParameter(*derivativeRuntime, "Transform"), matrix, sizeof(matrix));
+        const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        derivativeRuntime->SetParameterValue(
+            FindParameter(*derivativeRuntime, "Tint"), white, sizeof(white));
+        derivativeRuntime->SetTechnique(0);
+        derivativeRuntime->ApplyPass(1, {}, changes);
+
+        struct DerivativeVertex
+        {
+            float position[4];
+            float coordinate[2];
+        };
+        const VertexDeclaration derivativeDeclaration(
+            sizeof(DerivativeVertex),
+            {VertexElement(0, VertexElementFormat::Vector4,
+                           VertexElementUsage::Position, 0),
+             VertexElement(16, VertexElementFormat::Vector2,
+                           VertexElementUsage::TextureCoordinate, 0)});
+        auto derivativeBuffer = renderer.CreateVertexBuffer(3);
+        derivativeBuffer->SetVertexDeclaration(derivativeDeclaration);
+        GpuDrawParams derivativeParams;
+        derivativeParams.compiledEffectRuntime = derivativeRuntime.get();
+        const auto expectDerivativePixel = [&](int x, int y, int red, int green,
+                                               const std::string& label)
+        {
+            const auto pixels = ReadBackbufferPixels(renderer);
+            const std::size_t offset = static_cast<std::size_t>(y * 16 + x) * 4u;
+            Check(std::abs(static_cast<int>(pixels[offset]) - red) <= 1 &&
+                      std::abs(static_cast<int>(pixels[offset + 1u]) - green) <= 1 &&
+                      pixels[offset + 2u] == 0u && pixels[offset + 3u] == 255u,
+                  label + " derivative differs at " + std::to_string(x) + "," +
+                      std::to_string(y) + " (actual " + std::to_string(pixels[offset]) + "," +
+                      std::to_string(pixels[offset + 1u]) + "," +
+                      std::to_string(pixels[offset + 2u]) + "," +
+                      std::to_string(pixels[offset + 3u]) + ")");
+        };
+
+        const DerivativeVertex horizontal[2] = {
+            {{-0.75f, 0.0f, 0.5f, 1.0f}, {0.0f, 0.0f}},
+            {{ 0.75f, 0.0f, 0.5f, 1.0f}, {1.0f, 0.0f}},
+        };
+        derivativeBuffer->SetData(horizontal, 2, sizeof(DerivativeVertex));
+        clear();
+        renderer.DrawPrimitivesEx(*derivativeBuffer, identity, identity, identity,
+                                  PrimitiveType::LineList, 1, derivativeParams);
+        expectDerivativePixel(4, 8, 9, 0, "horizontal compiled LineList");
+        expectDerivativePixel(12, 8, 37, 0, "horizontal nonlinear compiled LineList");
+
+        const DerivativeVertex vertical[2] = {
+            {{0.0f,  0.75f, 0.5f, 1.0f}, {0.0f, 0.0f}},
+            {{0.0f, -0.75f, 0.5f, 1.0f}, {0.0f, 1.0f}},
+        };
+        derivativeBuffer->SetData(vertical, 2, sizeof(DerivativeVertex));
+        clear();
+        renderer.DrawPrimitivesEx(*derivativeBuffer, identity, identity, identity,
+                                  PrimitiveType::LineList, 1, derivativeParams);
+        expectDerivativePixel(8, 4, 0, 9, "vertical compiled LineList");
+        expectDerivativePixel(8, 12, 0, 37, "vertical nonlinear compiled LineList");
+
+        const DerivativeVertex wireframe[3] = {
+            {{-0.75f,  0.75f, 0.5f, 1.0f}, {0.0f, 0.0f}},
+            {{-0.75f, -0.75f, 0.5f, 1.0f}, {0.0f, 1.0f}},
+            {{ 0.75f,  0.0f,  0.5f, 1.0f}, {1.0f, 0.5f}},
+        };
+        derivativeBuffer->SetData(wireframe, 3, sizeof(DerivativeVertex));
+        renderer.ApplyRasterizerState(static_cast<int>(CullMode::None), 1, false);
+        clear();
+        renderer.DrawPrimitivesEx(*derivativeBuffer, identity, identity, identity,
+                                  PrimitiveType::TriangleList, 1, derivativeParams);
+        expectDerivativePixel(2, 4, 0, 9, "compiled wireframe TriangleList");
+        renderer.ApplyRasterizerState(static_cast<int>(CullMode::None), 0, false);
     }
 
     void CheckCompiledSpriteBatchRouting()

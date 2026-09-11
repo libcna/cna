@@ -25,6 +25,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <new>
 #include <set>
 #include <span>
@@ -3084,11 +3085,39 @@ namespace CNA::Internal::Renderers::Software
             }
 
             SoftwareFramebuffer& primary = *colorTargets[0];
-            WalkRasterLine(primary, multiSampleAntiAlias, clip, a, b,
-                           [&](int x, int y, float t, unsigned int coverageMask,
-                               const std::array<float, 4>* sampleTs)
+            const SoftwareShaderProgramEXT* pixelProgram = runtime.GetPixelProgramEXT();
+            if (pixelProgram == nullptr)
+                throw std::runtime_error(
+                    "SoftwareRenderer: compiled line has no selected pixel program.");
+            const bool usesDerivatives = std::any_of(
+                pixelProgram->instructions.begin(), pixelProgram->instructions.end(),
+                [](const SoftwareShaderInstructionEXT& instruction)
+                { return instruction.opcode == 91u || instruction.opcode == 92u; });
+
+            const auto interpolateInputs = [&](float t)
             {
+                std::array<SoftwareShaderSemanticValueEXT, 16> inputs{};
                 const float invW = a.invW + t * (b.invW - a.invW);
+                for (std::size_t varying = 0; varying < a.compiledVaryingCount; ++varying)
+                {
+                    const auto& first = a.compiledVaryings[varying];
+                    const auto& second = b.compiledVaryings[varying];
+                    inputs[varying].usage = first.usage;
+                    inputs[varying].usageIndex = first.usageIndex;
+                    for (std::size_t component = 0; component < 4; ++component)
+                    {
+                        inputs[varying].value[component] =
+                            (first.value[component] +
+                             t * (second.value[component] - first.value[component])) / invW;
+                    }
+                }
+                return inputs;
+            };
+            const auto writeResult = [&](int x, int y, float t,
+                                         unsigned int coverageMask,
+                                         const std::array<float, 4>* sampleTs,
+                                         const SoftwarePixelShaderResultEXT& pixel)
+            {
                 float depth = a.depth + t * (b.depth - a.depth);
                 if (depthBiasOffset != 0.0f)
                     depth = std::clamp(depth + depthBiasOffset, 0.0f, 1.0f);
@@ -3108,28 +3137,94 @@ namespace CNA::Internal::Renderers::Software
                         sampleDepths[static_cast<std::size_t>(sampleIndex)] = sampleDepth;
                     }
                 }
-
-                std::array<SoftwareShaderSemanticValueEXT, 16> inputs{};
-                for (std::size_t varying = 0; varying < a.compiledVaryingCount; ++varying)
-                {
-                    const auto& first = a.compiledVaryings[varying];
-                    const auto& second = b.compiledVaryings[varying];
-                    inputs[varying].usage = first.usage;
-                    inputs[varying].usageIndex = first.usageIndex;
-                    for (std::size_t component = 0; component < 4; ++component)
-                    {
-                        inputs[varying].value[component] =
-                            (first.value[component] +
-                             t * (second.value[component] - first.value[component])) / invW;
-                    }
-                }
-                WriteCompiledFragment(
+                WriteCompiledPixelResult(
                     colorTargets, colorTargetCount, depthState, stencilState, blendState,
-                    blendFactor, colorWriteMasks, multiSampleMask, occlusionQuery, runtime,
+                    blendFactor, colorWriteMasks, multiSampleMask, occlusionQuery,
                     x, y, depth, coverageMask,
                     sampleTs != nullptr ? &sampleDepths : nullptr,
-                    std::span(inputs.data(), a.compiledVaryingCount), &sampler);
+                    pixel);
+            };
+
+            if (!usesDerivatives)
+            {
+                WalkRasterLine(primary, multiSampleAntiAlias, clip, a, b,
+                               [&](int x, int y, float t, unsigned int coverageMask,
+                                   const std::array<float, 4>* sampleTs)
+                {
+                    const auto inputs = interpolateInputs(t);
+                    writeResult(
+                        x, y, t, coverageMask, sampleTs,
+                        runtime.ExecutePixelEXT(
+                            std::span(inputs.data(), a.compiledVaryingCount), &sampler));
+                });
+                return;
+            }
+
+            struct LineFragment
+            {
+                float t = 0.0f;
+                unsigned int coverageMask = 0u;
+                std::array<float, 4> sampleTs{};
+                bool hasSampleTs = false;
+            };
+            std::map<std::pair<int, int>, LineFragment> fragments;
+            WalkRasterLine(primary, multiSampleAntiAlias, clip, a, b,
+                           [&](int x, int y, float t, unsigned int coverageMask,
+                               const std::array<float, 4>* sampleTs)
+            {
+                LineFragment fragment;
+                fragment.t = t;
+                fragment.coverageMask = coverageMask;
+                if (sampleTs != nullptr)
+                {
+                    fragment.sampleTs = *sampleTs;
+                    fragment.hasSampleTs = true;
+                }
+                fragments[{x, y}] = fragment;
             });
+
+            std::set<std::pair<int, int>> quads;
+            for (const auto& [coordinate, fragment] : fragments)
+            {
+                (void) fragment;
+                quads.emplace(coordinate.first & ~1, coordinate.second & ~1);
+            }
+            const double dx = static_cast<double>(b.x) - static_cast<double>(a.x);
+            const double dy = static_cast<double>(b.y) - static_cast<double>(a.y);
+            const double lengthSquared = dx * dx + dy * dy;
+            for (const auto& quad : quads)
+            {
+                std::array<std::array<SoftwareShaderSemanticValueEXT, 16>, 4> laneInputs{};
+                std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4> inputSpans{};
+                for (std::size_t lane = 0; lane < laneInputs.size(); ++lane)
+                {
+                    const int x = quad.first + static_cast<int>(lane & 1u);
+                    const int y = quad.second + static_cast<int>(lane >> 1u);
+                    const double sampleX = static_cast<double>(x) +
+                        static_cast<double>(a.interpolationCenterOffset);
+                    const double sampleY = static_cast<double>(y) +
+                        static_cast<double>(a.interpolationCenterOffset);
+                    const float t = static_cast<float>(
+                        ((sampleX - static_cast<double>(a.x)) * dx +
+                         (sampleY - static_cast<double>(a.y)) * dy) / lengthSquared);
+                    laneInputs[lane] = interpolateInputs(t);
+                    inputSpans[lane] = std::span(
+                        laneInputs[lane].data(), a.compiledVaryingCount);
+                }
+                const auto pixels = runtime.ExecutePixelQuadEXT(inputSpans, &sampler);
+                for (std::size_t lane = 0; lane < laneInputs.size(); ++lane)
+                {
+                    const int x = quad.first + static_cast<int>(lane & 1u);
+                    const int y = quad.second + static_cast<int>(lane >> 1u);
+                    const auto found = fragments.find({x, y});
+                    if (found == fragments.end())
+                        continue;
+                    const LineFragment& fragment = found->second;
+                    writeResult(x, y, fragment.t, fragment.coverageMask,
+                                fragment.hasSampleTs ? &fragment.sampleTs : nullptr,
+                                pixels[lane]);
+                }
+            }
         }
 
         void RasterizeTriangleCompiled(
