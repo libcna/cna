@@ -44,7 +44,7 @@ Those are real parser, vertex and sampled-pixel phases, not complete execution p
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
 continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
 is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371/373/374/375/376/377/378/379/380/381/382/383/384/385/386/387` are complete: the opt-in runtime now includes compiled MRT,
+`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371/373/374/375/376/377/378/379/380/381/382/383/384/385/386/387/388` are complete: the opt-in runtime now includes compiled MRT,
 render-target/cube sampling, SpriteBatch custom-effect routing and classic line/wireframe rasterization. `SOFTWARE-164/165` remain the
 encompassing shader-profile, lifecycle and content-conformance backlog.
 The independent EasyGL challenge in `SOFTWARE-367` also repaired MojoShader's invalid writemask-
@@ -255,7 +255,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   profile cases stay in the explicit backlog. SOFTWARE-387 then executes variable-length SM3
   texture instructions whose constant-coordinate source carries a relative `aL`/address token;
   resolved constant coordinates are marked uniform so implicit LOD cannot be borrowed from an
-  unrelated same-numbered TEXCOORD interpolator.
+  unrelated same-numbered TEXCOORD interpolator. SOFTWARE-388 replaces the remaining SM3
+  temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
+  differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
+  swizzles, source modifiers, projection and sample-dependent temporary chains. Equivalent
+  cube/volume temporary-coordinate LOD evidence remains in the aggregate backlog.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.

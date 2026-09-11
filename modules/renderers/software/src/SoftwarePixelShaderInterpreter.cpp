@@ -33,6 +33,19 @@ struct DerivativeValue {
   Vector value{};
 };
 
+struct ImplicitSampleSource {
+  std::size_t instruction = 0;
+  int samplerRegister = 0;
+  Vector coordinate{};
+};
+
+struct ImplicitSampleDerivative {
+  std::size_t instruction = 0;
+  int samplerRegister = 0;
+  Vector gradientX{};
+  Vector gradientY{};
+};
+
 enum class RegisterType : std::uint8_t {
   Temporary = 0,
   Input = 1,
@@ -177,12 +190,16 @@ public:
                std::span<const CompiledEffectLegacyBumpMapEnvState>
                    legacyBumpMapEnvs = {},
                std::span<const DerivativeValue> derivativeValues = {},
-               std::vector<DerivativeValue> *derivativeSources = nullptr)
+               std::vector<DerivativeValue> *derivativeSources = nullptr,
+               std::span<const ImplicitSampleDerivative> implicitSampleDerivatives = {},
+               std::vector<ImplicitSampleSource> *implicitSampleSources = nullptr)
       : program_(program), floatRegisters_(floatRegisters),
         integerRegisters_(integerRegisters),
         booleanRegisters_(booleanRegisters), sampler_(sampler), builtins_(builtins),
         legacyBumpMapEnvs_(legacyBumpMapEnvs),
-        derivativeValues_(derivativeValues), derivativeSources_(derivativeSources) {
+        derivativeValues_(derivativeValues), derivativeSources_(derivativeSources),
+        implicitSampleDerivatives_(implicitSampleDerivatives),
+        implicitSampleSources_(implicitSampleSources) {
     if (program.stage != SoftwareShaderStageEXT::Pixel)
       throw std::invalid_argument("Software pixel shader: a vertex program "
                                   "cannot run as a pixel program.");
@@ -953,7 +970,7 @@ private:
                               const std::array<float, 3> &legacyReflectionEye = {},
                               bool legacyBumpCoordinates = false,
                               std::uint8_t legacyBumpBaseRegister = 0,
-                              const std::array<float, 4> &legacyBumpMatrix = {}) const {
+                              const std::array<float, 4> &legacyBumpMatrix = {}) {
     if (sampler_ == nullptr)
       throw std::runtime_error(
           "Software pixel shader: texture instruction has no sampler provider.");
@@ -997,6 +1014,24 @@ private:
     request.lod = lod;
     request.gradientX = gradientX;
     request.gradientY = gradientY;
+    if (lodMode == SoftwareTextureLodModeEXT::Implicit &&
+        coordinateOperand.type == RegisterType::Temporary &&
+        implicitSampleSources_ != nullptr) {
+      implicitSampleSources_->push_back(
+          ImplicitSampleSource{currentInstruction_, samplerRegister, coordinate});
+      if (implicitSampleCursor_ < implicitSampleDerivatives_.size()) {
+        const ImplicitSampleDerivative &derivative =
+            implicitSampleDerivatives_[implicitSampleCursor_];
+        if (derivative.instruction != currentInstruction_ ||
+            derivative.samplerRegister != samplerRegister)
+          throw std::runtime_error(
+              "Software pixel shader: implicit texture control flow changed between quad passes.");
+        request.lodMode = SoftwareTextureLodModeEXT::Gradients;
+        request.gradientX = derivative.gradientX;
+        request.gradientY = derivative.gradientY;
+      }
+      ++implicitSampleCursor_;
+    }
     return sampler_->SampleEXT(request);
   }
 
@@ -1139,6 +1174,7 @@ private:
 
   void ExecuteInstruction(const SoftwareShaderInstructionEXT &instruction,
                           std::size_t instructionIndex) {
+    currentInstruction_ = instructionIndex;
     const auto &tokens = instruction.tokens;
     if (tokens.empty())
       throw std::runtime_error("Software pixel shader: empty instruction.");
@@ -1778,6 +1814,10 @@ private:
   std::span<const DerivativeValue> derivativeValues_;
   std::vector<DerivativeValue> *derivativeSources_ = nullptr;
   std::size_t derivativeCursor_ = 0;
+  std::span<const ImplicitSampleDerivative> implicitSampleDerivatives_;
+  std::vector<ImplicitSampleSource> *implicitSampleSources_ = nullptr;
+  std::size_t implicitSampleCursor_ = 0;
+  std::size_t currentInstruction_ = 0;
   std::array<Vector, kTemporaryRegisterCount> temporaryRegisters_{};
   std::array<bool, kTemporaryRegisterCount> temporaryWritten_{};
   std::array<Vector, kInputRegisterCount> inputRegisters_{};
@@ -1834,16 +1874,20 @@ std::array<SoftwarePixelShaderResultEXT, 4> ExecuteSoftwarePixelShaderQuadEXT(
     std::span<const CompiledEffectLegacyBumpMapEnvState> legacyBumpMapEnvs) {
   std::array<std::vector<DerivativeValue>, 4> values;
   std::array<std::vector<DerivativeValue>, 4> sources;
+  std::array<std::vector<ImplicitSampleDerivative>, 4> sampleDerivatives;
+  std::array<std::vector<ImplicitSampleSource>, 4> sampleSources;
   std::array<SoftwarePixelShaderResultEXT, 4> results;
   std::size_t maximumPasses = 2u;
   for (std::size_t pass = 0; pass < maximumPasses; ++pass) {
     for (std::size_t lane = 0; lane < 4u; ++lane) {
       sources[lane].clear();
+      sampleSources[lane].clear();
       const SoftwarePixelShaderBuiltinsEXT *laneBuiltins =
           builtins != nullptr ? &(*builtins)[lane] : nullptr;
       results[lane] = PixelMachine(program, floatRegisters, integerRegisters,
                                    booleanRegisters, inputs[lane], sampler, laneBuiltins,
-                                   legacyBumpMapEnvs, values[lane], &sources[lane])
+                                   legacyBumpMapEnvs, values[lane], &sources[lane],
+                                   sampleDerivatives[lane], &sampleSources[lane])
                           .Execute();
     }
 
@@ -1853,8 +1897,14 @@ std::array<SoftwarePixelShaderResultEXT, 4> ExecuteSoftwarePixelShaderQuadEXT(
         throw std::runtime_error(
             "Software pixel shader: DSX/DSY occurs in non-uniform quad control flow.");
     }
+    const std::size_t sampleCount = sampleSources[0].size();
+    bool uniformSampleFlow = true;
+    for (std::size_t lane = 1; lane < 4u; ++lane)
+      uniformSampleFlow = uniformSampleFlow &&
+                          sampleSources[lane].size() == sampleCount;
     if (pass == 0u)
-      maximumPasses = std::max<std::size_t>(2u, count + 2u);
+      maximumPasses = std::max<std::size_t>(
+          2u, count + (uniformSampleFlow ? sampleCount : 0u) + 2u);
 
     std::array<std::vector<DerivativeValue>, 4> next;
     for (auto &lane : next)
@@ -1887,6 +1937,47 @@ std::array<SoftwarePixelShaderResultEXT, 4> ExecuteSoftwarePixelShaderQuadEXT(
         next[lane].push_back(DerivativeValue{instruction, opcode, derivative[lane]});
     }
 
+    std::array<std::vector<ImplicitSampleDerivative>, 4> nextSampleDerivatives;
+    if (uniformSampleFlow) {
+      for (auto &lane : nextSampleDerivatives)
+        lane.reserve(sampleCount);
+      for (std::size_t occurrence = 0; occurrence < sampleCount; ++occurrence) {
+        const std::size_t instruction = sampleSources[0][occurrence].instruction;
+        const int samplerRegister = sampleSources[0][occurrence].samplerRegister;
+        for (std::size_t lane = 1; lane < 4u; ++lane) {
+          if (sampleSources[lane][occurrence].instruction != instruction ||
+              sampleSources[lane][occurrence].samplerRegister != samplerRegister) {
+            uniformSampleFlow = false;
+            break;
+          }
+        }
+        if (!uniformSampleFlow)
+          break;
+        const auto difference = [&](std::size_t high, std::size_t low) {
+          Vector result{};
+          for (std::size_t component = 0; component < result.size(); ++component)
+            result[component] =
+                sampleSources[high][occurrence].coordinate[component] -
+                sampleSources[low][occurrence].coordinate[component];
+          return result;
+        };
+        const Vector topX = difference(1u, 0u);
+        const Vector bottomX = difference(3u, 2u);
+        const Vector leftY = difference(2u, 0u);
+        const Vector rightY = difference(3u, 1u);
+        const std::array<Vector, 4> gradientX{topX, topX, bottomX, bottomX};
+        const std::array<Vector, 4> gradientY{leftY, rightY, leftY, rightY};
+        for (std::size_t lane = 0; lane < 4u; ++lane) {
+          nextSampleDerivatives[lane].push_back(
+              ImplicitSampleDerivative{instruction, samplerRegister,
+                                       gradientX[lane], gradientY[lane]});
+        }
+      }
+    }
+    if (!uniformSampleFlow)
+      for (auto &lane : nextSampleDerivatives)
+        lane.clear();
+
     const auto sameValues = [](const auto &left, const auto &right) {
       if (left.size() != right.size())
         return false;
@@ -1902,12 +1993,33 @@ std::array<SoftwarePixelShaderResultEXT, 4> ExecuteSoftwarePixelShaderQuadEXT(
       }
       return true;
     };
+    const auto sameSampleDerivatives = [](const auto &left, const auto &right) {
+      if (left.size() != right.size())
+        return false;
+      for (std::size_t index = 0; index < left.size(); ++index) {
+        if (left[index].instruction != right[index].instruction ||
+            left[index].samplerRegister != right[index].samplerRegister)
+          return false;
+        for (std::size_t component = 0; component < 4u; ++component) {
+          if (std::bit_cast<std::uint32_t>(left[index].gradientX[component]) !=
+                  std::bit_cast<std::uint32_t>(right[index].gradientX[component]) ||
+              std::bit_cast<std::uint32_t>(left[index].gradientY[component]) !=
+                  std::bit_cast<std::uint32_t>(right[index].gradientY[component]))
+            return false;
+        }
+      }
+      return true;
+    };
     bool stable = true;
-    for (std::size_t lane = 0; lane < 4u; ++lane)
+    for (std::size_t lane = 0; lane < 4u; ++lane) {
       stable = stable && sameValues(values[lane], next[lane]);
+      stable = stable && sameSampleDerivatives(
+          sampleDerivatives[lane], nextSampleDerivatives[lane]);
+    }
     if (stable)
       return results;
     values = std::move(next);
+    sampleDerivatives = std::move(nextSampleDerivatives);
   }
   throw std::runtime_error(
       "Software pixel shader: derivative evaluation did not converge.");

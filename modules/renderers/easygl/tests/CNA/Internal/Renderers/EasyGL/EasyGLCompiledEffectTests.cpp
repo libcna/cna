@@ -601,6 +601,14 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9RelativeConstantTextureCoordinates)
     CNA::TestSupport::RunCompiledEffectRelativeTextureCoordinateContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9DependentTemporaryTextureCoordinatesDriveLod)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDependentTemporaryTextureCoordinateContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9SubroutinesExecuteAndReturn)
 {
     GraphicsDevice device;

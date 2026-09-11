@@ -1051,6 +1051,92 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Draws an SM3 sample whose temporary coordinate is eight times TEXCOORD0.
+     *
+     * The source TEXCOORD spans only one quarter repeat, which is a magnifying base-level
+     * footprint on the 4x4 target. The executed temporary spans two repeats and must therefore
+     * select a blue minified mip instead of the red base level.
+     *
+     * @param device Device used for the draw.
+     * @param effect Parsed fixture effect, allowing Software's opt-in test path to bypass its
+     *        deliberately false aggregate capability flag.
+     * @return Centre target pixel after the compiled draw.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectDependentTemporaryTextureCoordinate(
+        GraphicsDevice& device, Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        Texture2D texture(device, 4, 4, /*mipMap=*/true, SurfaceFormat::Color);
+        const std::vector<Color> base(16, Color::Red);
+        const Rectangle baseRectangle(0, 0, 4, 4);
+        texture.SetData(0, &baseRectangle, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 4 >> level);
+            const std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const Vertex quad[6] = {
+            {-1,  1, 0, 0, 0},       {-1, -1, 0, 0, 0.25f},
+            { 1, -1, 0, 0.25f, 0.25f}, {-1,  1, 0, 0, 0},
+            { 1, -1, 0, 0.25f, 0.25f}, { 1,  1, 0, 0.25f, 0},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        return centre;
+    }
+
+    /**
+     * @brief Proves implicit LOD follows an executed dependent temporary expression.
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectDependentTemporaryTextureCoordinateContract(
+        GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderUsesDependentTemporaryTextureCoordinate = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        const Color centre =
+            DrawCompiledEffectDependentTemporaryTextureCoordinate(device, effect);
+        EXPECT_NEAR(centre.getRProperty(), 0, 3);
+        EXPECT_NEAR(centre.getGProperty(), 0, 3);
+        EXPECT_NEAR(centre.getBProperty(), 255, 3)
+            << "implicit LOD must include the temporary coordinate expression";
+        EXPECT_NEAR(centre.getAProperty(), 255, 3);
+    }
+
+    /**
      * @brief Proves that parsed D3D9 subroutines execute and return to the main pixel program.
      *
      * The fixture uses an unconditional call whose body nests a second forward call, followed by

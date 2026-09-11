@@ -1991,6 +1991,24 @@ namespace CNA::Internal::Renderers::Software
         }
 
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        bool CompiledProgramNeedsQuadExecution(const SoftwareShaderProgramEXT& program)
+        {
+            return std::any_of(
+                program.instructions.begin(), program.instructions.end(),
+                [](const SoftwareShaderInstructionEXT& instruction)
+                {
+                    if (instruction.opcode == 91u || instruction.opcode == 92u)
+                        return true;
+                    if (instruction.opcode != 66u || instruction.tokens.size() < 3u)
+                        return false;
+                    const std::uint32_t coordinateToken = instruction.tokens[2];
+                    const std::uint32_t registerType =
+                        ((coordinateToken >> 28u) & 0x7u) |
+                        ((coordinateToken >> 8u) & 0x18u);
+                    return registerType == 0u;
+                });
+        }
+
         bool CompiledVaryingValue(const RasterVertex& vertex,
                                   MOJOSHADER_usage usage, std::uint8_t usageIndex,
                                   std::array<float, 4>& value)
@@ -3283,10 +3301,7 @@ namespace CNA::Internal::Renderers::Software
             if (pixelProgram == nullptr)
                 throw std::runtime_error(
                     "SoftwareRenderer: compiled line has no selected pixel program.");
-            const bool usesDerivatives = std::any_of(
-                pixelProgram->instructions.begin(), pixelProgram->instructions.end(),
-                [](const SoftwareShaderInstructionEXT& instruction)
-                { return instruction.opcode == 91u || instruction.opcode == 92u; });
+            const bool usesQuadEvaluation = CompiledProgramNeedsQuadExecution(*pixelProgram);
 
             const auto interpolateInputs = [&](float t)
             {
@@ -3339,7 +3354,7 @@ namespace CNA::Internal::Renderers::Software
                     pixel);
             };
 
-            if (!usesDerivatives)
+            if (!usesQuadEvaluation)
             {
                 WalkRasterLine(primary, multiSampleAntiAlias, clip, a, b,
                                [&](int x, int y, float t, unsigned int coverageMask,
@@ -3501,11 +3516,8 @@ namespace CNA::Internal::Renderers::Software
                 }
             }
 
-            const bool usesDerivatives = std::any_of(
-                pixelProgram->instructions.begin(), pixelProgram->instructions.end(),
-                [](const SoftwareShaderInstructionEXT& instruction)
-                { return instruction.opcode == 91u || instruction.opcode == 92u; });
-            if (usesDerivatives)
+            const bool usesQuadEvaluation = CompiledProgramNeedsQuadExecution(*pixelProgram);
+            if (usesQuadEvaluation)
             {
                 struct QuadLane
                 {
