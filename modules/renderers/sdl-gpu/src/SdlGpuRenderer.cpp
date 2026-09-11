@@ -2498,8 +2498,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Compiled-effect pipelines must go before their shader-owning MojoShader context. Queued
         // shader leases were already released by ReleaseSceneDrawBuffers()/spriteCommands_.clear().
         for (auto& [programIdentity, pipelines] : compiledEffectPipelines_)
-            for (auto& [key, pipeline] : pipelines)
-                ReleaseGraphicsPipeline(pipeline);
+            for (auto& [key, entry] : pipelines)
+                ReleaseGraphicsPipeline(entry.pipeline);
         compiledEffectPipelines_.clear();
         compiledProgramLeases_.clear();
         compiledProgramLifetimeState_->owner = nullptr;
@@ -3902,16 +3902,43 @@ namespace CNA::Internal::Renderers::SdlGpu
         return pipeline;
     }
 
+    SDL_GPUGraphicsPipeline* SdlGpuRenderer::FindCachedGraphicsPipeline(
+        GraphicsPipelineCacheEXT& cache, std::size_t key)
+    {
+        const auto it = cache.find(key);
+        if (it == cache.end())
+            return nullptr;
+        it->second.lastUse = ++graphicsPipelineUseSerial_;
+        return it->second.pipeline;
+    }
+
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::CacheGraphicsPipeline(
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*>& cache,
-        std::size_t key, SDL_GPUGraphicsPipeline* pipeline)
+        GraphicsPipelineCacheEXT& cache, std::size_t key,
+        SDL_GPUGraphicsPipeline* pipeline)
     {
         try
         {
-            const auto [it, inserted] = cache.emplace(key, pipeline);
+            const auto [it, inserted] = cache.emplace(
+                key, CachedGraphicsPipelineEXT{pipeline, ++graphicsPipelineUseSerial_});
             if (!inserted)
+            {
                 ReleaseGraphicsPipeline(pipeline);
-            return it->second;
+                it->second.lastUse = ++graphicsPipelineUseSerial_;
+            }
+
+            SDL_GPUGraphicsPipeline* result = it->second.pipeline;
+            if (cache.size() > MaxRetainedPipelineCountPerCacheEXT)
+            {
+                const auto victim = std::min_element(
+                    cache.begin(), cache.end(),
+                    [](const auto& lhs, const auto& rhs) {
+                        return lhs.second.lastUse < rhs.second.lastUse;
+                    });
+                SDL_GPUGraphicsPipeline* evicted = victim->second.pipeline;
+                cache.erase(victim);
+                ReleaseGraphicsPipeline(evicted);
+            }
+            return result;
         }
         catch (...)
         {
@@ -4703,8 +4730,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::DestroySpriteResources()
     {
-        for (auto& [key, pipeline] : spritePipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : spritePipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         spritePipelines_.clear();
         for (auto& [key, entry] : samplerCache_)
             ReleaseSampler(entry.sampler);
@@ -4726,9 +4753,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         const std::size_t key = PipelineCacheKey(SDL_GPU_PRIMITIVETYPE_TRIANGLELIST, depthTest, depthWrite, depthFunc,
                                                   activeColorTargetFormats_, colorTargetCount,
                                                   sampleCount, depthStencilFormat, renderState);
-        const auto it = spritePipelines_.find(key);
-        if (it != spritePipelines_.end())
-            return it->second;
+        if (SDL_GPUGraphicsPipeline* cached =
+                FindCachedGraphicsPipeline(spritePipelines_, key))
+            return cached;
 
         SDL_GPUVertexBufferDescription vbDesc{};
         vbDesc.slot = 0;
@@ -5618,8 +5645,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::DestroyColoredResources()
     {
-        for (auto& [key, pipeline] : coloredPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : coloredPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         coloredPipelines_.clear();
         ReleaseShader(coloredFragmentShader_);
         ReleaseShader(coloredVertexShader_);
@@ -5635,9 +5662,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_,
                              colorTargetCount, sampleCount, depthStencilFormat, renderState),
             vertexLayout);
-        const auto it = coloredPipelines_.find(key);
-        if (it != coloredPipelines_.end())
-            return it->second;
+        if (SDL_GPUGraphicsPipeline* cached =
+                FindCachedGraphicsPipeline(coloredPipelines_, key))
+            return cached;
 
         SdlGpuStockVertexStateEXT vertexState;
         BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
@@ -5713,11 +5740,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::DestroyTexturedResources()
     {
-        for (auto& [key, pipeline] : texturedPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : texturedPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         texturedPipelines_.clear();
-        for (auto& [key, pipeline] : coloredTexturedPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : coloredTexturedPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         coloredTexturedPipelines_.clear();
         ReleaseShader(texturedFragmentShader_);
         ReleaseShader(coloredTexturedVertexShader_);
@@ -5734,9 +5761,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_,
                              colorTargetCount, sampleCount, depthStencilFormat, renderState),
             vertexLayout);
-        const auto it = texturedPipelines_.find(key);
-        if (it != texturedPipelines_.end())
-            return it->second;
+        if (SDL_GPUGraphicsPipeline* cached =
+                FindCachedGraphicsPipeline(texturedPipelines_, key))
+            return cached;
 
         SdlGpuStockVertexStateEXT vertexState;
         BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
@@ -5780,9 +5807,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_,
                              colorTargetCount, sampleCount, depthStencilFormat, renderState),
             vertexLayout);
-        const auto it = coloredTexturedPipelines_.find(key);
-        if (it != coloredTexturedPipelines_.end())
-            return it->second;
+        if (SDL_GPUGraphicsPipeline* cached =
+                FindCachedGraphicsPipeline(coloredTexturedPipelines_, key))
+            return cached;
 
         SdlGpuStockVertexStateEXT vertexState;
         BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
@@ -5847,8 +5874,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::DestroyLitTexturedResources()
     {
-        for (auto& [key, pipeline] : litTexturedPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : litTexturedPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         litTexturedPipelines_.clear();
         ReleaseShader(litTexturedFragmentShader_);
         ReleaseShader(litTexturedVertexShader_);
@@ -5864,9 +5891,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_,
                              colorTargetCount, sampleCount, depthStencilFormat, renderState),
             vertexLayout);
-        const auto it = litTexturedPipelines_.find(key);
-        if (it != litTexturedPipelines_.end())
-            return it->second;
+        if (SDL_GPUGraphicsPipeline* cached =
+                FindCachedGraphicsPipeline(litTexturedPipelines_, key))
+            return cached;
 
         SdlGpuStockVertexStateEXT vertexState;
         BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
@@ -6114,11 +6141,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::DestroyAlphaTestResources()
     {
-        for (auto& [key, pipeline] : alphaTestPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : alphaTestPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         alphaTestPipelines_.clear();
-        for (auto& [key, pipeline] : alphaTestColoredPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : alphaTestColoredPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         alphaTestColoredPipelines_.clear();
         ReleaseShader(alphaTestFragmentShader_);
         ReleaseShader(alphaTestColoredVertexShader_);
@@ -6138,9 +6165,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                 PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_,
                                  colorTargetCount, sampleCount, depthStencilFormat, renderState),
                 vertexLayout);
-            const auto it = alphaTestColoredPipelines_.find(key);
-            if (it != alphaTestColoredPipelines_.end())
-                return it->second;
+            if (SDL_GPUGraphicsPipeline* cached =
+                    FindCachedGraphicsPipeline(alphaTestColoredPipelines_, key))
+                return cached;
 
             SdlGpuStockVertexStateEXT vertexState;
             BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
@@ -6179,9 +6206,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_,
                              colorTargetCount, sampleCount, depthStencilFormat, renderState),
             vertexLayout);
-        const auto it = alphaTestPipelines_.find(key);
-        if (it != alphaTestPipelines_.end())
-            return it->second;
+        if (SDL_GPUGraphicsPipeline* cached =
+                FindCachedGraphicsPipeline(alphaTestPipelines_, key))
+            return cached;
 
         SdlGpuStockVertexStateEXT vertexState;
         BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
@@ -6258,11 +6285,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::DestroyDualTextureResources()
     {
-        for (auto& [key, pipeline] : dualTexturePipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : dualTexturePipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         dualTexturePipelines_.clear();
-        for (auto& [key, pipeline] : dualTextureColoredPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : dualTextureColoredPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         dualTextureColoredPipelines_.clear();
         ReleaseShader(dualTextureFragmentShader_);
         ReleaseShader(dualTextureColoredVertexShader_);
@@ -6281,9 +6308,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_,
                              colorTargetCount, sampleCount, depthStencilFormat, renderState),
             vertexLayout);
-        const auto it = cache.find(key);
-        if (it != cache.end())
-            return it->second;
+        if (SDL_GPUGraphicsPipeline* cached =
+                FindCachedGraphicsPipeline(cache, key))
+            return cached;
 
         SdlGpuStockVertexStateEXT vertexState;
         BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
@@ -6348,8 +6375,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::DestroyEnvMapResources()
     {
-        for (auto& [key, pipeline] : envMapPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : envMapPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         envMapPipelines_.clear();
         ReleaseShader(envMapFragmentShader_);
         ReleaseShader(envMapVertexShader_);
@@ -6372,8 +6399,8 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::DestroyInstancedResources()
     {
-        for (auto& [key, pipeline] : instancedPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : instancedPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         instancedPipelines_.clear();
         ReleaseShader(instancedVertexShader_);
     }
@@ -6389,8 +6416,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_,
                              colorTargetCount, sampleCount, depthStencilFormat, renderState),
             vertexLayout);
-        if (const auto it = instancedPipelines_.find(key); it != instancedPipelines_.end())
-            return it->second;
+        if (SDL_GPUGraphicsPipeline* cached =
+                FindCachedGraphicsPipeline(instancedPipelines_, key))
+            return cached;
 
         SdlGpuStockVertexStateEXT vertexState;
         BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
@@ -6432,9 +6460,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, activeColorTargetFormats_,
                              colorTargetCount, sampleCount, depthStencilFormat, renderState),
             vertexLayout);
-        const auto it = envMapPipelines_.find(key);
-        if (it != envMapPipelines_.end())
-            return it->second;
+        if (SDL_GPUGraphicsPipeline* cached =
+                FindCachedGraphicsPipeline(envMapPipelines_, key))
+            return cached;
 
         SdlGpuStockVertexStateEXT vertexState;
         BuildSdlGpuStockVertexStateEXT(vertexLayout, vertexState);
@@ -6513,11 +6541,11 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::DestroySkinnedResources()
     {
-        for (auto& [key, pipeline] : skinnedPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : skinnedPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         skinnedPipelines_.clear();
-        for (auto& [key, pipeline] : skinnedColoredPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : skinnedColoredPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         skinnedColoredPipelines_.clear();
         ReleaseShader(skinnedColoredFragmentShader_);
         ReleaseShader(skinnedColoredVertexShader_);
@@ -6534,9 +6562,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             sampleCount,
             depthStencilFormat, renderState);
         auto& cache = hasVertexColor ? skinnedColoredPipelines_ : skinnedPipelines_;
-        const auto it = cache.find(key);
-        if (it != cache.end())
-            return it->second;
+        if (SDL_GPUGraphicsPipeline* cached =
+                FindCachedGraphicsPipeline(cache, key))
+            return cached;
 
         // Stride 52: VertexPositionNormalTextureSkinned -- pos(12) + normal(12) + uv(8) +
         // blendWeight(16) + blendIndices(4, UBYTE4, non-normalized -> uvec4 in the shader).
@@ -6701,19 +6729,19 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     void SdlGpuRenderer::DestroyPbrResources()
     {
-        for (auto& [key, pipeline] : pbrPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : pbrPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         pbrPipelines_.clear();
-        for (auto& [key, pipeline] : pbrSkinnedPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : pbrSkinnedPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         pbrSkinnedPipelines_.clear();
         // plans/plan_gltf.md GLTF-465: the two colour-carrying caches and their shaders, released the same
         // way -- a pipeline cache nobody frees is exactly the leak this function exists to prevent.
-        for (auto& [key, pipeline] : pbrColorPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : pbrColorPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         pbrColorPipelines_.clear();
-        for (auto& [key, pipeline] : pbrSkinnedColorPipelines_)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : pbrSkinnedColorPipelines_)
+            ReleaseGraphicsPipeline(entry.pipeline);
         pbrSkinnedColorPipelines_.clear();
         ReleaseShader(pbrColorVertexShader_);
         ReleaseShader(pbrSkinnedColorVertexShader_);
@@ -6747,9 +6775,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             depthStencilFormat, renderState);
         auto& cache = skinned ? (colored ? pbrSkinnedColorPipelines_ : pbrSkinnedPipelines_)
                               : (colored ? pbrColorPipelines_ : pbrPipelines_);
-        const auto it = cache.find(key);
-        if (it != cache.end())
-            return it->second;
+        if (SDL_GPUGraphicsPipeline* cached =
+                FindCachedGraphicsPipeline(cache, key))
+            return cached;
 
         SDL_GPUVertexBufferDescription vbDesc{};
         vbDesc.slot = 0;
@@ -7351,8 +7379,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         const auto program = compiledEffectPipelines_.find(programIdentity);
         if (program == compiledEffectPipelines_.end())
             return;
-        for (auto& [key, pipeline] : program->second)
-            ReleaseGraphicsPipeline(pipeline);
+        for (auto& [key, entry] : program->second)
+            ReleaseGraphicsPipeline(entry.pipeline);
         compiledEffectPipelines_.erase(program);
     }
 
@@ -7389,9 +7417,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         auto& programPipelines = compiledEffectPipelines_[binding.programIdentity];
-        const auto it = programPipelines.find(key);
-        if (it != programPipelines.end())
-            return it->second;
+        if (SDL_GPUGraphicsPipeline* cached =
+                FindCachedGraphicsPipeline(programPipelines, key))
+            return cached;
 
         std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
         FillColorTargetDescriptions(colorTargets, colorTargetCount,

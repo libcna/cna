@@ -2709,6 +2709,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             return spritePipelines_.size();
         }
+        /** @brief Maximum number of native pipelines retained in any one state cache. CNAEXT. */
+        CNAEXT static constexpr std::size_t MaxRetainedPipelineCountPerCacheEXT = 256;
         /** @brief Maximum number of native samplers retained across submitted frames. CNAEXT. */
         CNAEXT static constexpr std::size_t MaxRetainedSamplerCountEXT = 256;
         /** @brief Number of native samplers currently retained for reuse. Test-only. CNAEXT. */
@@ -2750,6 +2752,13 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     private:
         struct ConstructionResources;
+        struct CachedGraphicsPipelineEXT
+        {
+            SDL_GPUGraphicsPipeline* pipeline = nullptr;
+            std::uint64_t lastUse = 0;
+        };
+        using GraphicsPipelineCacheEXT =
+            std::unordered_map<std::size_t, CachedGraphicsPipelineEXT>;
 
         [[nodiscard]] static std::string InitializeHeadlessStockShaders(
             ConstructionResources& resources, const char* driverName);
@@ -2787,9 +2796,11 @@ namespace CNA::Internal::Renderers::SdlGpu
                                  SdlGpuResourceEventEXT event) const noexcept;
         [[nodiscard]] SDL_GPUGraphicsPipeline* CreateGraphicsPipeline(
             const SDL_GPUGraphicsPipelineCreateInfo& createInfo, const char* diagnostic);
+        [[nodiscard]] SDL_GPUGraphicsPipeline* FindCachedGraphicsPipeline(
+            GraphicsPipelineCacheEXT& cache, std::size_t key);
         [[nodiscard]] SDL_GPUGraphicsPipeline* CacheGraphicsPipeline(
-            std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*>& cache,
-            std::size_t key, SDL_GPUGraphicsPipeline* pipeline);
+            GraphicsPipelineCacheEXT& cache, std::size_t key,
+            SDL_GPUGraphicsPipeline* pipeline);
         void ReleaseGraphicsPipeline(SDL_GPUGraphicsPipeline* pipeline) noexcept;
         void ReleaseShader(SDL_GPUShader*& shader) noexcept;
         void ReleaseSampler(SDL_GPUSampler*& sampler) noexcept;
@@ -3422,7 +3433,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // Keyed by (int)colorFormat -- Phase SDLGPU-8 needs more than one variant (swapchain
         // format vs. render-target R8G8B8A8_UNORM), unlike Phases 1-7 where sprites only ever
         // targeted the swapchain.
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> spritePipelines_;
+        GraphicsPipelineCacheEXT spritePipelines_;
+        std::uint64_t graphicsPipelineUseSerial_ = 0;
         struct CachedSamplerEXT
         {
             SDL_GPUSampler* sampler = nullptr;
@@ -3453,19 +3465,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         // the exact packing, mirroring WebGPURenderer's own int-keyed cache convention).
         SDL_GPUShader* coloredVertexShader_ = nullptr;
         SDL_GPUShader* coloredFragmentShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> coloredPipelines_;
+        GraphicsPipelineCacheEXT coloredPipelines_;
         std::vector<ColoredDrawCommand> coloredDrawCommands_;
 
         SDL_GPUShader* texturedVertexShader_ = nullptr;         ///< POSITION0/TEXCOORD0 variant.
         SDL_GPUShader* coloredTexturedVertexShader_ = nullptr;  ///< POSITION0/COLOR0/TEXCOORD0 variant.
         SDL_GPUShader* texturedFragmentShader_ = nullptr;       ///< Shared by both semantic variants.
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> texturedPipelines_;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> coloredTexturedPipelines_;
+        GraphicsPipelineCacheEXT texturedPipelines_;
+        GraphicsPipelineCacheEXT coloredTexturedPipelines_;
         std::vector<TexturedDrawCommand> texturedDrawCommands_;
 
         SDL_GPUShader* litTexturedVertexShader_ = nullptr;
         SDL_GPUShader* litTexturedFragmentShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> litTexturedPipelines_;
+        GraphicsPipelineCacheEXT litTexturedPipelines_;
         std::vector<LitTexturedDrawCommand> litTexturedDrawCommands_;
 
         // Phase SDLGPU-7/59. Each cache key includes the fully resolved semantic input layout;
@@ -3473,24 +3485,24 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUShader* alphaTestVertexShader_ = nullptr;         ///< No COLOR0 tint.
         SDL_GPUShader* alphaTestColoredVertexShader_ = nullptr;  ///< COLOR0 tint.
         SDL_GPUShader* alphaTestFragmentShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> alphaTestPipelines_;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> alphaTestColoredPipelines_;
+        GraphicsPipelineCacheEXT alphaTestPipelines_;
+        GraphicsPipelineCacheEXT alphaTestColoredPipelines_;
         std::vector<AlphaTestDrawCommand> alphaTestDrawCommands_;
 
         SDL_GPUShader* dualTextureVertexShader_ = nullptr;         ///< TEXCOORD0/1, no COLOR0 tint.
         SDL_GPUShader* dualTextureColoredVertexShader_ = nullptr;  ///< TEXCOORD0/1 with COLOR0 tint.
         SDL_GPUShader* dualTextureFragmentShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> dualTexturePipelines_;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> dualTextureColoredPipelines_;
+        GraphicsPipelineCacheEXT dualTexturePipelines_;
+        GraphicsPipelineCacheEXT dualTextureColoredPipelines_;
         std::vector<DualTextureDrawCommand> dualTextureDrawCommands_;
 
         SDL_GPUShader* envMapVertexShader_ = nullptr;
         SDL_GPUShader* envMapFragmentShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> envMapPipelines_;
+        GraphicsPipelineCacheEXT envMapPipelines_;
         std::vector<EnvMapDrawCommand> envMapDrawCommands_;
 
         SDL_GPUShader* instancedVertexShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> instancedPipelines_;
+        GraphicsPipelineCacheEXT instancedPipelines_;
         std::vector<InstancedDrawCommand> instancedDrawCommands_;
 
         // No dedicated fragment shader for stride 52 -- reuses litTexturedFragmentShader_ (see
@@ -3498,12 +3510,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         // pair below, cached separately from skinnedPipelines_ (mirrors alphaTestPipelines_/
         // alphaTestColoredPipelines_'s own separate-map-per-stride convention).
         SDL_GPUShader* skinnedVertexShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> skinnedPipelines_;
+        GraphicsPipelineCacheEXT skinnedPipelines_;
         std::vector<SkinnedDrawCommand> skinnedDrawCommands_;
 
         SDL_GPUShader* skinnedColoredVertexShader_ = nullptr;    ///< stride 56
         SDL_GPUShader* skinnedColoredFragmentShader_ = nullptr;  ///< stride 56 (see skinned_colored3d.frag.glsl)
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> skinnedColoredPipelines_;
+        GraphicsPipelineCacheEXT skinnedColoredPipelines_;
 
         // PbrEffect/SkinnedPbrEffect. pbrFragmentShader_ is shared by both the unskinned
         // (pbrVertexShader_, stride 48) and skinned (pbrSkinnedVertexShader_, stride 68)
@@ -3516,10 +3528,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         // than a runtime flag because a SPIR-V input with no matching vertex attribute is invalid.
         SDL_GPUShader* pbrColorVertexShader_ = nullptr;
         SDL_GPUShader* pbrSkinnedColorVertexShader_ = nullptr;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrPipelines_;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrSkinnedPipelines_;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrColorPipelines_;
-        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrSkinnedColorPipelines_;
+        GraphicsPipelineCacheEXT pbrPipelines_;
+        GraphicsPipelineCacheEXT pbrSkinnedPipelines_;
+        GraphicsPipelineCacheEXT pbrColorPipelines_;
+        GraphicsPipelineCacheEXT pbrSkinnedColorPipelines_;
         std::vector<PbrDrawCommand> pbrDrawCommands_;
         // 1x1 fallback textures for PbrEffect's 6 optional maps when left unbound -- lazily
         // created by EnsureDefaultPbrTextures(). default_white_ makes an absent metallic-
@@ -3546,7 +3558,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // program's immutable state/layout hash is local to that identity and cannot alias another
         // program merely through a size_t hash collision.
         std::unordered_map<std::uint64_t,
-                           std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*>>
+                           GraphicsPipelineCacheEXT>
             compiledEffectPipelines_;
         /// Weak canonical lease per live program; Effects and queued draws own the strong copies.
         std::unordered_map<std::uint64_t, std::weak_ptr<const void>> compiledProgramLeases_;

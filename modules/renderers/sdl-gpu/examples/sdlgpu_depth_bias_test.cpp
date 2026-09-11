@@ -705,42 +705,90 @@ class SdlGpuDepthBiasTest final : public Game
             renderer.GetSpritePipelineCacheSizeEXT() == 6,
             "sloped SpriteBatch cases reuse all but the new negative-slope variant");
 
-        Check(
-            customEffect_->IsEffectValid(),
-            "custom SDL_GPU ShaderEffect compiled for pipeline-family coverage");
-        auto* customRenderer = dynamic_cast<SdlGpuEffectRenderer*>(
-            customEffect_->GetEffectRendererPtr());
-        Check(
-            customRenderer != nullptr,
-            "custom effect exposes the SDL_GPU pipeline family");
-        if (customRenderer != nullptr)
+        // ShaderEffect is an optional CNA extension: native-SPIR-V Vulkan builds exercise its
+        // adjacent custom cache, while D3D12 truthfully disables it because this renderer has no
+        // runtime GLSL-to-native ShaderEffect route there. Do not make the classic pipeline
+        // contract depend on that out-of-scope capability.
+        if (customEffect_->IsEffectValid())
+        {
+            Check(true, "custom SDL_GPU ShaderEffect compiled for pipeline-family coverage");
+            auto* customRenderer = dynamic_cast<SdlGpuEffectRenderer*>(
+                customEffect_->GetEffectRendererPtr());
+            Check(
+                customRenderer != nullptr,
+                "custom effect exposes the SDL_GPU pipeline family");
+            if (customRenderer != nullptr)
+            {
+                Check(
+                    IsGreen(RenderSprite(
+                        device, target, zero, customEffect_.get())),
+                    "custom-effect SpriteBatch zero-bias pipeline renders correctly");
+                Check(
+                    customRenderer->GetPipelineCacheSizeEXT() == 1,
+                    "custom-effect zero bias creates one disabled-bias pipeline");
+                Check(
+                    IsGreen(RenderSprite(
+                        device, target, positiveConstant, customEffect_.get())),
+                    "custom-effect enabled-bias pipeline remains validation-clean");
+                Check(
+                    customRenderer->GetPipelineCacheSizeEXT() == 2,
+                    "custom-effect positive bias creates one cache variant");
+                Check(
+                    IsGreen(RenderSprite(
+                        device, target, zero, customEffect_.get())),
+                    "custom-effect A->B->A restores zero bias");
+                Check(
+                    customRenderer->GetPipelineCacheSizeEXT() == 2,
+                    "custom-effect A->B->A reuses both variants");
+            }
+        }
+        else
         {
             Check(
-                IsGreen(RenderSprite(
-                    device, target, zero, customEffect_.get())),
-                "custom-effect SpriteBatch zero-bias pipeline renders correctly");
-            Check(
-                customRenderer->GetPipelineCacheSizeEXT() == 1,
-                "custom-effect zero bias creates one disabled-bias pipeline");
-            Check(
-                IsGreen(RenderSprite(
-                    device, target, positiveConstant, customEffect_.get())),
-                "custom-effect enabled-bias pipeline remains validation-clean");
-            Check(
-                customRenderer->GetPipelineCacheSizeEXT() == 2,
-                "custom-effect positive bias creates one cache variant");
-            Check(
-                IsGreen(RenderSprite(
-                    device, target, zero, customEffect_.get())),
-                "custom-effect A->B->A restores zero bias");
-            Check(
-                customRenderer->GetPipelineCacheSizeEXT() == 2,
-                "custom-effect A->B->A reuses both variants");
+                !device.SupportsCapability(CNA::GraphicsCapability::CustomEffects),
+                "unavailable ShaderEffect path reports its optional capability false");
         }
 
         Check(
             renderer.GetColoredPipelineCacheSizeEXT() == 10,
             "RT pipeline cardinality is exactly 10: 6 triangle bias, line, DepthRead, and 2 depthless variants");
+
+        // SDLGPU-127: immutable pipeline state includes two unrestricted ordinary-XNA floats.
+        // Retaining every value until GraphicsDevice destruction makes a long-running animated
+        // bias workload grow native ownership monotonically. All draws share one target/pass and
+        // differ only in DepthBias, so this is an exact cache-retention discriminator.
+        BeginTarget(device, target, DepthStencilState::None);
+        constexpr std::size_t extraPipelineStates = 32;
+        for (std::size_t i = 0;
+             i < SdlGpuRenderer::MaxRetainedPipelineCountPerCacheEXT + extraPipelineStates;
+             ++i)
+        {
+            const RasterizerState state =
+                BiasState(static_cast<float>(i + 1) * 0.000001f, 0.0f);
+            device.setRasterizerStateProperty(state);
+            DrawTriangle(device, false, kBlue);
+        }
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Check(
+            IsBlue(ReadCenter(target)),
+            "pipeline-retention stress preserves the final draw's exact pixel");
+        Check(
+            renderer.GetColoredPipelineCacheSizeEXT() ==
+                SdlGpuRenderer::MaxRetainedPipelineCountPerCacheEXT,
+            "colored pipeline retention stays at its cross-frame ceiling");
+
+        // The original zero-bias entry is older than all stress variants and must be recreated.
+        BeginTarget(device, target, DepthStencilState::None);
+        device.setRasterizerStateProperty(zero);
+        DrawTriangle(device, false, kGreen);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Check(
+            IsGreen(ReadCenter(target)),
+            "an evicted stock pipeline state is recreated without stale-handle reuse");
+        Check(
+            renderer.GetColoredPipelineCacheSizeEXT() ==
+                SdlGpuRenderer::MaxRetainedPipelineCountPerCacheEXT,
+            "pipeline recreation evicts another LRU entry instead of growing ownership");
 
         // Queue one ordinary biased backbuffer draw. Game::Run performs the normal presentation
         // after this Draw override returns; the next frame checks whether the backbuffer format
