@@ -220,6 +220,19 @@ namespace CNA::TestSupport
         Register,
     };
 
+    /** @brief Scratch-operand form emitted for the synthetic vertex `SGN` instruction. */
+    enum class SyntheticSgnScratchOperands
+    {
+        /** @brief Do not emit `SGN`. */
+        None,
+        /** @brief Use two distinct, intentionally uninitialized temporary scratch registers. */
+        ValidUninitialized,
+        /** @brief Invalidly name the same temporary scratch register twice. */
+        Aliased,
+        /** @brief Invalidly use constant registers instead of temporary scratch registers. */
+        NonTemporary,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -273,6 +286,9 @@ namespace CNA::TestSupport
         /// Emits a Shader Model 1.1 vertex program whose coverage depends on the legacy four-part
         /// `EXPP` result rather than the Shader Model 2+ replicated result.
         bool vertexShaderUsesLegacyExpp = false;
+        /// Emits vertex `SGN` with the selected scratch-operand form.
+        SyntheticSgnScratchOperands vertexShaderSgnScratchOperands =
+            SyntheticSgnScratchOperands::None;
         /// plans/plan_fx.md FX-104: adds a `Caption` parameter of reflected type String, with an initial
         /// value, so the XNA `SetValue(string)`/`GetValueString()` pair can be exercised on a
         /// parameter that really is one instead of only through its rejection path.
@@ -378,6 +394,9 @@ namespace CNA::TestSupport
         /// Defines r0.xy and r0.zw in separate instructions before TEXKILL. Validation must
         /// accumulate the two write masks and accept the complete temporary.
         bool pixelShaderTexkillReadsSplitTemporary = false;
+        /// Emits an otherwise well-formed pixel `SGN`; D3D9 exposes this opcode only to vertex
+        /// shaders, so shared parser validation must reject it.
+        bool pixelShaderUsesInvalidSgn = false;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -448,7 +467,8 @@ namespace CNA::TestSupport
         bool usesNrmWriteMask = false,
         bool readsUninitializedDestination = false,
         bool texkillReadsPartialTemporary = false,
-        bool texkillReadsSplitTemporary = false)
+        bool texkillReadsSplitTemporary = false,
+        bool usesInvalidSgn = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -629,6 +649,21 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 0));
             AppendUInt32(shader, 0x00000041u | (1u << 24)); // texkill r0
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+        }
+
+        if (usesInvalidSgn)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, c0
+            AppendUInt32(shader, destination(regTemp, 1, 0xFu));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r2, c0
+            AppendUInt32(shader, destination(regTemp, 2, 0xFu));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x00000022u | (4u << 24)); // sgn r0, c0, r1, r2
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, source(regTemp, 1));
+            AppendUInt32(shader, source(regTemp, 2));
         }
 
         if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic)
@@ -1370,7 +1405,9 @@ namespace CNA::TestSupport
                                                                 bool swizzlesSampleResult = false,
                                                                 bool usesShaderModel11Input = false,
                                                                 bool usesShaderModel11ExtendedInputs = false,
-                                                                bool usesLegacyExpp = false)
+                                                                bool usesLegacyExpp = false,
+                                                                SyntheticSgnScratchOperands sgnScratchOperands =
+                                                                    SyntheticSgnScratchOperands::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp;
@@ -1654,6 +1691,19 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_<kind> s#
             AppendUInt32(shader, 0x80000000u | (samplerTextureType << 27));
             AppendUInt32(shader, destination(regSampler, samplerRegister));
+        }
+        if (sgnScratchOperands != SyntheticSgnScratchOperands::None)
+        {
+            const bool nonTemporary =
+                sgnScratchOperands == SyntheticSgnScratchOperands::NonTemporary;
+            const std::uint32_t scratchType = nonTemporary ? regConst : regTemp;
+            const std::uint32_t secondScratch =
+                sgnScratchOperands == SyntheticSgnScratchOperands::Aliased ? 1u : 2u;
+            AppendUInt32(shader, 0x00000022u | (4u << 24)); // sgn r0, v0, scratch1, scratch2
+            AppendUInt32(shader, destination(regTemp, 0));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(scratchType, nonTemporary ? 0u : 1u));
+            AppendUInt32(shader, source(scratchType, nonTemporary ? 1u : secondScratch));
         }
         if (readsSecondStream)
         {
@@ -2216,7 +2266,8 @@ namespace CNA::TestSupport
             options.pixelShaderUsesNrmWriteMask,
             options.pixelShaderReadsUninitializedDestination,
             options.pixelShaderTexkillReadsPartialTemporary,
-            options.pixelShaderTexkillReadsSplitTemporary);
+            options.pixelShaderTexkillReadsSplitTemporary,
+            options.pixelShaderUsesInvalidSgn);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -2288,7 +2339,8 @@ namespace CNA::TestSupport
                 options.samplerKind, options.vertexShaderSwizzlesSampleResult,
                 options.vertexShaderUsesShaderModel11Input,
                 options.vertexShaderUsesShaderModel11ExtendedInputs,
-                options.vertexShaderUsesLegacyExpp);
+                options.vertexShaderUsesLegacyExpp,
+                options.vertexShaderSgnScratchOperands);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

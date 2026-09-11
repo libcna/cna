@@ -2693,6 +2693,48 @@ namespace
               "compiled Effect parser rejected TEXKILL after complete split temporary writes");
     }
 
+    void CheckCompiledSgnValidation(SoftwareRenderer& renderer)
+    {
+        using CNA::TestSupport::SyntheticSgnScratchOperands;
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexShaderSgnScratchOperands =
+            SyntheticSgnScratchOperands::ValidUninitialized;
+        const auto validBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        bool accepted = true;
+        try
+        {
+            static_cast<void>(renderer.CreateCompiledEffect(validBytes.data(), validBytes.size()));
+        }
+        catch (const std::runtime_error&)
+        {
+            accepted = false;
+        }
+        Check(accepted, "compiled Effect parser rejected valid uninitialized SGN scratch registers");
+
+        const auto expectRejected = [&renderer, &options](const char* message)
+        {
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected, message);
+        };
+        options.vertexShaderSgnScratchOperands = SyntheticSgnScratchOperands::Aliased;
+        expectRejected("compiled Effect parser accepted aliased SGN scratch registers");
+        options.vertexShaderSgnScratchOperands = SyntheticSgnScratchOperands::NonTemporary;
+        expectRejected("compiled Effect parser accepted non-temporary SGN scratch registers");
+        options.vertexShaderSgnScratchOperands = SyntheticSgnScratchOperands::None;
+        options.pixelShaderUsesInvalidSgn = true;
+        expectRejected("compiled Effect parser accepted pixel-shader SGN");
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4471,6 +4513,7 @@ int main()
         CheckCompiledShaderModel14PhaseValidation(renderer);
         CheckCompiledUninitializedTemporaryValidation(renderer);
         CheckCompiledTexkillTemporaryValidation(renderer);
+        CheckCompiledSgnValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();
