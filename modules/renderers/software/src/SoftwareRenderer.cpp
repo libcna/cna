@@ -2560,6 +2560,230 @@ namespace CNA::Internal::Renderers::Software
         // ---- Phase S5/S6: generalized (textured/blended/effect-driven) rasterization ----
 
 #ifndef CNA_SOFTWARE_2D_ONLY
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        void WriteCompiledFragment(
+            const std::array<SoftwareFramebuffer*, 4>& colorTargets, int colorTargetCount,
+            const RasterDepthState& depthState, const RasterStencilState& stencilState,
+            const SoftwareBlendState& blendState, const std::array<float, 4>& blendFactor,
+            const std::array<int, 4>& colorWriteMasks, unsigned int multiSampleMask,
+            SoftwareOcclusionQueryRenderer* occlusionQuery, SoftwareCompiledEffect& runtime,
+            int x, int y, float depth, unsigned int coverageMask,
+            const std::array<float, 4>* sampleDepths,
+            std::span<const SoftwareShaderSemanticValueEXT> inputs)
+        {
+            SoftwareFramebuffer& depthTarget = *colorTargets[0];
+            const unsigned int availableSamples =
+                depthTarget.HasMultiSampleColor() ? 0xFu : 0x1u;
+            const unsigned int activeSamples =
+                multiSampleMask & coverageMask & availableSamples;
+            if (activeSamples == 0u)
+                return;
+
+            const SoftwarePixelShaderResultEXT pixel = runtime.ExecutePixelEXT(inputs);
+            if (pixel.discarded)
+                return;
+
+            std::array<float, 4> shaderSampleDepths{};
+            const std::array<float, 4>* effectiveSampleDepths = sampleDepths;
+            float effectiveDepth = depth;
+            if (pixel.depthWritten)
+            {
+                effectiveDepth = pixel.depth;
+                if (depthTarget.HasMultiSampleColor())
+                {
+                    shaderSampleDepths.fill(pixel.depth);
+                    effectiveSampleDepths = &shaderSampleDepths;
+                }
+            }
+
+            const std::size_t depthPixelIndex =
+                static_cast<std::size_t>(y) * static_cast<std::size_t>(depthTarget.width) +
+                static_cast<std::size_t>(x);
+            const unsigned int passingSamples = ApplyFragmentTests(
+                depthTarget, depthState, stencilState, depthPixelIndex, activeSamples,
+                effectiveDepth, effectiveSampleDepths, occlusionQuery);
+            if (passingSamples == 0u)
+                return;
+
+            for (int slot = 0; slot < colorTargetCount; ++slot)
+            {
+                if ((pixel.colorWriteMask & (1u << slot)) == 0u ||
+                    colorTargets[static_cast<std::size_t>(slot)] == nullptr)
+                    continue;
+                SoftwareFramebuffer& target =
+                    *colorTargets[static_cast<std::size_t>(slot)];
+                const std::size_t pixelIndex =
+                    static_cast<std::size_t>(y) * static_cast<std::size_t>(target.width) +
+                    static_cast<std::size_t>(x);
+                const std::array<float, 4>& source =
+                    pixel.colors[static_cast<std::size_t>(slot)];
+                const auto writeColor = [&](int sample)
+                {
+                    std::array<float, 4> output = source;
+                    if (!blendState.IsOpaqueIdentity())
+                    {
+                        const std::array<float, 4> destination =
+                            target.ReadColor(pixelIndex, sample);
+                        output[0] = BlendComponent(
+                            0, blendState.colorSource, blendState.colorDestination,
+                            blendState.colorFunction, source, destination, blendFactor);
+                        output[1] = BlendComponent(
+                            1, blendState.colorSource, blendState.colorDestination,
+                            blendState.colorFunction, source, destination, blendFactor);
+                        output[2] = BlendComponent(
+                            2, blendState.colorSource, blendState.colorDestination,
+                            blendState.colorFunction, source, destination, blendFactor);
+                        output[3] = BlendComponent(
+                            3, blendState.alphaSource, blendState.alphaDestination,
+                            blendState.alphaFunction, source, destination, blendFactor);
+                    }
+                    target.WriteColor(pixelIndex, sample, output,
+                                      colorWriteMasks[static_cast<std::size_t>(slot)]);
+                };
+                if (!target.HasMultiSampleColor())
+                {
+                    writeColor(-1);
+                    continue;
+                }
+                for (int sample = 0; sample < 4; ++sample)
+                {
+                    if ((passingSamples & (1u << sample)) != 0u)
+                        writeColor(sample);
+                }
+            }
+        }
+
+        void RasterizeTriangleCompiled(
+            const std::array<SoftwareFramebuffer*, 4>& colorTargets, int colorTargetCount,
+            const RasterDepthState& depthState, const RasterStencilState& stencilState,
+            const SoftwareBlendState& blendState, const std::array<float, 4>& blendFactor,
+            int cullMode, float depthBias, float slopeScaleDepthBias,
+            const RasterClipRect& clip, const RasterVertex& v0, const RasterVertex& v1,
+            const RasterVertex& v2, const std::array<int, 4>& colorWriteMasks,
+            unsigned int multiSampleMask, SoftwareOcclusionQueryRenderer* occlusionQuery,
+            SoftwareCompiledEffect& runtime, bool multiSampleAntiAlias)
+        {
+            const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
+            if (area == 0.0f || ShouldCullTriangle(area, cullMode))
+                return;
+            const RasterStencilState faceStencil = SelectStencilFace(stencilState, area < 0.0f);
+            const float biasOffset =
+                ComputeDepthBiasOffset(v0, v1, v2, depthBias, slopeScaleDepthBias);
+            const bool hasBias = biasOffset != 0.0f;
+
+            const float minXf = std::min({v0.x, v1.x, v2.x});
+            const float maxXf = std::max({v0.x, v1.x, v2.x});
+            const float minYf = std::min({v0.y, v1.y, v2.y});
+            const float maxYf = std::max({v0.y, v1.y, v2.y});
+            int minX = 0, minY = 0, maxX = -1, maxY = -1;
+            if (!CalculateRasterBounds(minXf, minYf, maxXf, maxYf, clip,
+                                       minX, minY, maxX, maxY))
+                return;
+
+            SoftwareFramebuffer& primary = *colorTargets[0];
+            for (int y = minY; y <= maxY; ++y)
+            {
+                for (int x = minX; x <= maxX; ++x)
+                {
+                    const float px = static_cast<float>(x) + 0.5f;
+                    const float py = static_cast<float>(y) + 0.5f;
+                    const float w0 = EdgeFunction(v1.x, v1.y, v2.x, v2.y, px, py);
+                    const float w1 = EdgeFunction(v2.x, v2.y, v0.x, v0.y, px, py);
+                    const float w2 = EdgeFunction(v0.x, v0.y, v1.x, v1.y, px, py);
+
+                    unsigned int coverageMask = 1u;
+                    std::array<float, 4> sampleDepths{};
+                    if (!primary.HasMultiSampleColor())
+                    {
+                        if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
+                            continue;
+                    }
+                    else if (!multiSampleAntiAlias)
+                    {
+                        if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
+                            continue;
+                        coverageMask = 0xFu;
+                    }
+                    else
+                    {
+                        coverageMask = 0u;
+                        for (int sample = 0; sample < 4; ++sample)
+                        {
+                            const MultiSamplePosition& samplePosition =
+                                kStandardFourSamplePositions[static_cast<std::size_t>(sample)];
+                            const float sampleX = static_cast<float>(x) + samplePosition.x;
+                            const float sampleY = static_cast<float>(y) + samplePosition.y;
+                            const float sampleW0 = EdgeFunction(
+                                v1.x, v1.y, v2.x, v2.y, sampleX, sampleY);
+                            const float sampleW1 = EdgeFunction(
+                                v2.x, v2.y, v0.x, v0.y, sampleX, sampleY);
+                            const float sampleW2 = EdgeFunction(
+                                v0.x, v0.y, v1.x, v1.y, sampleX, sampleY);
+                            if (!TriangleContainsSample(v0, v1, v2, area,
+                                                        sampleW0, sampleW1, sampleW2))
+                                continue;
+                            coverageMask |= 1u << sample;
+                            float sampleDepth = (sampleW0 * v0.depth + sampleW1 * v1.depth +
+                                                 sampleW2 * v2.depth) / area;
+                            if (hasBias)
+                                sampleDepth = std::clamp(sampleDepth + biasOffset, 0.0f, 1.0f);
+                            sampleDepths[static_cast<std::size_t>(sample)] = sampleDepth;
+                        }
+                        if (coverageMask == 0u)
+                            continue;
+                    }
+
+                    const float lambda0 = w0 / area;
+                    const float lambda1 = w1 / area;
+                    float depth = BarycentricInterpolate(
+                        v0.depth, v1.depth, v2.depth, lambda0, lambda1);
+                    if (hasBias)
+                        depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);
+                    if (primary.HasMultiSampleColor() && !multiSampleAntiAlias)
+                        sampleDepths.fill(depth);
+                    const float invW = BarycentricInterpolate(
+                        v0.invW, v1.invW, v2.invW, lambda0, lambda1);
+
+                    if (v0.compiledVaryingCount != v1.compiledVaryingCount ||
+                        v0.compiledVaryingCount != v2.compiledVaryingCount)
+                    {
+                        throw std::runtime_error(
+                            "SoftwareRenderer: compiled varying counts disagree within a triangle.");
+                    }
+                    std::array<SoftwareShaderSemanticValueEXT, 16> inputs{};
+                    for (std::size_t varying = 0; varying < v0.compiledVaryingCount; ++varying)
+                    {
+                        const auto& first = v0.compiledVaryings[varying];
+                        const auto& second = v1.compiledVaryings[varying];
+                        const auto& third = v2.compiledVaryings[varying];
+                        if (first.usage != second.usage || first.usage != third.usage ||
+                            first.usageIndex != second.usageIndex ||
+                            first.usageIndex != third.usageIndex)
+                        {
+                            throw std::runtime_error(
+                                "SoftwareRenderer: compiled varying semantics disagree within a "
+                                "triangle.");
+                        }
+                        inputs[varying].usage = first.usage;
+                        inputs[varying].usageIndex = first.usageIndex;
+                        for (std::size_t component = 0; component < 4; ++component)
+                        {
+                            inputs[varying].value[component] = BarycentricInterpolate(
+                                first.value[component], second.value[component],
+                                third.value[component], lambda0, lambda1) / invW;
+                        }
+                    }
+                    WriteCompiledFragment(
+                        colorTargets, colorTargetCount, depthState, faceStencil, blendState,
+                        blendFactor, colorWriteMasks, multiSampleMask, occlusionQuery, runtime,
+                        x, y, depth, coverageMask,
+                        primary.HasMultiSampleColor() ? &sampleDepths : nullptr,
+                        std::span(inputs.data(), v0.compiledVaryingCount));
+                }
+            }
+        }
+#endif
+
         /// Transforms a vertex whose byte layout is inferred from `stride` (plans/plan_software.md
         /// design decision 2: 16=VertexPositionColor, 20=VertexPositionTexture,
         /// 24=VertexPositionColorTexture, 32=VertexPositionNormalTexture (SOFTWARE-82,
@@ -2899,13 +3123,29 @@ namespace CNA::Internal::Renderers::Software
             return result;
         }
 
-        void RequireCompiledEffectDeclarations(const SoftwareVertexBufferRenderer& fallback,
-                                               const GpuDrawParams& params)
+        SoftwareCompiledEffect& RequireCompiledEffectDraw(
+            const SoftwareVertexBufferRenderer& fallback, const GpuDrawParams& params)
         {
+            auto* runtime = dynamic_cast<SoftwareCompiledEffect*>(params.compiledEffectRuntime);
+            if (runtime == nullptr)
+            {
+                throw System::InvalidOperationException(
+                    "Software compiled-effect draw received a runtime from another renderer.");
+            }
+            if (runtime->GetVertexProgramEXT() == nullptr)
+            {
+                throw System::InvalidOperationException(
+                    "Software compiled-effect draw has no applied vertex shader.");
+            }
+            if (runtime->GetPixelProgramEXT() == nullptr)
+            {
+                throw System::InvalidOperationException(
+                    "Software compiled-effect draw has no applied pixel shader.");
+            }
             if (params.vertexStreamCount == 0)
             {
                 if (!fallback.Declaration().IsEmpty())
-                    return;
+                    return *runtime;
                 throw System::InvalidOperationException(
                     "Software compiled-effect drawing requires a VertexDeclaration.");
             }
@@ -2922,6 +3162,7 @@ namespace CNA::Internal::Renderers::Software
                     "Software compiled-effect drawing requires every active vertex stream to "
                     "carry a VertexDeclaration.");
             }
+            return *runtime;
         }
 #endif
 
@@ -5047,8 +5288,18 @@ namespace CNA::Internal::Renderers::Software
         const auto& swVb = static_cast<const SoftwareVertexBufferRenderer&>(vb);
         const bool compiledEffectDraw = params.compiledEffectRuntime != nullptr;
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        SoftwareCompiledEffect* compiledRuntime = nullptr;
         if (compiledEffectDraw)
-            RequireCompiledEffectDeclarations(swVb, params);
+        {
+            compiledRuntime = &RequireCompiledEffectDraw(swVb, params);
+            if (primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip ||
+                primitive == PrimitiveType::PointListEXT || fillMode_ == 1)
+            {
+                throw System::NotSupportedException(
+                    "Software compiled-effect line, point and wireframe execution requires "
+                    "SOFTWARE-165.");
+            }
+        }
 #else
         if (compiledEffectDraw)
             throw System::NotSupportedException(
@@ -5123,6 +5374,16 @@ namespace CNA::Internal::Renderers::Software
         // public draw, beside the depth-state snapshot above.
         const SoftwareBlendState blendState = blendState_;
         const std::array<float, 4> blendFactor = blendFactor_;
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        std::array<SoftwareFramebuffer*, 4> compiledColorTargets{};
+        int compiledColorTargetCount = 1;
+        compiledColorTargets[0] = &fb;
+        if (compiledEffectDraw && currentMrtCount_ > 0)
+        {
+            compiledColorTargets = currentMrtFramebuffers_;
+            compiledColorTargetCount = currentMrtCount_;
+        }
+#endif
 
         for (int i = 0; i < primitiveCount; ++i)
         {
@@ -5181,9 +5442,6 @@ namespace CNA::Internal::Renderers::Software
                 rv[static_cast<std::size_t>(k)] =
                     ClipVertexToRasterVertex(clipped[static_cast<std::size_t>(k)], vpT);
 
-            if (compiledEffectDraw)
-                continue;
-
             // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
             // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
             // SOFTWARE-106/107: preserve only the clipped polygon boundary in wireframe; top-left
@@ -5194,6 +5452,18 @@ namespace CNA::Internal::Renderers::Software
                 unsigned edgeMask = kEdgeV1V2;
                 if (fan == 1) edgeMask |= kEdgeV0V1;
                 if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+                if (compiledEffectDraw)
+                {
+                    RasterizeTriangleCompiled(
+                        compiledColorTargets, compiledColorTargetCount, depthState, stencilState,
+                        blendState, blendFactor, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
+                        rv[0], rv[static_cast<std::size_t>(fan)],
+                        rv[static_cast<std::size_t>(fan + 1)], colorWriteMasks_, multiSampleMask_,
+                        activeOcclusionQuery_, *compiledRuntime, multiSampleAntiAlias_);
+                    continue;
+                }
+#endif
                 RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                         cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
@@ -5203,12 +5473,6 @@ namespace CNA::Internal::Renderers::Software
                                         GetSamplerState(1), activeOcclusionQuery_,
                                         multiSampleAntiAlias_, wire, edgeMask);
             }
-        }
-        if (compiledEffectDraw)
-        {
-            throw System::NotSupportedException(
-                "Software compiled-effect vertex execution completed, but pixel-shader execution "
-                "requires SOFTWARE-164.");
         }
     }
 
@@ -5240,8 +5504,18 @@ namespace CNA::Internal::Renderers::Software
         const auto& swIb = static_cast<const SoftwareIndexBufferRenderer&>(ib);
         const bool compiledEffectDraw = params.compiledEffectRuntime != nullptr;
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        SoftwareCompiledEffect* compiledRuntime = nullptr;
         if (compiledEffectDraw)
-            RequireCompiledEffectDeclarations(swVb, params);
+        {
+            compiledRuntime = &RequireCompiledEffectDraw(swVb, params);
+            if (primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip ||
+                primitive == PrimitiveType::PointListEXT || fillMode_ == 1)
+            {
+                throw System::NotSupportedException(
+                    "Software compiled-effect line, point and wireframe execution requires "
+                    "SOFTWARE-165.");
+            }
+        }
 #else
         if (compiledEffectDraw)
             throw System::NotSupportedException(
@@ -5343,6 +5617,16 @@ namespace CNA::Internal::Renderers::Software
         // REMED-GFX-148: one by-value state snapshot for the complete indexed public draw.
         const SoftwareBlendState blendState = blendState_;
         const std::array<float, 4> blendFactor = blendFactor_;
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        std::array<SoftwareFramebuffer*, 4> compiledColorTargets{};
+        int compiledColorTargetCount = 1;
+        compiledColorTargets[0] = &fb;
+        if (compiledEffectDraw && currentMrtCount_ > 0)
+        {
+            compiledColorTargets = currentMrtFramebuffers_;
+            compiledColorTargetCount = currentMrtCount_;
+        }
+#endif
 
         for (int i = 0; i < primitiveCount; ++i)
         {
@@ -5401,9 +5685,6 @@ namespace CNA::Internal::Renderers::Software
                 rv[static_cast<std::size_t>(k)] =
                     ClipVertexToRasterVertex(clipped[static_cast<std::size_t>(k)], vpT);
 
-            if (compiledEffectDraw)
-                continue;
-
             // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
             // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
             // SOFTWARE-106/107: preserve only the clipped polygon boundary in wireframe; top-left
@@ -5414,6 +5695,18 @@ namespace CNA::Internal::Renderers::Software
                 unsigned edgeMask = kEdgeV1V2;
                 if (fan == 1) edgeMask |= kEdgeV0V1;
                 if (fan + 1 == clippedCount - 1) edgeMask |= kEdgeV2V0;
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+                if (compiledEffectDraw)
+                {
+                    RasterizeTriangleCompiled(
+                        compiledColorTargets, compiledColorTargetCount, depthState, stencilState,
+                        blendState, blendFactor, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
+                        rv[0], rv[static_cast<std::size_t>(fan)],
+                        rv[static_cast<std::size_t>(fan + 1)], colorWriteMasks_, multiSampleMask_,
+                        activeOcclusionQuery_, *compiledRuntime, multiSampleAntiAlias_);
+                    continue;
+                }
+#endif
                 RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                         cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
@@ -5423,12 +5716,6 @@ namespace CNA::Internal::Renderers::Software
                                         GetSamplerState(1), activeOcclusionQuery_,
                                         multiSampleAntiAlias_, wire, edgeMask);
             }
-        }
-        if (compiledEffectDraw && !applyInstanceStreams)
-        {
-            throw System::NotSupportedException(
-                "Software compiled-effect vertex execution completed, but pixel-shader execution "
-                "requires SOFTWARE-164.");
         }
     }
 
@@ -5494,12 +5781,6 @@ namespace CNA::Internal::Renderers::Software
             }
             DrawIndexedPrimitivesInternal(
                 vb, ib, world, view, projection, primitive, primitiveCount, current, true);
-        }
-        if (params.compiledEffectRuntime != nullptr)
-        {
-            throw System::NotSupportedException(
-                "Software compiled-effect vertex execution completed for every instance, but "
-                "pixel-shader execution requires SOFTWARE-164.");
         }
     }
 #else

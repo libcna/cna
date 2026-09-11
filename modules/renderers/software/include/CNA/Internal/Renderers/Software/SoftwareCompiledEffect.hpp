@@ -64,6 +64,8 @@ namespace CNA::Internal::Renderers::Software
         std::uint8_t usageIndex = 0;
         /** @brief Direct3D input or output register number. */
         std::uint16_t registerNumber = 0;
+        /** @brief Encoded Direct3D register family after type-bit normalization. */
+        std::uint8_t registerType = 1;
     };
 
     /** @brief One semantic float4 value entering or leaving the CPU shader. */
@@ -88,6 +90,21 @@ namespace CNA::Internal::Renderers::Software
         float pointSize = 1.0f;
     };
 
+    /** @brief Result of executing one compiled Direct3D pixel shader invocation. */
+    struct SoftwarePixelShaderResultEXT
+    {
+        /** @brief Shader-domain COLOR0 through COLOR3 values. */
+        std::array<std::array<float, 4>, 4> colors{};
+        /** @brief Bit N is set when COLOR N was written by the program. */
+        std::uint8_t colorWriteMask = 0;
+        /** @brief True when TEXKILL/discard rejected the fragment. */
+        bool discarded = false;
+        /** @brief Shader-written depth when @ref depthWritten is true. */
+        float depth = 0.0f;
+        /** @brief Whether the program wrote the depth output register. */
+        bool depthWritten = false;
+    };
+
     struct SoftwareShaderProgramEXT;
 
     /**
@@ -100,6 +117,23 @@ namespace CNA::Internal::Renderers::Software
      * @return Homogeneous position and interpolator outputs.
      */
     CNAEXT [[nodiscard]] SoftwareVertexShaderResultEXT ExecuteSoftwareVertexShaderEXT(
+        const SoftwareShaderProgramEXT& program, std::span<const float> floatRegisters,
+        std::span<const int> integerRegisters,
+        std::span<const unsigned char> booleanRegisters,
+        std::span<const SoftwareShaderSemanticValueEXT> inputs);
+
+    /**
+     * @brief Executes one validated Direct3D pixel program without texture sampling.
+     * @param program Pixel program token IR.
+     * @param floatRegisters Direct3D float4 constant register storage.
+     * @param integerRegisters Direct3D int4 constant register storage.
+     * @param booleanRegisters Direct3D Boolean constant register storage.
+     * @param inputs Perspective-correct declaration-semantic values for one fragment.
+     * @return Colour/depth outputs and discard state.
+     * @throws std::runtime_error if the program reaches a texture instruction before the
+     *         SOFTWARE-356 sampler phase is installed.
+     */
+    CNAEXT [[nodiscard]] SoftwarePixelShaderResultEXT ExecuteSoftwarePixelShaderEXT(
         const SoftwareShaderProgramEXT& program, std::span<const float> floatRegisters,
         std::span<const int> integerRegisters,
         std::span<const unsigned char> booleanRegisters,
@@ -252,6 +286,14 @@ namespace CNA::Internal::Renderers::Software
          * @return Homogeneous position and declared interpolator outputs.
          */
         CNAEXT [[nodiscard]] SoftwareVertexShaderResultEXT ExecuteVertexEXT(
+            std::span<const SoftwareShaderSemanticValueEXT> inputs) const;
+
+        /**
+         * @brief Executes the selected classic Direct3D pixel program for one fragment.
+         * @param inputs Perspective-correct semantic values from the vertex stage.
+         * @return Colour/depth outputs and discard state.
+         */
+        CNAEXT [[nodiscard]] SoftwarePixelShaderResultEXT ExecutePixelEXT(
             std::span<const SoftwareShaderSemanticValueEXT> inputs) const;
 
         /**

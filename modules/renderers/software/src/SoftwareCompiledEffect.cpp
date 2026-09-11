@@ -249,22 +249,41 @@ namespace CNA::Internal::Renderers::Software
                 instruction.tokens.assign(
                     result.tokens.begin() + static_cast<std::ptrdiff_t>(offset),
                     result.tokens.begin() + static_cast<std::ptrdiff_t>(offset + instructionSize));
-                if (result.stage == SoftwareShaderStageEXT::Vertex && opcode == 31u &&
-                    instruction.tokens.size() == 3u)
+                if (opcode == 31u && instruction.tokens.size() == 3u)
                 {
                     const std::uint32_t declarationToken = instruction.tokens[1];
                     const std::uint32_t registerToken = instruction.tokens[2];
                     const std::uint8_t registerType = ShaderRegisterType(registerToken);
+                    const std::uint16_t registerNumber =
+                        static_cast<std::uint16_t>(registerToken & 0x7FFu);
                     SoftwareShaderSemanticEXT semantic;
                     semantic.usage = static_cast<MOJOSHADER_usage>(declarationToken & 0xFu);
                     semantic.usageIndex =
                         static_cast<std::uint8_t>((declarationToken >> 16u) & 0xFu);
-                    semantic.registerNumber =
-                        static_cast<std::uint16_t>(registerToken & 0x7FFu);
-                    if (registerType == 1u)
+                    semantic.registerNumber = registerNumber;
+                    semantic.registerType = registerType;
+                    if (result.stage == SoftwareShaderStageEXT::Vertex)
+                    {
+                        if (registerType == 1u)
+                            result.inputSemantics.push_back(semantic);
+                        else if (registerType == 6u && result.majorVersion >= 3u)
+                            result.outputSemantics.push_back(semantic);
+                    }
+                    else if (registerType == 1u)
+                    {
+                        if (result.majorVersion < 3u)
+                        {
+                            semantic.usage = MOJOSHADER_USAGE_COLOR;
+                            semantic.usageIndex = static_cast<std::uint8_t>(registerNumber);
+                        }
                         result.inputSemantics.push_back(semantic);
-                    else if (registerType == 6u && result.majorVersion >= 3u)
-                        result.outputSemantics.push_back(semantic);
+                    }
+                    else if (registerType == 3u)
+                    {
+                        semantic.usage = MOJOSHADER_USAGE_TEXCOORD;
+                        semantic.usageIndex = static_cast<std::uint8_t>(registerNumber);
+                        result.inputSemantics.push_back(semantic);
+                    }
                 }
                 result.instructions.push_back(std::move(instruction));
                 offset += instructionSize;
@@ -665,6 +684,18 @@ namespace CNA::Internal::Renderers::Software
         lastVertexResult_ = result;
         ++vertexExecutionCount_;
         return result;
+    }
+
+    SoftwarePixelShaderResultEXT SoftwareCompiledEffect::ExecutePixelEXT(
+        std::span<const SoftwareShaderSemanticValueEXT> inputs) const
+    {
+        const SoftwareShaderProgramEXT* program = GetPixelProgramEXT();
+        if (program == nullptr)
+            throw std::runtime_error("Software compiled effect: no pixel program is selected.");
+        return ExecuteSoftwarePixelShaderEXT(
+            *program, GetFloatRegistersEXT(SoftwareShaderStageEXT::Pixel),
+            GetIntegerRegistersEXT(SoftwareShaderStageEXT::Pixel),
+            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs);
     }
 
     std::size_t SoftwareCompiledEffect::GetVertexExecutionCountEXT() const noexcept

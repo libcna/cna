@@ -28,7 +28,9 @@ compiled Direct3D 9 Effect Framework bytecode, while EasyGL does when built with
 `CNA_EASYGL_COMPILED_EFFECTS=ON`. `SOFTWARE-162` now provides an opt-in headless Effect parser,
 reflection/state runtime, preshader register files and validated Software-owned D3D9 token IR;
 `SOFTWARE-163` executes the committed effects' vertex programs and carries their declared outputs
-through clipping and perspective-interpolation setup:
+through clipping and perspective interpolation. `SOFTWARE-355` adds the first bounded pixel phase:
+texture-free D3D9 pixel programs now run through triangle rasterization and the existing
+discard/depth/stencil/blend/color-write output path:
 
 ```bash
 cmake -S . -B cmake-build-software-effects \
@@ -36,11 +38,12 @@ cmake -S . -B cmake-build-software-effects \
   -DCNA_SOFTWARE_COMPILED_EFFECTS=ON
 ```
 
-That is a real parser and vertex phase, not complete execution parity. Software still truthfully
+Those are real parser, vertex and texture-free pixel phases, not complete execution parity. Software still truthfully
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
 continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
 is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163` are complete and `SOFTWARE-164/165` remain the pixel/conformance backlog.
+`SOFTWARE-162/163/355` are complete, `SOFTWARE-356` owns pixel texture/sampler execution, and
+`SOFTWARE-164/165` remain the encompassing pixel/conformance backlog.
 
 The same challenge also confirmed a renderer-wide public-API hole: CNA stores
 `GraphicsDevice.VertexTextures` and `VertexSamplerStates`, but no renderer contract consumes them.
@@ -172,11 +175,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   binaries, apply their pass state, run their preshaders, retain validated D3D9 token/register IR
   (`SOFTWARE-162`) and execute the vertex programs used by all committed stock/authentic fixtures
   (`SOFTWARE-163`). Declaration semantics, draw offsets, signed base vertex, multiple streams,
-  instance divisors, homogeneous clipping and perspective-varying setup are wired. Pixel programs
-  are not yet executed, so a compiled draw intentionally refuses after its vertex phase rather
-  than substituting stock shading. Software therefore advertises `CompiledEffects=false` and the
-  public constructor rejects the same valid bytes. `SOFTWARE-164/165` remain the phased execution
-  backlog; CNAEXT `ShaderEffect` is a separate excluded API.
+  instance divisors, homogeneous clipping and perspective-varying setup are wired. SOFTWARE-355
+  executes texture-free pixel programs in ordinary, indexed, multi-stream and instanced triangle
+  draws, including shader discard/depth and the established depth/stencil/blend/color-mask output
+  path. A texture instruction still refuses explicitly under SOFTWARE-356; line/wireframe,
+  sampler/MRT/SpriteBatch and full shader-profile closure also remain. Software therefore advertises
+  `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
+  remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.
 - **Public vertex-stage texture/sampler collections are inert renderer-wide** (`SOFTWARE-167`).
   `GraphicsDevice.VertexTextures` and `VertexSamplerStates` have the correct public shape and
   resource-disposal bookkeeping, but common code has no operation that publishes their contents

@@ -301,6 +301,7 @@ repository-wide criteria, and the historical optional `SOFTWARE-85/86` pending.
 | SpriteBatch rejected finite floating-point destinations outside the `Int32` range | Earlier numeric tests covered non-finite inputs but encoded an unsupported distinction: NaN/infinities flowed to the renderer while finite values beyond an integer rectangle threw. SpriteBatch's float path does not use an XNA integer destination rectangle | Recovered Microsoft `InternalDraw` IL and FNA `PushSprite` store position and scale-derived dimensions directly as `Single`. An isolated XNA 4.0 probe accepts both signs of `float.MaxValue` for position and scale in Immediate and Deferred modes, including successful End. Five corrected tests failed before repair. Draw/DrawString now forward the complete `Single` domain; the integer-only renderer compatibility fallback performs defined saturating/non-finite conversion rather than a C++ undefined cast. A real Software/EasyGL draw proves an extreme off-screen sprite does not prevent a following visible sprite. Focused 9/9 and wider 78/78 selections pass on both; full graphics passes 2,622/2,685 Software and 2,616/2,685 isolated EasyGL GLES with 63/69 classified skips | Confirmed shared classic-XNA validation gap and repaired, SOFTWARE-352 ✅ |
 | SpriteFont construction, property validation and failed lookup had been collapsed into one invented invariant | REMED-GFX-002 made both the internal-equivalent constructor and public setter reject a default absent from `Characters`; SOFTWARE-296 then followed FNA's `ArgumentException("text")` without checking Microsoft's private resolver. No test represented invalid custom/content data or asserted the setter's empty parameter name | Recovered XNA IL stores the constructor value directly, validates only the public setter, and resolves every MeasureString/DrawString glyph through `GetIndexForCharacter`, whose terminal failure is `ArgumentException("character")`. An isolated XNA 4.0 reflection/runtime probe confirms invalid construction succeeds, the property retains `?`, MeasureString fails for `character`, an invalid setter throws with no parameter and preserves `?`, and a null setter succeeds. All seven corrected CNA tests failed before repair. One shared resolver now serves both text paths. The 126-case combined family and full 2,687-case suites pass on Software and isolated EasyGL GLES | Confirmed shared classic-XNA content/property/error-semantics gap and repaired, SOFTWARE-353 ✅; supersedes SOFTWARE-296's parameter conclusion |
 | SpriteBatch sorting mixed FNA's total float order with an invented stable C++ sorter | Existing tests asserted only distinct finite depths and explicitly required stable order within a texture group. The non-finite regression imposed FNA's total order so `std::stable_sort` would have a valid comparator | Recovered Microsoft IL calls .NET Framework 4 `Array.Sort<int>` for all three sorted modes. Its quicksort is unstable; its bare float comparisons return equality for every NaN pair. Isolated XNA probes prove reversed order for three equal keys, all six three-value NaN placements and exact 64-entry mixed orders. Three corrected CNA tests fail 0/3 pre-fix. An explicit framework-compatible partition loop now gives the measured result without feeding a non-transitive comparator to `std::sort`. The 141-test SpriteBatch/SpriteFont slice and complete 2,688-test graphics suite pass on Software and isolated EasyGL GLES | Confirmed shared classic-XNA ordering gap and repaired, SOFTWARE-354 ✅ |
+| Compiled pixel execution was wholly absent after the vertex phase | EasyGL's MojoShader/GL path executes the original D3D9 pixel program. SOFTWARE-163 deliberately stopped after vertex output and every Software compiled draw threw, so even a texture-free `mov oC0,c0` program could not produce a pixel | Opcode inventory across all six stock `.fxb` files and the authentic XNA 4 fixture defined the first bounded executor slice. SOFTWARE-355 implements the observed arithmetic/register/output rules, pixel DCLs and perspective-varying triangle integration. The synthetic compiled Effect writes exact parameter-driven pixels through ordinary/indexed/multi-stream/instanced routes; separate probes prove blend, channel mask, depth, TEXKILL and shader depth output. All texture-free stock programs execute, the dedicated displayless CTest passes and full Software graphics remains 2,625/2,688 | Confirmed material compiled-Effect gap and partially repaired, SOFTWARE-355 ✅; texture/sampler/AddressW is SOFTWARE-356 ⬜, full SOFTWARE-164/165 remains open and capability remains false |
 
 ### SOFTWARE-161: classic compiled XNA Effect assessment
 
@@ -355,9 +356,10 @@ not change the API classification.
     shader conformance corpus. Implementing only the current fixture opcodes would be a false
     capability claim.
 12. **Useful phases.** SOFTWARE-162 builds the runtime and validated IR; SOFTWARE-163 implements
-    vertex execution and draw-input integration; SOFTWARE-164 implements pixel execution,
-    samplers/AddressW/MRT and SpriteBatch-visible output; SOFTWARE-165 closes SM1-3, content,
-    lifecycle, stress and shared conformance before enabling the capability.
+    vertex execution and draw-input integration; SOFTWARE-355 implements the independently testable
+    texture-free triangle pixel/output slice; SOFTWARE-356 adds samplers, AddressW and texture
+    instructions under the SOFTWARE-164 pixel/MRT/SpriteBatch umbrella; SOFTWARE-165 closes SM1-3,
+    content, lifecycle, stress and shared conformance before enabling the capability.
 13. **Abstraction impact.** `ICompiledEffectRuntime` and the current draw token already provide the
     correct renderer-neutral boundary. The interpreter can remain reusable CPU-renderer code;
     common GraphicsDevice does not need shader opcodes or a GL-shaped API.
@@ -368,8 +370,9 @@ not change the API classification.
 
 The current evidence therefore rules out final classification A. In addition to the Software-only
 compiled-Effect executor gap, the audit has found a renderer-wide classic-XNA gap in the public
-vertex texture/sampler collections. SOFTWARE-162..165 remain pending because the assessment found
-a shader VM, not a reasonably bounded repair; SOFTWARE-168 is the separate shared binding task.
+vertex texture/sampler collections. SOFTWARE-162/163/355 have completed bounded parser, vertex and
+texture-free pixel phases, but SOFTWARE-356 and the SOFTWARE-164/165 umbrellas remain pending;
+SOFTWARE-168 is the separate shared binding task.
 The final classification must account for both gaps after the remaining state/resource/default/skip
 audit rather than describing compiled Effects as the only remaining defect.
 

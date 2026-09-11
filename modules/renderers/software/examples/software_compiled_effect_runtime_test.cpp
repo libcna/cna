@@ -12,9 +12,9 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
-#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -26,6 +26,7 @@
 
 using CNA::Internal::Renderers::CompiledEffectDeviceState;
 using CNA::Internal::Renderers::CompiledEffectPassStateChanges;
+using CNA::Internal::Renderers::BlendWriteState;
 using CNA::Internal::Renderers::GpuDrawParams;
 using CNA::Internal::Renderers::GpuVertexStreamBinding;
 using CNA::Internal::Renderers::ICompiledEffectRuntime;
@@ -35,6 +36,7 @@ using CNA::Internal::Renderers::Software::SoftwareShaderInstructionEXT;
 using CNA::Internal::Renderers::Software::SoftwareShaderSemanticValueEXT;
 using CNA::Internal::Renderers::Software::SoftwareShaderProgramEXT;
 using CNA::Internal::Renderers::Software::SoftwareShaderStageEXT;
+using CNA::Internal::Renderers::Software::ExecuteSoftwarePixelShaderEXT;
 using CNA::Internal::Renderers::Software::ExecuteSoftwareVertexShaderEXT;
 using Microsoft::Xna::Framework::Graphics::Blend;
 using Microsoft::Xna::Framework::Graphics::BlendState;
@@ -176,19 +178,60 @@ namespace
         Check(executed > 0, label + " exposed no executable vertex program");
     }
 
-    template<typename Draw>
-    void ExpectPixelPhaseRefusal(Draw&& draw, const std::string& label)
+    int ExerciseTextureFreePixelPrograms(ICompiledEffectRuntime& runtime,
+                                         const std::string& label)
     {
-        try
+        auto* software = dynamic_cast<SoftwareCompiledEffect*>(&runtime);
+        if (software == nullptr)
+            throw std::runtime_error(label + " is not a Software compiled effect");
+        const SoftwareShaderSemanticValueEXT inputs[] = {
+            {MOJOSHADER_USAGE_COLOR, 0u, {0.25f, 0.5f, 0.75f, 1.0f}},
+            {MOJOSHADER_USAGE_COLOR, 1u, {0.75f, 0.5f, 0.25f, 1.0f}},
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, {0.25f, 0.75f, 0.5f, 1.0f}},
+            {MOJOSHADER_USAGE_TEXCOORD, 1u, {0.75f, 0.25f, 0.5f, 1.0f}},
+        };
+        const auto& description = runtime.GetDescription();
+        int executed = 0;
+        for (std::size_t technique = 0; technique < description.techniques.size(); ++technique)
         {
-            draw();
-            Check(false, label + " silently drew without a pixel interpreter");
+            runtime.SetTechnique(static_cast<std::uint32_t>(technique));
+            for (std::size_t pass = 0; pass < description.techniques[technique].passes.size(); ++pass)
+            {
+                CompiledEffectPassStateChanges changes;
+                runtime.ApplyPass(static_cast<std::uint32_t>(pass), {}, changes);
+                const SoftwareShaderProgramEXT* program = software->GetPixelProgramEXT();
+                if (program == nullptr)
+                    continue;
+                const bool samplesTexture = std::any_of(
+                    program->instructions.begin(), program->instructions.end(),
+                    [](const SoftwareShaderInstructionEXT& instruction)
+                    {
+                        return instruction.opcode == 66u;
+                    });
+                if (samplesTexture)
+                    continue;
+                const auto result = software->ExecutePixelEXT(inputs);
+                Check(result.discarded || result.colorWriteMask != 0u || result.depthWritten,
+                      label + " executed a pixel program without an observable result");
+                ++executed;
+            }
         }
-        catch (const System::NotSupportedException& exception)
+        return executed;
+    }
+
+    int CountBackbufferColor(SoftwareRenderer& renderer,
+                             const std::array<std::uint8_t, 4>& expected)
+    {
+        std::array<std::uint8_t, 16u * 16u * 4u> pixels{};
+        renderer.ReadBackbuffer(0, 0, 16, 16, pixels.data());
+        int count = 0;
+        for (std::size_t offset = 0; offset < pixels.size(); offset += 4u)
         {
-            Check(std::string(exception.what()).find("SOFTWARE-164") != std::string::npos,
-                  label + " returned the wrong incomplete-phase error");
+            if (std::equal(expected.begin(), expected.end(), pixels.begin() +
+                                                               static_cast<std::ptrdiff_t>(offset)))
+                ++count;
         }
+        return count;
     }
 
     void CheckVertexInstructionSemantics()
@@ -326,6 +369,97 @@ namespace
               "D3D COLOR output saturation differs");
     }
 
+    void CheckPixelInstructionSemantics()
+    {
+        constexpr std::uint32_t temporary = 0u;
+        constexpr std::uint32_t input = 1u;
+        constexpr std::uint32_t constant = 2u;
+        constexpr std::uint32_t texture = 3u;
+        constexpr std::uint32_t colorOutput = 8u;
+        constexpr std::uint32_t depthOutput = 9u;
+        const auto registerBits = [](std::uint32_t type)
+        {
+            return ((type & 0x7u) << 28u) | ((type >> 3u) << 11u);
+        };
+        const auto destination = [&](std::uint32_t type, std::uint32_t number,
+                                     std::uint32_t mask = 0xFu,
+                                     std::uint32_t modifier = 0u,
+                                     std::uint32_t shift = 0u)
+        {
+            return 0x80000000u | registerBits(type) | number | (mask << 16u) |
+                   (modifier << 20u) | (shift << 24u);
+        };
+        const auto source = [&](std::uint32_t type, std::uint32_t number,
+                                std::uint32_t swizzle = 0xE4u,
+                                std::uint32_t modifier = 0u)
+        {
+            return 0x80000000u | registerBits(type) | number | (swizzle << 16u) |
+                   (modifier << 24u);
+        };
+        SoftwareShaderProgramEXT program;
+        program.stage = SoftwareShaderStageEXT::Pixel;
+        program.majorVersion = 2;
+        program.minorVersion = 0;
+        program.inputSemantics = {
+            {MOJOSHADER_USAGE_COLOR, 0u, 0u, 1u},
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, 0u, 3u},
+        };
+        const auto add = [&](std::uint16_t opcode, std::initializer_list<std::uint32_t> tokens)
+        {
+            SoftwareShaderInstructionEXT instruction;
+            instruction.opcode = opcode;
+            instruction.tokens.assign(tokens);
+            program.instructions.push_back(std::move(instruction));
+        };
+
+        add(4, {4u, destination(temporary, 0), source(input, 0), source(constant, 0),
+                source(texture, 0)});
+        add(88, {88u, destination(colorOutput, 0, 0xFu, 1u, 1u),
+                 source(constant, 1), source(temporary, 0), source(constant, 2)});
+        add(1, {1u, destination(depthOutput, 0, 0x1u), source(constant, 3, 0u)});
+
+        std::array<float, 256u * 4u> floats{};
+        const auto setConstant = [&](std::size_t index, std::array<float, 4> value)
+        {
+            std::copy(value.begin(), value.end(),
+                      floats.begin() + static_cast<std::ptrdiff_t>(index * 4u));
+        };
+        setConstant(0, {2.0f, -1.0f, 0.5f, 1.0f});
+        setConstant(1, {1.0f, -1.0f, 0.0f, 2.0f});
+        setConstant(2, {0.25f, 0.125f, 0.75f, -2.0f});
+        setConstant(3, {0.375f, 0.0f, 0.0f, 0.0f});
+        const std::array<int, 16u * 4u> integers{};
+        const std::array<unsigned char, 16> booleans{};
+        const SoftwareShaderSemanticValueEXT inputs[] = {
+            {MOJOSHADER_USAGE_COLOR, 0u, {0.2f, 0.4f, 0.6f, 0.8f}},
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, {0.1f, 0.2f, 0.3f, 0.4f}},
+        };
+        const auto result =
+            ExecuteSoftwarePixelShaderEXT(program, floats, integers, booleans, inputs);
+        Check(result.colorWriteMask == 1u, "pixel COLOR0 write tracking differs");
+        Check(result.colors[0] == std::array<float, 4>{1.0f, 0.25f, 1.0f, 1.0f},
+              "pixel MAD/CMP/shift/saturate result differs");
+        Check(result.depthWritten && result.depth == 0.375f,
+              "pixel depth-output result differs");
+        Check(!result.discarded, "ordinary pixel invocation was discarded");
+
+        SoftwareShaderProgramEXT killProgram;
+        killProgram.stage = SoftwareShaderStageEXT::Pixel;
+        killProgram.majorVersion = 1;
+        killProgram.minorVersion = 1;
+        SoftwareShaderInstructionEXT kill;
+        kill.opcode = 65u;
+        kill.tokens = {65u, destination(texture, 0)};
+        killProgram.instructions.push_back(std::move(kill));
+        const SoftwareShaderSemanticValueEXT killInputs[] = {
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, {0.1f, -0.2f, 0.3f, 0.4f}},
+        };
+        const auto killed = ExecuteSoftwarePixelShaderEXT(
+            killProgram, floats, integers, booleans, killInputs);
+        Check(killed.discarded && killed.colorWriteMask == 0u,
+              "TEXKILL did not suppress the Shader Model 1 r0 output");
+    }
+
 } // namespace
 
 int main()
@@ -334,10 +468,12 @@ int main()
     {
         SoftwareRenderer renderer(16, 16);
         CheckVertexInstructionSemantics();
+        CheckPixelInstructionSemantics();
         Check(!renderer.SupportsCompiledEffects(),
-              "parser-only SOFTWARE-162 must not advertise shader execution");
+              "incomplete SOFTWARE-164/165 path must not advertise compiled effects");
 
         const std::string stockDirectory = CNA_SOFTWARE_STOCK_EFFECT_DIRECTORY;
+        int textureFreePixelPrograms = 0;
         for (const char* name :
              {"SpriteEffect.fxb", "BasicEffect.fxb", "AlphaTestEffect.fxb", "DualTextureEffect.fxb",
               "EnvironmentMapEffect.fxb", "SkinnedEffect.fxb"})
@@ -349,8 +485,12 @@ int main()
                 Check(!runtime->GetDescription().techniques.empty(),
                       std::string(name) + " has no reflected techniques");
                 ExerciseEveryVertexProgram(*runtime, name);
+                textureFreePixelPrograms +=
+                    ExerciseTextureFreePixelPrograms(*runtime, name);
             }
         }
+        Check(textureFreePixelPrograms > 0,
+              "stock effects exposed no texture-free pixel program to execute");
 
         const auto authenticBytes =
             Load(std::string(CNA_SOFTWARE_COMPILED_EFFECT_FIXTURE_DIRECTORY) +
@@ -365,6 +505,8 @@ int main()
               "authentic XNA 4 technique reflection differs: " +
                   std::to_string(authentic->GetDescription().techniques.size()));
         ExerciseEveryVertexProgram(*authentic, "authentic XNA 4 effect");
+        static_cast<void>(ExerciseTextureFreePixelPrograms(
+            *authentic, "authentic XNA 4 effect"));
 
         const auto syntheticBytes = CNA::TestSupport::BuildSyntheticDrawableEffect(
             /*readsSecondStream=*/true);
@@ -373,9 +515,14 @@ int main()
         const float streamMix[4] = {1.0f, 1.0f, 1.0f, 0.0f};
         synthetic->SetParameterValue(FindParameter(*synthetic, "StreamMix"), streamMix,
                                      sizeof(streamMix));
+        const float syntheticTint[4] = {0.25f, 0.5f, 0.75f, 1.0f};
+        synthetic->SetParameterValue(FindParameter(*synthetic, "Tint"), syntheticTint,
+                                     sizeof(syntheticTint));
+        constexpr std::array<std::uint8_t, 4> expectedTint{64u, 128u, 191u, 255u};
         synthetic->SetTechnique(0);
         CompiledEffectPassStateChanges syntheticChanges;
         synthetic->ApplyPass(1, {}, syntheticChanges);
+        renderer.ApplyRasterizerState(0, 0, false);
         auto* softwareSynthetic = dynamic_cast<SoftwareCompiledEffect*>(synthetic.get());
         Check(softwareSynthetic != nullptr, "synthetic runtime has the wrong backend type");
         if (softwareSynthetic != nullptr)
@@ -414,18 +561,16 @@ int main()
             stagedParams.compiledEffectRuntime = synthetic.get();
             stagedParams.vertexStart = 1;
             const std::size_t beforeStaged = softwareSynthetic->GetVertexExecutionCountEXT();
-            ExpectPixelPhaseRefusal(
-                [&]
-                {
-                    renderer.DrawPrimitivesEx(*staged, identity, identity, identity,
-                                              PrimitiveType::TriangleList, 1, stagedParams);
-                },
-                "compiled staged/user non-indexed route");
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            renderer.DrawPrimitivesEx(*staged, identity, identity, identity,
+                                      PrimitiveType::TriangleList, 1, stagedParams);
             Check(softwareSynthetic->GetVertexExecutionCountEXT() == beforeStaged + 3u,
                   "non-indexed vertexStart route did not execute exactly three vertices");
             Check(softwareSynthetic->GetLastVertexResultEXT().position ==
                       std::array<float, 4>{0.75f, 0.5f, 0.5f, 1.0f},
                   "non-indexed vertexStart route fetched the wrong final record");
+            Check(CountBackbufferColor(renderer, expectedTint) > 0,
+                  "compiled non-indexed route did not write pixel-shader COLOR0");
 
             const PositionUv indexedVertices[] = {
                 {{9.0f, 9.0f, 9.0f, 1.0f}, {9.0f, 9.0f, 9.0f, 0.0f}},
@@ -445,19 +590,17 @@ int main()
             indexedParams.startIndex = 3;
             indexedParams.baseVertex = 2;
             const std::size_t beforeIndexed = softwareSynthetic->GetVertexExecutionCountEXT();
-            ExpectPixelPhaseRefusal(
-                [&]
-                {
-                    renderer.DrawIndexedPrimitivesEx(
-                        *indexedVertexBuffer, *indexBuffer, identity, identity, identity,
-                        PrimitiveType::TriangleList, 1, indexedParams);
-                },
-                "compiled indexed base/start route");
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            renderer.DrawIndexedPrimitivesEx(
+                *indexedVertexBuffer, *indexBuffer, identity, identity, identity,
+                PrimitiveType::TriangleList, 1, indexedParams);
             Check(softwareSynthetic->GetVertexExecutionCountEXT() == beforeIndexed + 3u,
                   "indexed base/start route did not execute exactly three vertices");
             Check(softwareSynthetic->GetLastVertexResultEXT().position ==
                       std::array<float, 4>{0.625f, 0.0f, 0.5f, 1.0f},
                   "indexed base/start route fetched the wrong final record");
+            Check(CountBackbufferColor(renderer, expectedTint) > 0,
+                  "compiled indexed route did not write pixel-shader COLOR0");
 
             struct PositionOnly
             {
@@ -493,19 +636,16 @@ int main()
             multiStreamParams.vertexStreams[1] =
                 GpuVertexStreamBinding{1, offsetsBuffer.get(), 16, 16, 2, 0, 6, true};
             const std::size_t beforeMulti = softwareSynthetic->GetVertexExecutionCountEXT();
-            ExpectPixelPhaseRefusal(
-                [&]
-                {
-                    renderer.DrawPrimitivesEx(*positionsBuffer, identity, identity, identity,
-                                              PrimitiveType::TriangleList, 1,
-                                              multiStreamParams);
-                },
-                "compiled multi-stream offset route");
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            renderer.DrawPrimitivesEx(*positionsBuffer, identity, identity, identity,
+                                      PrimitiveType::TriangleList, 1, multiStreamParams);
             Check(softwareSynthetic->GetVertexExecutionCountEXT() == beforeMulti + 3u,
                   "multi-stream route did not execute exactly three vertices");
             Check(softwareSynthetic->GetLastVertexResultEXT().position ==
                       std::array<float, 4>{0.75f, 0.0f, 0.5f, 1.0f},
                   "multi-stream route did not combine its independent offsets");
+            Check(CountBackbufferColor(renderer, expectedTint) > 0,
+                  "compiled multi-stream route did not write pixel-shader COLOR0");
 
             const PositionOnly instancePositions[] = {
                 {{-0.75f, 0.75f, 0.5f, 1.0f}},
@@ -534,19 +674,52 @@ int main()
             instanceParams.vertexStreams[1] =
                 GpuVertexStreamBinding{1, instanceBuffer.get(), 16, 16, 0, 1, 2, true};
             const std::size_t beforeInstances = softwareSynthetic->GetVertexExecutionCountEXT();
-            ExpectPixelPhaseRefusal(
-                [&]
-                {
-                    renderer.DrawInstancedPrimitivesEx(
-                        *instancePositionBuffer, *instanceIndexBuffer, identity, identity, identity,
-                        PrimitiveType::TriangleList, 1, 2, instanceParams);
-                },
-                "compiled instanced divisor route");
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            renderer.DrawInstancedPrimitivesEx(
+                *instancePositionBuffer, *instanceIndexBuffer, identity, identity, identity,
+                PrimitiveType::TriangleList, 1, 2, instanceParams);
             Check(softwareSynthetic->GetVertexExecutionCountEXT() == beforeInstances + 6u,
                   "instanced route did not execute three vertices for each instance");
             Check(softwareSynthetic->GetLastVertexResultEXT().position ==
                       std::array<float, 4>{0.75f, 0.0f, 0.5f, 1.0f},
                   "instanced route did not advance the per-instance semantic");
+            Check(CountBackbufferColor(renderer, expectedTint) > 0,
+                  "compiled instanced route did not write pixel-shader COLOR0");
+
+            const float blendedTint[4] = {1.0f, 0.0f, 0.0f, 0.5f};
+            synthetic->SetParameterValue(FindParameter(*synthetic, "Tint"), blendedTint,
+                                         sizeof(blendedTint));
+            synthetic->ApplyPass(1, {}, syntheticChanges);
+            renderer.ApplyBlendState(4, 0, 5, 1, 0, 0, BlendWriteState{});
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, 1.0f);
+            renderer.DrawPrimitivesEx(*staged, identity, identity, identity,
+                                      PrimitiveType::TriangleList, 1, stagedParams);
+            Check(CountBackbufferColor(renderer, {128u, 0u, 128u, 128u}) > 0,
+                  "compiled COLOR0 bypassed the active independent blend equation");
+
+            synthetic->SetParameterValue(FindParameter(*synthetic, "Tint"), syntheticTint,
+                                         sizeof(syntheticTint));
+            synthetic->ApplyPass(1, {}, syntheticChanges);
+            BlendWriteState greenOnly;
+            greenOnly.colorWriteChannels[0] = 2;
+            renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, greenOnly);
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            renderer.DrawPrimitivesEx(*staged, identity, identity, identity,
+                                      PrimitiveType::TriangleList, 1, stagedParams);
+            Check(CountBackbufferColor(renderer, {0u, 128u, 0u, 255u}) > 0,
+                  "compiled COLOR0 bypassed ColorWriteChannels0");
+
+            renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, BlendWriteState{});
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 0.4f);
+            renderer.DrawPrimitivesEx(*staged, identity, identity, identity,
+                                      PrimitiveType::TriangleList, 1, stagedParams);
+            Check(CountBackbufferColor(renderer, expectedTint) == 0,
+                  "compiled COLOR0 ignored a failing depth comparison");
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 0.6f);
+            renderer.DrawPrimitivesEx(*staged, identity, identity, identity,
+                                      PrimitiveType::TriangleList, 1, stagedParams);
+            Check(CountBackbufferColor(renderer, expectedTint) > 0,
+                  "compiled COLOR0 did not reach a passing depth fragment");
         }
 
         auto runtime = LoadRuntime(renderer, stockDirectory, "CnaConformanceEffect.fxb");
