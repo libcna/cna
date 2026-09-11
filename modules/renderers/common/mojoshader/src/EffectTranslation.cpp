@@ -623,6 +623,7 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
         bool blendChanged = false;
         bool depthChanged = false;
         bool rasterizerChanged = false;
+        std::unordered_map<std::uint32_t, std::size_t> bumpChanges;
         for (unsigned int i = 0; i < stateChanges.render_state_change_count; ++i)
         {
             const MOJOSHADER_effectState& state = stateChanges.render_state_changes[i];
@@ -823,6 +824,49 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                         ToBlendFunction(*state.value.valuesBO));
                     blendChanged = true;
                     break;
+                case MOJOSHADER_RS_BUMPENVMAT00:
+                case MOJOSHADER_RS_BUMPENVMAT01:
+                case MOJOSHADER_RS_BUMPENVMAT10:
+                case MOJOSHADER_RS_BUMPENVMAT11:
+                case MOJOSHADER_RS_BUMPENVLSCALE:
+                case MOJOSHADER_RS_BUMPENVLOFFSET:
+                {
+                    if (state.index >= static_cast<unsigned int>(SamplerStateCollection::MaxSamplers))
+                    {
+                        throw std::runtime_error(
+                            "Compiled effect: bump-environment stage exceeds the XNA slot limit.");
+                    }
+                    auto found = bumpChanges.find(state.index);
+                    if (found == bumpChanges.end())
+                    {
+                        found = bumpChanges.emplace(
+                            state.index, changes.legacyBumpMapEnvs.size()).first;
+                        changes.legacyBumpMapEnvs.push_back({state.index, 0, {}});
+                    }
+                    auto& change = changes.legacyBumpMapEnvs[found->second];
+                    const float value = state.value.valuesF[0];
+                    std::uint8_t bit = 0;
+                    if (state.type >= MOJOSHADER_RS_BUMPENVMAT00 &&
+                        state.type <= MOJOSHADER_RS_BUMPENVMAT11)
+                    {
+                        const std::size_t component = static_cast<std::size_t>(
+                            state.type - MOJOSHADER_RS_BUMPENVMAT00);
+                        change.state.matrix[component] = value;
+                        bit = static_cast<std::uint8_t>(1u << component);
+                    }
+                    else if (state.type == MOJOSHADER_RS_BUMPENVLSCALE)
+                    {
+                        change.state.luminanceScale = value;
+                        bit = 1u << 4u;
+                    }
+                    else
+                    {
+                        change.state.luminanceOffset = value;
+                        bit = 1u << 5u;
+                    }
+                    change.assignedMask = static_cast<std::uint8_t>(change.assignedMask | bit);
+                    break;
+                }
                 default:
                     throw std::runtime_error(
                         "Compiled effect: unsupported render state " +

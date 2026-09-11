@@ -2562,6 +2562,136 @@ namespace
               "compiled ps_1_2 TEXDP3 did not replicate its dot product to RGBA");
     }
 
+    void CheckCompiledLegacyBumpEnvironment()
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        using Operation = CNA::TestSupport::SyntheticLegacyBumpEnvironment;
+
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            PresentationParameters());
+        Texture2D texture(device, 8, 8, true, SurfaceFormat::Color);
+        std::vector<Color> texels(64, Color::Red);
+        for (int y = 0; y < 4; ++y)
+            for (int x = 4; x < 8; ++x)
+                texels[static_cast<std::size_t>(y * 8 + x)] = Color::Green;
+        for (int y = 4; y < 8; ++y)
+            for (int x = 0; x < 4; ++x)
+                texels[static_cast<std::size_t>(y * 8 + x)] = Color::Blue;
+        for (int y = 4; y < 8; ++y)
+            for (int x = 4; x < 8; ++x)
+                texels[static_cast<std::size_t>(y * 8 + x)] = Color::Yellow;
+        texture.SetData(texels.data(), static_cast<int>(texels.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](Operation operation,
+                                const std::vector<CNA::TestSupport::SyntheticRenderState>& states,
+                                float rightU = .75f)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .75f, .25f, .75f}, {-1, -1, 0, .75f, .25f, .75f},
+                { 1, -1, 0, rightU, .25f, .75f}, {-1,  1, 0, .75f, .25f, .75f},
+                { 1, -1, 0, rightU, .25f, .75f}, { 1,  1, 0, rightU, .25f, .75f},
+            };
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = operation != Operation::Arithmetic;
+            options.samplerRegister = 1;
+            options.pixelShaderLegacyBumpEnvironment = operation;
+            options.renderStates = states;
+            if (options.includeSampler)
+            {
+                options.samplerStates = {
+                    {Fx::SampMagFilter, Fx::FilterPoint},
+                    {Fx::SampMinFilter, Fx::FilterPoint},
+                    {Fx::SampMipFilter, Fx::FilterNone},
+                    {Fx::SampAddressU, Fx::AddressClamp},
+                    {Fx::SampAddressV, Fx::AddressClamp},
+                };
+            }
+            auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+                device, CNA::TestSupport::BuildSyntheticEffect(options));
+            effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            if (options.includeSampler)
+                effect->getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle probe(2, 2, 1, 1);
+            target.GetData(0, &probe, &centre, 0, 1);
+            return centre;
+        };
+        const auto textureStates = [](float m00, float m01, float m10, float m11)
+        {
+            return std::vector<CNA::TestSupport::SyntheticRenderState>{
+                {Fx::RsBumpEnvMat00, CNA::TestSupport::FloatBits(m00), true, 1},
+                {Fx::RsBumpEnvMat01, CNA::TestSupport::FloatBits(m01), true, 1},
+                {Fx::RsBumpEnvMat10, CNA::TestSupport::FloatBits(m10), true, 1},
+                {Fx::RsBumpEnvMat11, CNA::TestSupport::FloatBits(m11), true, 1},
+            };
+        };
+
+        Check(render(Operation::Texture, textureStates(1, 0, 0, 0)) == Color::Green,
+              "compiled TEXBEM ignored BUMPENVMAT00");
+        Check(render(Operation::Texture, textureStates(0, 0, -1, 0)) == Color::Green,
+              "compiled TEXBEM ignored BUMPENVMAT10");
+        Check(render(Operation::Texture, textureStates(0, 1, 0, 0)) == Color::Blue,
+              "compiled TEXBEM ignored BUMPENVMAT01");
+        Check(render(Operation::Texture, textureStates(0, 0, 0, -1)) == Color::Blue,
+              "compiled TEXBEM ignored BUMPENVMAT11");
+        Check(render(Operation::Texture, textureStates(0, 0, 0, 0), 8.75f) == Color::Red,
+              "compiled TEXBEM LOD used source derivatives removed by a zero matrix");
+        Check(render(Operation::Texture, textureStates(1, 0, 0, 0), 8.75f) == Color::Blue,
+              "compiled TEXBEM LOD ignored matrix-transformed source derivatives");
+        Check(render(Operation::Texture, {}) == Color::Green,
+              "compiled TEXBEM lost device bump state across effects");
+
+        auto luminanceStates = textureStates(0, 0, 0, 0);
+        luminanceStates.push_back(
+            {Fx::RsBumpEnvLScale, CNA::TestSupport::FloatBits(.5f), true, 1});
+        luminanceStates.push_back(
+            {Fx::RsBumpEnvLOffset, CNA::TestSupport::FloatBits(.25f), true, 1});
+        const Color luminance = render(Operation::TextureLuminance, luminanceStates);
+        Check(std::abs(static_cast<int>(luminance.getRProperty()) - 128) <= 1 &&
+                  luminance.getGProperty() == 0 && luminance.getBProperty() == 0 &&
+                  std::abs(static_cast<int>(luminance.getAProperty()) - 128) <= 1,
+              "compiled TEXBEML ignored luminance scale/offset");
+
+        const std::vector<CNA::TestSupport::SyntheticRenderState> arithmeticStates = {
+            {Fx::RsBumpEnvMat00, CNA::TestSupport::FloatBits(.4f), true, 0},
+            {Fx::RsBumpEnvMat01, CNA::TestSupport::FloatBits(.8f), true, 0},
+            {Fx::RsBumpEnvMat10, CNA::TestSupport::FloatBits(.2f), true, 0},
+            {Fx::RsBumpEnvMat11, CNA::TestSupport::FloatBits(.6f), true, 0},
+        };
+        const Color arithmetic = render(Operation::Arithmetic, arithmeticStates);
+        Check(std::abs(static_cast<int>(arithmetic.getRProperty()) - 89) <= 1 &&
+                  std::abs(static_cast<int>(arithmetic.getGProperty()) - 191) <= 1 &&
+                  std::abs(static_cast<int>(arithmetic.getBProperty()) - 77) <= 1 &&
+                  std::abs(static_cast<int>(arithmetic.getAProperty()) - 102) <= 1,
+              "compiled ps_1_4 BEM ignored the destination-stage matrix");
+    }
+
     void CheckCompiledSamplerRasterization(SoftwareRenderer& renderer)
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
@@ -3381,6 +3511,7 @@ int main()
         CheckCompiledLegacyDepthOutputs();
         CheckCompiledLegacyTextureRemap();
         CheckCompiledLegacyDependentTextures();
+        CheckCompiledLegacyBumpEnvironment();
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
         CheckCompiledLineAndWireframeRasterization(renderer);

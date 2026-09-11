@@ -27,11 +27,13 @@ namespace
     bool IsValidRenderStateType(std::uint32_t value)
     {
         // MojoShader's Effect ABI numbers the ordinary D3D9 render states contiguously from
-        // ZENABLE through BLENDOPALPHA, then reserves a gap before its two shader pseudo-states.
-        // The legacy compiler also emits 160 for PixelShaderConstant assignments and 178 for
-        // SetSampler metadata. They must remain distinguishable from ordinary enum values even
-        // when a backend cannot execute the corresponding Shader Model 1 assignment.
-        return value <= 102u || value == 146u || value == 147u || value == 160u ||
+        // ZENABLE through BLENDOPALPHA, then uses six values in the gap for the legacy texture-
+        // stage bump matrix/luminance assignments before its two shader pseudo-states. The legacy
+        // compiler also emits 160 for PixelShaderConstant assignments and 178 for SetSampler
+        // metadata. They must remain distinguishable from ordinary enum values even when a
+        // backend cannot execute the corresponding Shader Model 1 assignment.
+        return value <= 102u || (value >= 112u && value <= 115u) || value == 117u ||
+            value == 118u || value == 146u || value == 147u || value == 160u ||
             value == 178u;
     }
 

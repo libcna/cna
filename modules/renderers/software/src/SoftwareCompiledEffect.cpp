@@ -502,9 +502,14 @@ namespace CNA::Internal::Renderers::Software
         }
     };
 
-    SoftwareCompiledEffect::SoftwareCompiledEffect(const std::uint8_t* effectCode,
-                                                   std::size_t effectCodeLength)
-        : parserContext_(std::make_unique<ParserContext>())
+    SoftwareCompiledEffect::SoftwareCompiledEffect(
+        const std::uint8_t* effectCode, std::size_t effectCodeLength,
+        std::shared_ptr<std::array<CompiledEffectLegacyBumpMapEnvState, 16>> legacyBumpMapEnvs)
+        : parserContext_(std::make_unique<ParserContext>()),
+          legacyBumpMapEnvs_(legacyBumpMapEnvs != nullptr
+              ? std::move(legacyBumpMapEnvs)
+              : std::make_shared<
+                    std::array<CompiledEffectLegacyBumpMapEnvState, 16>>())
     {
         if (effectCode == nullptr || effectCodeLength == 0u ||
             effectCodeLength > std::numeric_limits<std::uint32_t>::max())
@@ -522,6 +527,7 @@ namespace CNA::Internal::Renderers::Software
     SoftwareCompiledEffect::SoftwareCompiledEffect(const SoftwareCompiledEffect& cloneSource, int)
         : parserContext_(std::make_unique<ParserContext>()), effectCode_(cloneSource.effectCode_),
           parameterValues_(cloneSource.parameterValues_), textures_(cloneSource.textures_),
+          legacyBumpMapEnvs_(cloneSource.legacyBumpMapEnvs_),
           techniqueIndex_(cloneSource.techniqueIndex_)
     {
         CreateEffect();
@@ -680,6 +686,17 @@ namespace CNA::Internal::Renderers::Software
         MojoShaderEffect::TranslateLegacySamplerAssignments(effectData_, stateChanges_, maxSlots,
                                                             samplerTextureParameters_, textures_,
                                                             deviceState, changes);
+        for (const auto& change : changes.legacyBumpMapEnvs)
+        {
+            auto& state = (*legacyBumpMapEnvs_)[change.slot];
+            for (std::size_t component = 0; component < state.matrix.size(); ++component)
+                if ((change.assignedMask & (1u << component)) != 0u)
+                    state.matrix[component] = change.state.matrix[component];
+            if ((change.assignedMask & (1u << 4u)) != 0u)
+                state.luminanceScale = change.state.luminanceScale;
+            if ((change.assignedMask & (1u << 5u)) != 0u)
+                state.luminanceOffset = change.state.luminanceOffset;
+        }
     }
 
     const SoftwareShaderProgramEXT* SoftwareCompiledEffect::GetVertexProgramEXT() const noexcept
@@ -747,7 +764,8 @@ namespace CNA::Internal::Renderers::Software
         return ExecuteSoftwarePixelShaderEXT(
             *program, GetFloatRegistersEXT(SoftwareShaderStageEXT::Pixel),
             GetIntegerRegistersEXT(SoftwareShaderStageEXT::Pixel),
-            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs, sampler, builtins);
+            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs, sampler, builtins,
+            *legacyBumpMapEnvs_);
     }
 
     std::array<SoftwarePixelShaderResultEXT, 4> SoftwareCompiledEffect::ExecutePixelQuadEXT(
@@ -761,7 +779,8 @@ namespace CNA::Internal::Renderers::Software
         return ExecuteSoftwarePixelShaderQuadEXT(
             *program, GetFloatRegistersEXT(SoftwareShaderStageEXT::Pixel),
             GetIntegerRegistersEXT(SoftwareShaderStageEXT::Pixel),
-            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs, sampler, builtins);
+            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs, sampler, builtins,
+            *legacyBumpMapEnvs_);
     }
 
     std::size_t SoftwareCompiledEffect::GetVertexExecutionCountEXT() const noexcept

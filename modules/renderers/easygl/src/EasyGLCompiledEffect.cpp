@@ -669,6 +669,17 @@ namespace CNA::Internal::Renderers::EasyGL
         MojoShaderEffect::TranslateLegacySamplerAssignments(
             effectData_, stateChanges_, maxSlots, samplerTextureParameters_, textures_,
             deviceState, changes);
+        for (const auto& change : changes.legacyBumpMapEnvs)
+        {
+            auto& state = renderer_.compiledLegacyBumpMapEnvs_[change.slot];
+            for (std::size_t component = 0; component < state.matrix.size(); ++component)
+                if ((change.assignedMask & (1u << component)) != 0u)
+                    state.matrix[component] = change.state.matrix[component];
+            if ((change.assignedMask & (1u << 4u)) != 0u)
+                state.luminanceScale = change.state.luminanceScale;
+            if ((change.assignedMask & (1u << 5u)) != 0u)
+                state.luminanceOffset = change.state.luminanceOffset;
+        }
 
         // plans/plan_fx.md FX-062: fold this pass's assignments into the persistent per-slot state a
         // draw route reads through GetBoundSamplerEXT. Matches real XNA behavior -- a slot this
@@ -1005,6 +1016,11 @@ namespace CNA::Internal::Renderers::EasyGL
         for (int i = 0; i < pixelParseData->sampler_count; ++i)
         {
             const MOJOSHADER_sampler& sampler = pixelParseData->samplers[i];
+            // A ps_1_4 BEM instruction needs the destination-numbered bump matrix uniform but
+            // performs no texture lookup. The managed MojoShader patch marks that synthetic
+            // uniform carrier with bit 1 while ordinary TEXBEM/L sampling uses bit 0.
+            if ((sampler.texbem & 2) != 0 && (sampler.texbem & 1) == 0)
+                continue;
             Texture* texture = nullptr;
             Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
             bool samplerAssigned = false;
@@ -1108,6 +1124,19 @@ namespace CNA::Internal::Renderers::EasyGL
                                      samplerState.getMaxMipLevelProperty(),
                                      samplerState.getMipMapLevelOfDetailBiasProperty());
             }
+        }
+
+        for (int i = 0; i < pixelParseData->sampler_count; ++i)
+        {
+            const MOJOSHADER_sampler& sampler = pixelParseData->samplers[i];
+            if (sampler.texbem == 0 || sampler.index < 0 || sampler.index >= 16)
+                continue;
+            const auto& state =
+                compiledLegacyBumpMapEnvs_[static_cast<std::size_t>(sampler.index)];
+            MOJOSHADER_glSetLegacyBumpMapEnv(
+                static_cast<unsigned int>(sampler.index), state.matrix[0], state.matrix[1],
+                state.matrix[2], state.matrix[3], state.luminanceScale,
+                state.luminanceOffset);
         }
 
         // Pushes uniforms from the shared register files (already populated by ApplyPass()'s

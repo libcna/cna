@@ -168,6 +168,12 @@ namespace CNA::Internal::Renderers::Software
         /** @brief Optional reflection performed after the legacy matrix product. */
         SoftwareLegacyTextureReflectionEXT legacyReflection =
             SoftwareLegacyTextureReflectionEXT::None;
+        /** @brief Whether TEXBEM/L combined a destination-stage base coordinate with its source. */
+        bool legacyBumpCoordinates = false;
+        /** @brief Destination-stage raw coordinate register used as the TEXBEM/L base. */
+        std::uint8_t legacyBumpBaseRegister = 0;
+        /** @brief BUMPENVMAT00/01/10/11 applied to source red/green. */
+        std::array<float, 4> legacyBumpMatrix{};
         /** @brief Constant eye ray used when @ref legacyReflection is `ConstantEye`. */
         std::array<float, 3> legacyReflectionEye{};
         /** @brief Declared sampler dimensionality. */
@@ -235,6 +241,7 @@ namespace CNA::Internal::Renderers::Software
      * @param inputs Perspective-correct declaration-semantic values for one fragment.
      * @param sampler Renderer-side texture provider, or null for texture-free programs.
      * @param builtins Rasterizer-provided VPOS/VFACE values, or null for defaults.
+     * @param legacyBumpMapEnvs Persistent legacy texture-stage bump-environment values.
      * @return Colour/depth outputs and discard state.
      * @throws std::runtime_error if a texture instruction has no sampler provider.
      */
@@ -244,7 +251,8 @@ namespace CNA::Internal::Renderers::Software
         std::span<const unsigned char> booleanRegisters,
         std::span<const SoftwareShaderSemanticValueEXT> inputs,
         const ISoftwarePixelSamplerEXT* sampler = nullptr,
-        const SoftwarePixelShaderBuiltinsEXT* builtins = nullptr);
+        const SoftwarePixelShaderBuiltinsEXT* builtins = nullptr,
+        std::span<const CompiledEffectLegacyBumpMapEnvState> legacyBumpMapEnvs = {});
 
     /**
      * @brief Executes four lock-step Direct3D pixel invocations in one 2x2 quad.
@@ -256,6 +264,7 @@ namespace CNA::Internal::Renderers::Software
      * bottom-left, bottom-right order.
      * @param sampler Renderer-side texture provider, or null for texture-free programs.
      * @param builtins Rasterizer-provided VPOS/VFACE values in lane order, or null for defaults.
+     * @param legacyBumpMapEnvs Persistent legacy texture-stage bump-environment values.
      * @return Colour/depth outputs and discard state for the four lanes in input order.
      */
     CNAEXT [[nodiscard]] std::array<SoftwarePixelShaderResultEXT, 4>
@@ -265,7 +274,8 @@ namespace CNA::Internal::Renderers::Software
         std::span<const unsigned char> booleanRegisters,
         const std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4>& inputs,
         const ISoftwarePixelSamplerEXT* sampler = nullptr,
-        const std::array<SoftwarePixelShaderBuiltinsEXT, 4>* builtins = nullptr);
+        const std::array<SoftwarePixelShaderBuiltinsEXT, 4>* builtins = nullptr,
+        std::span<const CompiledEffectLegacyBumpMapEnvState> legacyBumpMapEnvs = {});
 
     /** @brief A validated Direct3D 9 shader program prepared for the later CPU
      * execution phases. */
@@ -308,8 +318,12 @@ namespace CNA::Internal::Renderers::Software
          * context.
          * @param effectCode Compiled effect bytes.
          * @param effectCodeLength Number of bytes at @p effectCode.
+         * @param legacyBumpMapEnvs Renderer-wide persistent texture-stage bump state.
          */
-        SoftwareCompiledEffect(const std::uint8_t* effectCode, std::size_t effectCodeLength);
+        SoftwareCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeLength,
+            std::shared_ptr<std::array<CompiledEffectLegacyBumpMapEnvState, 16>>
+                legacyBumpMapEnvs = {});
 
         /** @brief Releases the parsed Effect graph and its retained shader programs.
          */
@@ -470,6 +484,8 @@ namespace CNA::Internal::Renderers::Software
         std::vector<std::vector<std::uint8_t>> parameterValues_;
         std::vector<Texture*> textures_;
         std::unordered_map<std::string, std::uint32_t> samplerTextureParameters_;
+        std::shared_ptr<std::array<CompiledEffectLegacyBumpMapEnvState, 16>>
+            legacyBumpMapEnvs_;
         CompiledEffectDescription description_;
         MOJOSHADER_effectStateChanges stateChanges_{};
         std::uint32_t techniqueIndex_ = 0;

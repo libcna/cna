@@ -174,11 +174,14 @@ public:
                std::span<const SoftwareShaderSemanticValueEXT> inputs,
                const ISoftwarePixelSamplerEXT *sampler,
                const SoftwarePixelShaderBuiltinsEXT *builtins = nullptr,
+               std::span<const CompiledEffectLegacyBumpMapEnvState>
+                   legacyBumpMapEnvs = {},
                std::span<const DerivativeValue> derivativeValues = {},
                std::vector<DerivativeValue> *derivativeSources = nullptr)
       : program_(program), floatRegisters_(floatRegisters),
         integerRegisters_(integerRegisters),
         booleanRegisters_(booleanRegisters), sampler_(sampler), builtins_(builtins),
+        legacyBumpMapEnvs_(legacyBumpMapEnvs),
         derivativeValues_(derivativeValues), derivativeSources_(derivativeSources) {
     if (program.stage != SoftwareShaderStageEXT::Pixel)
       throw std::invalid_argument("Software pixel shader: a vertex program "
@@ -940,7 +943,10 @@ private:
                                   {-1, -1, -1},
                               SoftwareLegacyTextureReflectionEXT legacyReflection =
                                   SoftwareLegacyTextureReflectionEXT::None,
-                              const std::array<float, 3> &legacyReflectionEye = {}) const {
+                              const std::array<float, 3> &legacyReflectionEye = {},
+                              bool legacyBumpCoordinates = false,
+                              std::uint8_t legacyBumpBaseRegister = 0,
+                              const std::array<float, 4> &legacyBumpMatrix = {}) const {
     if (sampler_ == nullptr)
       throw std::runtime_error(
           "Software pixel shader: texture instruction has no sampler provider.");
@@ -971,6 +977,9 @@ private:
     request.legacyMatrixRowRegisters = legacyMatrixRows;
     request.legacyReflection = legacyReflection;
     request.legacyReflectionEye = legacyReflectionEye;
+    request.legacyBumpCoordinates = legacyBumpCoordinates;
+    request.legacyBumpBaseRegister = legacyBumpBaseRegister;
+    request.legacyBumpMatrix = legacyBumpMatrix;
     request.samplerType = SamplerType(samplerRegister);
     request.coordinate = coordinate;
     request.lodMode = lodMode;
@@ -1109,8 +1118,12 @@ private:
     const auto &tokens = instruction.tokens;
     if (tokens.empty())
       throw std::runtime_error("Software pixel shader: empty instruction.");
+    if (instruction.opcode == 0xFFFDu) {
+      secondPhase_ = true;
+      return;
+    }
     if (instruction.opcode == 0u || instruction.opcode == 31u ||
-        instruction.opcode == 0xFFFEu || instruction.opcode == 0xFFFDu)
+        instruction.opcode == 0xFFFEu)
       return;
     PrepareInstructionPredicate(instruction);
     if (instruction.opcode == 81u) {
@@ -1154,6 +1167,50 @@ private:
     }
     if (instruction.opcode == 66u) {
       ExecuteTextureInstruction(instruction);
+      return;
+    }
+    if (instruction.opcode == 67u || instruction.opcode == 68u) {
+      if (program_.majorVersion != 1u || program_.minorVersion >= 4u ||
+          program_.minorVersion < 1u || tokens.size() != 3u)
+        throw std::runtime_error(
+            "Software pixel shader: malformed TEXBEM/TEXBEML instruction.");
+      const Operand destination = DecodeDestination(tokens[1]);
+      std::size_t cursor = 2u;
+      RegisterType relativeType;
+      int relativeComponent = 0;
+      const Operand source = DecodeSource(tokens, cursor, program_.majorVersion,
+                                          relativeType, relativeComponent);
+      if (destination.type != RegisterType::Texture || source.relative ||
+          source.type != RegisterType::Texture || destination.number <= source.number ||
+          (program_.minorVersion < 2u && source.sourceModifier == 4u) ||
+          cursor != tokens.size())
+        throw std::runtime_error(
+            "Software pixel shader: invalid TEXBEM/TEXBEML operands.");
+      const CompiledEffectLegacyBumpMapEnvState state =
+          destination.number >= 0 &&
+                  static_cast<std::size_t>(destination.number) < legacyBumpMapEnvs_.size()
+              ? legacyBumpMapEnvs_[static_cast<std::size_t>(destination.number)]
+              : CompiledEffectLegacyBumpMapEnvState{};
+      const Vector base = ReadRaw(destination.type, destination.number);
+      const Vector perturbation = ReadSourceFromOperand(source);
+      const Vector coordinate = {
+          base[0] + state.matrix[0] * perturbation[0] +
+              state.matrix[2] * perturbation[1],
+          base[1] + state.matrix[1] * perturbation[0] +
+              state.matrix[3] * perturbation[1],
+          base[2], base[3]};
+      Vector result = Sample(
+          source, coordinate, destination.number, SoftwareTextureLodModeEXT::Implicit,
+          0.0f, {}, {}, {0xFFu, 0xFFu, 0xFFu}, {-1, -1, -1},
+          SoftwareLegacyTextureReflectionEXT::None, {}, true,
+          static_cast<std::uint8_t>(destination.number), state.matrix);
+      if (instruction.opcode == 68u) {
+        const float luminance = perturbation[2] * state.luminanceScale +
+                                state.luminanceOffset;
+        for (float &component : result)
+          component *= luminance;
+      }
+      Write(destination, result);
       return;
     }
     if (instruction.opcode == 69u || instruction.opcode == 70u) {
@@ -1427,6 +1484,29 @@ private:
       depthWritten_ = true;
       return;
     }
+    if (instruction.opcode == 89u) {
+      if (program_.majorVersion != 1u || program_.minorVersion != 4u ||
+          tokens.size() != 4u || instruction.coissue || secondPhase_ || bemExecuted_)
+        throw std::runtime_error("Software pixel shader: malformed ps_1_4 BEM instruction.");
+      const Operand destination = DecodeDestination(tokens[1]);
+      if (destination.type != RegisterType::Temporary || destination.writeMask != 0x3u ||
+          destination.number < 0 ||
+          static_cast<std::size_t>(destination.number) >= legacyBumpMapEnvs_.size())
+        throw std::runtime_error("Software pixel shader: invalid BEM destination.");
+      std::size_t cursor = 2u;
+      const Vector source0 = ReadSource(tokens, cursor);
+      const Vector source1 = ReadSource(tokens, cursor);
+      if (cursor != tokens.size())
+        throw std::runtime_error("Software pixel shader: malformed BEM operands.");
+      const auto &matrix =
+          legacyBumpMapEnvs_[static_cast<std::size_t>(destination.number)].matrix;
+      Vector result{};
+      result[0] = source0[0] + matrix[0] * source1[0] + matrix[2] * source1[1];
+      result[1] = source0[1] + matrix[1] * source1[0] + matrix[3] * source1[1];
+      Write(destination, result);
+      bemExecuted_ = true;
+      return;
+    }
 
     if (tokens.size() < 3u)
       throw std::runtime_error("Software pixel shader: malformed instruction.");
@@ -1670,6 +1750,7 @@ private:
   std::span<const unsigned char> booleanRegisters_;
   const ISoftwarePixelSamplerEXT *sampler_ = nullptr;
   const SoftwarePixelShaderBuiltinsEXT *builtins_ = nullptr;
+  std::span<const CompiledEffectLegacyBumpMapEnvState> legacyBumpMapEnvs_;
   std::span<const DerivativeValue> derivativeValues_;
   std::vector<DerivativeValue> *derivativeSources_ = nullptr;
   std::size_t derivativeCursor_ = 0;
@@ -1682,6 +1763,8 @@ private:
   float depthOutput_ = 0.0f;
   bool depthWritten_ = false;
   bool discarded_ = false;
+  bool secondPhase_ = false;
+  bool bemExecuted_ = false;
   std::array<float, 2> legacyTextureMatrixDots_{};
   std::size_t legacyTextureMatrixDotCount_ = 0u;
   std::array<int, 2> legacyTextureMatrixRows_{-1, -1};
@@ -1709,9 +1792,10 @@ SoftwarePixelShaderResultEXT ExecuteSoftwarePixelShaderEXT(
     std::span<const unsigned char> booleanRegisters,
     std::span<const SoftwareShaderSemanticValueEXT> inputs,
     const ISoftwarePixelSamplerEXT *sampler,
-    const SoftwarePixelShaderBuiltinsEXT *builtins) {
+    const SoftwarePixelShaderBuiltinsEXT *builtins,
+    std::span<const CompiledEffectLegacyBumpMapEnvState> legacyBumpMapEnvs) {
   return PixelMachine(program, floatRegisters, integerRegisters,
-                      booleanRegisters, inputs, sampler, builtins)
+                      booleanRegisters, inputs, sampler, builtins, legacyBumpMapEnvs)
       .Execute();
 }
 
@@ -1722,7 +1806,8 @@ std::array<SoftwarePixelShaderResultEXT, 4> ExecuteSoftwarePixelShaderQuadEXT(
     std::span<const unsigned char> booleanRegisters,
     const std::array<std::span<const SoftwareShaderSemanticValueEXT>, 4> &inputs,
     const ISoftwarePixelSamplerEXT *sampler,
-    const std::array<SoftwarePixelShaderBuiltinsEXT, 4> *builtins) {
+    const std::array<SoftwarePixelShaderBuiltinsEXT, 4> *builtins,
+    std::span<const CompiledEffectLegacyBumpMapEnvState> legacyBumpMapEnvs) {
   std::array<std::vector<DerivativeValue>, 4> values;
   std::array<std::vector<DerivativeValue>, 4> sources;
   std::array<SoftwarePixelShaderResultEXT, 4> results;
@@ -1734,7 +1819,7 @@ std::array<SoftwarePixelShaderResultEXT, 4> ExecuteSoftwarePixelShaderQuadEXT(
           builtins != nullptr ? &(*builtins)[lane] : nullptr;
       results[lane] = PixelMachine(program, floatRegisters, integerRegisters,
                                    booleanRegisters, inputs[lane], sampler, laneBuiltins,
-                                   values[lane], &sources[lane])
+                                   legacyBumpMapEnvs, values[lane], &sources[lane])
                           .Execute();
     }
 

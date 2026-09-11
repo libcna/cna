@@ -244,8 +244,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   ps_1_2/1.3 `TEXREG2RGB`, `TEXDP3TEX` and `TEXDP3` dependent operations. The shared fixture proves
   `_bx2` RGB volume coordinates and their implicit mip footprint, a dot-derived 1D lookup and mip,
   and exact scalar-to-RGBA replication; a managed MojoShader patch gives EasyGL the same bounded
-  translation and profile/register validation. Invalid marker placement/count and the remaining
-  bump-environment operations stay in the explicit profile backlog.
+  translation and profile/register validation. SOFTWARE-385 executes `TEXBEM`, `TEXBEML` and
+  ps_1_4 `BEM`, persists the six indexed texture-stage matrix/luminance values across pass
+  application, and derives CPU implicit LOD from the perturbed coordinates. Its managed MojoShader
+  patch adds the missing validation/GLSL, while EasyGL now uploads the stage values before drawing.
+  Invalid marker placement/count and other unproven profile cases stay in the explicit backlog.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.

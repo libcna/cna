@@ -1853,6 +1853,12 @@ namespace CNA::Internal::Renderers::Software
         /// REMED-GFX-150: the per-slot SamplerState the rasterizer's sampler consults. Previously
         /// ApplySamplerState stored nothing at all.
         SoftwareSamplerState samplerSlots_[kMaxSamplerSlots]{};
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        /// Device-wide D3D9 texture-stage state consumed by legacy compiled bump instructions.
+        std::shared_ptr<std::array<CompiledEffectLegacyBumpMapEnvState, kMaxSamplerSlots>>
+            compiledLegacyBumpMapEnvs_ = std::make_shared<
+                std::array<CompiledEffectLegacyBumpMapEnvState, kMaxSamplerSlots>>();
+#endif
 
         /// REMED-GFX-079: the active viewport as raster parameters for the 3D draw path --
         /// (x,y,w,h) from GetActiveViewport() plus the MinDepth/MaxDepth depth range (defaulting to

@@ -1,0 +1,250 @@
+diff --git a/mojoshader.h b/mojoshader.h
+--- a/mojoshader.h
++++ b/mojoshader.h
+@@ -1610,24 +1610,24 @@ DECLSPEC void MOJOSHADER_glUnmapUniformBufferMemory();
+ /*
+- * Set up the vector for the TEXBEM opcode. Most apps can ignore this API.
++ * Set up the vector for the TEXBEM, TEXBEML or BEM opcode. Most apps can ignore this API.
+  *
+  * Shader Model 1.1 through 1.3 had an instruction for "fake bump mapping"
+  *  called TEXBEM. To use it, you had to set some sampler states,
+  *  D3DTSS_BUMPENVMATxx, which would be referenced by the opcode.
+  *
+- * This functionality was removed from Shader Model 1.4 and later, because
+- *  it was special-purpose and limited. The functionality could be built on
+- *  more general opcodes, and the sampler state could be supplied in a more
+- *  general uniform.
++ * Shader Model 1.4 replaced the special texture lookup with the BEM arithmetic
++ *  instruction, which consumes the same matrix state. The functionality was
++ *  removed from later shader models, where general opcodes and uniforms can
++ *  express the same calculation.
+  *
+- * However, to support this opcode, we supply a way to specify that sampler
++ * However, to support these opcodes, we supply a way to specify that sampler
+  *  state, and the OpenGL glue code does the right thing to pass that
+  *  information to the shader.
+  *
+  * This call maps to IDirect3DDevice::SetTextureStageState() with the
+  *  D3DTSS_BUMPENVMAT00, D3DTSS_BUMPENVMAT01, D3DTSS_BUMPENVMAT10,
+  *  D3DTSS_BUMPENVMAT11, D3DTSS_BUMPENVLSCALE, and D3DTSS_BUMPENVLOFFSET
+- *  targets. This is only useful for Shader Model < 1.4 pixel shaders, if
+- *  they use the TEXBEM or TEXBEML opcode. If you aren't sure, you don't need
++ *  targets. This is only useful for Shader Model 1 pixel shaders that use
++ *  TEXBEM, TEXBEML or BEM. If you aren't sure, you don't need
+  *  this function.
+  *
+  * Like the rest of your uniforms, you must call MOJOSHADER_glProgramReady()
+@@ -2413,6 +2413,15 @@ typedef enum MOJOSHADER_renderStateType
+     MOJOSHADER_RS_DESTBLENDALPHA,
+     MOJOSHADER_RS_BLENDOPALPHA,
+ 
++    /* Direct3D 9 Effect Framework texture-stage state assignments consumed by
++     * legacy TEXBEM, TEXBEML and BEM pixel instructions. */
++    MOJOSHADER_RS_BUMPENVMAT00 = 112,
++    MOJOSHADER_RS_BUMPENVMAT01 = 113,
++    MOJOSHADER_RS_BUMPENVMAT10 = 114,
++    MOJOSHADER_RS_BUMPENVMAT11 = 115,
++    MOJOSHADER_RS_BUMPENVLSCALE = 117,
++    MOJOSHADER_RS_BUMPENVLOFFSET = 118,
++
+     /* These aren't really "states", but these numbers are
+      * referred to by MOJOSHADER_effectStateType as such.
+      */
+diff --git a/mojoshader_effects.c b/mojoshader_effects.c
+--- a/mojoshader_effects.c
++++ b/mojoshader_effects.c
+@@ -657,6 +657,10 @@ static int render_state_type_is_valid(const uint32 type)
+     return (type <= MOJOSHADER_RS_BLENDOPALPHA) || (type == MOJOSHADER_RS_VERTEXSHADER)
+         || (type == MOJOSHADER_RS_PIXELSHADER) || (type == MOJOSHADER_RS_PIXELSHADERCONSTANT)
+-        || (type == MOJOSHADER_RS_SETSAMPLER);
++        || (type == MOJOSHADER_RS_SETSAMPLER)
++        || ((type >= MOJOSHADER_RS_BUMPENVMAT00) &&
++            (type <= MOJOSHADER_RS_BUMPENVMAT11))
++        || (type == MOJOSHADER_RS_BUMPENVLSCALE)
++        || (type == MOJOSHADER_RS_BUMPENVLOFFSET);
+ } // render_state_type_is_valid
+ 
+ static int readstates(const uint32 numstates,
+diff --git a/profiles/mojoshader_profile.h b/profiles/mojoshader_profile.h
+--- a/profiles/mojoshader_profile.h
++++ b/profiles/mojoshader_profile.h
+@@ -120,6 +120,8 @@ typedef struct Context
+     int instruction_count;
+     uint32 instruction_controls;
+     uint32 previous_opcode;
++    int phase_count;
++    int bem_count;
+     int coissue;
+     int loops;
+     int reps;
+diff --git a/mojoshader_internal.h b/mojoshader_internal.h
+--- a/mojoshader_internal.h
++++ b/mojoshader_internal.h
+@@ -763,6 +763,6 @@ INSTRUCTION_STATE(TEXM3X3, "TEXM3X3", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(TEXDEPTH, "TEXDEPTH", 1, D, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(CMP, "CMP", 1, DSSS, MOJOSHADER_TYPE_PIXEL, 0xF)
+-INSTRUCTION(BEM, "BEM", 2, DSS, MOJOSHADER_TYPE_PIXEL, 0xF)
++INSTRUCTION_STATE(BEM, "BEM", 2, DSS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(DP2ADD, "DP2ADD", 2, DSSS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION(DSX, "DSX", 2, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION(DSY, "DSY", 2, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2091,6 +2091,26 @@ static void state_TEXLDL(Context *ctx)
+     } // else
+ } // state_TEXLDL
+ 
++static void state_BEM(Context *ctx)
++{
++    if (!shader_version_exactly(ctx, 1, 4))
++        fail(ctx, "BEM opcode only available in Shader Model 1.4");
++    if (ctx->phase_count != 0)
++        fail(ctx, "BEM opcode must appear in the first phase");
++    if (ctx->bem_count != 0)
++        fail(ctx, "BEM opcode may appear only once per shader");
++    if (ctx->coissue)
++        fail(ctx, "BEM opcode cannot be co-issued");
++    if ((ctx->dest_arg.regtype != REG_TYPE_TEMP) ||
++        (ctx->dest_arg.orig_writemask != 0x3))
++        fail(ctx, "BEM destination must be a temporary register with .rg mask");
++    if (!isfail(ctx))
++    {
++        add_sampler(ctx, ctx->dest_arg.regnum, TEXTURE_TYPE_2D, 2);
++        ctx->bem_count++;
++    } // if
++} // state_BEM
++
+ static void state_DP2ADD(Context *ctx)
+ {
+     if (!replicate_swizzle(ctx->source_args[2].swizzle))
+@@ -3030,13 +3050,15 @@ static int parse_phase_token(Context *ctx)
+ {
+-    // !!! FIXME: needs state; allow only one phase token per shader, I think?
+     if (SWAP32(*(ctx->tokens)) != 0x0000FFFD) // phase token always 0x0000FFFD.
+         return 0;  // not us, eat no tokens.
+ 
+     if ( (!shader_is_pixel(ctx)) || (!shader_version_exactly(ctx, 1, 4)) )
+         fail(ctx, "phase token only available in 1.4 pixel shaders");
+ 
+     if (!isfail(ctx))
++    {
++        ctx->phase_count++;
+         ctx->profile->phase_emitter(ctx);
++    } // if
+ 
+     return 1;
+ } // parse_phase_token
+@@ -3419,7 +3444,7 @@ static MOJOSHADER_sampler *build_samplers(Context *ctx)
+             retval[i].type = cvtD3DToMojoSamplerType((TextureType) item->index);
+             retval[i].index = item->regnum;
+             retval[i].name = alloc_varname(ctx, item);
+-            retval[i].texbem = (item->misc != 0) ? 1 : 0;
++            retval[i].texbem = item->misc;
+             item = item->next;
+         } // for
+     } // if
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -153,7 +153,7 @@ static char *make_GLSL_destarg_assign(Context *ctx, char *buf, const size_t len,
+     // CENTROID only allowed in DCL opcodes, which shouldn't come through here.
+     assert((arg->result_mod & MOD_CENTROID) == 0);
+ 
+-    char operation[256];
++    char operation[512];
+     va_list ap;
+     va_start(ap, fmt);
+     const int len = vsnprintf(operation, sizeof (operation), fmt, ap);
+@@ -2206,7 +2206,7 @@ void emit_GLSL_TEXBEM(Context *ctx)
+ {
+     DestArgInfo *info = &ctx->dest_arg;
+     char dst[64]; get_GLSL_destarg_varname(ctx, dst, sizeof (dst));
+-    char src[64]; get_GLSL_srcarg_varname(ctx, 0, src, sizeof (src));
++    char src[128]; make_GLSL_srcarg_string_vec3(ctx, 0, src, sizeof (src));
+     char sampler[64];
+     char code[512];
+ 
+@@ -2227,10 +2227,9 @@ void emit_GLSL_TEXBEM(Context *ctx)
+ 
+ void emit_GLSL_TEXBEML(Context *ctx)
+ {
+-    // !!! FIXME: this code counts on the register not having swizzles, etc.
+     DestArgInfo *info = &ctx->dest_arg;
+     char dst[64]; get_GLSL_destarg_varname(ctx, dst, sizeof (dst));
+-    char src[64]; get_GLSL_srcarg_varname(ctx, 0, src, sizeof (src));
++    char src[128]; make_GLSL_srcarg_string_vec3(ctx, 0, src, sizeof (src));
+     char sampler[64];
+     char code[512];
+ 
+@@ -2239,7 +2238,7 @@ void emit_GLSL_TEXBEML(Context *ctx)
+     make_GLSL_destarg_assign(ctx, code, sizeof (code),
+         "(texture2D(%s, vec2(%s.x + (%s_texbem.x * %s.x) + (%s_texbem.z * %s.y),"
+         " %s.y + (%s_texbem.y * %s.x) + (%s_texbem.w * %s.y)))) *"
+-        " ((%s.z * %s_texbeml.x) + %s_texbem.y)",
++        " ((%s.z * %s_texbeml.x) + %s_texbeml.y)",
+         sampler,
+         dst, sampler, src, sampler, src,
+         dst, sampler, src, sampler, src,
+@@ -2695,7 +2694,22 @@ void emit_GLSL_CMP(Context *ctx)
+     emit_GLSL_comparison_operations(ctx, ">= 0.0");
+ } // emit_GLSL_CMP
+ 
+-EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(BEM) // !!! FIXME
++void emit_GLSL_BEM(Context *ctx)
++{
++    const DestArgInfo *info = &ctx->dest_arg;
++    char src0[128]; make_GLSL_srcarg_string_vec2(ctx, 0, src0, sizeof (src0));
++    char src1[128]; make_GLSL_srcarg_string_vec2(ctx, 1, src1, sizeof (src1));
++    char sampler[64];
++    char code[512];
++    get_GLSL_varname_in_buf(ctx, REG_TYPE_SAMPLER, info->regnum,
++                            sampler, sizeof (sampler));
++    make_GLSL_destarg_assign(ctx, code, sizeof (code),
++        "vec2(%s.x + (%s_texbem.x * %s.x) + (%s_texbem.z * %s.y),"
++        " %s.y + (%s_texbem.y * %s.x) + (%s_texbem.w * %s.y))",
++        src0, sampler, src1, sampler, src1,
++        src0, sampler, src1, sampler, src1);
++    output_line(ctx, "%s", code);
++} // emit_GLSL_BEM
+ 
+ void emit_GLSL_DP2ADD(Context *ctx)
+ {
+diff --git a/mojoshader_opengl.c b/mojoshader_opengl.c
+--- a/mojoshader_opengl.c
++++ b/mojoshader_opengl.c
+@@ -157,7 +157,7 @@ typedef WINGDIAPI void (APIENTRYP PFNGLDISABLEPROC) (GLenum cap);
+ #define MAX_REG_FILE_F 8192
+ #define MAX_REG_FILE_I 2047
+ #define MAX_REG_FILE_B 2047
+-#define MAX_TEXBEMS 3  // ps_1_1 allows 4 texture stages, texbem can't use t0.
++#define MAX_TEXBEMS 16  // D3D9 exposes 16 texture stages; BEM may use destination r0.
+ 
+ struct MOJOSHADER_glContext
+ {
+@@ -3023,9 +3023,9 @@ void MOJOSHADER_glSetLegacyBumpMapEnv(unsigned int sampler, float mat00,
+                                       float lscale, float loffset)
+ {
+-    if ((sampler == 0) || (sampler > (MAX_TEXBEMS+1)))
++    if (sampler >= MAX_TEXBEMS)
+         return;
+ 
+-    GLfloat *dstf = ctx->texbem_state + (6 * (sampler-1));
++    GLfloat *dstf = ctx->texbem_state + (6 * sampler);
+     *(dstf++) = (GLfloat) mat00;
+     *(dstf++) = (GLfloat) mat01;
+     *(dstf++) = (GLfloat) mat10;
+@@ -3158,10 +3158,10 @@ void MOJOSHADER_glProgramReady(void)
+             for (i = 0; i < samp_count; i++)
+             {
+                 if (samps[i].texbem)
+                 {
+-                    assert(samps[i].index > 0);
+-                    assert(samps[i].index <= MAX_TEXBEMS);
+-                    memcpy(dstf, &ctx->texbem_state[6 * (samps[i].index-1)],
++                    assert(samps[i].index >= 0);
++                    assert(samps[i].index < MAX_TEXBEMS);
++                    memcpy(dstf, &ctx->texbem_state[6 * samps[i].index],
+                            sizeof (GLfloat) * 6);
+                     dstf[6] = 0.0f;
+                     dstf[7] = 0.0f;

@@ -2055,6 +2055,26 @@ namespace CNA::Internal::Renderers::Software
                         request.coordinateBias;
             }
 
+            if (request.legacyBumpCoordinates)
+            {
+                for (int vertex = 0; vertex < 3; ++vertex)
+                {
+                    std::array<float, 4> base{};
+                    if (!CompiledTextureRegisterValue(
+                            program, *vertices[vertex], request.legacyBumpBaseRegister, base))
+                        return false;
+                    coordinates[vertex][0] =
+                        base[0] + request.legacyBumpMatrix[0] * source[vertex][0] +
+                        request.legacyBumpMatrix[2] * source[vertex][1];
+                    coordinates[vertex][1] =
+                        base[1] + request.legacyBumpMatrix[1] * source[vertex][0] +
+                        request.legacyBumpMatrix[3] * source[vertex][1];
+                    coordinates[vertex][2] = base[2];
+                    coordinates[vertex][3] = base[3];
+                }
+                return true;
+            }
+
             int matrixRows = 0;
             while (matrixRows < 3 && request.legacyMatrixRowRegisters[matrixRows] >= 0)
                 ++matrixRows;
@@ -5920,7 +5940,8 @@ namespace CNA::Internal::Renderers::Software
         const std::uint8_t* effectCode, std::size_t effectCodeBytes)
     {
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
-        return std::make_unique<SoftwareCompiledEffect>(effectCode, effectCodeBytes);
+        return std::make_unique<SoftwareCompiledEffect>(
+            effectCode, effectCodeBytes, compiledLegacyBumpMapEnvs_);
 #else
         static_cast<void>(effectCode);
         static_cast<void>(effectCodeBytes);

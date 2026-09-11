@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -98,6 +99,28 @@ namespace CNA::Internal::Renderers
         Texture* texture = nullptr;
     };
 
+    /** @brief Six legacy texture-stage values consumed by TEXBEM, TEXBEML and BEM. */
+    struct CompiledEffectLegacyBumpMapEnvState
+    {
+        /** @brief Row-major 2x2 BUMPENVMAT00/01/10/11 values. */
+        std::array<float, 4> matrix{};
+        /** @brief TEXBEML blue-channel scale. */
+        float luminanceScale = 0.0f;
+        /** @brief TEXBEML luminance offset. */
+        float luminanceOffset = 0.0f;
+    };
+
+    /** @brief Partial texture-stage bump-environment assignment made by one compiled pass. */
+    struct CompiledEffectLegacyBumpMapEnvChange
+    {
+        /** @brief Destination texture stage/register whose legacy state changes. */
+        std::uint32_t slot = 0;
+        /** @brief Bits 0..5 identify matrix00/01/10/11, scale and offset assignments. */
+        std::uint8_t assignedMask = 0;
+        /** @brief Assigned values; components absent from @ref assignedMask are ignored. */
+        CompiledEffectLegacyBumpMapEnvState state;
+    };
+
     /**
      * @brief Device state a compiled pass starts from when it translates its state assignments.
      *
@@ -129,6 +152,7 @@ namespace CNA::Internal::Renderers
         bool rasterizerChanged = false;
         RasterizerState rasterizer;
         std::vector<CompiledEffectSamplerChange> samplers;
+        std::vector<CompiledEffectLegacyBumpMapEnvChange> legacyBumpMapEnvs;
     };
 
     /**

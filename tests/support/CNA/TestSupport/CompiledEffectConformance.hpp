@@ -2004,6 +2004,136 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Proves Effect pass-state plumbing and execution for legacy bump-environment opcodes.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyBumpEnvironmentContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        using Operation = SyntheticLegacyBumpEnvironment;
+
+        Texture2D texture(device, 8, 8, true, SurfaceFormat::Color);
+        std::vector<Color> texels(64, Color::Red);
+        for (int y = 0; y < 4; ++y)
+            for (int x = 4; x < 8; ++x)
+                texels[static_cast<std::size_t>(y * 8 + x)] = Color::Green;
+        for (int y = 4; y < 8; ++y)
+            for (int x = 0; x < 4; ++x)
+                texels[static_cast<std::size_t>(y * 8 + x)] = Color::Blue;
+        for (int y = 4; y < 8; ++y)
+            for (int x = 4; x < 8; ++x)
+                texels[static_cast<std::size_t>(y * 8 + x)] = Color::Yellow;
+        texture.SetData(texels.data(), static_cast<int>(texels.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](Operation operation,
+                                const std::vector<SyntheticRenderState>& states,
+                                float rightU = .75f)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .75f, .25f, .75f}, {-1, -1, 0, .75f, .25f, .75f},
+                { 1, -1, 0, rightU, .25f, .75f}, {-1,  1, 0, .75f, .25f, .75f},
+                { 1, -1, 0, rightU, .25f, .75f}, { 1,  1, 0, rightU, .25f, .75f},
+            };
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = operation != Operation::Arithmetic;
+            options.samplerRegister = 1;
+            options.pixelShaderLegacyBumpEnvironment = operation;
+            options.renderStates = states;
+            if (options.includeSampler)
+            {
+                options.samplerStates = {
+                    {Fx::SampMagFilter, Fx::FilterPoint},
+                    {Fx::SampMinFilter, Fx::FilterPoint},
+                    {Fx::SampMipFilter, Fx::FilterNone},
+                    {Fx::SampAddressU, Fx::AddressClamp},
+                    {Fx::SampAddressV, Fx::AddressClamp},
+                };
+            }
+            Effect effect(device, BuildSyntheticEffect(options));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            if (options.includeSampler)
+                effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle probe(2, 2, 1, 1);
+            target.GetData(0, &probe, &centre, 0, 1);
+            return centre;
+        };
+
+        const auto textureStates = [](float m00, float m01, float m10, float m11)
+        {
+            return std::vector<SyntheticRenderState>{
+                {Fx::RsBumpEnvMat00, FloatBits(m00), true, 1},
+                {Fx::RsBumpEnvMat01, FloatBits(m01), true, 1},
+                {Fx::RsBumpEnvMat10, FloatBits(m10), true, 1},
+                {Fx::RsBumpEnvMat11, FloatBits(m11), true, 1},
+            };
+        };
+        EXPECT_EQ(render(Operation::Texture, textureStates(1, 0, 0, 0)), Color::Green)
+            << "TEXBEM must apply BUMPENVMAT00 to signed source red";
+        EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, -1, 0)), Color::Green)
+            << "TEXBEM must apply BUMPENVMAT10 to signed source green";
+        EXPECT_EQ(render(Operation::Texture, textureStates(0, 1, 0, 0)), Color::Blue)
+            << "TEXBEM must apply BUMPENVMAT01 to signed source red";
+        EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 0, -1)), Color::Blue)
+            << "TEXBEM must apply BUMPENVMAT11 to signed source green";
+        EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 0, 0), 8.75f), Color::Red)
+            << "TEXBEM implicit LOD must ignore source derivatives removed by a zero matrix";
+        EXPECT_EQ(render(Operation::Texture, textureStates(1, 0, 0, 0), 8.75f), Color::Blue)
+            << "TEXBEM implicit LOD must include matrix-transformed source derivatives";
+        EXPECT_EQ(render(Operation::Texture, {}), Color::Green)
+            << "an unassigned pass must retain device texture-stage bump state";
+
+        auto luminanceStates = textureStates(0, 0, 0, 0);
+        luminanceStates.push_back({Fx::RsBumpEnvLScale, FloatBits(.5f), true, 1});
+        luminanceStates.push_back({Fx::RsBumpEnvLOffset, FloatBits(.25f), true, 1});
+        const Color luminance = render(Operation::TextureLuminance, luminanceStates);
+        EXPECT_NEAR(luminance.getRProperty(), 128, 1);
+        EXPECT_EQ(luminance.getGProperty(), 0);
+        EXPECT_EQ(luminance.getBProperty(), 0);
+        EXPECT_NEAR(luminance.getAProperty(), 128, 1)
+            << "TEXBEML must multiply the lookup by blue*luminanceScale+luminanceOffset";
+
+        const std::vector<SyntheticRenderState> arithmeticStates = {
+            {Fx::RsBumpEnvMat00, FloatBits(.4f), true, 0},
+            {Fx::RsBumpEnvMat01, FloatBits(.8f), true, 0},
+            {Fx::RsBumpEnvMat10, FloatBits(.2f), true, 0},
+            {Fx::RsBumpEnvMat11, FloatBits(.6f), true, 0},
+        };
+        const Color arithmetic = render(Operation::Arithmetic, arithmeticStates);
+        EXPECT_NEAR(arithmetic.getRProperty(), 89, 1);
+        EXPECT_NEAR(arithmetic.getGProperty(), 191, 1);
+        EXPECT_NEAR(arithmetic.getBProperty(), 77, 1);
+        EXPECT_NEAR(arithmetic.getAProperty(), 102, 1)
+            << "ps_1_4 BEM must use the destination-numbered texture-stage matrix";
+    }
+
+    /**
      * @brief Contract: a compiled effect reads attributes from more than one bound stream.
      *
      * plans/plan_fx.md FX-082. Only for backends reporting `MultiStreamVertexInput`. The fixture's
@@ -4134,6 +4264,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectLegacyDepthOutputContract` -- ps_1_3/1_4 depth replacement and zero divide
      * - `RunCompiledEffectLegacyTextureRemapContract` -- ps_1_2 AR/GB sampling and implicit LOD
      * - `RunCompiledEffectLegacyDependentTextureContract` -- ps_1_2 RGB/dot dependent sampling
+     * - `RunCompiledEffectLegacyBumpEnvironmentContract` -- TEXBEM/L/BEM and pass-stage state
      * - `RunCompiledEffectMultiStreamDrawContract` -- several streams, and their own offsets
      * - `RunCompiledEffectInstancingDrawContract` -- instanced draws, offsets and divisor reset
      * - `RunCompiledEffectSpriteBatchContract` -- SpriteBatch runs the effect, or refuses by name

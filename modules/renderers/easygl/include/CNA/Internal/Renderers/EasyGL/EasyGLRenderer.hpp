@@ -1092,6 +1092,9 @@ namespace CNA::Internal::Renderers::EasyGL
         // lazily on first CreateCompiledEffect() call (see GetMojoShaderContextEXT() in
         // EasyGLCompiledEffect.cpp).
         MOJOSHADER_glContext* mojoShaderContext_ = nullptr;
+        /// Device-wide legacy D3D9 texture-stage values consumed by TEXBEM/L and BEM uniforms.
+        std::array<CompiledEffectLegacyBumpMapEnvState, 16>
+            compiledLegacyBumpMapEnvs_{};
         /// plans/plan_fx.md FX-108: the meta-gl context generation `mojoShaderContext_` (and every
         /// program MojoShader linked inside it) belongs to. A recreated context bumps the counter,
         /// and every one of those programs is then a dead GL name -- see
