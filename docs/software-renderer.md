@@ -188,8 +188,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   SpriteBatch uses the original embedded XNA SpriteEffect vertex stage when a custom pass supplies
   only a pixel program, matching FNA's retained-stage behavior. SOFTWARE-358 routes compiled
   `LineList`, `LineStrip` and wireframe triangles through the same shader/output pipeline, including
-  perspective varyings, sampling, depth bias and per-sample MSAA tests. Full SM1-3 shader-profile,
-  lifecycle and content closure still remain. Software therefore advertises
+  perspective varyings, sampling, depth bias and per-sample MSAA tests. SOFTWARE-364 adds bounded
+  nested `LOOP`/`REP` execution, the integer `aL` register, all three structured break forms and
+  pixel-local integer definitions, including conditional-stack unwinding and inactive-loop skips.
+  Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.
   SOFTWARE-360 also corrects gradient sampling to D3D9's real `TEXLDD` opcode 93; SOFTWARE-363

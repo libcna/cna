@@ -197,15 +197,30 @@ namespace CNA::Internal::Renderers::Software
                     bool condition;
                     bool sawElse;
                 };
-                std::vector<ConditionalFrame> conditionals;
-                bool active = true;
-                for (const SoftwareShaderInstructionEXT& instruction : program_.instructions)
+                struct LoopFrame
                 {
+                    std::size_t bodyBegin;
+                    std::size_t end;
+                    std::size_t conditionalDepth;
+                    int remaining;
+                    int current;
+                    int step;
+                    int previousLoopRegister;
+                    std::uint16_t endOpcode;
+                };
+                std::vector<ConditionalFrame> conditionals;
+                std::vector<LoopFrame> loops;
+                bool active = true;
+                std::size_t pc = 0u;
+                while (pc < program_.instructions.size())
+                {
+                    const SoftwareShaderInstructionEXT& instruction = program_.instructions[pc];
                     if (instruction.opcode == 40u || instruction.opcode == 41u)
                     {
                         const bool condition = active && EvaluateConditional(instruction);
                         conditionals.push_back({active, condition, false});
                         active = active && condition;
+                        ++pc;
                     }
                     else if (instruction.opcode == 42u)
                     {
@@ -215,6 +230,7 @@ namespace CNA::Internal::Renderers::Software
                         conditionals.back().sawElse = true;
                         active = conditionals.back().parentActive &&
                                  !conditionals.back().condition;
+                        ++pc;
                     }
                     else if (instruction.opcode == 43u)
                     {
@@ -223,15 +239,106 @@ namespace CNA::Internal::Renderers::Software
                                 "Software vertex shader: ENDIF without a matching IF.");
                         active = conditionals.back().parentActive;
                         conditionals.pop_back();
+                        ++pc;
+                    }
+                    else if (instruction.opcode == 27u || instruction.opcode == 38u)
+                    {
+                        const std::size_t end = FindMatchingLoop(pc);
+                        if (!active)
+                        {
+                            pc = end + 1u;
+                            continue;
+                        }
+                        const auto parameters = ReadLoopParameters(instruction);
+                        const int iterationCount = parameters[0];
+                        if (iterationCount < 0 || iterationCount > 255)
+                        {
+                            throw std::runtime_error(
+                                "Software vertex shader: loop iteration count exceeds the D3D limit.");
+                        }
+                        if (iterationCount == 0)
+                        {
+                            pc = end + 1u;
+                            continue;
+                        }
+                        const bool isLoop = instruction.opcode == 27u;
+                        loops.push_back({pc + 1u, end, conditionals.size(), iterationCount,
+                                         parameters[1], parameters[2], loopRegister_,
+                                         static_cast<std::uint16_t>(isLoop ? 29u : 39u)});
+                        if (isLoop)
+                            loopRegister_ = parameters[1];
+                        ++pc;
+                    }
+                    else if (instruction.opcode == 29u || instruction.opcode == 39u)
+                    {
+                        if (loops.empty() || loops.back().end != pc ||
+                            loops.back().endOpcode != instruction.opcode)
+                        {
+                            throw std::runtime_error(
+                                "Software vertex shader: loop terminator without a matching loop.");
+                        }
+                        if (conditionals.size() != loops.back().conditionalDepth)
+                        {
+                            throw std::runtime_error(
+                                "Software vertex shader: conditional crosses a loop boundary.");
+                        }
+                        LoopFrame& frame = loops.back();
+                        --frame.remaining;
+                        if (frame.remaining > 0)
+                        {
+                            if (frame.endOpcode == 29u)
+                            {
+                                frame.current += frame.step;
+                                loopRegister_ = frame.current;
+                            }
+                            pc = frame.bodyBegin;
+                        }
+                        else
+                        {
+                            if (frame.endOpcode == 29u)
+                                loopRegister_ = frame.previousLoopRegister;
+                            loops.pop_back();
+                            ++pc;
+                        }
+                    }
+                    else if (instruction.opcode == 44u || instruction.opcode == 45u ||
+                             instruction.opcode == 96u)
+                    {
+                        if (!active)
+                        {
+                            ++pc;
+                            continue;
+                        }
+                        if (loops.empty())
+                            throw std::runtime_error(
+                                "Software vertex shader: BREAK without an active loop.");
+                        if (!EvaluateBreak(instruction))
+                        {
+                            ++pc;
+                            continue;
+                        }
+                        const LoopFrame frame = loops.back();
+                        conditionals.resize(frame.conditionalDepth);
+                        active = true;
+                        if (frame.endOpcode == 29u)
+                            loopRegister_ = frame.previousLoopRegister;
+                        loops.pop_back();
+                        pc = frame.end + 1u;
                     }
                     else if (active)
                     {
                         ExecuteInstruction(instruction);
+                        ++pc;
                     }
+                    else
+                        ++pc;
                 }
                 if (!conditionals.empty())
                     throw std::runtime_error(
                         "Software vertex shader: IF without a matching ENDIF.");
+                if (!loops.empty())
+                    throw std::runtime_error(
+                        "Software vertex shader: loop without a matching terminator.");
                 return BuildResult();
             }
 
@@ -438,6 +545,83 @@ namespace CNA::Internal::Renderers::Software
                     return source0[0] != 0.0f;
                 const Vector source1 = ReadSource(instruction.tokens, cursor);
                 return Compare(source0[0], source1[0], instruction.controls);
+            }
+
+            [[nodiscard]] std::size_t FindMatchingLoop(std::size_t start) const
+            {
+                const std::uint16_t expectedEnd =
+                    program_.instructions[start].opcode == 27u ? 29u : 39u;
+                int depth = 1;
+                for (std::size_t cursor = start + 1u; cursor < program_.instructions.size();
+                     ++cursor)
+                {
+                    const std::uint16_t opcode = program_.instructions[cursor].opcode;
+                    if (opcode == 27u || opcode == 38u)
+                        ++depth;
+                    else if (opcode == 29u || opcode == 39u)
+                    {
+                        --depth;
+                        if (depth == 0)
+                        {
+                            if (opcode != expectedEnd)
+                                throw std::runtime_error(
+                                    "Software vertex shader: mismatched loop terminator.");
+                            return cursor;
+                        }
+                    }
+                }
+                throw std::runtime_error(
+                    "Software vertex shader: loop without a matching terminator.");
+            }
+
+            [[nodiscard]] std::array<int, 3> ReadLoopParameters(
+                const SoftwareShaderInstructionEXT& instruction)
+            {
+                std::size_t cursor = 1u;
+                if (instruction.opcode == 27u)
+                    static_cast<void>(ReadSource(instruction.tokens, cursor));
+                const Vector source = ReadSource(instruction.tokens, cursor);
+                if (cursor != instruction.tokens.size())
+                    throw std::runtime_error(
+                        "Software vertex shader: malformed loop instruction.");
+                if (!std::isfinite(source[0]) || source[0] < 0.0f || source[0] > 255.0f)
+                    throw std::runtime_error(
+                        "Software vertex shader: loop iteration count exceeds the D3D limit.");
+                if (instruction.opcode == 38u)
+                    return {static_cast<int>(source[0]), 0, 0};
+                if (!std::isfinite(source[1]) || !std::isfinite(source[2]) ||
+                    !std::isfinite(source[3]) || source[1] < 0.0f || source[1] > 255.0f ||
+                    source[2] < -128.0f || source[2] > 127.0f || source[3] != 0.0f)
+                {
+                    throw std::runtime_error(
+                        "Software vertex shader: loop parameters exceed the D3D limits.");
+                }
+                return {static_cast<int>(source[0]), static_cast<int>(source[1]),
+                        static_cast<int>(source[2])};
+            }
+
+            [[nodiscard]] bool EvaluateBreak(
+                const SoftwareShaderInstructionEXT& instruction)
+            {
+                if (instruction.opcode == 44u)
+                {
+                    if (instruction.tokens.size() != 1u)
+                        throw std::runtime_error(
+                            "Software vertex shader: malformed BREAK instruction.");
+                    return true;
+                }
+                std::size_t cursor = 1u;
+                const Vector source0 = ReadSource(instruction.tokens, cursor);
+                bool result = source0[0] != 0.0f;
+                if (instruction.opcode == 45u)
+                {
+                    const Vector source1 = ReadSource(instruction.tokens, cursor);
+                    result = Compare(source0[0], source1[0], instruction.controls);
+                }
+                if (cursor != instruction.tokens.size())
+                    throw std::runtime_error(
+                        "Software vertex shader: malformed conditional BREAK instruction.");
+                return result;
             }
 
             [[nodiscard]] Vector ReadMatrixRow(Operand base, int row)
