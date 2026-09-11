@@ -2878,6 +2878,34 @@ namespace
         }
     }
 
+    void CheckCompiledShaderModel20DynamicFeatureValidation(SoftwareRenderer& renderer)
+    {
+        using Feature = CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature;
+        constexpr std::array features{
+            Feature::PixelPredicatedMov, Feature::VertexIfc, Feature::VertexBreak,
+            Feature::VertexBreakc, Feature::VertexSetp, Feature::VertexIfPredicate,
+            Feature::VertexCallnzPredicate, Feature::VertexPredicatedMov,
+        };
+        for (const Feature feature : features)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.shaderModel20InvalidDynamicFeature = feature;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected,
+                  "compiled Effect parser accepted dynamic flow or predication in Shader Model 2.0");
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4662,6 +4690,7 @@ int main()
         CheckCompiledPixelShaderModel1OpcodeValidation(renderer);
         CheckCompiledVertexShaderModel1OpcodeValidation(renderer);
         CheckCompiledPixelShaderModel20OpcodeValidation(renderer);
+        CheckCompiledShaderModel20DynamicFeatureValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();

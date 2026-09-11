@@ -1,0 +1,110 @@
+diff --git a/mojoshader.c b/mojoshader.c
+index 447007f..2e6e31c 100644
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1563,6 +1563,9 @@ static void state_CALLNZ(Context *ctx)
+     const RegisterType regtype = ctx->source_args[1].regtype;
+     if ((regtype != REG_TYPE_CONSTBOOL) && (regtype != REG_TYPE_PREDICATE))
+         fail(ctx, "CALLNZ argument isn't constbool or predicate register");
++    else if ((regtype == REG_TYPE_PREDICATE) &&
++             !shader_version_atleast(ctx, 2, 1))
++        fail(ctx, "CALLNZ predicate argument requires Shader Model 2.x or later");
+     check_label_register(ctx, 0, "CALLNZ");
+     check_call_loop_wrappage(ctx, ctx->source_args[0].regnum);
+ } // state_CALLNZ
+@@ -1767,6 +1770,9 @@ static void state_IF(Context *ctx)
+     const RegisterType regtype = ctx->source_args[0].regtype;
+     if ((regtype != REG_TYPE_PREDICATE) && (regtype != REG_TYPE_CONSTBOOL))
+         fail(ctx, "IF src0 must be CONSTBOOL or PREDICATE");
++    else if ((regtype == REG_TYPE_PREDICATE) &&
++             !shader_version_atleast(ctx, 2, 1))
++        fail(ctx, "IF predicate argument requires Shader Model 2.x or later");
+     // !!! FIXME: track if nesting depth.
+ } // state_IF
+ 
+@@ -2333,8 +2339,68 @@ static int pixel_shader_model_two_zero_opcode_allowed(const uint32 opcode)
+         default:
+             return 0;
+     } // switch
+ } // pixel_shader_model_two_zero_opcode_allowed
+ 
++static int vertex_shader_model_two_zero_opcode_allowed(const uint32 opcode)
++{
++    switch (opcode)
++    {
++        case 0:  // NOP
++        case 1:  // MOV
++        case 2:  // ADD
++        case 3:  // SUB
++        case 4:  // MAD
++        case 5:  // MUL
++        case 6:  // RCP
++        case 7:  // RSQ
++        case 8:  // DP3
++        case 9:  // DP4
++        case 10: // MIN
++        case 11: // MAX
++        case 12: // SLT
++        case 13: // SGE
++        case 14: // EXP
++        case 15: // LOG
++        case 16: // LIT
++        case 17: // DST
++        case 18: // LRP
++        case 19: // FRC
++        case 20: // M4X4
++        case 21: // M4X3
++        case 22: // M3X4
++        case 23: // M3X3
++        case 24: // M3X2
++        case 25: // CALL
++        case 26: // CALLNZ bool
++        case 27: // LOOP
++        case 28: // RET
++        case 29: // ENDLOOP
++        case 30: // LABEL
++        case 31: // DCL
++        case 32: // POW
++        case 33: // CRS
++        case 34: // SGN
++        case 35: // ABS
++        case 36: // NRM
++        case 37: // SINCOS
++        case 38: // REP
++        case 39: // ENDREP
++        case 40: // IF bool
++        case 42: // ELSE
++        case 43: // ENDIF
++        case 46: // MOVA
++        case 47: // DEFB
++        case 48: // DEFI
++        case 78: // EXPP
++        case 79: // LOGP
++        case 81: // DEF
++            return 1;
++
++        default:
++            return 0;
++    } // switch
++} // vertex_shader_model_two_zero_opcode_allowed
++
+ 
+ // parse various token types...
+ 
+@@ -2398,6 +2464,16 @@ static int parse_instruction_token(Context *ctx)
+               instruction->opcode_string);
+     } // if
+ 
++    if (shader_is_vertex(ctx) && shader_version_exactly(ctx, 2, 0) &&
++        !vertex_shader_model_two_zero_opcode_allowed(opcode))
++    {
++        failf(ctx, "opcode '%s' not available in vertex Shader Model 2.0.",
++              instruction->opcode_string);
++    } // if
++
++    if (predicated && !shader_version_atleast(ctx, 2, 1))
++        fail(ctx, "instruction predication requires Shader Model 2.x or later");
++
+     memset(ctx->dwords, '\0', sizeof (ctx->dwords));
+     ctx->instruction_controls = controls;
+     ctx->predicated = predicated;

@@ -1024,6 +1024,36 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticInvalidPixelShaderModel20Opcode::Dsy,
         CNA::TestSupport::SyntheticInvalidPixelShaderModel20Opcode::Setp));
 
+class EasyGLCompiledEffectShaderModel20DynamicFeatureTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature>
+{
+};
+
+TEST_P(EasyGLCompiledEffectShaderModel20DynamicFeatureTest, RejectsLaterProfileFeature)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.shaderModel20InvalidDynamicFeature = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    LaterProfileFeatures,
+    EasyGLCompiledEffectShaderModel20DynamicFeatureTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::PixelPredicatedMov,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexIfc,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexBreak,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexBreakc,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexSetp,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexIfPredicate,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexCallnzPredicate,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexPredicatedMov));
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;

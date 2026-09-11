@@ -312,6 +312,29 @@ namespace CNA::TestSupport
         Setp,
     };
 
+    /** @brief Dynamic-flow or predication feature deliberately emitted in an exact 2.0 shader. */
+    enum class SyntheticInvalidShaderModel20DynamicFeature
+    {
+        /** @brief Emit no deliberately invalid feature. */
+        None,
+        /** @brief Emit pixel-shader instruction predication. */
+        PixelPredicatedMov,
+        /** @brief Emit vertex `IFC`. */
+        VertexIfc,
+        /** @brief Emit vertex `BREAK` inside a legal static `REP` block. */
+        VertexBreak,
+        /** @brief Emit vertex `BREAKC` inside a legal static `REP` block. */
+        VertexBreakc,
+        /** @brief Emit vertex `SETP`. */
+        VertexSetp,
+        /** @brief Emit vertex `IF` with a predicate rather than Boolean source. */
+        VertexIfPredicate,
+        /** @brief Emit vertex `CALLNZ` with a predicate rather than Boolean source. */
+        VertexCallnzPredicate,
+        /** @brief Emit vertex-shader instruction predication. */
+        VertexPredicatedMov,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -503,6 +526,9 @@ namespace CNA::TestSupport
         /// Emits the selected later-profile pixel opcode in a ps_2_0 program.
         SyntheticInvalidPixelShaderModel20Opcode pixelShaderModel20InvalidOpcode =
             SyntheticInvalidPixelShaderModel20Opcode::None;
+        /** @brief Emits the selected dynamic-flow or predication feature in an exact 2.0 shader. */
+        SyntheticInvalidShaderModel20DynamicFeature shaderModel20InvalidDynamicFeature =
+            SyntheticInvalidShaderModel20DynamicFeature::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -584,7 +610,9 @@ namespace CNA::TestSupport
         SyntheticInvalidPixelShaderModel1Opcode shaderModel1InvalidOpcode =
             SyntheticInvalidPixelShaderModel1Opcode::None,
         SyntheticInvalidPixelShaderModel20Opcode shaderModel20InvalidOpcode =
-            SyntheticInvalidPixelShaderModel20Opcode::None)
+            SyntheticInvalidPixelShaderModel20Opcode::None,
+        SyntheticInvalidShaderModel20DynamicFeature shaderModel20InvalidDynamicFeature =
+            SyntheticInvalidShaderModel20DynamicFeature::None)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -902,6 +930,15 @@ namespace CNA::TestSupport
                     break;
                 case SyntheticInvalidPixelShaderModel20Opcode::None: break;
             }
+        }
+
+        if (shaderModel20InvalidDynamicFeature ==
+            SyntheticInvalidShaderModel20DynamicFeature::PixelPredicatedMov)
+        {
+            AppendUInt32(shader, 0x10000001u | (3u << 24)); // (p0.x) mov r0, c0
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, source(regPredicate, 0, 0x00u));
         }
 
         if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic)
@@ -1665,7 +1702,10 @@ namespace CNA::TestSupport
                                                                 bool usesInvalidExpSwizzle = false,
                                                                 SyntheticInvalidVertexShaderModel1Opcode
                                                                     shaderModel1InvalidOpcode =
-                                                                        SyntheticInvalidVertexShaderModel1Opcode::None)
+                                                                        SyntheticInvalidVertexShaderModel1Opcode::None,
+                                                                SyntheticInvalidShaderModel20DynamicFeature
+                                                                    shaderModel20InvalidDynamicFeature =
+                                                                        SyntheticInvalidShaderModel20DynamicFeature::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -1782,6 +1822,7 @@ namespace CNA::TestSupport
         constexpr std::uint32_t regSampler = 10;
         constexpr std::uint32_t regConstInt = 7;
         constexpr std::uint32_t regConstBool = 14;
+        constexpr std::uint32_t regLabel = 18;
         const auto registerBits = [](std::uint32_t type) {
             return ((type & 0x7u) << 28) | ((type >> 3) << 11);
         };
@@ -2042,6 +2083,65 @@ namespace CNA::TestSupport
                 case SyntheticInvalidVertexShaderModel1Opcode::None: break;
             }
         }
+        if (shaderModel20InvalidDynamicFeature !=
+                SyntheticInvalidShaderModel20DynamicFeature::None &&
+            shaderModel20InvalidDynamicFeature !=
+                SyntheticInvalidShaderModel20DynamicFeature::PixelPredicatedMov)
+        {
+            switch (shaderModel20InvalidDynamicFeature)
+            {
+                case SyntheticInvalidShaderModel20DynamicFeature::VertexIfc:
+                    AppendUInt32(shader, 0x00000029u | (1u << 16) | (2u << 24)); // if_gt c0.x, c1.x
+                    AppendUInt32(shader, source(regConst, 0, 0x00u));
+                    AppendUInt32(shader, source(regConst, 1, 0x00u));
+                    AppendUInt32(shader, 0x0000002Bu); // endif
+                    break;
+                case SyntheticInvalidShaderModel20DynamicFeature::VertexBreak:
+                case SyntheticInvalidShaderModel20DynamicFeature::VertexBreakc:
+                    AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
+                    AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                    if (shaderModel20InvalidDynamicFeature ==
+                        SyntheticInvalidShaderModel20DynamicFeature::VertexBreak)
+                    {
+                        AppendUInt32(shader, 0x0000002Cu); // break
+                    }
+                    else
+                    {
+                        AppendUInt32(shader,
+                                     0x0000002Du | (1u << 16) |
+                                         (2u << 24)); // break_gt c0.x, c1.x
+                        AppendUInt32(shader, source(regConst, 0, 0x00u));
+                        AppendUInt32(shader, source(regConst, 1, 0x00u));
+                    }
+                    AppendUInt32(shader, 0x00000027u); // endrep
+                    break;
+                case SyntheticInvalidShaderModel20DynamicFeature::VertexSetp:
+                    AppendUInt32(shader,
+                                 0x0000005Eu | (1u << 16) | (3u << 24)); // setp_gt p0, c0.x, c1.x
+                    AppendUInt32(shader, destination(regPredicate, 0));
+                    AppendUInt32(shader, source(regConst, 0, 0x00u));
+                    AppendUInt32(shader, source(regConst, 1, 0x00u));
+                    break;
+                case SyntheticInvalidShaderModel20DynamicFeature::VertexIfPredicate:
+                    AppendUInt32(shader, 0x00000028u | (1u << 24)); // if p0.x
+                    AppendUInt32(shader, source(regPredicate, 0, 0x00u));
+                    AppendUInt32(shader, 0x0000002Bu); // endif
+                    break;
+                case SyntheticInvalidShaderModel20DynamicFeature::VertexCallnzPredicate:
+                    AppendUInt32(shader, 0x0000001Au | (2u << 24)); // callnz l0, p0.x
+                    AppendUInt32(shader, source(regLabel, 0));
+                    AppendUInt32(shader, source(regPredicate, 0, 0x00u));
+                    break;
+                case SyntheticInvalidShaderModel20DynamicFeature::VertexPredicatedMov:
+                    AppendUInt32(shader, 0x10000001u | (3u << 24)); // (p0.x) mov r1, c0
+                    AppendUInt32(shader, destination(regTemp, 1));
+                    AppendUInt32(shader, source(regConst, 0));
+                    AppendUInt32(shader, source(regPredicate, 0, 0x00u));
+                    break;
+                case SyntheticInvalidShaderModel20DynamicFeature::None:
+                case SyntheticInvalidShaderModel20DynamicFeature::PixelPredicatedMov: break;
+            }
+        }
         if (readsSecondStream)
         {
             // mad r0, v1, c4, v0
@@ -2203,6 +2303,14 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oT1, c241
             AppendUInt32(shader, destination(regTexCoordOut, 1));
             AppendUInt32(shader, source(regConst, 241u));
+        }
+        if (shaderModel20InvalidDynamicFeature ==
+            SyntheticInvalidShaderModel20DynamicFeature::VertexCallnzPredicate)
+        {
+            AppendUInt32(shader, 0x0000001Cu); // ret from main
+            AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l0
+            AppendUInt32(shader, source(regLabel, 0));
+            AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
         }
         AppendUInt32(shader, 0x0000FFFFu);
         return shader;
@@ -2612,7 +2720,8 @@ namespace CNA::TestSupport
             options.pixelShaderUsesInvalidSge,
             options.pixelShaderUsesInvalidExpSwizzle,
             options.pixelShaderModel1InvalidOpcode,
-            options.pixelShaderModel20InvalidOpcode);
+            options.pixelShaderModel20InvalidOpcode,
+            options.shaderModel20InvalidDynamicFeature);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -2688,7 +2797,8 @@ namespace CNA::TestSupport
                 options.vertexShaderSgnScratchOperands,
                 options.vertexShaderUsesInvalidExppSwizzle,
                 options.vertexShaderUsesInvalidExpSwizzle,
-                options.vertexShaderModel1InvalidOpcode);
+                options.vertexShaderModel1InvalidOpcode,
+                options.shaderModel20InvalidDynamicFeature);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());
