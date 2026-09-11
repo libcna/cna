@@ -5206,6 +5206,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             viewport.width = viewport.logicalWidth = static_cast<float>(currentRenderTarget_->GetWidth());
             viewport.height = viewport.logicalHeight = static_cast<float>(currentRenderTarget_->GetHeight());
         }
+        else if (currentRenderTargetCube_ != nullptr)
+        {
+            viewport.width = viewport.logicalWidth =
+                static_cast<float>(currentRenderTargetCube_->GetSize());
+            viewport.height = viewport.logicalHeight =
+                static_cast<float>(currentRenderTargetCube_->GetSize());
+        }
         else
         {
             viewport = ComputeLogicalViewport();
@@ -5226,7 +5233,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             spriteProjectionWidth = static_cast<float>(viewportW_);
             spriteProjectionHeight = static_cast<float>(viewportH_);
-            if (currentRenderTarget_ == nullptr && viewport.width > 0.0f && viewport.height > 0.0f)
+            if (currentRenderTarget_ == nullptr && currentRenderTargetCube_ == nullptr &&
+                viewport.width > 0.0f && viewport.height > 0.0f)
             {
                 spriteProjectionWidth *= viewport.logicalWidth / viewport.width;
                 spriteProjectionHeight *= viewport.logicalHeight / viewport.height;
