@@ -382,8 +382,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param text       Text to render.
          * @param position   Top-left position, in pixels.
          * @param color      Tint color.
-         * @throws std::invalid_argument if @p text contains a character @p spriteFont cannot
-         *         render and no defaultCharacter is set.
+         * @throws System::ArgumentException if @p text contains a character @p spriteFont cannot
+         *         resolve through either its glyph table or its default character.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const std::string& text,
@@ -402,8 +402,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale      Uniform scale factor.
          * @param effects    Sprite flipping flags.
          * @param layerDepth Depth value for sort ordering.
-         * @throws std::invalid_argument if @p text contains a character @p spriteFont cannot
-         *         render and no defaultCharacter is set.
+         * @throws System::ArgumentException if @p text contains a character @p spriteFont cannot
+         *         resolve through either its glyph table or its default character.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const std::string& text,
@@ -427,8 +427,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale      Non-uniform scale vector.
          * @param effects    Sprite flipping flags.
          * @param layerDepth Depth value for sort ordering.
-         * @throws std::invalid_argument if @p text contains a character @p spriteFont cannot
-         *         render and no defaultCharacter is set.
+         * @throws System::ArgumentException if @p text contains a character @p spriteFont cannot
+         *         resolve through either its glyph table or its default character.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const std::string& text,

@@ -1376,7 +1376,8 @@ TEST(SpriteBatchSortModeTest, InvalidNonzeroModeWithEmptyQueueDoesNotSort)
 namespace
 {
     SpriteFont makeSingleGlyphFontWithRenderer(
-        const std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>& texRenderer)
+        const std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>& texRenderer,
+        std::optional<SharpRuntime::charcs> defaultCharacter = std::nullopt)
     {
         Texture2D atlas = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
         std::vector<Rectangle> glyphs   = { Rectangle(0, 0, 8, 12) };
@@ -1385,7 +1386,7 @@ namespace
         std::vector<Microsoft::Xna::Framework::Vector3> kern =
             { Microsoft::Xna::Framework::Vector3(1.0f, 8.0f, 2.0f) };
         return SpriteFont(atlas, glyphs, cropping, chars, /*lineSpacing=*/16, /*spacing=*/0.0f,
-                          kern, std::nullopt);
+                          kern, defaultCharacter);
     }
 
     std::vector<RecordingSpriteBatchRenderer::DrawCall> drawSingleCharWithEffects(
@@ -1415,20 +1416,20 @@ namespace
     }
 
     template<typename TAction>
-    void expectTextArgumentException(TAction&& action)
+    void expectCharacterArgumentException(TAction&& action)
     {
         try
         {
             action();
-            FAIL() << "Expected System::ArgumentException for text";
+            FAIL() << "Expected System::ArgumentException for character";
         }
         catch (const System::ArgumentException& exception)
         {
-            EXPECT_EQ(exception.getParamNameProperty(), "text");
+            EXPECT_EQ(exception.getParamNameProperty(), "character");
         }
         catch (...)
         {
-            FAIL() << "Expected System::ArgumentException for text";
+            FAIL() << "Expected System::ArgumentException for character";
         }
     }
 }
@@ -1443,17 +1444,29 @@ TEST(SpriteBatchTest, DrawStringUnknownCharWithNoDefaultThrowsArgumentException)
     const SpriteFont font = makeSingleGlyphFontWithRenderer(textureRenderer);
 
     batch.Begin();
-    expectTextArgumentException([&]
+    expectCharacterArgumentException([&]
     {
         batch.DrawString(font, std::string("B"), Vector2::Zero, Color::White);
     });
     batch.End();
 }
 
-// -----------------------------------------------------------------------
-// REMED-GFX-057: public floating-point inputs that feed SpriteBatch's integer
-// destination bridge must be rejected before any undefined float-to-int cast.
-// -----------------------------------------------------------------------
+TEST(SpriteBatchTest, DrawStringInvalidContentDefaultThrowsForCharacter)
+{
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    SpriteBatch batch(std::move(renderer));
+    DummyTextureRenderer textureRendererRaw(16, 16);
+    auto textureRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &textureRendererRaw, [](auto*) {});
+    const SpriteFont font = makeSingleGlyphFontWithRenderer(textureRenderer, u'?');
+
+    batch.Begin();
+    expectCharacterArgumentException([&]
+    {
+        batch.DrawString(font, std::string("B"), Vector2::Zero, Color::White);
+    });
+    EXPECT_NO_THROW(batch.End());
+}
 
 // -----------------------------------------------------------------------
 // XNA 4.0 and FNA carry a sprite's destination through the batch as floats

@@ -628,6 +628,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   sprite vertex path; finite values outside `Int32` are not an error. Software and EasyGL accept
   the same extremes, while the compatibility adapter for older integer-only renderers uses a
   defined saturating/non-finite conversion rather than invoking C++ float-to-int undefined behavior.
+- **SpriteFont fallback semantics follow Microsoft XNA rather than FNA** (`SOFTWARE-353`). The
+  internal-equivalent content constructor preserves an authored default character even if it is
+  missing from the glyph map; the public setter rejects that same value without changing the old
+  property. Failed lookup through MeasureString or DrawString reports `ArgumentException` for
+  `character`. Software and EasyGL share this renderer-neutral resolver.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

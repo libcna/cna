@@ -57,20 +57,20 @@ static SpriteFont makeFontAB(float spacing = 0.0f)
 }
 
 template<typename TAction>
-static void expectTextArgumentException(TAction&& action)
+static void expectCharacterArgumentException(TAction&& action)
 {
     try
     {
         action();
-        FAIL() << "Expected System::ArgumentException for text";
+        FAIL() << "Expected System::ArgumentException for character";
     }
     catch (const System::ArgumentException& exception)
     {
-        EXPECT_EQ(exception.getParamNameProperty(), "text");
+        EXPECT_EQ(exception.getParamNameProperty(), "character");
     }
     catch (...)
     {
-        FAIL() << "Expected System::ArgumentException for text";
+        FAIL() << "Expected System::ArgumentException for character";
     }
 }
 
@@ -179,21 +179,20 @@ TEST(SpriteFontTest, EmptyFontHasEmptyCharacterList)
 }
 
 // -----------------------------------------------------------------------
-// REMED-GFX-002: defaultCharacter must be present in characters, validated at the point the
-// invariant would be violated (construction / setter), rather than left to invoke UB the first
-// time MeasureString/DrawString needs the fallback.
+// SOFTWARE-353: Microsoft's internal constructor stores the content value directly, while the
+// public property setter validates. This distinction is observable for malformed/custom content.
 // -----------------------------------------------------------------------
 
-TEST(SpriteFontTest, ConstructorThrowsWhenDefaultCharacterAbsentFromCharacters)
+TEST(SpriteFontTest, ConstructorPreservesDefaultCharacterAbsentFromCharacters)
 {
     std::vector<Rectangle> glyphs   = { {0, 0, 8, 12} };
     std::vector<Rectangle> cropping = { {0, 0, 8, 12} };
     std::vector<charcs>    chars    = { u'A' };
     std::vector<Vector3>   kern     = { Vector3(1.0f, 8.0f, 2.0f) };
-    EXPECT_THROW(
-        SpriteFont(Texture2D{}, glyphs, cropping, chars, 16, 0.0f, kern,
-                   std::optional<charcs>(u'?')),
-        System::ArgumentException);
+    const SpriteFont font(Texture2D{}, glyphs, cropping, chars, 16, 0.0f, kern,
+                          std::optional<charcs>(u'?'));
+    ASSERT_TRUE(font.getDefaultCharacterProperty().has_value());
+    EXPECT_EQ(font.getDefaultCharacterProperty().value(), u'?');
 }
 
 TEST(SpriteFontTest, ConstructorAcceptsDefaultCharacterPresentInCharacters)
@@ -237,7 +236,15 @@ TEST(SpriteFontTest, SetDefaultCharacterToNullopt)
 TEST(SpriteFontTest, SetDefaultCharacterThrowsWhenAbsentFromCharacters)
 {
     SpriteFont font = makeFontA();   // only 'A' is a known character
-    EXPECT_THROW(font.setDefaultCharacterProperty(u'Z'), System::ArgumentException);
+    try
+    {
+        font.setDefaultCharacterProperty(u'Z');
+        FAIL() << "Expected System::ArgumentException";
+    }
+    catch (const System::ArgumentException& exception)
+    {
+        EXPECT_TRUE(exception.getParamNameProperty().empty());
+    }
     // The rejected assignment must not have taken effect.
     EXPECT_FALSE(font.getDefaultCharacterProperty().has_value());
 }
@@ -478,7 +485,17 @@ TEST(SpriteFontTest, TrailingNewlineAddsAnEmptyLastLine)
 TEST(SpriteFontTest, UnknownCharWithNoDefaultThrows)
 {
     SpriteFont font = makeFontA();   // no default character
-    expectTextArgumentException([&]
+    expectCharacterArgumentException([&]
+    {
+        [[maybe_unused]] auto result = font.MeasureString(std::string("B"));
+    });
+}
+
+TEST(SpriteFontTest, UnknownCharWithInvalidContentDefaultThrowsForCharacter)
+{
+    SpriteFont font = makeFontA(0.0f, u'?');
+    EXPECT_EQ(font.getDefaultCharacterProperty(), std::optional<charcs>(u'?'));
+    expectCharacterArgumentException([&]
     {
         [[maybe_unused]] auto result = font.MeasureString(std::string("B"));
     });
@@ -538,7 +555,7 @@ TEST(SpriteFontTest, MeasureStringBuilderMatchesStringOverloadForMultiLineAppend
 TEST(SpriteFontTest, MeasureStringBuilderUnknownCharWithNoDefaultThrows)
 {
     SpriteFont font = makeFontA();   // no default character
-    expectTextArgumentException([&]
+    expectCharacterArgumentException([&]
     {
         [[maybe_unused]] auto result = font.MeasureString(StringBuilder("B"));
     });

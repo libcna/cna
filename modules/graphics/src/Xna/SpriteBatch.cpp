@@ -16,7 +16,6 @@
 #include "CNA/Internal/Renderers/Common/XnaStateConversion.hpp"
 #include "CNA/Internal/Utf8Decode.hpp"
 #include "System/ArgumentException.hpp"
-#include "System/Collections/Generic/KeyNotFoundException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -743,25 +742,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 continue;
             }
 
-            auto it = spriteFont.characterIndexMap_.find(c);
-            if (it == spriteFont.characterIndexMap_.end())
-            {
-                if (!spriteFont.defaultCharacter_.has_value())
-                    throw System::ArgumentException(
-                        "Text contains characters that cannot be resolved by this SpriteFont.",
-                        "text");
-                it = spriteFont.characterIndexMap_.find(spriteFont.defaultCharacter_.value());
-                // REMED-GFX-002: defaultCharacter is validated on construction/set (SpriteFont.cpp),
-                // so this cannot fail in practice -- checked anyway rather than dereferencing
-                // end(), matching FNA's characterIndexMap[DefaultCharacter.Value] Dictionary
-                // indexer, which throws KeyNotFoundException on a miss.
-                if (it == spriteFont.characterIndexMap_.end())
-                {
-                    throw System::Collections::Generic::KeyNotFoundException(
-                        "defaultCharacter is not present in characters.");
-                }
-            }
-            const int index = it->second;
+            const int index = spriteFont.getIndexForCharacter(c);
 
             const Vector3& cKern = spriteFont.kerning_[index];
             if (firstInLine)

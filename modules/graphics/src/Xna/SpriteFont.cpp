@@ -5,7 +5,6 @@
 #include <cstddef>
 #include "CNA/Internal/Utf8Decode.hpp"
 #include "System/ArgumentException.hpp"
-#include "System/Collections/Generic/KeyNotFoundException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -30,16 +29,6 @@ namespace Microsoft::Xna::Framework::Graphics
         for (int i = 0; i < static_cast<int>(characterMap_.size()); ++i)
         {
             characterIndexMap_[characterMap_[i]] = i;
-        }
-
-        // REMED-GFX-002: a defaultCharacter absent from characters would otherwise only be
-        // caught later, at the point MeasureString/DrawString falls back to it -- reject the
-        // inconsistency here instead, at the point it is actually introduced.
-        if (defaultCharacter_.has_value() &&
-            characterIndexMap_.find(defaultCharacter_.value()) == characterIndexMap_.end())
-        {
-            throw System::ArgumentException(
-                "defaultCharacter is not present in characters.", "defaultCharacter");
         }
     }
 
@@ -75,15 +64,28 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteFont::setDefaultCharacterProperty(std::optional<charcs> value)
     {
-        // REMED-GFX-002: same invariant as the constructor -- reject a fallback character that
-        // this font cannot actually render, rather than letting MeasureString/DrawString hit an
-        // unchecked end() dereference the first time the fallback is needed.
+        // Unlike the internal content constructor, Microsoft's public setter validates the new
+        // fallback before changing the property.
         if (value.has_value() && characterIndexMap_.find(value.value()) == characterIndexMap_.end())
         {
-            throw System::ArgumentException(
-                "defaultCharacter is not present in characters.", "value");
+            throw System::ArgumentException("defaultCharacter is not present in characters.");
         }
         defaultCharacter_ = value;
+    }
+
+    int SpriteFont::getIndexForCharacter(charcs character) const
+    {
+        const auto found = characterIndexMap_.find(character);
+        if (found != characterIndexMap_.end())
+        {
+            return found->second;
+        }
+        if (defaultCharacter_.has_value() && character != defaultCharacter_.value())
+        {
+            return getIndexForCharacter(defaultCharacter_.value());
+        }
+        throw System::ArgumentException(
+            "Character cannot be resolved by this SpriteFont.", "character");
     }
 
     int SpriteFont::getLineSpacingProperty() const
@@ -153,27 +155,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 continue;
             }
 
-            auto it = characterIndexMap_.find(c);
-            if (it == characterIndexMap_.end())
-            {
-                if (!defaultCharacter_.has_value())
-                {
-                    throw System::ArgumentException(
-                        "Text contains characters that cannot be resolved by this SpriteFont.",
-                        "text");
-                }
-                it = characterIndexMap_.find(defaultCharacter_.value());
-                // REMED-GFX-002: defaultCharacter is validated on construction/set, so this
-                // cannot fail in practice -- checked anyway rather than dereferencing end(),
-                // matching FNA's characterIndexMap[DefaultCharacter.Value] Dictionary indexer,
-                // which throws KeyNotFoundException on a miss.
-                if (it == characterIndexMap_.end())
-                {
-                    throw System::Collections::Generic::KeyNotFoundException(
-                        "defaultCharacter is not present in characters.");
-                }
-            }
-            const int index = it->second;
+            const int index = getIndexForCharacter(c);
 
             const Vector3& cKern = kerning_[index];
             if (firstInLine)
