@@ -265,6 +265,11 @@ namespace CNA::TestSupport
         /// Applies the sampler operand's BGRA source swizzle after the vertex TEXLDL lookup.
         /// This keeps sampler-result swizzle order observable independently from the coordinate.
         bool vertexShaderSwizzlesSampleResult = false;
+        /// Emits a Shader Model 1.1 vertex program that consumes its implicit POSITION0 input.
+        bool vertexShaderUsesShaderModel11Input = false;
+        /// Emits a Shader Model 1.1 vertex program whose coverage depends on the legacy four-part
+        /// `EXPP` result rather than the Shader Model 2+ replicated result.
+        bool vertexShaderUsesLegacyExpp = false;
         /// plans/plan_fx.md FX-104: adds a `Caption` parameter of reflected type String, with an initial
         /// value, so the XNA `SetValue(string)`/`GetValueString()` pair can be exercised on a
         /// parameter that really is one instead of only through its rejection path.
@@ -1319,10 +1324,15 @@ namespace CNA::TestSupport
                                                                 std::uint32_t samplerRegister = 0,
                                                                 SyntheticSamplerKind samplerKind =
                                                                     SyntheticSamplerKind::Sampler2D,
-                                                                bool swizzlesSampleResult = false)
+                                                                bool swizzlesSampleResult = false,
+                                                                bool usesShaderModel11Input = false,
+                                                                bool usesLegacyExpp = false)
     {
-        const std::uint32_t versionToken =
-            usesPredication || samplesTexture ? 0xFFFE0300u : 0xFFFE0200u;
+        const bool usesShaderModel11 = usesShaderModel11Input || usesLegacyExpp;
+        const std::uint32_t versionToken = usesShaderModel11
+                                               ? 0xFFFE0101u
+                                               : usesPredication || samplesTexture ? 0xFFFE0300u
+                                                                                  : 0xFFFE0200u;
         const std::uint32_t constantCount =
             1u + (readsSecondStream ? 1u : 0u) + (samplesTexture ? 1u : 0u);
 
@@ -1388,7 +1398,8 @@ namespace CNA::TestSupport
         const std::uint32_t streamMixName = appendCtabString("StreamMix");
         const std::uint32_t samplerName = appendCtabString("FxSampler");
         const std::uint32_t target = appendCtabString(
-            usesPredication || samplesTexture ? "vs_3_0" : "vs_2_0");
+            usesShaderModel11 ? "vs_1_1"
+                              : usesPredication || samplesTexture ? "vs_3_0" : "vs_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
         while ((ctab.size() & 3u) != 0) ctab.push_back(0);
 
@@ -1544,11 +1555,27 @@ namespace CNA::TestSupport
             };
             appendDef(241u, 0.25f, 0.25f, 0.0f, 1.0f); // destination-stage base UV
         }
+        if (usesLegacyExpp)
+        {
+            const auto appendDef = [&](std::uint32_t number, float x, float y, float z, float w) {
+                AppendUInt32(shader, 0x00000051u);
+                AppendUInt32(shader, destination(regConst, number));
+                AppendUInt32(shader, FloatBits(x));
+                AppendUInt32(shader, FloatBits(y));
+                AppendUInt32(shader, FloatBits(z));
+                AppendUInt32(shader, FloatBits(w));
+            };
+            appendDef(4u, 3.25f, 0.0f, 0.0f, 0.0f);
+            appendDef(5u, 9.0f, 0.5f, 10.0f, 2.0f);
+        }
 
         // dcl_position v0
-        AppendUInt32(shader, 0x0000001Fu | (2u << 24));
-        AppendUInt32(shader, 0x80000000u | 0u);            // D3DDECLUSAGE_POSITION, index 0
-        AppendUInt32(shader, destination(regInput, 0));
+        if (!usesShaderModel11)
+        {
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+            AppendUInt32(shader, 0x80000000u | 0u);        // D3DDECLUSAGE_POSITION, index 0
+            AppendUInt32(shader, destination(regInput, 0));
+        }
         if (usesPredication || samplesTexture)
         {
             // Shader Model 3 uses generic o# outputs, each with an explicit semantic declaration.
@@ -1606,6 +1633,33 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u | (2u << 24));
             AppendUInt32(shader, destination(regTexCoordOut, 0));
             AppendUInt32(shader, source(regTemp, 0));
+        }
+        else if (usesLegacyExpp)
+        {
+            // A conforming vs_1_1 EXPP gives (8, .25, 2^3.25, 1), whose four components are all
+            // below c5. Replicating 2^3.25 instead makes r1.x zero and collapses the whole quad.
+            AppendUInt32(shader, 0x00000014u); // m4x4 r2, v0, c0
+            AppendUInt32(shader, destination(regTemp, 2));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x0000004Eu); // expp r0, c4.x
+            AppendUInt32(shader, destination(regTemp, 0));
+            AppendUInt32(shader, source(regConst, 4, 0x00u));
+            AppendUInt32(shader, 0x0000000Cu); // slt r1, r0, c5
+            AppendUInt32(shader, destination(regTemp, 1));
+            AppendUInt32(shader, source(regTemp, 0));
+            AppendUInt32(shader, source(regConst, 5));
+            AppendUInt32(shader, 0x00000005u); // mul oPos, r2, r1.x
+            AppendUInt32(shader, destination(regRastOut, 0));
+            AppendUInt32(shader, source(regTemp, 2));
+            AppendUInt32(shader, source(regTemp, 1, 0x00u));
+        }
+        else if (usesShaderModel11)
+        {
+            AppendUInt32(shader, 0x00000014u); // m4x4 oPos, v0, c0
+            AppendUInt32(shader, destination(regRastOut, 0));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(regConst, 0));
         }
         else
         {
@@ -2166,7 +2220,9 @@ namespace CNA::TestSupport
                     options.pixelShaderLegacyBumpEnvironment !=
                         SyntheticLegacyBumpEnvironment::Arithmetic,
                 options.vertexShaderSamplesTexture, options.samplerRegister,
-                options.samplerKind, options.vertexShaderSwizzlesSampleResult);
+                options.samplerKind, options.vertexShaderSwizzlesSampleResult,
+                options.vertexShaderUsesShaderModel11Input,
+                options.vertexShaderUsesLegacyExpp);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

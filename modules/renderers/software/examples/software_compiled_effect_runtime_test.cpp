@@ -505,6 +505,37 @@ namespace
                   color->value == std::array<float, 4>{0.0f, 0.5f, 1.0f, 1.0f},
               "D3D COLOR output saturation differs");
 
+        SoftwareShaderProgramEXT legacyExpp;
+        legacyExpp.stage = SoftwareShaderStageEXT::Vertex;
+        legacyExpp.majorVersion = 1u;
+        legacyExpp.minorVersion = 1u;
+        legacyExpp.inputSemantics = {{MOJOSHADER_USAGE_POSITION, 0u, 0u}};
+        legacyExpp.outputSemantics = {
+            {MOJOSHADER_USAGE_POSITION, 0u, 0u, rasterOutput},
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, 0u, textureOutput},
+        };
+        SoftwareShaderInstructionEXT movePosition;
+        movePosition.opcode = 1u;
+        movePosition.tokens = {1u, destination(rasterOutput, 0u), source(input, 0u)};
+        legacyExpp.instructions.push_back(std::move(movePosition));
+        SoftwareShaderInstructionEXT expp;
+        expp.opcode = 78u;
+        expp.tokens = {78u, destination(textureOutput, 0u), source(constant, 30u, 0x00u)};
+        legacyExpp.instructions.push_back(std::move(expp));
+        setConstant(30u, {3.25f, 0.0f, 0.0f, 0.0f});
+        const auto legacyResult =
+            ExecuteSoftwareVertexShaderEXT(legacyExpp, floats, integers, booleans, inputs);
+        const auto legacyVarying = std::find_if(
+            legacyResult.varyings.begin(), legacyResult.varyings.end(), [](const auto& value)
+            {
+                return value.usage == MOJOSHADER_USAGE_TEXCOORD && value.usageIndex == 0u;
+            });
+        Check(legacyVarying != legacyResult.varyings.end() &&
+                  legacyVarying->value[0] == 8.0f && legacyVarying->value[1] == 0.25f &&
+                  std::abs(legacyVarying->value[2] - std::exp2(3.25f)) < 0.00001f &&
+                  legacyVarying->value[3] == 1.0f,
+              "Shader Model 1.1 EXPP did not emit its legacy four-part result");
+
         setConstant(35u, {-2.0f, 0.0f, 0.0f, 1.0f});
         setConstant(36u, {0.0f, 0.0f, 0.0f, 1.0f});
         SoftwareShaderProgramEXT logProgram;
@@ -1782,6 +1813,47 @@ namespace
         Check(result.colorWriteMask == 1u &&
                   result.colors[0] == std::array<float, 4>{1.0f, 1.0f, 1.0f, 1.0f},
               "parsed pixel NRM derived its length from the destination mask");
+    }
+
+    void CheckParsedShaderModel11VertexEffects(SoftwareRenderer& renderer)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexShaderUsesShaderModel11Input = true;
+        auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        auto runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+        const Matrix identity = Matrix::getIdentityProperty();
+        runtime->SetParameterValue(FindParameter(*runtime, "Transform"), &identity,
+                                   sizeof(identity));
+        runtime->SetTechnique(0u);
+        CompiledEffectPassStateChanges changes;
+        runtime->ApplyPass(1u, {}, changes);
+        auto* software = dynamic_cast<SoftwareCompiledEffect*>(runtime.get());
+        Check(software != nullptr, "parsed vs_1_1 input Effect has the wrong backend type");
+        if (software == nullptr)
+            return;
+        const SoftwareShaderSemanticValueEXT input = {
+            MOJOSHADER_USAGE_POSITION, 0u, {0.25f, -0.5f, 0.75f, 1.0f},
+        };
+        auto result = software->ExecuteVertexEXT(std::span(&input, 1u));
+        Check(result.position == input.value,
+              "parsed vs_1_1 vertex program did not bind implicit v0 as POSITION0");
+
+        options.vertexShaderUsesShaderModel11Input = false;
+        options.vertexShaderUsesLegacyExpp = true;
+        bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+        runtime->SetParameterValue(FindParameter(*runtime, "Transform"), &identity,
+                                   sizeof(identity));
+        runtime->SetTechnique(0u);
+        runtime->ApplyPass(1u, {}, changes);
+        software = dynamic_cast<SoftwareCompiledEffect*>(runtime.get());
+        Check(software != nullptr, "parsed legacy-EXPP Effect has the wrong backend type");
+        if (software == nullptr)
+            return;
+        result = software->ExecuteVertexEXT(std::span(&input, 1u));
+        Check(result.position == input.value,
+              "parsed vs_1_1 EXPP used the Shader Model 2 replicated result");
     }
 
     void CheckCompiledRelativeTextureCoordinate()
@@ -4287,6 +4359,7 @@ int main()
         CheckParsedSubroutineEffect(renderer);
         CheckParsedSignedLogEffect(renderer);
         CheckParsedNrmWriteMaskEffect(renderer);
+        CheckParsedShaderModel11VertexEffects(renderer);
         CheckCompiledRelativeTextureCoordinate();
         CheckCompiledDependentTemporaryTextureCoordinate();
         CheckCompiledDependentTemporaryCubeCoordinate();

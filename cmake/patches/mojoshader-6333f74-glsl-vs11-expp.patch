@@ -1,0 +1,32 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -2510,8 +2510,26 @@ void emit_GLSL_TEXM3X3VSPEC(Context *ctx)
+ 
+ void emit_GLSL_EXPP(Context *ctx)
+ {
+-    // !!! FIXME: msdn's asm docs don't list this opcode, I'll have to check the driver documentation.
+-    emit_GLSL_EXP(ctx);  // I guess this is just partial precision EXP?
++    if (shader_is_vertex(ctx) && (ctx->major_ver == 1))
++    {
++        char src0[64]; make_GLSL_srcarg_string_scalar(ctx, 0, src0, sizeof (src0));
++        char swizzle[6];
++        make_GLSL_swizzle_string(swizzle, sizeof (swizzle), 0xE4,
++                                 ctx->dest_arg.writemask);
++        char code[256];
++        output_line(ctx, "{");
++        ctx->indent++;
++        output_line(ctx,
++            "vec4 cna_expp_result = vec4(exp2(floor(%s)), %s - floor(%s), exp2(%s), 1.0);",
++            src0, src0, src0, src0);
++        make_GLSL_destarg_assign(ctx, code, sizeof (code),
++            "cna_expp_result%s", swizzle);
++        output_line(ctx, "%s", code);
++        ctx->indent--;
++        output_line(ctx, "}");
++    } // if
++    else
++        emit_GLSL_EXP(ctx);
+ } // emit_GLSL_EXPP
+ 
+ void emit_GLSL_LOGP(Context *ctx)

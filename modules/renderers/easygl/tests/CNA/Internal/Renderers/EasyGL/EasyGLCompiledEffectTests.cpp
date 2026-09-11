@@ -609,6 +609,22 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9NrmUsesXYZLengthRegardlessOfDestinationMa
     CNA::TestSupport::RunCompiledEffectNrmWriteMaskContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, ShaderModel11ExppUsesLegacyFourPartResult)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyExppContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, ShaderModel11ImplicitVertexInputMap)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectShaderModel11InputContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9RelativeConstantTextureCoordinates)
 {
     GraphicsDevice device;

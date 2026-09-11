@@ -36,6 +36,31 @@ namespace CNA::Internal::Renderers::Software
                                              ((token >> 8u) & 0x18u));
         }
 
+        int ShaderModelOneVertexInputRegister(MOJOSHADER_usage usage, int index)
+        {
+            switch (usage)
+            {
+            case MOJOSHADER_USAGE_POSITION:
+                return index == 0 ? 0 : index == 1 ? 15 : -1;
+            case MOJOSHADER_USAGE_BLENDWEIGHT:
+                return index == 0 ? 1 : -1;
+            case MOJOSHADER_USAGE_BLENDINDICES:
+                return index == 0 ? 2 : -1;
+            case MOJOSHADER_USAGE_NORMAL:
+                return index == 0 ? 3 : index == 1 ? 16 : -1;
+            case MOJOSHADER_USAGE_POINTSIZE:
+                return index == 0 ? 4 : -1;
+            case MOJOSHADER_USAGE_TEXCOORD:
+                return index >= 0 && index <= 7 ? 5 + index : -1;
+            case MOJOSHADER_USAGE_TANGENT:
+                return index == 0 ? 6 : -1;
+            case MOJOSHADER_USAGE_BINORMAL:
+                return index == 0 ? 7 : -1;
+            default:
+                return -1;
+            }
+        }
+
         std::size_t ShaderModelOneOperandCount(std::uint16_t opcode, SoftwareShaderStageEXT stage,
                                                std::uint8_t minorVersion)
         {
@@ -310,6 +335,24 @@ namespace CNA::Internal::Renderers::Software
 
             if (!foundEnd)
                 throw std::runtime_error("Software compiled effect: shader has no END token.");
+            if (result.stage == SoftwareShaderStageEXT::Vertex && result.majorVersion == 1u)
+            {
+                for (int attribute = 0; attribute < parseData.attribute_count; ++attribute)
+                {
+                    const MOJOSHADER_attribute& input = parseData.attributes[attribute];
+                    const int registerNumber =
+                        ShaderModelOneVertexInputRegister(input.usage, input.index);
+                    if (registerNumber < 0)
+                    {
+                        throw std::runtime_error(
+                            "Software compiled effect: Shader Model 1 vertex input has no "
+                            "D3D9 register mapping.");
+                    }
+                    result.inputSemantics.push_back(
+                        {input.usage, static_cast<std::uint8_t>(input.index),
+                         static_cast<std::uint16_t>(registerNumber), 1u});
+                }
+            }
             if (result.stage == SoftwareShaderStageEXT::Pixel)
             {
                 for (unsigned int symbolIndex = 0; symbolIndex < parseData.symbol_count;

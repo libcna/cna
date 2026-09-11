@@ -1062,6 +1062,76 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Draws a Shader Model 1.1 vertex-input or legacy-EXPP discriminator.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     * @param legacyExpp Whether the vertex program also gates coverage on the legacy EXPP tuple.
+     * @return Centre target pixel.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectShaderModel11Vertex(
+        GraphicsDevice& device, bool legacyExpp)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexShaderUsesShaderModel11Input = !legacyExpp;
+        options.vertexShaderUsesLegacyExpp = legacyExpp;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(1.0f));
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        return centre;
+    }
+
+    /**
+     * @brief Contract: Shader Model 1.1 implicit `v#` inputs use the fixed D3D9 semantic map.
+     *
+     * The shader has no `dcl` instruction, as required by its profile, but consumes v0 as
+     * POSITION0 and transforms a full-target quad. Leaving the implicit register unbound retains
+     * its default `(0,0,0,1)` and renders no white pixels.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectShaderModel11InputContract(GraphicsDevice& device)
+    {
+        EXPECT_EQ(DrawCompiledEffectShaderModel11Vertex(device, false), Color::White);
+    }
+
+    /**
+     * @brief Contract: Shader Model 1.1 `EXPP` emits its legacy four-part approximation tuple.
+     *
+     * The vertex program compares `EXPP(3.25)` with `(9,.5,10,2)` and preserves the submitted
+     * quad only when the result is `(8,.25,2^3.25,1)`. Treating the instruction like its Shader
+     * Model 2+ replicated form collapses every clip-space position and leaves the clear colour.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyExppContract(GraphicsDevice& device)
+    {
+        EXPECT_EQ(DrawCompiledEffectShaderModel11Vertex(device, true), Color::White);
+    }
+
+    /**
      * @brief Draws an SM3 texture load whose coordinate is the relatively addressed `c0[aL]`.
      *
      * `aL` is zero for the fixture's single loop iteration, so the lookup must use the reflected
