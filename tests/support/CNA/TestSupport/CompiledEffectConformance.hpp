@@ -1208,6 +1208,50 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Proves a Shader Model 3 predicate gates `TEXKILL` instead of being ignored.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectPredicatedTexkillContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesPredicatedTexkill = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        struct Position { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Position)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const Position quad[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+            {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](const Vector4& tint)
+        {
+            effect.getParametersProperty()["Tint"]->SetValue(tint);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(drawAndRead(Vector4::Zero), Color::Lime);
+        EXPECT_EQ(drawAndRead(Vector4::One), Color::Magenta);
+    }
+
+    /**
      * @brief Contract: a compiled effect reads attributes from more than one bound stream.
      *
      * plans/plan_fx.md FX-082. Only for backends reporting `MultiStreamVertexInput`. The fixture's
@@ -3327,6 +3371,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectLoopContract` -- non-unit D3D9 loop steps retain the declared count
      * - `RunCompiledEffectSubroutineContract` -- forward, nested and conditional calls return
      * - `RunCompiledEffectPredicationContract` -- SM3 predicates mask vertex/pixel components
+     * - `RunCompiledEffectPredicatedTexkillContract` -- a false predicate suppresses pixel kill
      * - `RunCompiledEffectMultiStreamDrawContract` -- several streams, and their own offsets
      * - `RunCompiledEffectInstancingDrawContract` -- instanced draws, offsets and divisor reset
      * - `RunCompiledEffectSpriteBatchContract` -- SpriteBatch runs the effect, or refuses by name

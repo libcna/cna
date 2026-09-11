@@ -1801,6 +1801,49 @@ namespace
               "compiled SM3 instruction predication produced the wrong RGBA result");
     }
 
+    void CheckCompiledPredicatedTexkill()
+    {
+        GraphicsDevice device;
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesPredicatedTexkill = true;
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        struct Position { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Position)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const Position quad[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+            {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](const Vector4& tint)
+        {
+            effect->getParametersProperty()["Tint"]->SetValue(tint);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        Check(drawAndRead(Vector4::Zero) == Color::Lime,
+              "a false predicate did not suppress compiled TEXKILL");
+        Check(drawAndRead(Vector4::One) == Color::Magenta,
+              "a true predicate did not execute compiled TEXKILL");
+    }
+
     void CheckCompiledSamplerRasterization(SoftwareRenderer& renderer)
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
@@ -2609,6 +2652,7 @@ int main()
         CheckCompiledDerivativeRasterization();
         CheckCompiledRasterInputs();
         CheckCompiledInstructionPredication();
+        CheckCompiledPredicatedTexkill();
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
         CheckCompiledLineAndWireframeRasterization(renderer);

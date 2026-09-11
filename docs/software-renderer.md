@@ -213,9 +213,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   identity/replicate `p0` tokens with optional negation and masks destination components; the
   managed MojoShader patch preserves vector pixel predicates, snapshots them before evaluating a
   predicated result and conditionally writes correctly typed GLSL scalar/vector components. A
-  shared parsed Effect proves both stages in one exact RGBA draw. Predicated non-destination
-  instructions such as `TEXKILL` remain part of the final profile audit rather than being inferred
-  from destination coverage.
+  shared parsed Effect proves both stages in one exact RGBA draw. SOFTWARE-374 then covers the
+  special non-writing `TEXKILL` case: the predicate's corresponding x/y/z component now gates each
+  negative-value discard test in EasyGL, matching Software's independently proven mask.
   Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
   remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.

@@ -625,6 +625,14 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9InstructionPredicationMasksBothShaderStag
     CNA::TestSupport::RunCompiledEffectPredicationContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9PredicationGatesTexkill)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectPredicatedTexkillContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedMultiStreamDrawContract)
 {
     GraphicsDevice device;

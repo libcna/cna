@@ -245,6 +245,8 @@ namespace CNA::TestSupport
         /// `p0` (including a replicated, negated predicate). The resulting colour makes both
         /// stages observable independently.
         bool shadersUsePredication = false;
+        /// Emits a Shader Model 3 pixel program that predicates `TEXKILL` through replicated `p0.x`.
+        bool pixelShaderUsesPredicatedTexkill = false;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -296,10 +298,12 @@ namespace CNA::TestSupport
         bool usesSubroutine = false,
         bool usesDerivatives = false,
         bool usesRasterInputs = false,
-        bool usesPredication = false)
+        bool usesPredication = false,
+        bool usesPredicatedTexkill = false)
     {
         const bool usesShaderModel3 =
-            usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication;
+            usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
+            usesPredicatedTexkill;
         const std::uint32_t versionToken = usesShaderModel3 ? 0xFFFF0300u : 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
         std::vector<std::uint8_t> ctab;
@@ -412,7 +416,38 @@ namespace CNA::TestSupport
                    (modifier << 24);
         };
 
-        if (usesPredication)
+        if (usesPredicatedTexkill)
+        {
+            // Tint.x controls whether p0.x enables the kill. The killed operand is negative only
+            // in x, so masking that one predicate component is the complete observable contract.
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c1, .5, .5, .5, .5
+            AppendUInt32(shader, destination(regConst, 1, 0xFu));
+            for (int i = 0; i < 4; ++i) AppendUInt32(shader, FloatBits(0.5f));
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c2, -1, 1, 1, 1
+            AppendUInt32(shader, destination(regConst, 2, 0xFu));
+            AppendUInt32(shader, FloatBits(-1.0f));
+            for (int i = 0; i < 3; ++i) AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c3, 0, 1, 0, 1
+            AppendUInt32(shader, destination(regConst, 3, 0xFu));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, 0x0000005Eu | (1u << 16) | (3u << 24)); // setp_gt p0, c0, c1
+            AppendUInt32(shader, destination(regPredicate, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, source(regConst, 1));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, c2
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 2));
+            AppendUInt32(shader, 0x10000041u | (2u << 24)); // (p0.x) texkill r0
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regPredicate, 0, 0x00u));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, c3
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 3));
+        }
+        else if (usesPredication)
         {
             // Vertex COLOR0 arrives as (.75, .625, .5, 1). Add .125 only to the x/z components
             // selected by p0, then use (!p0.y) to replace alpha with .125.
@@ -1265,7 +1300,8 @@ namespace CNA::TestSupport
             options.pixelShaderWritesMrt, options.pixelShaderUsesLoop,
             options.pixelLoopCount, options.pixelLoopInitial, options.pixelLoopStep,
             options.pixelShaderUsesSubroutine, options.pixelShaderUsesDerivatives,
-            options.pixelShaderUsesRasterInputs, options.shadersUsePredication);
+            options.pixelShaderUsesRasterInputs, options.shadersUsePredication,
+            options.pixelShaderUsesPredicatedTexkill);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
