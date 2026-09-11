@@ -151,6 +151,16 @@ void NormalizeConstantRegister(Operand &operand) {
   return result;
 }
 
+[[nodiscard]] Vector Swizzle(const Vector &value, std::uint8_t swizzle) {
+  Vector result{};
+  for (int component = 0; component < 4; ++component) {
+    const auto selected = static_cast<std::size_t>(
+        (swizzle >> static_cast<unsigned>(component * 2)) & 0x3u);
+    result[static_cast<std::size_t>(component)] = value[selected];
+  }
+  return result;
+}
+
 [[nodiscard]] Vector ReflectLegacyEyeRay(const Vector &normal,
                                          const Vector &eye) {
   const float scale = 2.0f * Dot(normal, eye, 3) / Dot(normal, normal, 3);
@@ -1101,8 +1111,9 @@ private:
           "Software pixel shader: unsupported TEX instruction control.");
     }
     Write(destination,
-          Sample(coordinateOperand, coordinate, sampler.number,
-                 SoftwareTextureLodModeEXT::Implicit, lod));
+          Swizzle(Sample(coordinateOperand, coordinate, sampler.number,
+                         SoftwareTextureLodModeEXT::Implicit, lod),
+                  sampler.swizzle));
   }
 
   [[nodiscard]] Vector ReadSourceFromOperand(const Operand &operand) const {
@@ -1165,8 +1176,9 @@ private:
         throw std::runtime_error(
             "Software pixel shader: malformed explicit-LOD texture instruction.");
       Write(destination,
-            Sample(coordinateOperand, coordinate, sampler.number,
-                   SoftwareTextureLodModeEXT::Explicit, coordinate[3]));
+            Swizzle(Sample(coordinateOperand, coordinate, sampler.number,
+                           SoftwareTextureLodModeEXT::Explicit, coordinate[3]),
+                    sampler.swizzle));
       return;
     }
     const Vector gradientX = ReadSource(tokens, cursor);
@@ -1175,9 +1187,10 @@ private:
       throw std::runtime_error(
           "Software pixel shader: malformed explicit-LOD texture instruction.");
     Write(destination,
-          Sample(coordinateOperand, coordinate, sampler.number,
-                 SoftwareTextureLodModeEXT::Gradients, 0.0f, gradientX,
-                 gradientY));
+          Swizzle(Sample(coordinateOperand, coordinate, sampler.number,
+                         SoftwareTextureLodModeEXT::Gradients, 0.0f, gradientX,
+                         gradientY),
+                  sampler.swizzle));
   }
 
   void ExecuteInstruction(const SoftwareShaderInstructionEXT &instruction,

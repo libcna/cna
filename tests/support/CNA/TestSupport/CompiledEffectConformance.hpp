@@ -3697,6 +3697,69 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Draws a sampled SM3 texel whose sampler operand uses `.bgra`.
+     *
+     * @param device Device used for the draw.
+     * @param effect Parsed fixture effect.
+     * @return Centre pixel after sampling and sampler-result swizzling.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectSamplerResultSwizzle(
+        GraphicsDevice& device, Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4::One);
+
+        Texture2D texture(device, 1, 1);
+        const Color source(32, 64, 128, 255);
+        texture.SetData(&source, 1);
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        SamplingQuadVertex quad[6];
+        FillSamplingQuad(quad, 0.5f, 0.5f);
+        const VertexDeclaration declaration = SamplingQuadDeclaration();
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        return centre;
+    }
+
+    /**
+     * @brief Proves a Shader Model 3 sampler source swizzle applies to the sampled result.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectSamplerResultSwizzleContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderSamplesTexture = true;
+        options.pixelShaderSwizzlesSampleResult = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        EXPECT_EQ(DrawCompiledEffectSamplerResultSwizzle(device, effect),
+                  Color(128, 64, 32, 255));
+    }
+
+    /**
      * @brief What a backend can represent of XNA's sampler state, for the GPU-visible contract.
      *
      * plans/plan_fx.md FX-093. Some sampler properties have no expression on some backends -- OpenGL ES
@@ -4915,6 +4978,7 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectSpriteBatchMultiPassContract` -- XNA's own batch/pass granularity
      * - `RunCompiledEffectSpriteBatchTextureSlotContract` -- the sprite's texture wins slot 0
      * - `RunCompiledEffectSamplerPixelContract` -- the sampler state reaches the GPU
+     * - `RunCompiledEffectSamplerResultSwizzleContract` -- SM3 sampler operands reorder texels
      * - `RunCompiledEffectPassSelectionContract` -- the applied pass is the pass that draws
      * - `RunCompiledEffectRenderTargetSourceContract` -- a rendered source is sampled right way up
      * - `RunCompiledEffectSpriteBatchRenderTargetSourceContract` -- and through SpriteBatch too

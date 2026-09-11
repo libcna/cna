@@ -676,19 +676,21 @@ namespace
         constexpr std::uint32_t predicateRegisterType = 19u;
         SoftwareShaderProgramEXT textureProgram;
         textureProgram.stage = SoftwareShaderStageEXT::Pixel;
-        textureProgram.majorVersion = 2;
+        textureProgram.majorVersion = 3;
         textureProgram.minorVersion = 0;
         textureProgram.inputSemantics = {
-            {MOJOSHADER_USAGE_TEXCOORD, 0u, 0u, 3u},
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, 0u, 1u},
         };
         textureProgram.samplers.push_back(
             SoftwareShaderSamplerEXT{3u, SoftwareShaderSamplerTypeEXT::Volume});
         SoftwareShaderInstructionEXT textureLookup;
         textureLookup.opcode = 66u;
         textureLookup.controls = 2u;
+        constexpr std::uint32_t swizzleBgra =
+            2u | (1u << 2u) | (0u << 4u) | (3u << 6u);
         textureLookup.tokens = {
-            66u, destination(temporary, 0), source(texture, 0),
-            source(samplerRegisterType, 3)};
+            66u, destination(temporary, 0), source(input, 0),
+            source(samplerRegisterType, 3, swizzleBgra)};
         textureProgram.instructions.push_back(std::move(textureLookup));
         SoftwareShaderInstructionEXT textureOutput;
         textureOutput.opcode = 1u;
@@ -708,29 +710,35 @@ namespace
         Check(recordingSampler.lastRequest.coordinate == inputs[1].value &&
                   recordingSampler.lastRequest.lod == inputs[1].value[3],
               "TEX lost its coordinate or instruction LOD bias");
-        Check(sampled.colorWriteMask == 1u && sampled.colors[0] == recordingSampler.result,
-              "TEX result did not reach COLOR0");
+        const std::array<float, 4> swizzledSample{0.5f, 0.25f, 0.125f, 1.0f};
+        Check(sampled.colorWriteMask == 1u && sampled.colors[0] == swizzledSample,
+              "TEX did not apply the sampler source swizzle to its result");
 
         textureProgram.instructions[0].opcode = 95u;
         textureProgram.instructions[0].controls = 0u;
         textureProgram.instructions[0].tokens[0] = 95u;
-        static_cast<void>(ExecuteSoftwarePixelShaderEXT(
-            textureProgram, floats, integers, booleans, inputs, &recordingSampler));
+        const auto sampledExplicit = ExecuteSoftwarePixelShaderEXT(
+            textureProgram, floats, integers, booleans, inputs, &recordingSampler);
         Check(recordingSampler.lastRequest.lodMode == SoftwareTextureLodModeEXT::Explicit &&
                   recordingSampler.lastRequest.lod == inputs[1].value[3],
               "TEXLDL did not publish its explicit level");
+        Check(sampledExplicit.colors[0] == swizzledSample,
+              "TEXLDL did not apply the sampler source swizzle to its result");
 
         textureProgram.instructions[0].opcode = 93u;
         textureProgram.instructions[0].tokens = {
-            93u, destination(temporary, 0), source(texture, 0),
-            source(samplerRegisterType, 3), source(input, 0), source(constant, 0)};
-        static_cast<void>(ExecuteSoftwarePixelShaderEXT(
-            textureProgram, floats, integers, booleans, inputs, &recordingSampler));
+            93u, destination(temporary, 0), source(input, 0),
+            source(samplerRegisterType, 3, swizzleBgra),
+            source(input, 0), source(constant, 0)};
+        const auto sampledGradients = ExecuteSoftwarePixelShaderEXT(
+            textureProgram, floats, integers, booleans, inputs, &recordingSampler);
         Check(recordingSampler.lastRequest.lodMode == SoftwareTextureLodModeEXT::Gradients &&
-                  recordingSampler.lastRequest.gradientX == inputs[0].value &&
+                  recordingSampler.lastRequest.gradientX == inputs[1].value &&
                   recordingSampler.lastRequest.gradientY ==
                       std::array<float, 4>{2.0f, -1.0f, 0.5f, 1.0f},
               "TEXLDD did not publish both explicit gradients");
+        Check(sampledGradients.colors[0] == swizzledSample,
+              "TEXLDD did not apply the sampler source swizzle to its result");
 
         const int samplesBeforeSetp = recordingSampler.sampleCount;
         textureProgram.instructions[0].opcode = 94u;
@@ -2164,6 +2172,60 @@ namespace
                   swizzledProjection.getBProperty() == 255 &&
                   swizzledProjection.getAProperty() == 255,
               "compiled ps_1_4 projection ran before the coordinate source swizzle");
+    }
+
+    void CheckCompiledSamplerResultSwizzle()
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        GraphicsDevice device;
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderSamplesTexture = true;
+        options.pixelShaderSwizzlesSampleResult = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect->getParametersProperty()["Tint"]->SetValue(Vector4::One);
+
+        Texture2D texture(device, 1, 1);
+        const Color sourcePixel(32, 64, 128, 255);
+        texture.SetData(&sourcePixel, 1);
+        effect->getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v; };
+        const Vertex quad[6] = {
+            {-1,  1, 0, .5f, .5f}, {-1, -1, 0, .5f, .5f},
+            { 1, -1, 0, .5f, .5f}, {-1,  1, 0, .5f, .5f},
+            { 1, -1, 0, .5f, .5f}, { 1,  1, 0, .5f, .5f},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        Check(centre == Color(128, 64, 32, 255),
+              "compiled SM3 sampler source swizzle did not reorder the sampled result");
     }
 
     void CheckCompiledShaderModel14TextureLoad()
@@ -4089,6 +4151,7 @@ int main()
         CheckCompiledInstructionPredication();
         CheckCompiledPredicatedTexkill();
         CheckCompiledProjectiveSourceModifiers();
+        CheckCompiledSamplerResultSwizzle();
         CheckCompiledShaderModel14TextureLoad();
         CheckCompiledShaderModel14Phase();
         CheckCompiledShaderModel14PhaseValidation(renderer);

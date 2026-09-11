@@ -349,6 +349,9 @@ namespace CNA::TestSupport
         /// suite still green: the read-back pixel was `Tint` whatever the backend did with its
         /// sampler state. Requires `includeSampler`.
         bool pixelShaderSamplesTexture = false;
+        /// Emits the sampling program as Shader Model 3 and reads its sampler operand as `.bgra`.
+        /// D3D9 applies that source swizzle to the sampled texel before the destination write.
+        bool pixelShaderSwizzlesSampleResult = false;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -413,12 +416,13 @@ namespace CNA::TestSupport
             SyntheticLegacyBumpEnvironment::None,
         bool duplicatesShaderModel14Phase = false,
         bool usesRelativeTextureCoordinate = false,
-        bool usesDependentTemporaryTextureCoordinate = false)
+        bool usesDependentTemporaryTextureCoordinate = false,
+        bool swizzlesSampleResult = false)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
-            usesDependentTemporaryTextureCoordinate;
+            usesDependentTemporaryTextureCoordinate || swizzlesSampleResult;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -1149,10 +1153,13 @@ namespace CNA::TestSupport
                     : samplerKind == SyntheticSamplerKind::Sampler3D
                           ? EffectFormat::SamplerTypeVolume
                           : EffectFormat::SamplerType2D;
-            // dcl t0.xy(z) -- the interpolated texture coordinate the vertex shader forwards.
+            const std::uint32_t coordinateRegister =
+                swizzlesSampleResult ? regInput : regTexture;
+            // dcl t0.xy(z) for ps_2_0 or dcl_texcoord0 v0.xy(z) for ps_3_0 -- the
+            // interpolated texture coordinate the vertex shader forwards.
             AppendUInt32(shader, 0x0000001Fu | (2u << 24));
-            AppendUInt32(shader, 0x80000000u);
-            AppendUInt32(shader, destination(regTexture, 0, coordinateMask));
+            AppendUInt32(shader, 0x80000000u | (swizzlesSampleResult ? 5u : 0u));
+            AppendUInt32(shader, destination(coordinateRegister, 0, coordinateMask));
             // dcl_<2d|cube|volume> s<samplerRegister> -- the texture type lives in bits 27..30 of
             // the usage token (D3DSAMPLER_TEXTURE_TYPE).
             AppendUInt32(shader, 0x0000001Fu | (2u << 24));
@@ -1161,8 +1168,12 @@ namespace CNA::TestSupport
             // texld r0, t0, s<samplerRegister>
             AppendUInt32(shader, 0x00000042u | (3u << 24));
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
-            AppendUInt32(shader, source(regTexture, 0));
-            AppendUInt32(shader, source(regSampler, samplerRegister));
+            AppendUInt32(shader, source(coordinateRegister, 0));
+            constexpr std::uint32_t swizzleBgra =
+                2u | (1u << 2) | (0u << 4) | (3u << 6);
+            AppendUInt32(shader, source(regSampler, samplerRegister,
+                                        swizzlesSampleResult ? swizzleBgra
+                                                            : swizzleIdentity));
             // mul oC0, r0, c0 -- the sampled texel modulated by Tint, so a test can read the raw
             // texel back with Tint at (1,1,1,1) and still prove the compiled shader is what ran by
             // changing Tint.
@@ -2001,7 +2012,8 @@ namespace CNA::TestSupport
             options.pixelShaderLegacyBumpEnvironment,
             options.pixelShaderDuplicatesShaderModel14Phase,
             options.pixelShaderUsesRelativeTextureCoordinate,
-            options.pixelShaderUsesDependentTemporaryTextureCoordinate);
+            options.pixelShaderUsesDependentTemporaryTextureCoordinate,
+            options.pixelShaderSwizzlesSampleResult);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
