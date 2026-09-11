@@ -212,6 +212,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   same target/depth/stencil option path as the Color overload. A shared RGBA32F test preserves
   `(-2, 3, 0.5, 0.25)` exactly on Software and EasyGL, proving there is no hidden conversion through
   eight-bit Color. CNA's component-wise and Color-plus-depth conveniences are explicitly `CNAEXT`.
+- **Classic generic backbuffer readback is available for the applied Color backbuffer**
+  (`SOFTWARE-328`). The three `GetBackBufferData<T>` shapes accept one-, two- and four-byte
+  trivially-copyable values whose total byte count exactly covers the requested full buffer or
+  rectangle. Shared tests prove raw RGBA byte order, nonzero destination windows, a custom
+  four-byte value type, null/width/total validation and unchanged Color-object unpacking on
+  Software and EasyGL. Both audited renderers normalize their applied backbuffer format to Color;
+  a renderer retaining a wider native backbuffer still needs a declared-format native read seam.
 - **Static and dynamic vertex/index buffers share EasyGL's public contract** (`SOFTWARE-109`,
   `SOFTWARE-294`). The complete fixed-size resource exists at construction, so readable buffers
   support `GetData` and valid draw ranges before their first upload, matching XNA/FNA native

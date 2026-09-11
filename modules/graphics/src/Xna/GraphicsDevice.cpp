@@ -34,6 +34,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -4473,6 +4474,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount)
     {
+        GetBackBufferDataCore(rect, data, startIndex, elementCount, 4u, true);
+    }
+
+    void GraphicsDevice::GetBackBufferDataCore(
+        const Rectangle* rect, void* data, int startIndex, int elementCount,
+        std::size_t elementSizeInBytes, bool colorObjects)
+    {
         ThrowIfDisposed();
         if (graphicsProfile_ == GraphicsProfile::Reach)
         {
@@ -4543,21 +4551,53 @@ namespace Microsoft::Xna::Framework::Graphics
             std::fflush(stderr);
         }
 
-        const int pixelCount = w * h;
-        if (elementCount != pixelCount)
-            throw System::ArgumentException(
-                "GetBackBufferData: elementCount does not match the requested pixel count");
-        Texture::ValidateGetDataFormat(presentationParameters_.getBackBufferFormatProperty(), 4);
-
-        // Color inherits a vtable pointer, so its first byte is NOT the R component.
-        // Use a plain byte buffer for ReadBackbuffer, then unpack each RGBA group
-        // into a Color(r, g, b, a) to avoid writing into the vtable pointer.
-        std::vector<uint8_t> buf(static_cast<std::size_t>(pixelCount) * 4);
-        renderer_->ReadBackbuffer(x, y, w, h, buf.data());
-        for (int i = 0; i < pixelCount; ++i)
+        const SurfaceFormat backBufferFormat =
+            presentationParameters_.getBackBufferFormatProperty();
+        const int formatSize = Texture::GetFormatSizeEXT(backBufferFormat);
+        if (elementSizeInBytes == 0u ||
+            elementSizeInBytes > static_cast<std::size_t>((std::numeric_limits<int>::max)()) ||
+            static_cast<std::size_t>(formatSize) % elementSizeInBytes != 0u)
         {
-            const uint8_t* p = buf.data() + i * 4;
-            data[startIndex + i] = Color(p[0], p[1], p[2], p[3]);
+            throw System::ArgumentException(
+                "GetBackBufferData: destination element size is invalid for the backbuffer format");
+        }
+        if (!colorObjects && formatSize != 4)
+        {
+            throw System::NotSupportedException(
+                "GetBackBufferData: generic reads of non-Color backbuffers require a native "
+                "declared-format readback path");
+        }
+
+        const std::int64_t pixelCount64 =
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h);
+        const std::int64_t requiredBytes =
+            pixelCount64 * (colorObjects ? 4 : formatSize);
+        const std::int64_t suppliedBytes =
+            static_cast<std::int64_t>(elementCount) *
+            static_cast<std::int64_t>(elementSizeInBytes);
+        if (suppliedBytes != requiredBytes)
+            throw System::ArgumentException(
+                "GetBackBufferData: elementCount does not match the requested byte count");
+
+        const std::size_t pixelCount = static_cast<std::size_t>(pixelCount64);
+        std::vector<uint8_t> buf(pixelCount * 4u);
+        renderer_->ReadBackbuffer(x, y, w, h, buf.data());
+        if (!colorObjects)
+        {
+            auto* destination = static_cast<std::uint8_t*>(data) +
+                static_cast<std::size_t>(startIndex) * elementSizeInBytes;
+            std::memcpy(destination, buf.data(), buf.size());
+            return;
+        }
+
+        // Color inherits a vtable pointer, so its first byte is NOT the R component. Unpack the
+        // renderer's plain RGBA groups into actual Color objects instead of overwriting vtables.
+        auto* colors = static_cast<Color*>(data);
+        for (std::size_t i = 0; i < pixelCount; ++i)
+        {
+            const uint8_t* p = buf.data() + i * 4u;
+            colors[static_cast<std::size_t>(startIndex) + i] =
+                Color(p[0], p[1], p[2], p[3]);
         }
     }
 

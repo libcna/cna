@@ -107,15 +107,21 @@ targets. CNA also has two non-XNA convenience overloads, now explicitly tagged `
 
 ## 5. Back-Buffer Readback
 
-FNA uses generics; CNA uses `Color*` raw pointers (Color-only port):
+FNA uses generics; CNA maps them to constrained pointer templates and retains a Color-object
+specialization:
 
 | FNA signature | CNA equivalent | Status |
 |---|---|---|
-| `GetBackBufferData<T>(T[] data)` | `GetBackBufferData(Color* data, int count)` | ⚠️ Color-only |
-| `GetBackBufferData<T>(T[] data, int start, int count)` | `GetBackBufferData(Color* data, int start, int count)` | ⚠️ Color-only |
-| `GetBackBufferData<T>(Rectangle? rect, T[] data, int start, int count)` | `GetBackBufferData(const Rectangle* rect, Color* data, int start, int count)` | ⚠️ Color-only |
+| `GetBackBufferData<T>(T[] data)` | `GetBackBufferData(T* data, int count)` | ✅ (`SOFTWARE-328`) |
+| `GetBackBufferData<T>(T[] data, int start, int count)` | `GetBackBufferData(T* data, int start, int count)` | ✅ (`SOFTWARE-328`) |
+| `GetBackBufferData<T>(Rectangle? rect, T[] data, int start, int count)` | `GetBackBufferData(const Rectangle* rect, T* data, int start, int count)` | ✅ (`SOFTWARE-328`) |
 
-All three overloads exist with the correct shape. The lack of generics is an intentional C++ deviation; the Color specialisation covers the main use case. Other element types (`Vector4`, `byte[]`, custom structs) are unsupported until a template or additional overloads are added.
+All three overloads now accept trivially-copyable element types whose width divides the applied
+backbuffer texel and whose exact byte total covers the requested region. `Color` retains a separate
+object-aware unpack because CNA's C++ type has a vtable. Software and EasyGL normalize their applied
+backbuffer to Color, for which byte, 16-bit and four-byte application-defined values are covered.
+Raw generic transfer from a renderer that retains a non-Color native backbuffer requires extending
+the currently RGBA8-only renderer readback seam.
 
 ---
 

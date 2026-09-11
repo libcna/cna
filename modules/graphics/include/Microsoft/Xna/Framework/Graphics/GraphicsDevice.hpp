@@ -2,11 +2,13 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -336,6 +338,49 @@ namespace Microsoft::Xna::Framework::Graphics
          * @throws System::InvalidOperationException if a render target is active.
          */
         void GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Copies the complete back buffer into arbitrary trivially-copyable elements.
+         *
+         * @tparam T Destination value type whose size divides the back-buffer texel size.
+         * @param data Output elements.
+         * @param elementCount Exact element count whose bytes equal the complete back buffer.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void GetBackBufferData(T* data, int elementCount)
+        {
+            GetBackBufferData(data, 0, elementCount);
+        }
+
+        /**
+         * @brief Copies the complete back buffer into a destination element window.
+         *
+         * @tparam T Destination value type whose size divides the back-buffer texel size.
+         * @param data Output elements.
+         * @param startIndex First destination element to write.
+         * @param elementCount Exact element count whose bytes equal the complete back buffer.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void GetBackBufferData(T* data, int startIndex, int elementCount)
+        {
+            GetBackBufferData(nullptr, data, startIndex, elementCount);
+        }
+
+        /**
+         * @brief Copies a back-buffer rectangle into arbitrary trivially-copyable elements.
+         *
+         * @tparam T Destination value type whose size divides the back-buffer texel size.
+         * @param rect Source rectangle, or null for the complete back buffer.
+         * @param data Output elements.
+         * @param startIndex First destination element to write.
+         * @param elementCount Exact element count whose bytes equal the requested rectangle.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void GetBackBufferData(const Rectangle* rect, T* data,
+                               int startIndex, int elementCount)
+        {
+            GetBackBufferDataCore(rect, data, startIndex, elementCount, sizeof(T), false);
+        }
 
         // --- Render targets ---
         /**
@@ -1493,6 +1538,9 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<std::uint8_t> userVertexScratch_;
         std::vector<std::uint8_t> userIndexScratch_;
         void ThrowIfDisposed() const;
+        void GetBackBufferDataCore(const Rectangle* rect, void* data,
+                                   int startIndex, int elementCount,
+                                   std::size_t elementSizeInBytes, bool colorObjects);
         void GetActiveRenderDimensions(int& width, int& height) const;
         [[nodiscard]] void* AcquireUserVertexScratch(std::size_t bytes);
         [[nodiscard]] void* AcquireUserIndexScratch(std::size_t bytes);
