@@ -26,7 +26,9 @@ SDL3/SDL3_image/SDL3_mixer and
 The final adversarial challenge found one material classic-XNA boundary: Software does not execute
 compiled Direct3D 9 Effect Framework bytecode, while EasyGL does when built with
 `CNA_EASYGL_COMPILED_EFFECTS=ON`. `SOFTWARE-162` now provides an opt-in headless Effect parser,
-reflection/state runtime, preshader register files and validated Software-owned D3D9 token IR:
+reflection/state runtime, preshader register files and validated Software-owned D3D9 token IR;
+`SOFTWARE-163` executes the committed effects' vertex programs and carries their declared outputs
+through clipping and perspective-interpolation setup:
 
 ```bash
 cmake -S . -B cmake-build-software-effects \
@@ -34,11 +36,11 @@ cmake -S . -B cmake-build-software-effects \
   -DCNA_SOFTWARE_COMPILED_EFFECTS=ON
 ```
 
-That is architecture for the remaining executor, not execution parity. Software still truthfully
+That is a real parser and vertex phase, not complete execution parity. Software still truthfully
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
-continues to reject those bytes rather than exposing a runtime that cannot draw. This is distinct
-from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162` the completed parser phase and `SOFTWARE-163..165` the CPU shader-execution backlog.
+continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
+is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
+`SOFTWARE-162/163` are complete and `SOFTWARE-164/165` remain the pixel/conformance backlog.
 
 The same challenge also confirmed a renderer-wide public-API hole: CNA stores
 `GraphicsDevice.VertexTextures` and `VertexSamplerStates`, but no renderer contract consumes them.
@@ -166,12 +168,15 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   constructor accepts XNA/FNA Direct3D 9 Effect Framework bytes only on renderers whose real
   runtime implements them. Opt-in EasyGL passes 40 tests covering reflection, techniques/passes,
   parameters, draw pixels, state, SpriteBatch, instancing, multi-stream input and 2D/cube/volume
-  sampling. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software can now parse and reflect those real
-  binaries, apply their pass state, run their preshaders and retain validated D3D9 token/register
-  IR (`SOFTWARE-162`), but it still has no CPU vertex/pixel instruction executor. It therefore
-  advertises `CompiledEffects=false` and the public constructor rejects those same valid bytes.
-  `SOFTWARE-163..165` is the remaining phased implementation backlog; CNAEXT `ShaderEffect` is a
-  separate excluded API.
+  sampling. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software can parse and reflect those real
+  binaries, apply their pass state, run their preshaders, retain validated D3D9 token/register IR
+  (`SOFTWARE-162`) and execute the vertex programs used by all committed stock/authentic fixtures
+  (`SOFTWARE-163`). Declaration semantics, draw offsets, signed base vertex, multiple streams,
+  instance divisors, homogeneous clipping and perspective-varying setup are wired. Pixel programs
+  are not yet executed, so a compiled draw intentionally refuses after its vertex phase rather
+  than substituting stock shading. Software therefore advertises `CompiledEffects=false` and the
+  public constructor rejects the same valid bytes. `SOFTWARE-164/165` remain the phased execution
+  backlog; CNAEXT `ShaderEffect` is a separate excluded API.
 - **Public vertex-stage texture/sampler collections are inert renderer-wide** (`SOFTWARE-167`).
   `GraphicsDevice.VertexTextures` and `VertexSamplerStates` have the correct public shape and
   resource-disposal bookkeeping, but common code has no operation that publishes their contents

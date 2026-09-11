@@ -23,6 +23,7 @@
 #include <cstring>
 #include <new>
 #include <set>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -86,6 +87,10 @@ namespace CNA::Internal::Renderers::Software
             /// same premultiply-then-divide perspective-correct interpolation treatment as color/uv.
             float wpx = 0.0f, wpy = 0.0f, wpz = 0.0f;
             float nx = 0.0f, ny = 0.0f, nz = 1.0f;
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+            std::array<SoftwareShaderSemanticValueEXT, 16> compiledVaryings{};
+            std::size_t compiledVaryingCount = 0;
+#endif
         };
 
         /// REMED-GFX-030: complete public depth state captured for one Software draw. Keeping all
@@ -429,6 +434,10 @@ namespace CNA::Internal::Renderers::Software
             float nx = 0.0f, ny = 0.0f, nz = 1.0f;
             /// SpriteBatch viewport-local homogeneous position before its orthographic projection.
             float spriteX = 0.0f, spriteY = 0.0f;
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+            std::array<SoftwareShaderSemanticValueEXT, 16> compiledVaryings{};
+            std::size_t compiledVaryingCount = 0;
+#endif
         };
 
         /// Reads a packed little-endian RGBA8 Color (Microsoft::Xna::Framework::Color's own
@@ -493,6 +502,32 @@ namespace CNA::Internal::Renderers::Software
             out.nz = a.nz + t * (b.nz - a.nz);
             out.spriteX = a.spriteX + t * (b.spriteX - a.spriteX);
             out.spriteY = a.spriteY + t * (b.spriteY - a.spriteY);
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+            if (a.compiledVaryingCount != b.compiledVaryingCount)
+            {
+                throw std::runtime_error(
+                    "SoftwareRenderer: compiled vertex outputs disagree across a primitive.");
+            }
+            out.compiledVaryingCount = a.compiledVaryingCount;
+            for (std::size_t varying = 0; varying < out.compiledVaryingCount; ++varying)
+            {
+                const auto& left = a.compiledVaryings[varying];
+                const auto& right = b.compiledVaryings[varying];
+                if (left.usage != right.usage || left.usageIndex != right.usageIndex)
+                {
+                    throw std::runtime_error(
+                        "SoftwareRenderer: compiled vertex output semantics changed within a draw.");
+                }
+                auto& value = out.compiledVaryings[varying];
+                value.usage = left.usage;
+                value.usageIndex = left.usageIndex;
+                for (std::size_t component = 0; component < value.value.size(); ++component)
+                {
+                    value.value[component] = left.value[component] +
+                        t * (right.value[component] - left.value[component]);
+                }
+            }
+#endif
             return out;
         }
 
@@ -679,6 +714,15 @@ namespace CNA::Internal::Renderers::Software
             out.nx = cv.nx * invW;
             out.ny = cv.ny * invW;
             out.nz = cv.nz * invW;
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+            out.compiledVaryingCount = cv.compiledVaryingCount;
+            for (std::size_t varying = 0; varying < out.compiledVaryingCount; ++varying)
+            {
+                out.compiledVaryings[varying] = cv.compiledVaryings[varying];
+                for (float& component : out.compiledVaryings[varying].value)
+                    component *= invW;
+            }
+#endif
             return out;
         }
 
@@ -2667,7 +2711,10 @@ namespace CNA::Internal::Renderers::Software
                 for (int i = 0; i < params->vertexStreamCount; ++i)
                 {
                     const auto& stream = params->vertexStreams[static_cast<std::size_t>(i)];
-                    if (stream.instanceFrequency != 0 || !stream.vertexShaderInputUsed)
+                    const bool compiledInstanceInput = useInstanceStreams &&
+                        params->compiledEffectRuntime != nullptr;
+                    if ((stream.instanceFrequency != 0 && !compiledInstanceInput) ||
+                        !stream.vertexShaderInputUsed)
                         continue;
                     const std::uint8_t* base = recordBase[static_cast<std::size_t>(i)];
                     if (base == nullptr)
@@ -2741,6 +2788,142 @@ namespace CNA::Internal::Renderers::Software
                 return false;
             }
         };
+
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        [[nodiscard]] bool ToVertexElementUsage(
+            MOJOSHADER_usage usage,
+            Microsoft::Xna::Framework::Graphics::VertexElementUsage& translated)
+        {
+            using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+            switch (usage)
+            {
+            case MOJOSHADER_USAGE_POSITION:
+                translated = VertexElementUsage::Position;
+                return true;
+            case MOJOSHADER_USAGE_BLENDWEIGHT:
+                translated = VertexElementUsage::BlendWeight;
+                return true;
+            case MOJOSHADER_USAGE_BLENDINDICES:
+                translated = VertexElementUsage::BlendIndices;
+                return true;
+            case MOJOSHADER_USAGE_NORMAL:
+                translated = VertexElementUsage::Normal;
+                return true;
+            case MOJOSHADER_USAGE_POINTSIZE:
+                translated = VertexElementUsage::PointSize;
+                return true;
+            case MOJOSHADER_USAGE_TEXCOORD:
+                translated = VertexElementUsage::TextureCoordinate;
+                return true;
+            case MOJOSHADER_USAGE_TANGENT:
+                translated = VertexElementUsage::Tangent;
+                return true;
+            case MOJOSHADER_USAGE_BINORMAL:
+                translated = VertexElementUsage::Binormal;
+                return true;
+            case MOJOSHADER_USAGE_TESSFACTOR:
+                translated = VertexElementUsage::TessellateFactor;
+                return true;
+            case MOJOSHADER_USAGE_COLOR:
+                translated = VertexElementUsage::Color;
+                return true;
+            case MOJOSHADER_USAGE_FOG:
+                translated = VertexElementUsage::Fog;
+                return true;
+            case MOJOSHADER_USAGE_DEPTH:
+                translated = VertexElementUsage::Depth;
+                return true;
+            case MOJOSHADER_USAGE_SAMPLE:
+                translated = VertexElementUsage::Sample;
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        ClipVertex BuildCompiledEffectClipVertex(const CombinedVertexReader& raw,
+                                                 const GpuDrawParams& params)
+        {
+            auto* runtime = dynamic_cast<SoftwareCompiledEffect*>(params.compiledEffectRuntime);
+            if (runtime == nullptr)
+            {
+                throw System::InvalidOperationException(
+                    "Software compiled-effect draw received a runtime from another renderer.");
+            }
+            const SoftwareShaderProgramEXT* program = runtime->GetVertexProgramEXT();
+            if (program == nullptr)
+            {
+                throw System::InvalidOperationException(
+                    "Software compiled-effect draw has no applied vertex shader.");
+            }
+
+            std::array<SoftwareShaderSemanticValueEXT, 16> inputs{};
+            std::size_t inputCount = 0;
+            for (const SoftwareShaderSemanticEXT& declaration : program->inputSemantics)
+            {
+                if (inputCount >= inputs.size())
+                {
+                    throw System::NotSupportedException(
+                        "Software compiled-effect vertex shader exceeds 16 XNA inputs.");
+                }
+                Microsoft::Xna::Framework::Graphics::VertexElementUsage usage{};
+                if (!ToVertexElementUsage(declaration.usage, usage))
+                {
+                    throw System::NotSupportedException(
+                        "Software compiled-effect vertex shader uses an input semantic that XNA "
+                        "VertexDeclaration cannot represent.");
+                }
+                const CombinedVertexReader::Attribute attribute =
+                    raw.Read(usage, declaration.usageIndex);
+                if (!attribute.found)
+                    continue;
+                inputs[inputCount++] =
+                    {declaration.usage, declaration.usageIndex, attribute.value};
+            }
+
+            const SoftwareVertexShaderResultEXT vertex =
+                runtime->ExecuteVertexEXT(std::span(inputs.data(), inputCount));
+            ClipVertex result;
+            result.x = vertex.position[0];
+            result.y = vertex.position[1];
+            result.z = vertex.position[2];
+            result.w = vertex.position[3];
+            if (vertex.varyings.size() > result.compiledVaryings.size())
+            {
+                throw System::NotSupportedException(
+                    "Software compiled-effect vertex shader exceeds 16 interpolators.");
+            }
+            result.compiledVaryingCount = vertex.varyings.size();
+            std::copy(vertex.varyings.begin(), vertex.varyings.end(),
+                      result.compiledVaryings.begin());
+            return result;
+        }
+
+        void RequireCompiledEffectDeclarations(const SoftwareVertexBufferRenderer& fallback,
+                                               const GpuDrawParams& params)
+        {
+            if (params.vertexStreamCount == 0)
+            {
+                if (!fallback.Declaration().IsEmpty())
+                    return;
+                throw System::InvalidOperationException(
+                    "Software compiled-effect drawing requires a VertexDeclaration.");
+            }
+            for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
+            {
+                const auto& stream =
+                    params.vertexStreams[static_cast<std::size_t>(streamIndex)];
+                if (stream.buffer != nullptr &&
+                    !static_cast<const SoftwareVertexBufferRenderer*>(stream.buffer)
+                         ->Declaration()
+                         .IsEmpty())
+                    continue;
+                throw System::InvalidOperationException(
+                    "Software compiled-effect drawing requires every active vertex stream to "
+                    "carry a VertexDeclaration.");
+            }
+        }
+#endif
 
         ClipVertex BuildLegacyGenericClipVertex(const CombinedVertexReader& raw, std::size_t stride,
                                                 const Matrix& combined,
@@ -2905,6 +3088,11 @@ namespace CNA::Internal::Renderers::Software
                                           const GpuDrawParams& params)
         {
             using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+            if (params.compiledEffectRuntime != nullptr)
+                return BuildCompiledEffectClipVertex(raw, params);
+#endif
 
             if (!raw.HasDeclaration())
                 return BuildLegacyGenericClipVertex(raw, stride, combined, params);
@@ -4857,10 +5045,19 @@ namespace CNA::Internal::Renderers::Software
             ValidateNonIndexedAddressing(vb.GetVertexCount(), consumedVertexCount, vertexStart);
 
         const auto& swVb = static_cast<const SoftwareVertexBufferRenderer&>(vb);
+        const bool compiledEffectDraw = params.compiledEffectRuntime != nullptr;
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        if (compiledEffectDraw)
+            RequireCompiledEffectDeclarations(swVb, params);
+#else
+        if (compiledEffectDraw)
+            throw System::NotSupportedException(
+                "Software compiled-effect support was not enabled in this build.");
+#endif
         // The combined stride remains relevant only to the empty-declaration compatibility path;
         // declared streams below are resolved by semantic, never by this aggregate number.
         const std::size_t stride = CombinedVertexStrideOr(params, swVb.Stride());
-        if (swVb.Declaration().IsEmpty() &&
+        if (!compiledEffectDraw && swVb.Declaration().IsEmpty() &&
             stride != 16 && stride != 20 && stride != 24 && stride != 32 &&
             stride != 48 && stride != 52 && stride != 56 && stride != 60 &&
             stride != 68 && stride != 76 && stride != 80)
@@ -4934,10 +5131,14 @@ namespace CNA::Internal::Renderers::Software
                 const CombinedVertexReader raw = fetchVertex(i);
                 const ClipVertex cv = BuildGenericClipVertex(raw, stride, combined, params);
                 if (IsInsideClipVolume(cv))
-                    RasterizePointShaded(
-                        fb, depthState, stencilState, blendState, blendFactor, params,
-                        clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMasks_[0], multiSampleMask_,
-                        GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_);
+                {
+                    const RasterVertex vertex = ClipVertexToRasterVertex(cv, vpT);
+                    if (!compiledEffectDraw)
+                        RasterizePointShaded(
+                            fb, depthState, stencilState, blendState, blendFactor, params,
+                            clip, vertex, colorWriteMasks_[0], multiSampleMask_,
+                            GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_);
+                }
                 continue;
             }
             if (primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip)
@@ -4949,11 +5150,16 @@ namespace CNA::Internal::Renderers::Software
                 ClipVertex b = BuildGenericClipVertex(
                     fetchVertex(first + 1), stride, combined, params);
                 if (ClipLineToFrustum(a, b))
-                    RasterizeLineShaded(
-                        fb, depthState, stencilState, blendState, blendFactor, params, clip,
-                        ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
-                        colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0), GetSamplerState(1),
-                        activeOcclusionQuery_, multiSampleAntiAlias_);
+                {
+                    const RasterVertex firstVertex = ClipVertexToRasterVertex(a, vpT);
+                    const RasterVertex secondVertex = ClipVertexToRasterVertex(b, vpT);
+                    if (!compiledEffectDraw)
+                        RasterizeLineShaded(
+                            fb, depthState, stencilState, blendState, blendFactor, params, clip,
+                            firstVertex, secondVertex, colorWriteMasks_[0], multiSampleMask_,
+                            GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_,
+                            multiSampleAntiAlias_);
+                }
                 continue;
             }
 
@@ -4975,6 +5181,9 @@ namespace CNA::Internal::Renderers::Software
                 rv[static_cast<std::size_t>(k)] =
                     ClipVertexToRasterVertex(clipped[static_cast<std::size_t>(k)], vpT);
 
+            if (compiledEffectDraw)
+                continue;
+
             // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
             // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
             // SOFTWARE-106/107: preserve only the clipped polygon boundary in wireframe; top-left
@@ -4994,6 +5203,12 @@ namespace CNA::Internal::Renderers::Software
                                         GetSamplerState(1), activeOcclusionQuery_,
                                         multiSampleAntiAlias_, wire, edgeMask);
             }
+        }
+        if (compiledEffectDraw)
+        {
+            throw System::NotSupportedException(
+                "Software compiled-effect vertex execution completed, but pixel-shader execution "
+                "requires SOFTWARE-164.");
         }
     }
 
@@ -5023,10 +5238,19 @@ namespace CNA::Internal::Renderers::Software
 
         const auto& swVb = static_cast<const SoftwareVertexBufferRenderer&>(vb);
         const auto& swIb = static_cast<const SoftwareIndexBufferRenderer&>(ib);
+        const bool compiledEffectDraw = params.compiledEffectRuntime != nullptr;
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        if (compiledEffectDraw)
+            RequireCompiledEffectDeclarations(swVb, params);
+#else
+        if (compiledEffectDraw)
+            throw System::NotSupportedException(
+                "Software compiled-effect support was not enabled in this build.");
+#endif
         // See DrawPrimitivesEx: declared streams are semantic-driven; this aggregate is only the
         // legacy empty-declaration fallback key.
         const std::size_t stride = CombinedVertexStrideOr(params, swVb.Stride());
-        if (swVb.Declaration().IsEmpty() &&
+        if (!compiledEffectDraw && swVb.Declaration().IsEmpty() &&
             stride != 16 && stride != 20 && stride != 24 && stride != 32 &&
             stride != 48 && stride != 52 && stride != 56 && stride != 60 &&
             stride != 68 && stride != 76 && stride != 80)
@@ -5127,10 +5351,14 @@ namespace CNA::Internal::Renderers::Software
                 const CombinedVertexReader raw = fetchVertex(i);
                 const ClipVertex cv = BuildGenericClipVertex(raw, stride, combined, params);
                 if (IsInsideClipVolume(cv))
-                    RasterizePointShaded(
-                        fb, depthState, stencilState, blendState, blendFactor, params,
-                        clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMasks_[0], multiSampleMask_,
-                        GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_);
+                {
+                    const RasterVertex vertex = ClipVertexToRasterVertex(cv, vpT);
+                    if (!compiledEffectDraw)
+                        RasterizePointShaded(
+                            fb, depthState, stencilState, blendState, blendFactor, params,
+                            clip, vertex, colorWriteMasks_[0], multiSampleMask_,
+                            GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_);
+                }
                 continue;
             }
             if (primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip)
@@ -5142,11 +5370,16 @@ namespace CNA::Internal::Renderers::Software
                 ClipVertex b = BuildGenericClipVertex(
                     fetchVertex(first + 1), stride, combined, params);
                 if (ClipLineToFrustum(a, b))
-                    RasterizeLineShaded(
-                        fb, depthState, stencilState, blendState, blendFactor, params, clip,
-                        ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
-                        colorWriteMasks_[0], multiSampleMask_, GetSamplerState(0), GetSamplerState(1),
-                        activeOcclusionQuery_, multiSampleAntiAlias_);
+                {
+                    const RasterVertex firstVertex = ClipVertexToRasterVertex(a, vpT);
+                    const RasterVertex secondVertex = ClipVertexToRasterVertex(b, vpT);
+                    if (!compiledEffectDraw)
+                        RasterizeLineShaded(
+                            fb, depthState, stencilState, blendState, blendFactor, params, clip,
+                            firstVertex, secondVertex, colorWriteMasks_[0], multiSampleMask_,
+                            GetSamplerState(0), GetSamplerState(1), activeOcclusionQuery_,
+                            multiSampleAntiAlias_);
+                }
                 continue;
             }
 
@@ -5168,6 +5401,9 @@ namespace CNA::Internal::Renderers::Software
                 rv[static_cast<std::size_t>(k)] =
                     ClipVertexToRasterVertex(clipped[static_cast<std::size_t>(k)], vpT);
 
+            if (compiledEffectDraw)
+                continue;
+
             // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
             // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
             // SOFTWARE-106/107: preserve only the clipped polygon boundary in wireframe; top-left
@@ -5187,6 +5423,12 @@ namespace CNA::Internal::Renderers::Software
                                         GetSamplerState(1), activeOcclusionQuery_,
                                         multiSampleAntiAlias_, wire, edgeMask);
             }
+        }
+        if (compiledEffectDraw && !applyInstanceStreams)
+        {
+            throw System::NotSupportedException(
+                "Software compiled-effect vertex execution completed, but pixel-shader execution "
+                "requires SOFTWARE-164.");
         }
     }
 
@@ -5223,6 +5465,8 @@ namespace CNA::Internal::Renderers::Software
 
             if (stream.instanceFrequency <= 0)
                 continue;
+            if (params.compiledEffectRuntime != nullptr)
+                continue;
             const auto& elements = buffer->Declaration().GetElements();
             if (elements.empty() || nextInstanceLocation >= 4)
             {
@@ -5250,6 +5494,12 @@ namespace CNA::Internal::Renderers::Software
             }
             DrawIndexedPrimitivesInternal(
                 vb, ib, world, view, projection, primitive, primitiveCount, current, true);
+        }
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            throw System::NotSupportedException(
+                "Software compiled-effect vertex execution completed for every instance, but "
+                "pixel-shader execution requires SOFTWARE-164.");
         }
     }
 #else

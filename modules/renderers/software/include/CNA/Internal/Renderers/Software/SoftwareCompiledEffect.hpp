@@ -55,6 +55,56 @@ namespace CNA::Internal::Renderers::Software
         std::vector<std::uint32_t> tokens;
     };
 
+    /** @brief One Direct3D declaration semantic bound to a shader register. */
+    struct SoftwareShaderSemanticEXT
+    {
+        /** @brief Direct3D/MojoShader semantic kind. */
+        MOJOSHADER_usage usage = MOJOSHADER_USAGE_UNKNOWN;
+        /** @brief Semantic usage index. */
+        std::uint8_t usageIndex = 0;
+        /** @brief Direct3D input or output register number. */
+        std::uint16_t registerNumber = 0;
+    };
+
+    /** @brief One semantic float4 value entering or leaving the CPU shader. */
+    struct SoftwareShaderSemanticValueEXT
+    {
+        /** @brief Direct3D/MojoShader semantic kind. */
+        MOJOSHADER_usage usage = MOJOSHADER_USAGE_UNKNOWN;
+        /** @brief Semantic usage index. */
+        std::uint8_t usageIndex = 0;
+        /** @brief Four-component value, with absent declaration components expanded by vertex fetch. */
+        std::array<float, 4> value{0.0f, 0.0f, 0.0f, 1.0f};
+    };
+
+    /** @brief Result of executing one compiled Direct3D vertex shader invocation. */
+    struct SoftwareVertexShaderResultEXT
+    {
+        /** @brief Homogeneous clip-space POSITION0 output. */
+        std::array<float, 4> position{0.0f, 0.0f, 0.0f, 1.0f};
+        /** @brief Non-position declared outputs for clipping and perspective interpolation. */
+        std::vector<SoftwareShaderSemanticValueEXT> varyings;
+        /** @brief Point-size output, or one when the shader did not write it. */
+        float pointSize = 1.0f;
+    };
+
+    struct SoftwareShaderProgramEXT;
+
+    /**
+     * @brief Executes one validated Direct3D vertex program without renderer state.
+     * @param program Vertex program token IR.
+     * @param floatRegisters Direct3D float4 constant register storage.
+     * @param integerRegisters Direct3D int4 constant register storage.
+     * @param booleanRegisters Direct3D Boolean constant register storage.
+     * @param inputs Declaration-semantic values for one vertex.
+     * @return Homogeneous position and interpolator outputs.
+     */
+    CNAEXT [[nodiscard]] SoftwareVertexShaderResultEXT ExecuteSoftwareVertexShaderEXT(
+        const SoftwareShaderProgramEXT& program, std::span<const float> floatRegisters,
+        std::span<const int> integerRegisters,
+        std::span<const unsigned char> booleanRegisters,
+        std::span<const SoftwareShaderSemanticValueEXT> inputs);
+
     /** @brief A validated Direct3D 9 shader program prepared for the later CPU
      * execution phases. */
     struct SoftwareShaderProgramEXT
@@ -70,6 +120,10 @@ namespace CNA::Internal::Renderers::Software
         /** @brief Validated instruction slices in stream order, excluding the final
          * END token. */
         std::vector<SoftwareShaderInstructionEXT> instructions;
+        /** @brief Declared vertex inputs, mapped to their Direct3D input registers. */
+        std::vector<SoftwareShaderSemanticEXT> inputSemantics;
+        /** @brief Declared Shader Model 3 outputs, mapped to output registers. */
+        std::vector<SoftwareShaderSemanticEXT> outputSemantics;
     };
 
     /**
@@ -192,6 +246,27 @@ namespace CNA::Internal::Renderers::Software
         CNAEXT [[nodiscard]] std::span<const unsigned char>
         GetBooleanRegistersEXT(SoftwareShaderStageEXT stage) const noexcept;
 
+        /**
+         * @brief Executes the selected classic Direct3D vertex program on one semantic input set.
+         * @param inputs Declaration-semantic values for one vertex.
+         * @return Homogeneous position and declared interpolator outputs.
+         */
+        CNAEXT [[nodiscard]] SoftwareVertexShaderResultEXT ExecuteVertexEXT(
+            std::span<const SoftwareShaderSemanticValueEXT> inputs) const;
+
+        /**
+         * @brief Returns how many successful vertex invocations this runtime executed.
+         * @return Monotonic per-runtime invocation count used by renderer conformance probes.
+         */
+        CNAEXT [[nodiscard]] std::size_t GetVertexExecutionCountEXT() const noexcept;
+
+        /**
+         * @brief Returns the most recent successful vertex result.
+         * @return Last homogeneous position and varying set.
+         */
+        CNAEXT [[nodiscard]] const SoftwareVertexShaderResultEXT&
+        GetLastVertexResultEXT() const noexcept;
+
     private:
         struct Shader;
         struct ParserContext;
@@ -210,6 +285,8 @@ namespace CNA::Internal::Renderers::Software
         MOJOSHADER_effectStateChanges stateChanges_{};
         std::uint32_t techniqueIndex_ = 0;
         bool passActive_ = false;
+        mutable std::size_t vertexExecutionCount_ = 0;
+        mutable SoftwareVertexShaderResultEXT lastVertexResult_{};
     };
 } // namespace CNA::Internal::Renderers::Software
 

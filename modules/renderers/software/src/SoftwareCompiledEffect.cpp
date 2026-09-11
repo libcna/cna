@@ -30,6 +30,12 @@ namespace CNA::Internal::Renderers::Software
                    (static_cast<std::uint32_t>(bytes[3]) << 24u);
         }
 
+        std::uint8_t ShaderRegisterType(std::uint32_t token)
+        {
+            return static_cast<std::uint8_t>(((token >> 28u) & 0x7u) |
+                                             ((token >> 8u) & 0x18u));
+        }
+
         std::size_t ShaderModelOneOperandCount(std::uint16_t opcode, SoftwareShaderStageEXT stage,
                                                std::uint8_t minorVersion)
         {
@@ -243,6 +249,23 @@ namespace CNA::Internal::Renderers::Software
                 instruction.tokens.assign(
                     result.tokens.begin() + static_cast<std::ptrdiff_t>(offset),
                     result.tokens.begin() + static_cast<std::ptrdiff_t>(offset + instructionSize));
+                if (result.stage == SoftwareShaderStageEXT::Vertex && opcode == 31u &&
+                    instruction.tokens.size() == 3u)
+                {
+                    const std::uint32_t declarationToken = instruction.tokens[1];
+                    const std::uint32_t registerToken = instruction.tokens[2];
+                    const std::uint8_t registerType = ShaderRegisterType(registerToken);
+                    SoftwareShaderSemanticEXT semantic;
+                    semantic.usage = static_cast<MOJOSHADER_usage>(declarationToken & 0xFu);
+                    semantic.usageIndex =
+                        static_cast<std::uint8_t>((declarationToken >> 16u) & 0xFu);
+                    semantic.registerNumber =
+                        static_cast<std::uint16_t>(registerToken & 0x7FFu);
+                    if (registerType == 1u)
+                        result.inputSemantics.push_back(semantic);
+                    else if (registerType == 6u && result.majorVersion >= 3u)
+                        result.outputSemantics.push_back(semantic);
+                }
                 result.instructions.push_back(std::move(instruction));
                 offset += instructionSize;
             }
@@ -627,6 +650,32 @@ namespace CNA::Internal::Renderers::Software
                                     ? parserContext_->vertexBoolean
                                     : parserContext_->pixelBoolean;
         return registers;
+    }
+
+    SoftwareVertexShaderResultEXT SoftwareCompiledEffect::ExecuteVertexEXT(
+        std::span<const SoftwareShaderSemanticValueEXT> inputs) const
+    {
+        const SoftwareShaderProgramEXT* program = GetVertexProgramEXT();
+        if (program == nullptr)
+            throw std::runtime_error("Software compiled effect: no vertex program is selected.");
+        SoftwareVertexShaderResultEXT result = ExecuteSoftwareVertexShaderEXT(
+            *program, GetFloatRegistersEXT(SoftwareShaderStageEXT::Vertex),
+            GetIntegerRegistersEXT(SoftwareShaderStageEXT::Vertex),
+            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Vertex), inputs);
+        lastVertexResult_ = result;
+        ++vertexExecutionCount_;
+        return result;
+    }
+
+    std::size_t SoftwareCompiledEffect::GetVertexExecutionCountEXT() const noexcept
+    {
+        return vertexExecutionCount_;
+    }
+
+    const SoftwareVertexShaderResultEXT&
+    SoftwareCompiledEffect::GetLastVertexResultEXT() const noexcept
+    {
+        return lastVertexResult_;
     }
 } // namespace CNA::Internal::Renderers::Software
 
