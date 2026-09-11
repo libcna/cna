@@ -973,6 +973,16 @@ TEST(EasyGLCompiledEffectDrawTest, SharedVertexSamplerContract)
     CNA::TestSupport::RunCompiledEffectVertexSamplerContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9VertexSamplerSourceSwizzlesSampleResult)
+{
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectVertexSamplerResultSwizzleContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedVertexSamplerDimensionsContract)
 {
     GraphicsDevice device(

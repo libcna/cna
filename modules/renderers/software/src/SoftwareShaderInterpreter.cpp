@@ -980,7 +980,16 @@ namespace CNA::Internal::Renderers::Software
                     request.coordinate = coordinate;
                     request.lodMode = SoftwareTextureLodModeEXT::Explicit;
                     request.lod = coordinate[3];
-                    Write(destination, sampler_->SampleEXT(request));
+                    const Vector sample = sampler_->SampleEXT(request);
+                    Vector result{};
+                    for (int component = 0; component < 4; ++component)
+                    {
+                        const auto selected = static_cast<std::size_t>(
+                            (samplerOperand.swizzle >>
+                             static_cast<unsigned>(component * 2)) & 0x3u);
+                        result[static_cast<std::size_t>(component)] = sample[selected];
+                    }
+                    Write(destination, result);
                     return;
                 }
 

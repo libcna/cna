@@ -504,6 +504,41 @@ namespace
         Check(color != result.varyings.end() &&
                   color->value == std::array<float, 4>{0.0f, 0.5f, 1.0f, 1.0f},
               "D3D COLOR output saturation differs");
+
+        SoftwareShaderProgramEXT textureProgram;
+        textureProgram.stage = SoftwareShaderStageEXT::Vertex;
+        textureProgram.majorVersion = 3u;
+        textureProgram.inputSemantics = {
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, 0u, input},
+        };
+        textureProgram.outputSemantics = {
+            {MOJOSHADER_USAGE_POSITION, 0u, 0u, textureOutput},
+        };
+        textureProgram.samplers.push_back(
+            SoftwareShaderSamplerEXT{3u, SoftwareShaderSamplerTypeEXT::Volume});
+        constexpr std::uint32_t sampler = 10u;
+        constexpr std::uint32_t swizzleBgra =
+            2u | (1u << 2u) | (0u << 4u) | (3u << 6u);
+        SoftwareShaderInstructionEXT textureLookup;
+        textureLookup.opcode = 95u;
+        textureLookup.tokens = {
+            95u, destination(textureOutput, 0u), source(input, 0u),
+            source(sampler, 3u, swizzleBgra)};
+        textureProgram.instructions.push_back(std::move(textureLookup));
+        RecordingPixelSampler recordingSampler;
+        const auto textureResult = ExecuteSoftwareVertexShaderEXT(
+            textureProgram, floats, integers, booleans, inputs, &recordingSampler);
+        Check(recordingSampler.sampleCount == 1 &&
+                  recordingSampler.lastRequest.samplerRegister == 3u &&
+                  recordingSampler.lastRequest.samplerType ==
+                      SoftwareShaderSamplerTypeEXT::Volume &&
+                  recordingSampler.lastRequest.lodMode ==
+                      SoftwareTextureLodModeEXT::Explicit &&
+                  recordingSampler.lastRequest.lod == inputs[1].value[3],
+              "vertex TEXLDL lost its sampler, dimension, or explicit LOD");
+        Check(textureResult.position ==
+                  std::array<float, 4>{0.5f, 0.25f, 0.125f, 1.0f},
+              "vertex TEXLDL did not apply the sampler source swizzle to its result");
     }
 
     void CheckPixelInstructionSemantics()
@@ -3088,11 +3123,13 @@ namespace
             {Fx::SampMipMapLodBias, CNA::TestSupport::FloatBits(0.0f), true},
         };
         auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
-            device, CNA::TestSupport::BuildSyntheticVertexSamplingEffect(states, slot));
+            device, CNA::TestSupport::BuildSyntheticVertexSamplingEffect(
+                        states, slot, CNA::TestSupport::SyntheticSamplerKind::Sampler2D,
+                        /*swizzlesSampleResult=*/true));
         effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
         effect->getParametersProperty()["Tint"]->SetValue(Vector4(1, 0, 0, 1));
 
-        const Vector4 outside(3, 3, 0, 1);
+        const Vector4 outside(0, 3, 3, 1);
         std::array<Vector4, 16> outsideBase{};
         outsideBase.fill(outside);
         const std::array<Vector4, 4> outsideMip1 = {outside, outside, outside, outside};
@@ -3104,10 +3141,10 @@ namespace
 
         Texture2D positions(device, 4, 4, true, SurfaceFormat::Vector4);
         std::array<Vector4, 16> base = outsideBase;
-        base[0] = Vector4(-1, 1, 0, 1);
-        base[12] = Vector4(-1, -1, 0, 1);
-        base[15] = Vector4(1, -1, 0, 1);
-        base[3] = Vector4(1, 1, 0, 1);
+        base[0] = Vector4(0, 1, -1, 1);
+        base[12] = Vector4(0, -1, -1, 1);
+        base[15] = Vector4(0, -1, 1, 1);
+        base[3] = Vector4(0, 1, 1, 1);
         positions.SetData(base.data(), static_cast<int>(base.size()));
         positions.SetData(1, nullptr, outsideMip1.data(), 0,
                           static_cast<int>(outsideMip1.size()));

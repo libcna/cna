@@ -262,6 +262,9 @@ namespace CNA::TestSupport
         /// declared sampler with TEXLDL. The sampler belongs to VertexTextures/VertexSamplerStates,
         /// independently from the pixel-stage collections. Requires @ref includeSampler.
         bool vertexShaderSamplesTexture = false;
+        /// Applies the sampler operand's BGRA source swizzle after the vertex TEXLDL lookup.
+        /// This keeps sampler-result swizzle order observable independently from the coordinate.
+        bool vertexShaderSwizzlesSampleResult = false;
         /// plans/plan_fx.md FX-104: adds a `Caption` parameter of reflected type String, with an initial
         /// value, so the XNA `SetValue(string)`/`GetValueString()` pair can be exercised on a
         /// parameter that really is one instead of only through its rejection path.
@@ -1240,7 +1243,8 @@ namespace CNA::TestSupport
                                                                 bool samplesTexture = false,
                                                                 std::uint32_t samplerRegister = 0,
                                                                 SyntheticSamplerKind samplerKind =
-                                                                    SyntheticSamplerKind::Sampler2D)
+                                                                    SyntheticSamplerKind::Sampler2D,
+                                                                bool swizzlesSampleResult = false)
     {
         const std::uint32_t versionToken =
             usesPredication || samplesTexture ? 0xFFFE0300u : 0xFFFE0200u;
@@ -1520,7 +1524,10 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x0000005Fu | (3u << 24));
             AppendUInt32(shader, destination(regTemp, 0));
             AppendUInt32(shader, source(regInput, 1));
-            AppendUInt32(shader, source(regSampler, samplerRegister));
+            constexpr std::uint32_t swizzleBgra =
+                2u | (1u << 2u) | (0u << 4u) | (3u << 6u);
+            AppendUInt32(shader, source(regSampler, samplerRegister,
+                                        swizzlesSampleResult ? swizzleBgra : 0xE4u));
             AppendUInt32(shader, 0x00000001u | (2u << 24));
             AppendUInt32(shader, destination(regTexCoordOut, 0));
             AppendUInt32(shader, source(regTemp, 0));
@@ -2082,7 +2089,7 @@ namespace CNA::TestSupport
                     options.pixelShaderLegacyBumpEnvironment !=
                         SyntheticLegacyBumpEnvironment::Arithmetic,
                 options.vertexShaderSamplesTexture, options.samplerRegister,
-                options.samplerKind);
+                options.samplerKind, options.vertexShaderSwizzlesSampleResult);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());
@@ -2205,12 +2212,14 @@ namespace CNA::TestSupport
      * @param samplerStates Sampler assignments applied by the vertex-shader pass.
      * @param samplerRegister Vertex sampler register in XNA's zero-through-three range.
      * @param samplerKind Which vertex sampler dimension the shader declares.
+     * @param swizzlesSampleResult Whether TEXLDL applies a BGRA source swizzle after sampling.
      * @return Complete Effect Framework bytecode.
      */
     inline std::vector<std::uint8_t> BuildSyntheticVertexSamplingEffect(
         const std::vector<SyntheticSamplerState>& samplerStates,
         std::uint32_t samplerRegister = 0,
-        SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D)
+        SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D,
+        bool swizzlesSampleResult = false)
     {
         SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
@@ -2219,6 +2228,7 @@ namespace CNA::TestSupport
         options.samplerStates = samplerStates;
         options.samplerRegister = samplerRegister;
         options.samplerKind = samplerKind;
+        options.vertexShaderSwizzlesSampleResult = swizzlesSampleResult;
         return BuildSyntheticEffect(options);
     }
 

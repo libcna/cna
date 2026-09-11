@@ -4291,6 +4291,78 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Contract: a vertex TEXLDL sampler source swizzle applies to the sampled value.
+     *
+     * Four Vector4 texels encode a full-target quad only after the sampler operand's BGRA
+     * swizzle. Ignoring it leaves every clip-space x coordinate at zero and produces no covered
+     * pixels, distinguishing result swizzling from coordinate swizzling and destination masking.
+     *
+     * @param device HiDef device whose renderer executes compiled Effects.
+     */
+    inline void RunCompiledEffectVertexSamplerResultSwizzleContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        ASSERT_EQ(device.getGraphicsProfileProperty(), GraphicsProfile::HiDef);
+        constexpr int kSize = 8;
+        const Color background(9, 19, 29, 255);
+        const std::vector<SyntheticSamplerState> states = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticVertexSamplingEffect(
+                                  states, 0, SyntheticSamplerKind::Sampler2D,
+                                  /*swizzlesSampleResult=*/true));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(1, 0, 0, 1));
+
+        Texture2D positions(device, 4, 4, false, SurfaceFormat::Vector4);
+        std::array<Vector4, 16> encoded{};
+        encoded.fill(Vector4(0, 3, 3, 1));
+        encoded[0] = Vector4(0, 1, -1, 1);
+        encoded[12] = Vector4(0, -1, -1, 1);
+        encoded[15] = Vector4(0, -1, 1, 1);
+        encoded[3] = Vector4(0, 1, 1, 1);
+        positions.SetData(encoded.data(), static_cast<int>(encoded.size()));
+        effect.getParametersProperty()["FxTexture"]->SetValue(&positions);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, lod;
+        };
+        const Vertex quad[6] = {
+            {0, 0, 0, .125f, .125f, 0, 0}, {0, 0, 0, .125f, .875f, 0, 0},
+            {0, 0, 0, .875f, .875f, 0, 0}, {0, 0, 0, .125f, .125f, 0, 0},
+            {0, 0, 0, .875f, .875f, 0, 0}, {0, 0, 0, .875f, .125f, 0, 0},
+        };
+        const VertexDeclaration declaration(sizeof(Vertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, kSize, kSize);
+        device.SetRenderTarget(&target);
+        device.Clear(background);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle sample(kSize / 2, kSize / 2, 1, 1);
+        target.GetData(0, &sample, &centre, 0, 1);
+        EXPECT_NEAR(centre.getRProperty(), 255, 3)
+            << "vertex TEXLDL ignored the sampler source swizzle";
+        EXPECT_NEAR(centre.getGProperty(), 0, 3);
+        EXPECT_NEAR(centre.getBProperty(), 0, 3);
+    }
+
+    /**
      * @brief Contract: compiled vertex TEXLDL supports classic cube and volume samplers.
      *
      * The cube leg fetches four clip positions from one face. The volume leg stores the quad in
