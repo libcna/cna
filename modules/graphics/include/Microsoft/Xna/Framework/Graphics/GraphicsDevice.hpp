@@ -260,10 +260,10 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Clear(ClearOptions options, const Color& color, float depth, int stencil);
         /**
-         * @brief Clears the specified buffers using an unclamped floating-point color.
+         * @brief Clears the specified buffers after converting a floating-point color to Color.
          *
          * @param options Flags indicating which buffers to clear.
-         * @param color   Floating-point color value for the color buffer.
+         * @param color   Floating-point color value converted through XNA's packed Color rules.
          * @param depth   Depth value for the depth buffer (0–1).
          * @param stencil Stencil value for the stencil buffer.
          */

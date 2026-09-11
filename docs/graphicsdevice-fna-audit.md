@@ -96,8 +96,11 @@ CNA also has a fourth overload `Reset(const PresentationParameters&, GraphicsAda
 | `Clear(ClearOptions, Color, float depth, int stencil)` | ✅ |
 | `Clear(ClearOptions, Vector4 color, float depth, int stencil)` | ✅ (`SOFTWARE-327`) |
 
-The `Vector4` overload is XNA 4.0 API and preserves unclamped components on floating-point render
-targets. CNA also has two non-XNA convenience overloads, now explicitly tagged `CNAEXT`:
+The `Vector4` overload is XNA 4.0 API, but Microsoft and FNA differ in its implementation.
+Recovered Microsoft XNA constructs `Color(color)` and calls the packed-color overload, so even a
+floating-point target receives clamped, eight-bit-quantized components. CNA follows that measured
+contract (`SOFTWARE-332`); FNA's direct native float clear is recorded as a divergence. CNA also has
+two non-XNA convenience overloads, explicitly tagged `CNAEXT`:
 
 - `Clear(float r, float g, float b, float a)`
 - `Clear(const Color& color, float depth)`

@@ -207,11 +207,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   preventing OpenGL's saturating reference clamp from changing negative or greater-than-255 values.
   Software and EasyGL share exact rendered `-1`/255 and 256/0 comparison proof, while getters retain
   `-1` and 256 exactly.
-- **The classic floating-point `GraphicsDevice.Clear` overload is present** (`SOFTWARE-327`).
-  `Clear(ClearOptions, Vector4, Single, Int32)` forwards unclamped Vector4 components through the
-  same target/depth/stencil option path as the Color overload. A shared RGBA32F test preserves
-  `(-2, 3, 0.5, 0.25)` exactly on Software and EasyGL, proving there is no hidden conversion through
-  eight-bit Color. CNA's component-wise and Color-plus-depth conveniences are explicitly `CNAEXT`.
+- **The classic `GraphicsDevice.Clear` Vector4 overload follows Microsoft XNA's packed conversion**
+  (`SOFTWARE-327/332`). Recovered XNA constructs `Color(color)` before entering the shared
+  target/depth/stencil path. A shared RGBA32F discriminator proves that `(-2, 3, 0.5, 0.25)` becomes
+  exactly `Color(0, 255, 128, 64).ToVector4()` on Software and EasyGL. FNA's direct unclamped clear
+  differs from Microsoft here. CNA's raw component and Color-plus-depth conveniences remain
+  explicitly `CNAEXT`.
 - **Classic generic backbuffer readback is available for the applied Color backbuffer**
   (`SOFTWARE-328`). The three `GetBackBufferData<T>` shapes accept one-, two- and four-byte
   trivially-copyable values whose total byte count exactly covers the requested full buffer or

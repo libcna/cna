@@ -568,12 +568,14 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    void GraphicsDevice::Clear(ClearOptions options, const Color& color, float depth, int stencil)
+    void GraphicsDevice::Clear(ClearOptions options, const Vector4& color, float depth, int stencil)
     {
-        Clear(options, color.ToVector4(), depth, stencil);
+        // Microsoft XNA 4.0 quantizes this overload through Color before clearing. FNA forwards
+        // raw floats instead; keep the deliberate Microsoft behavior at this public boundary.
+        Clear(options, Color(color), depth, stencil);
     }
 
-    void GraphicsDevice::Clear(ClearOptions options, const Vector4& color, float depth, int stencil)
+    void GraphicsDevice::Clear(ClearOptions options, const Color& color, float depth, int stencil)
     {
         ThrowIfDisposed();
         if (renderer_ == nullptr)
@@ -647,10 +649,11 @@ namespace Microsoft::Xna::Framework::Graphics
             options &= ~ClearOptions::Stencil;
         }
 
-        const float r = color.X;
-        const float g = color.Y;
-        const float b = color.Z;
-        const float a = color.W;
+        const Vector4 normalizedColor = color.ToVector4();
+        const float r = normalizedColor.X;
+        const float g = normalizedColor.Y;
+        const float b = normalizedColor.Z;
+        const float a = normalizedColor.W;
 
         const bool clearTarget  = hasClearFlag(options, ClearOptions::Target);
         const bool clearDepth   = hasClearFlag(options, ClearOptions::DepthBuffer);

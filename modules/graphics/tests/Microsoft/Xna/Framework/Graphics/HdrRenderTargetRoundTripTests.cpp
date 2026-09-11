@@ -136,7 +136,7 @@ TEST(HdrRenderTargetRoundTripTest, AFloatTargetKeepsValuesAboveOne)
     }
 }
 
-TEST(HdrRenderTargetRoundTripTest, ClassicVectorClearKeepsUnclampedComponents)
+TEST(HdrRenderTargetRoundTripTest, ClassicVectorClearQuantizesThroughColor)
 {
     GraphicsDevice gd;
     gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
@@ -145,6 +145,9 @@ TEST(HdrRenderTargetRoundTripTest, ClassicVectorClearKeepsUnclampedComponents)
 
     RenderTarget2D target(gd, 2, 2, false, SurfaceFormat::Vector4, DepthFormat::None);
     const Vector4 clearValue(-2.0f, 3.0f, 0.5f, 0.25f);
+    const Color packedValue(clearValue);
+    ASSERT_EQ(packedValue, Color(0, 255, 128, 64));
+    const Vector4 expected = packedValue.ToVector4();
 
     gd.SetRenderTarget(&target);
     gd.Clear(ClearOptions::Target, clearValue, 1.0f, 0);
@@ -154,10 +157,10 @@ TEST(HdrRenderTargetRoundTripTest, ClassicVectorClearKeepsUnclampedComponents)
     target.GetData(pixels.data(), static_cast<int>(pixels.size()));
     for (const Vector4& texel : pixels)
     {
-        EXPECT_FLOAT_EQ(texel.X, clearValue.X);
-        EXPECT_FLOAT_EQ(texel.Y, clearValue.Y);
-        EXPECT_FLOAT_EQ(texel.Z, clearValue.Z);
-        EXPECT_FLOAT_EQ(texel.W, clearValue.W);
+        EXPECT_FLOAT_EQ(texel.X, expected.X);
+        EXPECT_FLOAT_EQ(texel.Y, expected.Y);
+        EXPECT_FLOAT_EQ(texel.Z, expected.Z);
+        EXPECT_FLOAT_EQ(texel.W, expected.W);
     }
 }
 
