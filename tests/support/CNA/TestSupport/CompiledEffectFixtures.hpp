@@ -348,6 +348,21 @@ namespace CNA::TestSupport
         DestinationAliasesVectorSource,
     };
 
+    /** @brief Shader-stage/profile combination using an absolute source modifier before SM3. */
+    enum class SyntheticInvalidPreShaderModel3AbsoluteSource
+    {
+        /** @brief Emit no deliberately invalid absolute source modifier. */
+        None,
+        /** @brief Emit `abs(c0)` in a pixel Shader Model 2.0 instruction. */
+        PixelAbsolute,
+        /** @brief Emit `-abs(c0)` in a pixel Shader Model 2.0 instruction. */
+        PixelAbsoluteNegate,
+        /** @brief Emit `abs(c0)` in a vertex Shader Model 2.0 instruction. */
+        VertexAbsolute,
+        /** @brief Emit `-abs(c0)` in a vertex Shader Model 2.0 instruction. */
+        VertexAbsoluteNegate,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -547,6 +562,9 @@ namespace CNA::TestSupport
         /** @brief Emits the selected invalid matrix operand combination in the pixel shader. */
         SyntheticInvalidMatrixOperands pixelShaderInvalidMatrixOperands =
             SyntheticInvalidMatrixOperands::None;
+        /** @brief Emits an absolute source modifier in the selected pre-SM3 shader stage. */
+        SyntheticInvalidPreShaderModel3AbsoluteSource invalidPreShaderModel3AbsoluteSource =
+            SyntheticInvalidPreShaderModel3AbsoluteSource::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -633,7 +651,9 @@ namespace CNA::TestSupport
             SyntheticInvalidShaderModel20DynamicFeature::None,
         bool shaderModel2xUsesInvalidLoop = false,
         SyntheticInvalidMatrixOperands invalidMatrixOperands =
-            SyntheticInvalidMatrixOperands::None)
+            SyntheticInvalidMatrixOperands::None,
+        SyntheticInvalidPreShaderModel3AbsoluteSource invalidAbsoluteSource =
+            SyntheticInvalidPreShaderModel3AbsoluteSource::None)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -1004,6 +1024,22 @@ namespace CNA::TestSupport
                                SyntheticInvalidMatrixOperands::NegatedMatrixSource
                            ? 1u
                            : 0u));
+        }
+
+        if (invalidAbsoluteSource ==
+                SyntheticInvalidPreShaderModel3AbsoluteSource::PixelAbsolute ||
+            invalidAbsoluteSource ==
+                SyntheticInvalidPreShaderModel3AbsoluteSource::PixelAbsoluteNegate)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, abs(c0)
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(
+                shader,
+                source(regConst, 0, 0xE4u,
+                       invalidAbsoluteSource ==
+                               SyntheticInvalidPreShaderModel3AbsoluteSource::PixelAbsolute
+                           ? 11u
+                           : 12u));
         }
 
         if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic)
@@ -1770,7 +1806,10 @@ namespace CNA::TestSupport
                                                                         SyntheticInvalidVertexShaderModel1Opcode::None,
                                                                 SyntheticInvalidShaderModel20DynamicFeature
                                                                     shaderModel20InvalidDynamicFeature =
-                                                                        SyntheticInvalidShaderModel20DynamicFeature::None)
+                                                                        SyntheticInvalidShaderModel20DynamicFeature::None,
+                                                                SyntheticInvalidPreShaderModel3AbsoluteSource
+                                                                    invalidAbsoluteSource =
+                                                                        SyntheticInvalidPreShaderModel3AbsoluteSource::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -2206,6 +2245,21 @@ namespace CNA::TestSupport
                 case SyntheticInvalidShaderModel20DynamicFeature::None:
                 case SyntheticInvalidShaderModel20DynamicFeature::PixelPredicatedMov: break;
             }
+        }
+        if (invalidAbsoluteSource ==
+                SyntheticInvalidPreShaderModel3AbsoluteSource::VertexAbsolute ||
+            invalidAbsoluteSource ==
+                SyntheticInvalidPreShaderModel3AbsoluteSource::VertexAbsoluteNegate)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, abs(c0)
+            AppendUInt32(shader, destination(regTemp, 1));
+            AppendUInt32(
+                shader,
+                source(regConst, 0, 0xE4u,
+                       invalidAbsoluteSource ==
+                               SyntheticInvalidPreShaderModel3AbsoluteSource::VertexAbsolute
+                           ? 11u
+                           : 12u));
         }
         if (readsSecondStream)
         {
@@ -2788,7 +2842,8 @@ namespace CNA::TestSupport
             options.pixelShaderModel20InvalidOpcode,
             options.shaderModel20InvalidDynamicFeature,
             options.pixelShaderModel2xUsesInvalidLoop,
-            options.pixelShaderInvalidMatrixOperands);
+            options.pixelShaderInvalidMatrixOperands,
+            options.invalidPreShaderModel3AbsoluteSource);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -2865,7 +2920,8 @@ namespace CNA::TestSupport
                 options.vertexShaderUsesInvalidExppSwizzle,
                 options.vertexShaderUsesInvalidExpSwizzle,
                 options.vertexShaderModel1InvalidOpcode,
-                options.shaderModel20InvalidDynamicFeature);
+                options.shaderModel20InvalidDynamicFeature,
+                options.invalidPreShaderModel3AbsoluteSource);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

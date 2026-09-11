@@ -1091,6 +1091,33 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticInvalidMatrixOperands::SwizzledMatrixSource,
         CNA::TestSupport::SyntheticInvalidMatrixOperands::DestinationAliasesVectorSource));
 
+class EasyGLCompiledEffectPreShaderModel3AbsoluteSourceTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPreShaderModel3AbsoluteSourceTest, RejectsAbsoluteSourceModifier)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.invalidPreShaderModel3AbsoluteSource = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    PreShaderModel3,
+    EasyGLCompiledEffectPreShaderModel3AbsoluteSourceTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource::PixelAbsolute,
+        CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource::PixelAbsoluteNegate,
+        CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource::VertexAbsolute,
+        CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource::VertexAbsoluteNegate));
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;
