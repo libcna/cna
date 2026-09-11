@@ -29,8 +29,8 @@ fxc="${CNA_FXC:-/rv/tmp/samples/_tools/directx-sdk-june-2010/extract/DXSDK/Utili
 launcher="${CNA_FXC_LAUNCHER:-wine}"
 out="$repo/build/xna-interop-built"
 
-[ -x "$content" ] || { echo "run-built-families-interop: no cna-content at $content" >&2; exit 3; }
-[ -f "$fxc" ]     || { echo "run-built-families-interop: no fxc at $fxc" >&2; exit 3; }
+[ -x "$content" ] || { echo "run-built-families-interop: no cna-content at $content" >&2; exit 77; }
+[ -f "$fxc" ]     || { echo "run-built-families-interop: no fxc at $fxc" >&2; exit 77; }
 
 rm -rf "$out"; mkdir -p "$out"
 CNA_FXC="$fxc" CNA_FXC_LAUNCHER="$launcher" \

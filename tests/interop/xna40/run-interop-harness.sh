@@ -21,12 +21,12 @@ refs="${CNA_XNA40_REFERENCES:-/rv/tmp/samples/_tools/xna-game-studio-4-refresh/a
 prefix="${CNA_XNA40_WINEPREFIX:-$HOME/.wine-cna-xna40}"
 build="$repo/build/xna-interop"
 
-command -v mcs >/dev/null  || { echo "run-interop-harness: mcs not found" >&2; exit 3; }
-command -v wine >/dev/null || { echo "run-interop-harness: wine not found" >&2; exit 3; }
+command -v mcs >/dev/null  || { echo "run-interop-harness: mcs not found" >&2; exit 77; }
+command -v wine >/dev/null || { echo "run-interop-harness: wine not found" >&2; exit 77; }
 for dll in Microsoft.Xna.Framework.dll Microsoft.Xna.Framework.Graphics.dll Microsoft.Xna.Framework.Game.dll Microsoft.Xna.Framework.Video.dll; do
-    [ -f "$refs/$dll" ] || { echo "run-interop-harness: missing $refs/$dll" >&2; exit 3; }
+    [ -f "$refs/$dll" ] || { echo "run-interop-harness: missing $refs/$dll" >&2; exit 77; }
 done
-[ -d "$fixtures" ] || { echo "run-interop-harness: no fixtures at $fixtures" >&2; exit 3; }
+[ -d "$fixtures" ] || { echo "run-interop-harness: no fixtures at $fixtures" >&2; exit 77; }
 
 # The Microsoft assemblies are copied only into the ignored build directory, beside the harness,
 # so the CLR finds them without a GAC; nothing Microsoft owns reaches the repository.

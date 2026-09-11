@@ -178,7 +178,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.s
     set_tests_properties(XnaPipelineGenuineRuntimeInterop
                          PROPERTIES LABELS "parity;xnapipeline;interop"
                                     RESOURCE_LOCK xna-interop-scratch
-                                    SKIP_RETURN_CODE 3 TIMEOUT 900)
+                                    SKIP_RETURN_CODE 77 TIMEOUT 900)
 endif()
 
 # The three output families whose fixtures cannot be committed with the rest -- Effect, Song and
@@ -190,7 +190,14 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-built-families-in
     set_tests_properties(XnaPipelineGenuineRuntimeBuiltFamilies
                          PROPERTIES LABELS "parity;xnapipeline;interop"
                                     RESOURCE_LOCK xna-interop-scratch
-                                    SKIP_RETURN_CODE 3 TIMEOUT 900)
+                                    SKIP_RETURN_CODE 77 TIMEOUT 900)
+    # The script's own default guesses cmake-build-debug/, so it reported "no cna-content" from
+    # every other build directory and the gate never ran. Name the binary this configuration
+    # actually built. cna_content_tool is created later (cmake/ToolContentPipeline.cmake), which
+    # an if(TARGET) here would not see; a generator expression resolves after every target exists.
+    set_tests_properties(XnaPipelineGenuineRuntimeBuiltFamilies
+                         PROPERTIES ENVIRONMENT
+                                    "CNA_CONTENT=$<TARGET_FILE:cna_content_tool>")
 endif()
 
 # And the LZX half of the committed corpus, which is the same assets through the compressor XNA
@@ -202,7 +209,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.s
     set_tests_properties(XnaPipelineGenuineRuntimeInteropLzx
                          PROPERTIES LABELS "parity;xnapipeline;interop"
                                     RESOURCE_LOCK xna-interop-scratch
-                                    SKIP_RETURN_CODE 3 TIMEOUT 900)
+                                    SKIP_RETURN_CODE 77 TIMEOUT 900)
 endif()
 
 set_tests_properties(XnaPipelineParityGateIsGreen PROPERTIES LABELS "parity;xnapipeline")
