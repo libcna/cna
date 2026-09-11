@@ -1255,7 +1255,24 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         struct PendingSpriteEXT
         {
-            /** @brief The public texture renderer the sprite draws, and the run it belongs to. */
+            /**
+             * @brief The public texture renderer the sprite draws, and the run it belongs to.
+             *
+             * **Non-owning, and it is safe for a reason that lives in another module.** SDLGPU-119
+             * asked whether destroying the public `Texture2D` between `Draw` and `End` leaves this
+             * dangling, since `FlushPendingCompiledSpritesEXT` dereferences it. It does not:
+             * `SpriteBatch::pushSprite` takes a real `shared_ptr<ITextureRenderer>` copy at Draw
+             * time, and `SpriteBatch::End()` releases that queue only AFTER `renderer_->End()` has
+             * returned. So this pointer is covered for exactly as long as it can be dereferenced.
+             *
+             * That guarantee is a cross-module invariant and nothing in this file enforces it.
+             * `SpriteBatchTextureLifetimeTest` pins it against a deferring test double shaped like
+             * this queue; reordering those lines in `SpriteBatch::End()` fails those tests rather
+             * than silently reintroducing a use-after-free in every deferred renderer at once.
+             *
+             * `nativeTexture` below is a separate question and is owned: it keeps the GPU resource
+             * alive past the submit, which this pointer never did.
+             */
             const ITextureRenderer* texture = nullptr;
             /** @brief The texture resolved to its bindable native form, resolved at Draw() time. */
             SdlGpuSampledTextureEXT nativeTexture;

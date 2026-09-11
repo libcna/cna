@@ -1667,3 +1667,224 @@ TEST(SpriteBatchCrossDeviceTest, ATextureFromTheSameDeviceIsUnaffected)
     EXPECT_NO_THROW(batch.Draw(texture, Vector2(0.0f, 0.0f), Color::White));
     EXPECT_NO_THROW(batch.End());
 }
+
+// ---------------------------------------------------------------------------------------------
+// SDLGPU-119: a deferred batch keeps its texture renderers alive across the renderer's End().
+//
+// The finding this pins was stated against the SDL_GPU renderer, whose compiled-effect SpriteBatch
+// path holds a SECOND queue (`SdlGpuSpriteBatchRenderer::PendingSpriteEXT`) between Draw and End.
+// That queue owns the native GPU texture through `SdlGpuSampledTextureEXT::keepAlive`, but its
+// `texture` field is a BARE, NON-OWNING `const ITextureRenderer*`, and
+// `FlushPendingCompiledSpritesEXT` DEREFERENCES it -- `QueueSprite(*sprite.texture, ...)` -- from
+// inside `renderer_->End()`. The worry was that destroying the public `Texture2D` after `Draw` and
+// before `End` would leave that pointer dangling.
+//
+// It does not, and the reason is here rather than in the renderer: `pushSprite` takes a real
+// `shared_ptr<ITextureRenderer>` copy at Draw time, and `End()` releases the queue only AFTER
+// `renderer_->End()` has returned. So the renderer's bare pointer is covered for exactly as long
+// as it can be dereferenced.
+//
+// That is a CROSS-MODULE invariant: the guarantee lives in the graphics module and the code that
+// depends on it lives in each renderer. Nothing enforced it, so reordering these three lines in
+// `End()` would silently reintroduce the use-after-free in every deferred renderer at once. These
+// tests are what would fail.
+namespace
+{
+    /// An `ITextureRenderer` that reports its own destruction through a flag that outlives it.
+    /// A deferred renderer shaped like the one the finding is about.
+    ///
+    /// `SdlGpuSpriteBatchRenderer::PendingSpriteEXT` stores a bare, non-owning
+    /// `const ITextureRenderer*` at Draw time and `FlushPendingCompiledSpritesEXT` dereferences it
+    /// from inside `End()`. Every whole-frame-deferred renderer in this project has that shape.
+    /// The recording double does NOT -- it copies what it needs at Draw and never looks again --
+    /// so it cannot observe this contract at all, which is why the first version of these tests
+    /// passed with the defect injected.
+    class DeferringSpriteBatchRenderer final
+        : public CNA::Internal::Renderers::ISpriteBatchRenderer
+    {
+    public:
+        explicit DeferringSpriteBatchRenderer(std::shared_ptr<bool> textureDestroyed)
+            : textureDestroyed_(std::move(textureDestroyed))
+        {
+        }
+
+        void Begin() override {}
+
+        /// Mirrors the real renderer's rule: a compiled-effect batch queues only when NOT
+        /// immediate (`SdlGpuSpriteBatchRenderer::Draw`'s `if (!immediateMode_)`). Without this
+        /// the double queues in Immediate mode too, which no renderer does, and the Immediate
+        /// test then fails against a fault the double invented rather than one CNA has.
+        void SetImmediateMode(bool immediate) override { immediate_ = immediate; }
+
+        void Draw(const CNA::Internal::Renderers::ITextureRenderer& texture, float, float) override
+        {
+            Record(texture);
+        }
+
+        void Draw(const CNA::Internal::Renderers::ITextureRenderer& texture, const Rectangle&,
+                  const Rectangle&, const Color&) override
+        {
+            Record(texture);
+        }
+
+        void Draw(const CNA::Internal::Renderers::ITextureRenderer& texture, const Rectangle&,
+                  const Rectangle&, const Color&, float, const Vector2&,
+                  Microsoft::Xna::Framework::Graphics::SpriteEffects, float) override
+        {
+            Record(texture);
+        }
+
+        void End() override
+        {
+            // The replay. Whether the pointers are still valid HERE is the whole contract.
+            sawDanglingTexture = *textureDestroyed_ && !pending_.empty();
+            for (const CNA::Internal::Renderers::ITextureRenderer* texture : pending_)
+            {
+                // Only read it when it is provably alive: the point is to REPORT the dangling
+                // pointer, not to dereference one and make the test itself the crash.
+                widths.push_back(sawDanglingTexture ? -1 : texture->GetWidth());
+            }
+            pending_.clear();
+            ++endCount;
+        }
+
+        bool sawDanglingTexture = false;
+        int endCount = 0;
+        std::vector<int> widths;
+
+    private:
+        void Record(const CNA::Internal::Renderers::ITextureRenderer& texture)
+        {
+            if (immediate_)
+            {
+                // Immediate: consumed inside SpriteBatch::Draw, while the caller's own wrapper is
+                // still alive. Nothing is retained and nothing can dangle.
+                widths.push_back(texture.GetWidth());
+                return;
+            }
+            pending_.push_back(&texture);
+        }
+
+        std::vector<const CNA::Internal::Renderers::ITextureRenderer*> pending_;
+        std::shared_ptr<bool> textureDestroyed_;
+        bool immediate_ = false;
+    };
+
+    class LifetimeProbeTextureRenderer final : public CNA::Internal::Renderers::ITextureRenderer
+    {
+    public:
+        explicit LifetimeProbeTextureRenderer(std::shared_ptr<bool> destroyed)
+            : destroyed_(std::move(destroyed))
+        {
+        }
+
+        ~LifetimeProbeTextureRenderer() override { *destroyed_ = true; }
+
+        int GetWidth() const override { return 16; }
+        int GetHeight() const override { return 16; }
+
+    private:
+        std::shared_ptr<bool> destroyed_;
+    };
+}  // namespace
+
+TEST(SpriteBatchTextureLifetimeTest, ADeferredBatchOutlivesTheTextureWrapperItWasDrawnWith)
+{
+    auto destroyed = std::make_shared<bool>(false);
+    auto renderer = std::make_unique<DeferringSpriteBatchRenderer>(destroyed);
+    DeferringSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+
+    {
+        auto probe = std::make_shared<LifetimeProbeTextureRenderer>(destroyed);
+        std::optional<Texture2D> texture =
+            Texture2D::CreateWithRendererForTests(16, 16, probe);
+        // The wrapper is now the ONLY owner, so destroying it really would free the renderer if
+        // nothing downstream had taken a reference. Without this the test would pass on a leak.
+        probe.reset();
+
+        batch.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend);
+        batch.Draw(*texture, Rectangle(0, 0, 16, 16), Rectangle(0, 0, 16, 16), Color::White);
+        texture.reset();
+    }
+
+    batch.End();
+
+    // The claim, in one assertion: when the deferred renderer replayed its queue, the texture
+    // renderer those bare pointers address was still alive.
+    EXPECT_FALSE(rec->sawDanglingTexture)
+        << "the ITextureRenderer was freed before the renderer's End() replayed the sprites that "
+           "point at it -- a renderer holding a bare pointer there is reading freed memory";
+    EXPECT_EQ(rec->endCount, 1);
+    ASSERT_EQ(rec->widths.size(), 1u);
+    EXPECT_EQ(rec->widths[0], 16) << "the replay did not read the live texture";
+
+    // ...and the retention is SCOPED, not a leak: the batch drops its reference once End has
+    // returned. A test that only checked the lines above would pass just as well if SpriteBatch
+    // never released anything at all.
+    EXPECT_TRUE(*destroyed)
+        << "the batch still holds the texture renderer after End(); the retention is meant to "
+           "last exactly as long as the renderer's own End() call";
+}
+
+TEST(SpriteBatchTextureLifetimeTest, EverySortedModeRetainsItTooBecauseTheyAllFlushFromEnd)
+{
+    // Deferred is not a special case. Every non-Immediate mode queues and flushes from End(), and
+    // SpriteSortMode::Texture additionally COMPARES the stored pointers while sorting, which is
+    // undefined behaviour on a freed pointer even before anything dereferences it.
+    for (const SpriteSortMode mode : {SpriteSortMode::Texture,
+                                      SpriteSortMode::BackToFront,
+                                      SpriteSortMode::FrontToBack})
+    {
+        auto destroyed = std::make_shared<bool>(false);
+        auto renderer = std::make_unique<DeferringSpriteBatchRenderer>(destroyed);
+        DeferringSpriteBatchRenderer* rec = renderer.get();
+        SpriteBatch batch(std::move(renderer));
+
+        {
+            auto probe = std::make_shared<LifetimeProbeTextureRenderer>(destroyed);
+            std::optional<Texture2D> texture =
+                Texture2D::CreateWithRendererForTests(16, 16, probe);
+            probe.reset();
+
+            batch.Begin(mode, BlendState::AlphaBlend);
+            batch.Draw(*texture, Rectangle(0, 0, 16, 16), Rectangle(0, 0, 16, 16), Color::White);
+            texture.reset();
+        }
+        batch.End();
+
+        EXPECT_FALSE(rec->sawDanglingTexture) << "sort mode " << static_cast<int>(mode);
+        ASSERT_EQ(rec->widths.size(), 1u) << "sort mode " << static_cast<int>(mode);
+        EXPECT_EQ(rec->widths[0], 16) << "sort mode " << static_cast<int>(mode);
+        EXPECT_TRUE(*destroyed) << "sort mode " << static_cast<int>(mode);
+    }
+}
+
+TEST(SpriteBatchTextureLifetimeTest, ImmediateModeNeedsNoRetentionBecauseItDispatchesInsideDraw)
+{
+    // The other half of the contract, and the reason the SDL_GPU renderer fills its second queue
+    // only when `!immediateMode_`: in Immediate mode the renderer's Draw runs inside
+    // SpriteBatch::Draw, while the caller's own Texture2D is necessarily still alive. There is no
+    // window between Draw and End for a wrapper to be destroyed in.
+    auto destroyed = std::make_shared<bool>(false);
+    auto renderer = std::make_unique<DeferringSpriteBatchRenderer>(destroyed);
+    DeferringSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+
+    {
+        auto probe = std::make_shared<LifetimeProbeTextureRenderer>(destroyed);
+        std::optional<Texture2D> texture =
+            Texture2D::CreateWithRendererForTests(16, 16, probe);
+        probe.reset();
+
+        batch.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
+        batch.Draw(*texture, Rectangle(0, 0, 16, 16), Rectangle(0, 0, 16, 16), Color::White);
+        EXPECT_FALSE(*destroyed);
+        texture.reset();
+    }
+    batch.End();
+    EXPECT_FALSE(rec->sawDanglingTexture);
+    ASSERT_EQ(rec->widths.size(), 1u)
+        << "Immediate did not dispatch inside Draw, so the renderer's own "
+           "not-immediate-only queueing rule rests on a false premise";
+}

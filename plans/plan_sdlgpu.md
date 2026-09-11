@@ -925,7 +925,7 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   D3D12; the Vulkan `SdlGpu*` renderer aggregate passes **50/50**. The D3D12 CTest retained the
   global fatal debug-diagnostic policy, and neither run emitted a validation failure.
 
-### SDLGPU-119 — prove compiled-effect SpriteBatch cannot outlive its texture wrapper ⬜
+### SDLGPU-119 — prove compiled-effect SpriteBatch cannot outlive its texture wrapper ✅
 
 - **Provenance — this row records a finding, not a verified defect.** It was stated by the
   autonomous `cnasdlgpu` session at 2026-09-10T22:33:50Z, immediately before that session stopped
@@ -958,6 +958,72 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   shows either a correct draw or an explicit refusal rather than reading freed memory. Run under a
   sanitizer, because a plain pixel check can pass on freed-but-unreused memory — the same trap
   `SDLGPU-118` documented.
+- **VERDICT (2026-09-11): REFUTED as a defect, and the invariant it depends on is now pinned.**
+  The structural half of the claim is exactly right and was worth raising: `PendingSpriteEXT`
+  really does hold a bare, non-owning `const ITextureRenderer* texture` beside an owning
+  `SdlGpuSampledTextureEXT nativeTexture`, and `FlushPendingCompiledSpritesEXT` really does
+  dereference it — `QueueSprite(*sprite.texture, ...)` — from inside `End()`. What the claim missed
+  is where CNA holds its managed reference. It is not on the `Texture2D` wrapper, as FNA's is; it
+  is one level down:
+
+  1. `SpriteBatch::pushSprite` takes `texture.GetRendererWeak().lock()` — a real
+     `shared_ptr<ITextureRenderer>` copy — and stores it in `SpriteInfo::texture` at Draw time.
+  2. In every non-Immediate mode that sprite sits in `spriteQueue_` until `End()`.
+  3. `SpriteBatch::End()` runs `flushBatch()`, then `renderer_->End()`, and only then
+     `spriteQueue_.clear()`. Its own comment says why: *"Deferred renderers may submit their final
+     texture group only from End(). Retain every queued texture renderer through that call, then
+     release the queue."*
+
+  So the renderer's `Draw` is called from inside `End()` while the strong references are still
+  held, `FlushPendingCompiledSpritesEXT` replays inside the same `End()`, and the bare pointers
+  are covered for exactly as long as they can be dereferenced. Destroying the public `Texture2D`
+  between `Draw` and `End` frees the wrapper and not the `ITextureRenderer`.
+
+  The `!immediateMode_` guard closes the other half: in Immediate mode nothing is queued at all,
+  because the renderer's `Draw` runs inside `SpriteBatch::Draw` while the caller's own wrapper is
+  necessarily alive.
+
+- **Why this still produced work rather than a one-line dismissal.** The guarantee is a
+  CROSS-MODULE invariant: it is provided by `Microsoft::Xna::Framework::Graphics::SpriteBatch` and
+  depended on by every whole-frame-deferred renderer, and **nothing enforced it or even recorded
+  it**. Reordering three lines in `SpriteBatch::End()` would have reintroduced the
+  use-after-free this row describes, in every deferred renderer at once, with no test failing.
+  `PendingSpriteEXT::texture` now documents what it depends on, and
+  `SpriteBatchTextureLifetimeTest` (3 tests, `modules/graphics/tests/.../SpriteBatchTests.cpp`)
+  pins it.
+
+- **Test evidence, including the version that did not work.** The first draft used the existing
+  `RecordingSpriteBatchRenderer`, which copies what it needs at Draw and never looks at the texture
+  again — so it cannot observe this contract, and **all three tests passed with the defect
+  injected**. They were rewritten against a `DeferringSpriteBatchRenderer` shaped like
+  `PendingSpriteEXT`: it stores the bare pointer at Draw and reports at `End()` whether the object
+  is still alive. With `spriteQueue_.clear()` moved before `renderer_->End()`, the two deferred
+  tests now FAIL with *"the ITextureRenderer was freed before the renderer's End() replayed the
+  sprites that point at it"*, and the Immediate test correctly stays green because it does not
+  depend on the retention. Each test also asserts the texture renderer IS released after `End()`
+  returns, so none of them can pass on a leak.
+
+- **Device-level evidence, and whose it is.** The autonomous `cnasdlgpu` session had already
+  written the end-to-end regression before it was cut off — `SdlGpuCompiledEffectDrawTest.`
+  `DeferredCompiledSpriteSurvivesTextureDestructionBeforeEnd`, 38 lines left UNCOMMITTED in the
+  working tree. **That work is kept and is not rewritten.** It draws through a compiled Effect in a
+  Deferred batch, destroys the `Texture2D` between `Draw` and `End`, and reads the rendered pixel
+  back from a `RenderTarget2D`, so it proves the draw genuinely completed rather than merely not
+  crashing. Verified 2026-09-11 on the real `SDL_GPU` renderer (`cmake-build-sdlgpu`, Vulkan
+  backend, headless Xvfb): it PASSES, and the whole
+  `cna_test_sdlgpu_compiled_effect_runtime` binary is **43/43**.
+
+  It was found only because a `git status` in this worktree fails on a broken `SDL_image` submodule
+  path and silently reports nothing; `--ignore-submodules=all` shows it. Worth knowing before
+  trusting a clean-tree claim here.
+
+- **What is deliberately NOT claimed.** Neither test is a sanitizer run. `SDLGPU-118`'s evidence
+  makes the point that a pixel check can pass on released-but-unreused memory, and that argument
+  applies to the device-level test above as well: it is the SpriteBatch-layer contract test that
+  actually observes the lifetime, by reporting whether the object was alive rather than by reading
+  it. Running the device test under ASan would still be worth a few minutes if anyone wants the
+  belt-and-braces version.
+
 - **Next step:** confirm or refute the claim against
   `BuildCompiledEffectBindingEXT` / the SpriteBatch queue before writing the fix. If the bare
   `ITextureRenderer*` is not in fact re-read at `End`, close this row as not-a-defect and say so.

@@ -1024,6 +1024,44 @@ TEST(SdlGpuCompiledEffectDrawTest, QueuedSpriteRetainsShadersAfterEffectDisposal
     EXPECT_NEAR(centre.getBProperty(), 191, 3);
 }
 
+TEST(SdlGpuCompiledEffectDrawTest, DeferredCompiledSpriteSurvivesTextureDestructionBeforeEnd)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    constexpr int kSize = 8;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::CreateOrthographicOffCenter(
+        0.0f, static_cast<float>(kSize), static_cast<float>(kSize), 0.0f, -1.0f, 1.0f));
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+
+    auto source = std::make_unique<Texture2D>(device, 1, 1);
+    const Color white[1] = {Color::White};
+    source->SetData(white, 1);
+    RenderTarget2D target(device, kSize, kSize);
+    device.SetRenderTarget(&target);
+    device.Clear(Color(9, 19, 29, 255));
+
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr, nullptr, &effect);
+    batch.Draw(*source, Rectangle(0, 0, kSize, kSize), Color::White);
+
+    // FNA's deferred textureInfo array holds a managed Texture2D reference through FlushBatch.
+    // CNA must provide the same lifetime without dereferencing a dead C++ renderer wrapper here.
+    source.reset();
+    batch.End();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color centre(0, 0, 0, 0);
+    const Rectangle probe(kSize / 2, kSize / 2, 1, 1);
+    target.GetData(0, &probe, &centre, 0, 1);
+    EXPECT_NEAR(centre.getRProperty(), 64, 3);
+    EXPECT_NEAR(centre.getGProperty(), 128, 3);
+    EXPECT_NEAR(centre.getBProperty(), 191, 3);
+}
+
 TEST(SdlGpuCompiledEffectDrawTest, AbandonedQueuedDrawReleasesShadersBeforeRendererContext)
 {
     GraphicsDevice device;
