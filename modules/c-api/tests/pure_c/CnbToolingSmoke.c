@@ -327,7 +327,12 @@ static int validate_wav_import(void)
     REQUIRE(info.format == CNA_CNB_AUDIO_FORMAT_PCM16);
     REQUIRE(info.sample_rate == 8000U && info.channels == 1U);
     REQUIRE(info.frame_count == 2U);
-    REQUIRE(info.loop_start == 0U && info.loop_length == 0U);
+    /* A build-time importer gives a loopless source the whole sound, as XNA's
+       SoundEffectProcessor does, so the two frames here are the loop region rather than
+       nothing (CNA::Content::Cnb::SoundEffectLoopPolicy::WholeSoundWhenUnset,
+       plans/plan_xnapipeline_parity.md XNAPP-266). A runtime reader keeps what its file
+       declares, which CnbSoundEffectCodecTests covers separately. */
+    REQUIRE(info.loop_start == 0U && info.loop_length == 2U);
     {
         uint8_t samples[8];
         uint64_t produced = 0U;
