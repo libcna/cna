@@ -1,0 +1,19 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -1577,8 +1577,13 @@ void emit_GLSL_LOOP(Context *ctx)
+     assert(ctx->source_args[0].regnum == 0);  // in case they add aL1 someday.
+     output_line(ctx, "{");
+     ctx->indent++;
+-    output_line(ctx, "const int aLend = %s.x + %s.y;", var, var);
+-    output_line(ctx, "for (int aL = %s.y; aL < aLend; aL += %s.z) {", var, var);
++    /* D3D9 defines i#.x as the iteration count and i#.z only as the aL stride. Comparing aL
++     * against x+y under-iterates for positive strides above one and never terminates for zero or
++     * negative strides. Count independently so every legal stride executes exactly x times. -CNA
++     */
++    output_line(ctx, "for (int aL = %s.y, aL_count = 0; aL_count < %s.x; "
++                     "aL += %s.z, aL_count++) {",
++                     var, var, var);
+     ctx->indent++;
+ } // emit_GLSL_LOOP
+

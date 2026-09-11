@@ -5,8 +5,8 @@
 # real multi-file C library (not a single-header drop-in), so unlike sokol this actually builds a
 # static archive; it carries MojoShader as a git submodule, which the fetch must recurse into
 # because FNA3D's own CMakeLists.txt compiles MojoShader's translation units directly. CNA carries
-# one narrow parser-robustness patch for that exact submodule revision; the fetch/configure path
-# applies it automatically and idempotently.
+# a narrow compatibility/conformance patch series for that exact submodule revision; the
+# fetch/configure path applies it automatically and idempotently.
 #
 # FNA3D's only dependency is SDL 3.2.0 or newer -- exactly the SDL3 CNA already vendors -- so the
 # fetched project resolves SDL3::SDL3 from CNA's own already-configured imported target
@@ -50,7 +50,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-texcrd.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-legacy-texcoord-input.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-unmatched-fragment-input.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-ilp32-float-literal.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-ilp32-float-literal.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-d3d9-loop-count.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

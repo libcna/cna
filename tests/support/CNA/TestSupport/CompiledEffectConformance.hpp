@@ -905,6 +905,60 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Proves that D3D9 `LOOP` executes its declared count for a non-unit `aL` step.
+     *
+     * Microsoft's instruction contract makes `i#.x` the iteration count and `i#.z` only the
+     * loop-address step. Three iterations therefore add 0.25 red three times even when `aL`
+     * advances by two. An address-bound translation instead produces only 0.5 red.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLoopContract(GraphicsDevice& device)
+    {
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+            {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+        };
+
+        for (const std::int32_t step : {2, -2, 0})
+        {
+            SCOPED_TRACE("aL step " + std::to_string(step));
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderUsesLoop = true;
+            options.pixelLoopCount = 3;
+            options.pixelLoopInitial = 10;
+            options.pixelLoopStep = step;
+            Effect effect(device, BuildSyntheticEffect(options));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect.getParametersProperty()["Tint"]->SetValue(Vector4(0.0f, 0.0f, 0.0f, 1.0f));
+
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            EXPECT_NEAR(centre.getRProperty(), 191, 2);
+            EXPECT_EQ(centre.getGProperty(), 0);
+            EXPECT_EQ(centre.getBProperty(), 0);
+            EXPECT_EQ(centre.getAProperty(), 255);
+        }
+    }
+
+    /**
      * @brief Contract: a compiled effect reads attributes from more than one bound stream.
      *
      * plans/plan_fx.md FX-082. Only for backends reporting `MultiStreamVertexInput`. The fixture's
@@ -3021,6 +3075,7 @@ namespace CNA::TestSupport
      * claiming `CompiledEffects` must run all of them:
      *
      * - `RunCompiledEffectDrawContract` -- the XNA draw matrix, every result read back
+     * - `RunCompiledEffectLoopContract` -- non-unit D3D9 loop steps retain the declared count
      * - `RunCompiledEffectMultiStreamDrawContract` -- several streams, and their own offsets
      * - `RunCompiledEffectInstancingDrawContract` -- instanced draws, offsets and divisor reset
      * - `RunCompiledEffectSpriteBatchContract` -- SpriteBatch runs the effect, or refuses by name

@@ -224,6 +224,14 @@ namespace CNA::TestSupport
         /// Tint, so MRT routing and per-target write masks remain observable without extra
         /// reflected parameters. Mutually exclusive with @ref pixelShaderSamplesTexture.
         bool pixelShaderWritesMrt = false;
+        /// Emits a Shader Model 3 pixel program whose colour records how many times a D3D9
+        /// `LOOP` body executes. `pixelLoopCount`, `pixelLoopInitial` and `pixelLoopStep` become
+        /// the local `DEFI` tuple, allowing the shared renderer test to distinguish the required
+        /// count from an incorrect address-based termination condition.
+        bool pixelShaderUsesLoop = false;
+        std::int32_t pixelLoopCount = 3;
+        std::int32_t pixelLoopInitial = 10;
+        std::int32_t pixelLoopStep = 2;
         /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
@@ -267,9 +275,13 @@ namespace CNA::TestSupport
         bool samplesTexture = false,
         bool swizzleTint = false,
         SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D,
-        bool writesMrt = false)
+        bool writesMrt = false,
+        bool usesLoop = false,
+        std::int32_t loopCount = 3,
+        std::int32_t loopInitial = 10,
+        std::int32_t loopStep = 2)
     {
-        constexpr std::uint32_t versionToken = 0xFFFF0200u;
+        const std::uint32_t versionToken = usesLoop ? 0xFFFF0300u : 0xFFFF0200u;
         const int constantCount = includeSampler ? 2 : 1;
         std::vector<std::uint8_t> ctab;
         AppendUInt32(ctab, 28);           // 0  sizeof(D3DXSHADER_CONSTANTTABLE)
@@ -323,7 +335,7 @@ namespace CNA::TestSupport
         const std::uint32_t tintName =
             appendCtabString(breakSymbolBinding ? "NoSuchParameter" : "Tint");
         const std::uint32_t samplerName = appendCtabString("FxSampler");
-        const std::uint32_t target = appendCtabString("ps_2_0");
+        const std::uint32_t target = appendCtabString(usesLoop ? "ps_3_0" : "ps_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
         while ((ctab.size() & 3u) != 0) ctab.push_back(0);
 
@@ -355,8 +367,10 @@ namespace CNA::TestSupport
         constexpr std::uint32_t regTemp = 0;
         constexpr std::uint32_t regTexture = 3;    // ps_2_0 texture-coordinate input t#
         constexpr std::uint32_t regConst = 2;
+        constexpr std::uint32_t regConstInt = 7;
         constexpr std::uint32_t regColorOut = 8;   // oC#
         constexpr std::uint32_t regSampler = 10;   // s#
+        constexpr std::uint32_t regLoop = 15;
         constexpr std::uint32_t swizzleIdentity = 0xE4u;  // .xyzw
         // .yzxw: x<-y, y<-z, z<-x, w<-w, two bits per component, lowest component first.
         constexpr std::uint32_t swizzleYzxw = 1u | (2u << 2) | (0u << 4) | (3u << 6);
@@ -372,7 +386,42 @@ namespace CNA::TestSupport
             return 0x80000000u | registerBits(type) | number | (swizzle << 16);
         };
 
-        if (samplesTexture)
+        if (usesLoop)
+        {
+            // def c1, 0.25, 0, 0, 0
+            AppendUInt32(shader, 0x00000051u | (5u << 24));
+            AppendUInt32(shader, destination(regConst, 1, 0xFu));
+            AppendUInt32(shader, FloatBits(0.25f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            // defi i0, count, initial, step, 0
+            AppendUInt32(shader, 0x00000030u | (5u << 24));
+            AppendUInt32(shader, destination(regConstInt, 0, 0xFu));
+            AppendUInt32(shader, static_cast<std::uint32_t>(loopCount));
+            AppendUInt32(shader, static_cast<std::uint32_t>(loopInitial));
+            AppendUInt32(shader, static_cast<std::uint32_t>(loopStep));
+            AppendUInt32(shader, 0u);
+            // r0 starts at Tint. A test supplies opaque black, so each iteration adds exactly
+            // one quarter to red while retaining alpha one.
+            AppendUInt32(shader, 0x00000001u | (2u << 24));
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 0));
+            // loop aL, i0
+            AppendUInt32(shader, 0x0000001Bu | (2u << 24));
+            AppendUInt32(shader, source(regLoop, 0));
+            AppendUInt32(shader, source(regConstInt, 0));
+            // add r0.x, r0.x, c1.x
+            AppendUInt32(shader, 0x00000002u | (3u << 24));
+            AppendUInt32(shader, destination(regTemp, 0, 0x1u));
+            AppendUInt32(shader, source(regTemp, 0, 0x00u));
+            AppendUInt32(shader, source(regConst, 1, 0x00u));
+            AppendUInt32(shader, 0x0000001Du); // endloop
+            AppendUInt32(shader, 0x00000001u | (2u << 24));
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+        }
+        else if (samplesTexture)
         {
             // plans/plan_fx.md FX-110: a cube or volume sampler reads three components, a 2D one reads
             // two, and the declaration has to say which -- both in the coordinate register's write
@@ -956,7 +1005,8 @@ namespace CNA::TestSupport
         const std::vector<std::uint8_t> shader = BuildSyntheticPixelShader(
             options.samplerRegister, options.breakShaderSymbolBinding, options.includeSampler,
             options.pixelShaderSamplesTexture, /*swizzleTint=*/false, options.samplerKind,
-            options.pixelShaderWritesMrt);
+            options.pixelShaderWritesMrt, options.pixelShaderUsesLoop,
+            options.pixelLoopCount, options.pixelLoopInitial, options.pixelLoopStep);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
