@@ -4054,18 +4054,21 @@ namespace Microsoft::Xna::Framework::Graphics
         // permit filtered sampling; six of those formats also do not permit blending or masked
         // color writes. Keeping the guard shared makes ordinary draws and SpriteBatch use the same
         // rules and prevents capable CPU/GL backends from silently offering behavior XNA rejects.
-        const auto validateFilteredTexture = [this](const SurfaceFormat format, const int slot)
+        const auto validateFilteredTexture = [](const SurfaceFormat format, const int slot,
+                                                const SamplerStateCollection& samplers)
         {
-            if (slot >= 0 && slot < SamplerStateCollection::MaxSamplers &&
+            if (slot >= 0 && slot < samplers.ActiveSamplerCount() &&
                 IsPointFilterOnlyFormat(format) &&
-                samplerStates_[slot].getFilterProperty() != TextureFilter::Point)
+                samplers[slot].getFilterProperty() != TextureFilter::Point)
             {
                 throw System::NotSupportedException(
                     "The active GraphicsProfile does not support filtering SurfaceFormat " +
                     std::to_string(static_cast<int>(format)) + ".");
             }
         };
-        const auto validateNpotTexture = [this](const int width, const int height, const int slot)
+        const auto validateNpotTexture =
+            [this](const int width, const int height, const int slot,
+                   const SamplerStateCollection& samplers)
         {
             const auto isPowerOfTwo = [](const int value)
             {
@@ -4073,9 +4076,9 @@ namespace Microsoft::Xna::Framework::Graphics
             };
             if (graphicsProfile_ == GraphicsProfile::Reach &&
                 (!isPowerOfTwo(width) || !isPowerOfTwo(height)) &&
-                slot >= 0 && slot < SamplerStateCollection::MaxSamplers &&
-                (samplerStates_[slot].getAddressUProperty() != TextureAddressMode::Clamp ||
-                 samplerStates_[slot].getAddressVProperty() != TextureAddressMode::Clamp))
+                slot >= 0 && slot < samplers.ActiveSamplerCount() &&
+                (samplers[slot].getAddressUProperty() != TextureAddressMode::Clamp ||
+                 samplers[slot].getAddressVProperty() != TextureAddressMode::Clamp))
             {
                 throw System::NotSupportedException(
                     "Reach requires Clamp addressing for non-power-of-two Texture2D resources.");
@@ -4093,20 +4096,25 @@ namespace Microsoft::Xna::Framework::Graphics
             if (drawParams->texture0 != nullptr)
             {
                 validateFilteredTexture(
-                    static_cast<SurfaceFormat>(drawParams->texture0->GetSurfaceFormatEXT()), 0);
+                    static_cast<SurfaceFormat>(drawParams->texture0->GetSurfaceFormatEXT()), 0,
+                    samplerStates_);
                 validateNpotTexture(
-                    drawParams->texture0->GetWidth(), drawParams->texture0->GetHeight(), 0);
+                    drawParams->texture0->GetWidth(), drawParams->texture0->GetHeight(), 0,
+                    samplerStates_);
             }
             if (drawParams->texture1 != nullptr)
             {
                 validateFilteredTexture(
-                    static_cast<SurfaceFormat>(drawParams->texture1->GetSurfaceFormatEXT()), 1);
+                    static_cast<SurfaceFormat>(drawParams->texture1->GetSurfaceFormatEXT()), 1,
+                    samplerStates_);
                 validateNpotTexture(
-                    drawParams->texture1->GetWidth(), drawParams->texture1->GetHeight(), 1);
+                    drawParams->texture1->GetWidth(), drawParams->texture1->GetHeight(), 1,
+                    samplerStates_);
             }
             if (drawParams->envMap != nullptr)
                 validateFilteredTexture(
-                    static_cast<SurfaceFormat>(drawParams->envMap->GetSurfaceFormatEXT()), 1);
+                    static_cast<SurfaceFormat>(drawParams->envMap->GetSurfaceFormatEXT()), 1,
+                    samplerStates_);
 
             // Compiled Effect passes bind through the public device collection. Stock effects and
             // SpriteBatch instead carry the exact textures above; validating stale public slot 0
@@ -4117,11 +4125,32 @@ namespace Microsoft::Xna::Framework::Graphics
                 {
                     if (const Texture* texture = (*drawParams->compiledDeviceTextures)[slot])
                     {
-                        validateFilteredTexture(texture->getFormatProperty(), slot);
+                        validateFilteredTexture(texture->getFormatProperty(), slot, samplerStates_);
                         if (const auto* texture2D = dynamic_cast<const Texture2D*>(texture))
                         {
                             validateNpotTexture(
-                                texture2D->getWidthProperty(), texture2D->getHeightProperty(), slot);
+                                texture2D->getWidthProperty(), texture2D->getHeightProperty(), slot,
+                                samplerStates_);
+                        }
+                    }
+                }
+            }
+            if (drawParams->compiledDeviceVertexTextures != nullptr &&
+                drawParams->compiledDeviceVertexSamplerStates != nullptr)
+            {
+                const auto& vertexTextures = *drawParams->compiledDeviceVertexTextures;
+                const auto& vertexSamplers = *drawParams->compiledDeviceVertexSamplerStates;
+                for (int slot = 0; slot < vertexTextures.ActiveTextureCount(); ++slot)
+                {
+                    if (const Texture* texture = vertexTextures[slot])
+                    {
+                        validateFilteredTexture(texture->getFormatProperty(), slot,
+                                                vertexSamplers);
+                        if (const auto* texture2D = dynamic_cast<const Texture2D*>(texture))
+                        {
+                            validateNpotTexture(texture2D->getWidthProperty(),
+                                               texture2D->getHeightProperty(), slot,
+                                               vertexSamplers);
                         }
                     }
                 }

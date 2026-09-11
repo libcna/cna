@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #endif
 #include "SoftwareTextureFormat.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
@@ -2330,6 +2331,102 @@ namespace CNA::Internal::Renderers::Software
             return result;
         }
 
+        [[nodiscard]] SoftwareSamplerState ToSoftwareSamplerState(
+            const Microsoft::Xna::Framework::Graphics::SamplerState& state)
+        {
+            return SoftwareSamplerState{
+                static_cast<int>(state.getFilterProperty()),
+                static_cast<int>(state.getAddressUProperty()),
+                static_cast<int>(state.getAddressVProperty()),
+                static_cast<int>(state.getAddressWProperty()),
+                state.getMaxAnisotropyProperty(),
+                state.getMaxMipLevelProperty(),
+                state.getMipMapLevelOfDetailBiasProperty()};
+        }
+
+        class CompiledVertexSampler final : public ISoftwarePixelSamplerEXT
+        {
+        public:
+            explicit CompiledVertexSampler(const GpuDrawParams& params) : params_(params) {}
+
+            [[nodiscard]] std::array<float, 4> SampleEXT(
+                const SoftwarePixelSampleRequestEXT& request) const override
+            {
+                using Microsoft::Xna::Framework::Graphics::Texture;
+                using Microsoft::Xna::Framework::Graphics::Texture2D;
+                using Microsoft::Xna::Framework::Graphics::Texture3D;
+                using Microsoft::Xna::Framework::Graphics::TextureCube;
+                if (request.samplerRegister >= 4u)
+                    throw std::runtime_error(
+                        "Software compiled effect: vertex sampler register exceeds the XNA "
+                        "HiDef four-slot limit.");
+                if (params_.compiledDeviceVertexTextures == nullptr ||
+                    params_.compiledDeviceVertexSamplerStates == nullptr)
+                {
+                    throw std::runtime_error(
+                        "Software compiled effect: vertex texture/sampler collections were not "
+                        "provided.");
+                }
+                const Texture* texture =
+                    (*params_.compiledDeviceVertexTextures)[request.samplerRegister];
+                if (texture == nullptr)
+                    return {0.0f, 0.0f, 0.0f, 1.0f};
+                const SoftwareSamplerState sampler = ToSoftwareSamplerState(
+                    (*params_.compiledDeviceVertexSamplerStates)[request.samplerRegister]);
+                const float lambda = request.lod;
+                if (request.samplerType == SoftwareShaderSamplerTypeEXT::Texture2D)
+                {
+                    const auto* texture2D = dynamic_cast<const Texture2D*>(texture);
+                    const auto* surface = texture2D != nullptr
+                        ? dynamic_cast<const SoftwareColorSurface*>(&texture2D->GetRenderer())
+                        : nullptr;
+                    if (surface == nullptr)
+                        throw std::runtime_error(
+                            "Software compiled effect: vertex sampler2D requires a Software "
+                            "Texture2D.");
+                    float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
+                    SampleTexture(*surface, sampler, lambda <= 0.0f, lambda,
+                                  request.coordinate[0], request.coordinate[1], r, g, b, a);
+                    return {r, g, b, a};
+                }
+                if (request.samplerType == SoftwareShaderSamplerTypeEXT::Cube)
+                {
+                    const auto* cube = dynamic_cast<const TextureCube*>(texture);
+                    const auto* surface = cube != nullptr
+                        ? dynamic_cast<const SoftwareCubeSurface*>(&cube->GetRenderer())
+                        : nullptr;
+                    if (surface == nullptr)
+                        throw std::runtime_error(
+                            "Software compiled effect: vertex samplerCUBE requires a Software "
+                            "TextureCube.");
+                    float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
+                    SampleCubeMap(*surface, sampler, lambda <= 0.0f, lambda,
+                                  Vector3(request.coordinate[0], request.coordinate[1],
+                                          request.coordinate[2]),
+                                  r, g, b, a);
+                    return {r, g, b, a};
+                }
+                if (request.samplerType == SoftwareShaderSamplerTypeEXT::Volume)
+                {
+                    const auto* volume = dynamic_cast<const Texture3D*>(texture);
+                    const auto* surface = volume != nullptr
+                        ? dynamic_cast<const SoftwareTexture3DRenderer*>(&volume->GetRenderer())
+                        : nullptr;
+                    if (surface == nullptr)
+                        throw std::runtime_error(
+                            "Software compiled effect: vertex sampler3D requires a Software "
+                            "Texture3D.");
+                    return SampleVolume(*surface, sampler, lambda, request.coordinate[0],
+                                        request.coordinate[1], request.coordinate[2]);
+                }
+                throw std::runtime_error(
+                    "Software compiled effect: unsupported vertex sampler dimensionality.");
+            }
+
+        private:
+            const GpuDrawParams& params_;
+        };
+
         class CompiledPixelSampler final : public ISoftwarePixelSamplerEXT
         {
         public:
@@ -3974,8 +4071,9 @@ namespace CNA::Internal::Renderers::Software
                     {declaration.usage, declaration.usageIndex, attribute.value};
             }
 
+            const CompiledVertexSampler sampler(params);
             const SoftwareVertexShaderResultEXT vertex =
-                runtime.ExecuteVertexEXT(std::span(inputs.data(), inputCount));
+                runtime.ExecuteVertexEXT(std::span(inputs.data(), inputCount), &sampler);
             ClipVertex result;
             result.x = vertex.position[0];
             result.y = vertex.position[1];

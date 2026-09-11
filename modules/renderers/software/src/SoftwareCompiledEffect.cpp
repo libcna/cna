@@ -262,7 +262,22 @@ namespace CNA::Internal::Renderers::Software
                         static_cast<std::uint8_t>((declarationToken >> 16u) & 0xFu);
                     semantic.registerNumber = registerNumber;
                     semantic.registerType = registerType;
-                    if (result.stage == SoftwareShaderStageEXT::Vertex)
+                    if (registerType == 10u)
+                    {
+                        const auto samplerType = static_cast<SoftwareShaderSamplerTypeEXT>(
+                            (declarationToken >> 27u) & 0xFu);
+                        if (samplerType != SoftwareShaderSamplerTypeEXT::Texture2D &&
+                            samplerType != SoftwareShaderSamplerTypeEXT::Cube &&
+                            samplerType != SoftwareShaderSamplerTypeEXT::Volume)
+                        {
+                            throw std::runtime_error(
+                                "Software compiled effect: shader sampler declaration has an "
+                                "unsupported texture dimension.");
+                        }
+                        result.samplers.push_back(SoftwareShaderSamplerEXT{
+                            static_cast<std::uint8_t>(registerNumber), samplerType});
+                    }
+                    else if (result.stage == SoftwareShaderStageEXT::Vertex)
                     {
                         if (registerType == 1u)
                             result.inputSemantics.push_back(semantic);
@@ -287,21 +302,6 @@ namespace CNA::Internal::Renderers::Software
                     else if (registerType == 17u)
                     {
                         result.inputSemantics.push_back(semantic);
-                    }
-                    else if (registerType == 10u)
-                    {
-                        const auto samplerType = static_cast<SoftwareShaderSamplerTypeEXT>(
-                            (declarationToken >> 27u) & 0xFu);
-                        if (samplerType != SoftwareShaderSamplerTypeEXT::Texture2D &&
-                            samplerType != SoftwareShaderSamplerTypeEXT::Cube &&
-                            samplerType != SoftwareShaderSamplerTypeEXT::Volume)
-                        {
-                            throw std::runtime_error(
-                                "Software compiled effect: pixel sampler declaration has an "
-                                "unsupported texture dimension.");
-                        }
-                        result.samplers.push_back(SoftwareShaderSamplerEXT{
-                            static_cast<std::uint8_t>(registerNumber), samplerType});
                     }
                 }
                 result.instructions.push_back(std::move(instruction));
@@ -739,7 +739,8 @@ namespace CNA::Internal::Renderers::Software
     }
 
     SoftwareVertexShaderResultEXT SoftwareCompiledEffect::ExecuteVertexEXT(
-        std::span<const SoftwareShaderSemanticValueEXT> inputs) const
+        std::span<const SoftwareShaderSemanticValueEXT> inputs,
+        const ISoftwarePixelSamplerEXT* sampler) const
     {
         const SoftwareShaderProgramEXT* program = GetVertexProgramEXT();
         if (program == nullptr)
@@ -747,7 +748,7 @@ namespace CNA::Internal::Renderers::Software
         SoftwareVertexShaderResultEXT result = ExecuteSoftwareVertexShaderEXT(
             *program, GetFloatRegistersEXT(SoftwareShaderStageEXT::Vertex),
             GetIntegerRegistersEXT(SoftwareShaderStageEXT::Vertex),
-            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Vertex), inputs);
+            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Vertex), inputs, sampler);
         lastVertexResult_ = result;
         ++vertexExecutionCount_;
         return result;

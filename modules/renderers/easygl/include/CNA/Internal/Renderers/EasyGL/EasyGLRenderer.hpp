@@ -1125,7 +1125,7 @@ namespace CNA::Internal::Renderers::EasyGL
             /** @brief Whether the GL objects above exist. */
             bool created = false;
         };
-        std::array<CompiledEffectFlippedSourceEXT, 16> compiledFlippedSources_;
+        std::array<CompiledEffectFlippedSourceEXT, 20> compiledFlippedSources_;
         /// Read framebuffer the source render target's colour texture is attached to per blit, so
         /// the source's own framebuffers -- including a multisample one -- are never touched.
         ::easygl::Framebuffer compiledFlipReadFbo_;
@@ -1164,7 +1164,10 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool DisableScissorForClear();
         void RestoreScissorAfterClear(bool wasEnabled);
 
-        static constexpr int kMaxSamplerSlots = 16;
+        // XNA maps its four vertex samplers to the native units immediately after the sixteen
+        // pixel samplers. MojoShader uses the same 16-slot offset when built with
+        // MOJOSHADER_XNA4_VERTEX_TEXTURES.
+        static constexpr int kMaxSamplerSlots = 20;
         ::easygl::Sampler samplers_[kMaxSamplerSlots];
         bool contextRecoveryEnabled_ = true;
         int swapInterval_ = 1;
@@ -1658,11 +1661,12 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param deviceTextures When non-null, the effect's owning device texture slots. These are
          *        authoritative after pass application, including application overrides.
          * @param deviceSamplerStates When non-null, the matching authoritative sampler states.
+         * @param deviceVertexTextures When non-null, the effect's four public vertex texture slots.
+         * @param deviceVertexSamplerStates The matching authoritative vertex sampler states.
          * @throws std::runtime_error if the applied pass bound no shader pair, or @p runtime was
          *         not created by this renderer.
          * @throws System::NotSupportedException if no stream supplies an input the vertex shader
-         *         consumes, the vertex shader itself samples a texture, or a reflected pixel-stage
-         *         sampler has no 2D texture bound.
+         *         consumes, or a reflected shader-stage sampler has an incompatible texture bound.
          */
         CNAEXT void BindCompiledEffectForDrawEXT(
             const CompiledEffectStreamEXT* streams, std::size_t streamCount,
@@ -1671,7 +1675,11 @@ namespace CNA::Internal::Renderers::EasyGL
             const Microsoft::Xna::Framework::Graphics::TextureCollection*
                 deviceTextures = nullptr,
             const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
-                deviceSamplerStates = nullptr);
+                deviceSamplerStates = nullptr,
+            const Microsoft::Xna::Framework::Graphics::TextureCollection*
+                deviceVertexTextures = nullptr,
+            const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
+                deviceVertexSamplerStates = nullptr);
 
         /**
          * @brief CNAEXT. The one vertex array object every compiled-effect draw binds.

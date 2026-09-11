@@ -1441,7 +1441,9 @@ if (ProfileIsEs2ApiGeneration())
             int maxAnisotropy = 4;  ///< SamplerState default MaxAnisotropy
         };
 
-        constexpr int kEs2MaxSamplerSlots = 16;  ///< mirrors EasyGLRenderer::kMaxSamplerSlots
+        // Reach/ES2 has no XNA vertex texture slots, so only the sixteen pixel units participate
+        // in this profile-specific texture-object fallback.
+        constexpr int kEs2MaxSamplerSlots = 16;
 
         /// Last sampler state requested per slot. GL texture-unit count and sampler slots share
         /// the same indexing here, exactly like the sampler-object path's samplers_[slot].
@@ -5710,6 +5712,10 @@ if (ProfileUsesGlslEs100())
             customEffect_->getGraphicsDeviceInternal().getTexturesProperty();
         const SamplerStateCollection& deviceSamplerStates =
             customEffect_->getGraphicsDeviceInternal().getSamplerStatesProperty();
+        const TextureCollection& deviceVertexTextures =
+            customEffect_->getGraphicsDeviceInternal().getVertexTexturesProperty();
+        const SamplerStateCollection& deviceVertexSamplerStates =
+            customEffect_->getGraphicsDeviceInternal().getVertexSamplerStatesProperty();
         for (int pass = 0; pass < passCount; ++pass)
         {
             technique->getPassesProperty()[pass]->Apply();
@@ -5717,7 +5723,9 @@ if (ProfileUsesGlslEs100())
             vao.bind();
             graphicsRenderer_->BindCompiledEffectForDrawEXT(&stream, 1, *runtime,
                                                             current_texture_, &deviceTextures,
-                                                            &deviceSamplerStates);
+                                                            &deviceSamplerStates,
+                                                            &deviceVertexTextures,
+                                                            &deviceVertexSamplerStates);
             easyIndexBuffer->ibo.bind(::easygl::BufferTarget::ElementArray);
             device_.draw_elements(::easygl::PrimitiveType::Triangles, indexCount,
                                   ::easygl::DataType::UnsignedShort, nullptr);
@@ -12941,7 +12949,9 @@ else
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime, nullptr,
                                          params.compiledDeviceTextures,
-                                         params.compiledDeviceSamplerStates);
+                                         params.compiledDeviceSamplerStates,
+                                         params.compiledDeviceVertexTextures,
+                                         params.compiledDeviceVertexSamplerStates);
             const int compiledVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
             // glDrawArrays' `first` advances every bound stream by that many of its own records,
             // which is the same rule the stock multi-stream route relies on.
@@ -13042,7 +13052,9 @@ else
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime, nullptr,
                                          params.compiledDeviceTextures,
-                                         params.compiledDeviceSamplerStates);
+                                         params.compiledDeviceSamplerStates,
+                                         params.compiledDeviceVertexTextures,
+                                         params.compiledDeviceVertexSamplerStates);
             const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto compiledIdxType = compiledIb.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                                   : ::easygl::DataType::UnsignedShort;
@@ -13183,7 +13195,9 @@ else
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime, nullptr,
                                          params.compiledDeviceTextures,
-                                         params.compiledDeviceSamplerStates);
+                                         params.compiledDeviceSamplerStates,
+                                         params.compiledDeviceVertexTextures,
+                                         params.compiledDeviceVertexSamplerStates);
             const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto compiledIdxType = compiledIb.thirtyTwoBit
                 ? ::easygl::DataType::UnsignedInt : ::easygl::DataType::UnsignedShort;

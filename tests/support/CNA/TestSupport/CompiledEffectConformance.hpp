@@ -3704,6 +3704,276 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Contract: XNA HiDef vertex texture/sampler slots drive compiled TEXLDL output.
+     *
+     * The fixture's vertex shader publishes four sampled Vector4 texels as a quad's clip-space
+     * positions. The pass first assigns an off-screen texture and MaxMipLevel 1; the application
+     * then replaces both public vertex-stage slots after Apply. Rendering, changing only the
+     * public mip clamp, restoring it, and finally unbinding the texture proves stage isolation,
+     * application override authority, sampler-state transitions and null/unbind behavior.
+     *
+     * @param device HiDef device whose renderer executes compiled Effects.
+     */
+    inline void RunCompiledEffectVertexSamplerContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        ASSERT_EQ(device.getGraphicsProfileProperty(), GraphicsProfile::HiDef);
+        constexpr int kSlot = 2;
+        constexpr int kSize = 8;
+        const Color background(9, 19, 29, 255);
+        const std::vector<SyntheticSamplerState> passStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+            {Fx::SampAddressW, Fx::AddressMirror},
+            {Fx::SampMaxAnisotropy, 7},
+            {Fx::SampMaxMipLevel, 1},
+            {Fx::SampMipMapLodBias, FloatBits(0.0f), true},
+        };
+        Effect effect(device, BuildSyntheticVertexSamplingEffect(passStates, kSlot));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(
+            Vector4(1.0f, 0.0f, 0.0f, 1.0f));
+
+        Texture2D passTexture(device, 4, 4, true, SurfaceFormat::Vector4);
+        std::array<Vector4, 16> offscreenBase{};
+        offscreenBase.fill(Vector4(3.0f, 3.0f, 0.0f, 1.0f));
+        passTexture.SetData(offscreenBase.data(), static_cast<int>(offscreenBase.size()));
+        const std::array<Vector4, 4> offscreenMip1 = {
+            Vector4(3.0f, 3.0f, 0.0f, 1.0f), Vector4(3.0f, 3.0f, 0.0f, 1.0f),
+            Vector4(3.0f, 3.0f, 0.0f, 1.0f), Vector4(3.0f, 3.0f, 0.0f, 1.0f)};
+        passTexture.SetData(1, nullptr, offscreenMip1.data(), 0,
+                            static_cast<int>(offscreenMip1.size()));
+        const Vector4 offscreenMip2(3.0f, 3.0f, 0.0f, 1.0f);
+        passTexture.SetData(2, nullptr, &offscreenMip2, 0, 1);
+
+        Texture2D positions(device, 4, 4, true, SurfaceFormat::Vector4);
+        std::array<Vector4, 16> base{};
+        base.fill(Vector4(3.0f, 3.0f, 0.0f, 1.0f));
+        base[0] = Vector4(-1.0f, 1.0f, 0.0f, 1.0f);
+        base[12] = Vector4(-1.0f, -1.0f, 0.0f, 1.0f);
+        base[15] = Vector4(1.0f, -1.0f, 0.0f, 1.0f);
+        base[3] = Vector4(1.0f, 1.0f, 0.0f, 1.0f);
+        positions.SetData(base.data(), static_cast<int>(base.size()));
+        positions.SetData(1, nullptr, offscreenMip1.data(), 0,
+                          static_cast<int>(offscreenMip1.size()));
+        positions.SetData(2, nullptr, &offscreenMip2, 0, 1);
+
+        Texture2D pixelSentinel(device, 1, 1, false, SurfaceFormat::Color);
+        const Color blue = Color::Blue;
+        pixelSentinel.SetData(&blue, 1);
+        device.getTexturesProperty()(kSlot, &pixelSentinel);
+        effect.getParametersProperty()["FxTexture"]->SetValue(&passTexture);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+
+        EXPECT_EQ(device.getTexturesProperty()[kSlot], &pixelSentinel);
+        EXPECT_EQ(device.getVertexTexturesProperty()[kSlot], &passTexture);
+        const SamplerState& applied = device.getVertexSamplerStatesProperty()[kSlot];
+        EXPECT_EQ(applied.getFilterProperty(), TextureFilter::Point);
+        EXPECT_EQ(applied.getAddressUProperty(), TextureAddressMode::Clamp);
+        EXPECT_EQ(applied.getAddressVProperty(), TextureAddressMode::Clamp);
+        EXPECT_EQ(applied.getAddressWProperty(), TextureAddressMode::Mirror);
+        EXPECT_EQ(applied.getMaxAnisotropyProperty(), 7);
+        EXPECT_EQ(applied.getMaxMipLevelProperty(), 1);
+        EXPECT_FLOAT_EQ(applied.getMipMapLevelOfDetailBiasProperty(), 0.0f);
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, lod;
+        };
+        const Vertex quad[6] = {
+            {0, 0, 0, 0.125f, 0.125f, 0, 0},
+            {0, 0, 0, 0.125f, 0.875f, 0, 0},
+            {0, 0, 0, 0.875f, 0.875f, 0, 0},
+            {0, 0, 0, 0.125f, 0.125f, 0, 0},
+            {0, 0, 0, 0.875f, 0.875f, 0, 0},
+            {0, 0, 0, 0.875f, 0.125f, 0, 0},
+        };
+        const VertexDeclaration declaration(sizeof(Vertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, kSize, kSize);
+        const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+        const auto draw = [&]()
+        {
+            device.SetRenderTarget(&target);
+            device.Clear(background);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color pixel = Color::Transparent;
+            target.GetData(0, &centre, &pixel, 0, 1);
+            return pixel;
+        };
+
+        device.getVertexTexturesProperty()(kSlot, &positions);
+        device.getVertexSamplerStatesProperty()[kSlot] = SamplerState::LinearClamp;
+        device.SetRenderTarget(&target);
+        device.Clear(background);
+        EXPECT_THROW(
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration),
+            System::NotSupportedException)
+            << "Vector4 vertex texture filtering used the pixel sampler collection";
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        device.getVertexSamplerStatesProperty()[kSlot] = SamplerState::PointClamp;
+        EXPECT_NEAR(draw().getRProperty(), 255, 3)
+            << "application vertex texture/sampler overrides did not drive TEXLDL";
+
+        SamplerState biasOne = SamplerState::PointClamp;
+        biasOne.setMipMapLevelOfDetailBiasProperty(1.0f);
+        device.getVertexSamplerStatesProperty()[kSlot] = biasOne;
+        EXPECT_EQ(draw(), background) << "vertex LOD-bias transition did not select mip one";
+
+        SamplerState mipOne = SamplerState::PointClamp;
+        mipOne.setMaxMipLevelProperty(1);
+        device.getVertexSamplerStatesProperty()[kSlot] = mipOne;
+        EXPECT_EQ(draw(), background) << "vertex MaxMipLevel transition did not select mip one";
+
+        device.getVertexSamplerStatesProperty()[kSlot] = SamplerState::PointClamp;
+        EXPECT_NEAR(draw().getRProperty(), 255, 3)
+            << "vertex sampler state did not recover without reapplying the pass";
+
+        device.getVertexTexturesProperty()(kSlot, nullptr);
+        EXPECT_EQ(draw(), background) << "null vertex texture did not unbind the native slot";
+
+        device.getVertexTexturesProperty()(kSlot, &positions);
+        positions.Dispose();
+        EXPECT_EQ(device.getVertexTexturesProperty()[kSlot], nullptr);
+        EXPECT_EQ(draw(), background)
+            << "disposing a bound vertex texture did not remove the native binding";
+    }
+
+    /**
+     * @brief Contract: compiled vertex TEXLDL supports classic cube and volume samplers.
+     *
+     * The cube leg fetches four clip positions from one face. The volume leg stores the quad in
+     * slice zero and off-screen positions in slice one, then changes only AddressW from Wrap to
+     * Clamp for a z coordinate above one. This makes all three texture dimensions and AddressW's
+     * actual vertex-stage effect observable.
+     *
+     * @param device HiDef device whose renderer executes compiled Effects.
+     */
+    inline void RunCompiledEffectVertexSamplerDimensionsContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        constexpr int kSize = 8;
+        constexpr int kSlot = 1;
+        const Color background(9, 19, 29, 255);
+        const auto states = [](std::uint32_t addressW)
+        {
+            return std::vector<SyntheticSamplerState>{
+                {Fx::SampMagFilter, Fx::FilterPoint},
+                {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+                {Fx::SampAddressU, Fx::AddressClamp},
+                {Fx::SampAddressV, Fx::AddressClamp},
+                {Fx::SampAddressW, addressW},
+                {Fx::SampMaxMipLevel, 0},
+                {Fx::SampMipMapLodBias, FloatBits(0.0f), true},
+            };
+        };
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, lod;
+        };
+        const VertexDeclaration declaration(sizeof(Vertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, kSize, kSize);
+        const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+        const auto draw = [&](const Vertex (&vertices)[6])
+        {
+            device.SetRenderTarget(&target);
+            device.Clear(background);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color pixel = Color::Transparent;
+            target.GetData(0, &centre, &pixel, 0, 1);
+            return pixel;
+        };
+        const Vector4 outside(3, 3, 0, 1);
+        std::array<Vector4, 16> positions{};
+        positions.fill(outside);
+        positions[0] = Vector4(-1, 1, 0, 1);
+        positions[12] = Vector4(-1, -1, 0, 1);
+        positions[15] = Vector4(1, -1, 0, 1);
+        positions[3] = Vector4(1, 1, 0, 1);
+
+        {
+            Effect effect(device, BuildSyntheticVertexSamplingEffect(
+                states(Fx::AddressClamp), kSlot, SyntheticSamplerKind::SamplerCube));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect.getParametersProperty()["Tint"]->SetValue(Vector4(0, 1, 0, 1));
+            TextureCube cube(device, 4, false, SurfaceFormat::Vector4);
+            std::array<Vector4, 16> face{};
+            face.fill(outside);
+            for (int cubeFace = 0; cubeFace < 6; ++cubeFace)
+                cube.SetData(static_cast<CubeMapFace>(cubeFace), face.data(),
+                             static_cast<int>(face.size()));
+            cube.SetData(CubeMapFace::PositiveZ, positions.data(),
+                         static_cast<int>(positions.size()));
+            effect.getParametersProperty()["FxTexture"]->SetValue(&cube);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            const Vertex quad[6] = {
+                {0, 0, 0, -.75f, .75f, 1, 0}, {0, 0, 0, -.75f, -.75f, 1, 0},
+                {0, 0, 0, .75f, -.75f, 1, 0}, {0, 0, 0, -.75f, .75f, 1, 0},
+                {0, 0, 0, .75f, -.75f, 1, 0}, {0, 0, 0, .75f, .75f, 1, 0},
+            };
+            EXPECT_NEAR(draw(quad).getGProperty(), 255, 3)
+                << "compiled vertex samplerCUBE did not produce clip positions";
+        }
+
+        {
+            Effect effect(device, BuildSyntheticVertexSamplingEffect(
+                states(Fx::AddressClamp), kSlot, SyntheticSamplerKind::Sampler3D));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect.getParametersProperty()["Tint"]->SetValue(Vector4(0, 0, 1, 1));
+            Texture3D volume(device, 4, 4, 2, false, SurfaceFormat::Vector4);
+            std::array<Vector4, 32> texels{};
+            texels.fill(outside);
+            std::copy(positions.begin(), positions.end(), texels.begin());
+            volume.SetData(texels.data(), static_cast<int>(texels.size()));
+            effect.getParametersProperty()["FxTexture"]->SetValue(&volume);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            const Vertex quad[6] = {
+                {0, 0, 0, .125f, .125f, 1.125f, 0},
+                {0, 0, 0, .125f, .875f, 1.125f, 0},
+                {0, 0, 0, .875f, .875f, 1.125f, 0},
+                {0, 0, 0, .125f, .125f, 1.125f, 0},
+                {0, 0, 0, .875f, .875f, 1.125f, 0},
+                {0, 0, 0, .875f, .125f, 1.125f, 0},
+            };
+            EXPECT_EQ(draw(quad), background)
+                << "vertex sampler3D did not begin with pass-assigned AddressW.Clamp";
+            SamplerState wrap = SamplerState::PointClamp;
+            wrap.setAddressWProperty(TextureAddressMode::Wrap);
+            device.getVertexSamplerStatesProperty()[kSlot] = wrap;
+            EXPECT_NEAR(draw(quad).getBProperty(), 255, 3)
+                << "vertex sampler3D ignored AddressW.Wrap";
+            device.getVertexSamplerStatesProperty()[kSlot] = SamplerState::PointClamp;
+            EXPECT_EQ(draw(quad), background)
+                << "vertex sampler3D ignored AddressW.Clamp transition";
+        }
+    }
+
+    /**
      * @brief Contract: a compiled Effect samples a render target the right way up.
      *
      * plans/plan_fx.md FX-099. A renderer whose render targets store their rows in the opposite order to

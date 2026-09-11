@@ -165,9 +165,11 @@ namespace CNA::Internal::Renderers::Software
                           std::span<const float> floatRegisters,
                           std::span<const int> integerRegisters,
                           std::span<const unsigned char> booleanRegisters,
-                          std::span<const SoftwareShaderSemanticValueEXT> inputs)
+                          std::span<const SoftwareShaderSemanticValueEXT> inputs,
+                          const ISoftwarePixelSamplerEXT* sampler)
                 : program_(program), floatRegisters_(floatRegisters),
-                  integerRegisters_(integerRegisters), booleanRegisters_(booleanRegisters)
+                  integerRegisters_(integerRegisters), booleanRegisters_(booleanRegisters),
+                  sampler_(sampler)
             {
                 if (program.stage != SoftwareShaderStageEXT::Vertex)
                     throw std::invalid_argument(
@@ -940,6 +942,47 @@ namespace CNA::Internal::Renderers::Software
                     DefineBoolean(tokens);
                     return;
                 }
+                if (instruction.opcode == 95u) // TEXLDL (vs_3_0)
+                {
+                    const std::size_t expected = 4u + (instruction.predicated ? 1u : 0u);
+                    if (program_.majorVersion != 3u || tokens.size() != expected)
+                        throw std::runtime_error(
+                            "Software vertex shader: malformed TEXLDL instruction.");
+                    if (sampler_ == nullptr)
+                        throw std::runtime_error(
+                            "Software vertex shader: TEXLDL has no sampler provider.");
+                    const Operand destination = DecodeDestination(tokens[1]);
+                    std::size_t cursor = 2u;
+                    const Vector coordinate = ReadSource(tokens, cursor);
+                    RegisterType relativeType;
+                    int relativeComponent = 0;
+                    const Operand samplerOperand = DecodeSource(
+                        tokens, cursor, program_.majorVersion, relativeType, relativeComponent);
+                    if (samplerOperand.type != RegisterType::Sampler ||
+                        samplerOperand.relative || samplerOperand.sourceModifier != 0u)
+                    {
+                        throw std::runtime_error(
+                            "Software vertex shader: TEXLDL requires a direct sampler register.");
+                    }
+                    const auto declaration = std::find_if(
+                        program_.samplers.begin(), program_.samplers.end(),
+                        [&samplerOperand](const SoftwareShaderSamplerEXT& candidate)
+                        {
+                            return candidate.registerNumber == samplerOperand.number;
+                        });
+                    if (declaration == program_.samplers.end())
+                        throw std::runtime_error(
+                            "Software vertex shader: TEXLDL sampler was not declared.");
+                    SoftwarePixelSampleRequestEXT request;
+                    request.samplerRegister =
+                        static_cast<std::uint8_t>(samplerOperand.number);
+                    request.samplerType = declaration->type;
+                    request.coordinate = coordinate;
+                    request.lodMode = SoftwareTextureLodModeEXT::Explicit;
+                    request.lod = coordinate[3];
+                    Write(destination, sampler_->SampleEXT(request));
+                    return;
+                }
 
                 if (tokens.size() < 3u)
                     throw std::runtime_error("Software vertex shader: malformed instruction.");
@@ -1239,6 +1282,7 @@ namespace CNA::Internal::Renderers::Software
             std::span<const float> floatRegisters_;
             std::span<const int> integerRegisters_;
             std::span<const unsigned char> booleanRegisters_;
+            const ISoftwarePixelSamplerEXT* sampler_ = nullptr;
             std::array<Vector, kTemporaryRegisterCount> temporaryRegisters_{};
             std::array<Vector, kInputRegisterCount> inputRegisters_{};
             std::array<Vector, 3> rasterOutputs_{};
@@ -1260,9 +1304,11 @@ namespace CNA::Internal::Renderers::Software
     SoftwareVertexShaderResultEXT ExecuteSoftwareVertexShaderEXT(
         const SoftwareShaderProgramEXT& program, std::span<const float> floatRegisters,
         std::span<const int> integerRegisters, std::span<const unsigned char> booleanRegisters,
-        std::span<const SoftwareShaderSemanticValueEXT> inputs)
+        std::span<const SoftwareShaderSemanticValueEXT> inputs,
+        const ISoftwarePixelSamplerEXT* sampler)
     {
-        return VertexMachine(program, floatRegisters, integerRegisters, booleanRegisters, inputs)
+        return VertexMachine(program, floatRegisters, integerRegisters, booleanRegisters, inputs,
+                             sampler)
             .Execute();
     }
 } // namespace CNA::Internal::Renderers::Software

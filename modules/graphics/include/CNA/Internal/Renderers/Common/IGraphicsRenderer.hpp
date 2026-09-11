@@ -1588,6 +1588,13 @@ namespace CNA::Internal::Renderers
         /// Current public pixel sampler slots paired with @ref compiledDeviceTextures.
         const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
             compiledDeviceSamplerStates = nullptr;
+        /// Current public vertex texture slots for a compiled Effect draw. XNA exposes four
+        /// HiDef vertex-stage slots independently from the sixteen pixel-stage slots.
+        const Microsoft::Xna::Framework::Graphics::TextureCollection*
+            compiledDeviceVertexTextures = nullptr;
+        /// Current public vertex sampler slots paired with @ref compiledDeviceVertexTextures.
+        const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
+            compiledDeviceVertexSamplerStates = nullptr;
         /// SpriteBatch's current source texture for compiled pixel sampler slot zero. FNA writes
         /// this binding after applying each custom-effect pass, so it overrides a Texture
         /// parameter assigned to sampler zero without mutating the public texture collection.

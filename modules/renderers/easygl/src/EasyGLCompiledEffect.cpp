@@ -869,7 +869,10 @@ namespace CNA::Internal::Renderers::EasyGL
         const CompiledEffectStreamEXT* streams, std::size_t streamCount,
         ICompiledEffectRuntime& runtime, const ITextureRenderer* spriteBatchSlotZeroTexture,
         const Microsoft::Xna::Framework::Graphics::TextureCollection* deviceTextures,
-        const Microsoft::Xna::Framework::Graphics::SamplerStateCollection* deviceSamplerStates)
+        const Microsoft::Xna::Framework::Graphics::SamplerStateCollection* deviceSamplerStates,
+        const Microsoft::Xna::Framework::Graphics::TextureCollection* deviceVertexTextures,
+        const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
+            deviceVertexSamplerStates)
     {
         RequireCompiledEffectContextEXT("a compiled-effect draw");
         auto* effect = dynamic_cast<EasyGLCompiledEffect*>(&runtime);
@@ -921,21 +924,6 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             throw std::runtime_error(
                 "EasyGL compiled effect: the applied pass's shaders have no reflection.");
-        }
-
-        // plans/plan_fx.md FX-062, matching FX-071's own scope: a compiled effect's vertex shader
-        // sampling a texture is refused explicitly rather than silently mishandled -- this
-        // renderer's compiled-effect draw route does not bind vertex-stage sampler textures.
-        if (vertexParseData->sampler_count > 0)
-        {
-            // plans/plan_fx.md FX-109: a DIFFERENT limitation from the 3D/cube one below, and recorded
-            // as such. Vertex-stage texture sampling is unreachable on this renderer by ANY route
-            // -- GraphicsDevice.VertexTextures and VertexSamplerStates exist in the public API but
-            // no renderer consumes them (FX-110) -- so this is renderer-wide, not compiled-Effect
-            // specific.
-            throw System::NotSupportedException(
-                "CNA EasyGL: this compiled effect's vertex shader samples a texture. Vertex-stage "
-                "texture sampling is not implemented in this renderer at all, by any draw route.");
         }
 
         // Vertex attributes: MOJOSHADER_glSetVertexAttribute no-ops for an attribute the bound
@@ -1122,6 +1110,104 @@ namespace CNA::Internal::Renderers::EasyGL
                                      static_cast<int>(samplerState.getAddressWProperty()));
                 ApplySamplerMipState(static_cast<int>(sampler.index),
                                      samplerState.getMaxMipLevelProperty(),
+                                     samplerState.getMipMapLevelOfDetailBiasProperty());
+            }
+        }
+
+        // XNA 4.0 exposes four independent HiDef vertex sampler slots. MojoShader's
+        // MOJOSHADER_XNA4_VERTEX_TEXTURES path assigns them to native texture units 16..19, after
+        // the complete sixteen-slot pixel range. Bind both the public collection and every
+        // sampler property at that same offset; logical vertex register zero must never alias
+        // pixel register zero.
+        constexpr int kVertexSamplerUnitOffset = 16;
+        for (int i = 0; i < vertexParseData->sampler_count; ++i)
+        {
+            const MOJOSHADER_sampler& sampler = vertexParseData->samplers[i];
+            if (sampler.index < 0 || sampler.index >= 4)
+            {
+                throw System::NotSupportedException(
+                    "CNA EasyGL: a compiled vertex sampler register is outside XNA's four-slot "
+                    "HiDef range.");
+            }
+            const int nativeUnit = kVertexSamplerUnitOffset + sampler.index;
+            Texture* texture = nullptr;
+            Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
+            bool samplerAssigned = false;
+            effect->GetBoundSamplerEXT(static_cast<std::uint32_t>(sampler.index),
+                                       /*vertexStage=*/true, texture, samplerState,
+                                       samplerAssigned);
+            Texture* selectedTexture = texture;
+            ResolvedSamplerTextureEXT nativeTexture;
+            nativeTexture.ownedTexture2D = effect->boundVertexTexture2DResources_[sampler.index];
+            nativeTexture.ownedVolume = effect->boundVertexTexture3DResources_[sampler.index];
+            nativeTexture.ownedCube = effect->boundVertexTextureCubeResources_[sampler.index];
+            nativeTexture.texture2D = nativeTexture.ownedTexture2D.get();
+            nativeTexture.volume = nativeTexture.ownedVolume.get();
+            nativeTexture.cube = nativeTexture.ownedCube.get();
+            if (deviceVertexTextures != nullptr)
+            {
+                selectedTexture = (*deviceVertexTextures)[sampler.index];
+                nativeTexture = ResolveSamplerTexture(selectedTexture);
+            }
+            const std::string slotName = std::to_string(sampler.index) + " ('" +
+                (sampler.name != nullptr ? sampler.name : "<unnamed>") + "')";
+            if (!nativeTexture.Resolved())
+            {
+                if (selectedTexture != nullptr)
+                {
+                    throw System::NotSupportedException(
+                        "CNA EasyGL: this compiled effect's vertex shader samples slot " +
+                        slotName + ", but the texture bound there is not owned by this EasyGL "
+                        "graphics device.");
+                }
+                UnbindSamplerTextureEXT(nativeUnit, sampler.type);
+                continue;
+            }
+            if (sampler.type != nativeTexture.Kind())
+            {
+                throw System::NotSupportedException(
+                    "CNA EasyGL: this compiled effect's vertex shader declares " +
+                    std::string(SamplerKindName(sampler.type)) + " at slot " + slotName +
+                    ", but the texture bound there is a " +
+                    SamplerKindName(nativeTexture.Kind()) + ". The dimensions must match.");
+            }
+            if (SampledRowOrderIsBottomUp(nativeTexture.texture2D))
+            {
+                const auto* renderTarget =
+                    dynamic_cast<const EasyGLRenderTargetRenderer*>(nativeTexture.texture2D);
+                if (renderTarget == nullptr)
+                {
+                    throw System::NotSupportedException(
+                        "CNA EasyGL: this compiled effect samples a rendered vertex texture "
+                        "whose row order cannot be corrected (slot " +
+                        std::to_string(sampler.index) + ").");
+                }
+                const ::easygl::Texture& corrected =
+                    AcquireCompiledEffectFlippedSourceEXT(nativeUnit, *renderTarget);
+                corrected.active_bind(
+                    static_cast<::easygl::TextureUnit>(
+                        static_cast<unsigned int>(::easygl::TextureUnit::Texture0) + nativeUnit),
+                    ::easygl::TextureTarget::Texture2D);
+            }
+            else
+            {
+                nativeTexture.BindGL(nativeUnit);
+            }
+            if (deviceVertexSamplerStates != nullptr)
+            {
+                samplerState = (*deviceVertexSamplerStates)[sampler.index];
+                samplerAssigned = true;
+            }
+            if (samplerAssigned)
+            {
+                ApplySamplerState(nativeUnit,
+                                  static_cast<int>(samplerState.getFilterProperty()),
+                                  static_cast<int>(samplerState.getAddressUProperty()),
+                                  static_cast<int>(samplerState.getAddressVProperty()),
+                                  samplerState.getMaxAnisotropyProperty());
+                ApplySamplerAddressW(nativeUnit,
+                                     static_cast<int>(samplerState.getAddressWProperty()));
+                ApplySamplerMipState(nativeUnit, samplerState.getMaxMipLevelProperty(),
                                      samplerState.getMipMapLevelOfDetailBiasProperty());
             }
         }

@@ -258,6 +258,10 @@ namespace CNA::TestSupport
         /// with it set the geometry moves by exactly the second stream's own values, so binding
         /// that stream from the wrong buffer, stride or offset changes the pixels.
         bool vertexShaderReadsSecondStream = false;
+        /// Emits a Shader Model 3 vertex program that loads its clip-space POSITION0 from the
+        /// declared sampler with TEXLDL. The sampler belongs to VertexTextures/VertexSamplerStates,
+        /// independently from the pixel-stage collections. Requires @ref includeSampler.
+        bool vertexShaderSamplesTexture = false;
         /// plans/plan_fx.md FX-104: adds a `Caption` parameter of reflected type String, with an initial
         /// value, so the XNA `SetValue(string)`/`GetValueString()` pair can be exercised on a
         /// parameter that really is one instead of only through its rejection path.
@@ -1120,10 +1124,16 @@ namespace CNA::TestSupport
                                                                 bool forwardsLegacyTextureMatrix3VertexSpecular = false,
                                                                 bool legacyTextureMatrix2ZeroDivisor = false,
                                                                 bool forwardsLegacyDependentTexture = false,
-                                                                bool forwardsLegacyBumpTexture = false)
+                                                                bool forwardsLegacyBumpTexture = false,
+                                                                bool samplesTexture = false,
+                                                                std::uint32_t samplerRegister = 0,
+                                                                SyntheticSamplerKind samplerKind =
+                                                                    SyntheticSamplerKind::Sampler2D)
     {
-        const std::uint32_t versionToken = usesPredication ? 0xFFFE0300u : 0xFFFE0200u;
-        const std::uint32_t constantCount = readsSecondStream ? 2u : 1u;
+        const std::uint32_t versionToken =
+            usesPredication || samplesTexture ? 0xFFFE0300u : 0xFFFE0200u;
+        const std::uint32_t constantCount =
+            1u + (readsSecondStream ? 1u : 0u) + (samplesTexture ? 1u : 0u);
 
         std::vector<std::uint8_t> ctab;
         AppendUInt32(ctab, 28);                 // 0  sizeof(D3DXSHADER_CONSTANTTABLE)
@@ -1164,6 +1174,19 @@ namespace CNA::TestSupport
         AppendUInt16(ctab, 0); // struct members
         AppendUInt32(ctab, 0); // struct member info
 
+        const auto samplerType = static_cast<std::uint32_t>(ctab.size());
+        AppendUInt16(ctab, EffectFormat::ClassObject);
+        AppendUInt16(ctab, samplerKind == SyntheticSamplerKind::SamplerCube
+                                   ? EffectFormat::TypeSamplerCube
+                                   : samplerKind == SyntheticSamplerKind::Sampler3D
+                                         ? EffectFormat::TypeSampler3D
+                                         : EffectFormat::TypeSampler2D);
+        AppendUInt16(ctab, 1);
+        AppendUInt16(ctab, 1);
+        AppendUInt16(ctab, 1);
+        AppendUInt16(ctab, 0);
+        AppendUInt32(ctab, 0);
+
         const auto appendCtabString = [&ctab](const std::string& value) {
             const auto offset = static_cast<std::uint32_t>(ctab.size());
             ctab.insert(ctab.end(), value.begin(), value.end());
@@ -1172,7 +1195,9 @@ namespace CNA::TestSupport
         };
         const std::uint32_t transformName = appendCtabString("Transform");
         const std::uint32_t streamMixName = appendCtabString("StreamMix");
-        const std::uint32_t target = appendCtabString(usesPredication ? "vs_3_0" : "vs_2_0");
+        const std::uint32_t samplerName = appendCtabString("FxSampler");
+        const std::uint32_t target = appendCtabString(
+            usesPredication || samplesTexture ? "vs_3_0" : "vs_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
         while ((ctab.size() & 3u) != 0) ctab.push_back(0);
 
@@ -1191,6 +1216,15 @@ namespace CNA::TestSupport
             ctab[constantInfo + 28] = 1;  // RegisterCount
             PatchUInt32(ctab, constantInfo + 32, streamMixType);
         }
+        if (samplesTexture)
+        {
+            const std::uint32_t samplerInfo = constantInfo +
+                (readsSecondStream ? 40u : 20u);
+            PatchUInt32(ctab, samplerInfo, samplerName);
+            ctab[samplerInfo + 4] = 3; // RegisterSet: sampler
+            ctab[samplerInfo + 6] = static_cast<std::uint8_t>(samplerRegister);
+            PatchUInt32(ctab, samplerInfo + 12, samplerType);
+        }
 
         // Direct3D 9 shader-token register types, and the two token shapes every instruction
         // below is built from. Identical encoding to BuildSyntheticPixelShader's own.
@@ -1200,6 +1234,7 @@ namespace CNA::TestSupport
         constexpr std::uint32_t regRastOut = 4;
         constexpr std::uint32_t regTexCoordOut = 6;  // vs_2_0 oT#
         constexpr std::uint32_t regPredicate = 19;
+        constexpr std::uint32_t regSampler = 10;
         const auto registerBits = [](std::uint32_t type) {
             return ((type & 0x7u) << 28) | ((type >> 3) << 11);
         };
@@ -1323,15 +1358,18 @@ namespace CNA::TestSupport
         AppendUInt32(shader, 0x0000001Fu | (2u << 24));
         AppendUInt32(shader, 0x80000000u | 0u);            // D3DDECLUSAGE_POSITION, index 0
         AppendUInt32(shader, destination(regInput, 0));
-        if (usesPredication)
+        if (usesPredication || samplesTexture)
         {
             // Shader Model 3 uses generic o# outputs, each with an explicit semantic declaration.
             AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_position0 o0
             AppendUInt32(shader, 0x80000000u | 0u);
             AppendUInt32(shader, destination(regTexCoordOut, 0));
-            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_color0 o1
-            AppendUInt32(shader, 0x80000000u | 10u);
-            AppendUInt32(shader, destination(regTexCoordOut, 1));
+            if (usesPredication)
+            {
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_color0 o1
+                AppendUInt32(shader, 0x80000000u | 10u);
+                AppendUInt32(shader, destination(regTexCoordOut, 1));
+            }
         }
         // One declaration serves both consumers: the multi-stream fixture scales POSITION0 by it,
         // the sampling fixture forwards it, and a fixture that does both declares it once.
@@ -1342,6 +1380,18 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x80000000u | 5u);        // D3DDECLUSAGE_TEXCOORD, index 0
             AppendUInt32(shader, destination(regInput, 1));
         }
+        if (samplesTexture)
+        {
+            const std::uint32_t samplerTextureType =
+                samplerKind == SyntheticSamplerKind::SamplerCube
+                    ? EffectFormat::SamplerTypeCube
+                    : samplerKind == SyntheticSamplerKind::Sampler3D
+                          ? EffectFormat::SamplerTypeVolume
+                          : EffectFormat::SamplerType2D;
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_<kind> s#
+            AppendUInt32(shader, 0x80000000u | (samplerTextureType << 27));
+            AppendUInt32(shader, destination(regSampler, samplerRegister));
+        }
         if (readsSecondStream)
         {
             // mad r0, v1, c4, v0
@@ -1351,11 +1401,26 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 4));
             AppendUInt32(shader, source(regInput, 0));
         }
-        // m4x4 oPos, <r0|v0>, c0
-        AppendUInt32(shader, 0x00000014u | (3u << 24));
-        AppendUInt32(shader, destination(usesPredication ? regTexCoordOut : regRastOut, 0));
-        AppendUInt32(shader, readsSecondStream ? source(regTemp, 0) : source(regInput, 0));
-        AppendUInt32(shader, source(regConst, 0));
+        if (samplesTexture)
+        {
+            // texldl r0, v1, s#; mov o0, r0. The texture therefore owns the complete clip-space
+            // position and makes the vertex-stage lookup directly observable in target coverage.
+            AppendUInt32(shader, 0x0000005Fu | (3u << 24));
+            AppendUInt32(shader, destination(regTemp, 0));
+            AppendUInt32(shader, source(regInput, 1));
+            AppendUInt32(shader, source(regSampler, samplerRegister));
+            AppendUInt32(shader, 0x00000001u | (2u << 24));
+            AppendUInt32(shader, destination(regTexCoordOut, 0));
+            AppendUInt32(shader, source(regTemp, 0));
+        }
+        else
+        {
+            // m4x4 oPos, <r0|v0>, c0
+            AppendUInt32(shader, 0x00000014u | (3u << 24));
+            AppendUInt32(shader, destination(usesPredication ? regTexCoordOut : regRastOut, 0));
+            AppendUInt32(shader, readsSecondStream ? source(regTemp, 0) : source(regInput, 0));
+            AppendUInt32(shader, source(regConst, 0));
+        }
         if (usesPredication)
         {
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov o1, c242
@@ -1374,7 +1439,7 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 243u, 0x55u));
             AppendUInt32(shader, source(regPredicate, 0, 0x55u, 13u));
         }
-        if (forwardsTexCoord)
+        if (forwardsTexCoord && !samplesTexture)
         {
             // mov oT0.xy(z), v1 -- the interpolated coordinate the sampling pixel shader reads.
             // plans/plan_fx.md FX-110: a cube or volume sampler needs three components, so the mask
@@ -1811,7 +1876,8 @@ namespace CNA::TestSupport
         }
 
         const std::vector<std::uint8_t> shader = BuildSyntheticPixelShader(
-            options.samplerRegister, options.breakShaderSymbolBinding, options.includeSampler,
+            options.samplerRegister, options.breakShaderSymbolBinding,
+            options.includeSampler && !options.vertexShaderSamplesTexture,
             options.pixelShaderSamplesTexture, /*swizzleTint=*/false, options.samplerKind,
             options.pixelShaderWritesMrt, options.pixelShaderUsesLoop,
             options.pixelLoopCount, options.pixelLoopInitial, options.pixelLoopStep,
@@ -1840,7 +1906,8 @@ namespace CNA::TestSupport
         {
             const std::vector<std::uint8_t> vertexShader = BuildSyntheticVertexShader(
                 options.vertexShaderReadsSecondStream,
-                options.pixelShaderSamplesTexture || options.pixelShaderUsesDerivatives ||
+                options.vertexShaderSamplesTexture || options.pixelShaderSamplesTexture ||
+                    options.pixelShaderUsesDerivatives ||
                     options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
                     options.pixelShaderUsesShaderModel14Phase ||
@@ -1873,7 +1940,8 @@ namespace CNA::TestSupport
                     options.pixelShaderLegacyDepthOutput ==
                         SyntheticLegacyDepthOutput::TextureMatrix2,
                 options.shadersUsePredication,
-                options.pixelShaderUsesProjectiveModifiers ||
+                options.vertexShaderSamplesTexture ||
+                    options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
                     options.pixelShaderUsesShaderModel14Phase ||
                     options.pixelShaderDuplicatesShaderModel14Phase ||
@@ -1892,7 +1960,9 @@ namespace CNA::TestSupport
                 options.pixelShaderLegacyBumpEnvironment !=
                         SyntheticLegacyBumpEnvironment::None &&
                     options.pixelShaderLegacyBumpEnvironment !=
-                        SyntheticLegacyBumpEnvironment::Arithmetic);
+                        SyntheticLegacyBumpEnvironment::Arithmetic,
+                options.vertexShaderSamplesTexture, options.samplerRegister,
+                options.samplerKind);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());
@@ -1998,6 +2068,34 @@ namespace CNA::TestSupport
         options.includeDrawableProgram = true;
         options.includeSampler = true;
         options.pixelShaderSamplesTexture = true;
+        options.samplerStates = samplerStates;
+        options.samplerRegister = samplerRegister;
+        options.samplerKind = samplerKind;
+        return BuildSyntheticEffect(options);
+    }
+
+    /**
+     * @brief Builds a drawable Effect whose vertex shader samples an XNA HiDef texture slot.
+     *
+     * The Shader Model 3 vertex program executes `texldl r0, v1, s#` and publishes that sampled
+     * Vector4 directly as clip-space POSITION0. The pixel shader writes Tint unchanged. A four-
+     * texel Vector4 texture can therefore describe a full quad and makes stage/slot selection,
+     * sampler addressing and explicit mip selection visible as target coverage.
+     *
+     * @param samplerStates Sampler assignments applied by the vertex-shader pass.
+     * @param samplerRegister Vertex sampler register in XNA's zero-through-three range.
+     * @param samplerKind Which vertex sampler dimension the shader declares.
+     * @return Complete Effect Framework bytecode.
+     */
+    inline std::vector<std::uint8_t> BuildSyntheticVertexSamplingEffect(
+        const std::vector<SyntheticSamplerState>& samplerStates,
+        std::uint32_t samplerRegister = 0,
+        SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.vertexShaderSamplesTexture = true;
         options.samplerStates = samplerStates;
         options.samplerRegister = samplerRegister;
         options.samplerKind = samplerKind;

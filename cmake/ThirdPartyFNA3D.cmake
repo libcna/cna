@@ -64,7 +64,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-texm3x3spec-reflection.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-legacy-depth.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-legacy-dependent-texture.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-legacy-bump-environment.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-legacy-bump-environment.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-vertex-sampler-dcl-mask.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

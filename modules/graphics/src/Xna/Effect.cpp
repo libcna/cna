@@ -1017,6 +1017,9 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             params.compiledDeviceTextures = &device_->getTexturesProperty();
             params.compiledDeviceSamplerStates = &device_->getSamplerStatesProperty();
+            params.compiledDeviceVertexTextures = &device_->getVertexTexturesProperty();
+            params.compiledDeviceVertexSamplerStates =
+                &device_->getVertexSamplerStatesProperty();
         }
     }
 

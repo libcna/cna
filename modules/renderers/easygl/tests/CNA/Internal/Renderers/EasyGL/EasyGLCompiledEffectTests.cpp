@@ -921,6 +921,26 @@ TEST(EasyGLCompiledEffectDrawTest, SharedSamplerPixelContract)
     CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device, options);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SharedVertexSamplerContract)
+{
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectVertexSamplerContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedVertexSamplerDimensionsContract)
+{
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectVertexSamplerDimensionsContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, DeviceTextureAndSamplerOverridesRemainAuthoritativeAfterPassApply)
 {
     // SOFTWARE-186: FNA's Effect.INTERNAL_updateSamplers publishes a pass's assignments into the

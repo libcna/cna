@@ -2710,6 +2710,274 @@ namespace
               "compiled ps_1_4 BEM ignored the destination-stage matrix");
     }
 
+    void CheckCompiledVertexSamplerRasterization()
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        constexpr int slot = 2;
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            PresentationParameters());
+        const std::vector<CNA::TestSupport::SyntheticSamplerState> states = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+            {Fx::SampAddressW, Fx::AddressMirror},
+            {Fx::SampMaxAnisotropy, 7},
+            {Fx::SampMaxMipLevel, 1},
+            {Fx::SampMipMapLodBias, CNA::TestSupport::FloatBits(0.0f), true},
+        };
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticVertexSamplingEffect(states, slot));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect->getParametersProperty()["Tint"]->SetValue(Vector4(1, 0, 0, 1));
+
+        const Vector4 outside(3, 3, 0, 1);
+        std::array<Vector4, 16> outsideBase{};
+        outsideBase.fill(outside);
+        const std::array<Vector4, 4> outsideMip1 = {outside, outside, outside, outside};
+        Texture2D passTexture(device, 4, 4, true, SurfaceFormat::Vector4);
+        passTexture.SetData(outsideBase.data(), static_cast<int>(outsideBase.size()));
+        passTexture.SetData(1, nullptr, outsideMip1.data(), 0,
+                            static_cast<int>(outsideMip1.size()));
+        passTexture.SetData(2, nullptr, &outside, 0, 1);
+
+        Texture2D positions(device, 4, 4, true, SurfaceFormat::Vector4);
+        std::array<Vector4, 16> base = outsideBase;
+        base[0] = Vector4(-1, 1, 0, 1);
+        base[12] = Vector4(-1, -1, 0, 1);
+        base[15] = Vector4(1, -1, 0, 1);
+        base[3] = Vector4(1, 1, 0, 1);
+        positions.SetData(base.data(), static_cast<int>(base.size()));
+        positions.SetData(1, nullptr, outsideMip1.data(), 0,
+                          static_cast<int>(outsideMip1.size()));
+        positions.SetData(2, nullptr, &outside, 0, 1);
+
+        Texture2D pixelSentinel(device, 1, 1);
+        const Color blue = Color::Blue;
+        pixelSentinel.SetData(&blue, 1);
+        device.getTexturesProperty()(slot, &pixelSentinel);
+        effect->getParametersProperty()["FxTexture"]->SetValue(&passTexture);
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        Check(device.getTexturesProperty()[slot] == &pixelSentinel,
+              "vertex sampler aliased the pixel texture collection");
+        Check(device.getVertexTexturesProperty()[slot] == &passTexture,
+              "vertex sampler assignment did not reach VertexTextures");
+        const SamplerState& applied = device.getVertexSamplerStatesProperty()[slot];
+        Check(applied.getFilterProperty() == TextureFilter::Point &&
+                  applied.getAddressWProperty() == TextureAddressMode::Mirror &&
+                  applied.getMaxAnisotropyProperty() == 7 &&
+                  applied.getMaxMipLevelProperty() == 1 &&
+                  applied.getMipMapLevelOfDetailBiasProperty() == 0.0f,
+              "vertex sampler assignment lost a public SamplerState property");
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, lod;
+        };
+        const Vertex quad[6] = {
+            {0, 0, 0, .125f, .125f, 0, 0}, {0, 0, 0, .125f, .875f, 0, 0},
+            {0, 0, 0, .875f, .875f, 0, 0}, {0, 0, 0, .125f, .125f, 0, 0},
+            {0, 0, 0, .875f, .875f, 0, 0}, {0, 0, 0, .875f, .125f, 0, 0},
+        };
+        const VertexDeclaration declaration(sizeof(Vertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 8, 8);
+        const Rectangle centre(4, 4, 1, 1);
+        const Color background(9, 19, 29, 255);
+        const auto draw = [&]()
+        {
+            device.SetRenderTarget(&target);
+            device.Clear(background);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color result = Color::Transparent;
+            target.GetData(0, &centre, &result, 0, 1);
+            return result;
+        };
+
+        device.getVertexTexturesProperty()(slot, &positions);
+        device.getVertexSamplerStatesProperty()[slot] = SamplerState::LinearClamp;
+        device.SetRenderTarget(&target);
+        device.Clear(background);
+        bool rejectedFilteredVertexTexture = false;
+        try
+        {
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+        }
+        catch (const System::NotSupportedException&)
+        {
+            rejectedFilteredVertexTexture = true;
+        }
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Check(rejectedFilteredVertexTexture,
+              "Vector4 vertex texture filtering used the pixel sampler collection");
+
+        device.getVertexSamplerStatesProperty()[slot] = SamplerState::PointClamp;
+        const Color first = draw();
+        GpuDrawParams inspectedParams;
+        effect->FillGpuDrawParams(inspectedParams);
+        const auto* inspectedRuntime =
+            dynamic_cast<const SoftwareCompiledEffect*>(inspectedParams.compiledEffectRuntime);
+        const auto lastPosition = inspectedRuntime != nullptr
+            ? inspectedRuntime->GetLastVertexResultEXT().position
+            : std::array<float, 4>{};
+        Check(first.getRProperty() >= 252,
+              "vertex TEXLDL ignored application texture/sampler overrides (pixel " +
+                  std::to_string(first.getRProperty()) + "," +
+                  std::to_string(first.getGProperty()) + "," +
+                  std::to_string(first.getBProperty()) + "; last position " +
+                  std::to_string(lastPosition[0]) + "," +
+                  std::to_string(lastPosition[1]) + "," +
+                  std::to_string(lastPosition[2]) + "," +
+                  std::to_string(lastPosition[3]) + ")");
+        SamplerState biasOne = SamplerState::PointClamp;
+        biasOne.setMipMapLevelOfDetailBiasProperty(1.0f);
+        device.getVertexSamplerStatesProperty()[slot] = biasOne;
+        Check(draw() == background, "vertex TEXLDL ignored LOD-bias transition");
+        SamplerState mipOne = SamplerState::PointClamp;
+        mipOne.setMaxMipLevelProperty(1);
+        device.getVertexSamplerStatesProperty()[slot] = mipOne;
+        Check(draw() == background, "vertex TEXLDL ignored MaxMipLevel transition");
+        device.getVertexSamplerStatesProperty()[slot] = SamplerState::PointClamp;
+        Check(draw().getRProperty() >= 252,
+              "vertex sampler did not recover without pass reapplication");
+        device.getVertexTexturesProperty()(slot, nullptr);
+        Check(draw() == background, "vertex texture null transition did not unbind");
+        device.getVertexTexturesProperty()(slot, &positions);
+        positions.Dispose();
+        Check(device.getVertexTexturesProperty()[slot] == nullptr,
+              "disposing a vertex texture did not clear its public binding");
+        Check(draw() == background,
+              "disposing a bound vertex texture did not remove the native binding");
+    }
+
+    void CheckCompiledVertexSamplerDimensions()
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        using CNA::TestSupport::SyntheticSamplerKind;
+        constexpr int slot = 1;
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            PresentationParameters());
+        const auto states = [](std::uint32_t addressW)
+        {
+            return std::vector<CNA::TestSupport::SyntheticSamplerState>{
+                {Fx::SampMagFilter, Fx::FilterPoint},
+                {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+                {Fx::SampAddressU, Fx::AddressClamp},
+                {Fx::SampAddressV, Fx::AddressClamp},
+                {Fx::SampAddressW, addressW},
+                {Fx::SampMaxMipLevel, 0},
+                {Fx::SampMipMapLodBias, CNA::TestSupport::FloatBits(0.0f), true},
+            };
+        };
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, lod;
+        };
+        const VertexDeclaration declaration(sizeof(Vertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 8, 8);
+        const Rectangle centre(4, 4, 1, 1);
+        const Color background(9, 19, 29, 255);
+        const auto draw = [&](const Vertex (&vertices)[6])
+        {
+            device.SetRenderTarget(&target);
+            device.Clear(background);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color result = Color::Transparent;
+            target.GetData(0, &centre, &result, 0, 1);
+            return result;
+        };
+
+        const Vector4 outside(3, 3, 0, 1);
+        std::array<Vector4, 16> positions{};
+        positions.fill(outside);
+        positions[0] = Vector4(-1, 1, 0, 1);
+        positions[12] = Vector4(-1, -1, 0, 1);
+        positions[15] = Vector4(1, -1, 0, 1);
+        positions[3] = Vector4(1, 1, 0, 1);
+
+        {
+            auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+                device, CNA::TestSupport::BuildSyntheticVertexSamplingEffect(
+                            states(Fx::AddressClamp), slot, SyntheticSamplerKind::SamplerCube));
+            effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect->getParametersProperty()["Tint"]->SetValue(Vector4(0, 1, 0, 1));
+            TextureCube cube(device, 4, false, SurfaceFormat::Vector4);
+            std::array<Vector4, 16> face{};
+            face.fill(outside);
+            for (int cubeFace = 0; cubeFace < 6; ++cubeFace)
+                cube.SetData(static_cast<CubeMapFace>(cubeFace), face.data(),
+                             static_cast<int>(face.size()));
+            cube.SetData(CubeMapFace::PositiveZ, positions.data(),
+                         static_cast<int>(positions.size()));
+            effect->getParametersProperty()["FxTexture"]->SetValue(&cube);
+            effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            const Vertex quad[6] = {
+                {0, 0, 0, -.75f, .75f, 1, 0}, {0, 0, 0, -.75f, -.75f, 1, 0},
+                {0, 0, 0, .75f, -.75f, 1, 0}, {0, 0, 0, -.75f, .75f, 1, 0},
+                {0, 0, 0, .75f, -.75f, 1, 0}, {0, 0, 0, .75f, .75f, 1, 0},
+            };
+            Check(draw(quad).getGProperty() >= 252,
+                  "compiled vertex samplerCUBE did not produce clip positions");
+        }
+
+        {
+            auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+                device, CNA::TestSupport::BuildSyntheticVertexSamplingEffect(
+                            states(Fx::AddressClamp), slot, SyntheticSamplerKind::Sampler3D));
+            effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect->getParametersProperty()["Tint"]->SetValue(Vector4(0, 0, 1, 1));
+            Texture3D volume(device, 4, 4, 2, false, SurfaceFormat::Vector4);
+            std::array<Vector4, 32> texels{};
+            texels.fill(outside);
+            std::copy(positions.begin(), positions.end(), texels.begin());
+            volume.SetData(texels.data(), static_cast<int>(texels.size()));
+            effect->getParametersProperty()["FxTexture"]->SetValue(&volume);
+            effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            const Vertex quad[6] = {
+                {0, 0, 0, .125f, .125f, 1.125f, 0},
+                {0, 0, 0, .125f, .875f, 1.125f, 0},
+                {0, 0, 0, .875f, .875f, 1.125f, 0},
+                {0, 0, 0, .125f, .125f, 1.125f, 0},
+                {0, 0, 0, .875f, .875f, 1.125f, 0},
+                {0, 0, 0, .875f, .125f, 1.125f, 0},
+            };
+            Check(draw(quad) == background,
+                  "vertex sampler3D did not begin with AddressW.Clamp");
+            SamplerState wrap = SamplerState::PointClamp;
+            wrap.setAddressWProperty(TextureAddressMode::Wrap);
+            device.getVertexSamplerStatesProperty()[slot] = wrap;
+            Check(draw(quad).getBProperty() >= 252,
+                  "vertex sampler3D ignored AddressW.Wrap");
+            device.getVertexSamplerStatesProperty()[slot] = SamplerState::PointClamp;
+            Check(draw(quad) == background,
+                  "vertex sampler3D ignored AddressW.Clamp transition");
+        }
+    }
+
     void CheckCompiledSamplerRasterization(SoftwareRenderer& renderer)
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
@@ -3531,6 +3799,8 @@ int main()
         CheckCompiledLegacyTextureRemap();
         CheckCompiledLegacyDependentTextures();
         CheckCompiledLegacyBumpEnvironment();
+        CheckCompiledVertexSamplerRasterization();
+        CheckCompiledVertexSamplerDimensions();
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
         CheckCompiledLineAndWireframeRasterization(renderer);

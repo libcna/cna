@@ -150,10 +150,10 @@ namespace CNA::Internal::Renderers::Software
         MatrixRowW
     };
 
-    /** @brief One texture lookup requested by the CPU pixel machine. */
+    /** @brief One texture lookup requested by a CPU shader machine. */
     struct SoftwarePixelSampleRequestEXT
     {
-        /** @brief Pixel sampler register number. */
+        /** @brief Shader-stage sampler register number. */
         std::uint8_t samplerRegister = 0;
         /** @brief Texture-coordinate register used by the instruction. */
         std::uint8_t coordinateRegister = 0;
@@ -190,7 +190,7 @@ namespace CNA::Internal::Renderers::Software
         std::array<float, 4> gradientY{};
     };
 
-    /** @brief Renderer-side texture provider used by the CPU pixel machine. */
+    /** @brief Renderer-side texture provider used by the CPU shader machines. */
     class ISoftwarePixelSamplerEXT
     {
     public:
@@ -206,7 +206,7 @@ namespace CNA::Internal::Renderers::Software
             const SoftwarePixelSampleRequestEXT& request) const = 0;
     };
 
-    /** @brief One sampler declaration retained from a Direct3D pixel program. */
+    /** @brief One sampler declaration retained from a Direct3D shader program. */
     struct SoftwareShaderSamplerEXT
     {
         /** @brief Direct3D sampler register number. */
@@ -218,19 +218,21 @@ namespace CNA::Internal::Renderers::Software
     struct SoftwareShaderProgramEXT;
 
     /**
-     * @brief Executes one validated Direct3D vertex program without renderer state.
+     * @brief Executes one validated Direct3D vertex program.
      * @param program Vertex program token IR.
      * @param floatRegisters Direct3D float4 constant register storage.
      * @param integerRegisters Direct3D int4 constant register storage.
      * @param booleanRegisters Direct3D Boolean constant register storage.
      * @param inputs Declaration-semantic values for one vertex.
+     * @param sampler Renderer-side texture provider, or null for texture-free programs.
      * @return Homogeneous position and interpolator outputs.
      */
     CNAEXT [[nodiscard]] SoftwareVertexShaderResultEXT ExecuteSoftwareVertexShaderEXT(
         const SoftwareShaderProgramEXT& program, std::span<const float> floatRegisters,
         std::span<const int> integerRegisters,
         std::span<const unsigned char> booleanRegisters,
-        std::span<const SoftwareShaderSemanticValueEXT> inputs);
+        std::span<const SoftwareShaderSemanticValueEXT> inputs,
+        const ISoftwarePixelSamplerEXT* sampler = nullptr);
 
     /**
      * @brief Executes one validated Direct3D pixel program without texture sampling.
@@ -427,10 +429,12 @@ namespace CNA::Internal::Renderers::Software
         /**
          * @brief Executes the selected classic Direct3D vertex program on one semantic input set.
          * @param inputs Declaration-semantic values for one vertex.
+         * @param sampler Renderer-side texture provider, or null for texture-free programs.
          * @return Homogeneous position and declared interpolator outputs.
          */
         CNAEXT [[nodiscard]] SoftwareVertexShaderResultEXT ExecuteVertexEXT(
-            std::span<const SoftwareShaderSemanticValueEXT> inputs) const;
+            std::span<const SoftwareShaderSemanticValueEXT> inputs,
+            const ISoftwarePixelSamplerEXT* sampler = nullptr) const;
 
         /**
          * @brief Executes the selected classic Direct3D pixel program for one fragment.

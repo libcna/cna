@@ -51,11 +51,13 @@ The independent EasyGL challenge in `SOFTWARE-367` also repaired MojoShader's in
 suffixed label identifiers and missing prototypes for legal nested forward subroutine calls;
 `SOFTWARE-366` completes the matching bounded CPU executor in both shader stages.
 
-The same challenge also confirmed a renderer-wide public-API hole: CNA stores
-`GraphicsDevice.VertexTextures` and `VertexSamplerStates`, but no renderer contract consumes them.
-FNA applies those collections before drawing, and EasyGL currently rejects even compiled vertex
-shaders that declare samplers. `SOFTWARE-167` records the proof and `SOFTWARE-168` the shared
-binding work; Software execution additionally depends on the compiled-effect phases.
+The same challenge confirmed a renderer-wide public-API hole: CNA stored
+`GraphicsDevice.VertexTextures` and `VertexSamplerStates`, but no renderer contract consumed them.
+`SOFTWARE-167` records that proof. `SOFTWARE-168` now passes both public collections into compiled
+draws, maps EasyGL's four vertex samplers to MojoShader's native units 16..19, and executes
+Software `vs_3_0 TEXLDL` against 2D/cube/volume textures. Exact output tests cover stage isolation,
+all seven sampler properties, mip clamp/bias, `AddressW`, null and disposal transitions. This does
+not enable Software's aggregate compiled-Effect capability while SOFTWARE-164/165 remain open.
 
 ## What this renderer is for
 
@@ -263,11 +265,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   SOFTWARE-362 covers the EasyGL-supported Shader Model 1 arithmetic aliases `EXPP`, `LOGP` and
   component-wise `CND`; the remaining old texture-family instructions are still being audited
   against what the active MojoShader GLSL profile can genuinely execute.
-- **Public vertex-stage texture/sampler collections are inert renderer-wide** (`SOFTWARE-167`).
-  `GraphicsDevice.VertexTextures` and `VertexSamplerStates` have the correct public shape and
-  resource-disposal bookkeeping, but common code has no operation that publishes their contents
-  to any renderer. FNA does so on every dirty draw-state application. `SOFTWARE-168` owns the
-  shared binding contract; Software's actual vertex sampling also depends on `SOFTWARE-163/164`.
+- **Public vertex-stage texture/sampler collections drive classic compiled shaders**
+  (`SOFTWARE-167/168`). `GraphicsDevice.VertexTextures` and `VertexSamplerStates` retain their
+  zero-Reach/four-HiDef shape and resource-disposal rules, and are now authoritative after pass
+  application. EasyGL binds the four XNA vertex slots after its sixteen pixel units; Software
+  executes explicit-LOD `TEXLDL` through its 2D/cube/volume CPU sampler. Shared exact-output tests
+  prove stage isolation, all seven state values, mip clamp/bias, W addressing and unbind recovery.
 - **Vertex input is declaration-driven.** `VertexElementUsage`/usage index selects attributes
   across one or multiple streams, and all 12 XNA `VertexElementFormat` values are decoded at their
   declared offsets. Reordered, padded, application-defined and non-canonical-stride layouts,
