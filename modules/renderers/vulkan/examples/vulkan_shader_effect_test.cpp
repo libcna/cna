@@ -11,7 +11,7 @@
 //   [16..79] = mat4 uMatrix — unused here (identity implicit)
 //   [80..95] = vec4 uColor  — red tint (1,0,0,1)
 //
-// SPIR-V embedded below was compiled from:
+// The checked-in SPIR-V package was reproducibly compiled offline from:
 //   vert: NDC-map from pixel coords, pass-through UV and colour
 //   frag: texture * vColor * pc.uColor
 //
@@ -26,6 +26,9 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
+#include "common/PortableTintShaderPackage.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <cstdio>
 #include <cstdint>
@@ -36,147 +39,16 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
+using CNA::Graphics::ShaderCodeEXT;
+using CNA::Graphics::ShaderPackageEXT;
+namespace PortableTint = CNA::Examples::PortableTint;
 
-// ---------------------------------------------------------------------------
-// Pre-compiled SPIR-V for the tint shaders (NDC pixel-coord vertex + tint frag).
-// Push-constant layout matches VulkanEffectRenderer contract:
-//   vec2 vpSize | mat4 uMatrix | vec4 uColor | float uFloat0
-// ---------------------------------------------------------------------------
-
-// tint_test.vert — compiled with glslc from Android NDK 30
-static const uint32_t kTintVertSpv[] = {
-    0x07230203, 0x00010000, 0x000d000a, 0x00000036, 0x00000000, 0x00020011,
-    0x00000001, 0x0006000b, 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e,
-    0x00000000, 0x0003000e, 0x00000000, 0x00000001, 0x000b000f, 0x00000000,
-    0x00000004, 0x6e69616d, 0x00000000, 0x0000000b, 0x00000022, 0x0000002f,
-    0x00000030, 0x00000032, 0x00000034, 0x00030003, 0x00000002, 0x000001c2,
-    0x000a0004, 0x475f4c47, 0x4c474f4f, 0x70635f45, 0x74735f70, 0x5f656c79,
-    0x656e696c, 0x7269645f, 0x69746365, 0x00006576, 0x00080004, 0x475f4c47,
-    0x4c474f4f, 0x6e695f45, 0x64756c63, 0x69645f65, 0x74636572, 0x00657669,
-    0x00040005, 0x00000004, 0x6e69616d, 0x00000000, 0x00030005, 0x00000009,
-    0x0063646e, 0x00040005, 0x0000000b, 0x736f5061, 0x00000000, 0x00030005,
-    0x0000000f, 0x00004350, 0x00050006, 0x0000000f, 0x00000000, 0x69537076,
-    0x0000657a, 0x00050006, 0x0000000f, 0x00000001, 0x74614d75, 0x00786972,
-    0x00050006, 0x0000000f, 0x00000002, 0x6c6f4375, 0x0000726f, 0x00050006,
-    0x0000000f, 0x00000003, 0x6f6c4675, 0x00307461, 0x00030005, 0x00000011,
-    0x00006370, 0x00060005, 0x00000020, 0x505f6c67, 0x65567265, 0x78657472,
-    0x00000000, 0x00060006, 0x00000020, 0x00000000, 0x505f6c67, 0x7469736f,
-    0x006e6f69, 0x00070006, 0x00000020, 0x00000001, 0x505f6c67, 0x746e696f,
-    0x657a6953, 0x00000000, 0x00070006, 0x00000020, 0x00000002, 0x435f6c67,
-    0x4470696c, 0x61747369, 0x0065636e, 0x00070006, 0x00000020, 0x00000003,
-    0x435f6c67, 0x446c6c75, 0x61747369, 0x0065636e, 0x00030005, 0x00000022,
-    0x00000000, 0x00030005, 0x0000002f, 0x00565576, 0x00030005, 0x00000030,
-    0x00565561, 0x00040005, 0x00000032, 0x6c6f4376, 0x0000726f, 0x00040005,
-    0x00000034, 0x6c6f4361, 0x0000726f, 0x00040047, 0x0000000b, 0x0000001e,
-    0x00000000, 0x00050048, 0x0000000f, 0x00000000, 0x00000023, 0x00000000,
-    0x00040048, 0x0000000f, 0x00000001, 0x00000005, 0x00050048, 0x0000000f,
-    0x00000001, 0x00000023, 0x00000010, 0x00050048, 0x0000000f, 0x00000001,
-    0x00000007, 0x00000010, 0x00050048, 0x0000000f, 0x00000002, 0x00000023,
-    0x00000050, 0x00050048, 0x0000000f, 0x00000003, 0x00000023, 0x00000060,
-    0x00030047, 0x0000000f, 0x00000002, 0x00050048, 0x00000020, 0x00000000,
-    0x0000000b, 0x00000000, 0x00050048, 0x00000020, 0x00000001, 0x0000000b,
-    0x00000001, 0x00050048, 0x00000020, 0x00000002, 0x0000000b, 0x00000003,
-    0x00050048, 0x00000020, 0x00000003, 0x0000000b, 0x00000004, 0x00030047,
-    0x00000020, 0x00000002, 0x00040047, 0x0000002f, 0x0000001e, 0x00000000,
-    0x00040047, 0x00000030, 0x0000001e, 0x00000001, 0x00040047, 0x00000032,
-    0x0000001e, 0x00000001, 0x00040047, 0x00000034, 0x0000001e, 0x00000002,
-    0x00020013, 0x00000002, 0x00030021, 0x00000003, 0x00000002, 0x00030016,
-    0x00000006, 0x00000020, 0x00040017, 0x00000007, 0x00000006, 0x00000002,
-    0x00040020, 0x00000008, 0x00000007, 0x00000007, 0x00040020, 0x0000000a,
-    0x00000001, 0x00000007, 0x0004003b, 0x0000000a, 0x0000000b, 0x00000001,
-    0x00040017, 0x0000000d, 0x00000006, 0x00000004, 0x00040018, 0x0000000e,
-    0x0000000d, 0x00000004, 0x0006001e, 0x0000000f, 0x00000007, 0x0000000e,
-    0x0000000d, 0x00000006, 0x00040020, 0x00000010, 0x00000009, 0x0000000f,
-    0x0004003b, 0x00000010, 0x00000011, 0x00000009, 0x00040015, 0x00000012,
-    0x00000020, 0x00000001, 0x0004002b, 0x00000012, 0x00000013, 0x00000000,
-    0x00040020, 0x00000014, 0x00000009, 0x00000007, 0x0004002b, 0x00000006,
-    0x00000018, 0x40000000, 0x0004002b, 0x00000006, 0x0000001a, 0x3f800000,
-    0x0005002c, 0x00000007, 0x0000001b, 0x0000001a, 0x0000001a, 0x00040015,
-    0x0000001d, 0x00000020, 0x00000000, 0x0004002b, 0x0000001d, 0x0000001e,
-    0x00000001, 0x0004001c, 0x0000001f, 0x00000006, 0x0000001e, 0x0006001e,
-    0x00000020, 0x0000000d, 0x00000006, 0x0000001f, 0x0000001f, 0x00040020,
-    0x00000021, 0x00000003, 0x00000020, 0x0004003b, 0x00000021, 0x00000022,
-    0x00000003, 0x0004002b, 0x0000001d, 0x00000023, 0x00000000, 0x00040020,
-    0x00000024, 0x00000007, 0x00000006, 0x0004002b, 0x00000006, 0x0000002a,
-    0x00000000, 0x00040020, 0x0000002c, 0x00000003, 0x0000000d, 0x00040020,
-    0x0000002e, 0x00000003, 0x00000007, 0x0004003b, 0x0000002e, 0x0000002f,
-    0x00000003, 0x0004003b, 0x0000000a, 0x00000030, 0x00000001, 0x0004003b,
-    0x0000002c, 0x00000032, 0x00000003, 0x00040020, 0x00000033, 0x00000001,
-    0x0000000d, 0x0004003b, 0x00000033, 0x00000034, 0x00000001, 0x00050036,
-    0x00000002, 0x00000004, 0x00000000, 0x00000003, 0x000200f8, 0x00000005,
-    0x0004003b, 0x00000008, 0x00000009, 0x00000007, 0x0004003d, 0x00000007,
-    0x0000000c, 0x0000000b, 0x00050041, 0x00000014, 0x00000015, 0x00000011,
-    0x00000013, 0x0004003d, 0x00000007, 0x00000016, 0x00000015, 0x00050088,
-    0x00000007, 0x00000017, 0x0000000c, 0x00000016, 0x0005008e, 0x00000007,
-    0x00000019, 0x00000017, 0x00000018, 0x00050083, 0x00000007, 0x0000001c,
-    0x00000019, 0x0000001b, 0x0003003e, 0x00000009, 0x0000001c, 0x00050041,
-    0x00000024, 0x00000025, 0x00000009, 0x00000023, 0x0004003d, 0x00000006,
-    0x00000026, 0x00000025, 0x00050041, 0x00000024, 0x00000027, 0x00000009,
-    0x0000001e, 0x0004003d, 0x00000006, 0x00000028, 0x00000027, 0x0004007f,
-    0x00000006, 0x00000029, 0x00000028, 0x00070050, 0x0000000d, 0x0000002b,
-    0x00000026, 0x00000029, 0x0000002a, 0x0000001a, 0x00050041, 0x0000002c,
-    0x0000002d, 0x00000022, 0x00000013, 0x0003003e, 0x0000002d, 0x0000002b,
-    0x0004003d, 0x00000007, 0x00000031, 0x00000030, 0x0003003e, 0x0000002f,
-    0x00000031, 0x0004003d, 0x0000000d, 0x00000035, 0x00000034, 0x0003003e,
-    0x00000032, 0x00000035, 0x000100fd, 0x00010038
-};
-static const size_t kTintVertSpv_size = 1768;
-
-// tint_test.frag — compiled with glslc from Android NDK 30
-static const uint32_t kTintFragSpv[] = {
-    0x07230203, 0x00010000, 0x000d000a, 0x00000025, 0x00000000, 0x00020011,
-    0x00000001, 0x0006000b, 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e,
-    0x00000000, 0x0003000e, 0x00000000, 0x00000001, 0x0008000f, 0x00000004,
-    0x00000004, 0x6e69616d, 0x00000000, 0x00000011, 0x00000015, 0x00000018,
-    0x00030010, 0x00000004, 0x00000007, 0x00030003, 0x00000002, 0x000001c2,
-    0x000a0004, 0x475f4c47, 0x4c474f4f, 0x70635f45, 0x74735f70, 0x5f656c79,
-    0x656e696c, 0x7269645f, 0x69746365, 0x00006576, 0x00080004, 0x475f4c47,
-    0x4c474f4f, 0x6e695f45, 0x64756c63, 0x69645f65, 0x74636572, 0x00657669,
-    0x00040005, 0x00000004, 0x6e69616d, 0x00000000, 0x00050005, 0x00000009,
-    0x43786574, 0x726f6c6f, 0x00000000, 0x00040005, 0x0000000d, 0x78655475,
-    0x00000000, 0x00030005, 0x00000011, 0x00565576, 0x00050005, 0x00000015,
-    0x67617266, 0x6f6c6f43, 0x00000072, 0x00040005, 0x00000018, 0x6c6f4376,
-    0x0000726f, 0x00030005, 0x0000001c, 0x00004350, 0x00050006, 0x0000001c,
-    0x00000000, 0x69537076, 0x0000657a, 0x00050006, 0x0000001c, 0x00000001,
-    0x74614d75, 0x00786972, 0x00050006, 0x0000001c, 0x00000002, 0x6c6f4375,
-    0x0000726f, 0x00050006, 0x0000001c, 0x00000003, 0x6f6c4675, 0x00307461,
-    0x00030005, 0x0000001e, 0x00006370, 0x00040047, 0x0000000d, 0x00000022,
-    0x00000000, 0x00040047, 0x0000000d, 0x00000021, 0x00000000, 0x00040047,
-    0x00000011, 0x0000001e, 0x00000000, 0x00040047, 0x00000015, 0x0000001e,
-    0x00000000, 0x00040047, 0x00000018, 0x0000001e, 0x00000001, 0x00050048,
-    0x0000001c, 0x00000000, 0x00000023, 0x00000000, 0x00040048, 0x0000001c,
-    0x00000001, 0x00000005, 0x00050048, 0x0000001c, 0x00000001, 0x00000023,
-    0x00000010, 0x00050048, 0x0000001c, 0x00000001, 0x00000007, 0x00000010,
-    0x00050048, 0x0000001c, 0x00000002, 0x00000023, 0x00000050, 0x00050048,
-    0x0000001c, 0x00000003, 0x00000023, 0x00000060, 0x00030047, 0x0000001c,
-    0x00000002, 0x00020013, 0x00000002, 0x00030021, 0x00000003, 0x00000002,
-    0x00030016, 0x00000006, 0x00000020, 0x00040017, 0x00000007, 0x00000006,
-    0x00000004, 0x00040020, 0x00000008, 0x00000007, 0x00000007, 0x00090019,
-    0x0000000a, 0x00000006, 0x00000001, 0x00000000, 0x00000000, 0x00000000,
-    0x00000001, 0x00000000, 0x0003001b, 0x0000000b, 0x0000000a, 0x00040020,
-    0x0000000c, 0x00000000, 0x0000000b, 0x0004003b, 0x0000000c, 0x0000000d,
-    0x00000000, 0x00040017, 0x0000000f, 0x00000006, 0x00000002, 0x00040020,
-    0x00000010, 0x00000001, 0x0000000f, 0x0004003b, 0x00000010, 0x00000011,
-    0x00000001, 0x00040020, 0x00000014, 0x00000003, 0x00000007, 0x0004003b,
-    0x00000014, 0x00000015, 0x00000003, 0x00040020, 0x00000017, 0x00000001,
-    0x00000007, 0x0004003b, 0x00000017, 0x00000018, 0x00000001, 0x00040018,
-    0x0000001b, 0x00000007, 0x00000004, 0x0006001e, 0x0000001c, 0x0000000f,
-    0x0000001b, 0x00000007, 0x00000006, 0x00040020, 0x0000001d, 0x00000009,
-    0x0000001c, 0x0004003b, 0x0000001d, 0x0000001e, 0x00000009, 0x00040015,
-    0x0000001f, 0x00000020, 0x00000001, 0x0004002b, 0x0000001f, 0x00000020,
-    0x00000002, 0x00040020, 0x00000021, 0x00000009, 0x00000007, 0x00050036,
-    0x00000002, 0x00000004, 0x00000000, 0x00000003, 0x000200f8, 0x00000005,
-    0x0004003b, 0x00000008, 0x00000009, 0x00000007, 0x0004003d, 0x0000000b,
-    0x0000000e, 0x0000000d, 0x0004003d, 0x0000000f, 0x00000012, 0x00000011,
-    0x00050057, 0x00000007, 0x00000013, 0x0000000e, 0x00000012, 0x0003003e,
-    0x00000009, 0x00000013, 0x0004003d, 0x00000007, 0x00000016, 0x00000009,
-    0x0004003d, 0x00000007, 0x00000019, 0x00000018, 0x00050085, 0x00000007,
-    0x0000001a, 0x00000016, 0x00000019, 0x00050041, 0x00000021, 0x00000022,
-    0x0000001e, 0x00000020, 0x0004003d, 0x00000007, 0x00000023, 0x00000022,
-    0x00050085, 0x00000007, 0x00000024, 0x0000001a, 0x00000023, 0x0003003e,
-    0x00000015, 0x00000024, 0x000100fd, 0x00010038
-};
-static const size_t kTintFragSpv_size = 1216;
+template <std::size_t N>
+static std::vector<std::uint8_t> ShaderBytes(const std::uint32_t (&words)[N])
+{
+    const auto* begin = reinterpret_cast<const std::uint8_t*>(words);
+    return std::vector<std::uint8_t>(begin, begin + sizeof(words));
+}
 
 class VulkanShaderEffectTest : public Game
 {
@@ -210,10 +82,80 @@ protected:
         device.Clear(Color(0, 255, 0, 255)); // green background
         device.SetDepthTestEnabled(false);
 
-        // Build ShaderEffect from pre-compiled SPIR-V bytes.
-        std::string vertSpv(reinterpret_cast<const char*>(kTintVertSpv), kTintVertSpv_size);
-        std::string fragSpv(reinterpret_cast<const char*>(kTintFragSpv), kTintFragSpv_size);
-        ShaderEffect fx(device, vertSpv, fragSpv);
+        bool portableOverloadsOk = false;
+        std::unique_ptr<ShaderEffect> ownedEffect;
+        {
+            ShaderCodeEXT vertexCode(
+                CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Vertex,
+                "main", "portable_tint/vulkan.vert.glsl",
+                ShaderBytes(PortableTint::kVulkanVertexSpirV));
+            ShaderCodeEXT fragmentCode(
+                CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment,
+                "main", "portable_tint/vulkan.frag.glsl",
+                ShaderBytes(PortableTint::kVulkanFragmentSpirV));
+
+            ShaderEffect direct(device, vertexCode, fragmentCode);
+            const bool directOk = direct.IsEffectValid()
+                && direct.GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::SpirV
+                && direct.GetVertexSource().size() == PortableTint::kVulkanVertexSpirVByteSize
+                && direct.GetFragmentSource().size() == PortableTint::kVulkanFragmentSpirVByteSize;
+
+            const ShaderPackageEXT package = PortableTint::CreatePackage();
+            const auto selection = package.selectFor(device);
+
+            const auto& variants = package.getVariants();
+            const ShaderPackageEXT sourceOnlyPackage(
+                {variants[0], variants[1]},
+                {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
+            const auto refusal = sourceOnlyPackage.selectFor(device);
+            bool structuredRefusal = false;
+            try
+            {
+                ShaderEffect unsupported(device, sourceOnlyPackage);
+            }
+            catch (const CNA::ShaderCompilationExceptionEXT& error)
+            {
+                const auto& diagnostics = error.getDiagnostics();
+                structuredRefusal = diagnostics.size() == 2
+                    && diagnostics[0].getSourceLabel() == "easygl.vert.glsl"
+                    && diagnostics[0].getStage() == CNA::ShaderStageEXT::Vertex
+                    && diagnostics[1].getSourceLabel() == "easygl.frag.glsl"
+                    && diagnostics[1].getStage() == CNA::ShaderStageEXT::Fragment
+                    && diagnostics[0].getMessage() == refusal.getDiagnostic()
+                    && diagnostics[1].getMessage() == refusal.getDiagnostic();
+            }
+            catch (...)
+            {
+            }
+            const bool completeRefusal = structuredRefusal && !refusal.isUsable()
+                && refusal.getDiagnostic().find(
+                    "GlslEs {Vertex='easygl.vert.glsl', Fragment='easygl.frag.glsl'}")
+                    != std::string::npos
+                && refusal.getDiagnostic().find("renderer rejects GlslEs/Vertex")
+                    != std::string::npos
+                && refusal.getDiagnostic().find("renderer rejects GlslEs/Fragment")
+                    != std::string::npos;
+            ownedEffect = std::make_unique<ShaderEffect>(device, package);
+            portableOverloadsOk = directOk && selection.isUsable()
+                && selection.getLanguage() == CNA::ShaderLanguageEXT::SpirV
+                && completeRefusal && ownedEffect->IsEffectValid()
+                && ownedEffect->GetSelectedShaderLanguageEXT()
+                    == CNA::ShaderLanguageEXT::SpirV;
+            std::printf("[%s] MOD-2217: source-only refusal lists both generated stages\n",
+                        completeRefusal ? "ok" : "FAIL");
+        }
+        ShaderEffect& fx = *ownedEffect;
+        std::unique_ptr<Effect> clonedEffect(fx.Clone());
+        auto* clonedShaderEffect = dynamic_cast<ShaderEffect*>(clonedEffect.get());
+        portableOverloadsOk = portableOverloadsOk
+            && fx.GetSelectedShaderLanguageEXT() == CNA::ShaderLanguageEXT::SpirV
+            && fx.GetVertexSource().size() == PortableTint::kVulkanVertexSpirVByteSize
+            && fx.GetFragmentSource().size() == PortableTint::kVulkanFragmentSpirVByteSize
+            && clonedShaderEffect != nullptr && clonedShaderEffect->IsEffectValid()
+            && clonedShaderEffect->GetSelectedShaderLanguageEXT()
+                == CNA::ShaderLanguageEXT::SpirV;
+        std::printf("[%s] MOD-2217: portable package selected SPIR-V on Vulkan\n",
+                    portableOverloadsOk ? "ok" : "FAIL");
 
         if (!fx.IsEffectValid())
         {
@@ -222,29 +164,91 @@ protected:
             return;
         }
 
-        // Set red tint via SetUniformVec4 → pushConst_[20..23] (byte offset 80).
-        fx.SetUniformVec4("uColor", 1.0f, 0.0f, 0.0f, 1.0f);
-        fx.Apply();
+        // plan_vulkan.md VULKAN-251: TWO batches with DIFFERENT uniform values, into two regions.
+        //
+        // One value proves less than it looks. A shader that ignored `uColor` entirely would draw
+        // the white texture and fail the old single check -- but a uniform delivered to the wrong
+        // push-constant slot, or with only one channel arriving, can still land on "reddish". Two
+        // distinct values make the drawn colour a FUNCTION of the uniform: both regions come out
+        // identical unless the value is really being carried through.
+        //
+        // Sound because each batch snapshots the effect's push constants at End()
+        // (`VulkanRenderer.cpp:1355`), so the two do not collapse onto the last value the way
+        // F-12 predicted for buffers -- checked before relying on it.
+        const auto drawTinted = [&](float r, float g, float b, const Rectangle& dest) {
+            fx.SetUniformVec4("uColor", r, g, b, 1.0f);
+            fx.Apply();
+            sb_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend,
+                       nullptr, nullptr, nullptr, &fx);
+            sb_->Draw(tex_, dest, Rectangle(0, 0, 1, 1), Color::White);
+            sb_->End();
+        };
+        drawTinted(1.0f, 0.0f, 0.0f, Rectangle(W / 8,     H / 4, W / 4, H / 2));  // left: red
+        drawTinted(0.0f, 0.0f, 1.0f, Rectangle(W * 5 / 8, H / 4, W / 4, H / 2));  // right: blue
 
-        sb_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend,
-                   nullptr, nullptr, nullptr, &fx);
-        sb_->Draw(tex_,
-                  Rectangle(W / 4, H / 4, W / 2, H / 2),
-                  Rectangle(0, 0, 1, 1),
-                  Color::White);
-        sb_->End();
-
-        // Centre pixel should be red (white texture × red tint), corner green (background).
-        const Rectangle centReg(W / 2, H / 2, 1, 1);
+        const Rectangle leftReg(W / 4,     H / 2, 1, 1);
+        const Rectangle rightReg(W * 3 / 4, H / 2, 1, 1);
         const Rectangle bgReg(1, 1, 1, 1);
-        Color centPx(0, 0, 0, 0), bgPx(0, 0, 0, 0);
-        device.GetBackBufferData(&centReg, &centPx, 0, 1);
-        device.GetBackBufferData(&bgReg,   &bgPx,   0, 1);
+        Color leftPx(0, 0, 0, 0), rightPx(0, 0, 0, 0), bgPx(0, 0, 0, 0);
+        device.GetBackBufferData(&leftReg,  &leftPx,  0, 1);
+        device.GetBackBufferData(&rightReg, &rightPx, 0, 1);
+        device.GetBackBufferData(&bgReg,    &bgPx,    0, 1);
 
-        const bool centOk = (centPx.getRProperty() >= 200 && centPx.getGProperty() <= 50);
-        const bool bgOk   = (bgPx.getGProperty()   >= 200 && bgPx.getRProperty()   <= 50);
+        const bool leftOk  = (leftPx.getRProperty()  >= 200 && leftPx.getBProperty()  <= 60);
+        const bool rightOk = (rightPx.getBProperty() >= 200 && rightPx.getRProperty() <= 60);
+        const bool centOk  = leftOk && rightOk;
+        const bool bgOk    = (bgPx.getGProperty() >= 200 && bgPx.getRProperty() <= 50);
+        std::printf("[%s] VULKAN-251: two uniform values give two colours -- left=(%d,%d,%d) "
+                    "expected red, right=(%d,%d,%d) expected blue\n",
+                    centOk ? "ok" : "FAIL",
+                    leftPx.getRProperty(), leftPx.getGProperty(), leftPx.getBProperty(),
+                    rightPx.getRProperty(), rightPx.getGProperty(), rightPx.getBProperty());
 
-        if (centOk && bgOk)
+        // Kept for the refusal legs below, which need one live effect that demonstrably works.
+        const Color centPx = leftPx;
+
+        // plan_vulkan.md VULKAN-252: the four array uniform setters used to REFUSE here
+        // (`VULKAN-265`), because a fixed 128-byte push-constant block has nowhere to put an
+        // array. They accept now, through set 1's uniform-buffer ranges. What must never come back
+        // is silence, so this leg pins both ends of the new contract: a call within capacity
+        // succeeds, and one past it is refused BY NAME rather than truncated. The pixels an array
+        // actually produces are `Vulkan_ShaderEffect_UniformArrays`' job, not this file's.
+        // The centre-pixel check above is still this leg's control: it proves the same `fx`
+        // reaches the shader, so an acceptance cannot be explained by an inert effect.
+        const float payload[16] = {};
+        bool arraysOk = true;
+        auto expectAccepted = [&arraysOk](const char* setter, auto&& call) {
+            try {
+                call();
+                std::printf("[ok]   %s accepted\n", setter);
+            } catch (const std::exception& e) {
+                std::printf("[FAIL] VulkanShaderEffect: %s was refused: %s\n", setter, e.what());
+                arraysOk = false;
+            }
+        };
+        expectAccepted("SetUniformFloatArray",
+                       [&] { fx.SetUniformFloatArray("uWeights", payload, 4); });
+        expectAccepted("SetUniformVec2Array",
+                       [&] { fx.SetUniformVec2Array("uOffsets", payload, 2); });
+        expectAccepted("SetUniformVec3Array",
+                       [&] { fx.SetUniformVec3Array("uLightDirs", payload, 2); });
+        expectAccepted("SetUniformMat4Array",
+                       [&] { fx.SetUniformMat4Array("uBones", payload, 1); });
+        {
+            // Past the block's capacity. A renderer that quietly wrote 72 of the 1000 would pass
+            // every leg above and corrupt whatever followed the array.
+            bool refused = false;
+            std::string what;
+            try { fx.SetUniformMat4Array("uBones", payload, 1000); }
+            catch (const System::NotSupportedException& e) { refused = true; what = e.what(); }
+            catch (...) { what = "the wrong exception type"; }
+            const bool namesIt = refused && what.find("1000") != std::string::npos;
+            std::printf("[%s]   an array past the capacity is refused by name: %s\n",
+                        namesIt ? "ok" : "FAIL", refused ? what.c_str() : "NOT REFUSED");
+            if (!namesIt) arraysOk = false;
+        }
+
+        if (centOk && bgOk && arraysOk && portableOverloadsOk)
         {
             std::printf("[PASS] VulkanShaderEffect: centre=(%d,%d,%d) bg=(%d,%d,%d)\n",
                         centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty(),
@@ -253,10 +257,14 @@ protected:
         }
         else
         {
-            std::printf("[FAIL] VulkanShaderEffect: centre=(%d,%d,%d) bg=(%d,%d,%d)\n"
-                        "       expected: centre=red, bg=green\n",
+            std::printf("[FAIL] VulkanShaderEffect: centre=(%d,%d,%d) bg=(%d,%d,%d)"
+                        " arrays=%s portableOverloads=%s\n"
+                        "       expected: centre=red, bg=green, all four array setters accepted "
+                        "and an over-capacity one refused\n",
                         centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty(),
-                        bgPx.getRProperty(),   bgPx.getGProperty(),   bgPx.getBProperty());
+                        bgPx.getRProperty(),   bgPx.getGProperty(),   bgPx.getBProperty(),
+                        arraysOk ? "ok" : "FAILED",
+                        portableOverloadsOk ? "ok" : "FAILED");
         }
         Exit();
     }

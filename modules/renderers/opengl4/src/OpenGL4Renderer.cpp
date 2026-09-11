@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/OpenGL4/OpenGL4Renderer.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "System/InvalidOperationException.hpp"
 
@@ -2559,6 +2560,8 @@ void main()
         if (!GL4::LoadGL4Functions(platformContext_->GetLoader()))
             throw std::runtime_error("OpenGL4: failed to resolve required GL 4.x core entry points");
 
+        modernCapabilities_ = GL4::DiscoverModernCapabilities(platformContext_->GetLoader());
+
         const auto* versionStr = glGetString(GL_VERSION);
         std::cout << "OpenGL4Renderer initialized with OpenGL "
                   << (versionStr ? reinterpret_cast<const char*>(versionStr) : "(unknown)") << std::endl;
@@ -2692,6 +2695,14 @@ void main()
         // Unreachable for current members; a future member lands here (after the -Wswitch
         // warning above) and is reported unsupported until this renderer explicitly claims it.
         return false;
+    }
+
+    bool OpenGL4Renderer::SupportsShaderLanguageEXT(const int language, const int stage) const
+    {
+        if (language != static_cast<int>(CNA::ShaderLanguageEXT::GlslDesktop))
+            return false;
+        return stage == static_cast<int>(CNA::ShaderStageEXT::Vertex) ||
+               stage == static_cast<int>(CNA::ShaderStageEXT::Fragment);
     }
 
     void OpenGL4Renderer::Clear(float r, float g, float b, float a)

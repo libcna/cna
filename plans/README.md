@@ -84,6 +84,8 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_svg_dom.md`](plan_svg_dom.md) — SVG DOM rendering.
 - [`plan_tinygl.md`](plan_tinygl.md) — TinyGL.
 - [`plan_threejs.md`](plan_threejs.md) — Three.js feasibility analysis (candidate identity; not authorized).
+- [`plan_vulkan.md`](plan_vulkan.md) — Vulkan renderer parity, correctness, validation and
+  EasyGL-equivalence plan.
 - [`plan_webgpu.md`](plan_webgpu.md) — WebGPU.
 - [`plan_wicked.md`](plan_wicked.md) — Wicked Engine.
 

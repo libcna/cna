@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 23, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 26, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -34,15 +34,25 @@ _Static_assert(sizeof(CNA_RendererFeature) == sizeof(uint32_t) &&
                    CNA_RENDERER_FEATURE_THREE_DIMENSIONAL_PIPELINE == UINT32_C(0) &&
                    CNA_RENDERER_FEATURE_SHADER_EFFECT_SOURCE_EXECUTION == UINT32_C(8) &&
                    CNA_RENDERER_FEATURE_COMPUTE_IMAGE_BINDING == UINT32_C(19) &&
-                   CNA_RENDERER_FEATURE_MAXIMUM == UINT32_C(29),
+                   CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING == UINT32_C(30) &&
+                   CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING == UINT32_C(31) &&
+                   CNA_RENDERER_FEATURE_MAXIMUM == UINT32_C(31),
                "CNA detailed renderer-feature identities must remain stable");
+_Static_assert(sizeof(CNA_ShaderDialect) == sizeof(uint32_t) &&
+                   CNA_SHADER_DIALECT_GLSL_VULKAN == UINT32_C(3) &&
+                   CNA_SHADER_DIALECT_WGSL == UINT32_C(6) &&
+                   CNA_SHADER_DIALECT_SPIRV == UINT32_C(7) &&
+                   CNA_SHADER_DIALECT_MAXIMUM == UINT32_C(7),
+               "CNA shader-dialect identities must remain stable");
 _Static_assert(sizeof(CNA_RendererFeatureSupport) == sizeof(uint32_t) &&
                    CNA_RENDERER_FEATURE_SUPPORT_UNKNOWN == UINT32_C(0) &&
                    CNA_RENDERER_FEATURE_SUPPORT_RESTRICTED == UINT32_C(3),
                "CNA renderer-feature support identities must remain stable");
 _Static_assert(sizeof(CNA_RendererLimit) == sizeof(uint32_t) &&
                    CNA_RENDERER_LIMIT_MAX_TEXTURE_DIMENSION == UINT32_C(0) &&
-                   CNA_RENDERER_LIMIT_MAXIMUM == UINT32_C(9),
+                   CNA_RENDERER_LIMIT_MAX_VERTEX_SHADER_STORAGE_BLOCKS == UINT32_C(9) &&
+                   CNA_RENDERER_LIMIT_TIMESTAMP_PERIOD_PICOSECONDS == UINT32_C(21) &&
+                   CNA_RENDERER_LIMIT_MAXIMUM == UINT32_C(21),
                "CNA renderer-limit identities must remain stable");
 _Static_assert(sizeof(CNA_RendererFormatUsageFlags) == sizeof(uint32_t) &&
                    CNA_RENDERER_FORMAT_USAGE_COLOR_TRANSFER == (UINT32_C(1) << 12) &&

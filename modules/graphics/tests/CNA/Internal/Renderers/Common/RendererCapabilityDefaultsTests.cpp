@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_runtimerenderer.md RTR-P3-17: the defaults of the virtuals that replaced the XNA layer's
 // #ifdef CNA_RENDERER_* blocks.
+// plans/plan_modern.md MOD-2224: capability defaults must stay explicitly unknown/zero, and a
+// malformed supported bit must never pass the public known-and-supported predicate.
 //
 // What matters here is precisely the DEFAULT behaviour, because that is what 45 of the 46 renderers
 // get. When these decisions lived behind the preprocessor, the #else branch carried the
@@ -13,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 
 #include <limits>
 #include <memory>
@@ -68,6 +71,49 @@ namespace
             const Microsoft::Xna::Framework::Matrix&,
             Microsoft::Xna::Framework::Graphics::PrimitiveType, int) override {}
     };
+
+    class DefaultsOnlyTexture2DArrayRenderer final
+        : public CNA::Internal::Renderers::ITexture2DArrayRenderer
+    {
+    };
+
+    class DefaultsOnlyStorageTexture2DRenderer final
+        : public CNA::Internal::Renderers::IStorageTexture2DRenderer
+    {
+    };
+
+    class DefaultsOnlyStorageBufferRenderer final
+        : public CNA::Internal::Renderers::IStorageBufferRenderer
+    {
+    public:
+        void SetData(const void*, std::size_t) override { ++uploads; }
+        void GetData(void*, std::size_t) const override { ++readbacks; }
+        [[nodiscard]] std::size_t GetByteSize() const override { return 16; }
+
+        int uploads = 0;
+        mutable int readbacks = 0;
+    };
+
+    class DefaultsOnlyEffectRenderer final
+        : public CNA::Internal::Renderers::IEffectRenderer
+    {
+    public:
+        bool CompileProgram(const std::string&, const std::string&) override { return false; }
+        void Bind() override {}
+        void Unbind() override {}
+        [[nodiscard]] bool IsValid() const override { return false; }
+        [[nodiscard]] std::string GetCompileError() const override { return {}; }
+    };
+
+    class DefaultsOnlyComputeRenderer final
+        : public CNA::Internal::Renderers::IComputeShaderRenderer
+    {
+    public:
+        bool CompileProgram(const std::string&) override { return false; }
+        void Bind() override {}
+        [[nodiscard]] bool IsValid() const override { return false; }
+        [[nodiscard]] std::string GetCompileError() const override { return {}; }
+    };
 }
 
 TEST(RendererCapabilityDefaultsTest, ProfileCeilingsDefaultToNoCeiling)
@@ -111,6 +157,43 @@ TEST(RendererCapabilityDefaultsTest, FormatClassifiersDefaultToDefer)
     }
 }
 
+TEST(RendererCapabilityDefaultsTest, DetailedFormatUsagesDefaultToUnknown)
+{
+    DefaultsOnlyRenderer renderer;
+    for (int format = 0; format < 32; ++format)
+    {
+        const CNA::RendererFormatSupport support =
+            renderer.GetSurfaceFormatUsageSupportEXT(format);
+        EXPECT_EQ(support.knownUsages, 0U) << "format ordinal " << format;
+        EXPECT_EQ(support.supportedUsages, 0U) << "format ordinal " << format;
+    }
+}
+
+TEST(RendererCapabilityDefaultsTest, FormatSupportRejectsUnknownAndPartiallyKnownRequests)
+{
+    constexpr auto storage = CNA::RendererFormatUsage::TextureStorage;
+    constexpr auto renderTarget = CNA::RendererFormatUsage::RenderTarget;
+    constexpr auto storageAndTarget = storage | renderTarget;
+
+    // Deliberately malformed input: a renderer claims render-target support without classifying
+    // that usage. RendererFormatSupport is also the public C++ query result, so its predicate must
+    // remain safe even before GraphicsDevice's snapshot builder normalizes the raw masks.
+    const CNA::RendererFormatSupport malformed{
+        static_cast<std::uint32_t>(storage),
+        static_cast<std::uint32_t>(storageAndTarget)};
+
+    EXPECT_TRUE(malformed.IsKnown(storage));
+    EXPECT_TRUE(malformed.Supports(storage));
+    EXPECT_FALSE(malformed.IsKnown(renderTarget));
+    EXPECT_FALSE(malformed.Supports(renderTarget));
+    EXPECT_FALSE(malformed.IsKnown(storageAndTarget));
+    EXPECT_FALSE(malformed.Supports(storageAndTarget));
+
+    const CNA::RendererFormatSupport empty{};
+    EXPECT_FALSE(empty.IsKnown(storage));
+    EXPECT_FALSE(empty.Supports(storage));
+}
+
 TEST(RendererCapabilityDefaultsTest, CompressedTransferDefaultsToFalseForEveryFormat)
 {
     DefaultsOnlyRenderer renderer;
@@ -132,6 +215,120 @@ TEST(RendererCapabilityDefaultsTest, AdditionalLimitationsDefaultToNoRendererSpe
 {
     DefaultsOnlyRenderer renderer;
     EXPECT_TRUE(renderer.GetAdditionalLimitationsTextEXT().empty());
+}
+
+TEST(RendererCapabilityDefaultsTest, ModernGpuLimitsDefaultToExplicitlyUnavailable)
+{
+    DefaultsOnlyRenderer renderer;
+
+    EXPECT_EQ(renderer.GetMaxStorageBufferBytesEXT(), 0U);
+    EXPECT_EQ(renderer.GetMaxUniformBufferBytesEXT(), 0U);
+    EXPECT_EQ(renderer.GetMaxComputeStorageBufferBindingsEXT(), 0);
+    EXPECT_EQ(renderer.GetMaxTextureArrayLayersEXT(), 0);
+    EXPECT_EQ(renderer.GetMaxSampledTexturesPerShaderStageEXT(), 0);
+    EXPECT_EQ(renderer.GetMaxStorageImagesPerShaderStageEXT(), 0);
+    EXPECT_EQ(renderer.GetMaxVertexInputBindingsEXT(), 0);
+    EXPECT_EQ(renderer.GetMaxVertexInputAttributesEXT(), 0);
+    EXPECT_EQ(renderer.GetMaxColorAttachmentsEXT(), 0);
+    EXPECT_EQ(renderer.GetMinStorageBufferOffsetAlignmentEXT(), 0U);
+    EXPECT_EQ(renderer.GetMinUniformBufferOffsetAlignmentEXT(), 0U);
+    EXPECT_EQ(renderer.GetTimestampPeriodPicosecondsEXT(), 0U);
+}
+
+TEST(RendererCapabilityDefaultsTest, ModernGpuCapabilitySeamsDefaultToUnsupported)
+{
+    DefaultsOnlyRenderer renderer;
+    EXPECT_FALSE(renderer.SupportsComputeShadersEXT());
+    EXPECT_FALSE(renderer.SupportsIndirectDrawEXT());
+    EXPECT_FALSE(renderer.SupportsBaseInstanceDrawingEXT());
+}
+
+TEST(RendererCapabilityDefaultsTest, ShaderLanguageAndStageOrdinalsAreStableAndDefaultToUnsupported)
+{
+    using CNA::ShaderLanguageEXT;
+    using CNA::ShaderStageEXT;
+
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::Unknown), 0);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::GlslDesktop), 1);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::GlslEs), 2);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::GlslVulkan), 3);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::Hlsl), 4);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::Msl), 5);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::Wgsl), 6);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::SpirV), 7);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::Dxil), 8);
+    EXPECT_EQ(static_cast<int>(ShaderLanguageEXT::Count), 9);
+
+    EXPECT_EQ(static_cast<int>(ShaderStageEXT::Unknown), 0);
+    EXPECT_EQ(static_cast<int>(ShaderStageEXT::Vertex), 1);
+    EXPECT_EQ(static_cast<int>(ShaderStageEXT::Fragment), 2);
+    EXPECT_EQ(static_cast<int>(ShaderStageEXT::Compute), 3);
+    EXPECT_EQ(static_cast<int>(ShaderStageEXT::Count), 4);
+
+    DefaultsOnlyRenderer renderer;
+    for (int language = -1; language <= static_cast<int>(ShaderLanguageEXT::Count); ++language)
+    {
+        for (int stage = -1; stage <= static_cast<int>(ShaderStageEXT::Count); ++stage)
+            EXPECT_FALSE(renderer.SupportsShaderLanguageEXT(language, stage));
+    }
+}
+
+TEST(RendererCapabilityDefaultsTest, TextureArrayFactoryDefaultsToUnsupported)
+{
+    DefaultsOnlyRenderer renderer;
+    EXPECT_EQ(renderer.CreateTexture2DArrayEXT(4, 3, 2, 1, 0, UINT32_C(1)), nullptr);
+}
+
+TEST(RendererCapabilityDefaultsTest, StorageTextureFactoryDefaultsToUnsupported)
+{
+    DefaultsOnlyRenderer renderer;
+    EXPECT_EQ(renderer.CreateStorageTexture2DEXT(4, 3, 1, 0, UINT32_C(2)), nullptr);
+}
+
+TEST(RendererCapabilityDefaultsTest, StorageBufferDescriptorFactoryDefaultsToUnsupported)
+{
+    DefaultsOnlyRenderer renderer;
+    EXPECT_EQ(renderer.CreateStorageBufferEXT(16, UINT32_C(1), UINT32_C(3)), nullptr);
+}
+
+TEST(RendererCapabilityDefaultsTest, LegacyStorageBufferDefaultsRemainCompatibleAndCopyRefuses)
+{
+    DefaultsOnlyStorageBufferRenderer source;
+    DefaultsOnlyStorageBufferRenderer destination;
+    unsigned char bytes[4]{};
+    EXPECT_TRUE(source.SetDataRangeEXT(0, bytes, sizeof(bytes)));
+    EXPECT_TRUE(source.GetDataRangeEXT(0, bytes, sizeof(bytes)));
+    EXPECT_FALSE(source.SetDataRangeEXT(1, bytes, sizeof(bytes)));
+    EXPECT_FALSE(source.GetDataRangeEXT(1, bytes, sizeof(bytes)));
+    EXPECT_FALSE(source.CopyToEXT(destination, 0, 0, sizeof(bytes)));
+    EXPECT_EQ(source.GetUsageEXT(), UINT32_C(0x0F));
+    EXPECT_EQ(source.GetCpuAccessEXT(), UINT32_C(0x03));
+    EXPECT_EQ(source.uploads, 1);
+    EXPECT_EQ(source.readbacks, 1);
+}
+
+TEST(RendererCapabilityDefaultsTest, TextureArrayOperationsAndBindingDefaultToUnsupported)
+{
+    DefaultsOnlyTexture2DArrayRenderer texture;
+    DefaultsOnlyEffectRenderer effect;
+    unsigned char bytes[4]{};
+
+    EXPECT_FALSE(texture.SetData(0, 0, 0, 0, 1, 1, bytes, sizeof(bytes)));
+    EXPECT_FALSE(texture.GetData(0, 0, 0, 0, 1, 1, bytes, sizeof(bytes)));
+    EXPECT_FALSE(effect.BindTexture2DArrayEXT(0, {}));
+}
+
+TEST(RendererCapabilityDefaultsTest, StorageTextureOperationsAndBindingsDefaultToUnsupported)
+{
+    DefaultsOnlyStorageTexture2DRenderer texture;
+    DefaultsOnlyEffectRenderer effect;
+    DefaultsOnlyComputeRenderer compute;
+    unsigned char bytes[4]{};
+
+    EXPECT_FALSE(texture.SetData(0, 0, 0, 1, 1, bytes, sizeof(bytes)));
+    EXPECT_FALSE(texture.GetData(0, 0, 0, 1, 1, bytes, sizeof(bytes)));
+    EXPECT_FALSE(effect.BindStorageTexture2DEXT(0, {}));
+    EXPECT_FALSE(compute.BindStorageTexture2DEXT(0, {}, 1));
 }
 
 TEST(RendererCapabilityDefaultsTest, AppliedMultiSampleCountEchoesTheRequest)

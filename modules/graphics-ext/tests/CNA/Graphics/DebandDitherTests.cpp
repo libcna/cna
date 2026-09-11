@@ -133,12 +133,14 @@ TEST(DebandDitherTest, AFrameThatDidNotAskForItIsUnchangedToTheBit)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+
+    TonemapPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable tonemap shader variant";
 
     auto ramp = MakeRamp(gd);
     RenderTarget2D destination(gd, kWidth, kHeight);
 
-    TonemapPass pass(gd);
     pass.setMode(TonemappingMode::Aces);
     const std::vector<Color> before = RunTonemap(pass, *ramp, destination);
     const std::vector<Color> again  = RunTonemap(pass, *ramp, destination);
@@ -158,12 +160,14 @@ TEST(DebandDitherTest, ADitheredRampCarriesMoreValuesThanTheTargetHasSteps)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+
+    TonemapPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable tonemap shader variant";
 
     auto ramp = MakeRamp(gd);
     RenderTarget2D destination(gd, kWidth, kHeight);
 
-    TonemapPass pass(gd);
     pass.setMode(TonemappingMode::None);
     pass.setExposure(0.02f);
     pass.setGamma(1.0f);
@@ -190,12 +194,14 @@ TEST(DebandDitherTest, TheDitherIsZeroMeanSoAFlatAreaKeepsItsValue)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+
+    TonemapPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable tonemap shader variant";
 
     auto flat = MakeFlat(gd, 128);
     RenderTarget2D destination(gd, kWidth, kHeight);
 
-    TonemapPass pass(gd);
     pass.setMode(TonemappingMode::None);
     pass.setGamma(1.0f);
 
@@ -221,12 +227,14 @@ TEST(DebandDitherTest, TheNoiseIsNoLargerThanTheStepItIsHiding)
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+
+    TonemapPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable tonemap shader variant";
 
     auto flat = MakeFlat(gd, 128);
     RenderTarget2D destination(gd, kWidth, kHeight);
 
-    TonemapPass pass(gd);
     pass.setMode(TonemappingMode::None);
     pass.setGamma(1.0f);
     pass.setDebandEnabled(true);
@@ -249,10 +257,12 @@ TEST(DebandDitherTest, TheAmplitudeIsUniformInOutputSpaceBecauseTheDitherFollows
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+
+    TonemapPass pass(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer has no executable tonemap shader variant";
 
     RenderTarget2D destination(gd, kWidth, kHeight);
-    TonemapPass pass(gd);
     pass.setMode(TonemappingMode::None);
     pass.setGamma(2.2f);
     pass.setDebandEnabled(true);

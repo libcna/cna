@@ -14,9 +14,13 @@
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <functional>
@@ -28,32 +32,39 @@ namespace {
 using CNA::Graphics::LightShaftPass;
 using CNA::Graphics::PostProcessContext;
 using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
+using Microsoft::Xna::Framework::Graphics::BlendState;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+using Microsoft::Xna::Framework::Graphics::SpriteBatch;
+using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 constexpr int kSize = 64;
 
-/// The row a shader sees at this sampled V, and the reason it is not the obvious one: **sampling a
-/// render target is vertically flipped** relative to the rows a `Texture2D` was filled with
-/// (`MOD-2000`). Every image here is described in the coordinates the pass reads it in, so a light
-/// placed at V = 0.05 really is at the top of what the shader sees rather than the bottom.
-int RowForSampledV(const int v) { return kSize - 1 - v; }
-
-/// @param colourAt Takes (x, v) where v is the row *as the shader samples it*.
+/// Rasterizes the fixture in logical coordinates. On OpenGL the render-target write and subsequent
+/// sample carry opposite flips; on Vulkan both are top-left. Letting each renderer apply that pair
+/// is what makes the sampled image portable instead of pre-flipping CPU rows for one backend.
 std::unique_ptr<RenderTarget2D> MakeImage(GraphicsDevice& gd,
                                           const std::function<Color(int, int)>& colourAt)
 {
-    auto staging = std::make_unique<Texture2D>(gd, kSize, kSize);
-    std::vector<Color> texels(static_cast<std::size_t>(kSize) * kSize, Color(0, 0, 0, 255));
+    std::vector<Color> pixels(static_cast<std::size_t>(kSize) * kSize);
     for (int v = 0; v < kSize; ++v)
         for (int x = 0; x < kSize; ++x)
-            texels[static_cast<std::size_t>(RowForSampledV(v)) * kSize + x] = colourAt(x, v);
-    staging->SetData(texels.data(), static_cast<int>(texels.size()));
+            pixels[static_cast<std::size_t>(v) * kSize + x] = colourAt(x, v);
+
+    Texture2D image(gd, kSize, kSize);
+    image.SetData(pixels.data(), static_cast<int>(pixels.size()));
+
     auto target = std::make_unique<RenderTarget2D>(gd, kSize, kSize);
-    CNA::Graphics::FullscreenPass blit(gd);
-    blit.draw(staging.get(), target.get(), nullptr, kSize, kSize);
+    gd.SetRenderTarget(target.get());
+    gd.Clear(Color::Black);
+    SpriteBatch batch(gd);
+    batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+    batch.Draw(image, Rectangle(0, 0, kSize, kSize), Color::White);
+    batch.End();
+    gd.SetRenderTarget(nullptr);
     return target;
 }
 
@@ -97,7 +108,7 @@ TEST(LightShaftTest, PixelsOnTheClearPathToTheLightBrighten)
     // gathers piles up. A pixel with nothing bright on its path gathers nothing.
     GraphicsDevice gd;
     LightShaftPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd)) GTEST_SKIP() << "this renderer has no usable light-shaft shader";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeLightAndOccluder(gd);
@@ -131,7 +142,7 @@ TEST(LightShaftTest, AnOccluderLeavesItsShapeInTheShafts)
     // whose path is clear. The absence is the effect.
     GraphicsDevice gd;
     LightShaftPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd)) GTEST_SKIP() << "this renderer has no usable light-shaft shader";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     // The occluder has to take *light* away, not merely be dark: a black bar on a black background
@@ -173,7 +184,7 @@ TEST(LightShaftTest, ALightWellOffScreenStopsContributing)
     // leaves the view, which is the giveaway this avoids.
     GraphicsDevice gd;
     LightShaftPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
+    if (!pass.isSupported(gd)) GTEST_SKIP() << "this renderer has no usable light-shaft shader";
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
 
     auto source = MakeImage(gd, [](int, const int y) {
@@ -221,6 +232,7 @@ TEST(LightShaftTest, TheSettingsRoundTripAndTheNameIsStable)
     GraphicsDevice gd;
     LightShaftPass pass(gd);
     EXPECT_EQ(pass.getName(), "LightShafts");
+    EXPECT_EQ(LightShaftPass::kStepCount, 24);
     EXPECT_FLOAT_EQ(pass.getIntensity(), 0.0f) << "the effect must be off by default";
 
     pass.setLightScreenPosition(Vector2(1.4f, -0.2f));

@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Graphics::detail::AutoExposureGenerated",
+  "package": "auto_exposure",
+  "preprocessor_guard": "CNA_CNAEXT",
+  "payloads": [
+    {"symbol":"kReductionEsComputeSource","source":"reduction.es.comp.glsl","language":"glsl-es","stage":"compute","format":"text","entry_point":"main"},
+    {"symbol":"kReductionDesktopComputeSource","source":"reduction.desktop.comp.glsl","language":"glsl","stage":"compute","format":"text","entry_point":"main"},
+    {"symbol":"kReductionVulkanComputeSpirV","source":"reduction.vulkan.comp.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"compute","format":"spirv","entry_point":"main"}
+  ]
+}

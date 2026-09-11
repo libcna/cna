@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Graphics::detail::DepthNormalPrepassGenerated",
+  "package": "depth_normal_prepass",
+  "preprocessor_guard": "CNA_CNAEXT",
+  "payloads": [
+    {"symbol":"kRigidEsVertexSource","source":"rigid.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kSkinnedEsVertexSource","source":"skinned.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kPrepassEsFragmentSource","source":"prepass.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
+
+    {"symbol":"kRigidDesktopVertexSource","source":"rigid.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kSkinnedDesktopVertexSource","source":"skinned.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kPrepassDesktopFragmentSource","source":"prepass.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
+
+    {"symbol":"kRigidVulkanVertexSpirV","source":"rigid.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
+    {"symbol":"kSkinnedVulkanVertexSpirV","source":"skinned.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
+    {"symbol":"kPrepassVulkanFragmentSpirV","source":"prepass.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"},
+    {"symbol":"kPrepassVelocityVulkanFragmentSpirV","source":"prepass_velocity.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"}
+  ]
+}

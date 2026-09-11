@@ -116,6 +116,7 @@ namespace CNA::Graphics {
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> buildEffect_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> resolveEffect_;
         RenderTargetPool pool_;
+        bool packedDepth_ = false;
 
         ShadowMap* shadowMap_ = nullptr;
         Microsoft::Xna::Framework::Vector3 lightDirection_{0.0f, -1.0f, 0.0f};

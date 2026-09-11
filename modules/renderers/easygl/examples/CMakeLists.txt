@@ -64,6 +64,47 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # plans/plan_software.md SOFTWARE-61/84: this renderer's half of the cross-renderer diagnostic
         # dump -- not registered as a ctest, just a plain executable a developer/script runs by
         # hand alongside SOFTWARE's own cna_diag_software and cna_diag_compare.
+        # plan_vulkan.md VULKAN-214: the control -- 'preserve survives a resize' is a claim
+        # about the XNA contract, so one renderer cannot answer it alone.
+        cna_easygl_test(cna_test_easygl_rendertarget_preserve_across_resize
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_preserve_across_resize_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_RenderTargetPreserveAcrossResize
+            COMMAND cna_test_easygl_rendertarget_preserve_across_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-058: the control that turned a candidate finding into a
+        # defect -- EasyGL masked the sprite correctly while Vulkan painted the whole target.
+        cna_easygl_test(cna_test_easygl_spritebatch_depthstencil_state
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_depthstencil_state_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatch_DepthStencilState
+            COMMAND cna_test_easygl_spritebatch_depthstencil_state
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-137: the control for Vulkan's zero-length buffer run. Vulkan pads
+        # the allocation and EasyGL does not, so agreement between the two is the whole claim.
+        # plan_vulkan.md VULKAN-169 (finding F-32): SaveAsPng/SaveAsJpeg read a render target back
+        # instead of refusing. Shared-layer, so the reference renderer answers for it too.
+        cna_easygl_test(cna_test_easygl_texture2d_saveas_rendertarget
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/texture2d_saveas_rendertarget_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Texture2D_SaveAsRenderTarget
+            COMMAND cna_test_easygl_texture2d_saveas_rendertarget
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_easygl_test(cna_test_easygl_zero_length_buffers
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/zero_length_buffer_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_ZeroLengthBuffers
+            COMMAND cna_test_easygl_zero_length_buffers
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-050: registered here as the CONTROL for the Vulkan run -- the
+        # whole question is whether two renderers with different submission models agree about
+        # SpriteSortMode::Immediate, and a one-renderer measurement cannot answer it.
+        cna_easygl_test(cna_test_easygl_spritebatch_sort_mode_semantics
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_sort_mode_semantics_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatch_SortModeSemantics
+            COMMAND cna_test_easygl_spritebatch_sort_mode_semantics
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_diag_easygl ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
 
         # plans/plan_direct2d.md D2D-129: the 2D counterpart of the dump above. The 3D scene next to it
@@ -1800,6 +1841,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_DxtFormat COMMAND cna_test_easygl_dxt_format
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-240: direct EasyGL control for compressed cube-map upload,
+        # readback, partial replacement and sampling.
+        cna_easygl_test(cna_test_easygl_dxt_texturecube
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/dxt_texturecube_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_DxtTextureCube COMMAND cna_test_easygl_dxt_texturecube
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+            WORKING_DIRECTORY "${CNA_SOURCE_DIR}")
+
         # REMED-GFX-244: the three packed 16-bit formats GraphicsProfile.Reach permits, uploaded
         # through their typed SetData overloads and sampled in a real draw -- the channel order
         # differs between XNA and GL for the two with alpha, so this is the case that proves the
@@ -1903,6 +1952,40 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         easygl_spritebatch_blendstate_leak_test.cpp)
         cna_register_renderer_test(NAME EasyGL_SpriteBatch_BlendStateLeak COMMAND cna_test_easygl_spritebatch_blendstate_leak
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-400: the control run. The finding this checks is documented as
+        # EasyGL's (migration-guide known issues, Task 933), so a Vulkan-only registration could
+        # not tell "absent on Vulkan" from "the test cannot detect it anywhere".
+        cna_easygl_test(cna_test_easygl_fullscreen_sprite_then_3d
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/fullscreen_spritebatch_then_3d_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_FullscreenSpriteThen3D COMMAND cna_test_easygl_fullscreen_sprite_then_3d
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-217: does a TEXTURED instanced draw sample its texture? The two
+        # renderers implement instancing differently -- EasyGL adds an optional per-instance matrix to
+        # every stock program, Vulkan selects a separate colour-only program pair -- so this is
+        # registered on both or it measures nothing.
+        cna_easygl_test(cna_test_easygl_instanced_textured
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/instanced_textured_draw_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_InstancedTexturedDraw COMMAND cna_test_easygl_instanced_textured
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-167 (EasyGL half): a SpriteBatch's SamplerState.AddressW must reach
+        # a sampler3D a custom effect bound. ApplySamplerState derived WrapR from addressU, which is
+        # right for every XNA preset and wrong for a state that set W on its own; the sibling proof
+        # on Vulkan is Vulkan_Texture3DAddressW.
+        cna_easygl_test(cna_test_easygl_texture3d_addressw
+                        easygl_texture3d_addressw_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Texture3DAddressW COMMAND cna_test_easygl_texture3d_addressw
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-194: the second renderer for the SamplerStates[0] publication
+        # contract. The change is in the shared SpriteBatch/GraphicsDevice layer, so a one-renderer
+        # registration could not tell "correct" from "this renderer happens not to notice".
+        cna_easygl_test(cna_test_easygl_spritebatch_sampler0_publication
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_sampler0_publication_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatch_Sampler0Publication COMMAND cna_test_easygl_spritebatch_sampler0_publication
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # GraphicsDeviceManager.SynchronizeWithVerticalRetrace/ApplyChanges() must actually reach
         # IGraphicsRenderer::SetSwapInterval() -- renderer-independent fix in GraphicsDevice::Reset().

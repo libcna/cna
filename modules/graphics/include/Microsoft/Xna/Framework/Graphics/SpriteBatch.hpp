@@ -62,6 +62,9 @@ namespace Microsoft::Xna::Framework::Graphics
         SpriteSortMode sortMode_    = SpriteSortMode::Deferred;
         Matrix transformMatrix_     = Matrix::getIdentityProperty();
         Effect* customEffect_       = nullptr;
+        // plan_vulkan.md VULKAN-194: the batch's resolved sampler, retained because XNA publishes
+        // it into GraphicsDevice.SamplerStates[0] at the flush rather than at Begin().
+        SamplerState effectiveSampler_;
         std::vector<SpriteInfo> spriteQueue_;
 
         void pushSprite(const Texture2D& texture,

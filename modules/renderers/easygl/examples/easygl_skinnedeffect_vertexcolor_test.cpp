@@ -102,6 +102,21 @@ protected:
         fx.Apply();
         device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 
+        // plan_vulkan.md VULKAN-205 (finding F-40): quad B's claim is that a black per-vertex
+        // colour zeroes the lit/textured result. That is true of the DIFFUSE and, measured on the
+        // real XNA 4.0 runtime, NOT true of the specular highlight: XNA's own `Vc` effects fold the
+        // colour into `vout.Diffuse` and then `AddSpecular` adds `Specular * color.a` on top, so a
+        // black vertex colour with a full alpha leaves the highlight standing --
+        // `spikes/xna-vertex-color-specular-spike/` reads (249,249,249) for a white, a 20 % grey
+        // AND a black vertex colour in a scene whose diffuse term is exactly zero.
+        //
+        // `EnableDefaultLighting()` above turns specular on, so the original expectation of pure
+        // black held only while a renderer multiplied the WHOLE fragment by the colour, highlight
+        // included. Vulkan stopped doing that in VULKAN-205; the specular is switched off for this
+        // quad so the leg asserts the half that is true on every renderer and in XNA, instead of a
+        // half that is true on none of them. Quad A is drawn above with the lighting untouched, so
+        // its own expectation and golden are unaffected.
+        fx.setSpecularColorProperty(Vector3::Zero);
         fx.VertexColorEnabled = true;
         fx.Apply();
         device.DrawPrimitives(PrimitiveType::TriangleList, 6, 2);
@@ -115,7 +130,8 @@ protected:
         // reproduce it unchanged.
         ExpectPixel("quadA-vertexcolor-disabled", Rectangle(sampleAx, sampleY, 1, 1),
                     Color(174, 0, 0, 255), /*tolerance=*/40);
-        // VertexColorEnabled=true with a pure-black per-vertex color must zero the result.
+        // VertexColorEnabled=true with a pure-black per-vertex color must zero the DIFFUSE result.
+        // See the specular note above the draw: the highlight is not the colour's to zero.
         ExpectPixel("quadB-vertexcolor-enabled-black", Rectangle(sampleBx, sampleY, 1, 1),
                     Color(0, 0, 0, 255), /*tolerance=*/10);
 

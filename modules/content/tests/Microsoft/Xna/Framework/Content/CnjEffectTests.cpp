@@ -112,7 +112,15 @@ TEST_F(CnjEffectTest, LoadsRealCnjFixture)
     // A renderer with no shader compiler (OpenGL ES 1.1's fixed-function pipeline has none at all)
     // cannot produce a valid custom-GLSL effect. Gate on the capability rather than the renderer
     // name, matching CnjTexture3DTests' own convention for the same situation.
-    if (!gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
+    // plan_vulkan.md VULKAN-403: the capability is the wrong question on its own, and CLAUDE.md
+    // says so in as many words -- CustomEffects means the renderer ACCEPTS an effect, not that it
+    // runs your shader SOURCE. Vulkan accepts effects and reports true, then refuses this GLSL
+    // payload because its ShaderEffect takes SPIR-V ("SPIR-V size must be a multiple of 4 bytes").
+    // ExecutesShaderEffectSourceEXT() is the query that exists for exactly this distinction, and
+    // it is false there, so the fixture's expectation is the same as for a renderer with no
+    // compiler at all.
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CustomEffects) ||
+        !gd.ExecutesShaderEffectSourceEXT())
     {
         EXPECT_FALSE(shaderEffect->IsEffectValid());
         return;

@@ -193,10 +193,14 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             graphicsDevice_->setBlendStateProperty(
                 blendState ? *blendState : BlendState::AlphaBlend);
-            // FNA's PrepRenderState assigns the effective sampler through the public collection.
-            // Keeping only the renderer-local SpriteBatch state made the next 3D draw incorrectly
-            // restore the collection's stale sampler instead of inheriting SpriteBatch's state.
-            graphicsDevice_->getSamplerStatesProperty()[0] = effectiveSampler;
+            // The effective sampler IS published to the public collection -- but from flushBatch(),
+            // not from here. plans/plan_fx.md FX-126 originally assigned it at Begin() so a later
+            // 3D draw could not inherit a stale collection entry; plans/plan_vulkan.md VULKAN-166
+            // and VULKAN-194 then measured the real XNA runtime
+            // (spikes/xna-spritebatch-sampler0-spike) and found the assignment is NOT visible after
+            // Begin() for a Deferred batch, only after the flush. flushBatch() publishes before its
+            // own empty check, so FX-126's requirement still holds for an empty batch too; doing it
+            // here as well only made the publication visible too early.
             // Task 803 finding: this parameter was previously entirely unused -- SpriteBatch
             // draws silently inherited whatever DepthStencilState the game's own 3D rendering
             // last configured (or each renderer's own construction-time default), instead of
@@ -233,14 +237,41 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderer_->SetTransformMatrix(transformMatrix_);
                 // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
                 // resolved state is always (re-)applied — never left over from a previous Begin().
+                const SamplerState& effectiveSampler = samplerState ? *samplerState : SamplerState::LinearClamp;
+                effectiveSampler_ = effectiveSampler;
                 renderer_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
                 renderer_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
                                                 static_cast<int>(effectiveSampler.getAddressVProperty()));
                 renderer_->SetSamplerMipState(effectiveSampler.getMaxMipLevelProperty(),
                                               effectiveSampler.getMipMapLevelOfDetailBiasProperty());
+                // XNA assigns the WHOLE SamplerState to GraphicsDevice.SamplerStates[0]; this layer
+                // forwarded the filter and the U/V axes and dropped W. Harmless for 2D sampling,
+                // decisive for a custom effect's sampler3D whose W can leave [0,1].
+                //
+                // Two hooks carry the same value because the `dx` and `vulkan` branches each added
+                // one independently (plans/plan_dx.md DX-257 as SetSamplerAddressW, alongside the
+                // mip-state hook above; plans/plan_vulkan.md VULKAN-164 as SetSamplerAddressModeWEXT)
+                // and different renderer families override different names: DirectX 9/11/12
+                // implement the first, Vulkan the second, EasyGL both. Calling only one would
+                // silently stop delivering W to the other family, so both are called until the two
+                // hooks are unified -- a follow-up, not a merge decision. Both are idempotent
+                // setters recording the same ordinal.
                 renderer_->SetSamplerAddressW(static_cast<int>(effectiveSampler.getAddressWProperty()));
+                renderer_->SetSamplerAddressModeWEXT(
+                    static_cast<int>(effectiveSampler.getAddressWProperty()));
                 renderer_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
                 renderer_->Begin();
+                // plan_vulkan.md VULKAN-166: FNA's PrepRenderState pushes the whole sampler state
+                // down, and it runs from Begin() for Immediate (where no flushBatch ever will) and
+                // from FlushBatch otherwise. Do the same, from the same two places. Slot 0 is
+                // excluded because the three calls above already carry the batch's own sampler to
+                // it; slots 1 and up had no writer at all in a SpriteBatch-only frame, so a
+                // ShaderEffect's second texture unit was sampled with the first one's state.
+                if (graphicsDevice_ != nullptr && sortMode_ == SpriteSortMode::Immediate)
+                {
+                    graphicsDevice_->getSamplerStatesProperty()[0] = effectiveSampler_;
+                    graphicsDevice_->applySamplerStatesToRenderer(1);
+                }
             }
             catch (...)
             {
@@ -367,6 +398,20 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::flushBatch()
     {
+        // plan_vulkan.md VULKAN-166: before the empty check, matching FNA's FlushBatch, which
+        // calls PrepRenderState first and only then returns early on numSprites == 0.
+        // plan_vulkan.md VULKAN-194: PrepRenderState's first act is
+        // `GraphicsDevice.SamplerStates[0] = samplerState`, so the batch's sampler is left behind
+        // in the device collection and the next 3D draw inherits it. Measured on the XNA runtime
+        // (spikes/xna-spritebatch-sampler0-spike): the assignment is NOT visible after Begin() for
+        // a Deferred batch, only after the flush, and a following 3D draw really does sample with
+        // the batch's address mode.
+        if (graphicsDevice_ != nullptr)
+        {
+            graphicsDevice_->getSamplerStatesProperty()[0] = effectiveSampler_;
+            graphicsDevice_->applySamplerStatesToRenderer(1);
+        }
+
         if (spriteQueue_.empty()) return;
 
         if (sortMode_ == SpriteSortMode::BackToFront)

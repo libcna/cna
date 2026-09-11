@@ -1088,8 +1088,14 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     void GraphicsDevice::ValidateInstanceStreamRanges(
-        const CNA::Internal::Renderers::GpuDrawParams& p, int instanceCount) const
+        const CNA::Internal::Renderers::GpuDrawParams& p, const int instanceCount,
+        const int firstInstance) const
     {
+        if (firstInstance > (std::numeric_limits<int>::max)() - (instanceCount - 1))
+            throw System::ArgumentOutOfRangeException(
+                "firstInstance", std::to_string(firstInstance),
+                "The requested instance range exceeds the supported signed range.");
+        const int lastInstance = firstInstance + instanceCount - 1;
         for (int i = 0; i < p.vertexStreamCount; ++i)
         {
             const auto& stream = p.vertexStreams[static_cast<std::size_t>(i)];
@@ -1100,7 +1106,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // `VertexOffset` -- D3D11's StartInstanceLocation is 0 in FNA3D's own driver and
             // OpenGL has no start-instance term at all. Every term is an element count of THIS
             // stream, so a short stream is rejected even when another one is long enough.
-            const int requiredElements = 1 + (instanceCount - 1) / stream.instanceFrequency;
+            const int requiredElements = 1 + lastInstance / stream.instanceFrequency;
             const int available = stream.vertexCount;
             if (stream.vertexOffset > available ||
                 requiredElements > available - stream.vertexOffset)
@@ -1305,6 +1311,34 @@ namespace Microsoft::Xna::Framework::Graphics
         int instanceCount
     )
     {
+        DrawInstancedPrimitivesCore(
+            primitiveType, baseVertex, minVertexIndex, numVertices, startIndex,
+            primitiveCount, instanceCount, 0);
+    }
+
+    void GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT(
+        const PrimitiveType primitiveType, const int baseVertex, const int minVertexIndex,
+        const int numVertices, const int startIndex, const int primitiveCount,
+        const int instanceCount, const int firstInstance)
+    {
+        if (renderer_ == nullptr)
+            return;
+        if (!GetRenderer().SupportsBaseInstanceDrawingEXT())
+            throw System::NotSupportedException(
+                std::string("GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT: the ") +
+                std::string(GetGraphicsRendererName()) +
+                " renderer does not support base-instance drawing.");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(firstInstance, "firstInstance");
+        DrawInstancedPrimitivesCore(
+            primitiveType, baseVertex, minVertexIndex, numVertices, startIndex,
+            primitiveCount, instanceCount, firstInstance);
+    }
+
+    void GraphicsDevice::DrawInstancedPrimitivesCore(
+        const PrimitiveType primitiveType, const int baseVertex, const int minVertexIndex,
+        const int numVertices, const int startIndex, const int primitiveCount,
+        const int instanceCount, const int firstInstance)
+    {
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawInstancedPrimitives");
@@ -1365,6 +1399,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Internal::Renderers::GpuDrawParams p;
         currentEffect_->FillGpuDrawParams(p);
         p.instanceCount = instanceCount;
+        p.firstInstance = firstInstance;
         p.startIndex    = startIndex;
         p.baseVertex    = baseVertex;
         p.minVertexIndex = minVertexIndex;
@@ -1391,7 +1426,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ValidateVertexStreamRanges(
             p, baseVertex + minVertexIndex, numVertices,
             "numVertices", std::to_string(numVertices));
-        ValidateInstanceStreamRanges(p, instanceCount);
+        ValidateInstanceStreamRanges(p, instanceCount, firstInstance);
         ValidateVertexStreamCapability(p);
         applySamplerStatesToRenderer();
         renderer_->DrawInstancedPrimitivesEx(
@@ -1410,6 +1445,11 @@ namespace Microsoft::Xna::Framework::Graphics
             const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
             const int argumentByteOffset, const std::size_t argumentSize, const char* route)
         {
+            constexpr std::uint32_t IndirectArgumentsUsage = UINT32_C(1) << 3;
+            if ((argumentBuffer.GetUsageEXT() & IndirectArgumentsUsage) == 0)
+                throw System::NotSupportedException(
+                    std::string(route) +
+                    ": the storage buffer was not created with IndirectArguments usage.");
             System::ArgumentOutOfRangeException::ThrowIfNegative(argumentByteOffset,
                                                                  "argumentByteOffset");
             if (argumentByteOffset % 4 != 0)
@@ -2440,6 +2480,21 @@ namespace Microsoft::Xna::Framework::Graphics
         return renderer_->GetShaderDialectEXT();
     }
 
+    bool GraphicsDevice::SupportsShaderLanguageEXT(
+        const CNA::ShaderLanguageEXT language, const CNA::ShaderStageEXT stage) const
+    {
+        const int languageOrdinal = static_cast<int>(language);
+        const int stageOrdinal = static_cast<int>(stage);
+        if (renderer_ == nullptr || languageOrdinal <= static_cast<int>(CNA::ShaderLanguageEXT::Unknown)
+            || languageOrdinal >= static_cast<int>(CNA::ShaderLanguageEXT::Count)
+            || stageOrdinal <= static_cast<int>(CNA::ShaderStageEXT::Unknown)
+            || stageOrdinal >= static_cast<int>(CNA::ShaderStageEXT::Count))
+        {
+            return false;
+        }
+        return renderer_->SupportsShaderLanguageEXT(languageOrdinal, stageOrdinal);
+    }
+
     bool GraphicsDevice::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         // CompiledEffects was appended after many renderer-specific capability switches were
@@ -2551,6 +2606,12 @@ namespace Microsoft::Xna::Framework::Graphics
         setLegacy(CNA::RendererFeature::Texture3DStorage,
                   CNA::GraphicsCapability::Texture3D,
                   "Storage and transfer only; general shader sampling is not implied.");
+        profile.SetFeature(
+            CNA::RendererFeature::Texture3DSampling,
+            FeatureSupport(SupportsCapability(CNA::GraphicsCapability::Texture3D) &&
+                           renderer.SupportsTexture3DSamplingEXT()),
+            "A volume bound to a custom effect is read by that shader. Separate from storage "
+            "because a renderer can carry Texture3D data faithfully and have no sampler3D path.");
         setLegacy(CNA::RendererFeature::MultiStreamVertexInput,
                   CNA::GraphicsCapability::MultiStreamVertexInput);
         setLegacy(CNA::RendererFeature::InstancedDrawing,
@@ -2575,6 +2636,9 @@ namespace Microsoft::Xna::Framework::Graphics
                            renderer.SupportsComputeImageBindingEXT()));
         setLegacy(CNA::RendererFeature::IndirectDrawing,
                   CNA::GraphicsCapability::IndirectDraw);
+        profile.SetFeature(
+            CNA::RendererFeature::BaseInstanceDrawing,
+            FeatureSupport(renderer.SupportsBaseInstanceDrawingEXT()));
         profile.SetFeature(CNA::RendererFeature::ShadowSampling,
                            FeatureSupport(renderer.SupportsShadowSamplingEXT()));
         profile.SetFeature(CNA::RendererFeature::ImageBasedLighting,
@@ -2644,6 +2708,35 @@ namespace Microsoft::Xna::Framework::Graphics
                              ? static_cast<std::uint64_t>(vertexStorageBlocks)
                              : UINT64_C(0));
 
+        const auto setNonNegativeLimit = [&](const CNA::RendererLimit limit, const int value) {
+            profile.SetLimit(limit, value >= 0,
+                             value >= 0 ? static_cast<std::uint64_t>(value) : UINT64_C(0));
+        };
+        profile.SetLimit(CNA::RendererLimit::MaxStorageBufferBytes, true,
+                         renderer.GetMaxStorageBufferBytesEXT());
+        profile.SetLimit(CNA::RendererLimit::MaxUniformBufferBytes, true,
+                         renderer.GetMaxUniformBufferBytesEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxComputeStorageBufferBindings,
+                            renderer.GetMaxComputeStorageBufferBindingsEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxTextureArrayLayers,
+                            renderer.GetMaxTextureArrayLayersEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxSampledTexturesPerShaderStage,
+                            renderer.GetMaxSampledTexturesPerShaderStageEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxStorageImagesPerShaderStage,
+                            renderer.GetMaxStorageImagesPerShaderStageEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxVertexInputBindings,
+                            renderer.GetMaxVertexInputBindingsEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxVertexInputAttributes,
+                            renderer.GetMaxVertexInputAttributesEXT());
+        setNonNegativeLimit(CNA::RendererLimit::MaxColorAttachments,
+                            renderer.GetMaxColorAttachmentsEXT());
+        profile.SetLimit(CNA::RendererLimit::MinStorageBufferOffsetAlignment, true,
+                         renderer.GetMinStorageBufferOffsetAlignmentEXT());
+        profile.SetLimit(CNA::RendererLimit::MinUniformBufferOffsetAlignment, true,
+                         renderer.GetMinUniformBufferOffsetAlignmentEXT());
+        profile.SetLimit(CNA::RendererLimit::TimestampPeriodPicoseconds, true,
+                         renderer.GetTimestampPeriodPicosecondsEXT());
+
         constexpr std::uint32_t classifiedFormatUsages =
             static_cast<std::uint32_t>(CNA::RendererFormatUsage::TextureStorage) |
             static_cast<std::uint32_t>(CNA::RendererFormatUsage::RenderTarget) |
@@ -2652,6 +2745,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             const SurfaceFormat format = CapabilitySurfaceFormats[i];
             const int ordinal = static_cast<int>(format);
+            std::uint32_t known = classifiedFormatUsages;
             std::uint32_t supported = 0;
             if (ResolveFormatVerdict(renderer.ClassifySurfaceFormatEXT(ordinal),
                                      format == SurfaceFormat::Color))
@@ -2662,9 +2756,15 @@ namespace Microsoft::Xna::Framework::Graphics
             if (ResolveFormatVerdict(renderer.ClassifyColorTransferFormatEXT(ordinal),
                                      Texture::GetFormatSizeEXT(format) % 4 == 0))
                 supported |= static_cast<std::uint32_t>(CNA::RendererFormatUsage::ColorTransfer);
+            const CNA::RendererFormatSupport rendererSupport =
+                renderer.GetSurfaceFormatUsageSupportEXT(ordinal);
+            const std::uint32_t rendererKnown = rendererSupport.knownUsages;
+            supported = (supported & ~rendererKnown) |
+                        (rendererSupport.supportedUsages & rendererKnown);
+            known |= rendererKnown;
             profile.SetSurfaceFormat(static_cast<std::uint32_t>(ordinal),
                                      CapabilitySurfaceFormatNames[i],
-                                     {classifiedFormatUsages, supported});
+                                     {known, supported});
         }
 
         profile.additionalLimitationsText_ =
@@ -3563,10 +3663,11 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    void GraphicsDevice::applySamplerStatesToRenderer()
+    void GraphicsDevice::applySamplerStatesToRenderer(int firstSlot)
     {
         if (!renderer_) return;
-        for (int i = 0; i < SamplerStateCollection::MaxSamplers; ++i)
+        if (firstSlot < 0) firstSlot = 0;
+        for (int i = firstSlot; i < SamplerStateCollection::MaxSamplers; ++i)
         {
             const SamplerState& ss = samplerStates_[i];
             renderer_->ApplySamplerState(i,

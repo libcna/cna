@@ -22,6 +22,13 @@
 > every statement below describing `-007`/`-008` as open is retained as historical phase-1 exit
 > evidence. Current technical detail is in `REMEDIATION_PROGRESS.md`; the separate Batch 5
 > checkpoint retake is recorded in `integration/BATCH_5_STABILIZATION.md`.
+>
+> **Post-exit addendum — 2026-09-08:** `REMED-GFX-203` is now **DONE**. Vulkan reports and
+> implements the 16-slot multi-stream contract through immutable per-rate packed snapshots; the
+> shared conformance sources pass 48/48 on Vulkan and 48/48 on EasyGL. The §4/§9/§10 rows below
+> retain their 2026-08-04 boundary and skip counts as historical checkpoint evidence. Current
+> design, verification and status are in `REMEDIATION_PROGRESS.md`, `REMEDIATION_INDEX.md`,
+> `plans/plan_postaudit.md` §5 and `plans/plan_vulkan.md` F-45/§28.4.
 
 ---
 

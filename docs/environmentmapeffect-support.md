@@ -141,6 +141,41 @@ EasyGL, Vulkan, and Bgfx alike. No new bugs found — pure integration verificat
 the first attempt is itself a meaningful confirmation that Tasks 394–398's fixes don't just work
 in narrow isolation but compose correctly when combined in one scene.
 
+## 8. `EnvironmentMapAmount` above 1 is saturated (`plans/plan_vulkan.md` VULKAN-196, 2026-09-07)
+
+`EnvironmentMapAmount` has no clamp in its property setter (`EnvironmentMapEffect.cs:283`), so a
+game can hand the shader a value above 1. XNA still renders it as 1, and the reason is not in the
+effect at all: the factor is written to `vout.Specular.rgb` (`ComputeEnvMapVSOutput`), and
+`Structures.fxh:156` declares that member `Specular : COLOR1`, so **Direct3D 9 saturates it before
+interpolation** — the same `oD0`/`oD1` rule `plans/plan_fx.md` FX-123 measured for the lit programs.
+
+**Measured on the real XNA 4.0 runtime**, not inferred from the semantic:
+`spikes/xna-envmap-amount-clamp-spike/`, a quad with a `(60,60,60)` base texture and a
+`(200,200,200)` environment cube, `FresnelFactor = 0`:
+
+| `EnvironmentMapAmount` | 0.5 | 1.0 | 2.0 | 3.0 |
+|---|---|---|---|---|
+| real XNA | `(100,100,100)` | `(200,200,200)` | `(200,200,200)` | `(200,200,200)` |
+| CNA Vulkan, before | `(100,100,100)` | `(200,200,200)` | **`(255,255,255)`** | **`(255,255,255)`** |
+| CNA Vulkan, after | `(100,100,100)` | `(200,200,200)` | `(200,200,200)` | `(200,200,200)` |
+
+The 0.5 column is the positive control: without it, "2.0 renders as 1.0" cannot be told apart from
+"the amount does nothing on this stack".
+
+EasyGL already clamped (`EasyGLRenderer.cpp:8423`); Vulkan did not, so this was a renderer parity
+gap as well as an XNA divergence. The clamp belongs in the **vertex** stage, where D3D9 applies it —
+clamping after interpolation would interpolate the raw value first and give a different gradient.
+
+Guarded by `modules/graphics/examples/environmentmapeffect_amount_clamp_test.cpp`, registered as
+`Vulkan_EnvironmentMapEffect_AmountClamp`. The source is renderer-agnostic and its legs are
+relational, so registering it for another renderer is one line in that family's `CMakeLists.txt`.
+
+**The unlit sibling was the same defect one effect over.** The same D3D9 rule applies to
+`vout.Diffuse : COLOR0`, and neither renderer clamped it; `plans/plan_vulkan.md` VULKAN-197 measured
+it on the real runtime and fixed the Vulkan half in ten vertex shaders. See §6 of
+`docs/basiceffect-support.md` — including the colour-gradient case, where the two orders are 77
+levels apart. EasyGL's half is still open and belongs to `plans/plan_fx.md`.
+
 ## Support matrix
 
 | Feature | EasyGL | Vulkan | Bgfx |

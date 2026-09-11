@@ -193,6 +193,22 @@ if(CNA_BUILD_TESTS)
     add_executable(cna_diag_compare cross_renderer_diagnostic_compare.cpp)
 endif()
 
+# plans/plan_modern.md MOD-2201: keep the EasyGL/Vulkan/OpenGL4 baseline measurable from one
+# renderer-neutral source. This deliberately builds only for the three Phase-22 comparison
+# identities and prints both the legacy capability ordinals and the complete detailed profile.
+if(CNA_BUILD_TESTS AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4"))
+    add_executable(cna_probe_modern_gpu_capabilities modern_gpu_capability_probe.cpp)
+    target_link_libraries(cna_probe_modern_gpu_capabilities PRIVATE cna_graphics_core)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_probe_modern_gpu_capabilities PRIVATE SDL3::SDL3main)
+    endif()
+    add_test(NAME ModernGpuCapabilityProbe COMMAND cna_probe_modern_gpu_capabilities)
+    set_tests_properties(ModernGpuCapabilityProbe PROPERTIES
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+endif()
+
 # plans/plan_html_dom.md Phase D10 and plans/plan_platform.md PLAT-7/120: one renderer-agnostic fixed-scene
 # benchmark, built against whichever renderer this configure selected. Browser builds publish via
 # JavaScript as before; native builds use steady_clock and emit the raw samples as JSON. Keeping

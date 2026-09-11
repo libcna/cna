@@ -15,8 +15,10 @@ namespace Microsoft::Xna::Framework::Graphics {
 namespace CNA::Graphics {
 
     class ClusteredLightAssignment;
+    class ClusteredForwardEffect;
     class ClusteredLightGrid;
     class ClusteredLightSetEXT;
+    class StorageBuffer;
 
 /** @addtogroup cnaext_engine
  *  @{
@@ -44,6 +46,10 @@ namespace CNA::Graphics {
      *
      * @ref getLightLookupGlsl emits the decode side, along with the cluster arithmetic, so the
      * shader and this class cannot disagree about the layout.
+     *
+     * Binary renderers may additionally receive an exact storage-buffer mirror owned by this
+     * object. That mirror avoids consuming five 2D sampler bindings in the portable clustered
+     * forward effect; the public GLSL texture contract remains unchanged.
      */
     class ClusteredLightBuffer
     {
@@ -111,11 +117,18 @@ namespace CNA::Graphics {
         [[nodiscard]] bool isUploaded() const;
 
     private:
+        friend class ClusteredForwardEffect;
+
+        void bindStorageForDraw() const;
+
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
 
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> lightData_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> clusterTable_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> indexList_;
+        std::unique_ptr<StorageBuffer> storageLights_;
+        std::unique_ptr<StorageBuffer> storageClusters_;
+        std::unique_ptr<StorageBuffer> storageIndices_;
 
         int lightCount_     = 0;
         int clusterCount_   = 0;

@@ -2,6 +2,7 @@
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/SrgbTransfer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/EasyGL/EasyGLCompiledEffect.hpp"
 #include "Fna3dStockEffectBlobs.hpp"
@@ -2386,13 +2387,23 @@ if (!ProfileIsEs2ApiGeneration())
     // ---------------------------------------------------------------------------------------
     // plans/plan_modern.md MOD-1511..MOD-1515: compute shaders and shader storage buffers.
 
-    EasyGLStorageBufferRenderer::EasyGLStorageBufferRenderer(const std::size_t byteSize)
+    EasyGLStorageBufferRenderer::EasyGLStorageBufferRenderer(
+        const std::size_t byteSize, const std::uint32_t usage,
+        const std::uint32_t cpuAccess)
         : byteSize_(byteSize)
+        , usage_(usage)
+        , cpuAccess_(cpuAccess)
     {
+        if (byteSize_ == 0)
+            throw std::invalid_argument("EasyGL buffer: byte size must be positive");
+        if (usage_ == 0 || (usage_ & ~UINT32_C(0x7F)) != 0)
+            throw std::invalid_argument("EasyGL buffer: usage mask is invalid");
+        if ((cpuAccess_ & ~UINT32_C(0x03)) != 0)
+            throw std::invalid_argument("EasyGL buffer: CPU-access mask is invalid");
         buffer_.create();
-        // Allocated once with no initial data; DynamicDraw because the whole point of a storage
-        // buffer is that something writes it repeatedly -- usually the GPU itself.
-        buffer_.set_data(::easygl::BufferTarget::ShaderStorage, nullptr, byteSize_,
+        // GL buffer objects are target-agnostic. Choosing DrawIndirect for a command-only buffer
+        // is what keeps allocation valid on desktop GL 4.0-4.2, where SSBO targets do not exist.
+        buffer_.set_data(TransferTarget(), nullptr, byteSize_,
                          ::easygl::BufferUsage::DynamicDraw);
     }
 
@@ -2400,28 +2411,98 @@ if (!ProfileIsEs2ApiGeneration())
 
     void EasyGLStorageBufferRenderer::SetData(const void* data, const std::size_t byteSize)
     {
-        if (data == nullptr || byteSize == 0) return;
-        buffer_.set_sub_data(::easygl::BufferTarget::ShaderStorage, data,
-                             byteSize > byteSize_ ? byteSize_ : byteSize, 0);
+        (void)SetDataRangeEXT(0, data, byteSize);
     }
 
     void EasyGLStorageBufferRenderer::GetData(void* out, const std::size_t byteSize) const
     {
-        if (out == nullptr || byteSize == 0) return;
-        const std::size_t bytes = byteSize > byteSize_ ? byteSize_ : byteSize;
+        (void)GetDataRangeEXT(0, out, byteSize);
+    }
+
+    bool EasyGLStorageBufferRenderer::SetDataRangeEXT(
+        const std::size_t byteOffset, const void* data, const std::size_t byteSize)
+    {
+        if (byteOffset > byteSize_ || byteSize > byteSize_ - byteOffset)
+            throw std::invalid_argument("EasyGL storage-buffer upload range exceeds allocation");
+        if (data == nullptr && byteSize != 0)
+            throw std::invalid_argument("EasyGL storage-buffer upload source is null");
+        if (byteSize == 0) return true;
+        buffer_.set_sub_data(TransferTarget(), data, byteSize, byteOffset);
+        return true;
+    }
+
+    bool EasyGLStorageBufferRenderer::GetDataRangeEXT(
+        const std::size_t byteOffset, void* out, const std::size_t byteSize) const
+    {
+        if (byteOffset > byteSize_ || byteSize > byteSize_ - byteOffset)
+            throw std::invalid_argument("EasyGL storage-buffer read range exceeds allocation");
+        if (out == nullptr && byteSize != 0)
+            throw std::invalid_argument("EasyGL storage-buffer read destination is null");
+        if (byteSize == 0) return true;
+        if ((usage_ & UINT32_C(1)) != 0)
+            ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
         // glGetBufferSubData is desktop-only; mapping for read is the portable form and is what
         // the GL ES 3.1 contexts this renderer usually holds actually provide.
-        void* mapped = buffer_.map_range(::easygl::BufferTarget::ShaderStorage, 0,
-                                         static_cast<std::ptrdiff_t>(bytes),
+        const ::easygl::BufferTarget target = TransferTarget();
+        void* mapped = buffer_.map_range(target,
+                                         static_cast<std::ptrdiff_t>(byteOffset),
+                                         static_cast<std::ptrdiff_t>(byteSize),
                                          ::metagl::MapBufferAccessMask::Read);
-        if (mapped == nullptr) return;
-        std::memcpy(out, mapped, bytes);
-        buffer_.unmap(::easygl::BufferTarget::ShaderStorage);
+        if (mapped == nullptr) return false;
+        std::memcpy(out, mapped, byteSize);
+        buffer_.unmap(target);
+        return true;
+    }
+
+    bool EasyGLStorageBufferRenderer::CopyToEXT(
+        IStorageBufferRenderer& destination, const std::size_t sourceByteOffset,
+        const std::size_t destinationByteOffset, const std::size_t byteSize)
+    {
+        auto* target = dynamic_cast<EasyGLStorageBufferRenderer*>(&destination);
+        if (target == nullptr) return false;
+        if (sourceByteOffset > byteSize_ || byteSize > byteSize_ - sourceByteOffset ||
+            destinationByteOffset > target->byteSize_ ||
+            byteSize > target->byteSize_ - destinationByteOffset)
+            throw std::invalid_argument("EasyGL storage-buffer copy range exceeds allocation");
+        if (target == this && byteSize != 0 &&
+            sourceByteOffset < destinationByteOffset + byteSize &&
+            destinationByteOffset < sourceByteOffset + byteSize)
+            throw std::invalid_argument("EasyGL storage-buffer copy ranges overlap");
+        if (byteSize == 0) return true;
+        if (((usage_ | target->usage_) & UINT32_C(1)) != 0)
+            ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
+        buffer_.bind(::easygl::BufferTarget::CopyRead);
+        target->buffer_.bind(::easygl::BufferTarget::CopyWrite);
+        ::metagl::glCopyBufferSubData(
+            ::metagl::BufferTarget::CopyRead, ::metagl::BufferTarget::CopyWrite,
+            static_cast<std::ptrdiff_t>(sourceByteOffset),
+            static_cast<std::ptrdiff_t>(destinationByteOffset),
+            static_cast<std::ptrdiff_t>(byteSize));
+        if (((usage_ | target->usage_) & UINT32_C(1)) != 0)
+            ::metagl::glMemoryBarrier(::metagl::MemoryBarrierMask::AllBarrierBits);
+        return true;
+    }
+
+    ::easygl::BufferTarget EasyGLStorageBufferRenderer::TransferTarget() const
+    {
+        if ((usage_ & UINT32_C(1)) != 0)
+            return ::easygl::BufferTarget::ShaderStorage;
+        if ((usage_ & (UINT32_C(1) << 3)) != 0)
+            return ::easygl::BufferTarget::DrawIndirect;
+        if ((usage_ & (UINT32_C(1) << 6)) != 0)
+            return ::easygl::BufferTarget::Uniform;
+        return ::easygl::BufferTarget::CopyWrite;
     }
 
     void EasyGLStorageBufferRenderer::BindBase(const int binding) const
     {
         buffer_.bind_base(::easygl::BufferTarget::ShaderStorage,
+                          static_cast<unsigned int>(binding));
+    }
+
+    void EasyGLStorageBufferRenderer::BindUniformBase(const int binding) const
+    {
+        buffer_.bind_base(::easygl::BufferTarget::Uniform,
                           static_cast<unsigned int>(binding));
     }
 
@@ -2487,6 +2568,32 @@ if (!ProfileIsEs2ApiGeneration())
     {
         if (buffer == nullptr) return;
         static_cast<EasyGLStorageBufferRenderer*>(buffer)->BindBase(binding);
+    }
+
+    bool EasyGLComputeShaderRenderer::BindConstantBufferEXT(
+        const int binding, IStorageBufferRenderer* buffer)
+    {
+        if (binding < 0) return false;
+        GLint stageBindings = 0;
+        GLint totalBindings = 0;
+        ::metagl::glGetIntegerv(
+            ::metagl::GetParameter::MaxComputeUniformBlocks, &stageBindings);
+        ::metagl::glGetIntegerv(
+            ::metagl::GetParameter::MaxUniformBufferBindings, &totalBindings);
+        if (binding >= stageBindings || binding >= totalBindings) return false;
+        if (buffer == nullptr)
+        {
+            ::metagl::glBindBufferBase(
+                ::metagl::BufferTarget::Uniform,
+                static_cast<GLuint>(binding), ::metagl::BufferId{0});
+            return true;
+        }
+        auto* native = dynamic_cast<EasyGLStorageBufferRenderer*>(buffer);
+        if (native == nullptr ||
+            (native->GetUsageEXT() & (UINT32_C(1) << 6)) == 0)
+            return false;
+        native->BindUniformBase(binding);
+        return true;
     }
 
     void EasyGLComputeShaderRenderer::BindImageTexture(const int unit, ITextureRenderer* texture,
@@ -4290,7 +4397,20 @@ if (ProfileUsesGlslEs100())
         pendingLodBias_ = lodBias;
     }
 
+    /// plans/plan_vulkan.md VULKAN-167: the second half of VULKAN-164's hook. XNA assigns the whole
+    /// SamplerState to GraphicsDevice.SamplerStates[0], W included; this renderer's sprite path was
+    /// given the filter and the U and V axes and derived W from U. Invisible to 2D sampling, which
+    /// never consults W -- and decisive for a `sampler3D` a custom effect binds to unit 0, where
+    /// the same GL sampler object governs both the sprite's 2D texture and the volume.
+    ///
+    /// Two entry points record the same ordinal because the `dx` and `vulkan` branches named this
+    /// hook differently and other renderer families implement one name each; see SpriteBatch.cpp.
     void EasyGLSpriteBatchRenderer::SetSamplerAddressW(int addressW)
+    {
+        pendingAddressW_ = addressW;
+    }
+
+    void EasyGLSpriteBatchRenderer::SetSamplerAddressModeWEXT(int addressW)
     {
         pendingAddressW_ = addressW;
     }
@@ -4455,7 +4575,9 @@ if (ProfileUsesGlslEs100())
         {
             graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
             graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
-            graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
+            // VULKAN-167: ApplySamplerState sets W = U, which is right for every XNA preset and
+            // wrong for a state that set W on its own. The batch's own W, when it supplied one, wins.
+            if (pendingAddressW_ >= 0) graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
         }
 
         vbo_.bind(::easygl::BufferTarget::Array);
@@ -4626,7 +4748,9 @@ if (ProfileUsesGlslEs100())
         graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_,
                                              pendingAddressV_, 1);
         graphicsRenderer_->ApplySamplerMipState(0, pendingMaxMipLevel_, pendingLodBias_);
-        graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
+        // VULKAN-167: same as the stock flush above -- the batch's W overrides the W-follows-U
+        // default. This is the compiled-effect path, which a custom `sampler3D` reaches too.
+        if (pendingAddressW_ >= 0) graphicsRenderer_->ApplySamplerAddressW(0, pendingAddressW_);
 
         EasyGLRenderer::CompiledEffectStreamEXT stream;
         stream.buffer = easyVertexBuffer;
@@ -5103,11 +5227,27 @@ if (ProfileUsesGlslEs100())
         // Must run here, in the destructor body, rather than relying on member destruction order:
         // mojoShaderContext_ is a raw pointer (no destructor of its own) and needs the GL context
         // still current, which platformContext_ (destroyed after this body returns) still owns.
-        if (mojoShaderContext_ != nullptr)
+        //
+        // Release the registered compiled effects FIRST, and through the same path context loss
+        // uses. A compiled effect can outlive this renderer: the CNAEXT engine layer holds its
+        // post-process passes by shared_ptr, and CNA::Graphics::SsrPass -> FullscreenPass owns a
+        // SpriteBatch whose EasyGL sprite renderer owns an EasyGLCompiledEffect. When that chain
+        // finally releases, ~EasyGLCompiledEffect calls MOJOSHADER_deleteEffect ->
+        // MOJOSHADER_glDeleteShader, which addresses the context destroyed below -- a segfault, not
+        // a leak. ReleaseForContextLossEXT deletes each native effect while the context is still
+        // current and nulls its pointers, so the later destructor finds nothing to free.
+        //
+        // Neither branch could see this alone: the effects are owned by SpriteBatch's renderer
+        // because of plans/plan_fx.md FX-129/FX-130/FX-131 on `next`, and the passes that outlive
+        // the renderer come from the engine-layer work on `vulkan`. It appeared when they met
+        // (2026-09-11), as CApi_EngineLayerSmoke crashing in teardown.
+        //
+        // The function's log line says "context recovery" because that is its other caller; the
+        // work it does -- release every effect, then destroy the MojoShader context -- is exactly
+        // what teardown needs, and duplicating it here would be a second copy to keep in step.
+        if (mojoShaderContext_ != nullptr || !compiledEffects_.empty())
         {
-            MOJOSHADER_glMakeContextCurrent(nullptr);
-            MOJOSHADER_glDestroyContext(mojoShaderContext_);
-            mojoShaderContext_ = nullptr;
+            ReleaseCompiledEffectsForContextLossEXT();
         }
 #endif
         // platformContext_ is the first-declared member and therefore dies last, after every GL
@@ -5707,6 +5847,32 @@ if (!ProfileIsEs2ApiGeneration())
             : RendererFormatVerdict::Unsupported;
     }
 
+    ShaderDialectEXT EasyGLRenderer::GetShaderDialectEXT() const
+    {
+        return IsDesktopCoreProfile(profile_) ? ShaderDialectEXT::GlslDesktop
+                                              : ShaderDialectEXT::GlslEs;
+    }
+
+    bool EasyGLRenderer::SupportsShaderLanguageEXT(const int language, const int stage) const
+    {
+        const auto expectedLanguage = IsDesktopCoreProfile(profile_)
+            ? CNA::ShaderLanguageEXT::GlslDesktop
+            : CNA::ShaderLanguageEXT::GlslEs;
+        if (language != static_cast<int>(expectedLanguage)) return false;
+        switch (static_cast<CNA::ShaderStageEXT>(stage))
+        {
+            case CNA::ShaderStageEXT::Vertex:
+            case CNA::ShaderStageEXT::Fragment:
+                return true;
+            case CNA::ShaderStageEXT::Compute:
+                return SupportsComputeShadersEXT();
+            case CNA::ShaderStageEXT::Unknown:
+            case CNA::ShaderStageEXT::Count:
+                return false;
+        }
+        return false;
+    }
+
     bool EasyGLRenderer::SupportsComputeShadersEXT() const
     {
         // The runtime context decides, not the compile-time profile: this renderer asks for ES 3.0
@@ -5808,6 +5974,37 @@ if (!ProfileIsEs2ApiGeneration())
         return static_cast<int>(value);
     }
 
+    std::uint64_t EasyGLRenderer::GetMaxStorageBufferBytesEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        GLint64 value = 0;
+        ::metagl::glGetInteger64v(::metagl::GetParameter::MaxShaderStorageBlockSize, &value);
+        return value > 0 ? static_cast<std::uint64_t>(value) : 0;
+    }
+
+    std::uint64_t EasyGLRenderer::GetMaxUniformBufferBytesEXT() const
+    {
+        const auto& capabilities = device.capabilities();
+        const bool available = capabilities.is_webgl()
+            ? ProfileIs(GlProfile::WebGL2)
+            : (capabilities.is_opengles()
+                ? capabilities.is_at_least(3, 0)
+                : capabilities.is_opengl() && capabilities.is_at_least(3, 1));
+        if (!available) return 0;
+        GLint64 value = 0;
+        ::metagl::glGetInteger64v(::metagl::GetParameter::MaxUniformBlockSize, &value);
+        return value > 0 ? static_cast<std::uint64_t>(value) : 0;
+    }
+
+    std::uint64_t EasyGLRenderer::GetMinUniformBufferOffsetAlignmentEXT() const
+    {
+        if (GetMaxUniformBufferBytesEXT() == 0) return 0;
+        GLint value = 0;
+        ::metagl::glGetIntegerv(
+            ::metagl::GetParameter::UniformBufferOffsetAlignment, &value);
+        return value > 0 ? static_cast<std::uint64_t>(value) : 0;
+    }
+
     void EasyGLRenderer::BindStorageBufferForDrawEXT(const int binding,
                                                      const IStorageBufferRenderer& buffer)
     {
@@ -5835,6 +6032,27 @@ if (!ProfileIsEs2ApiGeneration())
         EnsureCallingThreadContext();
         if (!SupportsComputeShadersEXT() || byteSize == 0) return nullptr;
         return std::make_unique<EasyGLStorageBufferRenderer>(byteSize);
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> EasyGLRenderer::CreateStorageBufferEXT(
+        const std::size_t byteSize, const std::uint32_t usage,
+        const std::uint32_t cpuAccess)
+    {
+        EnsureCallingThreadContext();
+        constexpr std::uint32_t Storage = UINT32_C(1) << 0;
+        constexpr std::uint32_t IndirectArguments = UINT32_C(1) << 3;
+        constexpr std::uint32_t Constant = UINT32_C(1) << 6;
+        if (byteSize == 0 || usage == 0 || (usage & ~UINT32_C(0x7F)) != 0 ||
+            (cpuAccess & ~UINT32_C(0x03)) != 0)
+            return nullptr;
+        if ((usage & Storage) != 0 && !SupportsComputeShadersEXT()) return nullptr;
+        if ((usage & IndirectArguments) != 0 && !SupportsIndirectDrawEXT()) return nullptr;
+        if ((usage & Constant) != 0) {
+            const std::uint64_t maximum = GetMaxUniformBufferBytesEXT();
+            if (maximum == 0 || static_cast<std::uint64_t>(byteSize) > maximum)
+                return nullptr;
+        }
+        return std::make_unique<EasyGLStorageBufferRenderer>(byteSize, usage, cpuAccess);
     }
 
     void EasyGLRenderer::DispatchCompute(IComputeShaderRenderer* shader, const int groupsX,

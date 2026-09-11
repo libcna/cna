@@ -128,8 +128,8 @@ own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
 ### The CNAEXT Engine Layer (opt-in, experimental, `CNA::Graphics`)
 
 - **Maturity: the API is still moving.** Every subsystem below is implemented and tested, and the
-  HDR spine runs end to end — but the layer is at engine revision 2 and revision 2 already carried
-  renames. Build against a pinned CNA revision, read `CNA_CNAEXT_ENGINE_VERSION` and
+  HDR spine runs end to end — but the layer is at engine revision 10, and earlier revisions already
+  carried renames. Build against a pinned CNA revision, read `CNA_CNAEXT_ENGINE_VERSION` and
   [`docs/cnaext-engine-changelog.md`](docs/cnaext-engine-changelog.md) when you move, and expect
   more of the same. [`CNAEXT.md`](misc/CNAEXT.md) §9.1 says exactly which parts are settled (the layer's
   shape, the ownership rules, the naming conventions) and which are not (per-renderer behaviour

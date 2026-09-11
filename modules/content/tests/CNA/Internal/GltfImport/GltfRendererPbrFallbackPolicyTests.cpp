@@ -476,12 +476,13 @@ namespace
               layout(set = 2, binding = 5) uniform sampler2D uSpecularMap;
               layout(set = 2, binding = 6) uniform sampler2D uSpecularColorMap;)"}}},
         {"vulkan", "descriptor set 0 bindings 0,1,2,3,4",
-         {{R"(VkImageView views[7] = { baseColor, normalMap, metallicRoughness, emissive, occlusion,
-                                      specular, specularColor })",
+         {{R"(VkImageView views[10] = { baseColor, normalMap, metallicRoughness, emissive, occlusion,
+                                       specular, specularColor, iblIrradiance,
+                                       iblPrefilteredSpecular, iblBrdfLut })",
            R"(writes[i].dstBinding = i)",
            R"(GetOrCreatePbrDescSet(
                 currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
-                                    PbrSlotSamplersRawEXT().s))",
+                    vIrr, vIblSpec, vBrdf, PbrSlotSamplersRawEXT().s))",
            R"(layout(set = 0, binding = 0) uniform sampler2D uTexture;
               layout(set = 0, binding = 1) uniform sampler2D uNormalMap;
               layout(set = 0, binding = 2) uniform sampler2D uMetallicRoughnessMap;
@@ -1246,11 +1247,16 @@ namespace
          "for (int wi = 0; wi < 16; ++wi) out[20 + wi] = p.worldColMajor[wi]",
          "gl_Position = pc.mvp * vec4(inPos, 1.0)",
          "gl_Position = pc.mvp * skinnedPos"},
+        // plans/plan_vulkan.md VULKAN-232: the Vulkan PBR vertex shaders are compiled twice from
+        // one source, and the per-instance transform is spelled CNA_INSTANCE_POSITION() -- the
+        // identity without CNA_INSTANCED, so the ordinary module's SPIR-V is byte-identical to
+        // what this row's literal used to describe. Same evidence, current spelling; `magnum`
+        // below already carries its own instancing spelling for the same reason.
         {"vulkan",
          "const Matrix wvp = world * view * projection",
          "FillExtPushConst(d.pushConst, wvp, params)",
          "for (int wi = 0; wi < 16; ++wi) out[16 + wi] = p.worldColMajor[wi]",
-         "gl_Position = pc.mvp * vec4(aPos, 1.0)",
+         "gl_Position = pc.mvp * CNA_INSTANCE_POSITION(vec4(aPos, 1.0))",
          "gl_Position = pc.mvp * skinnedPos"},
         {"webgpu",
          "const Matrix wvp = world * view * projection",
@@ -1461,11 +1467,15 @@ namespace
          "command.lightUniforms[39] = static_cast<float>(params.weightsPerVertex)",
          "if (weightsPerVertex >= 2.0) skinMat += bb.bones[inBoneIndices.y] * inBoneWeights.y",
          "if (weightsPerVertex >= 4.0) skinMat += bb.bones[inBoneIndices.z] * inBoneWeights.z"},
+        // plans/plan_vulkan.md VULKAN-151: `aBoneIndices` is a `vec4` here now, not a `uvec4`, so the
+        // palette subscript carries an `int()` -- the same shape the EasyGL row two entries above
+        // has had all along. What this evidence asserts is unchanged: the shader really does read
+        // the palette and gate the second and fourth influences on the weight count.
         {"vulkan",
          "d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16)",
          "FillPbrUboData(d.pbrUboData, params, static_cast<float>(params.weightsPerVertex))",
-         "if (weightsPerVertex >= 2.0) skinMat += bb.bones[aBoneIndices.y] * aBoneWeights.y",
-         "if (weightsPerVertex >= 4.0) skinMat += bb.bones[aBoneIndices.z] * aBoneWeights.z"},
+         "if (weightsPerVertex >= 2.0) skinMat += bb.bones[int(aBoneIndices.y)] * aBoneWeights.y",
+         "if (weightsPerVertex >= 4.0) skinMat += bb.bones[int(aBoneIndices.z)] * aBoneWeights.z"},
         {"webgpu",
          "out[4 + i] = p.boneTransforms[i]",
          "out[0] = static_cast<float>(p.weightsPerVertex)",
@@ -2213,7 +2223,7 @@ TEST(GltfRendererPbrFallbackPolicy, VulkanSamplesBothKhrMaterialsSpecularTexture
     ASSERT_FALSE(source.empty());
 
     for (const char* evidence : {
-             "float pbrUboData[124]",
+             "float pbrUboData[128]",
              "out[60] = p.pbrDielectricF0Unclamped[0]",
              "out[63] = p.pbrSpecularFactor",
              "p.pbrSpecularColorTextureIsSrgb ? 1.f : 0.f",
@@ -2221,7 +2231,7 @@ TEST(GltfRendererPbrFallbackPolicy, VulkanSamplesBothKhrMaterialsSpecularTexture
              "p.pbrTextureCoordinateSetMask & 0x7fu",
              "params.pbrSpecularMap",
              "params.pbrSpecularColorMap",
-             "VkImageView views[7] = { baseColor, normalMap, metallicRoughness, emissive, occlusion, specular, specularColor }",
+             "VkImageView views[10] = { baseColor, normalMap, metallicRoughness, emissive, occlusion, specular, specularColor, iblIrradiance, iblPrefilteredSpecular, iblBrdfLut }",
              "slotSamplers_[4], slotSamplers_[5], slotSamplers_[6]",
              "layout(set = 0, binding = 6) uniform sampler2D uSpecularMap",
              "layout(set = 0, binding = 7) uniform sampler2D uSpecularColorMap",
@@ -2556,9 +2566,14 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererHonorsCallerOwnedCullState)
                  {"MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode,",
                   "VkCullModeFlags vkCull = VK_CULL_MODE_NONE",
                   "rs.cullMode = vkCull"});
+    // plans/plan_vulkan.md VULKAN-234: the end marker was
+    // `VkPipeline VulkanRenderer::GetOrCreatePipelineInstanced3D(`, which no longer exists --
+    // instancing stopped having a program family of its own, and every instanced draw takes its
+    // effect family's pipelines. The scope this marker delimits is unchanged: it is still the next
+    // member definition after the skinned-PBR factory.
     expectScoped(vulkan,
                  "VkPipeline VulkanRenderer::GetOrCreatePipelinePbrSkinned3D(",
-                 "VkPipeline VulkanRenderer::GetOrCreatePipelineInstanced3D(",
+                 "uint32_t VulkanRenderer::FindMemoryType(",
                  {"MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode,",
                   "VkCullModeFlags vkCull = VK_CULL_MODE_NONE",
                   "rs.cullMode = vkCull"});
@@ -2711,8 +2726,12 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
         {"sdl-gpu",
          "inTangent.w * cnaDirectionHandedness(mat3(lp.world))",
          "* cnaDirectionHandedness(skinNormalMat)"},
+        // plans/plan_vulkan.md VULKAN-232: the instance matrix is folded into World here, so the
+        // determinant this evidence is about now covers a mirroring INSTANCE too --
+        // sign(det(World x Instance)) == sign(det World) * sign(det Instance). Without
+        // CNA_INSTANCED the macro is the identity and the expression is the one that was here.
         {"vulkan",
-         "aTangent.w * cnaDirectionHandedness(mat3(pbr.world))",
+         "aTangent.w * cnaDirectionHandedness(mat3(CNA_INSTANCE_WORLD(pbr.world)))",
          "* cnaDirectionHandedness(skinNormalMat)"},
         {"webgpu",
          "input.tangent.w * directionHandedness(worldMat3)",

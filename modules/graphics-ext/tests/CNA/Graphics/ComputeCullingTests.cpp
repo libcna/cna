@@ -78,6 +78,9 @@ TEST(ComputeCullingTest, TheGpuCullerAgreesWithTheCpuOneBoxForBox)
     GraphicsDevice gd;
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ComputeShaders))
         GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!gd.SupportsShaderLanguageEXT(
+            CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute))
+        GTEST_SKIP() << "this legacy culler payload is GLSL ES, not the renderer's dialect";
 
     const Matrix view = Matrix::CreateLookAt(Vector3(0.0f, 10.0f, 30.0f), Vector3::Zero,
                                              Vector3(0.0f, 1.0f, 0.0f));

@@ -21,8 +21,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
    AND CNA_GRAPHICS_RENDERER STREQUAL "VULKAN")
 
         # --- helper macro: build a headless Vulkan test exe ----------------------
+        # plan_vulkan.md VULKAN-013: every example built by this macro also links the
+        # terminate handler that turns "no usable Vulkan device" into a CTest SKIP instead of a
+        # core dump. Linked here rather than written into 131 hand-rolled main()s, so no example's
+        # own evidence changes; see vulkan_unavailable_device_skip.cpp for why the match is narrow.
+        set(CNA_VULKAN_EXAMPLE_SKIP_GUARD
+            ${CMAKE_CURRENT_SOURCE_DIR}/vulkan_unavailable_device_skip.cpp)
+
         macro(cna_vulkan_test target src)
-            add_executable(${target} ${src})
+            add_executable(${target} ${src} ${CNA_VULKAN_EXAMPLE_SKIP_GUARD})
             # SDL3::SDL3 is linked explicitly like every other renderer's test macro already
             # does: several of these example TUs include <SDL3/SDL.h> directly, and nothing on
             # the CNA surface propagates SDL's include directories (SDL has always been a
@@ -47,6 +54,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # cna_diag_webgpu. Deliberately NOT a CTest (a two-build pixel comparison, not a single-run
         # pass/fail): it writes a 64x64 RGBA8 dump for cna_diag_compare.
         cna_vulkan_test(cna_diag_vulkan ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
+
+        # plan_vulkan.md VULKAN-431: the 2D half of the same dump, from the same renderer-agnostic
+        # source EasyGL and Direct2D already build. Deliberately a plain executable and NOT a
+        # CTest, exactly as cna_diag_vulkan above and cna_corpus2d_easygl are: it asserts nothing
+        # on its own, it produces one renderer's dump for cna_diag_compare to judge against
+        # another's -- and the two dumps come from two different build directories, which is why
+        # VULKAN-430's gate is a script rather than a test.
+        cna_vulkan_test(cna_corpus2d_vulkan ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_2d_corpus.cpp)
 
         # Task 88: 3-frame smoke test for the Vulkan renderer
         cna_register_renderer_test(NAME Vulkan_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
@@ -98,7 +113,279 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-399: what the mid-frame render-target flush stall costs, measured
+        cna_vulkan_test(cna_test_vulkan_rt_flush_stall_cost
+                        vulkan_rt_flush_stall_cost_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RtFlushStallCost COMMAND cna_test_vulkan_rt_flush_stall_cost
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-330 (F-03): SetPresentationMode must change the presented rectangle
+        cna_vulkan_test(cna_test_vulkan_presentation_mode
+                        vulkan_presentation_mode_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PresentationMode COMMAND cna_test_vulkan_presentation_mode
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-133: the dynamic-buffer stress proof, 12 frames cycling
+        # None/Discard/NoOverwrite with per-frame pixel readback. Renderer-agnostic source; the
+        # expected values are EasyGL's unchanged, because VULKAN-132 measured that each draw
+        # snapshots its buffer's bytes at its own call, which makes the three options
+        # indistinguishable here.
+        cna_vulkan_test(cna_test_vulkan_dynamic_buffer_stress
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dynamic_buffer_stress_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DynamicBufferStress COMMAND cna_test_vulkan_dynamic_buffer_stress
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-132 (F-12): does the deferred draw model make a dynamic-buffer
+        # update between two draws in one frame observable?
+        cna_vulkan_test(cna_test_vulkan_dynamic_buffer_update
+                        vulkan_dynamic_buffer_update_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DynamicBufferUpdate COMMAND cna_test_vulkan_dynamic_buffer_update
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-348: the stored back-buffer and depth formats must be the applied ones
+        cna_vulkan_test(cna_test_vulkan_applied_formats
+                        vulkan_applied_formats_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AppliedFormats COMMAND cna_test_vulkan_applied_formats
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-396: what the per-one-time-command vkQueueWaitIdle costs, measured
+        cna_vulkan_test(cna_test_vulkan_one_time_command_cost
+                        vulkan_one_time_command_cost_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_OneTimeCommandCost COMMAND cna_test_vulkan_one_time_command_cost
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-400: is the EasyGL-documented "full-backbuffer SpriteBatch draw before
+        # a 3D draw breaks the frame" finding (migration-guide known issues, Task 933) present here?
+        # Renderer-neutral source so the same file can answer it for any family.
+        cna_vulkan_test(cna_test_vulkan_fullscreen_sprite_then_3d
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/fullscreen_spritebatch_then_3d_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_FullscreenSpriteThen3D COMMAND cna_test_vulkan_fullscreen_sprite_then_3d
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-208: seven EasyGL sources whose SUBJECT this renderer had no test for
+        # at all -- not by name and not by source. Each is renderer-agnostic already (no EasyGL, GL or
+        # metagl include); registering is the whole change. A red one is a finding, not a failure.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_properties
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/basic_effect_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffect_Properties COMMAND cna_test_vulkan_basiceffect_properties
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_properties
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/skinned_effect_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SkinnedEffect_Properties COMMAND cna_test_vulkan_skinnedeffect_properties
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_spritefont_properties
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/sprite_font_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteFont_Properties COMMAND cna_test_vulkan_spritefont_properties
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_rendertarget_golden
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget2d_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RenderTarget2D_Golden COMMAND cna_test_vulkan_rendertarget_golden
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_alphatest_vertexcolor_diffuse
+            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatest_vertexcolor_diffuse_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AlphaTest_VertexColorDiffuse COMMAND cna_test_vulkan_alphatest_vertexcolor_diffuse
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_basiceffect_world_scale_precision
+            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_world_scale_precision_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffectWorldScalePrecision COMMAND cna_test_vulkan_basiceffect_world_scale_precision
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-217: does a TEXTURED instanced draw sample its texture? The two
+        # renderers implement instancing differently -- EasyGL adds an optional per-instance matrix to
+        # every stock program, Vulkan selects a separate colour-only program pair -- so this is
+        # registered on both or it measures nothing.
+        cna_vulkan_test(cna_test_vulkan_instanced_textured
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/instanced_textured_draw_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_InstancedTexturedDraw COMMAND cna_test_vulkan_instanced_textured
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-194: XNA's PrepRenderState assigns the batch's SamplerState into
+        # GraphicsDevice.SamplerStates[0], so it outlives End() and the next 3D draw samples with
+        # it. Timing measured on the shipped runtime (spikes/xna-spritebatch-sampler0-spike):
+        # published at the flush for Deferred, in Begin() for Immediate. Renderer-agnostic source.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_sampler0_publication
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_sampler0_publication_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteBatch_Sampler0Publication COMMAND cna_test_vulkan_spritebatch_sampler0_publication
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-055: a 3D draw after a SpriteBatch Begin()/End() pair inherits
+        # whatever GraphicsDevice.BlendState currently is -- FNA's own lasting side effect, asserted
+        # by pixel arithmetic (Additive: red(200,0,0) + gray(100,100,100) clamps to (255,100,100),
+        # versus (200,0,0) if the batch's blend did not survive End()). Renderer-agnostic source.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_blendstate_leak
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_blendstate_leak_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteBatch_BlendStateLeak COMMAND cna_test_vulkan_spritebatch_blendstate_leak
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-392: disposing a buffer must not stall the whole device
+        cna_vulkan_test(cna_test_vulkan_buffer_dispose_stall
+                        vulkan_buffer_dispose_stall_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BufferDisposeStall COMMAND cna_test_vulkan_buffer_dispose_stall
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-134: DrawUserPrimitives / DrawUserIndexedPrimitives on Vulkan.
+        # All four sources are renderer-agnostic (public XNA API only, zero renderer includes), so
+        # they run here unchanged -- the same reuse pattern as the other EasyGL sources above.
+        # These routes allocate a throwaway VertexBuffer per call (GraphicsDevice.cpp:1753+), which
+        # on Vulkan is a vkCreateBuffer/vkAllocateMemory per draw, so they are also VULKAN-392's
+        # exercising scene.
+        cna_vulkan_test(cna_test_vulkan_draw_user_primitives_vpc
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_primitives_vpc_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawUserPrimitives_VPC COMMAND cna_test_vulkan_draw_user_primitives_vpc
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_draw_user_primitives_custom
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_primitives_custom_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawUserPrimitives_CustomVertex COMMAND cna_test_vulkan_draw_user_primitives_custom
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_draw_user_indexed_primitives_vpc
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_indexed_primitives_vpc_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawUserIndexedPrimitives_VPC COMMAND cna_test_vulkan_draw_user_indexed_primitives_vpc
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_draw_user_indexed_primitives_32
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_user_indexed_primitives_32_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawUserIndexedPrimitives_32 COMMAND cna_test_vulkan_draw_user_indexed_primitives_32
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-347: the echoed multisample count must be the applied one
+        cna_vulkan_test(cna_test_vulkan_applied_multisample
+                        vulkan_applied_multisample_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AppliedMultiSampleCount COMMAND cna_test_vulkan_applied_multisample
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-025: what AcquireThreadContextLeaseEXT() means here, and what it does not
+        cna_vulkan_test(cna_test_vulkan_thread_context_lease
+                        vulkan_thread_context_lease_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ThreadContextLease COMMAND cna_test_vulkan_thread_context_lease
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-026: what CanBeginDrawEXT() answers when the swapchain is out of date
+        cna_vulkan_test(cna_test_vulkan_swapchain_outofdate
+                        vulkan_swapchain_outofdate_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SwapchainOutOfDate COMMAND cna_test_vulkan_swapchain_outofdate
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 119: ShaderEffect with SPIR-V — SpriteBatch tint via custom push constants
+        # plan_vulkan.md VULKAN-253 / plan_modern.md MOD-2248/MOD-2249: a custom effect samples a
+        # texture the caller explicitly bound through set 1; storage image upload/compute/readback
+        # shares that ordered stream and its tracked layouts.
+        cna_vulkan_test(cna_test_vulkan_effect_bound_texture
+                        vulkan_effect_bound_texture_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ShaderEffect_BoundTexture
+            COMMAND cna_test_vulkan_effect_bound_texture
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-164: SamplerState.AddressW decides what a bound Texture3D reads
+        # outside [0,1] -- the test VULKAN-094 proposed and could not write.
+        cna_vulkan_test(cna_test_vulkan_texture3d_addressw
+                        vulkan_texture3d_addressw_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Texture3DAddressW
+            COMMAND cna_test_vulkan_texture3d_addressw
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-198: three EasyGL BasicEffect sources with no Vulkan equivalent,
+        # run here to find out what this renderer does with them rather than to assert that it
+        # already agrees. VULKAN-257 closed only the combination sweep. Two of the three are NOT
+        # registered, and that is the finding rather than an omission: `PositionNormal` (stride 24,
+        # Position+Normal) and `LitVertexColor` (stride 36, +Colour+UV) are both REFUSED by this
+        # renderer's declaration guard -- it has no native lit layout for either stride -- so
+        # registering them would register a known refusal as a test. VULKAN-199 and VULKAN-200 own
+        # the two layouts and each registers its own source when it lands.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_default_lighting
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_default_lighting_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffectDefaultLighting
+            COMMAND cna_test_vulkan_basiceffect_default_lighting
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-202 (F-38): the declaration guard's REFUSAL contract, which the
+        # shared DeclarationGuardTest skips here because TranslatesDeclarations() lists Vulkan --
+        # true of every declaration a stock input table can satisfy, false of the rest.
+        cna_vulkan_test(cna_test_vulkan_declaration_refusal_contract
+                        vulkan_declaration_refusal_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeclarationRefusalContract
+            COMMAND cna_test_vulkan_declaration_refusal_contract
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-201 (F-37): the same 36-byte record with lighting OFF, which
+        # VULKAN-200 deliberately left refused. Its gradient leg is what pins the D3D9 oD0 clamp:
+        # a flat quad cannot see the order because the output write saturates either way.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_unlit_vertex_color_36byte
+                        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/basiceffect_unlit_vertex_color_36byte_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffect_UnlitVertexColor36Byte
+            COMMAND cna_test_vulkan_basiceffect_unlit_vertex_color_36byte
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-200 (F-37): the stock ModelProcessor's colour-carrying mesh --
+        # Position+Normal+Colour+TexCoord, 36 bytes -- which no lit program here could bind. The
+        # second registration is not a duplicate: EasyGL's source sets PreferPerPixelLighting(false)
+        # in its own body, so it exercises one of the two lit families and says nothing about the
+        # other, whose vertex-colour handling is a different shape rather than the same one moved.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_lit_vertex_color
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_lit_vertex_color_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffectLitVertexColor
+            COMMAND cna_test_vulkan_basiceffect_lit_vertex_color
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_basiceffect_lit_vertex_color_perpixel
+                        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/basiceffect_lit_vertex_color_perpixel_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffect_LitVertexColorPerPixel
+            COMMAND cna_test_vulkan_basiceffect_lit_vertex_color_perpixel
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-199 (F-37): XNA's Primitives3D vertex is Position+Normal, 24 bytes
+        # -- the same stride as VertexPositionColorTexture -- and BasicEffect must light it. This
+        # renderer refused it outright until the lit family gained a UV-less vertex stage.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_position_normal
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_position_normal_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffect_PositionNormal
+            COMMAND cna_test_vulkan_basiceffect_position_normal
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-197 (F-36): D3D9 saturates oD0, so an unlit DiffuseColor above 1
+        # blends as 1 -- and, across a colour gradient, is saturated per vertex before interpolation.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_diffuse_color_clamp
+                        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/basiceffect_diffuse_color_clamp_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffect_DiffuseColorClamp
+            COMMAND cna_test_vulkan_basiceffect_diffuse_color_clamp
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-196 (F-36): D3D9 saturates oD1, so EnvironmentMapAmount above 1
+        # blends as 1. Renderer-agnostic source -- EasyGL already clamps, this renderer did not.
+        cna_vulkan_test(cna_test_vulkan_environmentmapeffect_amount_clamp
+                        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/environmentmapeffect_amount_clamp_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_EnvironmentMapEffect_AmountClamp
+            COMMAND cna_test_vulkan_environmentmapeffect_amount_clamp
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-166: a ShaderEffect's texture unit u takes SamplerStates[u], so
+        # two bound volumes in one batch can be addressed differently.
+        cna_vulkan_test(cna_test_vulkan_shader_effect_per_unit_sampler
+                        vulkan_shader_effect_per_unit_sampler_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ShaderEffect_PerUnitSampler
+            COMMAND cna_test_vulkan_shader_effect_per_unit_sampler
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-255: a ShaderEffect driving a 3D draw with a custom vertex layout.
+        cna_vulkan_test(cna_test_vulkan_shader_effect_3d
+                        vulkan_shader_effect_3d_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ShaderEffect_3D
+            COMMAND cna_test_vulkan_shader_effect_3d
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-252: array uniforms through set 1's four uniform-buffer ranges.
+        cna_vulkan_test(cna_test_vulkan_shader_effect_uniform_arrays
+                        vulkan_shader_effect_uniform_arrays_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ShaderEffect_UniformArrays
+            COMMAND cna_test_vulkan_shader_effect_uniform_arrays
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_vulkan_test(cna_test_vulkan_shader_effect
                         vulkan_shader_effect_test.cpp)
         cna_register_renderer_test(NAME Vulkan_ShaderEffect_SpirV COMMAND cna_test_vulkan_shader_effect
@@ -297,8 +584,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # apart instead of asserting one pixel.
         cna_vulkan_test(cna_test_vulkan_graphicsdevice_clearoptions
                         ${CMAKE_SOURCE_DIR}/modules/renderers/bgfx/examples/bgfx_graphicsdevice_clearoptions_test.cpp)
+        # plan_vulkan.md VULKAN-183: 90 -> 300, with the measurement rather than on suspicion.
+        # Standalone, this test takes 1.9 s on llvmpipe (:99, the configured display) and 121.5 s on
+        # RADV through a compositor-less Xwayland, where each presented frame costs about a second.
+        # Its two siblings solved the same problem by turning vertical retrace off, which is the
+        # better fix and is not available here: the source belongs to the bgfx examples and this
+        # renderer only registers it, so the timeout is the renderer-local half of the answer.
         cna_register_renderer_test(NAME Vulkan_GraphicsDevice_ClearOptions COMMAND cna_test_vulkan_graphicsdevice_clearoptions
-            TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-129: Clear() is an ORDERED command at its exact public call position, not a
         # hint for the next render-pass load action. Every check queues its whole public sequence
@@ -923,6 +1216,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         ${CMAKE_SOURCE_DIR}/modules/renderers/bgfx/examples/bgfx_mrt_mixed_formats_test.cpp)
         cna_register_renderer_test(NAME Vulkan_MRT_MixedFormats COMMAND cna_test_vulkan_mrt_mixed_formats
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # plan_vulkan.md VULKAN-405: this test's MRT proxy leaked its VkFramebuffer past
+        # vkDestroyDevice, and the object tracker reported it DURING teardown -- after the last
+        # line of the test body, so no in-process GetValidationMessagesEXT() assertion can see it.
+        # The output gate is the instrument that can, and it is deliberately the whole
+        # "[Vulkan Validation]" prefix rather than the "VUID-|Validation Error|..." pattern the
+        # neighbouring registrations use: an Object Tracking report carries none of those words.
+        set_tests_properties(Vulkan_MRT_MixedFormats PROPERTIES
+            FAIL_REGULAR_EXPRESSION "\\[Vulkan Validation\\]")
 
         # Task 842 (verbatim reuse): Task 176's own SurfaceFormat-validation contract, confirmed
         # renderer-agnostic -- reused unmodified from EasyGL to directly confirm the same
@@ -1057,6 +1358,332 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_vertexbuffer_indexbuffer_getdata_test.cpp)
         cna_register_renderer_test(NAME Vulkan_VertexBufferIndexBufferGetData COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-147 (F-15): the same conversion for the stock EFFECT
+        # families. Alpha test had the offset guess in its most explicit form -- one VS for strides
+        # 20 and 32 with `uvOffset = (stride == 32) ? 24 : 12`. Each leg draws the same geometry at
+        # the same stride with the UV element moved, over a two-texel texture, so a stride-derived
+        # offset gives both draws the same pixel and a declaration-derived one gives two.
+        cna_vulkan_test(cna_test_vulkan_declared_effect_layout
+                        vulkan_declared_effect_layout_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeclaredEffectLayout
+            COMMAND cna_test_vulkan_declared_effect_layout
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-094: SamplerState.AddressW is plumbed and inert here, because
+        # Vulkan has no Texture3D sampling path -- and the public API that would make it observable
+        # accepts a binding and silently drops it (F-31).
+        cna_vulkan_test(cna_test_vulkan_sampler_addressw
+                        vulkan_sampler_addressw_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SamplerAddressW
+            COMMAND cna_test_vulkan_sampler_addressw
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-141: baseVertex/startIndex/minVertexIndex/numVertices mean what
+        # XNA says. Four quads, one per quadrant, so the parameters are separable and every leg
+        # asserts all four quadrants rather than only the one it expects to light.
+        cna_vulkan_test(cna_test_vulkan_indexed_draw_range
+                        vulkan_indexed_draw_range_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_IndexedDrawRange
+            COMMAND cna_test_vulkan_indexed_draw_range
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-096: every public BlendState/DepthStencilState/RasterizerState field
+        # measured against the pipeline key by cardinality -- the only instrument that can see a
+        # field the key silently drops.
+        cna_vulkan_test(cna_test_vulkan_pipeline_key_state_coverage
+                        vulkan_pipeline_key_state_coverage_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PipelineKeyStateCoverage
+            COMMAND cna_test_vulkan_pipeline_key_state_coverage
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-394: the sibling question for the ~20 PipelineKey-keyed caches.
+        cna_vulkan_test(cna_test_vulkan_pipeline_cache_bound
+                        vulkan_pipeline_cache_bound_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PipelineCacheBound
+            COMMAND cna_test_vulkan_pipeline_cache_bound
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-395: how large the VkSampler cache can get. Two of its seven key
+        # fields are caller-supplied numbers rather than enumerations, so the key space is not the
+        # few hundred the row assumed.
+        cna_vulkan_test(cna_test_vulkan_sampler_cache_bound
+                        vulkan_sampler_cache_bound_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SamplerCacheBound
+            COMMAND cna_test_vulkan_sampler_cache_bound
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-008: capability reporting captured as a checked-in snapshot,
+        # read through the GraphicsDevice seam because six of the nineteen members are answered
+        # above the renderer. The oracle VULKAN-470 re-verifies against.
+        cna_vulkan_test(cna_test_vulkan_capability_snapshot
+                        vulkan_capability_snapshot_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_CapabilitySnapshot
+            COMMAND cna_test_vulkan_capability_snapshot
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_modern.md MOD-2240: feature/property discovery uses Vulkan's extensible query
+        # forms, enables only features consumed by implemented CNA paths, and keeps modern work on
+        # the existing ordered graphics queue without advertising native availability as support.
+        cna_vulkan_test(cna_test_vulkan_modern_feature_discovery
+                        vulkan_modern_feature_discovery_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ModernFeatureDiscovery
+            COMMAND cna_test_vulkan_modern_feature_discovery
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_modern.md MOD-2222/MOD-2224: all current SurfaceFormat values map to exact
+        # VkFormats; usage masks and numeric limits are the intersection of live physical-device
+        # facts with paths this renderer actually implements, and public construction of every
+        # base/mip/MSAA combination must agree with those answers.
+        cna_vulkan_test(cna_test_vulkan_format_limit_queries
+                        vulkan_format_limit_queries_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_FormatLimitQueries
+            COMMAND cna_test_vulkan_format_limit_queries
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_modern.md MOD-2223: allocation identity plus end-to-end float/HDR clear,
+        # draw, sampling, mixed-MRT and typed readback coverage.
+        cna_vulkan_test(cna_test_vulkan_float_render_target
+                        vulkan_float_render_target_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_FloatRenderTarget
+            COMMAND cna_test_vulkan_float_render_target
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        if(CNA_CNAEXT)
+            # plans/plan_modern.md MOD-2243: raw physical-device limits/usage combinations must
+            # agree with array factory decisions, and native image/view records must retire and
+            # survive device-first teardown without holding dead Vulkan handles.
+            cna_vulkan_test(cna_test_vulkan_texture2d_array_contract
+                            vulkan_texture2d_array_contract_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_Texture2DArrayContract
+                COMMAND cna_test_vulkan_texture2d_array_contract
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            # plans/plan_modern.md MOD-2229/MOD-2241/MOD-2242/MOD-2248: SPIR-V compute plus
+            # descriptor-qualified storage buffers, exact native usage/memory, staging copies,
+            # bounded native allocation/lifetime and logical barrier emission/elision.
+            cna_vulkan_test(cna_test_vulkan_compute_storage_buffer
+                            vulkan_compute_storage_buffer_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_ComputeStorageBuffer
+                COMMAND cna_test_vulkan_compute_storage_buffer
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            # plans/plan_modern.md MOD-2245/2247: canonical indirect layouts, all geometry/base
+            # offsets, deferred argument/program lifetime, mixed SpriteBatch/compute/copy/3D order,
+            # one frame submit and the validation stream are one end-to-end contract.
+            cna_vulkan_test(cna_test_vulkan_indirect_draw
+                            vulkan_indirect_draw_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_IndirectDraw
+                COMMAND cna_test_vulkan_indirect_draw
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            # plans/plan_modern.md MOD-2246: selected queue timestamp facts, asynchronous result
+            # collection, query-pool reuse, zero device waits, ordered marker labels, balanced pass
+            # regions and one-copy structured logger delivery are one native contract.
+            cna_vulkan_test(cna_test_vulkan_gpu_timer_debug
+                            vulkan_gpu_timer_debug_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_GpuTimerDebug
+                COMMAND cna_test_vulkan_gpu_timer_debug
+                TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            # plans/plan_modern.md MOD-2252: every modern native record survives ordinary submit
+            # and swapchain recreation, queued work owns pre-present disposals, and device teardown
+            # disconnects externally retained records before destroying VkDevice.
+            cna_vulkan_test(cna_test_vulkan_modern_resource_lifetime
+                            vulkan_modern_resource_lifetime_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_ModernResourceLifetime
+                COMMAND cna_test_vulkan_modern_resource_lifetime
+                TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            # plans/plan_modern.md MOD-2253: 2,048 presented frames, 32 real resizes and one
+            # allocation/disposal cycle per frame prove modern caches and fence retirement remain
+            # bounded while routine commands add no queue/device-wide idle wait.
+            cna_vulkan_test(cna_test_vulkan_modern_allocator_stress
+                            vulkan_modern_allocator_stress_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_ModernAllocatorStress
+                COMMAND cna_test_vulkan_modern_allocator_stress
+                TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            # plans/plan_modern.md MOD-2254: acquire OUT_OF_DATE and present
+            # SUBOPTIMAL/OUT_OF_DATE preserve deferred modern work, native resource identities
+            # and validation cleanliness through their exact production recovery branches.
+            cna_vulkan_test(cna_test_vulkan_modern_recovery
+                            vulkan_modern_recovery_test.cpp)
+            cna_register_renderer_test(NAME Vulkan_ModernRecovery
+                COMMAND cna_test_vulkan_modern_recovery
+                TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        endif()
+
+        # plans/plan_vulkan.md VULKAN-098 (F-19): this renderer's clip-space depth range is XNA's
+        # [0,1], and EasyGL's is OpenGL's [-1,1]. Measured positively across the range -- a 5x4
+        # truth table plus both planes -- rather than inferred from a depth-bias experiment, which
+        # can only ever pin one point.
+        cna_vulkan_test(cna_test_vulkan_depth_range_contract
+                        vulkan_depth_range_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DepthRangeContract
+            COMMAND cna_test_vulkan_depth_range_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-391 (F-06's tail): every descriptor-set allocation answers the
+        # same way when the device refuses it -- by name, at the draw, never with a null handle a
+        # caller can only bind. One injected failure per family, with a warm-up draw first so the
+        # failure lands on that family's own pool.
+        cna_vulkan_test(cna_test_vulkan_descriptor_contract_uniformity
+                        vulkan_descriptor_contract_uniformity_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DescriptorContractUniformity
+            COMMAND cna_test_vulkan_descriptor_contract_uniformity
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-158 (F-26): the declaration says where elements sit inside a
+        # record; the stride says where the next record starts. Three factories baked the second,
+        # so a padded record produced right offsets into a record the fetch never reached. Every leg
+        # probes two widely separated pixels, because one vertex being right is the symptom.
+        cna_vulkan_test(cna_test_vulkan_record_stride_binding
+                        vulkan_record_stride_binding_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RecordStrideBinding
+            COMMAND cna_test_vulkan_record_stride_binding
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-150 (F-20): DualTextureEffect samples Texture2 with TEXCOORD1.
+        # EasyGL's own SAMPLE-073 fixture, run here -- it was unrunnable before, because this
+        # renderer's shader had one UV input and used it for both samplers.
+        cna_vulkan_test(cna_test_vulkan_dualtextureeffect_independent_uv
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtextureeffect_independent_uv_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DualTextureEffect_IndependentUV
+            COMMAND cna_test_vulkan_dualtextureeffect_independent_uv
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-155 (F-24): the legacy DrawColoredPrimitives pair reaches the one
+        # pipeline whose binding stride is hard-coded to 16, while both entry points copy the buffer
+        # at its real stride. Of bind it / refuse it / mis-read it, this pins which one happens.
+        cna_vulkan_test(cna_test_vulkan_legacy_colored_stride
+                        vulkan_legacy_colored_stride_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_LegacyColoredStride
+            COMMAND cna_test_vulkan_legacy_colored_stride
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-156: what a stock family does when the stream does not supply
+        # one of its shader's inputs. Rendering the texel and refusing by name are both acceptable;
+        # rasterizing NOTHING and reporting success is not, and was invisible to the conformance
+        # suite that found it (it compares a family against itself, and nothing agrees with itself
+        # more perfectly than an empty picture).
+        cna_vulkan_test(cna_test_vulkan_unsupplied_input_contract
+                        vulkan_unsupplied_input_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_UnsuppliedInputContract
+            COMMAND cna_test_vulkan_unsupplied_input_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-149 (F-15): the INSTANCED route's per-vertex layout, and the
+        # choice between its two vertex shaders, come from the declaration rather than from
+        # REMED-GFX-212's stride table. Every record carries a decoy colour at the offset that
+        # table would have used, so a stride-driven implementation cannot agree by accident.
+        cna_vulkan_test(cna_test_vulkan_declared_instanced_layout
+                        vulkan_declared_instanced_layout_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeclaredInstancedLayout
+            COMMAND cna_test_vulkan_declared_instanced_layout
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-146 (F-15): the BasicEffect pipelines take their attribute
+        # offsets from the caller's VertexDeclaration. Two 24-byte declarations the stride table
+        # cannot tell apart -- colour at 12 and colour at 20 -- must draw their own colours and get
+        # their own pipelines, and a buffer with no declaration must keep the stride path.
+        cna_vulkan_test(cna_test_vulkan_declared_vertex_layout
+                        vulkan_declared_vertex_layout_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeclaredVertexLayout
+            COMMAND cna_test_vulkan_declared_vertex_layout
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-145 (F-15's shared half): the declaration-driven vertex
+        # input layout builder. No pipeline factory uses it yet -- this row is the contract and its
+        # proof, so the conversion rows have something to rest on. Pure logic, no device needed.
+        cna_vulkan_test(cna_test_vulkan_vertex_input_layout
+                        vulkan_vertex_input_layout_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_VertexInputLayout
+            COMMAND cna_test_vulkan_vertex_input_layout
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-332 (F-05): swapInterval_ was read once, at swapchain
+        # creation, so GraphicsDeviceManager.SynchronizeWithVerticalRetrace + ApplyChanges()
+        # reached nothing. Asserts the swapchain was really rebuilt and the live VkPresentModeKHR
+        # followed -- not merely that the request was recorded, which the defect would satisfy.
+        cna_vulkan_test(cna_test_vulkan_swap_interval
+                        vulkan_swap_interval_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SwapInterval
+            COMMAND cna_test_vulkan_swap_interval
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-332: the renderer-agnostic PresentationParameters round-trip
+        # half, reused verbatim from EasyGL's own registration.
+        cna_vulkan_test(cna_test_vulkan_present_interval
+            ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_present_interval_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PresentInterval
+            COMMAND cna_test_vulkan_present_interval
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-370 (F-14): a Vulkan occlusion query only counts exactly
+        # when occlusionQueryPrecise is enabled AND vkCmdBeginQuery is given
+        # VK_QUERY_CONTROL_PRECISE_BIT. This renderer did neither while inheriting the shared
+        # "precise" default. Asserts an exactly-known visible-fragment count, not "> 0".
+        cna_vulkan_test(cna_test_vulkan_occlusionquery_precision
+                        vulkan_occlusionquery_precision_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_OcclusionQuery_Precision
+            COMMAND cna_test_vulkan_occlusionquery_precision
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-250 (F-07/F-08): GetShaderDialectEXT() was unoverridden, so
+        # the one query that exists to stop an application guessing the dialect answered Unknown on
+        # a renderer whose ShaderEffect accepts nothing but SPIR-V words. Asserts the declaration,
+        # that GLSL source is refused rather than silently accepted, and pins the enumerator
+        # ambiguity VULKAN-264 owns.
+        cna_vulkan_test(cna_test_vulkan_shader_dialect_contract
+                        vulkan_shader_dialect_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ShaderDialectContract
+            COMMAND cna_test_vulkan_shader_dialect_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-390 (F-06): GetOrCreateTexSamplerDescSet used to return the
+        # default WHITE descriptor set when the 512-set pool was full, so a game with more live
+        # texture/sampler pairs than that drew white sprites silently. Walks off that cliff on
+        # purpose with 640 live textures and asserts the pool chained, every sprite drew its own
+        # texture, and the layer stayed silent.
+        cna_vulkan_test(cna_test_vulkan_descriptor_pool_overflow
+                        vulkan_descriptor_pool_overflow_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DescriptorPoolOverflow
+            COMMAND cna_test_vulkan_descriptor_pool_overflow
+            TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-020 (F-07): SupportsCapability used to end in
+        # `default: return true`, so the renderer answered true for six members GraphicsDevice
+        # answers false, and for values that are not enumerators at all. Asks both seams the same
+        # 19 questions, requires the same 19 answers, and drives every false answer into the public
+        # API to prove it is a refusal rather than a working path.
+        cna_vulkan_test(cna_test_vulkan_capability_contract
+                        vulkan_capability_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_CapabilityContract
+            COMMAND cna_test_vulkan_capability_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-130 (F-01): the host-visible mapping a VertexBuffer uploads
+        # into is opened at 64 bytes per vertex, because CreateVertexBuffer is handed a count and
+        # not a stride -- while this renderer's own pipeline-key table recognises strides 68, 76
+        # and 80. Proves the allocation widens (its own EXT byte counter), that every uploaded byte
+        # survives, and that a draw from the far end of a wide buffer reads the right bytes.
+        cna_vulkan_test(cna_test_vulkan_vertexbuffer_wide_stride_bounds
+                        vulkan_vertexbuffer_wide_stride_bounds_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_VertexBuffer_WideStrideBounds
+            COMMAND cna_test_vulkan_vertexbuffer_wide_stride_bounds
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_vulkan.md VULKAN-131 (F-02): SetData16/SetData32 wrote index_count * element
+        # width into a mapping of capacity * element width with no comparison. The allocation is
+        # exact here (unlike the vertex buffer's stride guess), so this proves the exactness, the
+        # named refusal of an upload that would exceed it, and that a full-capacity 32-bit buffer
+        # still draws from its very last index.
+        cna_vulkan_test(cna_test_vulkan_indexbuffer_upload_bounds
+                        vulkan_indexbuffer_upload_bounds_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_IndexBuffer_UploadBounds
+            COMMAND cna_test_vulkan_indexbuffer_upload_bounds
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 855 (Phase 73 Vulkan gap closure): Texture2D SetData/GetData partial-rectangle +
         # startIndex/elementCount + mip-level on Vulkan -- verbatim reuse of the shared EasyGL
@@ -1260,12 +1887,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
 
         # REMED-GFX-169: every stock 3D effect must sample its textures through the public
-        # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. Vulkan's
-        # ApplySamplerState is correct and SpriteBatch reads slotSamplers_[0], but six stock 3D
-        # descriptor builders take NO sampler parameter at all, so all 15 of their combined-image-
-        # sampler bindings are hardcoded to defaultSampler_ (LINEAR + CLAMP_TO_EDGE) and the sampler is
-        # absent from their cache keys too. Vulkan is where the defect lives; the other renderers run the
-        # same public fixture as controls.
+        # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does.
+        #
+        # WHAT THIS SAID WHEN IT WAS WRITTEN, and why it is worth keeping: six stock 3D descriptor
+        # builders took no sampler parameter at all, so all 15 of their combined-image-sampler
+        # bindings were hardcoded to defaultSampler_ (LINEAR + CLAMP_TO_EDGE), and the sampler was
+        # absent from their cache keys too. Vulkan was where that defect lived.
+        #
+        # WHAT IS TRUE NOW (measured by plan_vulkan.md VULKAN-055, 2026-09-06): the builders take
+        # samplers. Exactly TWO descriptor sites still name defaultSampler_ -- the texture's and the
+        # render target's own pre-baked sets (VulkanRenderer.cpp:465, :904) -- and every stock-effect
+        # path builds from slotSamplers_[] (:12734, :12780, :12815, :12824, :12858, :12861). The
+        # fixture stays registered as the regression guard for that; the other renderers run the same
+        # public fixture as controls. A comment describing a fixed defect as current is how the next
+        # audit reaches the wrong conclusion, which is why this one now says both.
         cna_vulkan_test(cna_test_vulkan_stock_effect_sampler
             ${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_sampler_contract_test.cpp)
         cna_register_renderer_test(NAME Vulkan_StockEffectSamplerContract COMMAND cna_test_vulkan_stock_effect_sampler
@@ -1699,6 +2334,723 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_Swapchain_Sync COMMAND cna_test_vulkan_swapchain_sync
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-175: the Texture3D partial-box WRITE. Vulkan already proves the
+        # readback half (Vulkan_Texture3D_PartialBox_Readback, the sibling source registered above);
+        # the write half -- vkCmdCopyBufferToImage with a sub-imageOffset/imageExtent -- was checked
+        # by code inspection only, per docs/texture3d-texturecube-support.md:56.
+        cna_vulkan_test(cna_test_vulkan_texture3d_partial_box
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture3d_partial_box_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Texture3D_PartialBox
+            COMMAND cna_test_vulkan_texture3d_partial_box
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-176: six distinct face payloads written and read back, so no face
+        # can alias another. Vulkan proves the mip and partial-rect round-trips already; what this
+        # adds is that the six ARRAY LAYERS are addressed independently -- the same axis VULKAN-406
+        # found undefined for a cube render target.
+        cna_vulkan_test(cna_test_vulkan_texturecube_faces
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texturecube_faces_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_TextureCube_Faces
+            COMMAND cna_test_vulkan_texturecube_faces
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-177: the public disposal contract. On Vulkan a texture destroyed
+        # while its VkImageView is still referenced by a cached descriptor set is the exact case
+        # EvictSampledViewFromCaches exists for, so these two must reach a SAMPLED-then-disposed
+        # texture rather than an unused one -- see the row for what was measured.
+        cna_vulkan_test(cna_test_vulkan_disposed_resource
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_disposed_resource_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DisposedResource
+            COMMAND cna_test_vulkan_disposed_resource
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_bound_resource_dispose
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_bound_resource_dispose_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BoundResourceDispose
+            COMMAND cna_test_vulkan_bound_resource_dispose
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-052: TextureAddressMode::Mirror through the plain SpriteBatch route, which Vulkan proves only through effects.
+        cna_vulkan_test(cna_test_vulkan_texture_address_mode_mirror
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_address_mode_mirror_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_TextureAddressMode_Mirror
+            COMMAND cna_test_vulkan_texture_address_mode_mirror
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-053: SpriteBatch's RENDER-TARGET-derived projection: the ortho divisor must follow the bound target, not the backbuffer.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_rendertarget_size
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_rendertarget_size_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteBatch_RenderTargetSize
+            COMMAND cna_test_vulkan_spritebatch_rendertarget_size
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-054: DrawString rotation, scale and SpriteEffects -- the glyph-quad transform, which no Vulkan test covered.
+        cna_vulkan_test(cna_test_vulkan_spritefont_effects_flip
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_effects_flip_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteFont_EffectsFlip
+            COMMAND cna_test_vulkan_spritefont_effects_flip
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_spritefont_effects_rotation_scale
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_effects_rotation_scale_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteFont_EffectsRotationScale
+            COMMAND cna_test_vulkan_spritefont_effects_rotation_scale
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-092: the PUBLIC Viewport contract -- round-trip and survival -- as opposed to the four Vulkan tests that only observe its effect.
+        cna_vulkan_test(cna_test_vulkan_viewport_state
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_viewport_state_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ViewportState
+            COMMAND cna_test_vulkan_viewport_state
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-093: sampler component isolation and single-level anisotropy.
+        cna_vulkan_test(cna_test_vulkan_sampler_component_isolation
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/sampler_component_isolation_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SamplerComponentIsolation
+            COMMAND cna_test_vulkan_sampler_component_isolation
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_texture2d_anisotropic_singlelevel
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture2d_anisotropic_singlelevel_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Texture2D_AnisotropicSingleLevel
+            COMMAND cna_test_vulkan_texture2d_anisotropic_singlelevel
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-135: the VertexBuffer::SetData overload matrix.
+        cna_vulkan_test(cna_test_vulkan_vertexbuffer_setdata
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_vertexbuffer_setdata_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_VbSetData
+            COMMAND cna_test_vulkan_vertexbuffer_setdata
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-136: BufferUsage::WriteOnly must refuse GetData -- shared-layer behaviour whose Vulkan integration was unproven.
+        cna_vulkan_test(cna_test_vulkan_buffer_usage
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_buffer_usage_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BufferUsage
+            COMMAND cna_test_vulkan_buffer_usage
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-138: the disposed-buffer USE contract, which VULKAN-392 left open when it removed the dispose stall.
+        cna_vulkan_test(cna_test_vulkan_disposed_buffer
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_disposed_buffer_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DisposedBuffer
+            COMMAND cna_test_vulkan_disposed_buffer
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-143: draw-argument validation: ranges, primitive types, and drawing with no bound buffer.
+        cna_vulkan_test(cna_test_vulkan_draw_range_validation
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_range_validation_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawRangeValidation
+            COMMAND cna_test_vulkan_draw_range_validation
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_primitivetype_validation
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_primitivetype_validation_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PrimitiveTypeValidation
+            COMMAND cna_test_vulkan_primitivetype_validation
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_draw_novertexbuffer
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_novertexbuffer_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawNoVertexBuffer
+            COMMAND cna_test_vulkan_draw_novertexbuffer
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_draw_noindexbuffer
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_draw_noindexbuffer_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DrawNoIndexBuffer
+            COMMAND cna_test_vulkan_draw_noindexbuffer
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-211: RenderTargetCube depth-format fidelity -- the cube half of what VULKAN-215 fixed for the 2D twin.
+        cna_vulkan_test(cna_test_vulkan_rendertargetcube_depthformat
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertargetcube_depthformat_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RenderTargetCube_DepthFormat
+            COMMAND cna_test_vulkan_rendertargetcube_depthformat
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-257: the BasicEffect combination sweep.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_combinations
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_combinations_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffectCombinations
+            COMMAND cna_test_vulkan_basiceffect_combinations
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-258: the AlphaTestEffect evidence gaps.
+        cna_vulkan_test(cna_test_vulkan_alphatest_modes
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatest_modes_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AlphaTestModes
+            COMMAND cna_test_vulkan_alphatest_modes
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_alpha_test_integration
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/alpha_test_integration_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AlphaTestEffect_AlphaCutout
+            COMMAND cna_test_vulkan_alpha_test_integration
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_alpha_test_effect
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/alpha_test_effect_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AlphaTestEffect_Properties
+            COMMAND cna_test_vulkan_alpha_test_effect
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-261: the SkinnedEffect evidence gaps.
+        cna_vulkan_test(cna_test_vulkan_skinned_effect_bones
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinned_effect_bones_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SkinnedBones
+            COMMAND cna_test_vulkan_skinned_effect_bones
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_vector4_bone_indices
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_vector4_bone_indices_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SkinnedEffectVector4BoneIndices
+            COMMAND cna_test_vulkan_skinnedeffect_vector4_bone_indices
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_skinned_effect_integration
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/skinned_effect_integration_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SkinnedEffect_BoneDeformation
+            COMMAND cna_test_vulkan_skinned_effect_integration
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-262: PBR per-map contribution: normal, metallic-roughness, occlusion and emissive each changing the result.
+        cna_vulkan_test(cna_test_vulkan_pbr_material_maps
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_material_maps_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Pbr_MaterialMaps
+            COMMAND cna_test_vulkan_pbr_material_maps
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-263: Effect::Clone and CurrentTechnique -- mostly shared logic, but a cloned effect must not share renderer-side pipeline or descriptor state, which is Vulkan-specific.
+        cna_vulkan_test(cna_test_vulkan_effect_clone
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_effect_clone_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_EffectClone
+            COMMAND cna_test_vulkan_effect_clone
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_effect_current_technique
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_effect_current_technique_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_EffectCurrentTechnique
+            COMMAND cna_test_vulkan_effect_current_technique
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-300: basic Model drawing.
+        cna_vulkan_test(cna_test_vulkan_model_draw
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_model_draw_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ModelDraw_RedQuad
+            COMMAND cna_test_vulkan_model_draw
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-301: glTF tangent handedness and mirrored tangents.
+        cna_vulkan_test(cna_test_vulkan_gltf_tangent_handedness
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_tangent_handedness_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_TangentHandedness
+            COMMAND cna_test_vulkan_gltf_tangent_handedness
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_gltf_mirrored_tangent
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_mirrored_tangent_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_MirroredTangent
+            COMMAND cna_test_vulkan_gltf_mirrored_tangent
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-302: glTF sampler wrap and per-map texture transforms.
+        cna_vulkan_test(cna_test_vulkan_gltf_sampler_wrap
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_sampler_wrap_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_SamplerWrap
+            COMMAND cna_test_vulkan_gltf_sampler_wrap
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_gltf_texture_transform_per_map
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_texture_transform_per_map_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_TextureTransformPerMap
+            COMMAND cna_test_vulkan_gltf_texture_transform_per_map
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-304: skinned PBR under non-uniform joint scale.
+        cna_vulkan_test(cna_test_vulkan_gltf_skinned_pbr_nonuniform_joint
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_skinned_pbr_nonuniform_joint_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_SkinnedPbrNonUniformJoint
+            COMMAND cna_test_vulkan_gltf_skinned_pbr_nonuniform_joint
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-336: backbuffer resize -- the path VULKAN-404 found serving the pre-resize frame.
+        cna_vulkan_test(cna_test_vulkan_backbuffer_resize
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_backbuffer_resize_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BackbufferResize
+            COMMAND cna_test_vulkan_backbuffer_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-344: GraphicsDevice argument validation.
+        cna_vulkan_test(cna_test_vulkan_device_validation
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_device_validation_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeviceValidation
+            COMMAND cna_test_vulkan_device_validation
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-345: the Clear overload and ClearOptions matrix.
+        cna_vulkan_test(cna_test_vulkan_clear_overloads
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_clear_overloads_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ClearOverloads
+            COMMAND cna_test_vulkan_clear_overloads
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-371: the occlusion-query reset/reuse cycle.
+        cna_vulkan_test(cna_test_vulkan_occlusion_query_cycle
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/occlusion_query_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_OcclusionQuery_Cycle
+            COMMAND cna_test_vulkan_occlusion_query_cycle
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-260: the EnvironmentMapEffect Fresnel GRADIENT, shaped to catch a per-vertex/per-pixel interpolation defect.
+        cna_vulkan_test(cna_test_vulkan_environmentmapeffect_fresnel_gradient
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_fresnel_gradient_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_EnvironmentMapEffect_Fresnel_Gradient
+            COMMAND cna_test_vulkan_environmentmapeffect_fresnel_gradient
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-335: the PresentationParameters round-trip.
+        cna_vulkan_test(cna_test_vulkan_presentation_parameters
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_presentation_parameters_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PresentationParameters
+            COMMAND cna_test_vulkan_presentation_parameters
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-190: GetData on a multisampled target that is STILL BOUND -- every
+        # other MSAA test here reads after the unbind, which is the case that cannot fail this way.
+        cna_vulkan_test(cna_test_vulkan_bound_msaa_readback
+                        vulkan_bound_msaa_readback_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BoundMsaaReadback
+            COMMAND cna_test_vulkan_bound_msaa_readback
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-189: how EmissiveColor composes into the lit result. Renderer-
+        # agnostic source; this renderer had emissive tests but nothing pinning the composition.
+        cna_vulkan_test(cna_test_vulkan_emissive_ambient_composition
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_emissive_ambient_composition_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_EmissiveAmbientComposition
+            COMMAND cna_test_vulkan_emissive_ambient_composition
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-192: the three whole-scene smoke tests -- several subsystems at
+        # once, which is the shape that catches an integration defect the unit-shaped tests cannot.
+        cna_vulkan_test(cna_test_vulkan_sample_keyboard_cube3d
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sample_keyboard_cube3d_test.cpp)
+        # The same include the EasyGL registration needs: the scene drives itself through the
+        # platform module's shared canned-keyboard test decorator.
+        target_include_directories(cna_test_vulkan_sample_keyboard_cube3d PRIVATE
+                                   ${CMAKE_SOURCE_DIR}/modules/platform/tests)
+        cna_register_renderer_test(NAME Vulkan_Sample_KeyboardCube3D
+            COMMAND cna_test_vulkan_sample_keyboard_cube3d
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_sample_layered_blend
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sample_layered_blend_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Sample_LayeredBlend
+            COMMAND cna_test_vulkan_sample_layered_blend
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_sample_moving_quad3d
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sample_moving_quad3d_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Sample_MovingQuad3D
+            COMMAND cna_test_vulkan_sample_moving_quad3d
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-188 (finding F-35): D3D9 saturates a vertex shader's colour output
+        # before the rasterizer interpolates it. EasyGL's own FX-123 test is renderer-agnostic, so
+        # it is registered here rather than rewritten.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_vertex_color_clamp
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_vertex_color_clamp_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffectVertexColorClamp
+            COMMAND cna_test_vulkan_basiceffect_vertex_color_clamp
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-372: does GraphicsAdapter tell a game what the device will do?
+        cna_vulkan_test(cna_test_vulkan_adapter_query_contract
+                        vulkan_adapter_query_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AdapterQueryContract
+            COMMAND cna_test_vulkan_adapter_query_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-334: a lost device is reported once and refuses by name.
+        cna_vulkan_test(cna_test_vulkan_device_lost_contract
+                        vulkan_device_lost_contract_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeviceLostContract
+            COMMAND cna_test_vulkan_device_lost_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-398: 120 frames of everything at once, asserting the LAST frame
+        # and that no cache grew across the last eighty.
+        cna_vulkan_test(cna_test_vulkan_repeated_use_stress
+                        vulkan_repeated_use_stress_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RepeatedUseStress
+            COMMAND cna_test_vulkan_repeated_use_stress
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-178: Texture2D::FromStream and SaveAsPng/SaveAsJpeg, both of which
+        # go through this renderer's own upload and readback paths. The sources are SDL_Renderer's
+        # (Tasks 682/683) and contain nothing renderer-specific but the presentation mode they
+        # request, which this renderer implements too.
+        cna_vulkan_test(cna_test_vulkan_texture2d_fromstream
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_fromstream_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Texture2D_FromStream
+            COMMAND cna_test_vulkan_texture2d_fromstream
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_texture2d_saveas_roundtrip
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_saveas_roundtrip_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Texture2D_SaveAsRoundTrip
+            COMMAND cna_test_vulkan_texture2d_saveas_roundtrip
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_texture2d_saveas_rendertarget
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/texture2d_saveas_rendertarget_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Texture2D_SaveAsRenderTarget
+            COMMAND cna_test_vulkan_texture2d_saveas_rendertarget
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-165: unknown-stride rejection -- the other half of VULKAN-144's declaration-driven layout.
+        cna_vulkan_test(cna_test_vulkan_unknown_stride_rejection
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_unknown_stride_rejection_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_UnknownStride_Rejected
+            COMMAND cna_test_vulkan_unknown_stride_rejection
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-350: a real window resize, which on Vulkan is a swapchain recreation.
+        cna_vulkan_test(cna_test_vulkan_real_window_resize
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_real_window_resize_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RealWindowResize
+            COMMAND cna_test_vulkan_real_window_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-432: the stock-effect goldens, compared against the SAME PNGs EasyGL is compared against -- the point of a golden is that two renderers land on one image, not that each keeps its own.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BasicEffect_Golden
+            COMMAND cna_test_vulkan_basiceffect_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_alphatesteffect_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_alphatesteffect_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_AlphaTestEffect_Golden
+            COMMAND cna_test_vulkan_alphatesteffect_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_dualtextureeffect_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dualtextureeffect_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DualTextureEffect_Golden
+            COMMAND cna_test_vulkan_dualtextureeffect_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-433: the EnvironmentMapEffect and SkinnedEffect goldens. The first is the one VULKAN-260 has a stake in: its Fresnel term was per-fragment until that row, so a golden it now matches is evidence the fix is the XNA shape and not merely a different one.
+        cna_vulkan_test(cna_test_vulkan_environmentmapeffect_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_environmentmapeffect_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_EnvironmentMapEffect_Golden
+            COMMAND cna_test_vulkan_environmentmapeffect_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_skinnedeffect_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SkinnedEffect_Golden
+            COMMAND cna_test_vulkan_skinnedeffect_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-434: the state goldens -- blend, depth/stencil write mask, cull mode. Vulkan bakes all three into the PIPELINE rather than setting them, so a golden is the only test that compares the RESULT of that baking against another renderer's.
+        cna_vulkan_test(cna_test_vulkan_blendstate_additive_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_blendstate_additive_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_BlendState_Additive_Golden
+            COMMAND cna_test_vulkan_blendstate_additive_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_depthstencilstate_write_enable_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_write_enable_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DepthStencilState_WriteEnable_Golden
+            COMMAND cna_test_vulkan_depthstencilstate_write_enable_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_rasterizerstate_cullmode_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rasterizerstate_cullmode_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RasterizerState_CullMode_Golden
+            COMMAND cna_test_vulkan_rasterizerstate_cullmode_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-435: the 2D goldens and the two golden-harness smoke tests.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_rotation_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_rotation_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteBatch_Rotation_Golden
+            COMMAND cna_test_vulkan_spritebatch_rotation_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_texture_filter_linear_golden
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_texture_filter_linear_golden_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_TextureFilter_Linear_Golden
+            COMMAND cna_test_vulkan_texture_filter_linear_golden
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_goldenimage_smoke
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_goldenimage_smoke_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_GoldenImage_Smoke
+            COMMAND cna_test_vulkan_goldenimage_smoke
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_pixeltestgame_smoke
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pixeltestgame_smoke_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_PixelTestGame_Smoke
+            COMMAND cna_test_vulkan_pixeltestgame_smoke
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-436: the shared sample scenes.
+        cna_vulkan_test(cna_test_vulkan_sample_dualtexture_swap
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sample_dualtexture_swap_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Sample_DualTextureSwap
+            COMMAND cna_test_vulkan_sample_dualtexture_swap
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_fullscreen_field
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_fullscreen_field_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_FullscreenField
+            COMMAND cna_test_vulkan_fullscreen_field
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-303: glTF alpha blending, transmission ordering and
+        # base-colour factor x texture. Transmission ordering is a DRAW-ORDER property, and this
+        # renderer's command model is deferred -- every batch and 3D draw is recorded and replayed
+        # at Present -- so it is the one of the three that a shared-code argument could not settle.
+        cna_vulkan_test(cna_test_vulkan_gltf_alpha_blend
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_alpha_blend_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_AlphaBlend
+            COMMAND cna_test_vulkan_gltf_alpha_blend
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_gltf_transmission_ordering
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_transmission_ordering_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_TransmissionOrdering
+            COMMAND cna_test_vulkan_gltf_transmission_ordering
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_gltf_basecolor_factor_texture
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_gltf_basecolor_factor_texture_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Gltf_BaseColorFactorTexture
+            COMMAND cna_test_vulkan_gltf_basecolor_factor_texture
+            TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-024: the six shared limit/profile defaults against what this
+        # physical device actually reports -- a default that promises more than the device
+        # can do fails a leg, with both numbers printed.
+        cna_vulkan_test(cna_test_vulkan_profile_limits_audit
+                        vulkan_profile_limits_audit_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ProfileLimitsAudit
+            COMMAND cna_test_vulkan_profile_limits_audit
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-213: the three render-target lifetime shapes the existing four
+        # lifetime tests do not reach -- disposal with work still queued, in three arrangements.
+        cna_vulkan_test(cna_test_vulkan_rendertarget_lifetime_shapes
+                        vulkan_rendertarget_lifetime_shapes_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RenderTargetLifetimeShapes
+            COMMAND cna_test_vulkan_rendertarget_lifetime_shapes
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-338: twenty-two back-to-back swapchain recreations, a minimized
+        # (0x0) drawable with a frame presented in that state, and a restore -- with live
+        # resources across all of it.
+        cna_vulkan_test(cna_test_vulkan_swapchain_churn
+                        vulkan_swapchain_churn_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SwapchainChurn
+            COMMAND cna_test_vulkan_swapchain_churn
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-214: a PreserveContents target across a real window resize,
+        # which on this renderer is a swapchain recreation.
+        cna_vulkan_test(cna_test_vulkan_rendertarget_preserve_across_resize
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_preserve_across_resize_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RenderTargetPreserveAcrossResize
+            COMMAND cna_test_vulkan_rendertarget_preserve_across_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-058: a SpriteBatch must honour the DepthStencilState its
+        # Begin() installs -- the 2D pipeline used to hardcode it off entirely.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_depthstencil_state
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_depthstencil_state_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteBatch_DepthStencilState
+            COMMAND cna_test_vulkan_spritebatch_depthstencil_state
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-137: a zero-element VertexBuffer/IndexBuffer. Vulkan pads the
+        # allocation to max(1, size) because vkCreateBuffer rejects 0; the padding must be invisible
+        # from the public API, and the validation half is the VULKAN-408 output gate's.
+        cna_vulkan_test(cna_test_vulkan_zero_length_buffers
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/zero_length_buffer_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ZeroLengthBuffers
+            COMMAND cna_test_vulkan_zero_length_buffers
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-216: a RenderTarget2D's MultiSampleCount is its OWN, on a device
+        # created WITHOUT multisampling -- deliberately no RecreateRendererForMultiSampleCount().
+        cna_vulkan_test(cna_test_vulkan_rendertarget_own_msaa
+                        vulkan_rendertarget_own_msaa_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_RenderTargetOwnMsaa
+            COMMAND cna_test_vulkan_rendertarget_own_msaa
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-050: SpriteSortMode::Immediate and ::Texture, asserted through
+        # behaviour that DIFFERS between the modes rather than through the mode being accepted.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_sort_mode_semantics
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_sort_mode_semantics_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SpriteBatch_SortModeSemantics
+            COMMAND cna_test_vulkan_spritebatch_sort_mode_semantics
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-339: the release path that also runs vkDeviceWaitIdle and the
+        # retirement lists. HasRenderer() must be false after the first Dispose and no second
+        # release may be attempted.
+        cna_vulkan_test(cna_test_vulkan_handle_release
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_handle_release_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_HandleRelease
+            COMMAND cna_test_vulkan_handle_release
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_double_dispose
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_double_dispose_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DoubleDispose
+            COMMAND cna_test_vulkan_double_dispose
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-340: 80 resources over 20 iterations. VULKAN-393's output gate is
+        # the Vulkan-side half the row asked for -- the object tracker names every Vk* handle still
+        # alive at vkDestroyDevice, which is a stronger statement than a CNA-side count of zero.
+        cna_vulkan_test(cna_test_vulkan_resource_leak
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_resource_leak_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ResourceLeak
+            COMMAND cna_test_vulkan_resource_leak
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-341: a move must not leave two entries in liveVertexBuffers_ /
+        # liveIndexBuffers_ / liveRenderTargets_ pointing at one object -- a shape the EasyGL
+        # registry does not have, so this source asks a different question here than there.
+        cna_vulkan_test(cna_test_vulkan_move_semantics
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_move_semantics_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_MoveSemantics
+            COMMAND cna_test_vulkan_move_semantics
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-342: destroying the device BEFORE its resources is the case
+        # ~VulkanRenderer's release-and-disconnect machinery exists for -- and VULKAN-407 found
+        # three classes it did not cover.
+        cna_vulkan_test(cna_test_vulkan_device_dispose_order
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_device_dispose_order_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeviceDisposeOrder
+            COMMAND cna_test_vulkan_device_dispose_order
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-343: ApplyChanges() on a live device is a full Reset on Vulkan.
+        cna_vulkan_test(cna_test_vulkan_resource_events
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_resource_events_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ResourceEvents
+            COMMAND cna_test_vulkan_resource_events
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_vulkan_test(cna_test_vulkan_device_reset_events
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_device_reset_events_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DeviceResetEvents
+            COMMAND cna_test_vulkan_device_reset_events
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-095: MultiSampleCount changed on a LIVE device. Vulkan-owned rather
+        # than a registration of easygl_msaa_change_test.cpp, because that source asserts EasyGL's
+        # own limit -- that the count cannot change post-construction -- which is false here.
+        cna_vulkan_test(cna_test_vulkan_msaa_runtime_change vulkan_msaa_runtime_change_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_MsaaRuntimeChange
+            COMMAND cna_test_vulkan_msaa_runtime_change
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_disposed_texture_eviction
+                        vulkan_disposed_texture_eviction_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DisposedTextureEviction
+            COMMAND cna_test_vulkan_disposed_texture_eviction
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-172: the three block-compressed formats, uploaded as raw 4x4
+        # blocks and sampled in a real draw. Two blocks side by side, so a mis-sized block (8 bytes
+        # for DXT1, 16 for the other two) or a mis-walked block stream shows as a wrong half rather
+        # than as a plausible picture.
+        cna_vulkan_test(cna_test_vulkan_dxt_format
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dxt_format_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DxtFormat
+            COMMAND cna_test_vulkan_dxt_format
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-240: DXT1/3/5 cube faces use their requested native BC image,
+        # survive readback and partial block replacement, and are sampled by EnvironmentMapEffect.
+        # The same source runs on EasyGL so this is a direct capability comparison.
+        cna_vulkan_test(cna_test_vulkan_dxt_texturecube
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/dxt_texturecube_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_DxtTextureCube
+            COMMAND cna_test_vulkan_dxt_texturecube
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+            WORKING_DIRECTORY "${CNA_SOURCE_DIR}")
+
+        # plan_vulkan.md VULKAN-172/VULKAN-241: the DXT1 DDS route through Texture2D::FromStream.
+        # On a BC-capable device it now exercises native block preservation; otherwise the shared
+        # loader decodes to Color. Either route must produce the same rendered result.
+        cna_vulkan_test(cna_test_vulkan_dxt1_texture
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/dxt1_texture_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Dxt1FromStream
+            COMMAND cna_test_vulkan_dxt1_texture
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-174: the two signed-normalized byte formats, sampled in a real
+        # draw -- including a NEGATIVE texel, which is what distinguishes SNORM storage from UNORM
+        # storage of the same bytes -- plus the Color-shaped-transfer refusal the four-byte-wide
+        # NormalizedByte4 would otherwise pass on width alone.
+        cna_vulkan_test(cna_test_vulkan_snorm_format vulkan_snorm_format_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_NormalizedByteFormat
+            COMMAND cna_test_vulkan_snorm_format
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-173: the packed 16-bit formats, SAMPLED in a real draw rather than
+        # merely constructed -- VULKAN-170 measured that a construct-and-read test cannot tell a
+        # stored format from a claimed one, because Texture2D::GetData is served from the shared
+        # CPU shadow. This is the renderer-agnostic REMED-GFX-244 source, whose per-leg gate is the
+        # renderer's own ClassifySurfaceFormatEXT verdict.
+        cna_vulkan_test(cna_test_vulkan_packed16_format
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_packed16_format_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Packed16Format
+            COMMAND cna_test_vulkan_packed16_format
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-407: a Texture3D, TextureCube or RenderTargetCube renderer that
+        # outlives its GraphicsDevice must not leak its Vulkan objects, and must not read the
+        # destroyed VulkanRenderer on the way out. The discriminator is VULKAN-393's output gate,
+        # applied to this registration like every other -- the layer reports the leak DURING
+        # vkDestroyDevice, which no in-process assertion can observe.
+        cna_vulkan_test(cna_test_vulkan_resource_outlives_device
+                        vulkan_resource_outlives_device_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_ResourceOutlivesDevice
+            COMMAND cna_test_vulkan_resource_outlives_device
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-170: the renderer's SurfaceFormat verdict must predict what
+        # Texture2D construction actually does, for every value of the enum -- with the
+        # GraphicsProfile's own eleven Reach refusals kept separate from the renderer's verdict,
+        # because they are different questions with different exception types.
+        cna_vulkan_test(cna_test_vulkan_surface_format_classification
+                        vulkan_surface_format_classification_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_SurfaceFormatClassification
+            COMMAND cna_test_vulkan_surface_format_classification
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # ==================================================================================
+        # plan_vulkan.md VULKAN-393 / VULKAN-408 -- the Vulkan validation gate.
+        #
+        # VULKAN-393 built it here, over this directory's own 254 registrations. VULKAN-408 moved
+        # the mechanism to cmake/TestHelpers.cmake and the call to the ROOT CMakeLists, because
+        # this directory is 254 of the configuration's 9 117 CTests and every one of the others
+        # runs this renderer too -- VULKAN-477 measured 20 validation messages entirely outside
+        # this prefix. Nothing is registered here any more; the gate reaches these tests from
+        # cna_register_renderer_test() like every other, and the exemption list lives with it so
+        # there is exactly one place to audit. The one thing still needed HERE is the re-merge:
+        # nine registrations in this file call set_tests_properties(... FAIL_REGULAR_EXPRESSION ...)
+        # after their registration, which REPLACES the property rather than adding to it. This must
+        # therefore stay last in the file.
+        cna_apply_vulkan_validation_gate()
     endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

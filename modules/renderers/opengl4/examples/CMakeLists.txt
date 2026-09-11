@@ -204,6 +204,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_instancedmodel opengl4_instancedmodel_shader_test.cpp)
     cna_register_renderer_test(NAME OpenGL4_InstancedModel COMMAND cna_test_opengl4_instancedmodel
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    if(CNA_CNAEXT)
+        # plans/plan_modern.md MOD-2260: deterministic GL 4.1/extension classification plus a live
+        # oracle proving optional post-4.1 discovery never becomes a renderer-creation requirement.
+        cna_opengl4_test(cna_test_opengl4_modern_feature_discovery
+                         opengl4_modern_feature_discovery_test.cpp)
+        cna_register_renderer_test(NAME OpenGL4_ModernFeatureDiscovery
+            COMMAND cna_test_opengl4_modern_feature_discovery
+            TIMEOUT 60 LABELS "OpenGL4;ModernGPU"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    endif()
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

@@ -68,7 +68,19 @@ namespace Microsoft::Xna::Framework::Graphics
         rtCubeRenderer_ = static_cast<IRenderTargetCubeRenderer*>(GetRendererRaw());
         // MultiSampleCount reflects the renderer's real, device-clamped value (matching FNA's
         // FNA3D_GetMaxMultiSampleCount), not the raw constructor argument.
-        if (rtCubeRenderer_) multiSampleCount_ = rtCubeRenderer_->GetMultiSampleCount();
+        if (rtCubeRenderer_)
+        {
+            multiSampleCount_ = rtCubeRenderer_->GetMultiSampleCount();
+            // plans/plan_vulkan.md VULKAN-215: DepthStencilFormat reflects the renderer's real
+            // choice, exactly as RenderTarget2D's already does. Before this it echoed the
+            // constructor argument, so a renderer that substituted a depth format -- Vulkan gives
+            // each cube its own VkFormat -- reported a format it had not used. The third time this
+            // class has lagged its 2D twin in the same way; MOD-107 was the surface format, and
+            // the multisample count above was the first.
+            depthFormat_ = static_cast<DepthFormat>(
+                rtCubeRenderer_->GetAppliedDepthStencilFormatEXT(
+                    static_cast<int>(preferredDepthFormat)));
+        }
     }
 
     IRenderTargetCubeRenderer* RenderTargetCube::GetRenderTargetCubeRenderer() const

@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Graphics::detail::SkyboxGenerated",
+  "package": "skybox",
+  "preprocessor_guard": "CNA_CNAEXT",
+  "payloads": [
+    {"symbol":"kEsVertexSource","source":"skybox.es.vert.glsl","language":"glsl-es","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kEsFragmentSource","source":"skybox.es.frag.glsl","language":"glsl-es","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kDesktopVertexSource","source":"skybox.desktop.vert.glsl","language":"glsl","stage":"vertex","format":"text","entry_point":"main"},
+    {"symbol":"kDesktopFragmentSource","source":"skybox.desktop.frag.glsl","language":"glsl","stage":"fragment","format":"text","entry_point":"main"},
+    {"symbol":"kVulkanVertexSpirV","source":"skybox.vulkan.vert.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"vertex","format":"spirv","entry_point":"main"},
+    {"symbol":"kVulkanFragmentSpirV","source":"skybox.vulkan.frag.glsl","language":"spirv","source_language":"vulkan-glsl","stage":"fragment","format":"spirv","entry_point":"main"}
+  ]
+}

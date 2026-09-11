@@ -4,6 +4,8 @@
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/FullscreenPass.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -11,10 +13,15 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "shaders/skybox/SkyboxShaderPackage.generated.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cmath>
+#include <cstdint>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace CNA::Graphics {
 
@@ -28,49 +35,51 @@ namespace CNA::Graphics {
 
     namespace {
 
-        constexpr const char* kVertexSource = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aTexCoord;
-layout(location = 2) in vec4 aColor;
-out vec2 TexCoord;
-uniform mat4 projection;
-void main() {
-    gl_Position = projection * vec4(aPos, 0.0, 1.0);
-    TexCoord = aTexCoord;
-}
-)";
+        [[nodiscard]] std::vector<std::uint8_t> ToBytes(
+            const std::uint32_t* words, const std::size_t byteSize)
+        {
+            const auto* begin = reinterpret_cast<const std::uint8_t*>(words);
+            return std::vector<std::uint8_t>(begin, begin + byteSize);
+        }
 
-        // The ray reconstruction. uInvViewProj is the inverse of (rotation-only view) * projection,
-        // so a point on the near plane taken back through it is already a direction from the origin
-        // -- there is no camera position left in it to subtract.
-        constexpr const char* kFragmentSource = R"(#version 300 es
-precision highp float;
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform samplerCube uEnvironment;
-uniform mat4 uInvViewProj;
-uniform float uYawSin;
-uniform float uYawCos;
-uniform float uIntensity;
-uniform vec3 uTint;
-void main() {
-    vec2 ndc = TexCoord * 2.0 - 1.0;
-    vec4 farPoint = uInvViewProj * vec4(ndc, 1.0, 1.0);
-    vec3 direction = normalize(farPoint.xyz / max(abs(farPoint.w), 1e-6) * sign(farPoint.w));
-    // Yaw about Y, applied to the lookup rather than to the matrix, so the same environment can be
-    // turned per draw without rebuilding anything.
-    vec3 rotated = vec3(direction.x * uYawCos + direction.z * uYawSin,
-                        direction.y,
-                        -direction.x * uYawSin + direction.z * uYawCos);
-    vec3 sky = texture(uEnvironment, rotated).rgb;
-    FragColor = vec4(sky * uIntensity * uTint, 1.0);
-    // texture1 is SpriteBatch's own source and is deliberately unused; referencing it keeps the
-    // sampler from being optimised away, which would leave SpriteBatch binding to a dead uniform.
-    FragColor.a = 1.0 + texture(texture1, TexCoord).a * 0.0;
-}
-)";
+        [[nodiscard]] ShaderPackageEXT CreateSkyboxShaderPackage()
+        {
+            using ShaderCodeEXT = CNA::Graphics::ShaderCodeEXT;
+            using namespace CNA::Graphics::detail::SkyboxGenerated;
+            return ShaderPackageEXT(
+                {
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "skybox/skybox.es.vert.glsl",
+                                  std::string(kEsVertexSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "skybox/skybox.es.frag.glsl",
+                                  std::string(kEsFragmentSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "skybox/skybox.desktop.vert.glsl",
+                                  std::string(kDesktopVertexSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "skybox/skybox.desktop.frag.glsl",
+                                  std::string(kDesktopFragmentSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "skybox/skybox.vulkan.vert.spv",
+                                  ToBytes(kVulkanVertexSpirV,
+                                          kVulkanVertexSpirVByteSize)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "skybox/skybox.vulkan.frag.spv",
+                                  ToBytes(kVulkanFragmentSpirV,
+                                          kVulkanFragmentSpirVByteSize)),
+                },
+                {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
+                {ShaderBindingRequirementEXT(
+                    "uEnvironment", 1, ShaderBindingTypeEXT::SampledTextureCube,
+                    CNA::ShaderStageEXT::Fragment)});
+        }
 
         Vector3 TransformPerspective(const Matrix& m, float x, float y, float z, float w)
         {
@@ -123,13 +132,13 @@ void main() {
         const Color white = Color::White;
         dummySource_->SetData(&white, 1);
 
-        // Two questions, not one (plans/plan_modern.md `MOD-1699`): `CustomEffects` only means the
-        // renderer *accepts* an effect. SOFTWARE and HEADLESS accept the sky shader and then draw
-        // the fullscreen quad with their own fixed path, which fills the frame with the placeholder
-        // texture's white -- a sky that is "supported" and shows no environment at all.
+        // MOD-2238: exact package selection is the executable-shader question. GLSL ES/desktop
+        // renderers keep source variants, Vulkan selects checked-in SPIR-V, and fixed-path
+        // renderers remain unsupported without pretending to compile source they ignore.
+        const ShaderPackageEXT package = CreateSkyboxShaderPackage();
         if (device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
-            && device.ExecutesShaderEffectSourceEXT())
-            effect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kFragmentSource);
+            && package.selectFor(device).isUsable())
+            effect_ = std::make_unique<ShaderEffect>(device, package);
         supported_ = effect_ != nullptr && effect_->IsEffectValid();
     }
 
@@ -192,12 +201,16 @@ void main() {
 
         const Matrix inverse = Matrix::Invert(RotationOnly(view) * projection);
         effect_->Apply();
-        effect_->SetUniformMat4("uInvViewProj", &inverse.M11);
-        effect_->SetUniformFloat("uYawSin", std::sin(yaw_));
-        effect_->SetUniformFloat("uYawCos", std::cos(yaw_));
-        effect_->SetUniformFloat("uIntensity", intensity_);
-        effect_->SetUniformVec3("uTint", tint_.X, tint_.Y, tint_.Z);
+        // GLSL samplers need the cube's texture unit. Vulkan's fixed custom-effect contract has
+        // no named integer uniforms, so set it before the scalar push slot's real sky value.
         effect_->SetUniformInt("uEnvironment", 1);
+        effect_->SetUniformMat4("uInvViewProj", &inverse.M11);
+        // Combining tint and intensity leaves the portable fixed push block with exactly one
+        // vec3 and one scalar. The shader computes yaw's sine/cosine from that scalar, preserving
+        // the source path's result without requiring renderer-specific extra uniforms.
+        effect_->SetUniformVec3("uTintIntensity", tint_.X * intensity_,
+                                tint_.Y * intensity_, tint_.Z * intensity_);
+        effect_->SetUniformFloat("uYaw", yaw_);
         effect_->SetTexture(1, *environment_);
 
         // Over whatever is already bound: the scene target inside a pipeline frame, the back

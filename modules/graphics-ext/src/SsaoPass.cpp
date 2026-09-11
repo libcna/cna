@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/SsaoPass.hpp"
-#include "CNA/Graphics/ShaderDiagnostics.hpp"
 #include "CNA/Graphics/DepthNormalPrepass.hpp"
+#include "CNA/Graphics/ShaderDiagnostics.hpp"
+#include "CNA/GraphicsCapability.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -12,9 +13,13 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "PostProcessShaderPackages.hpp"
+#include "shaders/post_process/PostProcessShaderPackage.generated.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <string_view>
 
 namespace CNA::Graphics {
 
@@ -33,147 +38,34 @@ namespace CNA::Graphics {
         constexpr int kMaxSamples  = 64;
         constexpr int kNoiseExtent = 4;
 
-        constexpr const char* kVertexSource = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aTexCoord;
-layout(location = 2) in vec4 aColor;
-out vec2 TexCoord;
-uniform mat4 projection;
-void main() {
-    gl_Position = projection * vec4(aPos, 0.0, 1.0);
-    TexCoord = aTexCoord;
-}
-)";
-
-        // Occlusion estimate. texture1 is the linear-depth image (SpriteBatch's own slot), slot 1
-        // the view-space normals, slot 2 the rotation noise.
-        //
-        // The range check is what keeps a distant silhouette from darkening the surface in front of
-        // it: a sample is only counted when the geometry it hit is within the sampling radius, so
-        // an object far behind the pixel occludes nothing.
-        constexpr const char* kOcclusionBody = R"(
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform sampler2D uNormalSampler;
-uniform sampler2D uNoiseSampler;
-uniform vec3  uKernel[64];
-uniform vec2  uNoiseScale;
-uniform float uRadius;
-uniform float uBias;
-uniform float uDepthRange;
-uniform int   uSampleCount;
-
-void main() {
-    // MOD-2035: decoded, not read raw. This said `.r` for its whole life, which is the depth only
-    // when the prepass stores it unpacked -- so on every renderer without half-float render targets
-    // SSAO has been comparing the top eight bits of a packed value against each other and calling
-    // the result occlusion. It produced a plausible frame, which is why nothing caught it.
-    float centerDepth = cnaDecodeLinearDepth(texture(texture1, TexCoord));
-
-    // Nothing was rendered here (the prepass cleared to "infinitely far"); the sky is not occluded.
-    if (centerDepth <= 0.0) {
-        FragColor = vec4(1.0, 1.0, 1.0, 1.0);
-        return;
-    }
-
-    // Every normalize() here is guarded. normalize(vec3(0)) is NaN, every comparison against NaN
-    // is false, and the occlusion test below is a comparison -- so one degenerate vector does not
-    // produce a wrong pixel, it silently produces an entirely unoccluded frame with no error
-    // anywhere to point at. A mid-grey noise texel is enough to do it: (0.5, 0.5) decodes to (0, 0).
-    vec3 rawNormal = texture(uNormalSampler, TexCoord).xyz * 2.0 - 1.0;
-    vec3 normal = length(rawNormal) > 1e-4 ? normalize(rawNormal) : vec3(0.0, 0.0, 1.0);
-
-    // A per-pixel rotation from a tiled 4x4 noise texture. Without it every pixel samples the same
-    // pattern and the result bands visibly; with it the error becomes noise the blur can remove.
-    vec3 rawRandom = vec3(texture(uNoiseSampler, TexCoord * uNoiseScale).xy * 2.0 - 1.0, 0.0);
-    vec3 randomVector = length(rawRandom) > 1e-4 ? normalize(rawRandom) : vec3(1.0, 0.0, 0.0);
-
-    vec3 rawTangent = randomVector - normal * dot(randomVector, normal);
-    // The rotation vector can land parallel to the normal, leaving nothing to build a tangent from.
-    vec3 tangent = length(rawTangent) > 1e-4
-                     ? normalize(rawTangent)
-                     : normalize(cross(normal, vec3(0.0, 1.0, 0.0)) + vec3(1e-3, 0.0, 0.0));
-    vec3 bitangent = cross(normal, tangent);
-    mat3 tbn = mat3(tangent, bitangent, normal);
-
-    float occlusion = 0.0;
-    int count = uSampleCount;
-    for (int i = 0; i < 64; ++i) {
-        if (i >= count) break;
-
-        vec3 samplePosition = tbn * uKernel[i];
-        vec2 sampleUv = TexCoord + samplePosition.xy * uRadius;
-        float sampleDepth = cnaDecodeLinearDepth(textureLod(texture1, sampleUv, 0.0));
-        if (sampleDepth <= 0.0) continue;
-
-        // An occluder is simply something nearer to the camera than this pixel. The obvious
-        // extra term -- offsetting the comparison by the sample's own depth component times the
-        // radius -- belongs to a view-space formulation, and this pass has no view space: its
-        // radius is a screen-space offset in UV and its depths are a normalized texture. Mixing
-        // the two makes the comparison depend on a quantity in the wrong units, and the symptom
-        // is not a wrong-looking image but an entirely unoccluded one at most radii, because the
-        // offset swamps the depth difference it is being compared against.
-        if (sampleDepth < centerDepth - uBias) {
-            // Distant geometry seen past a silhouette must not darken this pixel; uDepthRange is
-            // how far away an occluder may be and still count, in the depth texture's own units.
-            float rangeCheck =
-                smoothstep(0.0, 1.0, uDepthRange / max(abs(centerDepth - sampleDepth), 1e-5));
-            occlusion += rangeCheck;
-        }
-    }
-
-    float visibility = 1.0 - occlusion / float(count);
-    FragColor = vec4(visibility, visibility, visibility, 1.0);
-}
-)";
-
-        // Blur the AO buffer and multiply it into the scene in one pass: the AO term is noisy by
-        // construction, and a separate blur pass would need a third intermediate for no gain at
-        // this kernel size.
-        constexpr const char* kComposeSource = R"(#version 300 es
-precision highp float;
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform sampler2D uOcclusionSampler;
-uniform vec2  uTexelSize;
-uniform float uIntensity;
-
-void main() {
-    float blurred = 0.0;
-    for (int y = -2; y <= 2; ++y) {
-        for (int x = -2; x <= 2; ++x) {
-            blurred += texture(uOcclusionSampler,
-                               TexCoord + vec2(float(x), float(y)) * uTexelSize).r;
-        }
-    }
-    blurred /= 25.0;
-
-    float visibility = clamp(1.0 - (1.0 - blurred) * uIntensity, 0.0, 1.0);
-    vec4 scene = texture(texture1, TexCoord);
-    FragColor = vec4(scene.rgb * visibility, scene.a);
-}
-)";
-
     } // namespace
 
     std::string SsaoPass::getOcclusionGlsl(const bool packed)
     {
-        std::string source = "#version 300 es\nprecision highp float;\n";
-        source += DepthNormalPrepass::getDepthDecodeGlsl(packed);
-        source += kOcclusionBody;
+        using namespace CNA::Graphics::detail::PostProcessGenerated;
+        std::string source(kSsaoOcclusionEsFragmentSource);
+        constexpr std::string_view policy = "uSsaoScalars[4]";
+        for (std::size_t at = source.find(policy); at != std::string::npos;
+             at = source.find(policy, at))
+        {
+            const std::string_view replacement = packed ? "1.0" : "0.0";
+            source.replace(at, policy.size(), replacement);
+            at += replacement.size();
+        }
         return source;
     }
 
     SsaoPass::SsaoPass(GraphicsDevice& device)
-        : fullscreen_(std::make_unique<FullscreenPass>(device)), pool_(device)
+        : fullscreen_(std::make_unique<FullscreenPass>(device))
+        , pool_(device)
+        , packedDepth_(DepthNormalPrepass::usesPackedDepthEXT(device))
     {
-        const std::string occlusionSource =
-            getOcclusionGlsl(DepthNormalPrepass::usesPackedDepthEXT(device));
-        occlusionEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, occlusionSource);
-        composeEffect_   = std::make_unique<ShaderEffect>(device, kVertexSource, kComposeSource);
+        const ShaderPackageEXT occlusionPackage = detail::CreateSsaoOcclusionShaderPackage();
+        if (occlusionPackage.selectFor(device).isUsable())
+            occlusionEffect_ = std::make_unique<ShaderEffect>(device, occlusionPackage);
+        const ShaderPackageEXT composePackage = detail::CreateSsaoComposeShaderPackage();
+        if (composePackage.selectFor(device).isUsable())
+            composeEffect_ = std::make_unique<ShaderEffect>(device, composePackage);
 
         // plans/plan_modern.md MOD-219: a failed compile makes this pass copy its input through, which is
         // correct and completely silent. This names the pass and prints the compiler's log once.
@@ -281,21 +173,26 @@ void main() {
         occlusionEffect_->SetTexture(1, *context.sourceNormals);
         occlusionEffect_->SetUniformInt("uNoiseSampler", 2);
         occlusionEffect_->SetTexture(2, *noiseTexture_);
-        occlusionEffect_->SetUniformVec3Array("uKernel", &kernel_[0].X, kMaxSamples);
+        occlusionEffect_->SetUniformVec3Array("uSsaoKernel", &kernel_[0].X, kMaxSamples);
         // Tiled against the *occlusion* buffer, not the frame: at half resolution a frame-sized
         // scale would repeat the 4x4 rotation twice as often and turn its pattern into visible
         // cross-hatching.
-        occlusionEffect_->SetUniformVec2(
-            "uNoiseScale",
+        const std::array noiseScale{
             static_cast<float>(occlusionWidth) / static_cast<float>(kNoiseExtent),
-            static_cast<float>(occlusionHeight) / static_cast<float>(kNoiseExtent));
-        occlusionEffect_->SetUniformFloat("uRadius", radius);
-        occlusionEffect_->SetUniformFloat("uBias", 0.005f);
+            static_cast<float>(occlusionHeight) / static_cast<float>(kNoiseExtent)};
         // The depth-side companion to the screen-space radius: how far, in the depth texture's own
         // 0..1 units, an occluder may be and still count. Tied to the radius so one setting still
         // controls "how big is the ambient neighbourhood", but never used as a UV offset.
-        occlusionEffect_->SetUniformFloat("uDepthRange", std::max(radius * 0.25f, 0.01f));
-        occlusionEffect_->SetUniformInt("uSampleCount", samples);
+        const std::array ssaoScalars{
+            radius,
+            0.005f,
+            std::max(radius * 0.25f, 0.01f),
+            static_cast<float>(samples),
+            packedDepth_ ? 1.0f : 0.0f,
+        };
+        occlusionEffect_->SetUniformVec2Array("uSsaoVectors", noiseScale.data(), 1);
+        occlusionEffect_->SetUniformFloatArray("uSsaoScalars", ssaoScalars.data(),
+                                               static_cast<int>(ssaoScalars.size()));
 
         fullscreen_->draw(context.sourceDepth, occlusion, occlusionEffect_.get(),
                           occlusionWidth, occlusionHeight);
@@ -306,10 +203,11 @@ void main() {
         // The blur folded into the compose pass steps by the occlusion buffer's texels, which at
         // half resolution are twice as wide -- so the blur covers the same *screen* distance either
         // way rather than halving with the buffer.
-        composeEffect_->SetUniformVec2("uTexelSize",
-                                       1.0f / static_cast<float>(occlusionWidth),
-                                       1.0f / static_cast<float>(occlusionHeight));
-        composeEffect_->SetUniformFloat("uIntensity", intensity);
+        const std::array texelSize{1.0f / static_cast<float>(occlusionWidth),
+                                   1.0f / static_cast<float>(occlusionHeight)};
+        const std::array composeScalars{intensity};
+        composeEffect_->SetUniformVec2Array("uSsaoComposeVectors", texelSize.data(), 1);
+        composeEffect_->SetUniformFloatArray("uSsaoComposeScalars", composeScalars.data(), 1);
 
         fullscreen_->draw(context.source, context.destination, composeEffect_.get(),
                           context.width, context.height);
@@ -339,7 +237,7 @@ void main() {
 
     bool SsaoPass::isSupported(GraphicsDevice& device) const
     {
-        return PostProcessPass::isSupported(device)
+        return device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
             && occlusionEffect_ && occlusionEffect_->IsEffectValid()
             && composeEffect_ && composeEffect_->IsEffectValid();
     }

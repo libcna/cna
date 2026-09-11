@@ -40,16 +40,33 @@ namespace CNA::Graphics {
     class HeightFogPass final : public PostProcessPass
     {
     public:
-        /** @brief Creates the pass and compiles its shader. @param device The device to render with. */
+        /**
+         * @brief Creates the pass and selects its packaged shader.
+         *
+         * @param device The device to render with.
+         */
         explicit HeightFogPass(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device);
         /** @brief Destroys the pass and its shader. */
         ~HeightFogPass() override;
 
-        /** @brief Fogs @ref PostProcessContext::source into the destination. @param context The images, camera and size. */
+        /**
+         * @brief Fogs @ref PostProcessContext::source into the destination.
+         *
+         * @param context The images, camera state and output size.
+         */
         void apply(const PostProcessContext& context) override;
-        /** @brief Returns `"HeightFog"`. */
+        /**
+         * @brief Returns the stable pass name.
+         *
+         * @return `"HeightFog"`.
+         */
         [[nodiscard]] const std::string& getName() const override;
-        /** @brief Returns whether this renderer can run the pass. @param device The device queried. @return True when its shader compiled. */
+        /**
+         * @brief Returns whether this renderer can run the pass.
+         *
+         * @param device The device queried.
+         * @return True when the renderer selects and accepts the packaged shader.
+         */
         [[nodiscard]] bool isSupported(
             Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) const override;
 
@@ -73,17 +90,37 @@ namespace CNA::Graphics {
                                                 float distance, float density, float falloff,
                                                 float baseHeight);
 
-        /** @brief Returns the fog's colour. */
+        /**
+         * @brief Returns the fog's colour.
+         *
+         * @return The current scene-referred fog colour.
+         */
         [[nodiscard]] Microsoft::Xna::Framework::Vector3 getColor() const;
-        /** @brief Sets the fog's colour, in scene-referred units. @param value The colour. */
+        /**
+         * @brief Sets the fog's colour in scene-referred units.
+         *
+         * @param value The colour.
+         */
         void setColor(const Microsoft::Xna::Framework::Vector3& value);
 
-        /** @brief Returns the density at the base height; zero disables the pass. */
+        /**
+         * @brief Returns the density at the base height.
+         *
+         * @return The current density; zero disables the pass.
+         */
         [[nodiscard]] float getDensity() const;
-        /** @brief Sets the density at the base height. @param value The density; negatives are ignored. */
+        /**
+         * @brief Sets the density at the base height.
+         *
+         * @param value The density; negative values are ignored.
+         */
         void setDensity(float value);
 
-        /** @brief Returns how quickly density drops with height. */
+        /**
+         * @brief Returns how quickly density drops with height.
+         *
+         * @return The current falloff per world unit.
+         */
         [[nodiscard]] float getFalloff() const;
         /**
          * @brief Sets how quickly density drops with height.
@@ -94,14 +131,23 @@ namespace CNA::Graphics {
          */
         void setFalloff(float value);
 
-        /** @brief Returns the height at which the density applies. */
+        /**
+         * @brief Returns the height at which the density applies.
+         *
+         * @return The current base height in world units.
+         */
         [[nodiscard]] float getBaseHeight() const;
-        /** @brief Sets the height at which the density applies. @param value The height in world units. */
+        /**
+         * @brief Sets the height at which the density applies.
+         *
+         * @param value The height in world units.
+         */
         void setBaseHeight(float value);
 
     private:
         std::unique_ptr<FullscreenPass> fullscreen_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> effect_;
+        bool packedDepth_ = true;
 
         Microsoft::Xna::Framework::Vector3 color_{0.62f, 0.68f, 0.78f};
         float density_    = 0.0f;

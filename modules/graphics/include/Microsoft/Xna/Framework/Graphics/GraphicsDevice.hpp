@@ -41,6 +41,7 @@
 #include "CNA/DisplayColorSpace.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/RendererCapabilityProfile.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
 namespace CNA::Platform
@@ -48,6 +49,13 @@ namespace CNA::Platform
     class IPlatform;
     class IPlatformSurfacePresenter;
     class IPlatformWindow;
+}
+
+namespace CNA::Internal
+{
+    class Texture2DArrayGraphicsDeviceTestPeer;
+    class StorageTexture2DGraphicsDeviceTestPeer;
+    class StorageBufferGraphicsDeviceTestPeer;
 }
 
 namespace Microsoft::Xna::Framework
@@ -441,6 +449,32 @@ namespace Microsoft::Xna::Framework::Graphics
                                      int primitiveCount, int instanceCount);
 
         /**
+         * @brief Draws an indexed instance range beginning at @p firstInstance.
+         *
+         * This CNA extension preserves the complete XNA `DrawInstancedPrimitives` geometry,
+         * binding and effect contract. Only the first logical instance changes; renderers never
+         * expose a native command or native buffer handle through this API.
+         *
+         * @param primitiveType  The type of primitive to draw.
+         * @param baseVertex     Offset added to each decoded index.
+         * @param minVertexIndex Minimum referenced vertex index.
+         * @param numVertices    Number of vertices in the declared referenced window.
+         * @param startIndex     First index element to read.
+         * @param primitiveCount Number of primitives per instance.
+         * @param instanceCount  Number of instances to draw.
+         * @param firstInstance  First logical instance, which must be non-negative.
+         * @throws System::NotSupportedException if the renderer does not report
+         *         `CNA::RendererFeature::BaseInstanceDrawing`.
+         * @throws System::ArgumentOutOfRangeException for the same invalid ranges as
+         *         `DrawInstancedPrimitives`, or if @p firstInstance is negative or makes the
+         *         required instance range exceed a bound per-instance stream.
+         */
+        CNAEXT void DrawInstancedPrimitivesBaseInstanceEXT(
+            PrimitiveType primitiveType, int baseVertex, int minVertexIndex,
+            int numVertices, int startIndex, int primitiveCount,
+            int instanceCount, int firstInstance);
+
+        /**
          * @brief Draws with the counts and offsets read out of a GPU buffer rather than passed in.
          *
          * plans/plan_modern.md `MOD-2090`. @p argumentBuffer holds a `CNA::IndirectDrawArguments` at
@@ -458,7 +492,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param argumentBuffer     The buffer holding the arguments.
          * @param argumentByteOffset Where in it they start, in bytes. Must be a multiple of 4.
          * @throws System::NotSupportedException If the renderer does not report
-         *         `CNA::GraphicsCapability::IndirectDraw`, naming it.
+         *         `CNA::GraphicsCapability::IndirectDraw`, naming it, or if the buffer lacks the
+         *         declared indirect-argument usage.
          * @throws std::runtime_error If no vertex buffer or no effect is bound.
          * @throws System::ArgumentOutOfRangeException If @p argumentByteOffset is negative, not a
          *         multiple of 4, or leaves no room for the arguments in @p argumentBuffer.
@@ -475,7 +510,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param argumentBuffer     The buffer holding a `CNA::IndirectDrawIndexedArguments`.
          * @param argumentByteOffset Where in it they start, in bytes. Must be a multiple of 4.
          * @throws System::NotSupportedException If the renderer does not report
-         *         `CNA::GraphicsCapability::IndirectDraw`, naming it.
+         *         `CNA::GraphicsCapability::IndirectDraw`, naming it, or if the buffer lacks the
+         *         declared indirect-argument usage.
          * @throws std::runtime_error If no vertex buffer, index buffer or effect is bound.
          * @throws System::ArgumentOutOfRangeException If @p argumentByteOffset is negative, not a
          *         multiple of 4, or leaves no room for the arguments in @p argumentBuffer.
@@ -1085,6 +1121,19 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] CNA::Internal::Renderers::ShaderDialectEXT GetShaderDialectEXT() const;
 
         /**
+         * @brief Returns whether the active renderer consumes an explicit shader payload pair.
+         *
+         * plans/plan_modern.md `MOD-2210`. This is a live renderer query, not a mapping from the
+         * renderer's name. Unknown, sentinel and invalid enum values return false.
+         *
+         * @param language The payload's declared source language or binary format.
+         * @param stage The programmable stage implemented by the payload.
+         * @return True only when the active renderer's implemented path consumes that exact pair.
+         */
+        CNAEXT [[nodiscard]] bool SupportsShaderLanguageEXT(
+            CNA::ShaderLanguageEXT language, CNA::ShaderStageEXT stage) const;
+
+        /**
          * @brief Returns which graphics renderer THIS DEVICE is using.
          *
          * plans/plan_runtimerenderer.md RTR-P7-3. This used to be `constexpr`, returning
@@ -1514,13 +1563,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // REMED-GFX-202: REMED-GFX-118's instance-range gate widened from the first per-instance
         // binding to EVERY one of them. `instanceCount` instances consume
-        // `1 + (instanceCount - 1) / InstanceFrequency` records of each per-instance stream,
-        // beginning at that stream's own VertexOffset -- all in vertex ELEMENTS of that stream's own
-        // declaration, never bytes. A stream too short is rejected here, naming the offending slot,
-        // even when another per-instance stream is long enough.
+        // `1 + (firstInstance + instanceCount - 1) / InstanceFrequency` records of each
+        // per-instance stream, beginning at that stream's own VertexOffset -- all in vertex
+        // ELEMENTS of that stream's own declaration, never bytes. A stream too short is rejected
+        // here, naming the offending slot, even when another per-instance stream is long enough.
         void ValidateInstanceStreamRanges(
             const CNA::Internal::Renderers::GpuDrawParams& p,
-            int instanceCount) const;
+            int instanceCount, int firstInstance = 0) const;
+
+        void DrawInstancedPrimitivesCore(
+            PrimitiveType primitiveType, int baseVertex, int minVertexIndex,
+            int numVertices, int startIndex, int primitiveCount,
+            int instanceCount, int firstInstance);
 
         // The one object-to-GPU-stream conversion behind every built-in vertex type's explicit
         // VertexDeclaration draw: the values are packed into the stream that type's declaration
@@ -1581,7 +1635,19 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetVirtualResolution(int width, int height);
         void SetPresentationMode(int mode);
         void applyPresentationParametersToWindow();
-        void applySamplerStatesToRenderer();
+        /**
+         * @brief Pushes SamplerStates[firstSlot..MaxSamplers-1] down to the renderer.
+         *
+         * Called from every draw entry point with the default, and from SpriteBatch's flush
+         * with firstSlot == 1 (plan_vulkan.md VULKAN-166): a sprite batch owns slot 0 through
+         * ISpriteBatchRenderer::SetSamplerFilter/SetSamplerAddressMode/SetSamplerAddressModeWEXT,
+         * so re-publishing it here would give one slot two writers with no ordering between them
+         * across the renderer families. Slots 1 and up have no other writer at all, which is why
+         * a ShaderEffect's second texture unit could not be sampled differently from its first.
+         *
+         * @param firstSlot Lowest sampler slot to publish; slots below it are left alone.
+         */
+        void applySamplerStatesToRenderer(int firstSlot = 0);
 
         /**
          * @brief Resets Viewport and ScissorRectangle to (0, 0, width, height).
@@ -1645,5 +1711,8 @@ namespace Microsoft::Xna::Framework::Graphics
         friend class Microsoft::Xna::Framework::GraphicsDeviceManager;
         friend class Microsoft::Xna::Framework::Game;
         friend class Microsoft::Xna::Framework::Content::ContentReader;
+        friend class CNA::Internal::Texture2DArrayGraphicsDeviceTestPeer;
+        friend class CNA::Internal::StorageTexture2DGraphicsDeviceTestPeer;
+        friend class CNA::Internal::StorageBufferGraphicsDeviceTestPeer;
     };
 }

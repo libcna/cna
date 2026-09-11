@@ -48,6 +48,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "System/NotSupportedException.hpp"
@@ -278,7 +279,11 @@ protected:
             std::exit(77);
         }
 
-        const auto cube   = Cube(Vector3(0.0f, kCubeCentre, 0.0f), kCubeHalf);
+        // Keep the caster in object space and place it through the public uWorld hook. An identity
+        // world matrix would hide the exact two-matrix collision MOD-2237 fixed on Vulkan: before
+        // the dedicated matrix block, setting uWorld overwrote uLightViewProjection.
+        const auto cube   = Cube(Vector3::Zero, kCubeHalf);
+        const Matrix cubeWorld = Matrix::CreateTranslation(0.0f, kCubeCentre, 0.0f);
         const auto ground = Ground();
         const BoundingBox sceneBounds(
             Vector3(-kGroundHalf, -1.0f, -kGroundHalf),
@@ -310,6 +315,7 @@ protected:
             pipeline.setShadowScene(&shadowMap, sun, sceneBounds, [&] {
                 device.setRasterizerStateProperty(RasterizerState::CullNone);
                 device.setDepthStencilStateProperty(DepthStencilState::Default);
+                shadowMap.getCasterEffect()->SetUniformMat4("uWorld", &cubeWorld.M11);
                 device.DrawUserPrimitives(PrimitiveType::TriangleList, cube.data(), 0, 12);
             });
 
@@ -391,7 +397,7 @@ protected:
               "with shadows disabled no pass runs and the plane is uniformly lit");
 
         if (benchmark_)
-            RunBenchmark(device, cube, sceneBounds);
+            RunBenchmark(device, cube, cubeWorld, sceneBounds);
 
         std::printf("=== %d/%d PASS ===\n", passCount_, checkCount_);
         result_ = (passCount_ == checkCount_) ? 0 : 1;
@@ -402,6 +408,7 @@ protected:
     /// not a budget, and running it in every CI job would spend minutes to learn nothing.
     void RunBenchmark(GraphicsDevice& device,
                       const std::vector<VertexPositionNormalTexture>& cube,
+                      const Matrix& cubeWorld,
                       const BoundingBox& sceneBounds)
     {
         DirectionalLightEXT sun;
@@ -425,6 +432,7 @@ protected:
             // One untimed pass first: the caster program is compiled on its first use, and folding
             // a shader compile into the first measurement would make Low look like the slow one.
             map.begin(sun, sceneBounds);
+            map.getCasterEffect()->SetUniformMat4("uWorld", &cubeWorld.M11);
             device.DrawUserPrimitives(PrimitiveType::TriangleList, cube.data(), 0, 12);
             map.end();
 
@@ -433,6 +441,7 @@ protected:
             for (int i = 0; i < kIterations; ++i)
             {
                 map.begin(sun, sceneBounds);
+                map.getCasterEffect()->SetUniformMat4("uWorld", &cubeWorld.M11);
                 device.DrawUserPrimitives(PrimitiveType::TriangleList, cube.data(), 0, 12);
                 map.end();
             }
