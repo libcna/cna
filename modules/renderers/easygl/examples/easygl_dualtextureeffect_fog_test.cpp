@@ -18,13 +18,9 @@
 // (`1(white)*2*0.502(gray)≈1.004`) so the pre-fog material color reduces to ~`DiffuseColor`
 // directly, isolating this test's own variable (fog) the same way Task 385/386 isolated theirs.
 //
-// A 3-point Z-sweep (`z=FogStart` full fog, `z=FogEnd` no fog, `z=0` half fog) proves the blend
-// is a genuine interpolation, not just an on/off switch — same methodology as Task 378. A real,
-// easy-to-miss consequence of the real formula: with `View=Identity`, `FogStart` is the FULLY
-// FOGGED boundary here, not the unfogged one the property name might suggest — see
-// `fog_gradient_quad.scene`'s own comment / Task 1111 for the full derivation. `World`/`View`/
-// `Projection` are all Identity, so raw vertex Z is `gl_Position.z` directly (must stay within
-// OpenGL's valid clip-space NDC range `[-1,1]` or the primitive gets frustum-clipped away).
+// A 3-point Z-sweep (`z=0` no fog, `z=0.45` half fog, `z=0.9` full fog) proves the blend is a
+// genuine interpolation, not just an on/off switch. `World`/`View`/`Projection` are all Identity,
+// so this renderer-neutral fixture keeps raw vertex Z inside Direct3D's [0,1] clip interval.
 //
 // CONFIRMED, NOT FIXED HERE: Vulkan and Bgfx have zero fog GPU implementation for any 3D effect
 // (Task 888, discovered by Task 378) — no test is added for either renderer, matching Task 377/378's
@@ -57,17 +53,17 @@ static constexpr int kSize = 64;
 
 static const Vector3 kDiffuse(0.8f, 0.2f, 0.4f);
 static const Vector3 kFogColor(0.1f, 0.6f, 0.9f);
-// Kept inside OpenGL's valid clip-space NDC range [-1,1] (World/View/Projection are all Identity
-// in this test, so raw vertex z IS gl_Position.z).
-static constexpr float kFogStart = -0.9f;
-static constexpr float kFogEnd   =  0.9f;
+// The descending fog range places the full observable gradient inside both renderers' visible
+// positive clip-space interval.
+static constexpr float kFogStart =  0.0f;
+static constexpr float kFogEnd   = -0.9f;
 
 // Expected: mix(FogColor, MaterialColor, clamp((z+FogEnd)/(FogEnd-FogStart),0,1)), where
 // MaterialColor ≈ white*2*gray(0.502)*DiffuseColor ≈ DiffuseColor (the *2/gray cancellation is
 // not exact -- 2*128/255=1.00392 -- so expected material color is (205,51,102), not (204,51,102)).
-static const Color kExpectedNoFog(205, 51, 102, 255);   // z=FogEnd:   factor=1, unblended material color
-static const Color kExpectedFullFog(26, 153, 230, 255); // z=FogStart: factor=0, pure fog color
-static const Color kExpectedHalfFog(115, 102, 166, 255);// z=0:        factor=0.5, halfway blend
+static const Color kExpectedNoFog(205, 51, 102, 255);   // z=0:    factor=1, unblended material color
+static const Color kExpectedFullFog(26, 153, 230, 255); // z=0.9:  factor=0, pure fog color
+static const Color kExpectedHalfFog(115, 102, 166, 255);// z=0.45: factor=0.5, halfway blend
 
 class DualTextureFogTest : public Game
 {
@@ -155,17 +151,17 @@ protected:
         Texture2D texWhite(dev, 1, 1); texWhite.SetData(&kWhite, 1);
         Texture2D texGray(dev, 1, 1);  texGray.SetData(&kGrayHalf, 1);
 
-        const Color noFogGot = renderAtZ(dev, texWhite, texGray, kFogEnd);
+        const Color noFogGot = renderAtZ(dev, texWhite, texGray, 0.0f);
         check(matches(noFogGot, kExpectedNoFog),
-              "z=0.9 (at FogEnd): unblended material color", noFogGot, "(205,51,102)");
+              "z=0: unblended material color", noFogGot, "(205,51,102)");
 
-        const Color fullFogGot = renderAtZ(dev, texWhite, texGray, kFogStart);
+        const Color fullFogGot = renderAtZ(dev, texWhite, texGray, 0.9f);
         check(matches(fullFogGot, kExpectedFullFog),
-              "z=-0.9 (at FogStart): pure fog color", fullFogGot, "(26,153,230)");
+              "z=0.9: pure fog color", fullFogGot, "(26,153,230)");
 
-        const Color halfFogGot = renderAtZ(dev, texWhite, texGray, 0.0f);
+        const Color halfFogGot = renderAtZ(dev, texWhite, texGray, 0.45f);
         check(matches(halfFogGot, kExpectedHalfFog),
-              "z=0 (halfway): 50/50 blend, proves real interpolation not on/off",
+              "z=0.45 (halfway): 50/50 blend, proves real interpolation not on/off",
               halfFogGot, "(115,102,166)");
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);

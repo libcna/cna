@@ -755,6 +755,10 @@ class FrontFaceWindingTest : public Game
             Outcome o; o.unsupported = true; o.what = e.what();
             return o;
         }
+        // RenderTarget2D content becomes sampleable/readable at the destination-switch boundary;
+        // in particular, that is where a multisampled attachment is resolved. This fixture tests
+        // winding, not the separate active-target GetData boundary.
+        if (dest.rt) dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         const Readback r = Read(dev, dest);
         if (!r.ok()) { Outcome o; o.unreadable = true; return o; }
         return Classify(r, kRedC, kGrnC);

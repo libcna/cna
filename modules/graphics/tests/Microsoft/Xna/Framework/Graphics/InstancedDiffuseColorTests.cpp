@@ -142,11 +142,9 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
                            Vulkan, DirectX9, DirectX11, DirectX12, SdlGpu);
 }
 
-// The renderers whose instanced route this file has MEASURED on a real display. D3D9/D3D11/D3D12
-// stay outside it because no D3D display is reachable here (SDL reports "x11 not available" under
-// Wine on the Xvfb displays this environment permits), and an unmeasured renderer must not be
-// asserted in either direction. Every leg still PRINTS its reading there, which is the evidence
-// those renderers lack.
+// The renderers whose instanced route this file has MEASURED on a GPU-backed display. D3D11 and
+// D3D12 are covered through Wine on the private headless Mutter/Xwayland compositor; D3D9 remains
+// outside the asserted set until equivalent runtime evidence exists.
 //
 // UNLIKE InstancedVertexColorTests.cpp, this file grants NO renderer an exemption: every measured
 // renderer is asserted against the CONTRACT above, never against its own measured behaviour. That is
@@ -154,8 +152,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedDiffuseMeasured()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx,
-                           Vulkan, WebGPU, SdlGpu);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU,
+                           DirectX11, DirectX12, SdlGpu);
 }
 
 

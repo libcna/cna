@@ -6,12 +6,15 @@
 
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/DepthNormalPrepass.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
@@ -22,11 +25,16 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "shaders/particle_system/ParticleSystemShaderPackage.generated.hpp"
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cmath>
+#include <cstdint>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace CNA::Graphics {
 
@@ -36,6 +44,7 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Vector3;
     using Microsoft::Xna::Framework::Vector4;
     using Microsoft::Xna::Framework::Graphics::BasicEffect;
+    using Microsoft::Xna::Framework::Graphics::BufferUsage;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::IndexBuffer;
     using Microsoft::Xna::Framework::Graphics::PrimitiveType;
@@ -47,157 +56,97 @@ namespace CNA::Graphics {
 
     namespace {
 
-        /// The hash and the spawn, written once in GLSL and once in C++ below. Integer arithmetic
-        /// wraps identically in both languages, so every value a spawn draws is bit-identical
-        /// across the two simulations; only the integration can differ, and only by rounding.
-        constexpr const char* kSharedGlsl = R"(
-uint cnaParticleHash(uint x) {
-    x ^= x >> 16u; x *= 0x7feb352du;
-    x ^= x >> 15u; x *= 0x846ca68bu;
-    x ^= x >> 16u; return x;
-}
-float cnaParticleRandom(uint seed) {
-    return float(cnaParticleHash(seed) & 0x00ffffffu) / 16777216.0;
-}
-)";
+        struct ParticleSimulationParameters
+        {
+            std::array<float, 4> Simulation0{};
+            std::array<float, 4> Simulation1{};
+            std::array<float, 4> Origin{};
+            std::array<float, 4> Direction{};
+            std::array<float, 4> Gravity{};
+        };
+        static_assert(sizeof(ParticleSimulationParameters) == 20 * sizeof(float));
 
-        constexpr const char* kComputeSource = R"(#version 310 es
-layout(local_size_x = 64) in;
-layout(std430, binding = 0) buffer CnaParticles { vec4 cnaParticles[]; };
-uniform int   uCount;
-uniform float uElapsed;
-uniform float uConeAngle;
-uniform float uSpeed;
-uniform float uSpeedVariance;
-uniform float uLifetime;
-uniform float uLifetimeVariance;
-uniform float uDrag;
-uniform float uOriginX; uniform float uOriginY; uniform float uOriginZ;
-uniform float uDirectionX; uniform float uDirectionY; uniform float uDirectionZ;
-uniform float uGravityX; uniform float uGravityY; uniform float uGravityZ;
-)";
+        template <std::size_t N>
+        [[nodiscard]] std::vector<std::uint8_t> ToBytes(const std::uint32_t (&words)[N])
+        {
+            const auto* begin = reinterpret_cast<const std::uint8_t*>(words);
+            return std::vector<std::uint8_t>(begin, begin + sizeof(words));
+        }
 
-        constexpr const char* kComputeBody = R"(
-void cnaSpawn(uint index, uint generation, out vec3 position, out vec3 velocity, out float lifetime) {
-    uint seed = cnaParticleHash(index * 747796405u + generation * 2891336453u);
-    float u = cnaParticleRandom(seed);
-    float v = cnaParticleRandom(seed + 1u);
-    float w = cnaParticleRandom(seed + 2u);
-    float x = cnaParticleRandom(seed + 3u);
+        [[nodiscard]] ShaderPackageEXT CreateParticleComputePackage()
+        {
+            using namespace detail::ParticleSystemGenerated;
+            return ShaderPackageEXT(
+                {
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "particle_system/simulate.es.comp.glsl",
+                                  std::string(kSimulateEsComputeSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "particle_system/simulate.desktop.comp.glsl",
+                                  std::string(kSimulateDesktopComputeSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Compute, "main",
+                                  "particle_system/simulate.vulkan.comp.spv",
+                                  ToBytes(kSimulateVulkanComputeSpirV)),
+                },
+                {CNA::ShaderStageEXT::Compute},
+                {
+                    ShaderBindingRequirementEXT(
+                        "CnaParticles", 0, ShaderBindingTypeEXT::StorageBuffer,
+                        CNA::ShaderStageEXT::Compute),
+                    ShaderBindingRequirementEXT(
+                        "ParticleSimulationParameters", 1,
+                        ShaderBindingTypeEXT::ConstantBuffer,
+                        CNA::ShaderStageEXT::Compute),
+                });
+        }
 
-    // A direction inside the cone, uniformly over the cap rather than over the angle -- sampling
-    // the angle uniformly crowds the axis, which reads as a beam with a bright core.
-    // Written as the CPU writes it, not as mix(), so the two agree bit for bit rather
-    // than nearly: mix(x, y, a) is x*(1-a) + y*a, which is a different float expression.
-    float cosTheta = 1.0 + (cos(uConeAngle) - 1.0) * u;
-    float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
-    float phi = 6.28318530718 * v;
-
-    vec3 axis = normalize(vec3(uDirectionX, uDirectionY, uDirectionZ));
-    vec3 helper = abs(axis.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 right = normalize(cross(helper, axis));
-    vec3 up = cross(axis, right);
-    vec3 direction = axis * cosTheta + (right * cos(phi) + up * sin(phi)) * sinTheta;
-
-    float speed = uSpeed * (1.0 + uSpeedVariance * (w * 2.0 - 1.0));
-    position = vec3(uOriginX, uOriginY, uOriginZ);
-    velocity = direction * speed;
-    lifetime = max(uLifetime * (1.0 + uLifetimeVariance * (x * 2.0 - 1.0)), 1e-3);
-}
-
-void main() {
-    uint index = gl_GlobalInvocationID.x;
-    if (index >= uint(uCount)) return;
-    uint base = index * 3u;
-
-    vec3  position = cnaParticles[base].xyz;
-    vec3  velocity = cnaParticles[base + 1u].xyz;
-    vec4  state    = cnaParticles[base + 2u];
-    float age      = state.x;
-    float lifetime = state.y;
-    float generation = state.w;
-
-    age += uElapsed;
-    if (age >= lifetime) {
-        generation += 1.0;
-        // The overshoot is carried into the new particle's age, so a long step does not quietly
-        // shorten every lifetime it spans.
-        age -= lifetime;
-        cnaSpawn(index, uint(generation), position, velocity, lifetime);
-    }
-
-    velocity += vec3(uGravityX, uGravityY, uGravityZ) * uElapsed;
-    velocity -= velocity * min(uDrag * uElapsed, 1.0);
-    position += velocity * uElapsed;
-
-    cnaParticles[base]      = vec4(position, 0.0);
-    cnaParticles[base + 1u] = vec4(velocity, 0.0);
-    cnaParticles[base + 2u] = vec4(age, lifetime, state.z, generation);
-}
-)";
-
-        constexpr const char* kDrawVertexBody = R"(
-layout(location = 0) in vec3 aPos;
-out vec2 vTexCoord;
-out vec4 vColor;
-out float vViewDepth;
-uniform mat4 View;
-uniform mat4 Projection;
-uniform vec4 uStartColor;
-uniform vec4 uEndColor;
-uniform float uStartSize;
-uniform float uEndSize;
-uniform int  uActiveCount;
-
-void main() {
-    int base = gl_InstanceID * 3;
-    vec3 position = cnaParticles[base].xyz;
-    vec4 state    = cnaParticles[base + 2];
-    float t = clamp(state.x / max(state.y, 1e-4), 0.0, 1.0);
-    float size = mix(uStartSize, uEndSize, t);
-    if (gl_InstanceID >= uActiveCount) size = 0.0;
-
-    // Billboarded in view space: the quad's corners are added after the view transform, so it
-    // faces the camera without any per-particle rotation and without the CPU knowing the camera.
-    vec3 viewPosition = (View * vec4(position, 1.0)).xyz;
-    viewPosition.xy += aPos.xy * size;
-    gl_Position = Projection * vec4(viewPosition, 1.0);
-    vTexCoord = aPos.xy + 0.5;
-    vColor = mix(uStartColor, uEndColor, t);
-    // MOD-2109: the billboard's own distance along the view, which the fragment compares against
-    // whatever the depth image says is behind it.
-    vViewDepth = -viewPosition.z;
-}
-)";
-
-        constexpr const char* kDrawFragmentBody = R"(
-in vec2 vTexCoord;
-in vec4 vColor;
-in float vViewDepth;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform sampler2D uSceneDepth;
-uniform vec2  uViewport;
-uniform float uHasDepth;
-uniform float uSoftness;
-uniform float uDepthFarPlane;
-
-void main() {
-    vec4 colour = texture(texture1, vTexCoord) * vColor;
-    if (uHasDepth > 0.5 && uSoftness > 0.0) {
-        // The depth image is screen-sized, so the sample point is this fragment's own position in
-        // it. Both images are render targets in every path that supplies one, which is what makes
-        // gl_FragCoord the right coordinate rather than an orientation gamble.
-        vec2 uv = gl_FragCoord.xy / max(uViewport, vec2(1.0));
-        float behind = cnaDecodeLinearDepth(texture(uSceneDepth, uv)) * uDepthFarPlane;
-        // A particle touching the surface behind it vanishes; one a full softness in front of it is
-        // untouched. Linear between, which is what makes an intersecting billboard read as volume
-        // rather than as a cut.
-        colour.a *= clamp((behind - vViewDepth) / uSoftness, 0.0, 1.0);
-    }
-    FragColor = colour;
-}
-)";
+        [[nodiscard]] ShaderPackageEXT CreateParticleDrawPackage()
+        {
+            using namespace detail::ParticleSystemGenerated;
+            return ShaderPackageEXT(
+                {
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "particle_system/draw.es.vert.glsl",
+                                  std::string(kDrawEsVertexSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "particle_system/draw.es.frag.glsl",
+                                  std::string(kDrawEsFragmentSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "particle_system/draw.desktop.vert.glsl",
+                                  std::string(kDrawDesktopVertexSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "particle_system/draw.desktop.frag.glsl",
+                                  std::string(kDrawDesktopFragmentSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "particle_system/draw.vulkan.vert.spv",
+                                  ToBytes(kDrawVulkanVertexSpirV)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "particle_system/draw.vulkan.frag.spv",
+                                  ToBytes(kDrawVulkanFragmentSpirV)),
+                },
+                {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
+                {
+                    ShaderBindingRequirementEXT(
+                        "texture1", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                        CNA::ShaderStageEXT::Fragment),
+                    ShaderBindingRequirementEXT(
+                        "uSceneDepth", 1, ShaderBindingTypeEXT::SampledTexture2D,
+                        CNA::ShaderStageEXT::Fragment),
+                    ShaderBindingRequirementEXT(
+                        "CnaParticleBuffer", ParticleSystem::kParticleBinding,
+                        ShaderBindingTypeEXT::StorageBuffer,
+                        CNA::ShaderStageEXT::Vertex),
+                });
+        }
 
         std::uint32_t Hash(std::uint32_t x)
         {
@@ -309,49 +258,66 @@ layout(std430, binding = 7) readonly buffer CnaParticleBuffer { vec4 cnaParticle
             unsupportedReason_ =
                 "this context allows no storage buffer in a vertex shader, so the draw could not "
                 "read what the simulation wrote";
-        else if (!device.ExecutesShaderEffectSourceEXT())
-            unsupportedReason_ =
-                "this renderer accepts effect source without running it, so the particle shader "
-                "would never execute";
+        else if (!device.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
+            unsupportedReason_ = "this renderer cannot execute a custom particle draw effect";
 
         if (unsupportedReason_.empty())
         {
-            std::string compute = std::string(kComputeSource) + kSharedGlsl + kComputeBody;
-            program_ = std::make_unique<ComputeShader>(device, compute);
-            std::string vertex = "#version 310 es\nprecision highp float;\n";
-            vertex += getParticleLookupGlsl();
-            vertex += kDrawVertexBody;
-            std::string fragment = "#version 310 es\nprecision highp float;\n";
-            fragment += DepthNormalPrepass::getDepthDecodeGlsl(
-                DepthNormalPrepass::usesPackedDepthEXT(device));
-            fragment += kDrawFragmentBody;
-            effect_ = std::make_unique<ShaderEffect>(device, vertex, fragment);
-            bool logged = false;
-            detail::reportShaderCompileFailure(device, "ParticleSystem", effect_.get(), logged);
-
-            if (!program_->isValid() || effect_ == nullptr || !effect_->IsEffectValid())
+            const ShaderPackageEXT computePackage = CreateParticleComputePackage();
+            const ShaderPackageEXT drawPackage = CreateParticleDrawPackage();
+            if (!computePackage.selectFor(device).isUsable()
+                || !drawPackage.selectFor(device).isUsable())
             {
-                unsupportedReason_ = "the particle shaders did not compile on this device";
-                program_.reset();
-                effect_.reset();
+                unsupportedReason_ =
+                    "this renderer has no usable portable particle shader variants";
             }
             else
             {
-                buffer_ = std::make_unique<StorageBuffer>(
-                    device, static_cast<std::size_t>(capacity_) * sizeof(Particle));
+                try
+                {
+                    program_ = std::make_unique<ComputeShader>(device, computePackage);
+                    effect_ = std::make_unique<ShaderEffect>(device, drawPackage);
+                    bool logged = false;
+                    detail::reportShaderCompileFailure(
+                        device, "ParticleSystem", effect_.get(), logged);
+                    if (!program_->isValid() || !effect_->IsEffectValid())
+                        throw std::runtime_error(
+                            "the selected portable particle shader did not compile");
 
-                // One unit quad, drawn once per particle. Wound clockwise, like every other piece
-                // of geometry this layer's tests draw, so the default rasterizer keeps it.
-                const std::array<VertexPositionColor, 4> corners{
-                    VertexPositionColor(Vector3(-0.5f, -0.5f, 0.0f), Color::White),
-                    VertexPositionColor(Vector3(-0.5f, 0.5f, 0.0f), Color::White),
-                    VertexPositionColor(Vector3(0.5f, 0.5f, 0.0f), Color::White),
-                    VertexPositionColor(Vector3(0.5f, -0.5f, 0.0f), Color::White)};
-                quad_ = std::make_unique<VertexBuffer>(device, 4);
-                quad_->SetData(corners.data(), 4);
-                const std::array<std::uint16_t, 6> order{0, 1, 2, 0, 2, 3};
-                quadIndices_ = std::make_unique<IndexBuffer>(device, 6);
-                quadIndices_->SetData(order.data(), 6);
+                    buffer_ = std::make_unique<StorageBuffer>(
+                        device, static_cast<std::size_t>(capacity_) * sizeof(Particle));
+                    computeParameters_ = std::make_unique<StorageBuffer>(
+                        device,
+                        StorageBufferDescriptor(
+                            sizeof(ParticleSimulationParameters),
+                            StorageBufferUsage::Constant,
+                            StorageBufferCpuAccess::Write));
+
+                    // One unit quad, drawn once per particle. Its own declaration is required by a
+                    // portable custom effect; inferring inputs from stride is not valid.
+                    const std::array<VertexPositionColor, 4> corners{
+                        VertexPositionColor(Vector3(-0.5f, -0.5f, 0.0f), Color::White),
+                        VertexPositionColor(Vector3(-0.5f, 0.5f, 0.0f), Color::White),
+                        VertexPositionColor(Vector3(0.5f, 0.5f, 0.0f), Color::White),
+                        VertexPositionColor(Vector3(0.5f, -0.5f, 0.0f), Color::White)};
+                    quad_ = std::make_unique<VertexBuffer>(
+                        device, VertexPositionColor::getVertexDeclarationStatic(), 4,
+                        BufferUsage::None);
+                    quad_->SetData(corners.data(), 4);
+                    const std::array<std::uint16_t, 6> order{0, 1, 2, 0, 2, 3};
+                    quadIndices_ = std::make_unique<IndexBuffer>(device, 6);
+                    quadIndices_->SetData(order.data(), 6);
+                }
+                catch (const std::exception& error)
+                {
+                    unsupportedReason_ =
+                        "the portable particle shaders did not initialise: "
+                        + std::string(error.what());
+                    program_.reset();
+                    effect_.reset();
+                    buffer_.reset();
+                    computeParameters_.reset();
+                }
             }
         }
 
@@ -451,27 +417,22 @@ layout(std430, binding = 7) readonly buffer CnaParticleBuffer { vec4 cnaParticle
     {
         if (elapsedSeconds <= 0.0f) return;
 
-        if (!forceCpu_ && program_ != nullptr && buffer_ != nullptr)
+        if (!forceCpu_ && program_ != nullptr && buffer_ != nullptr
+            && computeParameters_ != nullptr)
         {
             if (!gpuStateValid_) uploadToGpu();
+            const ParticleSimulationParameters parameters{
+                {static_cast<float>(getActiveCount()), elapsedSeconds,
+                 settings_.ConeAngle, settings_.Speed},
+                {settings_.SpeedVariance, settings_.Lifetime,
+                 settings_.LifetimeVariance, settings_.Drag},
+                {settings_.Position.X, settings_.Position.Y, settings_.Position.Z, 0.0f},
+                {settings_.Direction.X, settings_.Direction.Y, settings_.Direction.Z, 0.0f},
+                {settings_.Gravity.X, settings_.Gravity.Y, settings_.Gravity.Z, 0.0f},
+            };
+            computeParameters_->setBytes(&parameters, sizeof(parameters));
             program_->bindStorageBuffer(0, *buffer_);
-            program_->setUniform("uCount", getActiveCount());
-            program_->setUniform("uElapsed", elapsedSeconds);
-            program_->setUniform("uConeAngle", settings_.ConeAngle);
-            program_->setUniform("uSpeed", settings_.Speed);
-            program_->setUniform("uSpeedVariance", settings_.SpeedVariance);
-            program_->setUniform("uLifetime", settings_.Lifetime);
-            program_->setUniform("uLifetimeVariance", settings_.LifetimeVariance);
-            program_->setUniform("uDrag", settings_.Drag);
-            program_->setUniform("uOriginX", settings_.Position.X);
-            program_->setUniform("uOriginY", settings_.Position.Y);
-            program_->setUniform("uOriginZ", settings_.Position.Z);
-            program_->setUniform("uDirectionX", settings_.Direction.X);
-            program_->setUniform("uDirectionY", settings_.Direction.Y);
-            program_->setUniform("uDirectionZ", settings_.Direction.Z);
-            program_->setUniform("uGravityX", settings_.Gravity.X);
-            program_->setUniform("uGravityY", settings_.Gravity.Y);
-            program_->setUniform("uGravityZ", settings_.Gravity.Z);
+            program_->bindConstantBuffer(1, *computeParameters_);
             program_->dispatch((getActiveCount() + 63) / 64);
             program_->barrier(CNA::GraphicsMemoryBarrier::ShaderStorage);
             usesCompute_ = true;
@@ -509,22 +470,34 @@ layout(std430, binding = 7) readonly buffer CnaParticleBuffer { vec4 cnaParticle
             effect_->setViewProperty(view);
             effect_->setProjectionProperty(projection);
             effect_->Apply();
-            effect_->SetUniformVec4("uStartColor", settings_.StartColor.X, settings_.StartColor.Y,
-                                    settings_.StartColor.Z, settings_.StartColor.W);
-            effect_->SetUniformVec4("uEndColor", settings_.EndColor.X, settings_.EndColor.Y,
-                                    settings_.EndColor.Z, settings_.EndColor.W);
-            effect_->SetUniformFloat("uStartSize", settings_.StartSize);
-            effect_->SetUniformFloat("uEndSize", settings_.EndSize);
-            effect_->SetUniformInt("uActiveCount", active);
+            std::array<float, 32> matrices{};
+            view.ToColumnMajor(matrices.data());
+            projection.ToColumnMajor(matrices.data() + 16);
+            const std::array<float, 6> colours{
+                settings_.StartColor.X, settings_.StartColor.Y, settings_.StartColor.Z,
+                settings_.EndColor.X, settings_.EndColor.Y, settings_.EndColor.Z,
+            };
+            const bool fading =
+                sceneDepth_ != nullptr && depthFarPlane_ > 0.0f && softness_ > 0.0f;
+            const std::array<float, 11> scalars{
+                settings_.StartColor.W,
+                settings_.EndColor.W,
+                settings_.StartSize,
+                settings_.EndSize,
+                static_cast<float>(active),
+                fading ? 1.0f : 0.0f,
+                softness_,
+                depthFarPlane_,
+                static_cast<float>(device_.getViewportProperty().getWidthProperty()),
+                static_cast<float>(device_.getViewportProperty().getHeightProperty()),
+                DepthNormalPrepass::usesPackedDepthEXT(device_) ? 1.0f : 0.0f,
+            };
+            effect_->SetUniformMat4Array("uParticleMatrices", matrices.data(), 2);
+            effect_->SetUniformVec3Array("uParticleColours", colours.data(), 2);
+            effect_->SetUniformFloatArray(
+                "uParticleScalars", scalars.data(), static_cast<int>(scalars.size()));
             effect_->SetUniformInt("texture1", 0);
             effect_->SetTexture(0, *texture);
-            const bool fading = sceneDepth_ != nullptr && depthFarPlane_ > 0.0f && softness_ > 0.0f;
-            effect_->SetUniformFloat("uHasDepth", fading ? 1.0f : 0.0f);
-            effect_->SetUniformFloat("uSoftness", softness_);
-            effect_->SetUniformFloat("uDepthFarPlane", depthFarPlane_);
-            effect_->SetUniformVec2("uViewport",
-                                    static_cast<float>(device_.getViewportProperty().getWidthProperty()),
-                                    static_cast<float>(device_.getViewportProperty().getHeightProperty()));
             if (fading)
             {
                 effect_->SetUniformInt("uSceneDepth", 1);

@@ -6,6 +6,9 @@
 #include "CNA/Graphics/ClusteredLightAssignment.hpp"
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
 #include "CNA/Graphics/ClusteredLightSetEXT.hpp"
+#include "CNA/Graphics/StorageBuffer.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
@@ -84,6 +87,13 @@ namespace CNA::Graphics {
         nearPlane_  = grid.getNearPlane();
         farPlane_   = grid.getFarPlane();
 
+        std::vector<float> storageLights(
+            static_cast<std::size_t>(std::max(1, lightCount_)) * kFloatsPerLight, 0.0f);
+        std::vector<std::uint32_t> storageClusters(
+            static_cast<std::size_t>(std::max(1, clusterCount_)) * 2, 0u);
+        std::vector<std::uint32_t> storageIndices(
+            static_cast<std::size_t>(std::max(1, referenceCount_)), 0u);
+
         // ── The lights ───────────────────────────────────────────────────────
         {
             const int rows = std::max(1, lightCount_);
@@ -109,8 +119,12 @@ namespace CNA::Graphics {
                     0.0f, 0.0f, 0.0f,
                 };
                 for (int f = 0; f < kFloatsPerLight; ++f)
+                {
+                    storageLights[static_cast<std::size_t>(index) * kFloatsPerLight +
+                                  static_cast<std::size_t>(f)] = values[f];
                     texels[static_cast<std::size_t>(index) * kFloatsPerLight +
                            static_cast<std::size_t>(f)] = PackFloat(values[f]);
+                }
             }
             lightData_ = std::make_unique<Texture2D>(device_, kFloatsPerLight, rows);
             lightData_->SetData(texels.data(), static_cast<int>(texels.size()));
@@ -131,6 +145,10 @@ namespace CNA::Graphics {
                     PackUInt32(static_cast<std::uint32_t>(begin));
                 texels[static_cast<std::size_t>(cluster) * 2 + 1] =
                     PackUInt32(static_cast<std::uint32_t>(end - begin));
+                storageClusters[static_cast<std::size_t>(cluster) * 2] =
+                    static_cast<std::uint32_t>(begin);
+                storageClusters[static_cast<std::size_t>(cluster) * 2 + 1] =
+                    static_cast<std::uint32_t>(end - begin);
             }
             clusterTable_ = std::make_unique<Texture2D>(device_, kTableWidth, rows);
             clusterTable_->SetData(texels.data(), static_cast<int>(texels.size()));
@@ -143,10 +161,39 @@ namespace CNA::Graphics {
                                       Color(0, 0, 0, 0));
             const std::vector<int>& indices = assignment.getIndices();
             for (int i = 0; i < referenceCount_; ++i)
+            {
                 texels[static_cast<std::size_t>(i)] =
                     PackUInt32(static_cast<std::uint32_t>(indices[static_cast<std::size_t>(i)]));
+                storageIndices[static_cast<std::size_t>(i)] =
+                    static_cast<std::uint32_t>(indices[static_cast<std::size_t>(i)]);
+            }
             indexList_ = std::make_unique<Texture2D>(device_, kTableWidth, rows);
             indexList_->SetData(texels.data(), static_cast<int>(texels.size()));
+        }
+
+        if (device_.SupportsShaderLanguageEXT(
+                CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Fragment))
+        {
+            const auto makeStorage = [this](const void* data, const std::size_t byteSize) {
+                auto buffer = std::make_unique<StorageBuffer>(
+                    device_, StorageBufferDescriptor(
+                                 byteSize, StorageBufferUsage::Storage,
+                                 StorageBufferCpuAccess::Write));
+                buffer->setBytes(data, byteSize);
+                return buffer;
+            };
+            storageLights_ = makeStorage(
+                storageLights.data(), storageLights.size() * sizeof(float));
+            storageClusters_ = makeStorage(
+                storageClusters.data(), storageClusters.size() * sizeof(std::uint32_t));
+            storageIndices_ = makeStorage(
+                storageIndices.data(), storageIndices.size() * sizeof(std::uint32_t));
+        }
+        else
+        {
+            storageLights_.reset();
+            storageClusters_.reset();
+            storageIndices_.reset();
         }
 
         uploaded_ = true;
@@ -172,6 +219,21 @@ namespace CNA::Graphics {
         effect.SetUniformInt("uCnaLightCount", lightCount_);
         effect.SetUniformFloat("uCnaGridNear", nearPlane_);
         effect.SetUniformFloat("uCnaGridFar", farPlane_);
+    }
+
+    void ClusteredLightBuffer::bindStorageForDraw() const
+    {
+        if (!uploaded_ || storageLights_ == nullptr || storageClusters_ == nullptr ||
+            storageIndices_ == nullptr)
+            throw std::runtime_error(
+                "CNA::Graphics::ClusteredLightBuffer: the selected binary shader needs its "
+                "storage-buffer mirror, but this upload did not create one");
+        device_.GetRenderer().BindStorageBufferForDrawEXT(
+            6, *storageLights_->getRendererEXT());
+        device_.GetRenderer().BindStorageBufferForDrawEXT(
+            7, *storageClusters_->getRendererEXT());
+        device_.GetRenderer().BindStorageBufferForDrawEXT(
+            8, *storageIndices_->getRendererEXT());
     }
 
     std::string ClusteredLightBuffer::getLightLookupGlsl()

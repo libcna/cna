@@ -74,6 +74,21 @@ namespace Microsoft::Xna::Framework
         game_ = game;
         graphicsDevice_ = &game_->getGraphicsDeviceProperty();
 
+        // Let the window decide orientation from the surface the game draws into rather than from
+        // the window around it. Installed here rather than in ApplyChanges(), which returns early
+        // whenever nothing changed and so cannot be relied on to run at all. Captured as a
+        // provider, not a value, because the window re-derives orientation from inside the
+        // platform's own resize handling, long after this. See
+        // GameWindow::SetLogicalSizeProviderEXT and misc/known_bugs.md.
+        {
+            auto* const device = graphicsDevice_;
+            game_->getWindowProperty().SetLogicalSizeProviderEXT(
+                [device](int& width, int& height)
+                {
+                    return device != nullptr && device->GetLogicalSizeEXT(width, height);
+                });
+        }
+
         registerServices();
 
         // Deliberately NOT calling ApplyChanges() here (cna-template/missing.md): Game's own

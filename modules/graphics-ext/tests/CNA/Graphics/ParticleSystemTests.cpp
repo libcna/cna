@@ -237,6 +237,47 @@ TEST(ParticleSystemTest, TheGpuSimulationAgreesWithTheCpuOne)
         << "no particle lived out its lifetime, so the respawn half was never compared";
 }
 
+TEST(ParticleSystemTest, AZeroEmissionDirectionUsesTheSameFallbackAxisOnGpuAndCpu)
+{
+    GraphicsDevice device;
+    ParticleSystem system(device, 16);
+    if (!system.getUnsupportedReason().empty())
+        GTEST_SKIP() << system.getUnsupportedReason();
+
+    ParticleEmitterSettings settings = QuietSettings();
+    settings.Direction = Vector3::Zero;
+    settings.ConeAngle = 0.0f;
+    settings.Speed = 2.0f;
+    settings.SpeedVariance = 0.0f;
+    settings.Lifetime = 0.01f;
+    settings.LifetimeVariance = 0.0f;
+    settings.Gravity = Vector3::Zero;
+    settings.Drag = 0.0f;
+    settings.EmissionRate = 1600.0f;
+    system.setSettings(settings);
+    system.reset();
+
+    std::vector<Particle> mirror = system.readParticlesEXT();
+    constexpr float kStep = 0.02f;
+    system.update(kStep);
+    for (int i = 0; i < system.getActiveCount(); ++i)
+        ParticleSystem::step(mirror[static_cast<std::size_t>(i)], i, settings, kStep);
+    ASSERT_TRUE(system.usesCompute());
+
+    const std::vector<Particle> gpu = system.readParticlesEXT();
+    ASSERT_EQ(gpu.size(), mirror.size());
+    for (int i = 0; i < system.getActiveCount(); ++i)
+    {
+        const Particle& actual = gpu[static_cast<std::size_t>(i)];
+        const Particle& expected = mirror[static_cast<std::size_t>(i)];
+        EXPECT_TRUE(std::isfinite(actual.Position.Y)) << "particle " << i;
+        EXPECT_NEAR(actual.Position.X, expected.Position.X, 1e-5f) << "particle " << i;
+        EXPECT_NEAR(actual.Position.Y, expected.Position.Y, 1e-5f) << "particle " << i;
+        EXPECT_NEAR(actual.Position.Z, expected.Position.Z, 1e-5f) << "particle " << i;
+        EXPECT_NEAR(actual.Velocity.Y, expected.Velocity.Y, 1e-5f) << "particle " << i;
+    }
+}
+
 TEST(ParticleSystemTest, PinningTheSimulationToTheCpuCarriesTheParticlesAcross)
 {
     // The fallback has to be runnable on a device that does not need it, or nothing ever runs it.

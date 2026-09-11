@@ -92,23 +92,33 @@ class VulkanSkinnedEffectVertexColorTest : public Game
         return px;
     }
 
+    /// plan_vulkan.md VULKAN-205: the lighting terms are parameters with the original values as
+    /// defaults, so every leg written before this row calls it unchanged. The two new legs need a
+    /// scene where the specular is the ONLY term, and one where the lit sum crosses 1 -- neither of
+    /// which the original scene can express (it sets SpecularColor to zero on purpose).
     Color renderWith(GraphicsDevice& dev, Texture2D& tex, bool vertexColorEnabled,
                       std::uint8_t vr, std::uint8_t vg, std::uint8_t vb, std::uint8_t va,
-                      const BlendState& blendState)
+                      const BlendState& blendState,
+                      Vector3 ambient        = Vector3::Zero,
+                      Vector3 diffuseColor   = Vector3(0.8f, 0.6f, 0.4f),
+                      Vector3 light0Diffuse  = Vector3(0.5f, 0.5f, 0.5f),
+                      Vector3 specularColor  = Vector3::Zero,
+                      Vector3 light0Specular = Vector3::Zero,
+                      float   specularPower  = 32.0f)
     {
         SkinnedEffect fx(dev);
         fx.setTextureProperty(&tex);
-        fx.setAmbientLightColorProperty(Vector3::Zero);
-        fx.setDiffuseColorProperty(Vector3(0.8f, 0.6f, 0.4f));
+        fx.setAmbientLightColorProperty(ambient);
+        fx.setDiffuseColorProperty(diffuseColor);
         fx.setEmissiveColorProperty(Vector3::Zero);
-        fx.setSpecularColorProperty(Vector3::Zero);
-        fx.setSpecularPowerProperty(32.0f);
+        fx.setSpecularColorProperty(specularColor);
+        fx.setSpecularPowerProperty(specularPower);
         fx.VertexColorEnabled = vertexColorEnabled;
 
         fx.DirectionalLight0.setEnabledProperty(true);
         fx.DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
-        fx.DirectionalLight0.setDiffuseColorProperty(Vector3(0.5f, 0.5f, 0.5f));
-        fx.DirectionalLight0.setSpecularColorProperty(Vector3::Zero);
+        fx.DirectionalLight0.setDiffuseColorProperty(light0Diffuse);
+        fx.DirectionalLight0.setSpecularColorProperty(light0Specular);
         fx.DirectionalLight1.setEnabledProperty(false);
         fx.DirectionalLight2.setEnabledProperty(false);
 
@@ -201,6 +211,57 @@ protected:
         const Color e = renderWith(dev, whiteTex, false, 200, 100, 50, 255, constant);
         check(matches(e, Color(76, 38, 13, 255)),
               "(e) SkinnedEffect InverseBlendFactor: litRGB*(1-constant)", e, "~(76,38,13)");
+
+        // ---------------------------------------------------------------------------------
+        // plan_vulkan.md VULKAN-205 (finding F-39). Two things this test could not previously see,
+        // because its scene sets SpecularColor to zero and keeps the lit sum below 1.
+        //
+        // XNA has no SkinnedEffect vertex-colour variant, so the rule was measured on the one Vc
+        // family it does have -- BasicEffect -- by spikes/xna-vertex-color-specular-spike/, in a
+        // scene whose diffuse term is exactly zero so that every lit pixel IS the highlight:
+        //
+        //     vertex colour white -> (249,249,249)   20% grey -> (249,249,249)
+        //
+        // i.e. the vertex colour does not reach the highlight. FNA's AddSpecular adds
+        // `Specular * color.a` AFTER the colour has been folded into the diffuse, so only the
+        // colour's ALPHA can scale it.
+        // ---------------------------------------------------------------------------------
+
+        // (f) Specular-only: ambient 0, light diffuse 0, so the pixel IS the highlight. A dark
+        //     vertex colour must not dim it. Relational, exactly as the probe measured it --
+        //     the absolute value depends on this renderer's own specular math, the RELATION does
+        //     not.
+        const Vector3 one(1.0f, 1.0f, 1.0f);
+        const Color specWhite = renderWith(dev, whiteTex, true, 255, 255, 255, 255,
+                                           BlendState::Opaque, Vector3::Zero, one, Vector3::Zero,
+                                           one, one, 1.0f);
+        const Color specDark  = renderWith(dev, whiteTex, true, 51, 51, 51, 255,
+                                           BlendState::Opaque, Vector3::Zero, one, Vector3::Zero,
+                                           one, one, 1.0f);
+        check(specWhite.getRProperty() > 60,
+              "(f-control) the specular-only scene really has a highlight to measure", specWhite,
+              "bright");
+        check(matches(specDark, specWhite),
+              "(f) a dark vertex colour does NOT dim the specular highlight, as XNA's own Vc "
+              "effects do not", specDark, "same as the white-vertex-colour highlight");
+
+        // (g) The clamp order. litRGB = ambient * diffuseColor = 1.8, which crosses 1, and the
+        //     vertex colour is 0.5. Direct3D 9 saturates oD0 with the colour already folded in
+        //     (FX-123 + FX-125, and VULKAN-200 wrote exactly this for BasicEffect):
+        //         clamp(1.8 * 0.502) = 0.904 -> 230
+        //     Clamping first and scaling afterwards gives a different picture, not a rounding
+        //     difference:
+        //         clamp(1.8) * 0.502 = 0.502 -> 128
+        const Vector3 bright(1.8f, 1.8f, 1.8f);
+        const Color clamped = renderWith(dev, whiteTex, true, 128, 128, 128, 255,
+                                         BlendState::Opaque, bright, one, Vector3::Zero,
+                                         Vector3::Zero, Vector3::Zero, 32.0f);
+        check(matches(clamped, Color(230, 230, 230, 255)),
+              "(g) the vertex colour is INSIDE the saturate: clamp(1.8*0.502)=0.904", clamped,
+              "(230,230,230)");
+        check(clamped.getRProperty() > 180,
+              "(g') and not clamp(1.8)*0.502=0.502, which would read (128,128,128)", clamped,
+              "> 180");
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
         Exit();

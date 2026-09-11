@@ -307,6 +307,36 @@ class DualTextureSlotSamplerContractTest : public Game
     std::unique_ptr<Texture2D> white_, colTex_, rowTex_, gridA_, gridB_, mipA_, mipB_;
     int mipLevels_ = 0;
 
+    class BoundRenderTargetGuard final
+    {
+        GraphicsDevice* device_;
+
+    public:
+        explicit BoundRenderTargetGuard(GraphicsDevice& device) : device_(&device) {}
+        BoundRenderTargetGuard(const BoundRenderTargetGuard&) = delete;
+        BoundRenderTargetGuard& operator=(const BoundRenderTargetGuard&) = delete;
+
+        ~BoundRenderTargetGuard()
+        {
+            if (device_ == nullptr) return;
+            try
+            {
+                device_->SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            }
+            catch (...)
+            {
+                // Preserve the original draw exception during stack unwinding.
+            }
+        }
+
+        void Restore()
+        {
+            if (device_ == nullptr) return;
+            device_->SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            device_ = nullptr;
+        }
+    };
+
     void check(bool ok, const std::string& label)
     {
         std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label.c_str());
@@ -839,19 +869,11 @@ class DualTextureSlotSamplerContractTest : public Game
         RenderTarget2D rt(dev, edge, edge, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::DiscardContents);
         dev.SetRenderTarget(&rt);
+        BoundRenderTargetGuard targetGuard(dev);
         ResetDeviceState(dev, edge, edge);
         dev.Clear(kSentinel);
-        try
-        {
-            DrawDual(dev, cfg);
-        }
-        catch (...)
-        {
-            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            ResetDeviceState(dev, kBBW, kBBH);
-            throw;
-        }
-        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        DrawDual(dev, cfg);
+        targetGuard.Restore();
         ResetDeviceState(dev, kBBW, kBBH);
         std::vector<Color> pix(static_cast<std::size_t>(edge) * edge, Color(0, 0, 0, 0));
         rt.GetData(pix.data(), 0, static_cast<int>(pix.size()));
@@ -867,24 +889,16 @@ class DualTextureSlotSamplerContractTest : public Game
         RenderTarget2D rt(dev, kRT, kRT, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::DiscardContents);
         dev.SetRenderTarget(&rt);
+        BoundRenderTargetGuard targetGuard(dev);
         ResetDeviceState(dev, kRT, kRT);
         dev.Clear(kSentinel);
-        try
-        {
-            dev.setViewportProperty(Viewport(0, 0, kRT, kRT / 2));
-            DrawDual(dev, a);
-            if (between) between(dev);
-            dev.setViewportProperty(Viewport(0, kRT / 2, kRT, kRT / 2));
-            DrawDual(dev, b);
-            if (after) after(dev);
-        }
-        catch (...)
-        {
-            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            ResetDeviceState(dev, kBBW, kBBH);
-            throw;
-        }
-        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        dev.setViewportProperty(Viewport(0, 0, kRT, kRT / 2));
+        DrawDual(dev, a);
+        if (between) between(dev);
+        dev.setViewportProperty(Viewport(0, kRT / 2, kRT, kRT / 2));
+        DrawDual(dev, b);
+        if (after) after(dev);
+        targetGuard.Restore();
         ResetDeviceState(dev, kBBW, kBBH);
         std::vector<Color> pix(static_cast<std::size_t>(kRT) * kRT, Color(0, 0, 0, 0));
         rt.GetData(pix.data(), 0, static_cast<int>(pix.size()));
@@ -1303,6 +1317,7 @@ class DualTextureSlotSamplerContractTest : public Game
         RenderTarget2D rt(dev, kRT, kRT, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::DiscardContents);
         dev.SetRenderTarget(&rt);
+        BoundRenderTargetGuard targetGuard(dev);
         ResetDeviceState(dev, kRT, kRT);
         dev.Clear(kSentinel);
 
@@ -1318,7 +1333,7 @@ class DualTextureSlotSamplerContractTest : public Game
         dev.setViewportProperty(Viewport(0, 2 * kBandH, kRT, kBandH));
         DrawDual(dev, Sep());
 
-        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        targetGuard.Restore();
         ResetDeviceState(dev, kBBW, kBBH);
         std::vector<Color> pix(static_cast<std::size_t>(kRT) * kRT, Color(0, 0, 0, 0));
         rt.GetData(pix.data(), 0, static_cast<int>(pix.size()));
@@ -1587,6 +1602,15 @@ protected:
         }
         catch (const std::exception& e)
         {
+            // plans/plan_vulkan.md VULKAN-346, and the same recovery
+            // rendertarget_effect_source_test.cpp already documents for its own legs. Render()
+            // binds a render target before the draw it is probing with, so a renderer that refuses
+            // that draw leaves the target BOUND -- the unbind after it never runs. The shutdown
+            // Present then throws "Cannot present while render targets are bound", which escapes
+            // main and turns an orderly SKIP into a std::terminate the runner can only report as a
+            // crash. Unbinding here keeps the exit code matching the verdict actually printed.
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ResetDeviceState(dev, kBBW, kBBH);
             skip(std::string("A..M: this renderer does not implement DualTextureEffect (") +
                  e.what() + ")");
             Finish();

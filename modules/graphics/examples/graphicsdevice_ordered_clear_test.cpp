@@ -220,6 +220,10 @@ namespace
     constexpr Contract kContract{"DIRECTX11", true, true, true, true, true,
                                  true, true, true,
                                  true, true, true, true, false, true, false};
+#elif defined(CNA_RENDERER_DIRECTX12)
+    constexpr Contract kContract{"DIRECTX12", true, true, true, true, true,
+                                 true, true, true,
+                                 true, true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_LLGL)
     // Cube targets and stencil testing are deliberately unsupported on the validated OpenGL path;
     // their dedicated LLGL checks require deterministic NotSupportedException instead.

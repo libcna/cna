@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "namespace": "CNA::Tests::ConstantBuffer",
+  "package": "constant_buffer",
+  "payloads": [
+    {
+      "symbol": "kEasyGlComputeSource",
+      "source": "easygl.comp.glsl",
+      "language": "glsl-es",
+      "stage": "compute",
+      "format": "text",
+      "entry_point": "main"
+    },
+    {
+      "symbol": "kVulkanComputeSpirV",
+      "source": "vulkan.comp.glsl",
+      "language": "spirv",
+      "source_language": "vulkan-glsl",
+      "stage": "compute",
+      "format": "spirv",
+      "entry_point": "main"
+    }
+  ]
+}

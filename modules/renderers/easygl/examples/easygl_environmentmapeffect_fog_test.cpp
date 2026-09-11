@@ -17,8 +17,8 @@
 //   finalRGB   = mix(FogColor, geomRGB, vFogFactor)
 // With View=Identity, FogStart is NOT the "near/unfogged" boundary the property name might
 // suggest -- see fog_gradient_quad.scene's own comment / Task 1111 for the full derivation.
-// FogStart=0 configurations (this file's pre-fix values) collapse to a constant with the real
-// formula, so this test now uses FogStart=-0.9/FogEnd=0.9 (matching every sibling *_fog_test.cpp).
+// The descending 0/-0.9 range places the full gradient in the positive-Z clip interval shared by
+// EasyGL and Direct3D.
 //
 // EnvironmentMapAmount=0 (Task 393's own isolation technique) removes the cube map's
 // contribution entirely, and EnvironmentMapSpecular=0 removes its additive specular term, so the
@@ -170,14 +170,14 @@ protected:
         const Color gotOff = renderQuad(dev, tex, *cube, 0.0f, false, Vector3(1, 0, 0), 0.0f, 1.0f);
         check(matches(gotOff, kBlue), "(a) fog OFF: blue quad -> pure blue", gotOff, "(0,0,255)");
 
-        // (b) Fog 50%: Z=0, FogStart=-0.9, FogEnd=0.9, FogColor=red -> mix(red,blue,0.5)=(128,0,128).
-        const Color gotHalf = renderQuad(dev, tex, *cube, 0.0f, true, Vector3(1, 0, 0), -0.9f, 0.9f);
+        // (b) Fog 50%: Z=0.45, FogStart=0, FogEnd=-0.9 -> mix(red,blue,0.5)=(128,0,128).
+        const Color gotHalf = renderQuad(dev, tex, *cube, 0.45f, true, Vector3(1, 0, 0), 0.0f, -0.9f);
         check(matches(gotHalf, Color(128, 0, 128, 255)),
-              "(b) fog 50%: Z=0 -> purple mix", gotHalf, "(128,0,128)");
+              "(b) fog 50%: Z=0.45 -> purple mix", gotHalf, "(128,0,128)");
 
-        // (c) Full fog: FogStart=-0.9, FogEnd=0.9, Z=-0.9 (at FogStart) -> vFogFactor=0 -> pure red.
-        const Color gotFull = renderQuad(dev, tex, *cube, -0.9f, true, Vector3(1, 0, 0), -0.9f, 0.9f);
-        check(matches(gotFull, kRed), "(c) full fog: Z=FogStart=-0.9 -> full red", gotFull, "(255,0,0)");
+        // (c) Full fog: Z=0.9 at the far end of the same visible gradient -> pure red.
+        const Color gotFull = renderQuad(dev, tex, *cube, 0.9f, true, Vector3(1, 0, 0), 0.0f, -0.9f);
+        check(matches(gotFull, kRed), "(c) full fog: Z=0.9 -> full red", gotFull, "(255,0,0)");
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
         Exit();

@@ -17,6 +17,7 @@
 
 #include "CNA/Graphics/TransparentDrawList.hpp"
 #include "CNA/Graphics/WeightedBlendedTransparency.hpp"
+#include "TransparencyExampleShaderPackage.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -53,28 +54,11 @@ namespace
     constexpr int   kFrame = 256;
     constexpr float kFar   = 100.0f;
 
-    constexpr const char* kVertexSource = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec3 aPos;
-uniform mat4 World;
-uniform mat4 View;
-uniform mat4 Projection;
-uniform vec2 uOffset;
-uniform float uScale;
-void main() { gl_Position = vec4(aPos.xy * uScale + uOffset, aPos.z, 1.0); }
-)";
-
-    constexpr const char* kBlendFragment = R"(#version 300 es
-precision highp float;
-out vec4 FragColor;
-uniform vec4 uColour;
-void main() { FragColor = uColour; }
-)";
-
-    std::array<VertexPositionColor, 6> Quad()
+    std::array<VertexPositionColor, 6> Quad(const float x, const float y, const float scale)
     {
-        const auto at = [](const float x, const float y) {
-            return VertexPositionColor(Vector3(x, y, 0.0f), Color::White);
+        const auto at = [x, y, scale](const float localX, const float localY) {
+            return VertexPositionColor(
+                Vector3(localX * scale + x, localY * scale + y, 0.0f), Color::White);
         };
         return {at(-1.0f, -1.0f), at(-1.0f, 1.0f), at(1.0f, 1.0f),
                 at(-1.0f, -1.0f), at(1.0f, 1.0f),  at(1.0f, -1.0f)};
@@ -136,32 +120,20 @@ protected:
         }
         check(true, "the renderer runs the order-independent route");
 
-        std::string accumulate = "#version 300 es\nprecision highp float;\n";
-        accumulate += WeightedBlendedTransparency::getAccumulationGlsl();
-        accumulate += R"(
-uniform vec4 uColour;
-uniform float uDepth;
-void main() { cnaOitEmit(uColour.rgb, uColour.a, uDepth); }
-)";
-        ShaderEffect emitter(device, kVertexSource, accumulate);
-        ShaderEffect blender(device, kVertexSource, kBlendFragment);
+        ShaderEffect emitter(device, CNA::Examples::Transparency::CreateEmitterPackage());
+        ShaderEffect blender(device, CNA::Examples::Transparency::CreateFlatPackage());
         if (!emitter.IsEffectValid() || !blender.IsEffectValid())
         {
             std::printf("SKIP: the transparency shaders did not compile\n");
             std::exit(77);
         }
 
-        const auto quad = Quad();
         const auto drawOne = [&](ShaderEffect& effect, const Surface& surface, const bool oitPath) {
             effect.Apply();
-            effect.SetUniformVec2("uOffset", surface.X, surface.Y);
-            effect.SetUniformFloat("uScale", 0.5f);
-            effect.SetUniformVec4("uColour", surface.R, surface.G, surface.B, 0.4f);
+            effect.SetUniformVec4("uEffectParams", surface.R, surface.G, surface.B, 0.4f);
             if (oitPath)
-            {
-                effect.SetUniformFloat("uDepth", surface.Depth);
-                effect.SetUniformFloat("uCnaOitFarPlane", kFar);
-            }
+                effect.SetUniformFloat("uScalar", surface.Depth / kFar);
+            const auto quad = Quad(surface.X, surface.Y, 0.5f);
             device.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
         };
 

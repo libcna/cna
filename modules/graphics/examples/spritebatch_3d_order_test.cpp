@@ -110,6 +110,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -118,6 +119,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/NotSupportedException.hpp"
@@ -425,6 +427,7 @@ class SpriteBatch3DOrderTest : public Game
     std::unique_ptr<AlphaTestEffect>      alphaFx_;
     std::unique_ptr<DualTextureEffect>    dualFx_;
     std::unique_ptr<EnvironmentMapEffect> envFx_;
+    std::unique_ptr<SkinnedEffect>        skinnedFx_;
 
     std::unique_ptr<VertexBuffer> quadVb_;      ///< 6 VertexPositionTexture, rewritten per draw.
     std::unique_ptr<VertexBuffer> quadIdxVb_;   ///< 4 VertexPositionTexture for the indexed paths.
@@ -650,6 +653,33 @@ class SpriteBatch3DOrderTest : public Game
         out[5] = { Vector3(xR,  1.f, 0.f), n, Vector2(1.f, 0.f) };
     }
 
+    /// Stride-52 stream expected by SkinnedEffect: position, normal, UV, weights, byte indices.
+    struct SkinnedVertex
+    {
+        float px, py, pz;
+        float nx, ny, nz;
+        float u, v;
+        float w0, w1, w2, w3;
+        std::uint8_t i0, i1, i2, i3;
+    };
+    static_assert(sizeof(SkinnedVertex) == 52, "skinned vertex stream must have stride 52");
+
+    /// Six identity-skinned vertices covering stripes [@p from, @p to), full height.
+    static void QuadSkinned(int from, int to, SkinnedVertex* out)
+    {
+        const float xL = StripeClipX(from), xR = StripeClipX(to);
+        const SkinnedVertex tl{xL,  1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f,
+                               1.f, 0.f, 0.f, 0.f, 0, 0, 0, 0};
+        const SkinnedVertex bl{xL, -1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 1.f,
+                               1.f, 0.f, 0.f, 0.f, 0, 0, 0, 0};
+        const SkinnedVertex br{xR, -1.f, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f,
+                               1.f, 0.f, 0.f, 0.f, 0, 0, 0, 0};
+        const SkinnedVertex tr{xR,  1.f, 0.f, 0.f, 0.f, 1.f, 1.f, 0.f,
+                               1.f, 0.f, 0.f, 0.f, 0, 0, 0, 0};
+        out[0] = tl; out[1] = bl; out[2] = br;
+        out[3] = tl; out[4] = br; out[5] = tr;
+    }
+
     /// Points a stock effect at identity transforms and, where it has one, at @p tex.
     void ConfigureEffect(Fx fx, Texture2D* tex)
     {
@@ -694,9 +724,32 @@ class SpriteBatch3DOrderTest : public Game
             envFx_->setEnvironmentMapProperty(envCube_.get());
             envFx_->setEnvironmentMapAmountProperty(0.f);
             envFx_->setFresnelFactorProperty(0.f);
+            envFx_->setEnvironmentMapSpecularProperty(Vector3::Zero);
+            envFx_->setDiffuseColorProperty(Vector3(1.f, 1.f, 1.f));
+            envFx_->setEmissiveColorProperty(Vector3::Zero);
+            envFx_->setLightingEnabledProperty(true);
+            envFx_->setAmbientLightColorProperty(Vector3(1.f, 1.f, 1.f));
+            envFx_->DirectionalLight0.setEnabledProperty(false);
+            envFx_->DirectionalLight1.setEnabledProperty(false);
+            envFx_->DirectionalLight2.setEnabledProperty(false);
+            envFx_->setFogEnabledProperty(false);
             break;
         case Fx::Skinned:
-            break;   // handled by its own leg
+            skinnedFx_->setWorldProperty(id); skinnedFx_->setViewProperty(id);
+            skinnedFx_->setProjectionProperty(id);
+            skinnedFx_->setTextureProperty(tex);
+            skinnedFx_->SetBoneTransforms({Matrix::getIdentityProperty()});
+            skinnedFx_->setWeightsPerVertexProperty(1);
+            skinnedFx_->setDiffuseColorProperty(Vector3(1.f, 1.f, 1.f));
+            skinnedFx_->setEmissiveColorProperty(Vector3::Zero);
+            skinnedFx_->setSpecularColorProperty(Vector3::Zero);
+            skinnedFx_->setLightingEnabledProperty(true);
+            skinnedFx_->setAmbientLightColorProperty(Vector3(1.f, 1.f, 1.f));
+            skinnedFx_->DirectionalLight0.setEnabledProperty(false);
+            skinnedFx_->DirectionalLight1.setEnabledProperty(false);
+            skinnedFx_->DirectionalLight2.setEnabledProperty(false);
+            skinnedFx_->setFogEnabledProperty(false);
+            break;
         }
     }
 
@@ -710,7 +763,7 @@ class SpriteBatch3DOrderTest : public Game
         case Fx::AlphaTest:        alphaFx_->Apply(); break;
         case Fx::DualTexture:      dualFx_->Apply();  break;
         case Fx::EnvironmentMap:   envFx_->Apply();   break;
-        case Fx::Skinned:          break;
+        case Fx::Skinned:          skinnedFx_->Apply(); break;
         }
     }
 
@@ -727,6 +780,17 @@ class SpriteBatch3DOrderTest : public Game
         dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
         dev.getSamplerStatesProperty()[1] = SamplerState::PointClamp;
 
+        if (fx == Fx::Skinned)
+        {
+            SkinnedVertex q[6];
+            QuadSkinned(from, to, q);
+            ConfigureEffect(fx, tex);
+            ApplyEffect(fx);
+            dev.DrawUserPrimitives(
+                PrimitiveType::TriangleList, q, 0, 2,
+                VertexPositionNormalTextureSkinned::getVertexDeclarationStatic());
+            return;
+        }
         if (fx == Fx::EnvironmentMap)
         {
             VertexPositionNormalTexture q[6];
@@ -2042,6 +2106,7 @@ protected:
             try { alphaFx_ = std::make_unique<AlphaTestEffect>(dev); } catch (...) {}
             try { dualFx_  = std::make_unique<DualTextureEffect>(dev); } catch (...) {}
             try { envFx_   = std::make_unique<EnvironmentMapEffect>(dev); } catch (...) {}
+            try { skinnedFx_ = std::make_unique<SkinnedEffect>(dev); } catch (...) {}
             try
             {
                 envCube_ = std::make_unique<TextureCube>(dev, 1, false, SurfaceFormat::Color);

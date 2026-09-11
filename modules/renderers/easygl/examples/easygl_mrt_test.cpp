@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-016: public EasyGL multiple-render-target contract regression.
+// REMED-GFX-016 / DX-224: renderer-neutral public multiple-render-target contract.
 //
 // The historical test used BasicEffect, whose fragment shader has only output location 0, and
 // expected attachment 1's old blue contents to survive an MRT bind. RenderTargetUsage defaults
@@ -7,7 +7,7 @@
 // to black before that single-output draw. That test therefore could not distinguish "attachment
 // 1 is not active" from the documented single-output-shader behavior.
 //
-// This replacement uses one public ShaderEffect fragment invocation with explicitly distinct
+// This replacement uses equivalent GLSL/HLSL ShaderEffect programs with explicitly distinct
 // outputs at locations 0..3. It covers ordered one-through-four-target rendering, independent
 // ColorWriteChannels0..3, first-target depth ownership, true MRT MSAA + resolve, target-set
 // transitions/replacement, RenderTargetUsage, direct readback, immediate producer-to-consumer
@@ -39,7 +39,9 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
+#if defined(CNA_RENDERER_EASYGL)
 #include <SDL3/SDL.h>
+#endif
 
 #include <array>
 #include <cmath>
@@ -60,6 +62,7 @@ namespace
     const Color kBaseB(40, 180, 220, 160);
     const Color kBaseC(230, 60, 140, 200);
 
+#if defined(CNA_RENDERER_EASYGL)
     const char* kMrtVertexShader = R"GLSL(#version 300 es
 precision highp float;
 layout(location = 0) in vec3 aPosition;
@@ -71,7 +74,29 @@ void main()
     gl_Position = Projection * View * World * vec4(aPosition, 1.0);
 }
 )GLSL";
+#else
+    const char* kMrtVertexShader = R"HLSL(
+cbuffer TransformBlock : register(b0)
+{
+    float4x4 World;
+    float4x4 View;
+    float4x4 Projection;
+};
+struct VSIn
+{
+    float3 position : POSITION0;
+    float4 color : COLOR0;
+};
+float4 main(VSIn input) : SV_Position
+{
+    float4 position = mul(World, float4(input.position, 1.0));
+    position = mul(View, position);
+    return mul(Projection, position);
+}
+)HLSL";
+#endif
 
+#if defined(CNA_RENDERER_EASYGL)
     const char* kMrtFragmentShader = R"GLSL(#version 300 es
 precision highp float;
 layout(location = 0) out vec4 outTarget0;
@@ -87,10 +112,35 @@ void main()
     outTarget3 = vec4(uBase.r, uBase.b, uBase.g, uBase.a);
 }
 )GLSL";
+#else
+    const char* kMrtFragmentShader = R"HLSL(
+cbuffer MaterialBlock : register(b1)
+{
+    float4 uBase;
+};
+struct PSOut
+{
+    float4 target0 : SV_Target0;
+    float4 target1 : SV_Target1;
+    float4 target2 : SV_Target2;
+    float4 target3 : SV_Target3;
+};
+PSOut main()
+{
+    PSOut output;
+    output.target0 = uBase;
+    output.target1 = uBase.gbra;
+    output.target2 = uBase.brga;
+    output.target3 = float4(uBase.r, uBase.b, uBase.g, uBase.a);
+    return output;
+}
+)HLSL";
+#endif
 
-    // gl_SampleMask is an ESSL 3.20 core output. Selecting exactly sample 0 makes a full-screen
-    // draw resolve to 1/N of its source on a real N-sample attachment, but remain fully opaque
-    // if a renderer silently substituted a single-sample texture.
+    // gl_SampleMask/SV_Coverage selects exactly sample 0. A full-screen draw therefore resolves
+    // to 1/N of its source on a real N-sample attachment, but remains fully opaque if a renderer
+    // silently substituted a single-sample texture.
+#if defined(CNA_RENDERER_EASYGL)
     const char* kMsaaVertexShader = R"GLSL(#version 320 es
 precision highp float;
 layout(location = 0) in vec3 aPosition;
@@ -102,7 +152,11 @@ void main()
     gl_Position = Projection * View * World * vec4(aPosition, 1.0);
 }
 )GLSL";
+#else
+    const char* kMsaaVertexShader = kMrtVertexShader;
+#endif
 
+#if defined(CNA_RENDERER_EASYGL)
     const char* kMsaaFragmentShader = R"GLSL(#version 320 es
 precision highp float;
 layout(location = 0) out vec4 outTarget0;
@@ -114,6 +168,24 @@ void main()
     outTarget1 = vec4(0.0, 1.0, 0.0, 1.0);
 }
 )GLSL";
+#else
+    const char* kMsaaFragmentShader = R"HLSL(
+struct PSOut
+{
+    float4 target0 : SV_Target0;
+    float4 target1 : SV_Target1;
+    uint coverage : SV_Coverage;
+};
+PSOut main()
+{
+    PSOut output;
+    output.target0 = float4(1.0, 0.0, 0.0, 1.0);
+    output.target1 = float4(0.0, 1.0, 0.0, 1.0);
+    output.coverage = 1;
+    return output;
+}
+)HLSL";
+#endif
 
     Color OutputFor(const Color& base, int slot)
     {
@@ -155,7 +227,7 @@ void main()
     }
 }
 
-class EasyGlMrtTest final : public Game
+class MrtTest final : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> graphics_;
     std::unique_ptr<ShaderEffect> mrtEffect_;
@@ -391,8 +463,8 @@ class EasyGlMrtTest final : public Game
         device.SetRenderTargets(Bindings({depth0.get(), color1.get()}));
         device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, kClear, 1.0f, 0);
         PrepareDraw(*mrtEffect_, BlendState::Opaque, DepthStencilState::Default);
-        DrawFullScreen(*mrtEffect_, kBaseA, -0.5f);
-        DrawFullScreen(*mrtEffect_, kBaseB, 0.5f);
+        DrawFullScreen(*mrtEffect_, kBaseA, 0.25f);
+        DrawFullScreen(*mrtEffect_, kBaseB, 0.75f);
         device.SetRenderTargets({});
 
         const Color depthGot0 = ReadCenter(*depth0);
@@ -407,8 +479,8 @@ class EasyGlMrtTest final : public Game
         device.SetRenderTargets(Bindings({noDepth0.get(), unusedDepth1.get()}));
         device.Clear(kClear);
         PrepareDraw(*mrtEffect_, BlendState::Opaque, DepthStencilState::Default);
-        DrawFullScreen(*mrtEffect_, kBaseA, -0.5f);
-        DrawFullScreen(*mrtEffect_, kBaseB, 0.5f);
+        DrawFullScreen(*mrtEffect_, kBaseA, 0.25f);
+        DrawFullScreen(*mrtEffect_, kBaseB, 0.75f);
         device.SetRenderTargets({});
         const Color noDepthGot0 = ReadCenter(*noDepth0);
         const Color noDepthGot1 = ReadCenter(*unusedDepth1);
@@ -527,9 +599,9 @@ class EasyGlMrtTest final : public Game
         const int samples = msaa0->getMultiSampleCountProperty();
         if (samples <= 1 || !msaaEffect_ || !msaaEffect_->IsEffectValid())
         {
-            std::printf("[NOTE] true MRT MSAA discriminator unavailable: applied samples=%d, "
-                        "ESSL 3.20 effect=%s\n",
-                        samples, msaaEffect_ && msaaEffect_->IsEffectValid() ? "valid" : "invalid");
+            Check(false, "true MRT MSAA discriminator is available: applied samples="
+                + std::to_string(samples) + " effect="
+                + (msaaEffect_ && msaaEffect_->IsEffectValid() ? "valid" : "invalid"));
         }
         else
         {
@@ -566,6 +638,7 @@ class EasyGlMrtTest final : public Game
               "mixed applied sample counts reject deterministically without changing active state");
     }
 
+#if defined(CNA_RENDERER_EASYGL)
     void CheckNativeGlErrors()
     {
         using GetError = unsigned int (*)();
@@ -585,6 +658,7 @@ class EasyGlMrtTest final : public Game
         Check(getError != nullptr && errors.empty(),
               "complete native GL error drain reports no EasyGL MRT errors");
     }
+#endif
 
 protected:
     void LoadContent() override
@@ -603,7 +677,7 @@ protected:
 
         if (!mrtEffect_ || !mrtEffect_->IsEffectValid())
         {
-            Check(false, "four-output ESSL 3.00 MRT effect compiles");
+            Check(false, "four-output MRT ShaderEffect compiles");
         }
         else
         {
@@ -615,7 +689,9 @@ protected:
             TestUsageAndCompatibility();
             TestMsaa();
         }
+#if defined(CNA_RENDERER_EASYGL)
         CheckNativeGlErrors();
+#endif
 
         std::printf("=== %d/%d PASS ===\n", pass_, total_);
         result_ = pass_ == total_ ? 0 : 1;
@@ -623,7 +699,7 @@ protected:
     }
 
 public:
-    EasyGlMrtTest()
+    MrtTest()
     {
         graphics_ = std::make_unique<GraphicsDeviceManager>(this);
         graphics_->setPreferredBackBufferWidthProperty(96);
@@ -635,7 +711,7 @@ public:
 
 int main()
 {
-    EasyGlMrtTest game;
+    MrtTest game;
     game.Run();
     return game.getResult();
 }

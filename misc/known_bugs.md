@@ -154,7 +154,93 @@ Every file the test exercises — `GraphicsDevice.cpp`, `SpriteBatch.cpp` and al
 `modules/renderers/easygl` — is byte-identical to `next`, so this is `next`'s EasyGL behaviour, not
 a merge interaction.
 
-### Required correction — not implemented here
+### Partly fixed on 2026-09-09, and the rest is measured now
+
+**The discriminator was one of the two causes and is fixed** (`modules/renderers/easygl/src/
+EasyGLRenderer.cpp`, sprite flush). It asked *"does the GL viewport differ from the full target?"*,
+and under Letterbox the **default** viewport is the presentation rectangle, which differs from the
+drawable by construction — so the default viewport was classified as a game-set sub-viewport and
+the sprite projection was sized to the rectangle's PHYSICAL extent instead of the logical one. It
+now compares against `GetDefaultViewportRect()` (with the same Y flip `SetViewport` applies), keeps
+the presentation rectangle as the rasterizer viewport instead of resetting to the whole drawable,
+and converts a genuine sub-viewport back into logical units before building the ortho.
+
+Effect on the failing case, 800x480 drawable, virtual 240x240, letterbox `(160,0,480x480)`:
+
+| | sprite bounding box |
+|---|---|
+| before | `(0,245)-(792,476)` |
+| after | `(0,0)-(792,476)` |
+| expected | fill `(160,0,480x480)` |
+
+So the vertical half of the error is gone and the horizontal half is not.
+
+**Measured at flush time on the second pass** (`CNA_EASYGL_SPRITE_VIEWPORT_DEBUG=1`, an env-gated
+print left in the sprite flush because the next person needs it too):
+
+```
+[spritevp] entry=(160,0,480x480) def=(160,0,480x480) custom=0 full=(800x480) log=(240x240)
+           atDraw=(160,0,480x480)
+```
+
+Everything the renderer does is now right: the rasterizer viewport IS the letterbox rectangle and
+the projection IS the logical size.
+
+**The remaining failure is the test's, and it is measured.** With `CNA_BACKBUFFER_READ_TRACE=1`:
+
+```
+[GFX-165] GetBackBufferData backbuffer=800x480 viewport=240x240 region=(400,240,1x1)
+```
+
+The back buffer is 800x480 while the renderer's logical size is 240x240 — a state **no game can
+produce**. `GraphicsDevice::SetVirtualResolution()` sets both the renderer's virtual resolution and
+`PresentationParameters.BackBufferWidth/Height` together, so in any real game the back buffer IS the
+logical surface. That is also the XNA-faithful reading: the back buffer is what the game asked for.
+This test bypasses it, calling `renderer.SetVirtualResolution()` directly because the device's own
+setter is private, and then reads physical drawable coordinates out of a back buffer a real game
+would have made 240x240.
+
+XNA cannot arbitrate between the two spaces, because it has no virtual resolution: its back buffer
+and its drawable are the same thing. Worth establishing rather than assuming — it is why the answer
+has to come from CNA's own contract instead.
+
+**So the correction belongs in the test, not in `GetBackBufferData`**: give it a way to set the
+virtual resolution through `GraphicsDevice` so the two stay in step, then read in back-buffer
+coordinates. Do not change the readback to satisfy an assertion built on a state the framework
+cannot reach.
+
+**A second, real defect is still open, and it is the one a user sees.** SAMPLE-077 at 960x800 now
+draws in the right place — the content moved from the drawable origin back to the letterbox
+rectangle — but the layout *inside* the rectangle is still wrong: the checkerboard panel renders as
+a narrow vertical strip and the four menu ellipses do not render at all. The sample sets no
+`Viewport`, no scissor and no `RenderTarget2D`, so none of those explain it; the next suspect is the
+batch `transform_` or a second draw path. Reproduce with
+`SAMPLE-077 .../scripts/probe-resize.sh 960 800`, compare `evidence/resize-final.png` against
+`evidence/original-windows-hidef-diagnostic/01-page1.png`.
+
+Full suite after the change: `CnaGraphicsTests` 2369 passed, this one still failing, nothing else
+regressed. `SAMPLE-077` at its native 480x800 renders byte-identically to before the change.
+
+**Why it matters more than it did this morning.** Letterbox became the default presentation mode on
+2026-09-08 (`f13701188`), so this is no longer a corner a game opts into. `SAMPLE-077` (DynamicMenu)
+is a shipped `✅` sample and its menu is misplaced badly enough to be unusable in any window that is
+not exactly its 480x800 back buffer — the owner reported it as "the menu is cut off and the third
+item cannot be launched". Reproduction:
+`/rv/tmp/samples/SAMPLE-077-DynamicMenu_4_0/scripts/probe-resize.sh 960 800`.
+
+### The two causes found so far
+
+1. **The discriminator** asked whether the GL viewport differed from the whole drawable. Under
+   Letterbox the default viewport is the presentation rectangle, which differs by construction, so
+   the default viewport was classified as a game-set sub-viewport. Fixed.
+2. **Staleness.** A window resize moves the presentation rectangle while the GL viewport still
+   holds the previous one, so *any* comparison of live GL state against the fresh rectangle reads
+   the stale viewport as a custom one — and then preserves it. That is what left SAMPLE-077 drawing
+   at the old rectangle's origin after a resize. Fixed by deciding default-versus-custom inside
+   `SetViewport()`, while the rectangle is the one the call was derived from, and exposing it as
+   `EasyGLRenderer::ViewportIsDefaultEXT()`.
+
+### What the rest of the correction is likely to be — **not** measured
 
 The stock and compiled SpriteBatch routes must both preserve the physical presentation rectangle,
 classify it as the default rather than a caller sub-viewport, and project logical sprite coordinates
@@ -182,3 +268,121 @@ GL profile the build selected, so a build that cannot honour `SamplerState.MipMa
 still gets a test that asserts it does. The fix belongs to the parity framework, not to EasyGL:
 either gate these two on the profile, or give a fixture the documented-divergence route
 `fill_mode_wireframe` already uses. Until then these two are expected red in any EasyGL ES build.
+
+
+---
+
+## 4. `Window.CurrentOrientation` follows the OS window, not the surface the game draws into
+
+**Found:** 2026-09-09, through SAMPLE-077 (DynamicMenu).
+**Open in:** `modules/runtime/src/GameWindow.cpp` (`refreshCachedPlatformState` →
+`orientationFromBounds(clientBounds_)`).
+
+`GameWindow` derives the current orientation from the **platform window's client bounds**. A game
+with a virtual resolution does not draw into those bounds: it draws into the logical surface, which
+`GraphicsDevice` letterboxes inside them. So widening a window past its own height reports
+`LandscapeLeft` while the drawing surface stays portrait, and a game that believes the report lays
+itself out for a shape it does not have.
+
+### The measurement
+
+SAMPLE-077 has a 480x800 back buffer and its own portrait and landscape layouts
+(`PhoneScreen::UpdateOrientation`). Counting non-background pixels in the lower half of the frame,
+where its menu panel belongs:
+
+| window | shape | menu panel |
+|---|---|---|
+| 700x900 | taller than wide | **12 656** samples — renders correctly, letterboxed and scaled |
+| 960x800 | wider than tall | **200** samples — the panel is off the logical area |
+
+Nothing about the two differs except which side is longer. The renderer is doing its job in both:
+the sprite flush reports `def=(240,0,480x800) custom=0 log=(480x800) atDraw=(240,0,480x800)` on
+every one of 3 300 flushes in the landscape case. The sample is doing its job too — it was told
+landscape and moved its containers to `HorizontalContainer2Left/Top`, which is off a 480-wide
+logical surface.
+
+Reproduce: `/rv/tmp/samples/SAMPLE-077-DynamicMenu_4_0/scripts/probe-resize.sh 960 800` against
+`700 900`.
+
+### What XNA does
+
+On Windows Phone an orientation change rotates the **back buffer** with the device — `XNA` swaps
+`PreferredBackBufferWidth`/`Height` for a supported orientation, so the reported orientation and the
+drawing surface always agree. CNA keeps the virtual resolution fixed and letterboxes, so reporting
+the change without swapping tells the game something its own surface contradicts.
+
+### Fixed on 2026-09-09
+
+`GameWindow` now takes the shape from the surface the game draws into: `GraphicsDeviceManager`
+installs a logical-size provider at construction — not in `ApplyChanges()`, which returns early
+whenever nothing changed and so cannot be relied on to run — and `refreshCachedPlatformState` asks
+it before deriving the orientation, falling back to the client bounds when nothing answers.
+
+| window | menu-panel pixels, before | after |
+|---|---|---|
+| 480x800 (native) | 10 000 | 10 000 |
+| 700x900 (portrait) | 12 656 | 12 656 |
+| 960x800 (landscape) | **200** | **10 000** |
+
+Option 1 below was taken. The argument that settled it is that a desktop window resize is not a
+device rotation: XNA swaps the back buffer when the *device* rotates, and reports nothing for a
+window that merely got wider. Option 2 stays the right answer for a real mobile target, and is
+written up below for whoever builds one.
+
+### The correction — a decision, not just a patch
+
+Two coherent answers, and they are not equivalent:
+
+1. **Derive the orientation from the logical surface** whenever a virtual resolution is in effect.
+   Narrow, fixes this, and means a desktop window resize never reports an orientation change — which
+   is arguably right, since resizing a window is not rotating a device.
+2. **Swap the virtual resolution with the orientation**, as XNA swaps the back buffer. Faithful to
+   XNA, and much larger: every letterbox rectangle, input mapping and content layout follows.
+
+There is a third question underneath both: `Window.ClientBounds` currently reports the OS window
+too, and XNA's is the back-buffer area. If `ClientBounds` became the logical surface, the
+orientation would follow it for free — but every other consumer of `ClientBounds` changes with it.
+
+Not chosen here: the sample campaign found it, the answer changes framework semantics, and it wants
+an owner decision rather than whichever patch makes SAMPLE-077 look right.
+
+---
+
+## 5. The XACT audio suite's failures rotate, so a stable failure COUNT hides a changing set
+
+**Found:** 2026-09-11, while comparing two full-suite runs across the `vulkan` merge.
+**Open in:** `modules/audio` — `CueTest`, `SoundBankTest`, `WaveBankTest`.
+**Not caused by any renderer work:** neither the `dx` nor the `vulkan` branch changed a single file
+under `modules/audio/`, verified by diff against the merge base.
+
+### What was measured
+
+Three full runs of the same 10 563-test suite, on three commits, each reporting **32 failures** —
+and each time a *different* subset of the audio family was among them:
+
+| Run | Audio cases that failed |
+|---|---|
+| after the `dx` merge (`c1c017cd7`) | `CueTest.PlayingCueNaturallyTransitionsToStoppedAfterPlaybackFinishes`, `CueTest.PauseAfterNaturalCompletionIsANoOp` |
+| during the `vulkan` merge | the two above, plus `SoundBankTest.IsInUseFalseSoonAfterFireAndForgetCueNaturallyFinishes` and `WaveBankTest.IsInUseFalseSoonAfterCueNaturallyFinishesWithoutExplicitStop` |
+| after the `vulkan` merge (`93ca4ffdf`) | `CueTest.PauseAfterDisposeIsANoOp` — a case that had passed in both earlier runs — plus the same `SoundBankTest` and `WaveBankTest` |
+
+Every one of them passes when run alone or in a small serial set, and fails under load. They assert
+that a cue has *naturally finished* after a wall-clock wait, so they measure the machine's audio
+timing as much as CNA's bookkeeping.
+
+### Why this is written down rather than left as "flaky"
+
+The failure count is stable while the membership is not. A summary that says *"32 failures, same as
+the baseline"* is therefore true and useless at the same time: it reads as "nothing changed" for as
+long as nobody diffs the NAMES. This merge's real regressions were found only because both
+directions of the comparison were taken — what appeared **and** what disappeared — and the same
+diff is what exposed this.
+
+**So: never conclude "unchanged" from a matching failure count.** Compare the sets.
+
+### What the correction would be
+
+Not a retry loop, which would hide it again. Either drive the audio clock deterministically in
+these tests so "naturally finished" is a fact rather than a race, or mark the family as requiring
+an exclusive machine the way `TwoProcessLoopbackTest` and the `ENet*` suites already are, so a
+loaded run does not report a product defect. The first is better; the second is honest.

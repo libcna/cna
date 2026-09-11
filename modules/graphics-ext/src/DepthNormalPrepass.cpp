@@ -3,6 +3,7 @@
 
 #ifdef CNA_CNAEXT
 
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/ShaderDiagnostics.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -13,11 +14,16 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "shaders/depth_normal_prepass/DepthNormalPrepassShaderPackage.generated.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace CNA::Graphics {
@@ -42,32 +48,6 @@ namespace CNA::Graphics {
         /// MOD-2033: only ever reached without MRT, where velocity is a third pass over the geometry.
         constexpr int kVelocityPass = 2;
 
-        /// The packing MOD-507 uses where a float target is unavailable. Written once here as GLSL
-        /// and once in C++ below, and a test asserts the two agree -- the usual failure of a packed
-        /// format is that the two halves drift and depth reads back as noise.
-        constexpr const char* kPackGlsl = R"(
-vec4 cnaPackDepth(float value) {
-    // 8 bits per channel, most significant first. The subtraction removes each channel's
-    // contribution before the next is extracted, which is what stops rounding accumulating.
-    //
-    // The clamp stops one texel short of 1.0 on purpose: fract(1.0) is 0, so an unclamped 1.0
-    // packs to all zeroes and reads back as the *nearest* possible surface -- the exact inverse
-    // of what it means. Depth is normalised by the far plane, so 1.0 is the most common value in
-    // the buffer, and getting it inverted would put the whole background in front of the scene.
-    // `channels` rather than `packed`: the latter is a reserved word in GLSL ES 3.00.
-    // 255, not 256. An 8-bit UNORM channel stores round(c * 255) / 255, so a base of 256 makes
-    // every channel land between two storable values and the low channels' quantisation error
-    // passes straight through the reconstruction -- the delivered resolution was 1 part in 255,
-    // exactly what one channel alone gives, and the other three bought nothing. With 255 each
-    // channel comes out an exact multiple of 1/255 and survives the target unchanged.
-    const vec4 shift = vec4(16581375.0, 65025.0, 255.0, 1.0);
-    const vec4 mask  = vec4(0.0, 1.0 / 255.0, 1.0 / 255.0, 1.0 / 255.0);
-    vec4 channels = fract(clamp(value, 0.0, 0.99999994) * shift);
-    channels -= channels.xxyz * mask;
-    return channels;
-}
-)";
-
         constexpr const char* kUnpackGlsl = R"(
 float cnaUnpackDepth(vec4 channels) {
     const vec4 shift = vec4(1.0 / 16581375.0, 1.0 / 65025.0, 1.0 / 255.0, 1.0);
@@ -75,144 +55,76 @@ float cnaUnpackDepth(vec4 channels) {
 }
 )";
 
-        // ---- The prepass shaders ---------------------------------------------------------------
-        //
-        // Depth is *linear view depth normalised by the far plane*, not the non-linear value a
-        // depth buffer holds. That choice is the whole reason this pass exists: a consumer can
-        // reconstruct a view-space position from it with one multiply, and the value means the same
-        // thing on every renderer, which a depth attachment's contents do not.
-
-        constexpr const char* kVertexCommon = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec3 aPosition;
-layout(location = 1) in vec3 aNormal;
-uniform mat4 uWorld;
-uniform mat4 uView;
-uniform mat4 uProjection;
-uniform mat4 uPreviousWorld;
-uniform mat4 uPreviousViewProjection;
-out vec3 vViewNormal;
-out float vViewDepth;
-out vec4 vCurrentClip;
-out vec4 vPreviousClip;
-uniform float uFarPlane;
-void main() {
-    vec4 world = uWorld * vec4(aPosition, 1.0);
-    vec4 view  = uView * world;
-    gl_Position = uProjection * view;
-    // MOD-2033. Both clip positions go to the fragment stage undivided: the perspective divide is
-    // not an affine operation, so interpolating the divided values would put the velocity of a
-    // large triangle in the wrong place everywhere except at its vertices.
-    vCurrentClip  = gl_Position;
-    vPreviousClip = uPreviousViewProjection * (uPreviousWorld * vec4(aPosition, 1.0));
-    // The normal matrix would be the inverse transpose; a uniformly-scaled world matrix makes the
-    // upper 3x3 sufficient, which is what CNA's own model transforms are. Non-uniform scale skews
-    // the normal here, and is documented rather than corrected -- correcting it needs an inverse
-    // per draw that nothing else in this layer pays for.
-    vViewNormal = normalize(mat3(uView) * mat3(uWorld) * aNormal);
-    vViewDepth  = clamp(-view.z / uFarPlane, 0.0, 1.0);
-}
-)";
-
-        constexpr const char* kSkinnedVertexCommon = R"(#version 300 es
-precision highp float;
-layout(location = 0) in vec3 aPosition;
-layout(location = 1) in vec3 aNormal;
-layout(location = 2) in vec2 aUV;
-layout(location = 3) in vec4 aBoneWeights;
-// FX-127: a float vec4, matching the stock skinned programs -- XNA's BLENDINDICES is a
-// float4 register whether the declaration spelled the bytes Byte4 or Vector4, so EasyGL
-// binds both as floats and no shader may read the attribute as an integer.
-layout(location = 4) in vec4 aBoneIndices;
-uniform mat4 uWorld;
-uniform mat4 uView;
-uniform mat4 uProjection;
-uniform mat4 uBones[72];
-uniform int uWeightsPerVertex;
-uniform float uFarPlane;
-uniform mat4 uPreviousWorld;
-uniform mat4 uPreviousViewProjection;
-out vec3 vViewNormal;
-out float vViewDepth;
-out vec4 vCurrentClip;
-out vec4 vPreviousClip;
-void main() {
-    mat4 skin = uBones[int(aBoneIndices.x)] * aBoneWeights.x;
-    if (uWeightsPerVertex >= 2) skin += uBones[int(aBoneIndices.y)] * aBoneWeights.y;
-    if (uWeightsPerVertex >= 4) skin += uBones[int(aBoneIndices.z)] * aBoneWeights.z
-                                      + uBones[int(aBoneIndices.w)] * aBoneWeights.w;
-    vec4 world = uWorld * skin * vec4(aPosition, 1.0);
-    vec4 view  = uView * world;
-    gl_Position = uProjection * view;
-    vCurrentClip  = gl_Position;
-    // The previous pose is deliberately NOT reconstructed here: the bones are this frame's, so a
-    // skinned mesh's velocity is its object's motion and not its deformation. Recording the latter
-    // needs the previous frame's bone set as a second array, which is an obligation on the app an
-    // order of magnitude larger than one matrix; it is stated in the header rather than faked.
-    vPreviousClip = uPreviousViewProjection * (uPreviousWorld * skin * vec4(aPosition, 1.0));
-    vViewNormal = normalize(mat3(uView) * mat3(uWorld) * mat3(skin) * aNormal);
-    vViewDepth  = clamp(-view.z / uFarPlane, 0.0, 1.0);
-}
-)";
-
-        /// One fragment shader for every combination, branching on two uniforms rather than
-        /// compiling four programs: the branches are uniform-controlled, so a driver folds them,
-        /// and four near-identical shaders is four places for the encoding to drift.
-        std::string MakeFragmentSource()
+        struct TextStage
         {
-            std::string source = R"(#version 300 es
-precision highp float;
-in vec3 vViewNormal;
-in float vViewDepth;
-in vec4 vCurrentClip;
-in vec4 vPreviousClip;
-uniform int uPackDepth;
-uniform int uOutputMode;   // 0 = every target (MRT), 1 = depth, 2 = normals, 3 = velocity
-uniform float uRoughness;  // rides in the normal target's alpha; see setRoughness
-layout(location = 0) out vec4 FragTarget0;
-layout(location = 1) out vec4 FragTarget1;
-layout(location = 2) out vec4 FragTarget2;
-)";
-            source += kPackGlsl;
-            source += DepthNormalPrepass::getVelocityDecodeGlsl();
-            source += R"(
-vec4 cnaVelocityOut(vec4 currentClip, vec4 previousClip) {
-    // Behind the previous camera: there is no screen position to have come from, so the pixel is
-    // marked as carrying no velocity rather than given a reprojection through a negative w.
-    if (currentClip.w <= 0.0 || previousClip.w <= 0.0) return cnaNoVelocity();
-    vec2 currentUv  = (currentClip.xy / currentClip.w) * 0.5 + 0.5;
-    vec2 previousUv = (previousClip.xy / previousClip.w) * 0.5 + 0.5;
-    return cnaEncodeVelocity(currentUv - previousUv);
-}
+            std::string_view source;
+            const char* label;
+        };
 
-void main() {
-    vec4 depthOut  = (uPackDepth != 0) ? cnaPackDepth(vViewDepth)
-                                       : vec4(vViewDepth, vViewDepth, vViewDepth, 1.0);
-    // The alpha of the normal target carried nothing until MOD-2003. Roughness rides there rather
-    // than in a third target: MRT is capped and this pass already falls back to two passes without
-    // it, so a third output would make that fallback three passes for one scalar.
-    vec4 normalOut = vec4(vViewNormal * 0.5 + 0.5, uRoughness);
-    vec4 velocityOut = cnaVelocityOut(vCurrentClip, vPreviousClip);
-    if (uOutputMode == 1) {
-        FragTarget0 = depthOut;
-        FragTarget1 = depthOut;
-        FragTarget2 = depthOut;
-    } else if (uOutputMode == 2) {
-        FragTarget0 = normalOut;
-        FragTarget1 = normalOut;
-        FragTarget2 = normalOut;
-    } else if (uOutputMode == 3) {
-        FragTarget0 = velocityOut;
-        FragTarget1 = velocityOut;
-        FragTarget2 = velocityOut;
-    } else {
-        FragTarget0 = depthOut;
-        FragTarget1 = normalOut;
-        FragTarget2 = velocityOut;
-    }
-}
-)";
-            return source;
+        struct SpirVStage
+        {
+            const std::uint32_t* words;
+            std::size_t byteSize;
+            const char* label;
+        };
+
+        [[nodiscard]] std::vector<std::uint8_t> ToBytes(const SpirVStage& stage)
+        {
+            const auto* begin = reinterpret_cast<const std::uint8_t*>(stage.words);
+            return std::vector<std::uint8_t>(begin, begin + stage.byteSize);
+        }
+
+        [[nodiscard]] ShaderPackageEXT MakePrepassPackage(const bool skinned,
+                                                          const bool velocityOutputs)
+        {
+            using namespace CNA::Graphics::detail::DepthNormalPrepassGenerated;
+            const TextStage esVertex = skinned
+                ? TextStage{kSkinnedEsVertexSource, "depth_normal_prepass/skinned.es.vert.glsl"}
+                : TextStage{kRigidEsVertexSource, "depth_normal_prepass/rigid.es.vert.glsl"};
+            const TextStage desktopVertex = skinned
+                ? TextStage{kSkinnedDesktopVertexSource,
+                            "depth_normal_prepass/skinned.desktop.vert.glsl"}
+                : TextStage{kRigidDesktopVertexSource,
+                            "depth_normal_prepass/rigid.desktop.vert.glsl"};
+            const SpirVStage vulkanVertex = skinned
+                ? SpirVStage{kSkinnedVulkanVertexSpirV,
+                             kSkinnedVulkanVertexSpirVByteSize,
+                             "depth_normal_prepass/skinned.vulkan.vert.spv"}
+                : SpirVStage{kRigidVulkanVertexSpirV,
+                             kRigidVulkanVertexSpirVByteSize,
+                             "depth_normal_prepass/rigid.vulkan.vert.spv"};
+            const SpirVStage vulkanFragment = velocityOutputs
+                ? SpirVStage{kPrepassVelocityVulkanFragmentSpirV,
+                             kPrepassVelocityVulkanFragmentSpirVByteSize,
+                             "depth_normal_prepass/prepass_velocity.vulkan.frag.spv"}
+                : SpirVStage{kPrepassVulkanFragmentSpirV,
+                             kPrepassVulkanFragmentSpirVByteSize,
+                             "depth_normal_prepass/prepass.vulkan.frag.spv"};
+
+            return ShaderPackageEXT(
+                {
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Vertex, "main", esVertex.label,
+                                  std::string(esVertex.source)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "depth_normal_prepass/prepass.es.frag.glsl",
+                                  std::string(kPrepassEsFragmentSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                  CNA::ShaderStageEXT::Vertex, "main", desktopVertex.label,
+                                  std::string(desktopVertex.source)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "depth_normal_prepass/prepass.desktop.frag.glsl",
+                                  std::string(kPrepassDesktopFragmentSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Vertex, "main", vulkanVertex.label,
+                                  ToBytes(vulkanVertex)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Fragment, "main", vulkanFragment.label,
+                                  ToBytes(vulkanFragment)),
+                },
+                {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment});
         }
 
     } // namespace
@@ -246,16 +158,30 @@ void main() {
         default:                       packDepth_ = usesPackedDepthEXT(device); break;
         }
 
-        const std::string fragment = MakeFragmentSource();
-        effect_        = std::make_unique<ShaderEffect>(device, kVertexCommon, fragment);
-        skinnedEffect_ = std::make_unique<ShaderEffect>(device, kSkinnedVertexCommon, fragment);
+        const auto makeEffect = [&device](const bool skinned, const bool velocityOutputs) {
+            const ShaderPackageEXT package = MakePrepassPackage(skinned, velocityOutputs);
+            return package.selectFor(device).isUsable()
+                ? std::make_unique<ShaderEffect>(device, package)
+                : nullptr;
+        };
+        effect_ = makeEffect(false, false);
+        skinnedEffect_ = makeEffect(true, false);
+        velocityEffect_ = makeEffect(false, true);
+        skinnedVelocityEffect_ = makeEffect(true, true);
 
         bool logged = false;
         detail::reportShaderCompileFailure(device, "DepthNormalPrepass", effect_.get(), logged);
         detail::reportShaderCompileFailure(device, "DepthNormalPrepass (skinned)",
                                            skinnedEffect_.get(), logged);
+        detail::reportShaderCompileFailure(device, "DepthNormalPrepass (velocity)",
+                                           velocityEffect_.get(), logged);
+        detail::reportShaderCompileFailure(device, "DepthNormalPrepass (skinned velocity)",
+                                           skinnedVelocityEffect_.get(), logged);
 
-        supported_ = effect_->IsEffectValid() && device.ExecutesShaderEffectSourceEXT();
+        supported_ = effect_ && effect_->IsEffectValid()
+                  && skinnedEffect_ && skinnedEffect_->IsEffectValid()
+                  && velocityEffect_ && velocityEffect_->IsEffectValid()
+                  && skinnedVelocityEffect_ && skinnedVelocityEffect_->IsEffectValid();
 
         allocateTargets();
 
@@ -362,7 +288,9 @@ void main() {
         // Applied immediately when a pass is open, for the reason setRoughness is: the prepass draws
         // whatever the app hands it and cannot tell one object from the next.
         if (passOpen_ && supported_)
-            for (ShaderEffect* effect : {effect_.get(), skinnedEffect_.get()})
+            for (ShaderEffect* effect : {
+                     velocity_ ? velocityEffect_.get() : effect_.get(),
+                     velocity_ ? skinnedVelocityEffect_.get() : skinnedEffect_.get()})
                 if (effect != nullptr && effect->IsEffectValid())
                 {
                     effect->Apply();
@@ -439,12 +367,21 @@ void main() {
                 const int outputMode = useMrt_ ? 0
                                                : (passIndex == kVelocityPass ? 3
                                                   : (passIndex == kNormalPass ? 2 : 1));
+                openFarPlane_ = farPlane;
+                const std::array prepassScalars{
+                    farPlane,
+                    packDepth_ ? 1.0f : 0.0f,
+                    static_cast<float>(outputMode),
+                    roughness_,
+                };
                 // With no previous camera supplied the current one stands in, which reads as "the
                 // camera did not move" -- the honest answer for a first frame, and better than the
                 // identity, which would smear the whole image from the world origin.
                 const Matrix previousViewProjection =
                     hasPreviousCamera_ ? previousViewProjection_ : (view * projection);
-                for (ShaderEffect* effect : {effect_.get(), skinnedEffect_.get()})
+                for (ShaderEffect* effect : {
+                         velocity_ ? velocityEffect_.get() : effect_.get(),
+                         velocity_ ? skinnedVelocityEffect_.get() : skinnedEffect_.get()})
                 {
                     if (effect == nullptr || !effect->IsEffectValid()) continue;
                     effect->Apply();
@@ -452,10 +389,9 @@ void main() {
                     effect->SetUniformMat4("uProjection", &projection.M11);
                     const Matrix identity = Matrix::getIdentityProperty();
                     effect->SetUniformMat4("uWorld", &identity.M11);
-                    effect->SetUniformFloat("uFarPlane", farPlane);
-                    effect->SetUniformInt("uPackDepth", packDepth_ ? 1 : 0);
-                    effect->SetUniformInt("uOutputMode", outputMode);
-                    effect->SetUniformFloat("uRoughness", roughness_);
+                    effect->SetUniformFloatArray(
+                        "uPrepassScalars", prepassScalars.data(),
+                        static_cast<int>(prepassScalars.size()));
                     effect->SetUniformMat4("uPreviousWorld", &previousWorld_.M11);
                     effect->SetUniformMat4("uPreviousViewProjection", &previousViewProjection.M11);
                 }
@@ -491,22 +427,39 @@ void main() {
         // one begin()/end() -- which is the only way a scene with more than one material can
         // describe itself, since the prepass draws whatever the app hands it.
         if (passOpen_ && supported_)
-            for (ShaderEffect* effect : {effect_.get(), skinnedEffect_.get()})
+        {
+            const int outputMode = useMrt_ ? 0
+                                           : (openPass_ == kVelocityPass ? 3
+                                              : (openPass_ == kNormalPass ? 2 : 1));
+            const std::array prepassScalars{
+                openFarPlane_,
+                packDepth_ ? 1.0f : 0.0f,
+                static_cast<float>(outputMode),
+                roughness_,
+            };
+            for (ShaderEffect* effect : {
+                     velocity_ ? velocityEffect_.get() : effect_.get(),
+                     velocity_ ? skinnedVelocityEffect_.get() : skinnedEffect_.get()})
                 if (effect != nullptr && effect->IsEffectValid())
                 {
                     effect->Apply();
-                    effect->SetUniformFloat("uRoughness", roughness_);
+                    effect->SetUniformFloatArray(
+                        "uPrepassScalars", prepassScalars.data(),
+                        static_cast<int>(prepassScalars.size()));
                 }
+        }
     }
 
     ShaderEffect* DepthNormalPrepass::getPrepassEffect() const
     {
-        return supported_ ? effect_.get() : nullptr;
+        return supported_ ? (velocity_ ? velocityEffect_.get() : effect_.get()) : nullptr;
     }
 
     ShaderEffect* DepthNormalPrepass::getSkinnedPrepassEffect() const
     {
-        return supported_ ? skinnedEffect_.get() : nullptr;
+        return supported_
+            ? (velocity_ ? skinnedVelocityEffect_.get() : skinnedEffect_.get())
+            : nullptr;
     }
 
     Texture2D* DepthNormalPrepass::getDepthTexture() const { return depthTarget_.get(); }
@@ -516,39 +469,13 @@ void main() {
     bool DepthNormalPrepass::usesPackedDepthEXT(GraphicsDevice& device)
     {
         (void)device;
-        // MOD-507 chose the half-float target wherever one existed. MOD-2035 measured what that
-        // costs on the reference renderer, and the measurement is not subtle: with a half-float
-        // depth target, SSAO driven from the prepass occludes **nothing** -- 0 pixels of 16384 --
-        // and with a packed one it occludes 2101. `CNAEXT_Showcase`'s check E goes from 0
-        // strongly-occluded pixels to 1022 on the same frame.
-        //
-        // **And the mechanism is no longer a mystery** (`HalfFloatDepthMechanismTests`). It is not
-        // the storage, the filtering, the binding or the loop -- every one of those was measured and
-        // is sound. It is the *sky early-out* every screen-space pass in this layer opens with:
-        // `if (centerDepth <= 0.0) { …; return; }` is taken on every pixel of a half-float depth
-        // image, although every value in that image is positive and the identical comparison passes
-        // when the rest of the shader is not around it. Removing that one block from the shipped
-        // estimator's emitted source takes it from 0 darkened pixels to 669 on the same image.
-        //
-        // So this stays true here, and for a reason that is now stated rather than assumed: the
-        // defect belongs to the shader compiler, the layer cannot work around it without deleting a
-        // guard every pass needs, and packing costs nothing.
-        //
-        // **The mechanism is not established, and this comment does not claim one.** A minimal
-        // reproducer -- two textures proven to hold identical values, one half-float and one 8-bit,
-        // and the same loop inlined over each -- does *not* separate them
-        // (`HalfFloatDepthSamplingTests` runs it and records what it finds). So what is known is
-        // the effect in the real pass, not its cause, and the earlier bisection in this row's
-        // history was measuring something real that a smaller test does not yet capture.
-        //
-        // Choosing the packed path anyway is not settling for a workaround, because packing is the
-        // better encoding on its own terms and this class's own documentation already said so:
-        // 1 part in 255^3 against a half-float's 11-bit mantissa, at the price of a little
-        // arithmetic on both ends, and no capability required at all -- one fewer per-renderer
-        // branch rather than one more.
-        //
-        // The half-float path is kept rather than deleted: it is one `return` away, and a renderer
-        // that samples it correctly would prefer it for the bandwidth.
+        // MOD-507 originally chose half-float whenever available. MOD-2035 then observed a real,
+        // intermittent loss of SSAO occlusion from that path on the reference renderer; the focused
+        // mechanism probes do not currently reproduce it. Automatic mode therefore stays packed:
+        // it is deterministic across renderers, requires no optional format and retains roughly
+        // 1 part in 255^3 rather than a half-float's 11-bit mantissa. The explicit HalfFloat
+        // constructor path remains available so the alternative and the historical failure can
+        // continue to be tested rather than being hidden by policy.
         return true;
     }
 
@@ -616,7 +543,7 @@ vec2 cnaDecodeVelocity(vec4 texel) { return (texel.xy - 0.5) * 2.0; }
     {
         // Stops one texel short of 1.0, exactly as the GLSL does and for the same reason:
         // fract(1.0) is 0, so an unclamped far-plane depth would read back as the nearest possible
-        // surface. See kPackGlsl.
+        // surface. The packaged fragment shaders use the same constant and shifts.
         const float clamped = std::clamp(value, 0.0f, 0.99999994f);
         const float shift[4] = {16581375.0f, 65025.0f, 255.0f, 1.0f};
         float channels[4];

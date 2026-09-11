@@ -78,6 +78,20 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    static bool IsColorTransferFormatEXT(const GraphicsDevice* device, SurfaceFormat format) noexcept
+    {
+        if (device != nullptr)
+        {
+            switch (device->GetRenderer().ClassifyColorTransferFormatEXT(static_cast<int>(format)))
+            {
+                case CNA::Internal::Renderers::RendererFormatVerdict::Supported: return true;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported: return false;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Defer: break;
+            }
+        }
+        return Texture::GetFormatSizeEXT(format) % 4 == 0;
+    }
+
     Texture3D::~Texture3D() = default;
     Texture3D::Texture3D(Texture3D&&) noexcept = default;
     Texture3D& Texture3D::operator=(Texture3D&&) noexcept = default;
@@ -158,6 +172,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("Texture3D");
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
+            throw std::invalid_argument(
+                "Texture3D::SetData: Color data requires a Color-compatible 32-bit format");
         if (!data)
             throw std::invalid_argument("Texture3D::SetData: data must not be null");
         if (elementCount <= 0)
@@ -232,6 +249,12 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("Texture3D");
+        const bool isCompressedTransfer = graphicsDevice_ != nullptr &&
+            graphicsDevice_->GetRenderer().IsCompressedTransferFormatEXT(
+                static_cast<int>(format_));
+        if (!IsColorTransferFormatEXT(graphicsDevice_, format_) && !isCompressedTransfer)
+            throw std::invalid_argument(
+                "Texture3D::GetData: Color data requires a Color-compatible 32-bit format");
         if (!data)
             throw std::invalid_argument("Texture3D::GetData: data must not be null");
         if (elementCount <= 0)

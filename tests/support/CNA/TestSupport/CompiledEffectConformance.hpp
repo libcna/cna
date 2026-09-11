@@ -1470,12 +1470,15 @@ namespace CNA::TestSupport
             batch.End();
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             Color pixel(0, 0, 0, 0);
-            const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
-            target.GetData(0, &centre, &pixel, 0, 1);
+            // Stay clear of the exact u=0.5 point-filter tie. D3D9 rasterizes this custom-effect
+            // path at integer pixel centres while modern APIs use half-integer centres; a probe on
+            // the tie tests that convention rather than whether SpriteEffects reached the shader.
+            const Rectangle probe(kSize - 2, kSize / 2, 1, 1);
+            target.GetData(0, &probe, &pixel, 0, 1);
             return pixel;
         };
 
-        // The whole 2x1 texture across the target: the centre pixel lands in the right-hand column.
+        // The whole 2x1 texture across the target: the interior probe lands in the right-hand column.
         const Color whole = drawSprite(Rectangle(0, 0, 2, 1), SpriteEffects::None);
         EXPECT_NEAR(whole.getRProperty(), 0, 3)
             << "the sprite's own texture must reach slot 0, not the effect's FxTexture (red)";

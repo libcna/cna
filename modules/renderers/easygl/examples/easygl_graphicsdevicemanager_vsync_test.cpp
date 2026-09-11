@@ -38,28 +38,23 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
+#if defined(CNA_RENDERER_EASYGL)
 #include <SDL3/SDL.h>
+#endif
 
 #include <cstdio>
 #include <memory>
 
-namespace
-{
-    // Matches examples/common/PixelTestGame.hpp's own kSkipExitCode -- this project's established
-    // SKIP_RETURN_CODE 77 convention (cmake/UnitTests.cmake's Task 470 comment) applied uniformly
-    // to every registered CTest, this one included.
-    constexpr int kSkipExitCode = 77;
-}
-
 using namespace Microsoft::Xna::Framework;
 
-class EasyGLGraphicsDeviceManagerVsyncTest : public Game
+class GraphicsDeviceManagerVsyncTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
     int result_ = 1;
 
     int failCount_ = 0;
+#if defined(CNA_RENDERER_EASYGL)
     bool driverHalfSkipped_ = false;
 
     void Check(bool ok, const char* label, int got)
@@ -67,10 +62,11 @@ class EasyGLGraphicsDeviceManagerVsyncTest : public Game
         std::printf("[%s] %s (SDL_GL_GetSwapInterval()=%d)\n", ok ? "PASS" : "FAIL", label, got);
         if (ok) ++passCount_; else ++failCount_;
     }
+#endif
 
     void CheckForwarded(bool ok, const char* label, int got)
     {
-        std::printf("[%s] %s (EasyGLRenderer::GetSwapIntervalEXT()=%d)\n",
+        std::printf("[%s] %s (IGraphicsRenderer::GetSwapIntervalEXT()=%d)\n",
                     ok ? "PASS" : "FAIL", label, got);
         if (ok) ++passCount_; else ++failCount_;
     }
@@ -99,15 +95,18 @@ protected:
         CheckForwarded(renderer.GetSwapIntervalEXT() == 0,
                        "P1: SynchronizeWithVerticalRetrace=false is forwarded to the renderer",
                        renderer.GetSwapIntervalEXT());
+#if defined(CNA_RENDERER_EASYGL)
         int intervalOff = 0;
         SDL_GL_GetSwapInterval(&intervalOff);
         Check(intervalOff == 0, "SynchronizeWithVerticalRetrace=false reaches the real GL context", intervalOff);
+#endif
 
         gdm_->setSynchronizeWithVerticalRetraceProperty(true);
         gdm_->ApplyChanges();
         CheckForwarded(renderer.GetSwapIntervalEXT() != 0,
                        "P2: SynchronizeWithVerticalRetrace=true is forwarded to the renderer",
                        renderer.GetSwapIntervalEXT());
+#if defined(CNA_RENDERER_EASYGL)
         int intervalOn = 0;
         SDL_GL_GetSwapInterval(&intervalOn);
 
@@ -145,12 +144,18 @@ protected:
         const int expected = driverHalfSkipped_ ? 3 : 4;
         std::printf("=== %d/%d PASS%s ===\n", passCount_, expected,
                     driverHalfSkipped_ ? " (driver half skipped)" : "");
+#else
+        constexpr int expected = 2;
+        std::printf("[INFO] Native SDL GL swap-interval checks apply only to EasyGL; "
+                    "both renderer-neutral forwarding checks ran.\n");
+        std::printf("=== %d/%d PASS ===\n", passCount_, expected);
+#endif
         result_ = (failCount_ == 0 && passCount_ == expected) ? 0 : 1;
         Exit();
     }
 
 public:
-    EasyGLGraphicsDeviceManagerVsyncTest()
+    GraphicsDeviceManagerVsyncTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(64);
@@ -162,7 +167,7 @@ public:
 
 int main()
 {
-    EasyGLGraphicsDeviceManagerVsyncTest game;
+    GraphicsDeviceManagerVsyncTest game;
     game.Run();
     return game.getResult();
 }

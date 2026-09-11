@@ -117,8 +117,15 @@ namespace Microsoft::Xna::Framework::Graphics
             case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
                 return;
             case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
+                // plan_vulkan.md VULKAN-170: name the format. A bare "has not passed the
+                // renderer's promotion gate" tells a caller nothing it did not already know, and
+                // the sibling refusal one branch down (Texture::ValidateFormat) has always named
+                // the ordinal. This is the renderer's own no -- distinct from the profile's
+                // System::NotSupportedException above -- so it says which format and whose no it is.
                 throw std::runtime_error(
-                    "Texture2D SurfaceFormat has not passed the renderer's promotion gate.");
+                    "Texture2D: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
+                    " has not passed the renderer's promotion gate -- this renderer classified it "
+                    "Unsupported on this device.");
             case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
                 Texture::ValidateFormat(format);
                 return;
@@ -2456,25 +2463,64 @@ namespace Microsoft::Xna::Framework::Graphics
     // SaveAsPng
     // -----------------------------------------------------------------------
 
+    // -----------------------------------------------------------------------
+    // plan_vulkan.md VULKAN-169, finding F-32: what the four save routines encode.
+    // -----------------------------------------------------------------------
+
+    // Before this, all four encoded `cpuPixels_` and threw when there was none -- so a
+    // RenderTarget2D a game drew into and never SetData'd could not be saved at all, which is the
+    // screenshot idiom every XNA sample uses. The pixels are on the GPU, and this layer already
+    // knows how to fetch them: GetData does it, and does it in this exact precedence.
+    //
+    // The renderer is PREFERRED for a render target and only for a render target, for the reason
+    // GetData states beside its own copy of this rule: a shadow left by a temporary SetData staging
+    // buffer is not authoritative once something has rendered into the target. For every other
+    // texture the shadow IS the content, and asking the renderer would be both slower and, on a
+    // renderer whose textures are not readable, wrong.
+    //
+    // The result is deliberately NOT cached into `cpuPixels_`. Saving twice would then be cheaper,
+    // and the second save would be stale the moment anything rendered into the target again -- the
+    // exact defect the preference above exists to avoid.
+    const std::uint8_t* Texture2D::gatherPixelsForEncode(std::vector<std::uint8_t>& scratch) const
+    {
+        const int total = width * height;
+        if (gpuOnlyContent_ && renderer_ != nullptr && total > 0)
+        {
+            scratch.assign(static_cast<std::size_t>(total) * 4, 0);
+            if (renderer_->GetData(0, 0, 0, width, height, scratch.data(),
+                                   static_cast<int>(scratch.size())))
+                return scratch.data();
+            scratch.clear();
+        }
+        if (cpuPixels_ && !cpuPixels_->empty() &&
+            cpuPixels_->size() >= static_cast<std::size_t>(total) * 4)
+            return cpuPixels_->data();
+        return nullptr;
+    }
+
     void Texture2D::SaveAsPng(System::IO::Stream* stream, int targetWidth, int targetHeight) const
     {
         if (!stream)
             throw std::invalid_argument("Texture2D::SaveAsPng: stream is null");
-        if (!cpuPixels_ || cpuPixels_->empty())
+        std::vector<std::uint8_t> scratch;
+        const std::uint8_t* pixels = gatherPixelsForEncode(scratch);
+        if (pixels == nullptr)
             throw std::runtime_error("Texture2D::SaveAsPng: no CPU-side pixel data available");
 
         const std::vector<uint8_t> encoded = ImageLoader::EncodePng(
-            cpuPixels_->data(), width, height, targetWidth, targetHeight);
+            pixels, width, height, targetWidth, targetHeight);
         stream->Write(reinterpret_cast<const System::IO::bytecs*>(encoded.data()), 0,
                       static_cast<System::IO::intcs>(encoded.size()));
     }
 
     void Texture2D::SaveAsPng(const std::string& filename) const
     {
-        if (!cpuPixels_ || cpuPixels_->empty())
+        std::vector<std::uint8_t> scratch;
+        const std::uint8_t* pixels = gatherPixelsForEncode(scratch);
+        if (pixels == nullptr)
             throw std::runtime_error("Texture2D::SaveAsPng: no CPU-side pixel data available");
 
-        ImageLoader::SavePng(cpuPixels_->data(), width, height, filename);
+        ImageLoader::SavePng(pixels, width, height, filename);
     }
 
     // -----------------------------------------------------------------------
@@ -2498,22 +2544,25 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!stream)
             throw std::invalid_argument("Texture2D::SaveAsJpeg: stream is null");
-        if (!cpuPixels_ || cpuPixels_->empty())
+        std::vector<std::uint8_t> scratch;
+        const std::uint8_t* pixels = gatherPixelsForEncode(scratch);
+        if (pixels == nullptr)
             throw std::runtime_error("Texture2D::SaveAsJpeg: no CPU-side pixel data available");
 
         const std::vector<uint8_t> encoded = ImageLoader::EncodeJpeg(
-            cpuPixels_->data(), width, height, targetWidth, targetHeight, GetJpegSaveQuality());
+            pixels, width, height, targetWidth, targetHeight, GetJpegSaveQuality());
         stream->Write(reinterpret_cast<const System::IO::bytecs*>(encoded.data()), 0,
                       static_cast<System::IO::intcs>(encoded.size()));
     }
 
     void Texture2D::SaveAsJpeg(const std::string& filename) const
     {
-        if (!cpuPixels_ || cpuPixels_->empty())
+        std::vector<std::uint8_t> scratch;
+        const std::uint8_t* pixels = gatherPixelsForEncode(scratch);
+        if (pixels == nullptr)
             throw std::runtime_error("Texture2D::SaveAsJpeg: no CPU-side pixel data available");
 
-        ImageLoader::SaveJpeg(
-            cpuPixels_->data(), width, height, filename, GetJpegSaveQuality());
+        ImageLoader::SaveJpeg(pixels, width, height, filename, GetJpegSaveQuality());
     }
 
     Texture2D Texture2D::CreateFromPixels(GraphicsDevice& device,

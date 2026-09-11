@@ -55,14 +55,18 @@ namespace CNA::Graphics {
          */
         void apply(const PostProcessContext& context) override;
 
-        /** @brief Returns `"DepthOfField"`. */
+        /**
+         * @brief Returns the stable pass name.
+         *
+         * @return `"DepthOfField"`.
+         */
         [[nodiscard]] const std::string& getName() const override;
 
         /**
          * @brief Returns whether this renderer can run the pass.
          *
          * @param device The device whose renderer is queried.
-         * @return True when the renderer executes shader source and the shader compiled.
+         * @return True when the renderer selects and accepts the packaged shader.
          */
         [[nodiscard]] bool isSupported(
             Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) const override;
@@ -83,7 +87,11 @@ namespace CNA::Graphics {
         [[nodiscard]] static float circleOfConfusionMillimetres(float depth, float focusDistance,
                                                                 float focalLength, float fNumber);
 
-        /** @brief Returns the distance the lens is focused at, in world units. */
+        /**
+         * @brief Returns the distance the lens is focused at, in world units.
+         *
+         * @return The current focus distance.
+         */
         [[nodiscard]] float getFocusDistance() const;
         /**
          * @brief Sets the distance the lens is focused at, in world units.
@@ -92,7 +100,11 @@ namespace CNA::Graphics {
          */
         void setFocusDistance(float value);
 
-        /** @brief Returns the focal length in millimetres. */
+        /**
+         * @brief Returns the focal length in millimetres.
+         *
+         * @return The current focal length.
+         */
         [[nodiscard]] float getFocalLength() const;
         /**
          * @brief Sets the focal length in millimetres.
@@ -101,7 +113,11 @@ namespace CNA::Graphics {
          */
         void setFocalLength(float value);
 
-        /** @brief Returns the f-number. */
+        /**
+         * @brief Returns the f-number.
+         *
+         * @return The current aperture ratio.
+         */
         [[nodiscard]] float getFNumber() const;
         /**
          * @brief Sets the f-number, the ratio of focal length to aperture diameter.
@@ -112,7 +128,11 @@ namespace CNA::Graphics {
          */
         void setFNumber(float value);
 
-        /** @brief Returns the largest blur radius the pass will use, in screen fractions. */
+        /**
+         * @brief Returns the largest blur radius the pass will use, in screen fractions.
+         *
+         * @return The current blur-radius ceiling.
+         */
         [[nodiscard]] float getMaxRadius() const;
         /**
          * @brief Sets the largest blur radius the pass will use, in screen fractions.
@@ -131,6 +151,7 @@ namespace CNA::Graphics {
     private:
         std::unique_ptr<FullscreenPass> fullscreen_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> effect_;
+        bool packedDepth_ = true;
 
         float focusDistance_ = 10.0f;
         float focalLength_   = 50.0f;

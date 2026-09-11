@@ -93,7 +93,8 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!colorTexture_) Recreate();
 
         IDirect3DSurface9* color = (appliedMultiSampleCount_ > 1 ? msaaSurface_ : colorSurface_).Get();
-        owner_->BindRenderTargetSurfacesEXT(&color, 1, depthStencilSurface_.Get(), width_, height_,
+        owner_->BindRenderTargetSurfacesEXT(&color, 1, depthStencilSurface_.Get(),
+                                            depthFormatOrdinal_, width_, height_,
                                             "binding RenderTarget2D");
     }
 
@@ -101,7 +102,12 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         if (appliedMultiSampleCount_ > 1 && msaaSurface_ && colorSurface_)
         {
-            device_->StretchRect(msaaSurface_.Get(), nullptr, colorSurface_.Get(), nullptr, D3DTEXF_NONE);
+            const HRESULT hr = device_->StretchRect(
+                msaaSurface_.Get(), nullptr, colorSurface_.Get(), nullptr, D3DTEXF_NONE);
+            if (FAILED(hr))
+                throw std::runtime_error(
+                    "D3D9RenderTargetRenderer::ResolveForTransitionEXT: StretchRect failed, hr=" +
+                    FormatHr(hr));
         }
     }
 
@@ -234,7 +240,8 @@ namespace CNA::Internal::Renderers::DirectX9
             throw std::runtime_error("D3D9RenderTargetCubeRenderer::BindAsRenderTargetFace: GetCubeMapSurface failed, hr=" + FormatHr(hr));
 
         IDirect3DSurface9* color = faceSurface.Get();
-        owner_->BindRenderTargetSurfacesEXT(&color, 1, depthStencilSurface_.Get(), size_, size_,
+        owner_->BindRenderTargetSurfacesEXT(&color, 1, depthStencilSurface_.Get(),
+                                            depthFormatOrdinal_, size_, size_,
                                             "binding RenderTargetCube face");
     }
 

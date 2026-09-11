@@ -6,11 +6,15 @@ The **CNAEXT engine layer** is the opt-in `CNA::Graphics` namespace that sits *a
 API and orchestrates frame-level work the XNA 4.0 contract has no concept of: an HDR render
 pipeline, post-processing passes, shadow maps, skybox/IBL, and (long term) compute.
 
-**The HDR pipeline works; the scene-level subsystems do not exist yet.** As of 2026-08-17 a game
-can wrap its drawing in `RenderPipeline`, render into a float scene target, and get ambient
-occlusion, bloom, tonemapping and FXAA — verified on EasyGL against Mesa's software renderer. What
-is still only designed: shadow maps, the skybox, image-based lighting, compute shaders, and the
-instancing/LOD helpers. Do not describe those as available. The design is
+**The engine layer is implemented on its EasyGL reference path and is being rolled out to other
+renderers capability by capability.** Its HDR/post-process pipeline, shadows, skybox, image-based
+lighting, instancing/LOD helpers and compute/resource layer all have executable coverage; Vulkan
+now implements exact HDR targets, stock-PBR IBL, portable directional/cascade/point/spot shadow
+generation and stock-effect reception, portable cube and atmospheric skies, eighteen portable post-process consumers and both legacy post-process effects,
+a portable decal projector, a portable depth/normal/velocity producer, instancing and the modern
+compute/resource paths. The
+remaining post-process effects are still
+source-authored shader gaps. The design is
 [`../CNAEXT.md`](../misc/CNAEXT.md); the task backlog and its evidence trail are
 [`../plans/plan_modern.md`](../plans/plan_modern.md).
 
@@ -131,13 +135,15 @@ whole phase exists to remove, so there is no downgrade policy to choose between.
 
 ### The format table
 
-The internal formats below are EasyGL's, which is the reference implementation; the D3D and Vulkan
-columns name the format an implementation is expected to choose when it lands, and are **not** claims
-that it has.
+The internal formats below are EasyGL's, which is the reference implementation. Since `MOD-2223`
+for 2D targets and `MOD-2234` for cube targets, the Vulkan column is also the format the live
+implementation allocates; the D3D column remains the intended mapping rather than an implementation
+claim.
 
 | `SurfaceFormat` | Channels × bits | EasyGL internal format | Bytes/texel | Vulkan equivalent | D3D equivalent |
 |---|---|---|---|---|---|
 | `Color` | 4 × 8 unorm | `RGBA8` | 4 | `R8G8B8A8_UNORM` | `R8G8B8A8_UNORM` |
+| `Rgba64` | 4 × 16 unorm | `RGBA16` (desktop GL) | 8 | `R16G16B16A16_UNORM` | `R16G16B16A16_UNORM` |
 | `HalfSingle` | 1 × 16 float | `R16F` | 2 | `R16_SFLOAT` | `R16_FLOAT` |
 | `HalfVector2` | 2 × 16 float | `RG16F` | 4 | `R16G16_SFLOAT` | `R16G16_FLOAT` |
 | `HalfVector4` | 4 × 16 float | `RGBA16F` | 8 | `R16G16B16A16_SFLOAT` | `R16G16B16A16_FLOAT` |
@@ -146,8 +152,9 @@ that it has.
 | `Vector2` | 2 × 32 float | `RG32F` | 8 | `R32G32_SFLOAT` | `R32G32_FLOAT` |
 | `Vector4` | 4 × 32 float | `RGBA32F` | 16 | `R32G32B32A32_SFLOAT` | `R32G32B32A32_FLOAT` |
 
-Every other `SurfaceFormat` — the compressed formats, `Bgra5551`, `Rgba1010102`, `Rg32`, `Rgba64`
-and the rest — is **not** a render-target format in CNA, on any renderer, and is refused.
+Other `SurfaceFormat` values are outside the current EasyGL/Vulkan exact target tables and those
+renderers refuse them. This is CNA's implemented boundary, not a claim that FNA's HiDef profile
+omits every one of them: notably `Rgba1010102` and `Rg32` remain a shared parity follow-up.
 
 ### `HdrBlendable` is `HalfVector4`
 
@@ -171,15 +178,15 @@ pass that needs a `Single` accumulation buffer writes it with blending off.
 
 ### Per-renderer status
 
-Only two renderers answer this question with their own verdict today; every other renderer defers,
-and the framework's own rule then applies — `Color`, and nothing else. That is the literal truth for a
-renderer that has implemented no other render-target format, which is why the default is honest
-rather than merely conservative.
+The implementations below answer this question with their own device verdict. A renderer without
+an override defers, and the framework's own rule then applies — `Color`, and nothing else. That is
+the literal truth for a renderer that has implemented no other render-target format, which is why
+the default is honest rather than merely conservative.
 
 | Renderer | Float render targets | Note |
 |---|---|---|
 | `OpenGLES3`, `OpenGL33`, `OpenGLES2`, `OpenGL4`, `WebGL1`, `WebGL2` (EasyGL) | ✅ all seven float formats | Verified against Mesa llvmpipe (ES 3.2) by `HdrRenderTargetRoundTripTests`. What a *driver* supports is still asked at run time, so an ES 2 profile that lacks float FBOs reports false rather than failing later. |
-| `Vulkan` | ⬜ defers → `Color` only | Measured, not assumed (`MOD-1610`): its `HdrRenderTargetRoundTrip` cases skip on a real lavapipe device. |
+| `Vulkan` | ✅ all seven float formats | `MOD-2223`/`MOD-2234`: exact native 2D and cube attachments are queried from the selected device. `Vulkan_FloatRenderTarget` exercises clear, draw, sample, readback, MSAA and mips, plus exact allocation for every advertised cube format and six unclamped RGBA16F faces. |
 | Every other renderer | ⬜ defers → `Color` only | No `ClassifyRenderTargetFormatEXT` override, so the framework rule applies. The 2D-only and fixed-function identities are ⛔ by their own nature — see the per-identity matrix below. |
 
 ## Per-renderer support matrix
@@ -195,47 +202,89 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 
 | Subsystem | EasyGL (reference) | Vulkan | D3D11 | Other renderers |
 |---|---|---|---|---|
-| Post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ⛔ its `ShaderEffect` takes SPIR-V, not the passes' GLSL | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
-| Float/HDR render targets | ✅ RGBA16F + RGBA32F, runtime-probed | ⬜ measured: `Color` only today | ⬜ | ⬜ — each reports `false` and `RenderTarget2D` refuses the format rather than substituting `Color` |
-| `RenderPipeline` + post-process passes | ✅ | 🟨 runs and copies through — measured, frame identical to no pipeline | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
-| Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ⬜ `SupportsShadowSamplingEXT()` false | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
-| Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
-| Contact shadows | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `ContactShadowPass::isSupported()` is false and the pass copies its input through, so the frame keeps the shadow map it already had |
-| Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
-| Skybox | ✅ one fullscreen pass; needs `CustomEffects` | ⬜ | ⬜ | ⬜ — where the shader will not compile the sky is skipped and logged once |
-| Image-based lighting | ✅ CPU precompute (works on every renderer) + split-sum shading | 🟨 precompute works; `SupportsImageBasedLightingEXT()` false | ⬜ | ⬜ — the precompute runs anywhere; the shading needs the renderer's own shader path |
+| Legacy post-process effects (`DepthEffect`, `CRTEffect`) | ✅ GLSL | ✅ both select portable GLSL/SPIR-V packages (`MOD-2239s`/`MOD-2239t`) | ⬜ | `AsciiPostProcessEffect` is CPU-side and runs everywhere |
+| Float/HDR render targets | ✅ exact 2D/cube targets, runtime-probed | ✅ exact Float16/Float32 `RenderTarget2D` and `RenderTargetCube`, device-probed (`MOD-2223`/`MOD-2234`) | ⬜ | ⬜ — each reports `false` and the target constructor refuses the format rather than substituting `Color` |
+| `RenderPipeline` + post-process passes | ✅ | ✅ all eighteen built-in pass consumers plus portable `CRTEffect` and `DepthEffect` through `EffectPass` run, including aerial perspective, volumetric fog, contact shadows, SSR, SSAO, Bloom, colour grading, depth of field, motion blur, analytic height fog, light shafts, tonemap/deband and texture/file HDR display encoding | ⬜ | The shader-based passes need a usable package variant; without one each copies its input and the frame still renders |
+| Depth/normal/velocity prepass | ✅ rigid/skinned producer | ✅ portable rigid/skinned GLSL/SPIR-V package (`MOD-2239l`) | ⬜ | ⬜ — consumers needing these scene images remain unsupported unless this producer or equivalent application inputs run |
+| Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ✅ portable rigid/skinned generation (`MOD-2237`) + stock reception (`MOD-2236`) | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
+| Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ✅ portable atlas generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
+| Contact shadows | ✅ needs the prepass depth and a selected package | ✅ GLSL/SPIR-V package (`MOD-2239n`) | ⬜ | ⬜ — `ContactShadowPass::isSupported()` is false and the pass copies its input through, so the frame keeps the shadow map it already had |
+| Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | ✅ portable cube/spot generation + stock reception | ⬜ | ⬜ — same accepted-and-ignored convention |
+| Skybox | ✅ one fullscreen pass; needs `CustomEffects` | ✅ GLSL/SPIR-V package (`MOD-2238`) | ⬜ | ⬜ — where no package variant will compile the sky is skipped and logged once |
+| Atmospheric sky | ✅ per-ray Rayleigh/Mie model | ✅ GLSL/SPIR-V package (`MOD-2239q`) | ⬜ | ⬜ — where no package variant will compile the procedural sky is skipped |
+| Image-based lighting | ✅ CPU precompute + split-sum shading | ✅ stock `PbrEffect` and `SkinnedPbrEffect`, same three-product split sum (`MOD-2235`) | ⬜ | ⬜ — precompute additionally requires working cube/2D texture storage; shading needs a renderer-specific stock PBR path |
 | Materials (`PbrMaterial` ↔ `PbrEffect`) | ✅ | ✅ | ✅ | ✅ — no renderer code at all: it moves values between two existing objects |
 | Instancing / LOD / culling | ✅ | ✅ measured — `cnaext_instancing_lod_test` passes 5/5 on a real Vulkan device | ⬜ | ⬜ — `LodGroupEXT` and `FrustumCullerEXT` are renderer-free and run everywhere; `InstancedRendererEXT` needs `GraphicsCapability::Instancing` and otherwise refuses (or falls back, on request) |
-| Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; image bindings desktop-GL only | ⬜ not implemented; reports false and both wrappers refuse | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
-| Indirect draws | ✅ GL ES ≥ 3.1 / GL ≥ 4.0, runtime-probed; both routes, including per-instance streams | ⬜ | ⬜ | ⬜ — `SupportsIndirectDrawEXT()` is false by default and `GraphicsDevice` refuses the draw naming the renderer |
-| GPU culling into an indirect draw | ✅ needs compute, indirect draw, executed effect source and a vertex-stage SSBO — all four probed | ⬜ | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
-| Particles | ✅ GPU simulation + instanced billboards | 🟨 CPU simulation and the stock-effect draw work anywhere | 🟨 same | 🟨 — `ParticleSystem` falls back to its CPU path and the same particles appear, more slowly |
+| Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; ordinary texture image bindings desktop-GL only | ✅ SPIR-V, reflected SSBO/push constants, readonly vertex/fragment SSBOs, fifteen exact dedicated storage-image formats plus legal ordinary-texture/render-target bridges in one deferred order | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
+| Auto-exposure | ✅ portable compute reduction over uploaded or rendered textures | ✅ portable SPIR-V reduction with tracked render-target sampling (`MOD-2239x`) | ⬜ | ⬜ — construction refuses when no compute/package variant exists rather than reporting a fabricated exposure |
+| Indirect draws | ✅ GL ES ≥ 3.1 / GL ≥ 4.0, runtime-probed; both routes, including per-instance streams | ✅ device-gated `drawIndirectFirstInstance`; both routes, deferred lifetime and compute-written commands | ⬜ | ⬜ — `SupportsIndirectDrawEXT()` is false by default and `GraphicsDevice` refuses the draw naming the renderer |
+| GPU culling into an indirect draw | ✅ portable GLSL package + vertex-stage SSBO | ✅ portable SPIR-V compute package, reflected vertex-stage SSBO and compute-written indirect command (`MOD-2239v`) | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
+| Particles | ✅ portable GPU simulation + instanced billboards | ✅ portable SPIR-V compute/draw package, reflected vertex SSBO and no readback (`MOD-2239w`) | 🟨 same | 🟨 — `ParticleSystem` falls back to its CPU path and the same particles appear, more slowly |
 | Transparency (sorted) | ✅ ordering is renderer-free; the phase needs only a scene target | ✅ | ✅ | ✅ — `TransparentDrawList` is plain arithmetic and runs everywhere |
-| Transparency (order-independent) | ✅ needs MRT, a half-float target and executed effect source | ⬜ | ⬜ | ⬜ — the pipeline falls back to the sorted phase and names the missing requirement |
+| Transparency (order-independent) | ✅ needs MRT, a half-float target and a usable custom-effect package | ✅ portable resolve plus GLSL/SPIR-V accumulation contract (`MOD-2239u`) | ⬜ | ⬜ — the pipeline falls back to the sorted phase and names the missing requirement |
 | `.cube` grading tables | ✅ parse is renderer-free; the strip needs only a 2D texture | ✅ | ✅ | ✅ — `CubeLut` is plain arithmetic and the strip layout runs everywhere |
-| Tetrahedral LUT interpolation, volume LUTs | ✅ needs executed effect source; the volume layout also needs `GraphicsCapability::Texture3D` | ⬜ | ⬜ | ⬜ — where the shader is not run the grade copies its input through, exactly as it did before |
-| Debanding dither | ✅ needs executed effect source | ⬜ | ⬜ | ⬜ — off by default everywhere, and a renderer that does not run the tonemap shader was not dithering before either |
-| Aerial perspective | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `AerialPerspectivePass::isSupported()` is false and the frame keeps the unaltered geometry it had |
+| Tetrahedral LUT interpolation, volume LUTs | ✅ needs executed effect source; the volume layout also needs `GraphicsCapability::Texture3D` | ✅ portable strip and volume packages (`MOD-2239g`) | ⬜ | ⬜ — where no package variant runs, the grade copies its input through |
+| Debanding dither | ✅ needs executed effect source | ✅ portable tonemap/deband package (`MOD-2239a`) | ⬜ | ⬜ — off by default everywhere, and a renderer that does not run the tonemap shader was not dithering before either |
+| Aerial perspective | ✅ needs the prepass depth and a selected package | ✅ GLSL/SPIR-V package (`MOD-2239p`) | ⬜ | ⬜ — without a usable variant `AerialPerspectivePass::isSupported()` is false and the frame keeps the unaltered geometry it had |
 | Debug drawing and gizmos | ✅ needs only `BasicEffect` and a line draw | ✅ | ✅ | ✅ — `DebugDraw` uses nothing an XNA `BasicEffect` does not already provide |
-| GPU timer queries | ✅ probed: `GL_EXT_disjoint_timer_query` is present on this machine's Mesa ES driver | ⬜ | ⬜ | ⬜ — `GpuTimer::isSupported()` is false and names the missing extension; no CPU fallback is offered |
-| Decals | ✅ needs the prepass and `CustomEffects` | ⬜ | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
-| Spatial upscaling | ✅ | ⬜ | ⬜ | ⬜ — without executed effect source the pass copies its input through at the target size, which is the hardware stretch it was replacing |
-| Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
-| Per-object velocity | ✅ opt-in; a third target with MRT, a third pass without | ⬜ | ⬜ | ⬜ — off by default everywhere, and motion blur stays camera-only, which is what it was before |
+| GPU timer queries | ✅ probed: `GL_EXT_disjoint_timer_query` is present on this machine's Mesa ES driver | ✅ queue/device-gated timestamp queries, nonblocking and recycled (`MOD-2246`) | ⬜ | ⬜ — `GpuTimer::isSupported()` is false and names the missing native path; no CPU fallback is offered |
+| Decals | ✅ needs the prepass and a selected package | ✅ GLSL/SPIR-V package (`MOD-2239o`) | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
+| Spatial upscaling | ✅ | ✅ portable edge-adaptive/sharpen package (`MOD-2239d`) | ⬜ | ⬜ — without a usable package the pass copies its input through at the target size, which is the hardware stretch it was replacing |
+| Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same; the portable encoder runs, presentation remains sRGB | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
+| Per-object velocity | ✅ opt-in; a third target with MRT, a third pass without | ✅ portable producer and consumer (`MOD-2239j`/`MOD-2239l`) | ⬜ | ⬜ — off by default everywhere, and motion blur stays camera-only when no velocity image is supplied |
 
-**Asking a renderer what it will actually do.** Three questions, and they are not the same question:
+**Asking a renderer what it will actually do.** These questions are related, but they are not the
+same question:
 
 | Question | Answers |
 |---|---|
 | `SupportsCapability(GraphicsCapability::CustomEffects)` | whether the renderer can compile *some* custom effect — not that it takes this layer's shader language |
+| `SupportsShaderLanguageEXT(language, stage)` | whether the live renderer's implemented path consumes that exact explicit payload pair, including the exact desktop/ES/Vulkan GLSL dialect; unknown, invalid and future values default to false |
 | `SupportsShadowSamplingEXT()` | whether its lit shaders really *sample* the shadow state every effect accepts |
 | `SupportsImageBasedLightingEXT()` | whether its PBR shader really shades from a bound environment |
 
-The distinction is not academic: the Vulkan renderer answers **true** to the first and **false** to
-the other two, because its `ShaderEffect` takes SPIR-V bytecode while this layer's passes and
-shadow casters hand it GLSL source. Before those two queries existed, the shadow example on Vulkan
-did not fail — it crashed, because the caster's effect failed to compile and the draw proceeded with
-no effect applied. Ask all three.
+The distinction is not academic: the Vulkan renderer now answers **true** to the first, shadow
+sampling and IBL questions, while its language query accepts SPIR-V and refuses GLSL. Its stock
+SPIR-V programs consume the latter two states. Since `MOD-2237`, every shadow caster selects a
+portable package containing GLSL ES, desktop GLSL and SPIR-V instead of handing only GLSL source to
+the renderer; `MOD-2238` does the same for cube `Skybox`, `MOD-2239q` for `AtmosphericSky`, and
+`MOD-2239` starts the post-process rollout with chromatic aberration. `MOD-2218`/`MOD-2219` add
+FXAA and film grain, and `MOD-2239a` adds the
+main HDR tonemap/deband step; `MOD-2239b` adds the implemented lens-flare ghost path and
+`MOD-2239c` adds sRGB/scRGB/HDR10 texture/file encoding. The last path does not alter the
+swap-chain capability: Vulkan still truthfully advertises sRGB presentation only. `MOD-2239d`
+adds edge-adaptive spatial upscaling and neighbourhood-clamped sharpening; `MOD-2239e` adds the
+occlusion-aware light-shaft radial walk; `MOD-2239f` adds Bloom's extract, separable blur,
+progressive pyramid upsample and final composite; `MOD-2239g` adds filtered/tetrahedral strip and
+true 3D-LUT colour grading; `MOD-2239h` adds analytic height fog from depth and camera state; and
+`MOD-2239i` adds thin-lens depth of field, `MOD-2239j` adds camera/object motion blur, and
+`MOD-2239k` adds the SSAO estimate plus blur/composite, `MOD-2239l` adds the shared rigid/skinned
+depth/normal/velocity producer, `MOD-2239m` adds screen-space reflections, `MOD-2239n` adds
+screen-space contact shadows, `MOD-2239o` adds projected decals, `MOD-2239p` adds aerial
+perspective, `MOD-2239r` adds volumetric fog, `MOD-2239s`/`MOD-2239t` add the legacy
+`CRTEffect`/`DepthEffect` pair, `MOD-2239u` adds weighted order-independent transparency,
+`MOD-2239v` adds portable GPU instance culling, `MOD-2239w` adds portable GPU particle
+simulation and drawing, `MOD-2239x` adds portable auto-exposure reduction, `MOD-2239y`
+adds portable clustered-light assignment, and `MOD-2239z` adds portable clustered forward
+shading with a Vulkan SSBO light-list mirror. The shader-based built-in engine-layer rollout is now
+complete. Portable packages use the
+language/stage query to select a payload; third-party source-only passes remain conservatively
+unsupported on a binary-only renderer, and subsystems still ask their own semantic capability
+before promising a visible result.
+
+**Explicit code values.** `ShaderCodeEXT` is the owned input atom for portable shader packages. It
+stores one exact language/dialect, stage, non-empty entry point, diagnostic label and either owned
+text or owned bytes. The text and binary constructors reject a language from the other form;
+SPIR-V additionally requires whole 32-bit words. Selection therefore never guesses a language from
+payload contents, and temporary caller strings or byte vectors may be destroyed immediately after
+construction.
+
+`ShaderPackageEXT` owns several of those values plus its required stages and logical resource
+bindings. A binding has a diagnostic name, non-negative portable slot, resource kind and consuming
+stage; the package refuses missing required stages, undeclared stages and conflicting slots before
+selection. The package deliberately contains no live device or native program, so applications may
+copy, move, cache and ship GLSL, SPIR-V, HLSL, WGSL and other variants together without choosing a
+renderer while assembling assets.
 
 ### Every renderer identity
 
@@ -256,7 +305,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES2` | 🟨 shares EasyGL | GLSL ES 1.00: the shaders are transformed, so no `textureLod` (rough IBL reflections read the base mip), no dynamic uniform-array indexing, statically countable loops only. |
 | `WebGL1` | 🟨 shares EasyGL | As `OpenGLES2`, plus: no compute in any WebGL version. |
 | `WebGL2` | 🟨 shares EasyGL | No compute; otherwise the ES 3.00 path. |
-| `Vulkan` | 🟨 measured | Verified against a real device (Mesa lavapipe 1.4): instancing works; float targets, the post-process passes, shadow sampling, IBL shading and compute do not. Its `ShaderEffect` takes SPIR-V, not this layer's GLSL. |
+| `Vulkan` | ✅ measured | Exact float/HDR 2D and cube targets, instancing, stock-PBR IBL, portable cube and atmospheric skies, all eighteen built-in post-process consumers, both legacy post-process effects and their depth/normal/velocity prepass producer, directional/cascade/point/spot shadow generation and reception, auto-exposure, clustered assignment and clustered forward shading, compute/storage resources, indirect draws and GPU timers work. The main rollout was verified on RADV and llvmpipe; `MOD-2239u`–`MOD-2239z` use llvmpipe because RADV cannot present through the hidden Xvfb display available here. Arbitrary third-party GLSL source remains intentionally unavailable, and presentation remains truthfully sRGB-only. |
 | `Headless` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Three limits it does not advertise — no render-target readback, no cube-face storage, and a cube-face bind that records the face without making it current. The engine layer constructs and passes through; tests probe the three rather than assume them. |
 | `Software` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Render targets, readback and cube storage all work; what does **not** is custom shader source — it is accepted and then ignored, which is why every shader-based subsystem asks `ExecutesShaderEffectSourceEXT()` as well as `CustomEffects`. |
 | `Stub` | ✅ measured | Whole suite run against it: 0 engine-layer failures. Stricter than `Headless` — it refuses to bind a `RenderTarget2D` at all, so a pipeline stops before it renders. Everything above that point constructs and reports false. |
@@ -512,8 +561,8 @@ what is left. The pipeline does not stop you, and on the reference renderer the 
 MSAA's memory plus FXAA's 3.5 ms.
 
 Per renderer, the practical position today: EasyGL has both (MSAA up to 4×, and it runs the FXAA
-shader). Vulkan reports `MultiSampleAntiAliasing` but its `ShaderEffect` takes SPIR-V, so FXAA is
-unavailable there and MSAA is the only option. The 2D-only identities have neither and
+shader). Vulkan also has both: it reports `MultiSampleAntiAliasing`, and since `MOD-2218` the FXAA
+pass selects its packaged SPIR-V variant. The 2D-only identities have neither and
 `RenderPipeline` passes through. The per-identity matrix below is the authority; this row is the
 guidance that goes with it.
 
@@ -553,6 +602,15 @@ much less quality than the pixel count suggests — but thin contact shadows los
 exactly where AO earns its keep. Both paths are asserted to produce occlusion rather than only the
 default one, since a half-resolution path that silently produced nothing would look like AO merely
 being weak.
+
+Since `MOD-2239k`, both SSAO stages select generated GLSL ES/desktop GLSL on EasyGL or SPIR-V on
+Vulkan. The estimate reads depth as its primary texture, normals and deterministic rotation noise at
+units 1 and 2, and sends its 64-element kernel plus controls through the established typed uniform
+arrays. The compose stage blurs the intermediate occlusion image and multiplies it into the scene.
+The standalone SSAO suites pass **15/15** on EasyGL, RADV and llvmpipe. Since `MOD-2239l`, the
+rigid/skinned `DepthNormalPrepass` also selects generated GLSL ES/desktop GLSL or SPIR-V, so the
+three real-prepass integration cases run on Vulkan as well. The combined portable depth/prepass/
+velocity/SSAO core passes **27/27** on EasyGL, RADV and llvmpipe.
 
 ### Screen-space reflections, and the two things they cannot do
 
@@ -607,6 +665,13 @@ in front of the surface and the first behind it — and six bisections close it,
 count sharpens what is found rather than shifting where it is found. Without that, a coarse march
 stair-steps every reflected edge and halving the step moves the whole reflection.
 
+Since `MOD-2239m`, `SsrPass` selects generated GLSL ES/desktop GLSL on EasyGL or SPIR-V on Vulkan.
+Source, depth and normals use the established three sampled-image slots; projection matrices, depth
+dimensions and all nine controls reuse the typed uniform arrays. Vulkan converts its top-left
+texture UV into XNA camera NDC for view reconstruction and back again after projection, while the
+GLSL render-target convention supplies that inversion implicitly. The same **22/22** SSR cases pass
+on EasyGL, RADV and llvmpipe, and the complete portable post-process set is **174/174** on all three.
+
 ### Depth of field, in the units a photographer uses
 
 `plans/plan_modern.md` `MOD-2010`–`MOD-2015`. `DepthOfFieldPass` blurs each pixel by the **circle of
@@ -650,6 +715,12 @@ means. It is the difference between depth of field and a depth-weighted blur.
 something is far enough out of focus to reach it, and lowering it below what the optics ask for
 makes the frame sharper than the lens would.
 
+Since `MOD-2239i`, the pass selects generated GLSL ES/desktop GLSL on EasyGL or SPIR-V on Vulkan.
+The prepass depth remains texture unit 1 (Vulkan set 1 binding 1), while the far plane, four lens
+controls and packed-depth policy occupy six elements of the established float-array block. The
+same 14-case image/optics suite passes on EasyGL, RADV and llvmpipe; it includes the focus swap,
+contrast loss, foreground bleed guard and shader-versus-CPU formula comparison.
+
 ### Bloom: what the numbers mean, and what they do not
 
 `plans/plan_modern.md` `MOD-417`, `MOD-405`, `MOD-409`.
@@ -687,6 +758,14 @@ stair-step. The pass asks `GraphicsCapability::HalfFloatTextureLinearFiltering` 
 and takes the fallback silently; there is no setting for it, because there is no reason to prefer the
 worse path where the better one exists.
 
+Since `MOD-2239f`, all four stages select generated GLSL ES/desktop GLSL on EasyGL or SPIR-V on
+Vulkan. The two stages that read both the current level and a smaller bloom target declare the
+second image explicitly and clamp its sampler; the application's previous sampler slot is restored
+after the draws capture it. This detail is part of correctness, not only edge polish: wrapping a
+highlight across the frame makes a one-level pyramid appear to have maximum reach. The shared
+20-case pass/quality/pyramid oracle runs without shader skips on EasyGL, RADV and Vulkan llvmpipe,
+including HDR retention and a top/bottom-sensitive uploaded-source fixture.
+
 ### Volumetrics: air you can see, and three passes that do it differently
 
 `plans/plan_modern.md` `MOD-2050`–`MOD-2054`. Three passes put light *in the air between things* rather
@@ -720,6 +799,12 @@ settings.setVolumetricFogDensity(0.3f);   // 0 is off
   optics can be checked without a frame. A **level look is a separate branch** rather than a nudged
   general one: the general form divides by the ray's climb, and pushing that away from zero would
   make a level view's fog depend on the size of the nudge.
+  Since `MOD-2239h`, the same shader selects generated GLSL ES/desktop GLSL on EasyGL or SPIR-V on
+  Vulkan. Its depth texture uses the existing secondary sampled binding; two camera matrices and
+  the complete fog state use the established typed uniform-array blocks rather than overwriting
+  Vulkan's name-independent push slots. The expanded nine-case oracle passes on EasyGL, RADV and
+  Vulkan llvmpipe, including a repeated update that raises only the camera and visibly leaves the
+  fog layer.
 - **A shaft is the shape of an occluder.** The pass walks from each pixel towards the light
   gathering brightness, so what you see is where the *bright* pixels were blocked -- the streaks
   are the gaps. The light's screen position is the application's to supply
@@ -727,6 +812,11 @@ settings.setVolumetricFogDensity(0.3f);   // 0 is off
   is the sun and the application already holds the matrices. **Positions outside [0, 1] are
   meaningful and are not clamped**: a light just past the edge still throws shafts inward, and the
   effect fades with how far outside it is rather than cutting off at the border.
+  Since `MOD-2239e`, that 24-step walk selects GLSL ES on EasyGL and packaged SPIR-V on Vulkan.
+  Its rendered-target oracle passes **5/5** on EasyGL, RADV and Vulkan llvmpipe, including a
+  top/bottom-sensitive light position, the dark shape cast by an occluder and gradual off-screen
+  falloff. The GLSL variant maps the absolute light position into OpenGL's corrected render-target
+  sampling space; Vulkan remains in the API's top-left space throughout.
 - **Volumetric fog earns its cost with the shadow map.** Without one the medium is lit wherever the
   light points, which is haze; with one the beams have edges. It fills a **slice atlas** -- a 2D
   render target holding the depth slices side by side, the same layout `ColorGradePass` reads a 3D
@@ -734,6 +824,11 @@ settings.setVolumetricFogDensity(0.3f);   // 0 is off
   writes into one, and filling a volume with compute needs the image stores GL ES refuses
   (`MOD-1514`). Slices are spaced quadratically, so the near ones are thinner and the resolution
   stays where the eye is.
+  Since `MOD-2239r`, both the atlas build and its depth-limited resolve select generated GLSL ES,
+  desktop GLSL or SPIR-V. The GLSL route distinguishes logical screen UV from each render target's
+  bottom-up storage through `uRtFlipV`; Vulkan stays top-left. The expanded suite passes **7/7** on
+  EasyGL, RADV and Vulkan llvmpipe, including a real generated shadow map and a non-symmetric
+  upper/lower camera-ray oracle.
 - **Order in the chain**: shafts, then volumetric fog, then height fog, all before motion blur.
   Shafts are light travelling through air, so the fog that dims distance should dim them too; and
   fog is part of what the shutter collected, so a moving camera smears the fogged image rather than
@@ -807,6 +902,12 @@ or once every other frame, still compares against the camera the previous frame 
 with. The first frame after a start or a resize has no history at all and is left alone: blurring it
 along an arbitrary direction would put a one-frame glitch on every cut.
 
+Since `MOD-2239j`, the blur itself selects generated GLSL ES/desktop GLSL on EasyGL or SPIR-V on
+Vulkan. Depth and optional velocity remain texture units 1 and 2 (Vulkan set 1 bindings 1 and 2),
+while the three camera matrices and six scalar controls use the established typed array blocks. Its
+seven-case portable suite passes on EasyGL, RADV and llvmpipe, including both the synthetic
+velocity-image isolation from `MOD-2239j` and real prepass-produced object motion from `MOD-2239l`.
+
 ### The lens and the grade: four passes and where each one belongs
 
 `plans/plan_modern.md` `MOD-2020`–`MOD-2027`. Four small passes, all **off by default**, whose positions in
@@ -863,6 +964,13 @@ falls in. Measured on an 8-entry table built from a known grade:
 |---|---|---|
 | `Trilinear` | 18/255 | 5.66 / 25 |
 | `Tetrahedral` | **0/255** | 4.03 / 23 |
+
+Since `MOD-2239g`, all three grading routes select generated GLSL ES/desktop GLSL on EasyGL or
+SPIR-V on Vulkan. The filtered strip uses linear-clamp sampling; explicit interpolation and the
+volume use exact texel fetches with point-clamp, and the pass restores the application's secondary
+sampler afterwards. The 31-case grading/LUT oracle passes on EasyGL, RADV and Vulkan llvmpipe,
+including sampler-state isolation and a **0/255** worst-channel difference between two layouts of
+the same table.
 
 The zero is exact rather than close: a neutral colour lies on the edge from a cell's black corner to
 its white one, so tetrahedral computes it from two neutral entries and nothing else. Trilinear mixes
@@ -957,10 +1065,14 @@ without the answer travelling back through the CPU, which is a pipeline stall ra
 
 ```cpp
 if (device.SupportsCapability(CNA::GraphicsCapability::IndirectDraw)) {
-    CNA::Graphics::StorageBuffer commands(device, sizeof(CNA::IndirectDrawArguments));
-    // ... a compute shader writes the counts into `commands` ...
-    device.GetRenderer().MemoryBarrierEXT(
-        static_cast<int>(CNA::GraphicsMemoryBarrier::IndirectCommand));
+    CNA::Graphics::StorageBuffer commands(
+        device,
+        CNA::Graphics::StorageBufferDescriptor(
+            sizeof(CNA::IndirectDrawArguments),
+            CNA::Graphics::StorageBufferUsage::IndirectArguments,
+            CNA::Graphics::StorageBufferCpuAccess::Write));
+    CNA::IndirectDrawArguments arguments{3, 1, 0, 0};
+    commands.setBytes(&arguments, sizeof(arguments));
     device.SetVertexBuffer(&mesh);
     effect.Apply();
     device.DrawPrimitivesIndirectEXT(PrimitiveType::TriangleList, *commands.getRendererEXT(), 0);
@@ -972,7 +1084,8 @@ if (device.SupportsCapability(CNA::GraphicsCapability::IndirectDraw)) {
 order GL, D3D12 and Vulkan all agree on. A compute shader declaring the same words in the same order
 lands on the same memory. `BaseInstance` **must be 0 on GL ES**, which has no base-instance
 parameter; that cannot be diagnosed anywhere, because by the time the draw runs the value is in GPU
-memory.
+memory. Vulkan instead advertises the route only when `drawIndirectFirstInstance` is enabled, so
+the complete layout — including non-zero values — is a real device promise.
 
 **The range checks every other draw performs are impossible here.** `GraphicsDevice` rejects a
 primitive range that leaves the bound buffers before every other draw route; for this one the range
@@ -983,16 +1096,34 @@ an applied effect, and an argument offset that is 4-byte aligned and leaves room
 **One buffer can hold a frame's worth of commands.** The byte offset selects which one this draw
 runs, which is the shape a GPU-driven pass wants.
 
-**Order the command fetch explicitly.** `GraphicsMemoryBarrier::IndirectCommand` is a separate bit
-from `ShaderStorage` because writing a count through a storage binding and fetching it as a command
-are two different accesses; ordering only the first can let the fetch read the previous frame's
-numbers.
+**The renderer orders the command fetch.** Writing a count through a storage binding and fetching
+it as a command are distinct accesses, but the accepted ordering contract makes that a backend
+responsibility. `GraphicsMemoryBarrier::IndirectCommand` remains a compatibility hint for older
+callers; Vulkan automatically emits the host/transfer/compute-write → indirect-command-read
+dependency before the render pass and the compute-written-command oracle calls no manual barrier.
 
-**A wrinkle worth knowing before you plan around it.** The only argument buffer CNA has is
-`CNA::Graphics::StorageBuffer`, which is an SSBO and needs GL ES 3.1 / desktop GL 4.3. The indirect
-draw itself needs only GL 4.0, so on a desktop context between 4.0 and 4.2 the capability truthfully
-reports `true` and there is still nothing in CNA able to hold the arguments. Check both capabilities
-if you intend to run there.
+**Argument buffers do not imply compute.** A `StorageBufferDescriptor` whose usage contains
+`IndirectArguments` but not `Storage` needs only the indirect-draw capability; this is the
+CPU-written route shown above and it remains valid on desktop GL 4.0–4.2. Add `Storage` only when a
+compute shader will write the same buffer. Mixed usage then deliberately requires both capabilities,
+while transfer roles and CPU access remain independent. CNA keeps one buffer resource hierarchy:
+`IndirectArguments` is an immutable role, not a second native/public buffer type.
+
+**Vulkan keeps deferred arguments alive and bounded.** It cannot know a compute-written draw range
+on the CPU, so it snapshots each complete remaining geometry/instance stream within its fixed
+per-frame arenas and retains the argument buffer's internal record until command recording. Public
+`Dispose()` after enqueue neither cancels the draw nor leaves a dangling `VkBuffer`; physical
+release is fence-retired. `Vulkan_IndirectDraw` proves both command layouts, every independent
+offset, `BaseInstance=1`, disposal-before-flush and compute-to-indirect without readback on RADV and
+llvmpipe.
+
+**A direct base instance is a separate, queryable extension.**
+`GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT` has the same indexed geometry, vertex
+bindings and applied-effect state as XNA's `DrawInstancedPrimitives`, plus a non-negative
+`firstInstance`. Query `RendererFeature::BaseInstanceDrawing` before calling it. The value shifts
+both native instance identity and per-instance vertex-record selection; it is not emulated by
+moving one binding and losing the shader-visible instance number. A renderer that has not opted in
+refuses before submission.
 
 **Wireframe is ignored on this route.** The fill-mode fallback the ordinary routes take rebuilds a
 line list from the primitive count, and this route has no primitive count to rebuild from; an
@@ -1033,6 +1164,12 @@ destination; a decal blends onto the frame, so it uses `BlendState::NonPremultip
 image's own alpha is the mask. Draw decals after the scene and before the post-process chain, so
 they are tonemapped and graded with everything else.
 
+Since MOD-2239o the projection selects one GLSL ES, desktop GLSL, or Vulkan SPIR-V package. Depth,
+decal image and optional normals keep bindings 0, 1 and 2; typed arrays carry both matrices, the
+view-space axis, tint and scalar controls. Vulkan's explicit texture-UV/XNA-camera-NDC bridge is
+pinned by a vertically asymmetric decal, while a second oracle checks the exact tint/opacity result
+through straight-alpha blending. The expanded suite is 10/10 on EasyGL, RADV and llvmpipe.
+
 **Cost is one fullscreen pass per decal**, which is what a screen-space projection costs when it is
 not batched. `DecalPass::isInsideDecalBox` is offered as a plain static so a game can decide whether
 a decal is worth drawing at all before spending one.
@@ -1065,8 +1202,11 @@ because a long object crossing a short one has a distant centre and a near end.
 **`OrderIndependent` cannot be got wrong by ordering, and is approximate everywhere.** Weighted
 blended transparency accumulates every surface with a depth-derived weight and resolves once;
 submitting in any order gives the same frame, measured at within 1/255 where plain alpha blending on
-the same pair differs by 57. Your transparent shader writes through
-`WeightedBlendedTransparency::getAccumulationGlsl()` instead of writing `FragColor`.
+the same pair differs by 57. On a source-capable GLSL renderer your transparent shader can write
+through `WeightedBlendedTransparency::getAccumulationGlsl()` instead of `FragColor`. On Vulkan it
+supplies an equivalent `ShaderPackageEXT` SPIR-V fragment variant with outputs at locations 0
+(weighted colour/coverage) and 1 (`log(1 - alpha)` revealage); the checked-in example demonstrates
+both dialect routes from one package.
 
 **How to choose, in one line each.** Few large surfaces at very different depths → `Sorted`; the
 approximation is worst exactly there, and against the exact frame it can differ by 142/255
@@ -1087,8 +1227,8 @@ without hiding the transparent ones behind it.
 
 **It is off by default.** `TransparencyMode::None` renders exactly the frame this pipeline rendered
 before any of this existed, even with a transparent draw registered. Where `OrderIndependent` is
-asked for and the renderer lacks multiple render targets, a half-float target or executed effect
-source, the pipeline **falls back to `Sorted` and names the missing requirement** through
+asked for and the renderer lacks multiple render targets, a half-float target or a usable portable
+resolve variant, the pipeline **falls back to `Sorted` and names the missing requirement** through
 `getTransparencyFallbackReasonEXT` rather than quietly drawing a different way.
 
 ### Particles
@@ -1124,11 +1264,15 @@ specification, down to the float expressions: the spawn values come from an inte
 bit-identical in GLSL and C++, so a comparison between the two paths is meaningful and is asserted
 rather than assumed.
 
-**The GPU path reads back nothing.** The vertex shader reads the buffer the compute shader wrote,
+**The GPU path reads back nothing.** A generated package selects GLSL ES, desktop GLSL or SPIR-V
+for both the compute and draw stages. The vertex shader reads the buffer the compute shader wrote,
 which needs a storage buffer readable from a vertex stage (see `GpuInstanceCuller` for why that is
-its own requirement) plus `GraphicsCapability::Instancing`. Where any of that is missing the system
-falls back to the CPU — and here a fallback is the right answer, unlike for GPU culling: the same
-particles appear, only simulated more slowly. `usesCompute()` says which ran.
+its own requirement) plus `GraphicsCapability::Instancing`. Where any of that or a usable package
+variant is missing the system falls back to the CPU — and here a fallback is the right answer,
+unlike for GPU culling: the same particles appear, only simulated more slowly. `usesCompute()` says
+which ran. The low-level `cna_test_cnaext_compute_particles` baseline also selects a portable
+compute variant, but deliberately reads back so the transfer avoided by `ParticleSystem` stays
+measurable.
 
 **`setSimulationOnCpuEXT` pins it to the CPU** on a device that has both. Worth having on a tile GPU
 where a dispatch and its barrier cost more than stepping a few hundred particles — and it is how the
@@ -1155,10 +1299,11 @@ culler.draw(PrimitiveType::TriangleList);
 ```
 
 **Your vertex shader reads its own transform from a storage buffer**, not from a per-instance vertex
-stream, because a compute shader cannot write a vertex buffer in this profile. Paste
-`GpuInstanceCuller::getInstanceLookupGlsl()` after a `#version 310 es` line and call
-`cnaInstanceWorld()`; the matrix arrives in the same layout the `World` uniform does, so it
-multiplies the same way.
+stream, because a compute shader cannot write a vertex buffer in this profile. A GLSL package may
+paste `GpuInstanceCuller::getInstanceLookupGlsl()` after a `#version 310 es` line and call
+`cnaInstanceWorld()`. A Vulkan package declares the equivalent read-only matrix buffer at descriptor
+set 2 and `GpuInstanceCuller::kInstanceBinding`, indexed by `gl_InstanceIndex`. The matrix arrives in
+the same layout the `World` uniform does, so it multiplies the same way.
 
 ```glsl
 #version 310 es
@@ -1167,9 +1312,10 @@ void main() { gl_Position = Projection * View * cnaInstanceWorld() * vec4(aPos, 
 ```
 
 **Four requirements, and the fourth is the one that surprises people.** Compute shaders, indirect
-draws, an effect source the renderer really executes — and at least one storage buffer readable from
-a *vertex* shader. GL ES 3.1 allows `GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS` to be **zero**, so a
-context can implement compute completely and still refuse this.
+draws, a usable custom-effect package — and at least one storage buffer readable from a *vertex*
+shader. GL ES 3.1 allows `GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS` to be **zero**, so a context can
+implement compute completely and still refuse this. The culler selects its own generated GLSL ES,
+desktop GLSL or SPIR-V compute payload; it does not ask Vulkan to execute GLSL source.
 
 **It refuses rather than falling back**, which is the opposite of what `ClusteredLightCompute` does,
 deliberately. That class has a CPU path that is a correct if slower answer; there is no CPU
@@ -1208,6 +1354,11 @@ display.setPaperWhiteNits(200.0f);   // what a scene value of 1.0 is worth
 display.setPeakNits(1000.0f);
 display.draw(&sceneTarget, &output, width, height);
 ```
+
+Since `MOD-2239c`, that same encoder selects GLSL ES on EasyGL and packaged SPIR-V on Vulkan. Its
+11-case oracle passes on EasyGL, RADV and Vulkan llvmpipe, including exact sRGB pixels and GPU/CPU
+agreement for scRGB and HDR10. This changes no presentation claim: the capability calls above still
+refuse an HDR swap chain on every platform back end.
 
 **In `Srgb` it copies through, pixel for pixel**, so the pass can sit at the end of the chain on every
 machine: `TonemapPass` has already produced display-encoded sRGB, and a second transfer function
@@ -1263,10 +1414,11 @@ the upscale, if that is what you want at full resolution.
 comparison a game actually wants to offer, and because a claim that the adaptive path helps is only
 worth making if the path it beats can be run beside it.
 
-**The pass reports `isSupported()` false where the renderer does not execute effect source.** Ask it
-before building a low-resolution scene target: on a renderer that accepts an effect and ignores it,
-the frame would come out stretched by the fixed path with no edge awareness at all, and nothing on
-screen would say why.
+Since `MOD-2239d`, the pass selects GLSL ES on EasyGL and packaged SPIR-V on Vulkan. Its eight-case
+oracle passes on EasyGL, RADV and Vulkan llvmpipe: the adaptive path beats the bilinear control, the
+sharpen stays in range and 1:1 output is pixel-exact. **The pass reports `isSupported()` false where
+no package variant can execute.** Ask it before building a low-resolution scene target: that path
+falls back to the fixed stretch and cannot provide edge awareness.
 
 ### Seeing what the layer is doing: debug shapes and GPU time
 
@@ -1302,9 +1454,12 @@ build that never asks for one. The cluster gizmo draws **slices, not tiles** —
 slices is 3072 boxes, a thicket rather than a picture.
 
 **`GpuTimer` refuses rather than substituting a CPU clock.** On GL ES it needs
-`GL_EXT_disjoint_timer_query`; where that is absent `isSupported()` is false and
-`getUnsupportedReason()` says so. A wall-clock number wearing a GPU name measures when the driver
-*accepted* the work, which is precisely what GPU timing exists to see past.
+`GL_EXT_disjoint_timer_query`. Vulkan needs timestamp support on the selected graphics queue and a
+positive device `timestampPeriod`; it reuses one two-slot query pool per timer, submits the range
+with the ordinary deferred frame and polls availability without a queue/device-wide wait. Where a
+renderer has no implemented native path, `isSupported()` is false and `getUnsupportedReason()`
+says so. A wall-clock number wearing a GPU name measures when the driver *accepted* the work, which
+is precisely what GPU timing exists to see past.
 
 ```cpp
 pipeline.setGpuTimingEnabledEXT(true);       // off by default
@@ -1322,6 +1477,10 @@ Two properties of the per-pass timing are load-bearing:
   a working measurement of a one-pass chain.
 - **An unavailable timer produces an empty list, not a list of zeroes**, so a caller can tell "not
   measured here" from "this pass took no time".
+
+On a deferred renderer such as Vulkan, a standalone range becomes queryable only after the
+enclosing frame is submitted (normally by `Present`). Calling `end()` itself never forces a submit
+or turns an asynchronous measurement into a hidden synchronization point.
 
 The costs, and what they turned out to say about the existing table, are in
 [`cnaext-perf.md`](cnaext-perf.md).
@@ -1438,18 +1597,22 @@ device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, triangles);
   approximations err the same way: a light may be assigned to a cell it only nearly touches, which
   costs an iteration of the shader's light loop. Neither can drop a light, which would be a hole in
   the lighting.
-- **The light list reaches the shader as three textures** — the light data, the cluster table, and
-  the index list — with every value stored as the four bytes of its IEEE representation and read
-  back with `texelFetch` and `uintBitsToFloat`. That is forced, not chosen: this renderer's textures
-  are 8-bit only, and uniform arrays cannot hold 256 lights inside GL ES 3.0's limits. A storage
-  buffer would be the natural answer and is not available here, because an SSBO in a *fragment*
-  shader needs GLSL ES 3.10 and this layer's shader floor is 3.00.
+- **The light list has texture and storage-buffer representations.** GLSL ES 3.00 receives three
+  textures — light data, cluster table and index list — with every value stored as the four bytes
+  of its IEEE representation and read with `texelFetch`/`uintBitsToFloat`. This remains exact on
+  EasyGL without raising the layer's shader floor merely to obtain fragment SSBOs. A fragment
+  SPIR-V renderer also receives mirrors of the same arrays as three storage buffers; Vulkan reads
+  them at set 2 bindings 6–8, leaving its four explicit sampled-texture slots available for material
+  inputs. `ClusteredLightBuffer::upload` creates both forms when that binary path is available, so
+  package selection changes the transport and not the light-list contents.
 - **`ClusteredLightCompute` sorts on the GPU and produces the identical list**, element for element,
-  not a similar one — everything downstream refers to a light by index. It falls back to the CPU
-  where compute is absent and says so. Its per-cluster capacity is fixed, since a GPU cannot grow an
-  array; a fuller cluster raises `hasOverflowed()` rather than truncating in silence. The GPU path
-  is flat in the light count and the CPU path is not, and the two cross around 128–256 lights on
-  this machine — see `docs/cnaext-perf.md`.
+  not a similar one — everything downstream refers to a light by index. Its generated package
+  selects GLSL ES, desktop GLSL or SPIR-V, and it falls back to the CPU where compute or a usable
+  variant is absent and says so. Its per-cluster capacity is fixed, since a GPU cannot grow an
+  array; a fuller cluster raises `hasOverflowed()` rather than truncating in silence. The same ten
+  cases pass on Vulkan llvmpipe and EasyGL, including all boundary/overflow cases. The GPU path is
+  flat in the light count and the CPU path is not, and the two cross around 128–256 lights on this
+  machine — see `docs/cnaext-perf.md`.
 - **Shadows are still a small budget.** Clustering removed the limit on how many lights can *light*
   a scene and nothing at all about how many can *shadow* one: a shadow map is a render target and a
   geometry pass, six of them for a point light. `ClusteredShadowPolicyEXT` spends that budget on a
@@ -1460,6 +1623,9 @@ device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, triangles);
   light loop there would be a change to EasyGL's built-in effect family — code compiled into every
   game whether `CNA_CNAEXT` is on or off. What a game gives up by using this instead is
   `PbrEffect`'s texture set and its shadowed punctual light; what it gains is the light count.
+  Its generated GLSL ES/SPIR-V package is verified by the same 34-case render suite on EasyGL and
+  Vulkan llvmpipe; the ES payload retains the exact former composed shader and the binary path packs
+  matrices, vectors and scalars into the renderer's typed parameter arrays.
 
 ### Shadows, and the contract they put on the app
 
@@ -1485,6 +1651,12 @@ shadowMap.end();
 pipeline.getSettings().setShadowsEnabled(true);
 pipeline.setShadowScene(&shadowMap, sun, sceneBounds, [&] { drawEveryCaster(); });
 ```
+
+The effect applied by `begin()` comes from one portable package: GLSL ES and desktop GLSL keep the
+EasyGL path, while Vulkan selects checked-in SPIR-V. For object transforms, set `uWorld` through
+`getCasterEffect()` after `begin()` and before drawing each rigid object. Use
+`getSkinnedCasterEffect()` for skinned geometry and set its bones in the same interval. The package
+preserves those public hooks across renderers; no Vulkan-specific drawing API is involved.
 
 Either way, the receiving half is the app's: shadows arrive at a surface through the effect that
 shades it, so each lit effect is told about the map.
@@ -1624,6 +1796,14 @@ and a non-degenerate light direction. The fallback is silent by construction —
 contact shadows in it looks exactly like a frame nobody asked for them in — which is why the reason
 is a string rather than a bool.
 
+Since MOD-2239n the pass selects the shared GLSL ES, desktop GLSL, or Vulkan SPIR-V package and sends
+the projection pair, view-space light, depth size, ray controls, and packed-depth policy through the
+same typed-uniform contract on every renderer. A render-target-backed vertical-orientation oracle is
+part of its 24-case suite: all 24 execute on EasyGL, while RADV and llvmpipe execute the 23 portable
+cases and skip only the diagnostic that deliberately supplies arbitrary source text. Together with
+the other packaged post-process passes, the renderer-independent execution set is 197/197 on all
+three drivers.
+
 **Cost is pixels times steps, and completely independent of the scene** — see
 [`cnaext-perf.md`](cnaext-perf.md). Unlike a shadow map, which re-renders geometry and therefore
 costs what the scene costs, this pass runs the same march in an empty room and in a crowded one.
@@ -1706,6 +1886,10 @@ pipeline.setSkyboxCamera(view, projection);  // the pipeline has no camera of it
   down, and `directionToEquirectangular` is its counterpart: longitude across, latitude down, with
   **−Z at the centre of the panorama** — where a camera at its default orientation looks. The two
   are tested as inverses, so the converter cannot disagree with itself.
+- **Portable shader package.** The same `Skybox` selects GLSL ES on EasyGL and checked-in SPIR-V
+  on Vulkan. Its six-face, yaw, tint/intensity, HDR and foreground-visibility oracle passes 15/15
+  on EasyGL, Vulkan/RADV and Vulkan/llvmpipe; the application-level orbit/yaw check passes 3/3 on
+  all three paths (`MOD-2238`).
 - **Cost** (`cnaext_skybox_test --benchmark`, 128×128, Mesa llvmpipe): 0.020 ms per frame against
   0.005 ms for a clear alone — one fullscreen pass, which is what it should be.
 
@@ -1736,6 +1920,10 @@ sky.draw(view, projection, width, height);           // before the scene's geome
   it to ask what colour the sky is for an ambient or fog term without drawing one -- and it is what
   lets the physics be tested as ratios between channels and directions rather than against a
   screenshot.
+- **Portable shader package.** Since `MOD-2239q`, the procedural sky selects generated GLSL ES,
+  desktop GLSL or checked-in SPIR-V. A non-symmetric upper/lower image test reconstructs both world
+  rays on the CPU and compares every channel with `radiance()`; the suite passes **10/10** on
+  EasyGL, RADV and llvmpipe.
 - **Two lengths, doing opposite jobs.** The view path is how much lit air is being looked through,
   so a longer one is *brighter*; the sun path is what the light lost getting in, so a longer one is
   *dimmer and redder*. They must not be summed into one extinction term -- that saturates, and the
@@ -1768,11 +1956,21 @@ air.setScaleHeight(8400.0f);           // the one number tied to the game's worl
 air.apply(context);                    // needs sourceDepth, farPlane and the camera matrices
 ```
 
-**One model, not two.** `AtmosphericSky::getModelGlsl()` emits the scattering functions and both
-passes compile the same string. The sky is `cnaScatteringAlongPath` with the path set to the whole
-atmosphere; aerial perspective is the same call with the path set to however far the geometry is.
-Two copies of one model agree until somebody edits one of them, and the symptom is a frame that looks
-slightly wrong with nothing to point at — `MOD-2035` charged this layer for exactly that.
+**One physical model, expressed in the payload each renderer can consume.** The sky is
+`cnaScatteringAlongPath` with the path set to the whole atmosphere; aerial perspective is the same
+equation with the path set to however far the geometry is. `AtmosphericSky::getModelGlsl()` remains
+the source-execution form, while the aerial package spells the same constants and functions in GLSL
+ES, desktop GLSL and Vulkan GLSL compiled to checked-in SPIR-V. The far-horizon image oracle compares
+the packaged pass directly with `AtmosphericSky::radiance`, so drift between those representations
+is a test failure rather than a subtly different frame.
+
+Since `MOD-2239p`, `AerialPerspectivePass` selects that generated package instead of assuming the
+renderer executes a GLSL string. Scene depth is binding 1, and typed float, vec3 and mat4 arrays carry
+the packed-depth policy, atmosphere settings, sun direction and two reconstruction matrices. A
+100-km vertical transmittance oracle also found that the old EasyGL source interpreted the upper
+screen as camera -Y. All three packaged variants now bridge top-left texture UV to XNA camera NDC.
+The suite passes **15/15** on EasyGL and **14 passed / 1 intentional arbitrary-source diagnostic
+skip** on RADV and llvmpipe; both Vulkan runs are validation-clean.
 
 **Scale height is where a game's world scale enters, and it is the only dial worth touching.** The
 model's coefficients are optical depth through one *vertical column* of atmosphere, so a distance
@@ -1940,6 +2138,11 @@ pbrEffect.setImageBasedLightEXT(environment);   // SkinnedPbrEffect has the same
   On GLSL ES 1.00 profiles (WebGL1, GLES2) a fragment shader has no `textureLod`, so those read the
   base level and a rough surface reflects a sharp environment. That is a real, visible limitation
   of those two profiles rather than a silent one.
+- **Vulkan uses the same split sum.** `MOD-2235` binds the three products to both rigid and skinned
+  stock PBR programs, keeps the established 512-byte uniform stride, and tracks every sampled view
+  through deferred execution. Since `MOD-2236`, the shared oracle passes all 8/8 checks on RADV,
+  llvmpipe and EasyGL, including the rule that a directional shadow removes direct light but leaves
+  the environment term.
 - **White furnace** (`cnaext_ibl_test`, environment at half intensity, albedo 1, no lights;
   128/255 would be exact energy conservation): roughness 0.1 → **159**, 0.4 → **139**, 0.7 → **129**,
   1.0 → **155**. The split sum with 8-bit products and an 8-sample irradiance sweep gains a little
@@ -2183,10 +2386,10 @@ if (device.SupportsCapability(GraphicsCapability::ComputeShaders)) {
 
 | Capability | Where |
 |---|---|
-| `GraphicsCapability::ComputeShaders` | GL ES ≥ 3.1, desktop GL ≥ 4.3. Never WebGL — no version of it has compute. Decided by the **runtime** context, so an EasyGL build that asked for ES 3.0 and received 3.2 gets compute. |
+| `GraphicsCapability::ComputeShaders` | EasyGL: GL ES ≥ 3.1 or desktop GL ≥ 4.3, never WebGL, decided by the runtime context. Vulkan: the selected ordered graphics queue must support compute and the required storage/dispatch limits. |
 | Storage buffers, dispatch, barriers | Everywhere compute is. |
-| `Texture2D` as a compute **image** | Desktop GL only (`ComputeShader::isImageBindingSupported`). GL ES requires an immutable texture (`glTexStorage2D`) and CNA allocates textures mutably, so the binding is refused with that reason rather than issued and silently dropped. |
-| Sampling a `Texture2D` **from** compute | Everywhere compute is — sampling has no immutability requirement. This is the route auto-exposure takes. |
+| `Texture2D` as a compute **image** | Desktop GL accepts its ordinary immutable-capable texture route. Vulkan conditionally adds storage usage to an ordinary texture only when its exact sampled/transfer allocation admits the combined usage, and reuses any exact eligible render-target image; reflected SPIR-V format/access and device ownership are still validated at bind time. Ineligible resources refuse explicitly. GL ES requires immutable `glTexStorage2D`, while CNA's EasyGL textures are mutable, so that route is also refused explicitly. Query with `ComputeShader::isImageBindingSupported`; an accepted resource is still validated at bind time. |
+| Sampling a `Texture2D` **from** compute | Implemented by EasyGL wherever compute is available; Vulkan currently implements storage-image reads, not a separate sampled-texture compute descriptor. This is the EasyGL route auto-exposure takes. |
 
 - **Nothing is silent.** A renderer without compute makes both wrappers throw
   `System::NotSupportedException` naming it, at construction rather than at some later dispatch that
@@ -2197,12 +2400,24 @@ if (device.SupportsCapability(GraphicsCapability::ComputeShaders)) {
   how the *rest of the pipeline* will read the data — a buffer about to be drawn as vertices needs
   `VertexAttribArray`, a texture about to be sampled needs `TextureFetch` — and that is
   `ComputeShader::barrier`.
+- **Vulkan lifetime**: accepted commands retain renderer-owned records, not public wrappers.
+  Destroying a buffer, program, dedicated image or render-target bridge before `Present()` therefore
+  cannot invalidate the command. The same records survive swapchain recreation unchanged and are
+  released/disconnected before terminal device teardown; `Vulkan_ModernResourceLifetime` verifies
+  all modern resource families on RADV and llvmpipe.
+- **Vulkan synchronization/allocator bound**: routine compute, upload and disposal stay in the
+  deferred frame and never idle the queue/device. CPU readback records only its producer closure
+  plus copy and waits that submit's fence. `Vulkan_ModernAllocatorStress` holds descriptors and
+  pipelines constant while 2,048 staging/buffer/timer cycles and 32 resize requests drain through a
+  bounded retirement window on RADV and llvmpipe (`MOD-2253`).
 - **`Texture2D::GetData` never shows compute writes.** It answers from the CPU pixels the texture
   was uploaded with. Compute output reaches the CPU through a storage buffer, or reaches the screen
   by being sampled in a draw.
-- **The gap worth naming**: a storage buffer cannot be bound as a vertex stream, so a
-  GPU-resident particle system has to come back through the CPU. Measured at 100 000 particles on
-  llvmpipe: GPU step **0.881 ms**, CPU step **2.401 ms**, read-back **0.806 ms**.
+- **The avoided transfer worth measuring**: a storage buffer is not a vertex stream, but portable
+  custom vertex shaders can read it directly. Production `ParticleSystem` therefore stays on the
+  GPU. The low-level baseline deliberately reads 100 000 particles back before building an ordinary
+  instance stream; its historical llvmpipe measurements were GPU step **0.881 ms**, CPU step
+  **2.401 ms**, read-back **0.806 ms**.
 
 **Auto-exposure** (`AutoExposureEXT`) is the first consumer inside the engine layer, and the reason
 `MOD-308` deferred auto-exposure until compute existed:
@@ -2213,12 +2428,16 @@ exposure.update(*pipeline.getSceneTarget(), elapsedSeconds);
 exposure.applyTo(pipeline.getSettings());     // TonemapPass already reads getExposure()
 ```
 
-It reduces a 64×64 sample grid in shared memory to 64 partials and finishes the sum on the CPU —
-64 floats cost less to fetch than a second kernel launch costs to start. The average is a
+Its generated package selects GLSL ES, desktop GLSL or SPIR-V and samples both ordinary uploaded
+textures and a rendered scene target. It reduces a 64×64 sample grid in shared memory to 64
+partials and finishes the sum on the CPU — 64 floats cost less to fetch than a second kernel launch
+costs to start. The average is a
 **log**-average, so a handful of very bright pixels cannot crush the frame, and adaptation is
 exponential and **asymmetric**: adapting to a brighter scene is fast, to a darker one slow, as an
 eye is. The speeds are named for the scene, not the exposure — a brighter scene means a *lower*
-exposure, and getting that comparison backwards is invisible until something moves.
+exposure, and getting that comparison backwards is invisible until something moves. The same
+seven behavior cases pass on Vulkan llvmpipe and EasyGL, including the render-target path with no
+CPU texture readback.
 
 Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · ⛔ deliberately unsupported.
 

@@ -7,9 +7,9 @@
 // PreserveContents — SetRenderTarget does NOT clear on re-bind.
 //   A green fill written before unbinding must survive the re-bind unchanged.
 //
-// Verification: GetBackBufferData is called while the RT's FBO is still
-// bound (currentRtHeight_ != 0), which reads directly from the RT attachment.
-// No SpriteBatch round-trip needed.
+// Verification: each target is unbound, then read through RenderTarget2D::GetData.
+// This is the public XNA target-readback path and does not depend on a renderer redirecting
+// GetBackBufferData to the currently bound target.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -49,12 +49,11 @@ class RenderTargetUsageTest : public Game
             && a.getBProperty() == b.getBProperty();
     }
 
-    // Read one pixel from the currently bound framebuffer (RT or backbuffer).
-    Color readPixel(GraphicsDevice& dev, int x, int y)
+    Color readPixel(RenderTarget2D& target, int x, int y)
     {
         Color px(0, 0, 0, 0);
         Rectangle reg(x, y, 1, 1);
-        dev.GetBackBufferData(&reg, &px, 0, 1);
+        target.GetData(0, &reg, &px, 0, 1);
         return px;
     }
 
@@ -78,17 +77,15 @@ protected:
 
             // Re-bind → DiscardContents issues Clear(0,0,0,255).
             dev.SetRenderTarget(&rt);
+            dev.SetRenderTarget(nullptr);
 
-            // Read directly from the RT's FBO (it is still bound).
-            Color px = readPixel(dev, 0, 0);
+            Color px = readPixel(rt, 0, 0);
             std::printf("DiscardContents readback: R=%d G=%d B=%d\n",
                 px.getRProperty(), px.getGProperty(), px.getBProperty());
             check(!colourMatch(px, Color::Red),
                   "DiscardContents: contents are discarded (not red)");
             check(px.getRProperty() == 0 && px.getGProperty() == 0 && px.getBProperty() == 0,
                   "DiscardContents: cleared to black (0,0,0)");
-
-            dev.SetRenderTarget(nullptr);
         }
 
         // ── Case B: PreserveContents ─────────────────────────────────────────
@@ -105,15 +102,13 @@ protected:
 
             // Re-bind → PreserveContents: no clear.
             dev.SetRenderTarget(&rt);
+            dev.SetRenderTarget(nullptr);
 
-            // Read directly from the RT's FBO.
-            Color px = readPixel(dev, 0, 0);
+            Color px = readPixel(rt, 0, 0);
             std::printf("PreserveContents readback: R=%d G=%d B=%d\n",
                 px.getRProperty(), px.getGProperty(), px.getBProperty());
             check(colourMatch(px, Color::Green),
                   "PreserveContents: contents are preserved (green)");
-
-            dev.SetRenderTarget(nullptr);
         }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);

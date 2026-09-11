@@ -3,9 +3,11 @@
 //
 // This is intentionally not a HEADLESS/STUB lifetime test: their context-loss hook is a no-op.
 // EasyGL's desktop hook destroys the SDL GL context, creates a fresh one, then rebuilds registered
-// resources from their CPU shadows. The same long-lived Model must therefore draw the same imported
-// vertex/index buffers and base-colour texture before and after the loss; reloading the asset after
-// recovery would only prove that a second load works and could hide dangling first-load resources.
+// resources from their CPU shadows. DirectX exposes loss and restore as two separately observable
+// phases, while EasyGL completes both atomically. The same long-lived Model must therefore draw the
+// same imported vertex/index buffers and base-colour texture after whichever recovery shape the
+// active renderer uses; reloading the asset would only prove that a second load works and could hide
+// dangling first-load resources.
 
 #include "common/PixelTestGame.hpp"
 
@@ -77,6 +79,8 @@ protected:
         IndexBuffer* const indexBuffer = part->getIndexBufferProperty();
         Texture2D* const texture = effect->getTextureProperty();
         device.GetRenderer().DebugSimulateContextLoss();
+        if (!device.GetRenderer().CanBeginDrawEXT())
+            device.GetRenderer().DebugRestoreContext();
 
         if (!ExpectTrue("context recovery preserves the original model resource objects",
                         part->getVertexBufferProperty() == vertexBuffer

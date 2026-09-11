@@ -44,6 +44,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <memory>
@@ -134,8 +135,11 @@ protected:
 
             int physW = 0, physH = 0;
             SDL_GetWindowSize(window, &physW, &physH);
-            targetPhysicalWidth_  = physW * 2;
-            targetPhysicalHeight_ = physH + 200;
+            // Stay inside the current virtual/desktop work area. Doubling the default 800-pixel
+            // window made a 1600-pixel request that compositors legitimately clamp on smaller
+            // displays, turning this into a desktop-size oracle instead of a resize oracle.
+            targetPhysicalWidth_ = std::max(64, physW - 137);
+            targetPhysicalHeight_ = std::max(64, physH - 91);
 
             // Resize the REAL SDL window directly -- bypasses GraphicsDeviceManager entirely,
             // simulating a user dragging the window edge rather than a game-driven API resize.

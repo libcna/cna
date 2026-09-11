@@ -4,15 +4,22 @@
 
 #ifdef CNA_CNAEXT
 
-#include "LensPassVertexSource.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "shaders/atmospheric_sky/AtmosphericSkyShaderPackage.generated.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cmath>
+#include <cstdint>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace CNA::Graphics {
@@ -25,8 +32,6 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::Texture2D;
 
     namespace {
-
-        constexpr const char* kVertexSource = detail::kLensVertexSource;
 
         // Rayleigh's wavelength dependence is the whole reason a clear sky is blue: the coefficients
         // fall as the fourth power of wavelength, so blue is scattered sideways into the eye several
@@ -117,21 +122,51 @@ vec3 cnaAerialPerspective(vec3 colour, vec3 viewDirection, vec3 sunDirection, fl
 }
 )";
 
-        constexpr const char* kFragmentBody = R"(
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-uniform mat4  uInverseViewProjection;
-uniform vec3  uSunDirection;
-uniform float uTurbidity;
-uniform float uIntensity;
+        [[nodiscard]] std::vector<std::uint8_t> ToBytes(
+            const std::uint32_t* words, const std::size_t byteSize)
+        {
+            const auto* begin = reinterpret_cast<const std::uint8_t*>(words);
+            return std::vector<std::uint8_t>(begin, begin + byteSize);
+        }
 
-void main() {
-    vec4 ray = uInverseViewProjection * vec4(TexCoord * 2.0 - 1.0, 1.0, 1.0);
-    vec3 direction = normalize(ray.xyz / ray.w);
-    FragColor = vec4(cnaSkyRadiance(direction, uSunDirection, uTurbidity) * uIntensity, 1.0);
-}
-)";
+        [[nodiscard]] ShaderPackageEXT CreateAtmosphericSkyShaderPackage()
+        {
+            using ShaderCodeEXT = CNA::Graphics::ShaderCodeEXT;
+            using namespace CNA::Graphics::detail::AtmosphericSkyGenerated;
+            return ShaderPackageEXT(
+                {
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "atmospheric_sky/sky.es.vert.glsl",
+                                  std::string(kEsVertexSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslEs,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "atmospheric_sky/sky.es.frag.glsl",
+                                  std::string(kEsFragmentSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "atmospheric_sky/sky.desktop.vert.glsl",
+                                  std::string(kDesktopVertexSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::GlslDesktop,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "atmospheric_sky/sky.desktop.frag.glsl",
+                                  std::string(kDesktopFragmentSource)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Vertex, "main",
+                                  "atmospheric_sky/sky.vulkan.vert.spv",
+                                  ToBytes(kVulkanVertexSpirV,
+                                          kVulkanVertexSpirVByteSize)),
+                    ShaderCodeEXT(CNA::ShaderLanguageEXT::SpirV,
+                                  CNA::ShaderStageEXT::Fragment, "main",
+                                  "atmospheric_sky/sky.vulkan.frag.spv",
+                                  ToBytes(kVulkanFragmentSpirV,
+                                          kVulkanFragmentSpirVByteSize)),
+                },
+                {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment},
+                {ShaderBindingRequirementEXT(
+                    "texture1", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Fragment)});
+        }
 
         Matrix RotationOnly(const Matrix& view)
         {
@@ -163,10 +198,10 @@ void main() {
     AtmosphericSky::AtmosphericSky(GraphicsDevice& device)
         : fullscreen_(std::make_unique<FullscreenPass>(device))
     {
-        std::string source = "#version 300 es\nprecision highp float;\n";
-        source += kModelGlsl;
-        source += kFragmentBody;
-        effect_ = std::make_unique<ShaderEffect>(device, kVertexSource, source);
+        const ShaderPackageEXT package = CreateAtmosphericSkyShaderPackage();
+        if (device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
+            && package.selectFor(device).isUsable())
+            effect_ = std::make_unique<ShaderEffect>(device, package);
         bool logged = false;
         detail::reportShaderCompileFailure(device, "AtmosphericSky", effect_.get(), logged);
         supported_ = effect_ != nullptr && effect_->IsEffectValid();
@@ -230,11 +265,16 @@ void main() {
         if (!supported_) return;
 
         const Matrix inverse = Matrix::Invert(RotationOnly(view) * projection);
+        std::array<float, 16> matrix{};
+        inverse.ToColumnMajor(matrix.data());
+        const std::array sunDirection{
+            sunDirection_.X, sunDirection_.Y, sunDirection_.Z};
+        const std::array scalars{turbidity_, intensity_};
         effect_->Apply();
-        effect_->SetUniformMat4("uInverseViewProjection", &inverse.M11);
-        effect_->SetUniformVec3("uSunDirection", sunDirection_.X, sunDirection_.Y, sunDirection_.Z);
-        effect_->SetUniformFloat("uTurbidity", turbidity_);
-        effect_->SetUniformFloat("uIntensity", intensity_);
+        effect_->SetUniformMat4Array("uSkyMatrices", matrix.data(), 1);
+        effect_->SetUniformVec3Array("uSkyVectors", sunDirection.data(), 1);
+        effect_->SetUniformFloatArray("uSkyScalars", scalars.data(),
+                                      static_cast<int>(scalars.size()));
 
         fullscreen_->drawOverCurrentTarget(white_.get(), effect_.get(), width, height);
     }

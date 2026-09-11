@@ -30,13 +30,24 @@ option(CNA_BUILD_RENDERER_DESCRIPTOR_GATE
 #                (bgfx::RendererType, from <bgfx/bgfx.h>).
 #   directx9  -- design decision 9's adapterQueries answer from real D3DCAPS9 / D3DFORMAT values
 #                (<d3d9.h>).
+#   directx11 -- DX-214/DX-225 gave it the same treatment as directx9: the descriptor creates a
+#                real ID3D11Device and answers adapterQueries from CheckFormatSupport rather than
+#                from a hardcoded table (<d3d11.h>, <dxgiformat.h>, <wrl/client.h>).
+#   directx12 -- the same, through its own device and shared D3DCommon format mapping.
 #
-# Neither can be made self-contained without dropping behaviour, so for these two the "compiled at
+# None can be made self-contained without dropping behaviour, so for these the "compiled at
 # least once in a configuration where the family is available" rule is met by the family's OWN
-# target: a BGFX build and a DIRECTX9 build each compile theirs for real. Every other family's
-# descriptor needs nothing but CNA's own headers, and this list is deliberately hard to grow --
-# a new family is gated by default, and excluding it takes a deliberate edit with a reason.
-set(CNA_DESCRIPTOR_GATE_SDK_BOUND_FAMILIES bgfx directx9)
+# target: a BGFX, DIRECTX9, DIRECTX11 or DIRECTX12 build each compiles theirs for real. Every
+# other family's descriptor needs nothing but CNA's own headers, and this list is deliberately
+# hard to grow -- a new family is gated by default, and excluding it takes a deliberate edit
+# with a reason.
+#
+# directx11/directx12 were added when the `dx` branch merged into `next` (2026-09-10). On `dx`
+# the omission could not surface: every build there SELECTS a DirectX family, so the descriptors
+# were already deferred by the branch above this list. A native Linux build that selects a
+# non-DirectX renderer is the configuration that compiles them here, and it cannot -- the Windows
+# SDK headers they now include do not exist on it.
+set(CNA_DESCRIPTOR_GATE_SDK_BOUND_FAMILIES bgfx directx9 directx11 directx12)
 
 # Defines the descriptor gate target. Must be called from modules/renderers/CMakeLists.txt, after
 # CNA_SELECTED_RENDERER_FAMILIES has been established.
@@ -113,7 +124,8 @@ function(cna_add_renderer_descriptor_gate)
     # public root is namespaced CNA/Internal/Renderers/<Family>/, so making them all reachable here
     # cannot shadow anything.
     file(GLOB _family_include_roots "${_renderers_dir}/*/include")
-    foreach(_root IN LISTS _family_include_roots)
+    file(GLOB _shared_include_roots "${_renderers_dir}/common/*/include")
+    foreach(_root IN LISTS _family_include_roots _shared_include_roots)
         if(IS_DIRECTORY "${_root}")
             target_include_directories(cna_renderer_descriptor_gate PRIVATE "${_root}")
         endif()

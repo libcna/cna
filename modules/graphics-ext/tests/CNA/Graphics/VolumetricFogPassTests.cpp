@@ -14,6 +14,7 @@
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
 #include "CNA/Graphics/ShadowQuality.hpp"
+#include "CNA/Graphics/Skybox.hpp"
 #include "CNA/Graphics/VolumetricFogPass.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
@@ -40,6 +41,7 @@ namespace {
 using CNA::Graphics::PostProcessContext;
 using CNA::Graphics::ShadowMap;
 using CNA::Graphics::ShadowQuality;
+using CNA::Graphics::Skybox;
 using CNA::Graphics::VolumetricFogPass;
 using Microsoft::Xna::Framework::BoundingBox;
 using Microsoft::Xna::Framework::Color;
@@ -143,9 +145,10 @@ TEST(VolumetricFogTest, TheMediumScattersLightIntoTheFrame)
 {
     GraphicsDevice gd;
     VolumetricFogPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot select both volumetric-fog shader packages";
 
     // A black scene, so everything the frame comes back with is light the medium put there. Against
     // a lit scene this would be ambiguous: a dense medium extinguishes the source faster than it
@@ -173,9 +176,10 @@ TEST(VolumetricFogTest, AShadowMapDarkensTheMediumItBlocks)
     // lit everywhere the light points, which is a haze; with it, the lid's shadow is in the air.
     GraphicsDevice gd;
     VolumetricFogPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot select both volumetric-fog shader packages";
 
     ShadowMap shadowMap(gd, ShadowQuality::Low);
     if (!shadowMap.isSupported())
@@ -211,9 +215,10 @@ TEST(VolumetricFogTest, LookingTowardsTheLightScattersMoreThanLookingAway)
     // through the anisotropy setting rather than by moving the camera, so nothing else changes.
     GraphicsDevice gd;
     VolumetricFogPass pass(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot select both volumetric-fog shader packages";
 
     auto depth  = MakeFlatDepth(gd, 40.0f);
     auto source = MakeImage(gd, [](int, int) { return Color(0, 0, 0, 255); });
@@ -236,6 +241,56 @@ TEST(VolumetricFogTest, LookingTowardsTheLightScattersMoreThanLookingAway)
     EXPECT_GT(forward, isotropic)
         << "forward scattering did not brighten a view into the light: " << forward
         << " against " << isotropic;
+}
+
+TEST(VolumetricFogTest, ThePackagedVolumeKeepsTheCameraYDirection)
+{
+    GraphicsDevice gd;
+    VolumetricFogPass pass(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!pass.isSupported(gd))
+        GTEST_SKIP() << "this renderer cannot select both volumetric-fog shader packages";
+
+    auto depth = MakeFlatDepth(gd, 40.0f);
+    auto source = MakeImage(gd, [](int, int) { return Color(0, 0, 0, 255); });
+    RenderTarget2D destination(gd, kSize, kSize);
+    PostProcessContext context = MakeContext(*source, destination);
+    context.sourceDepth = depth.get();
+
+    constexpr int column = kSize / 2;
+    constexpr int upperRow = 8;
+    constexpr int lowerRow = kSize - 9;
+    const float ndcX = (static_cast<float>(column) + 0.5f)
+                     / static_cast<float>(kSize) * 2.0f - 1.0f;
+    const Matrix view = Matrix::Invert(context.inverseView);
+    const auto rayAt = [&](const int row) {
+        const float ndcY = 1.0f - (static_cast<float>(row) + 0.5f)
+                                 / static_cast<float>(kSize) * 2.0f;
+        return Skybox::computeViewRay(view, context.projection, ndcX, ndcY, 0.0f);
+    };
+    const Vector3 lightDirection(0.0f, -1.0f, 0.0f);
+    const auto scatteringCosine = [&lightDirection](const Vector3& viewRay) {
+        return -(lightDirection.X * viewRay.X
+               + lightDirection.Y * viewRay.Y
+               + lightDirection.Z * viewRay.Z);
+    };
+    ASSERT_GT(scatteringCosine(rayAt(upperRow)), scatteringCosine(rayAt(lowerRow)))
+        << "the CPU rays do not distinguish the selected vertical image rows";
+
+    pass.setLight(nullptr, lightDirection, Vector3(3.0f, 3.0f, 3.0f));
+    pass.setDensity(0.08f);
+    pass.setAnisotropy(0.85f);
+    pass.setRange(60.0f);
+    pass.apply(context);
+
+    const auto pixels = ReadTarget(destination);
+    const int upper = pixels[static_cast<std::size_t>(upperRow) * kSize + column].getRProperty();
+    const int lower = pixels[static_cast<std::size_t>(lowerRow) * kSize + column].getRProperty();
+    EXPECT_GT(upper, 5) << "the directional medium produced no measurable upper-ray signal"
+                        << "; lower=" << lower;
+    EXPECT_GT(upper, lower + 5)
+        << "the atlas mirrored the forward-scattering lobe vertically";
 }
 
 TEST(VolumetricFogTest, ZeroDensityLeavesTheFrameAlone)

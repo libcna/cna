@@ -1,27 +1,22 @@
 #pragma once
 
 // plans/plan_dx.md Phase DX13 (DX-121): custom ShaderEffect -- runtime D3DCompile() of arbitrary HLSL
-// vertex+fragment source, mirroring D3D11EffectRenderer's (DX-58) exact fixed-slot convention and
-// fixed Sprite2DVertex-shaped vertex contract (x,y|u,v|r,g,b,a, 32 bytes) -- this mechanism is a
-// SpriteBatch-custom-shader facility, not a general arbitrary-vertex-format one.
-//
-// Real, D3D12-specific difference from D3D11: D3D12 bakes shader+input-layout+root-signature+
-// blend/depth-stencil state into one indivisible ID3D12PipelineState, so CompileProgram() must
-// build a real PSO up front (unlike D3D11's separate VSSetShader/PSSetShader calls). It reuses
-// D3D12SpriteBatchRenderer's own (1,1,1) root-signature shape (CBV@b0, SRV table@t0, sampler
-// table@s0) via D3D12RootSignatureCache -- the SAME cached object D3D12SpriteBatchRenderer's own
-// stock sprite2d PSO already uses -- so a custom-compiled shader binds through the identical root
-// signature FlushBatch() already sets. The PSO's RTV format is hardcoded to
-// DXGI_FORMAT_R8G8B8A8_UNORM (matching every render target this whole renderer uses, DX-11-fmt's
-// own "Color/RGBA8 almost everywhere" convention) rather than queried from the currently-bound
-// target, since CompileProgram() may run before any render target is bound (XNA content loading
-// typically compiles effects up front) -- an honest, documented simplification, not an oversight.
+// DX-223 replaces the original fixed (1 CBV, 1 SRV, 1 sampler), fixed Sprite2DVertex PSO with
+// shared D3D reflection. CompileProgram retains bytecode and reflected register layouts; PSOs are
+// created lazily through DirectX12Renderer's complete state cache for the actual vertex layout,
+// target formats, topology and sample count at draw time.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DProgramReflection.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12RendererReference.hpp"
+#include "CNA/Internal/Renderers/DirectX12/D3D12PipelineStateCache.hpp"
 
 #include <d3d12.h>
+#include <d3dcompiler.h>
 #include <wrl/client.h>
 
+#include <array>
+#include <cstdint>
 #include <string>
 
 namespace CNA::Internal::Renderers::DirectX12
@@ -36,11 +31,7 @@ namespace CNA::Internal::Renderers::DirectX12
         explicit D3D12EffectRenderer(DirectX12Renderer* owner);
 
         bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
-        /// Updates the mapped constant buffer with the current uniform values -- D3D12 has no
-        /// separate "bind shader to context" call the way D3D11 does (state lives in the PSO this
-        /// class already built); D3D12SpriteBatchRenderer::FlushBatch() pulls
-        /// GetPipelineStateEXT()/GetConstantBufferEXT() and binds them within its own single
-        /// command-list recording, right after calling this.
+        /// Finalizes CPU-side reflected values. The consuming draw allocates immutable frame ranges.
         void Bind() override;
         void Unbind() override;
         [[nodiscard]] bool IsValid() const override { return valid_; }
@@ -52,24 +43,69 @@ namespace CNA::Internal::Renderers::DirectX12
         void SetUniformVec2(const char* name, float x, float y) override;
         void SetUniformFloat(const char* name, float value) override;
         void SetUniformInt(const char* name, int value) override;
+        void SetUniformFloatArray(const char* name, const float* values, int count) override;
+        void SetUniformVec2Array(const char* name, const float* values, int count) override;
+        void SetUniformVec3Array(const char* name, const float* values, int count) override;
+        void SetUniformMat4Array(const char* name, const float* matrices, int count) override;
+        void BindTexture(int unit, ITextureRenderer* texture) override;
+        void BindTextureCube(int unit, ITextureCubeRenderer* texture) override;
+        void BindTexture3D(int unit, ITexture3DRenderer* texture) override;
 
-        /// DX-121: mirrors D3D11EffectRenderer::SetViewportSizeEXT -- writes the [0..15]-byte vpSize
-        /// slot this class's own fixed-slot convention reserves for it. CNAEXT.
+        /** @brief Writes the reflected `vpSize` parameter used by the SpriteBatch convention. */
         void SetViewportSizeEXT(float width, float height);
 
-        /// CNAEXT: the real, compiled PSO -- D3D12SpriteBatchRenderer::FlushBatch() binds this in
-        /// place of its own stock sprite2d PSO when a valid custom effect is active.
+        /** @brief Returns the most recently resolved custom PSO, if any. */
         [[nodiscard]] ID3D12PipelineState* GetPipelineStateEXT() const { return pso_.Get(); }
-        /// CNAEXT: the real, mapped 128-byte constant buffer Bind() writes into.
-        [[nodiscard]] ID3D12Resource* GetConstantBufferEXT() const { return constantBuffer_.Get(); }
+        /** @brief Resolves a custom PSO through the renderer's complete state cache. */
+        [[nodiscard]] ID3D12PipelineState* GetOrCreatePipelineStateEXT(
+            D3D12PipelineStateDesc desc);
+        /** @brief Returns this program's reflected root signature. */
+        [[nodiscard]] ID3D12RootSignature* GetRootSignatureEXT() const { return rootSignature_.Get(); }
+        /** @brief Copies a reflected cbuffer into a frame-owned range and returns its GPU address. */
+        [[nodiscard]] D3D12_GPU_VIRTUAL_ADDRESS GetConstantBufferGpuAddressEXT(int slot = 0);
+        /** @brief Returns one plus the highest reflected b-register. */
+        [[nodiscard]] int GetConstantBufferCountEXT() const
+        {
+            return reflection_.GetConstantBufferCount();
+        }
+        /** @brief Returns one plus the highest reflected t-register. */
+        [[nodiscard]] int GetShaderResourceCountEXT() const
+        {
+            return reflection_.GetShaderResourceCount();
+        }
+        /** @brief Returns one plus the highest reflected s-register. */
+        [[nodiscard]] int GetSamplerCountEXT() const { return reflection_.GetSamplerCount(); }
+        /** @brief Reports whether the caller explicitly bound a texture at @p unit. */
+        [[nodiscard]] bool HasTextureBindingEXT(int unit) const;
+        /** @brief Resolves the current texture binding at one reflected t-register. */
+        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetTextureGpuHandleEXT(int unit);
 
     private:
-        DirectX12Renderer* owner_;
+        enum class TextureKind
+        {
+            None,
+            Texture2D,
+            TextureCube,
+            Texture3D,
+        };
+
+        struct TextureBinding
+        {
+            TextureKind kind = TextureKind::None;
+            void* texture = nullptr;
+            bool explicitlySet = false;
+        };
+
+        D3D12RendererReference owner_;
         ID3D12Device* device_;
         ComPtr<ID3D12PipelineState> pso_;
-        ComPtr<ID3D12Resource> constantBuffer_;
-        void* constantBufferMapped_ = nullptr;
-        float pushConst_[32] = {};
+        ComPtr<ID3D12RootSignature> rootSignature_;
+        ComPtr<ID3DBlob> vsBytecode_;
+        ComPtr<ID3DBlob> psBytecode_;
+        D3DCommon::D3DProgramReflection reflection_;
+        std::array<TextureBinding,
+                   D3DCommon::D3DProgramReflection::kMaxShaderResources> textures_{};
+        std::uint64_t programId_ = 0;
         std::string compileError_;
         bool valid_ = false;
     };

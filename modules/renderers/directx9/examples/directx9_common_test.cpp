@@ -18,8 +18,13 @@
 #include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
+#include <array>
 #include <cstdio>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace CNA::Internal::Renderers::DirectX9;
@@ -151,6 +156,60 @@ int main()
         UINT count = 123;
         const D3DVERTEXELEMENT9* elems = VertexElementsForStrideD3D9(999, count);
         check(elems == nullptr && count == 0, "an unrecognized stride returns nullptr/count=0, not garbage");
+    }
+
+    // D9-127: a public declaration is translated by value instead of being reinterpreted through
+    // the stride table. The 32-byte DualTexture input is the collision that exposed this gap.
+    {
+        const std::vector<VertexElement> input = {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+            VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        };
+        const auto elems = TranslateVertexElementsD3D9(input);
+        check(elems.size() == 5 &&
+              elems[0].Type == D3DDECLTYPE_FLOAT3 && elems[0].Usage == D3DDECLUSAGE_POSITION &&
+              elems[1].Type == D3DDECLTYPE_UBYTE4N && elems[1].Usage == D3DDECLUSAGE_COLOR &&
+              elems[2].Type == D3DDECLTYPE_FLOAT2 && elems[2].Usage == D3DDECLUSAGE_TEXCOORD &&
+              elems[2].UsageIndex == 0 && elems[3].UsageIndex == 1 &&
+              elems[4].Stream == 0xFF && elems[4].Type == D3DDECLTYPE_UNUSED,
+              "public stride-32 DualTexture declaration preserves COLOR0 and both texture coordinates");
+    }
+    {
+        constexpr std::array<BYTE, 12> expectedTypes = {
+            D3DDECLTYPE_FLOAT1, D3DDECLTYPE_FLOAT2, D3DDECLTYPE_FLOAT3, D3DDECLTYPE_FLOAT4,
+            D3DDECLTYPE_UBYTE4N, D3DDECLTYPE_UBYTE4, D3DDECLTYPE_SHORT2, D3DDECLTYPE_SHORT4,
+            D3DDECLTYPE_SHORT2N, D3DDECLTYPE_SHORT4N, D3DDECLTYPE_FLOAT16_2,
+            D3DDECLTYPE_FLOAT16_4,
+        };
+        std::vector<VertexElement> input;
+        for (int i = 0; i < static_cast<int>(expectedTypes.size()); ++i)
+            input.emplace_back(i * 16, static_cast<VertexElementFormat>(i), VertexElementUsage::TextureCoordinate, i);
+        const auto elems = TranslateVertexElementsD3D9(input);
+        bool exact = elems.size() == expectedTypes.size() + 1;
+        for (std::size_t i = 0; exact && i < expectedTypes.size(); ++i)
+            exact = elems[i].Type == expectedTypes[i] && elems[i].Usage == D3DDECLUSAGE_TEXCOORD &&
+                    elems[i].UsageIndex == i;
+        check(exact, "all 12 XNA VertexElementFormat values translate to their exact D3D9 types");
+    }
+    {
+        constexpr std::array<BYTE, 13> expectedUsages = {
+            D3DDECLUSAGE_POSITION, D3DDECLUSAGE_COLOR, D3DDECLUSAGE_TEXCOORD,
+            D3DDECLUSAGE_NORMAL, D3DDECLUSAGE_BINORMAL, D3DDECLUSAGE_TANGENT,
+            D3DDECLUSAGE_BLENDINDICES, D3DDECLUSAGE_BLENDWEIGHT, D3DDECLUSAGE_DEPTH,
+            D3DDECLUSAGE_FOG, D3DDECLUSAGE_PSIZE, D3DDECLUSAGE_SAMPLE,
+            D3DDECLUSAGE_TESSFACTOR,
+        };
+        std::vector<VertexElement> input;
+        for (int i = 0; i < static_cast<int>(expectedUsages.size()); ++i)
+            input.emplace_back(i * 4, VertexElementFormat::Single,
+                               static_cast<VertexElementUsage>(i), i);
+        const auto elems = TranslateVertexElementsD3D9(input);
+        bool exact = elems.size() == expectedUsages.size() + 1;
+        for (std::size_t i = 0; exact && i < expectedUsages.size(); ++i)
+            exact = elems[i].Usage == expectedUsages[i] && elems[i].UsageIndex == i;
+        check(exact, "all 13 XNA VertexElementUsage values translate to their exact D3D9 usages");
     }
 
     std::printf("=== %d/%d PASS ===\n", passCount, totalCount);

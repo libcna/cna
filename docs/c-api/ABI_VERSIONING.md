@@ -2,7 +2,44 @@
 
 ## ABI identity
 
-The ABI is `0.23.0`. It adds **one route**, `cna_decal_pass_is_supported`, and is otherwise
+The ABI is `0.26.0`. It appends **one detailed renderer-feature identity**,
+`CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING` (`31`). The answer is supported only when the
+renderer consumes a caller-selected first logical instance through the CNAEXT instanced-draw
+route; older renderers inherit the explicit unsupported default. Existing feature identities keep
+values `0` through `30`, and only `CNA_RENDERER_FEATURE_MAXIMUM` moves from `30` to `31`.
+
+The minor increments because the closed enumerable feature range changed. A caller built against
+`0.25.0` is unchanged; a caller iterating the new maximum sees the additional answer and can gate
+the operation without inferring support from the renderer name.
+
+`0.25.0` appended **one shader-payload identity**,
+`CNA_SHADER_DIALECT_SPIRV` (`7`), for renderers that require already-compiled SPIR-V bytecode
+rather than Vulkan GLSL source. The distinction is observable: native CNA Vulkan consumes SPIR-V
+words, while IGL's Vulkan backend compiles GLSL source, and both previously reported
+`CNA_SHADER_DIALECT_GLSL_VULKAN`. Existing identities retain values `0` through `6`; only
+`CNA_SHADER_DIALECT_MAXIMUM` moves from `6` to `7`. The minor increments because the closed
+enumerable range changed, and `plans/plan_vulkan.md` `VULKAN-264` records the renderer-side
+contract and tests.
+
+A caller that handles `0.24.0` dialects by name is unchanged. A caller that iterates through
+`CNA_SHADER_DIALECT_MAXIMUM` sees one additional identity and can now choose the correct payload
+without inferring it from a renderer name.
+
+`0.24.0` added **one detailed renderer-feature identity**,
+`CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING` (`30`), which asks whether a `Texture3D` bound to a
+custom effect is actually **sampled** by that shader. `CNA_RENDERER_FEATURE_TEXTURE_3D_STORAGE`
+answers only that a volume can be uploaded and read back, and the two came apart in practice: the
+Vulkan renderer carried `Texture3D` data faithfully for a long time with no `sampler3D` path at
+all, so a caller asking the storage question got `supported` and a shader reading the volume got
+nothing (`plans/plan_vulkan.md` `VULKAN-164`, finding `F-31`). No existing identity changes
+meaning; appending this one moves `CNA_RENDERER_FEATURE_MAXIMUM` from `29` to `30`, which is why
+the minor increments rather than the patch -- the same reason `0.8.0` gives for the five
+engine-layer capability identities it appended.
+
+A caller that iterates `0 .. CNA_RENDERER_FEATURE_MAXIMUM` sees one more entry than it did under
+`0.23.0`; one that names the identities it asks about sees no change at all.
+
+`0.23.0` added **one route**, `cna_decal_pass_is_supported`, and is otherwise
 identical to `0.22.0`. The addition closes a gap the language bindings recorded as
 `BINDFIX-018` in [`plans/plan_bindings_upstream.md`](../../plans/plan_bindings_upstream.md): a
 decal pass is its own handle kind, so `cna_post_process_pass_is_supported` refuses it with

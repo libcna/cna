@@ -49,10 +49,10 @@ namespace CNA::Graphics {
      * that differs per API. Rendering depth explicitly costs a second pass over the geometry and is
      * the same everywhere, which is the trade this layer makes throughout.
      *
-     * **The loop is not decoration.** With `MultipleRenderTargets` the prepass writes both images in
-     * one pass and `getPassCount()` is 1. Without it, depth and normals are written in two passes
-     * over the same geometry and the count is 2. Writing the loop means an app is correct on both,
-     * and on the renderers that have MRT it costs one iteration.
+     * **The loop is not decoration.** With `MultipleRenderTargets` the prepass writes every enabled
+     * image in one pass and `getPassCount()` is 1. Without it, depth and normals are written in two
+     * passes, or three when velocity is enabled. Writing the loop makes the app correct in either
+     * mode; on renderers with MRT it still costs one iteration.
      */
     class DepthNormalPrepass
     {
@@ -72,17 +72,15 @@ namespace CNA::Graphics {
          * @brief Creates the prepass with a chosen depth encoding.
          *
          * plans/plan_modern.md `MOD-2035`. The encoding is normally not a caller's business — the layer
-         * packs everywhere, because a half-float depth target defeated every screen-space effect on
-         * the reference renderer and the reason for that is still open. This overload exists so the
-         * failing shape can still be *built*: a policy whose alternative cannot be constructed can
-         * never be re-examined, and the investigation that closes `MOD-2035` needs to reproduce the
-         * failure before it can bisect it.
+         * packs everywhere because it is deterministic, needs no optional render-target format and
+         * preserves more depth precision. This overload keeps the half-float alternative directly
+         * constructible for renderer diagnostics and comparisons.
          *
          * @param device   The device to render on.
          * @param width    Target width in pixels; must be positive.
          * @param height   Target height in pixels; must be positive.
-         * @param encoding How to store depth. @ref DepthEncoding::HalfFloat is known to break this
-         *                 layer's screen-space passes and is not a supported configuration.
+         * @param encoding How to store depth. @ref DepthEncoding::HalfFloat is an explicit
+         *                 diagnostic alternative rather than the automatic policy.
          * @throws std::invalid_argument If a dimension is not positive.
          */
         DepthNormalPrepass(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device, int width,
@@ -107,7 +105,7 @@ namespace CNA::Graphics {
         /**
          * @brief How many times the scene must be drawn to fill both images.
          *
-         * @return 1 where the renderer has multiple render targets, otherwise 2.
+         * @return 1 with MRT; otherwise 2, or 3 when velocity is enabled.
          */
         [[nodiscard]] int getPassCount() const;
 
@@ -366,6 +364,7 @@ namespace CNA::Graphics {
         int  height_ = 0;
         bool passOpen_ = false;
         int  openPass_ = -1;
+        float openFarPlane_ = 1.0f;
         bool useMrt_    = false;
         bool packDepth_ = false;
         float roughness_ = 0.0f;
@@ -380,6 +379,8 @@ namespace CNA::Graphics {
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> velocityTarget_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect>   effect_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect>   skinnedEffect_;
+        std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect>   velocityEffect_;
+        std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect>   skinnedVelocityEffect_;
     };
 
 /** @} */ // end of cnaext_engine

@@ -1,41 +1,62 @@
 // SPDX-License-Identifier: MS-PL
 // plans/plan_modern.md MOD-1510..MOD-1525: compute shaders and storage buffers, end to end.
 //
-// Every test here starts by asking the device whether it can do this at all, because the answer
-// genuinely varies -- GL ES 3.1 and desktop GL 4.3 can, and the ES 2.0/3.0 profiles several CNA
-// renderers target cannot. Where it can, the assertions are exact: a shader that doubles a
-// thousand floats produces exactly those floats back, and a shader that writes a gradient into a
-// texture produces exactly that gradient.
+// Every test first asks for the capability it exercises. The legacy string constructor consumes
+// the active renderer's own dialect, so tests whose payload is explicitly GLSL ES additionally
+// require GLSL ES compute-source support. Portable package tests select their own backend payload.
 
 #ifdef CNA_CNAEXT
 
 #include <gtest/gtest.h>
 
 #include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/ConstantBuffer.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
+#include "CNA/Graphics/StorageTexture2D.hpp"
+#include "CNA/Graphics/Texture2DArray.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/GraphicsImageAccess.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
+#include "ConstantBufferShaderPackage.generated.hpp"
+#include "ModernResourceInteropShaderPackage.generated.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::IndexBuffer;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using CNA::GraphicsCapability;
 using CNA::GraphicsImageAccess;
 using CNA::GraphicsMemoryBarrier;
+using CNA::ShaderCompilationExceptionEXT;
 using CNA::Graphics::ComputeShader;
+using CNA::Graphics::ConstantBufferT;
+using CNA::Graphics::ShaderBindingRequirementEXT;
+using CNA::Graphics::ShaderBindingTypeEXT;
+using CNA::Graphics::ShaderCodeEXT;
+using CNA::Graphics::ShaderPackageEXT;
 using CNA::Graphics::StorageBuffer;
 using CNA::Graphics::StorageBufferT;
+using CNA::Graphics::StorageTexture2D;
+using CNA::Graphics::Texture2DArray;
 
 namespace {
 
@@ -47,6 +68,12 @@ namespace {
         [[nodiscard]] bool supported() const
         {
             return gd.SupportsCapability(GraphicsCapability::ComputeShaders);
+        }
+
+        [[nodiscard]] bool supportsGlslEsComputeSource() const
+        {
+            return gd.SupportsShaderLanguageEXT(
+                CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute);
         }
     };
 
@@ -62,7 +89,141 @@ void main() {
 }
 )";
 
+    template<std::size_t N>
+    [[nodiscard]] std::vector<std::uint8_t> ToBytes(
+        const std::uint32_t (&words)[N])
+    {
+        const auto* begin = reinterpret_cast<const std::uint8_t*>(words);
+        return std::vector<std::uint8_t>(begin, begin + sizeof(words));
+    }
+
+    [[nodiscard]] ShaderPackageEXT MakeModernResourceInteropPackage()
+    {
+        using namespace CNA::Tests::ModernResourceInterop;
+        return ShaderPackageEXT(
+            {
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[0].source),
+                    std::string(kEasyGlComputeSource)),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[1].source),
+                    ToBytes(kVulkanComputeSpirV)),
+            },
+            {CNA::ShaderStageEXT::Compute},
+            {
+                ShaderBindingRequirementEXT(
+                    "uSource", 0, ShaderBindingTypeEXT::SampledTexture2D,
+                    CNA::ShaderStageEXT::Compute),
+                ShaderBindingRequirementEXT(
+                    "Output", 1, ShaderBindingTypeEXT::StorageBuffer,
+                    CNA::ShaderStageEXT::Compute),
+            });
+    }
+
+    struct alignas(16) ConstantParameters
+    {
+        float value[4];
+    };
+
+    static_assert(sizeof(ConstantParameters) == 16);
+    static_assert(std::is_trivially_copyable_v<ConstantParameters>);
+    static_assert(std::is_standard_layout_v<ConstantParameters>);
+
+    [[nodiscard]] ShaderPackageEXT MakeConstantBufferPackage()
+    {
+        using namespace CNA::Tests::ConstantBuffer;
+        return ShaderPackageEXT(
+            {
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[0].source),
+                    std::string(kEasyGlComputeSource)),
+                ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[1].source),
+                    ToBytes(kVulkanComputeSpirV)),
+            },
+            {CNA::ShaderStageEXT::Compute},
+            {
+                ShaderBindingRequirementEXT(
+                    "Parameters", 0, ShaderBindingTypeEXT::ConstantBuffer,
+                    CNA::ShaderStageEXT::Compute),
+                ShaderBindingRequirementEXT(
+                    "Output", 1, ShaderBindingTypeEXT::StorageBuffer,
+                    CNA::ShaderStageEXT::Compute),
+            });
+    }
+
+    void ExpectColorNear(const Vector4& actual, const Color& expected)
+    {
+        constexpr float kByteTolerance = 1.0f / 255.0f;
+        EXPECT_NEAR(
+            actual.X, static_cast<float>(expected.getRProperty()) / 255.0f, kByteTolerance);
+        EXPECT_NEAR(
+            actual.Y, static_cast<float>(expected.getGProperty()) / 255.0f, kByteTolerance);
+        EXPECT_NEAR(
+            actual.Z, static_cast<float>(expected.getBProperty()) / 255.0f, kByteTolerance);
+        EXPECT_NEAR(
+            actual.W, static_cast<float>(expected.getAProperty()) / 255.0f, kByteTolerance);
+    }
+
+    template<typename T>
+    concept ComputeSampledBindable = requires(ComputeShader& shader, T& resource)
+    {
+        shader.bindTexture(0, std::string(), resource);
+    };
+
+    template<typename T>
+    concept ComputeStorageBindable = requires(ComputeShader& shader, T& resource)
+    {
+        shader.bindStorageBuffer(0, resource);
+    };
+
+    template<typename T>
+    concept ComputeStorageImageBindable = requires(ComputeShader& shader, T& resource)
+    {
+        shader.bindStorageTexture(0, resource, GraphicsImageAccess::ReadOnly);
+    };
+
+    template<typename T>
+    concept StorageBufferCopyDestination = requires(StorageBuffer& source, T& destination)
+    {
+        source.copyTo(destination, 0, 0, 0);
+    };
+
+    static_assert(ComputeSampledBindable<Texture2D>);
+    static_assert(ComputeSampledBindable<RenderTarget2D>);
+    static_assert(!ComputeSampledBindable<VertexBuffer>);
+    static_assert(!ComputeSampledBindable<IndexBuffer>);
+    static_assert(!ComputeSampledBindable<Texture2DArray>);
+    static_assert(!ComputeSampledBindable<StorageTexture2D>);
+    static_assert(ComputeStorageBindable<StorageBuffer>);
+    static_assert(!ComputeStorageBindable<VertexBuffer>);
+    static_assert(!ComputeStorageBindable<IndexBuffer>);
+    static_assert(ComputeStorageImageBindable<StorageTexture2D>);
+    static_assert(StorageBufferCopyDestination<StorageBuffer>);
+    static_assert(!StorageBufferCopyDestination<VertexBuffer>);
+    static_assert(!StorageBufferCopyDestination<IndexBuffer>);
+
 } // namespace
+
+TEST(ModernResourceInteropTypeTest, OnlyDeclaredTypesCrossComputeAndGpuCopyBoundaries)
+{
+    // MOD-2233: this is deliberately a compile-time API-shape test as well as a runtime report.
+    // XNA vertex/index buffers never become typeless aliases merely because StorageBuffer has
+    // future Vertex/Index allocation-intent bits.
+    EXPECT_TRUE(ComputeSampledBindable<Texture2D>);
+    EXPECT_TRUE(ComputeSampledBindable<RenderTarget2D>);
+    EXPECT_TRUE(ComputeStorageBindable<StorageBuffer>);
+    EXPECT_TRUE(ComputeStorageImageBindable<StorageTexture2D>);
+    EXPECT_TRUE(StorageBufferCopyDestination<StorageBuffer>);
+    EXPECT_FALSE(ComputeSampledBindable<VertexBuffer>);
+    EXPECT_FALSE(ComputeSampledBindable<IndexBuffer>);
+    EXPECT_FALSE(StorageBufferCopyDestination<VertexBuffer>);
+    EXPECT_FALSE(StorageBufferCopyDestination<IndexBuffer>);
+}
 
 TEST_F(ComputeTest, TheCapabilityAndTheLimitsAgreeWithEachOther)
 {
@@ -96,6 +257,52 @@ TEST_F(ComputeTest, WithoutSupportBothWrappersRefuseByName)
     if (supported()) GTEST_SKIP() << "this renderer supports compute; the refusal path is elsewhere";
     EXPECT_THROW(StorageBuffer(gd, 1024), System::NotSupportedException);
     EXPECT_THROW(ComputeShader(gd, kDoubler), System::NotSupportedException);
+}
+
+TEST_F(ComputeTest, PortableOverloadsRejectWrongStagesAndNonMainEntryPoints)
+{
+    const ShaderCodeEXT vertex(
+        CNA::ShaderLanguageEXT::GlslEs, CNA::ShaderStageEXT::Vertex,
+        "main", "wrong.vert", "source");
+    EXPECT_THROW(ComputeShader(gd, vertex), std::invalid_argument);
+    EXPECT_THROW(
+        ComputeShader(
+            gd, ShaderPackageEXT(
+                    {vertex}, {CNA::ShaderStageEXT::Vertex})),
+        std::invalid_argument);
+
+    CNA::ShaderLanguageEXT supportedLanguage = CNA::ShaderLanguageEXT::Unknown;
+    for (const auto language : {CNA::ShaderLanguageEXT::SpirV,
+                                CNA::ShaderLanguageEXT::GlslDesktop,
+                                CNA::ShaderLanguageEXT::GlslEs})
+    {
+        if (gd.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Compute))
+        {
+            supportedLanguage = language;
+            break;
+        }
+    }
+    if (supportedLanguage == CNA::ShaderLanguageEXT::Unknown) return;
+
+    if (supportedLanguage == CNA::ShaderLanguageEXT::SpirV)
+    {
+        EXPECT_THROW(
+            ComputeShader(
+                gd, ShaderCodeEXT(
+                        supportedLanguage, CNA::ShaderStageEXT::Compute,
+                        "notMain", "compute.spv",
+                        std::vector<std::uint8_t>{1, 2, 3, 4})),
+            std::invalid_argument);
+    }
+    else
+    {
+        EXPECT_THROW(
+            ComputeShader(
+                gd, ShaderCodeEXT(
+                        supportedLanguage, CNA::ShaderStageEXT::Compute,
+                        "notMain", "compute.glsl", "source")),
+            std::invalid_argument);
+    }
 }
 
 TEST_F(ComputeTest, AStorageBufferRoundTripsAMegabyteExactly)
@@ -132,6 +339,8 @@ TEST_F(ComputeTest, ABrokenShaderThrowsWithItsCompilerLog)
 {
     // MOD-1511: the log is the whole value of the failure, so it must reach the caller.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!supportsGlslEsComputeSource())
+        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
     try
     {
         ComputeShader broken(gd, "#version 310 es\nthis is not a shader\n");
@@ -139,10 +348,20 @@ TEST_F(ComputeTest, ABrokenShaderThrowsWithItsCompilerLog)
     }
     catch (const std::runtime_error& error)
     {
+        // plans/plan_modern.md MOD-2215 replaced the free-text "the program did not compile: <log>"
+        // with a structured ShaderCompilationExceptionEXT, whose what() reads
+        // "Shader compilation failed (N diagnostics): <first>; N more". This expectation was left
+        // on the old wording by that task and was red on the `vulkan` branch before it merged into
+        // `next` (2026-09-11); it is corrected here rather than left inherited.
+        //
+        // What this test is for is unchanged and is what is asserted: the failure must carry the
+        // COMPILER'S OWN words to the caller, not merely report that something failed. So the
+        // message must name the compiler's diagnostic, not just the wrapper's summary.
         const std::string message = error.what();
-        EXPECT_NE(message.find("did not compile"), std::string::npos) << message;
-        EXPECT_GT(message.size(), std::string("CNA::Graphics::ComputeShader: the program did not "
-                                              "compile: ").size())
+        EXPECT_NE(message.find("Shader compilation failed"), std::string::npos) << message;
+        EXPECT_NE(message.find("error"), std::string::npos)
+            << "the compiler log did not reach the caller: " << message;
+        EXPECT_GT(message.size(), std::string("Shader compilation failed (1 diagnostics): ").size())
             << "the compiler log was empty: " << message;
     }
 }
@@ -151,6 +370,8 @@ TEST_F(ComputeTest, ADispatchDoublesEveryElementOfABuffer)
 {
     // MOD-1513, the row's own example: 1024 floats, doubled.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!supportsGlslEsComputeSource())
+        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
     constexpr int kCount = 1024;
     StorageBufferT<float> values(gd, kCount);
     std::vector<float> source(kCount);
@@ -160,6 +381,8 @@ TEST_F(ComputeTest, ADispatchDoublesEveryElementOfABuffer)
     ComputeShader doubler(gd, kDoubler);
     EXPECT_TRUE(doubler.isValid());
     EXPECT_TRUE(doubler.getCompileError().empty());
+    EXPECT_EQ(doubler.getSelectedLanguageEXT(), CNA::ShaderLanguageEXT::Unknown);
+    EXPECT_EQ(doubler.getSelectedCodeEXT(), nullptr);
     doubler.bindStorageBuffer(0, values.getBuffer());
     doubler.setUniform("uCount", kCount);
     doubler.dispatch(kCount / 64);
@@ -194,6 +417,151 @@ TEST_F(ComputeTest, AVectorBufferRoundTripsThroughTheTypedView)
     EXPECT_THROW(buffer.setData(tooMany), std::invalid_argument);
 }
 
+TEST_F(ComputeTest, PortableComputeSamplesTexture2DAndRetainsItsDeferredLifetime)
+{
+    // MOD-2233: rebinding the shader after dispatch removes its mutable reference to `source`.
+    // Disposing that public Texture2D then proves the accepted immutable command owns enough
+    // image/format lifetime to finish without dereferencing the disposed wrapper.
+    const ShaderPackageEXT package = MakeModernResourceInteropPackage();
+    const auto selection = package.selectFor(gd);
+    if (!selection.isUsable()) GTEST_SKIP() << selection.getDiagnostic();
+
+    const Color kExpected(51, 102, 153, 255);
+    auto source = std::make_unique<Texture2D>(gd, 1, 1);
+    source->SetData(&kExpected, 1);
+    StorageBufferT<Vector4> output(gd, 1);
+    output.setData({Vector4::Zero});
+    ComputeShader shader(gd, package);
+    shader.bindTexture(0, "uSource", *source);
+    shader.bindStorageBuffer(1, output.getBuffer());
+    shader.dispatch(1);
+
+    const Color replacementColor = Color::Blue;
+    Texture2D replacement(gd, 1, 1);
+    replacement.SetData(&replacementColor, 1);
+    shader.bindTexture(0, "uSource", replacement);
+    source->Dispose();
+
+    const auto result = output.getData();
+    ASSERT_EQ(result.size(), 1u);
+    ExpectColorNear(result.front(), kExpected);
+}
+
+TEST_F(ComputeTest, PortableComputeSamplesDeferredRenderTargetWithoutPublicBarriers)
+{
+    // MOD-2233: Vulkan queues the clear and the compute dispatch separately. The synchronous
+    // storage-buffer readback must discover and submit the sampled target's producer first; no
+    // image layout or memory-barrier enum is exposed to the caller.
+    const ShaderPackageEXT package = MakeModernResourceInteropPackage();
+    const auto selection = package.selectFor(gd);
+    if (!selection.isUsable()) GTEST_SKIP() << selection.getDiagnostic();
+
+    const Color kExpected(64, 128, 192, 255);
+    RenderTarget2D source(gd, 1, 1);
+    gd.SetRenderTarget(&source);
+    gd.Clear(kExpected);
+    gd.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    StorageBufferT<Vector4> output(gd, 1);
+    output.setData({Vector4::Zero});
+    ComputeShader shader(gd, package);
+    shader.bindTexture(0, "uSource", source);
+    shader.bindStorageBuffer(1, output.getBuffer());
+    shader.dispatch(1);
+
+    const auto result = output.getData();
+    ASSERT_EQ(result.size(), 1u);
+    ExpectColorNear(result.front(), kExpected);
+}
+
+TEST_F(ComputeTest, PortableConstantBufferExecutesRetainsLifetimeAndObservesUpdates)
+{
+    const ShaderPackageEXT package = MakeConstantBufferPackage();
+    const auto selection = package.selectFor(gd);
+    if (!selection.isUsable()) GTEST_SKIP() << selection.getDiagnostic();
+
+    const ConstantParameters first{{0.125f, 0.25f, 0.5f, 1.0f}};
+    auto constants = std::make_unique<ConstantBufferT<ConstantParameters>>(gd);
+    constants->setData(first);
+    StorageBufferT<Vector4> output(gd, 1);
+    output.setData({Vector4::Zero});
+
+    ComputeShader shader(gd, package);
+    shader.bindConstantBuffer(0, *constants);
+    shader.bindStorageBuffer(1, output.getBuffer());
+    shader.dispatch(1);
+
+    ConstantBufferT<ConstantParameters> replacement(gd);
+    const ConstantParameters second{{0.75f, 0.625f, 0.375f, 0.25f}};
+    replacement.setData(second);
+    shader.bindConstantBuffer(0, replacement);
+    constants.reset();
+
+    auto result = output.getData();
+    ASSERT_EQ(result.size(), 1U);
+    EXPECT_FLOAT_EQ(result[0].X, first.value[0]);
+    EXPECT_FLOAT_EQ(result[0].Y, first.value[1]);
+    EXPECT_FLOAT_EQ(result[0].Z, first.value[2]);
+    EXPECT_FLOAT_EQ(result[0].W, first.value[3]);
+
+    output.setData({Vector4::Zero});
+    shader.dispatch(1);
+    result = output.getData();
+    ASSERT_EQ(result.size(), 1U);
+    EXPECT_FLOAT_EQ(result[0].X, second.value[0]);
+    EXPECT_FLOAT_EQ(result[0].Y, second.value[1]);
+    EXPECT_FLOAT_EQ(result[0].Z, second.value[2]);
+    EXPECT_FLOAT_EQ(result[0].W, second.value[3]);
+}
+
+TEST_F(ComputeTest, VulkanRejectsAnIntegerSamplerBeforeItCanAliasAFloatTexture)
+{
+    if (!gd.SupportsShaderLanguageEXT(
+            CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute))
+        GTEST_SKIP() << "this renderer does not consume SPIR-V compute payloads";
+
+    using namespace CNA::Tests::ModernResourceInterop;
+    try
+    {
+        ComputeShader shader(
+            gd, ShaderCodeEXT(
+                    CNA::ShaderLanguageEXT::SpirV, CNA::ShaderStageEXT::Compute,
+                    "main", std::string(kPayloads[2].source),
+                    ToBytes(kVulkanUnsignedSamplerComputeSpirV)));
+        FAIL() << "an unsigned sampler must not compile against CNA's float-sampled XNA textures";
+    }
+    catch (const ShaderCompilationExceptionEXT& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("float32 sampler2D"), std::string::npos)
+            << error.what();
+    }
+}
+
+TEST_F(ComputeTest, TextureInteropRejectsDisposedForeignAndInvalidAccessBeforeBackendWork)
+{
+    const ShaderPackageEXT package = MakeModernResourceInteropPackage();
+    const auto selection = package.selectFor(gd);
+    if (!selection.isUsable()) GTEST_SKIP() << selection.getDiagnostic();
+
+    ComputeShader shader(gd, package);
+    Texture2D disposed(gd, 1, 1);
+    disposed.Dispose();
+    EXPECT_THROW(
+        shader.bindTexture(0, "uSource", disposed), System::ObjectDisposedException);
+
+    Texture2D live(gd, 1, 1);
+    EXPECT_THROW(
+        shader.bindImage(0, live, static_cast<GraphicsImageAccess>(999)),
+        std::invalid_argument);
+
+    GraphicsDevice foreignDevice;
+    Texture2D foreign(foreignDevice, 1, 1);
+    EXPECT_THROW(shader.bindTexture(0, "uSource", foreign), std::invalid_argument);
+    EXPECT_THROW(
+        shader.bindImage(0, foreign, GraphicsImageAccess::ReadOnly),
+        std::invalid_argument);
+}
+
 TEST_F(ComputeTest, ImageBindingEitherWorksOrRefusesWithItsReason)
 {
     // MOD-1514/MOD-1504, written to assert something on both kinds of context rather than to skip
@@ -202,6 +570,8 @@ TEST_F(ComputeTest, ImageBindingEitherWorksOrRefusesWithItsReason)
     // than let the driver reject the binding silently, the wrapper refuses it and says why. On
     // desktop GL the same code binds and the gradient below is asserted exactly.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!supportsGlslEsComputeSource())
+        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
     constexpr int kSize = 16;
     Texture2D texture(gd, kSize, kSize);
     const std::vector<Color> initial(kSize * kSize, Color::Black);
@@ -289,6 +659,8 @@ TEST_F(ComputeTest, Texture2DGetDataDoesNotSeeComputeWrites)
     // was uploaded with. If CNA ever gives Texture2D a real GPU read-back this test fails, and the
     // note beside it has to be rewritten.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!supportsGlslEsComputeSource())
+        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
     constexpr int kSize = 8;
     Texture2D texture(gd, kSize, kSize);
     const std::vector<Color> initial(kSize * kSize, Color::Black);
@@ -318,6 +690,8 @@ TEST_F(ComputeTest, UniformsReachTheProgram)
     // MOD-1515: an int and a float, checked by their effect on a buffer rather than by asking the
     // program back -- what matters is that the value the shader read is the value that was set.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!supportsGlslEsComputeSource())
+        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
     StorageBufferT<float> values(gd, 64);
     values.setData(std::vector<float>(64, 1.0f));
 
@@ -344,6 +718,8 @@ TEST_F(ComputeTest, DispatchArgumentsAreValidatedBeforeSubmission)
 {
     // MOD-1523.
     if (!supported()) GTEST_SKIP() << "this renderer does not support compute shaders";
+    if (!supportsGlslEsComputeSource())
+        GTEST_SKIP() << "this test's legacy payload is GLSL ES, not the renderer's dialect";
     StorageBufferT<float> values(gd, 64);
     ComputeShader doubler(gd, kDoubler);
     doubler.bindStorageBuffer(0, values.getBuffer());

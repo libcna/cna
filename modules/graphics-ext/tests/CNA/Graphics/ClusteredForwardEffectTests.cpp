@@ -20,6 +20,7 @@
 #include "CNA/Graphics/LightProbeEXT.hpp"
 #include "CNA/Graphics/LightProbeVolumeEXT.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
+#include "CNA/Graphics/ThinFilmIridescence.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -36,10 +37,13 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "../../../src/shaders/clustered_forward/ClusteredForwardShaderPackage.generated.hpp"
 
 #include <array>
 #include <cmath>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -56,6 +60,7 @@ using CNA::Graphics::ClusteredLightType;
 using CNA::Graphics::LightProbeEXT;
 using CNA::Graphics::LightProbeVolumeEXT;
 using CNA::Graphics::PbrMaterialExtensions;
+using CNA::Graphics::ThinFilmIridescence;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector2;
@@ -245,6 +250,23 @@ TEST(ClusteredForwardEffectTest, ASpotConeCutsOffOutsideItsOuterAngle)
 
 // ── The GPU ──────────────────────────────────────────────────────────────────
 
+TEST(ClusteredForwardEffectTest, PackagedEsSourceRetainsEveryPublicGlslFragment)
+{
+    // The effect package owns a static source so shader generation is reproducible, while these
+    // five public helpers remain useful to application-authored GLSL. This pins the package to the
+    // exact helper text rather than allowing a second copy of an algorithm to drift unnoticed.
+    const std::string_view source =
+        CNA::Graphics::detail::ClusteredForwardGenerated::kForwardEsFragmentSource;
+    for (const std::string& fragment : {
+             ClusteredLightBuffer::getLightLookupGlsl(),
+             LightProbeEXT::getEvaluationGlsl(),
+             ThinFilmIridescence::getGlsl(),
+             AreaLightBrdfTable::getLookupGlsl(),
+             AreaLightShading::getShadingGlsl(),
+         })
+        EXPECT_NE(source.find(fragment), std::string_view::npos);
+}
+
 TEST(ClusteredForwardEffectTest, AnUnuploadedBufferIsRefused)
 {
     GraphicsDevice gd;
@@ -287,7 +309,6 @@ TEST(ClusteredForwardEffectTest, OneLightLightsTheWallWhereItIs)
 {
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -318,7 +339,6 @@ TEST(ClusteredForwardEffectTest, ALightNowhereNearTheWallLeavesItDark)
     // lit everything: a light behind the camera reaches no cluster the wall occupies.
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -342,7 +362,6 @@ TEST(ClusteredForwardEffectTest, TwoHundredAndFiftySixLightsRender)
     // the top of their range.
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -373,7 +392,6 @@ TEST(ClusteredForwardEffectTest, TheShadedValueMatchesTheCpuModel)
     // compared against ClusteredForwardEffect::contribution -- the CPU mirror of the same shader.
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -427,7 +445,6 @@ TEST(ClusteredForwardEffectTest, AnAreaLightLightsTheWallWithNoPunctualLightsAtA
 {
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -474,7 +491,6 @@ TEST(ClusteredForwardEffectTest, TheAreaLightsShadedValueMatchesTheCpuModel)
     // AreaLightShading::contribution computes for it.
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -511,7 +527,6 @@ TEST(ClusteredForwardEffectTest, TheHighlightHasTheLightsShapeOnASmoothSurface)
     // the contrast between the frame's centre and its corner.
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -538,6 +553,46 @@ TEST(ClusteredForwardEffectTest, TheHighlightHasTheLightsShapeOnASmoothSurface)
     EXPECT_GT(smooth.first, 20) << "the smooth surface shows no highlight at all";
     EXPECT_GT(smooth.first - smooth.second, rough.first - rough.second)
         << "the rough surface's highlight had at least as much of an edge as the smooth one's";
+}
+
+TEST(ClusteredForwardEffectTest, AreaLightAndTransmissionUseIndependentTextures)
+{
+    // The portable Vulkan path has four explicit 2D slots, so its clustered lists live in storage
+    // buffers and these two optional images must remain independent. Testing them separately
+    // would not catch both aliases landing on one descriptor.
+    GraphicsDevice gd;
+    ClusteredForwardEffect effect(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+    if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
+
+    Texture2D behind(gd, 4, 4);
+    const std::vector<Color> blue(16, Color(0, 0, 220, 255));
+    behind.SetData(blue.data(), static_cast<int>(blue.size()));
+
+    PbrMaterialExtensions glass;
+    glass.setTransmissionFactor(0.5f);
+    effect.setMaterialExtensions(glass);
+    effect.setOpaqueFrame(&behind);
+    effect.setBaseColor(Vector3(0.8f, 0.8f, 0.8f));
+    effect.setRoughness(0.6f);
+
+    const ClusteredLightSetEXT none;
+    const Color transmissionOnly =
+        RenderWall(gd, effect, none)[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2];
+
+    AreaLightBrdfTable table(gd, 16, 64);
+    AreaLightEXT area = WallLight(3.0f);
+    area.Intensity = 3.0f;
+    effect.setAreaLight(area, table);
+    const Color combined =
+        RenderWall(gd, effect, none)[static_cast<std::size_t>(kSize) * (kSize / 2) + kSize / 2];
+
+    EXPECT_GT(static_cast<int>(combined.getBProperty()), 50)
+        << "the opaque-frame texture disappeared when the area BRDF texture was also bound";
+    EXPECT_GT(static_cast<int>(combined.getRProperty()),
+              static_cast<int>(transmissionOnly.getRProperty()) + 10)
+        << "the area-light texture disappeared when the opaque frame was also bound";
 }
 
 // ── The clearcoat lobe (MOD-2070) ────────────────────────────────────────────
@@ -600,7 +655,6 @@ TEST(ClusteredForwardEffectTest, TheClearcoatSettingsReachTheShader)
 {
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -720,7 +774,6 @@ TEST(ClusteredForwardEffectTest, TheSheenSettingsReachTheShader)
 {
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -833,7 +886,6 @@ TEST(ClusteredForwardEffectTest, ATransmissiveWallShowsWhatIsBehindIt)
 {
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -872,7 +924,6 @@ TEST(ClusteredForwardEffectTest, AThickVolumeAbsorbsWhatPassesThroughIt)
 {
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -983,7 +1034,6 @@ TEST(ClusteredForwardEffectTest, TheSubsurfaceSettingsReachTheShader)
 {
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -1034,7 +1084,6 @@ TEST(ClusteredForwardEffectTest, AProbeReplacesTheFlatAmbientAndNothingElse)
 {
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";
@@ -1069,7 +1118,6 @@ TEST(ClusteredForwardEffectTest, AVolumeLightsAnObjectAtItsOwnPosition)
     // is what a single global environment cannot do.
     GraphicsDevice gd;
     ClusteredForwardEffect effect(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!effect.isSupported()) GTEST_SKIP() << "this renderer cannot run the clustered effect";

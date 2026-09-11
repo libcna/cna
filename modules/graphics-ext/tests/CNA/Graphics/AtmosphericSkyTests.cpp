@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Graphics/AtmosphericSky.hpp"
+#include "CNA/Graphics/Skybox.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -18,12 +19,15 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <vector>
 
 namespace {
 
 using CNA::Graphics::AtmosphericSky;
+using CNA::Graphics::Skybox;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
@@ -129,7 +133,6 @@ TEST(AtmosphericSkyTest, ItDrawsASkyRatherThanAFlatColour)
 {
     GraphicsDevice gd;
     AtmosphericSky sky(gd);
-    CNA_SKIP_WITHOUT_SHADER_EXECUTION(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
     if (!sky.isSupported()) GTEST_SKIP() << "this renderer cannot draw the atmospheric sky";
@@ -166,6 +169,68 @@ TEST(AtmosphericSkyTest, ItDrawsASkyRatherThanAFlatColour)
     EXPECT_GT(highest - lowest, 10) << "the sky is a flat colour, so nothing varies with direction";
     EXPECT_GT(blue, 0) << "no blue anywhere in the sky";
     (void)red;
+}
+
+TEST(AtmosphericSkyTest, ThePackagedShaderMatchesTheCpuModelAndKeepsCameraY)
+{
+    GraphicsDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
+
+    AtmosphericSky sky(gd);
+    if (!sky.isSupported())
+        GTEST_SKIP() << "this renderer cannot select the atmospheric-sky shader package";
+
+    const Matrix view = Matrix::CreateLookAt(Vector3::Zero,
+                                              Vector3(0.0f, 0.15f, 1.0f), kUp);
+    const Matrix projection =
+        Matrix::CreatePerspectiveFieldOfView(1.2f, 1.0f, 0.1f, 100.0f);
+    constexpr int column = kSize / 2;
+    constexpr int upperRow = 8;
+    constexpr int lowerRow = kSize - 9;
+    const float ndcX = (static_cast<float>(column) + 0.5f)
+                     / static_cast<float>(kSize) * 2.0f - 1.0f;
+    const auto directionAt = [&](const int row) {
+        const float ndcY = 1.0f - (static_cast<float>(row) + 0.5f)
+                                 / static_cast<float>(kSize) * 2.0f;
+        return Skybox::computeViewRay(view, projection, ndcX, ndcY, 0.0f);
+    };
+
+    constexpr float turbidity = 3.0f;
+    const Vector3 upper = AtmosphericSky::radiance(directionAt(upperRow), kSunsetSun, turbidity);
+    const Vector3 lower = AtmosphericSky::radiance(directionAt(lowerRow), kSunsetSun, turbidity);
+    const float brightest = std::max({upper.X, upper.Y, upper.Z, lower.X, lower.Y, lower.Z});
+    ASSERT_GT(brightest, 1e-4f);
+    const float intensity = 0.65f / brightest;
+    const auto encode = [intensity](const float value) {
+        return static_cast<int>(std::clamp(value * intensity, 0.0f, 1.0f) * 255.0f + 0.5f);
+    };
+    const int expectedDifference = std::max({
+        std::abs(encode(upper.X) - encode(lower.X)),
+        std::abs(encode(upper.Y) - encode(lower.Y)),
+        std::abs(encode(upper.Z) - encode(lower.Z)),
+    });
+    ASSERT_GT(expectedDifference, 20) << "the selected rows do not expose the vertical axis";
+
+    sky.setSunDirection(kSunsetSun);
+    sky.setTurbidity(turbidity);
+    sky.setIntensity(intensity);
+    RenderTarget2D target(gd, kSize, kSize);
+    gd.SetRenderTarget(&target);
+    gd.Clear(Color::Black);
+    sky.draw(view, projection, kSize, kSize);
+    gd.SetRenderTarget(nullptr);
+
+    std::vector<Color> pixels(static_cast<std::size_t>(kSize) * kSize, Color::Black);
+    target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    const auto expectRow = [&](const int row, const Vector3& expected, const char* name) {
+        const Color& actual = pixels[static_cast<std::size_t>(row) * kSize + column];
+        EXPECT_NEAR(static_cast<int>(actual.getRProperty()), encode(expected.X), 4) << name;
+        EXPECT_NEAR(static_cast<int>(actual.getGProperty()), encode(expected.Y), 4) << name;
+        EXPECT_NEAR(static_cast<int>(actual.getBProperty()), encode(expected.Z), 4) << name;
+    };
+    expectRow(upperRow, upper, "upper camera ray");
+    expectRow(lowerRow, lower, "lower camera ray");
 }
 
 TEST(AtmosphericSkyTest, AnInvalidSizeIsRejected)

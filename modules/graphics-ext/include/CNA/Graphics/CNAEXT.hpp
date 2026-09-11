@@ -32,9 +32,14 @@
  */
 
 // ---- Foundation ------------------------------------------------------------------------------
+#include "CNA/Graphics/ConstantBuffer.hpp"
 #include "CNA/Graphics/EngineException.hpp"
 #include "CNA/Graphics/EngineLayerVersion.hpp"
 #include "CNA/Graphics/RequireCapability.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
+#include "CNA/ShaderDiagnosticEXT.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 
 // ---- Configuration and enumerations -------------------------------------------------------
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
@@ -110,6 +115,8 @@
 #include "CNA/Graphics/AutoExposureEXT.hpp"
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
+#include "CNA/Graphics/StorageTexture2D.hpp"
+#include "CNA/Graphics/Texture2DArray.hpp"
 
 // ---- Instancing, LOD and culling -------------------------------------------------------------
 #include "CNA/Graphics/FrustumCullerEXT.hpp"

@@ -245,29 +245,32 @@ namespace {
     {
         if (!audioSubsystemAcquired_) return {};
 
-        // Only real devices are enumerated, so `Microphone::All` is the machine's device list and
-        // `Microphone::Default` -- which is `All[0]` -- is a real device reporting the driver's own
-        // name for itself.
+        // Only real devices are enumerated, and the host's default recording device is placed
+        // first, so `Microphone::All` is the machine's device list and `Microphone::Default` --
+        // which is `All[0]` -- is the device the user actually speaks into, reporting the driver's
+        // own name for it. That is XNA's shape: its enumeration puts the system default first and
+        // names it.
         //
-        // FNA prepends a synthetic entry here instead, named "Default Device" and bound to
+        // FNA instead prepends a synthetic entry named "Default Device", bound to
         // SDL_AUDIO_DEVICE_DEFAULT_RECORDING (`SDL3_FNAPlatform.cs:1699,1707`, "First mic is always
-        // OS default"), and CNA used to reproduce that literally. XNA does not: its default
-        // microphone is a real enumerated device. The two were caught side by side by SAMPLE-098,
-        // whose entire HUD is `Microphone.Name` -- the unchanged XNA executable drew
-        // "PulseAudio Input is Stopped" where CNA drew "Default Device is Stopped", with the rest of
-        // the frame identical. Per CLAUDE.md, where XNA and FNA disagree CNA follows XNA, so the
-        // synthetic entry is gone.
+        // OS default"), and CNA reproduced that literally until 2026-09-09. SAMPLE-098, whose whole
+        // HUD is `Microphone.Name`, showed the two side by side: the unchanged XNA executable drew
+        // "PulseAudio Input is Stopped" where CNA drew "Default Device is Stopped".
         //
-        // What that costs: the host's *current* default input route is no longer addressable
-        // through this provider, so a game does not follow the user changing their default device
-        // mid-session. XNA does not offer that either. `isDefault` stays on the info struct for a
-        // backend that can genuinely identify the default among real devices; SDL3 cannot, so this
-        // provider marks none, which the contract permits.
+        // Ordering matters as much as naming, and dropping the synthetic entry without it was a
+        // real regression: sorted by id alone, `All[0]` became whichever real device SDL happened
+        // to number lowest -- here the machine's second, unconnected microphone -- so the sample
+        // captured silence and echoed nothing, while the original and the browser build both
+        // worked. SDL_GetAudioDeviceName resolves the default pseudo-id to the current default
+        // physical device's name, which is how that device is identified here.
         int count = 0;
         SDL_AudioDeviceID* nativeDevices = SDL_GetAudioRecordingDevices(&count);
         std::vector<AudioRecordingDeviceInfo> result;
         if (nativeDevices && count > 0)
         {
+            const char* defaultName = SDL_GetAudioDeviceName(SDL_AUDIO_DEVICE_DEFAULT_RECORDING);
+            const std::string defaultDeviceName = defaultName ? defaultName : std::string{};
+
             result.reserve(static_cast<std::size_t>(count));
             for (int i = 0; i < count; ++i)
             {
@@ -280,6 +283,24 @@ namespace {
             {
                 return left.id < right.id;
             });
+
+            // The lowest-id device carrying the default's name, so two identically named devices
+            // resolve deterministically. If SDL reported no default name, or none matches, the
+            // list stays in id order and no entry claims to be the default -- which the contract
+            // permits, and which is honest rather than guessed.
+            if (!defaultDeviceName.empty())
+            {
+                const auto defaultEntry = std::find_if(
+                    result.begin(), result.end(), [&defaultDeviceName](const auto& info)
+                {
+                    return info.name == defaultDeviceName;
+                });
+                if (defaultEntry != result.end())
+                {
+                    defaultEntry->isDefault = true;
+                    std::rotate(result.begin(), defaultEntry, defaultEntry + 1);
+                }
+            }
         }
         SDL_free(nativeDevices);
         return result;

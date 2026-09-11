@@ -84,8 +84,12 @@ namespace CNA
         ShaderDialectMsl = 28,
         /** @brief Source-based effects consume WebGPU Shading Language. */
         ShaderDialectWgsl = 29,
+        /** @brief A `Texture3D` bound to a custom effect is sampled by the shader. */
+        Texture3DSampling = 30,
+        /** @brief Instanced indexed drawing can start at a caller-selected instance. */
+        BaseInstanceDrawing = 31,
         /** @brief Number of declared feature identities; not itself a queryable feature. */
-        Count = 30
+        Count = 32
     };
 
     /** @brief The renderer's classified answer for one detailed feature. */
@@ -124,8 +128,32 @@ namespace CNA
         MaxComputeWorkGroupInvocations = 8,
         /** @brief Maximum storage-buffer bindings readable by a vertex shader. */
         MaxVertexShaderStorageBlocks = 9,
+        /** @brief Maximum byte range addressable through one storage-buffer binding. */
+        MaxStorageBufferBytes = 10,
+        /** @brief Maximum byte range addressable through one uniform/constant-buffer binding. */
+        MaxUniformBufferBytes = 11,
+        /** @brief Maximum storage-buffer bindings visible to one compute shader. */
+        MaxComputeStorageBufferBindings = 12,
+        /** @brief Maximum layer count of a sampled two-dimensional texture array. */
+        MaxTextureArrayLayers = 13,
+        /** @brief Maximum sampled textures visible to one shader stage. */
+        MaxSampledTexturesPerShaderStage = 14,
+        /** @brief Maximum storage images visible to one shader stage. */
+        MaxStorageImagesPerShaderStage = 15,
+        /** @brief Maximum native vertex-buffer bindings consumed by one draw. */
+        MaxVertexInputBindings = 16,
+        /** @brief Maximum vertex attributes consumed by one draw. */
+        MaxVertexInputAttributes = 17,
+        /** @brief Maximum colour attachments written by one graphics draw. */
+        MaxColorAttachments = 18,
+        /** @brief Required byte alignment of a storage-buffer binding offset. */
+        MinStorageBufferOffsetAlignment = 19,
+        /** @brief Required byte alignment of a uniform/constant-buffer binding offset. */
+        MinUniformBufferOffsetAlignment = 20,
+        /** @brief GPU timestamp tick duration in picoseconds; zero when unavailable. */
+        TimestampPeriodPicoseconds = 21,
         /** @brief Number of declared limit identities; not itself a queryable limit. */
-        Count = 10
+        Count = 22
     };
 
     /**

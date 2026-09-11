@@ -68,6 +68,16 @@ if(CNA_BUILD_TESTS)
     # programs and the module probes above.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/c-api/tests/.*\\.cpp$")
 
+    # plans/plan_dx.md DX-250/DX-269: XmlSerializationEXTTests includes the optional
+    # SharpRuntime::Xml.Serialization component directly. Windows intentionally omits that
+    # component while its Diagnostics dependency still includes POSIX-only <poll.h> outside its
+    # platform guard, so omitting only the link edge is insufficient: the source must leave the
+    # inventory with the unavailable component.
+    if(NOT CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/math/tests/Microsoft/Xna/Framework/XmlSerializationEXTTests\\.cpp$")
+    endif()
+
     # plans/plan_apple.md APPLE-11: the Apple smoke application (cmake/AppleSmoke.cmake) is a complete
     # program with its own main(), for the same reason as the two entries above. Swept into
     # CnaTests it does not merely add a case -- its main() replaces GTest's, so the test binary
@@ -324,12 +334,24 @@ if(CNA_BUILD_TESTS)
     set(CNA_TEST_GROUP_DEPENDENCY_devices_ext cna_devices_ext)
     set(CNA_TEST_GROUP_DEPENDENCY_gamer_services CNA_GamerServices)
     set(CNA_TEST_GROUP_DEPENDENCY_graphics cna_graphics_core)
-    set(CNA_TEST_GROUP_DEPENDENCY_graphics_ext cna_graphics_ext)
+    # Engine resources such as Texture2DArray exercise their real GraphicsDevice ownership and
+    # renderer capability gate. Link the aggregate so this focused group receives the selected
+    # renderer registry as well as the graphics-ext implementation; cna_graphics_ext alone cannot
+    # construct a device because renderer families deliberately sit outside its dependency edge.
+    set(CNA_TEST_GROUP_DEPENDENCY_graphics_ext CNA)
     set(CNA_TEST_GROUP_DEPENDENCY_input cna_input)
     set(CNA_TEST_GROUP_DEPENDENCY_integration CNA)
     # SAMPLE-066: XmlSerializationEXT.hpp opts the math value types into
-    # System::Xml::Serialization, so the group that tests it links that component too.
-    set(CNA_TEST_GROUP_DEPENDENCY_math cna_math SharpRuntime::Xml.Serialization)
+    # System::Xml::Serialization, so the group that tests it links that component too --
+    # everywhere the component exists. plans/plan_dx.md DX-250/DX-269: on a Windows target it does
+    # not (see cmake/SharpRuntimeConsumption.cmake for the exact upstream reason), so both the
+    # source and dependency are absent rather than naming a target CMake would reject at generate
+    # time or compiling a source whose include root is unavailable.
+    if(CNA_SHARP_RUNTIME_HAS_XML_SERIALIZATION)
+        set(CNA_TEST_GROUP_DEPENDENCY_math cna_math SharpRuntime::Xml.Serialization)
+    else()
+        set(CNA_TEST_GROUP_DEPENDENCY_math cna_math)
+    endif()
     # The phone service adapts Game's lifecycle events, so its tests construct a Game.
     set(CNA_TEST_GROUP_DEPENDENCY_phone cna_phone cna_runtime)
     set(CNA_TEST_GROUP_DEPENDENCY_media cna_media)
@@ -443,6 +465,16 @@ if(CNA_BUILD_TESTS)
         list(APPEND CNA_FOCUSED_TEST_TARGETS "${_cna_focused_test_target}")
     endforeach()
     message(STATUS "CNA: focused unit-test targets: ${CNA_FOCUSED_TEST_TARGETS}")
+
+    if(MINGW AND
+       ((CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" AND CNA_DIRECTX9_COMPILED_EFFECTS) OR
+        (CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" AND CNA_DIRECTX11_COMPILED_EFFECTS) OR
+        (CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12" AND CNA_DIRECTX12_COMPILED_EFFECTS)))
+        target_link_options(CnaRendererTests PRIVATE
+            -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition)
+        cna_copy_mingw_runtime(CnaRendererTests)
+        cna_copy_sdl_runtime(CnaRendererTests)
+    endif()
 
     target_link_libraries(CnaTests PRIVATE
         cna_test_build_config
@@ -634,7 +666,7 @@ if(CNA_BUILD_TESTS)
     # plans/plan_webgpu.md WEBGPU-167: the same is now true of WebGPU's compiled-effect headers,
     # which the renderer header includes unconditionally once the option is on -- so the condition
     # is the presence of the MojoShader target, not one family's option. Any family that configured
-    # it has public headers a test TU can reach.
+    # it -- EasyGL, Vulkan, WebGPU or DirectX 9/11/12 -- has public headers a test TU can reach.
     if(TARGET cna_mojoshader)
         target_link_libraries(cna_test_build_config INTERFACE cna_mojoshader)
     endif()
@@ -1031,7 +1063,22 @@ if(CNA_BUILD_TESTS)
     # CTest runs then fail to find fixture files that the same binary finds fine when run
     # directly from the repo root. Mirrors the already-correct pattern in
     # cmake/Tests/EasyGLTests.cmake / VulkanTests.cmake.
-    gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    # plan_vulkan.md VULKAN-408: the Vulkan validation output gate, for the half of the suite the
+    # tree-wide sweep cannot reach. DISCOVERY_MODE PRE_TEST registers these cases at TEST time, so
+    # they are in no directory's TESTS property at configure time and
+    # cna_apply_vulkan_validation_gate() never sees them -- yet they are ~8 700 of this
+    # configuration's 9 117 CTests and every one of them runs the selected renderer. VULKAN-477's
+    # whole-suite inventory found all 20 of its messages here, in MetalResourceHealth's own
+    # device-outliving test. gtest_discover_tests(PROPERTIES ...) is the only hook that reaches
+    # them, and it is applied only where a VkDevice can exist at all.
+    cna_vulkan_validation_gate_applies(_cna_unit_tests_vk_gate)
+    if(_cna_unit_tests_vk_gate)
+        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            PROPERTIES FAIL_REGULAR_EXPRESSION "\\[Vulkan Validation\\]")
+    else()
+        gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+    endif()
 
     # D2D-118/D2D-119: a stable label and one explicit runner make the renderer's device-free
     # capability, blend, mip-policy, HRESULT and pixel-conversion contract independently runnable.
@@ -1057,8 +1104,15 @@ if(CNA_BUILD_TESTS)
     # Headless-safe audio everywhere; the video driver is left to the runner (Xvfb+x11 in CI, real
     # display or `xvfb-run` locally) because the MouseCursor tests need real cursors (the SDL dummy
     # driver has null cursors).
+    # plans/plan_vulkan.md VULKAN-153 (finding F-22): this test carried NO timeout, and it can
+    # deadlock -- observed twice on 2026-09-05, single-threaded in futex_wait with 2 seconds of CPU
+    # after 45 minutes of wall clock, both times while a second copy of this same suite was running
+    # from another checkout. Without a TIMEOUT, ctest never reaps it and the whole run stops there;
+    # the only way to finish was to kill the process by hand. Bounding it turns an unbounded stall
+    # into one reported failure. 1200s is generous against the measured range: 221s alone, 628s as
+    # the slowest healthy run seen under -j6. The deadlock itself is a separate row.
     cna_register_renderer_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
-        LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+        TIMEOUT 1200 LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
     # plans/plan_gltf.md GLTF-010: the glTF conformance ladder as one runnable label.
     #
@@ -1224,6 +1278,16 @@ if(CNA_BUILD_TESTS)
     # token does not match the string "PlatformWindowConformance".
     cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:DisplayInfoTests.*:GraphicsDevicePlatformWindowTests.*:GameWindowPlatformTest.*:*PlatformWindowConformance*
         LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
+
+    # plans/plan_vulkan.md VULKAN-154/VULKAN-157: the Xlib error-handler regression is the one
+    # platform test that needs a REAL X11 connection rather than SDL's dummy driver -- its whole
+    # subject is what Xlib does with a failing X request. Its own ctest, with the video driver and
+    # the display forced, because the gtest-discovered copy inside the shared binary inherits the
+    # shell's DISPLAY (finding F-22) and usually finds SDL already committed to another driver.
+    cna_register_renderer_test(NAME CnaPlatformXErrorHandlerTests
+        COMMAND CnaTests --gtest_filter=Sdl3XErrorHandlerTest.*
+        LABELS "platform" TIMEOUT 60
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # The rest of the platform contract is display-independent by construction, so it runs
     # unconditionally. Shuffled and repeated for the same reason the input suite is: SDL's

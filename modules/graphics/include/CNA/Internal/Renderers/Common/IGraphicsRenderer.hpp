@@ -31,6 +31,7 @@
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/DisplayColorSpace.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics { class Effect; }
@@ -233,6 +234,7 @@ namespace CNA::Internal::Renderers
     };
 
     class ITextureRenderer;
+    class IStorageTexture2DRenderer;
 
     /**
      * @brief A GPU buffer a compute shader reads and writes (an SSBO, in GL terms).
@@ -242,6 +244,7 @@ namespace CNA::Internal::Renderers
      * wrapper is where a typed view over it belongs.
      */
     class IStorageBufferRenderer
+        : public std::enable_shared_from_this<IStorageBufferRenderer>
     {
     public:
         /** @brief Virtual destructor. */
@@ -263,8 +266,72 @@ namespace CNA::Internal::Renderers
          */
         virtual void GetData(void* out, std::size_t byteSize) const = 0;
 
+        /**
+         * @brief Uploads bytes into an exact buffer range.
+         * @param byteOffset First destination byte.
+         * @param data Source bytes.
+         * @param byteSize Number of bytes to upload.
+         * @return True when the complete range was accepted.
+         */
+        virtual bool SetDataRangeEXT(
+            std::size_t byteOffset, const void* data, std::size_t byteSize)
+        {
+            if (byteOffset != 0) return false;
+            SetData(data, byteSize);
+            return true;
+        }
+
+        /**
+         * @brief Reads bytes from an exact buffer range.
+         * @param byteOffset First source byte.
+         * @param out Destination bytes.
+         * @param byteSize Number of bytes to read.
+         * @return True when the complete range was accepted.
+         */
+        virtual bool GetDataRangeEXT(
+            std::size_t byteOffset, void* out, std::size_t byteSize) const
+        {
+            if (byteOffset != 0) return false;
+            GetData(out, byteSize);
+            return true;
+        }
+
+        /**
+         * @brief Copies bytes to another renderer-side storage buffer.
+         * @param destination Destination buffer record.
+         * @param sourceByteOffset First source byte.
+         * @param destinationByteOffset First destination byte.
+         * @param byteSize Number of bytes to copy.
+         * @return True when the complete GPU-side copy was accepted.
+         */
+        virtual bool CopyToEXT(
+            IStorageBufferRenderer& /*destination*/, std::size_t /*sourceByteOffset*/,
+            std::size_t /*destinationByteOffset*/, std::size_t /*byteSize*/)
+        {
+            return false;
+        }
+
         /** @brief Returns the buffer's size in bytes. */
         [[nodiscard]] virtual std::size_t GetByteSize() const = 0;
+
+        /**
+         * @brief Returns the immutable portable usage mask.
+         * @return Raw `CNA::Graphics::StorageBufferUsage` bits.
+         */
+        [[nodiscard]] virtual std::uint32_t GetUsageEXT() const
+        {
+            // Compatible pre-descriptor behavior: storage, two-way transfer and indirect use.
+            return UINT32_C(0x0F);
+        }
+
+        /**
+         * @brief Returns the immutable portable direct CPU-access mask.
+         * @return Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         */
+        [[nodiscard]] virtual std::uint32_t GetCpuAccessEXT() const
+        {
+            return UINT32_C(0x03);
+        }
     };
 
     /**
@@ -318,6 +385,22 @@ namespace CNA::Internal::Renderers
         virtual void BindStorageBuffer(int /*binding*/, IStorageBufferRenderer* /*buffer*/) {}
 
         /**
+         * @brief Binds a read-only uniform/constant buffer to one program binding point.
+         *
+         * Returning false is the renderer-neutral refusal path; implementations must not accept
+         * and silently discard a constant-buffer binding.
+         *
+         * @param binding The binding index declared by the shader.
+         * @param buffer Shared buffer record, or null to clear the slot.
+         * @return True when the binding operation is implemented and accepted.
+         */
+        [[nodiscard]] virtual bool BindConstantBufferEXT(
+            int /*binding*/, IStorageBufferRenderer* /*buffer*/)
+        {
+            return false;
+        }
+
+        /**
          * @brief Binds a texture as a readable/writable image.
          *
          * @param unit       The image unit the shader declares.
@@ -326,6 +409,25 @@ namespace CNA::Internal::Renderers
          */
         virtual void BindImageTexture(int /*unit*/, ITextureRenderer* /*texture*/,
                                       int /*accessMode*/) {}
+
+        /**
+         * @brief Binds a tracked storage texture to a compute image slot.
+         *
+         * The shared record, rather than the public resource, is retained so deferred work can
+         * safely outlive public disposal. Returning false is the renderer-neutral refusal path;
+         * implementations must not accept and discard the binding.
+         *
+         * @param unit Direct image binding declared by the compute program.
+         * @param texture Renderer-owned storage texture record, or null to clear the slot.
+         * @param accessMode A `CNA::GraphicsImageAccess` ordinal.
+         * @return True when the binding was implemented and accepted.
+         */
+        [[nodiscard]] virtual bool BindStorageTexture2DEXT(
+            int /*unit*/, std::shared_ptr<IStorageTexture2DRenderer> /*texture*/,
+            int /*accessMode*/)
+        {
+            return false;
+        }
 
         /**
          * @brief Binds a texture to a sampler unit the program can sample.
@@ -339,6 +441,20 @@ namespace CNA::Internal::Renderers
          * @param texture The texture, or null to unbind.
          */
         virtual void BindTexture(int /*unit*/, ITextureRenderer* /*texture*/) {}
+
+        /**
+         * @brief Returns whether sampled textures use direct descriptor binding numbers.
+         *
+         * Source-language renderers return false and receive a matching integer sampler uniform
+         * after @ref BindTexture. Descriptor-language renderers return true because @p unit is
+         * already the shader binding and no name-based uniform exists.
+         *
+         * @return True when the sampled-texture binding is direct.
+         */
+        [[nodiscard]] virtual bool UsesDirectSampledTextureBindingsEXT() const
+        {
+            return false;
+        }
 
         /** @brief Returns whether a program is currently linked and usable. */
         [[nodiscard]] virtual bool IsValid() const = 0;
@@ -360,7 +476,7 @@ namespace CNA::Internal::Renderers
     public:
         virtual ~ITextureCubeRenderer() = default;
         /**
-         * @brief Uploads raw RGBA8 pixels into a sub-rectangle of a single cube face.
+         * @brief Uploads format-native texels into a sub-rectangle of a single cube face.
          *
          * REMED-GFX-135, the write-side counterpart of `GetData`'s contract below. Returns **true
          * only when the COMPLETE requested region was stored**, and false when this renderer stored
@@ -375,10 +491,9 @@ namespace CNA::Internal::Renderers
          * or never attempted at all. The shared layer now raises `System::NotSupportedException` on
          * false, so the one thing a renderer can never do is accept data it does not keep.
          *
-         * `data` holds the region as tightly packed RGBA8 rows, top row first, so its row pitch is
-         * `w * 4`. The caller's memory is valid only for the duration of the call: an implementation
-         * that hands it to an asynchronous native upload must copy or stage it before returning
-         * true.
+         * `data` holds the region as tightly packed rows in the texture's SurfaceFormat. The
+         * caller's memory is valid only for the duration of the call: an implementation that hands
+         * it to an asynchronous native upload must copy or stage it before returning true.
          *
          * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
          * @param level      Mip level to write.
@@ -386,8 +501,8 @@ namespace CNA::Internal::Renderers
          * @param y          Top edge of the requested region, in texels.
          * @param w          Width of the requested region, in texels.
          * @param h          Height of the requested region, in texels.
-         * @param data       Source pixels, tightly packed RGBA8 rows, top row first.
-         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @param data       Source texels, tightly packed in the texture's SurfaceFormat.
+         * @param dataLength Size of @p data in bytes.
          * @return True if the whole region was stored; false if this renderer stored nothing.
          */
         [[nodiscard]] virtual bool SetData(int face, int level, int x, int y, int w, int h,
@@ -418,7 +533,7 @@ namespace CNA::Internal::Renderers
             return false;
         }
         /**
-         * @brief Reads back raw RGBA8 pixels from a sub-rectangle of a single cube face.
+         * @brief Reads back format-native texels from a sub-rectangle of a single cube face.
          *
          * REMED-GFX-130, extending REMED-GFX-127's contract to this interface. Returns **true only
          * when the complete requested region was written into @p data**, and false when this
@@ -441,8 +556,10 @@ namespace CNA::Internal::Renderers
          * @param y          Top edge of the requested region, in texels.
          * @param w          Width of the requested region, in texels.
          * @param h          Height of the requested region, in texels.
-         * @param data       Destination for tightly packed RGBA8 rows, top row first.
-         * @param dataLength Size of @p data in bytes; exactly w * h * 4.
+         * @param data       Destination for tightly packed texels in the texture's SurfaceFormat.
+         *                   A block-compressed cube renderer writes decoded RGBA8 because the
+         *                   public TextureCube readback contract receives Color elements.
+         * @param dataLength Size of @p data in bytes.
          * @return True if the whole region was written; false if this renderer read nothing back.
          */
         [[nodiscard]] virtual bool GetData(int face, int level, int x, int y, int w, int h,
@@ -466,6 +583,8 @@ namespace CNA::Internal::Renderers
         /// requiring a shared, cross-renderer `BindTextureCube` signature change. Defaults to 0
         /// ("unknown/unsupported"), harmless for every renderer that does not implement sampling.
         [[nodiscard]] virtual int GetSizeEXT() const noexcept { return 0; }
+        /** @brief Returns the raw SurfaceFormat ordinal used to create this texture. */
+        [[nodiscard]] virtual int GetSurfaceFormatEXT() const noexcept { return 0; }
     };
 
     /**
@@ -481,12 +600,11 @@ namespace CNA::Internal::Renderers
     public:
         virtual ~ITexture3DRenderer() = default;
         /**
-         * @brief Uploads raw RGBA8 voxels into a sub-volume of the given mip level.
+         * @brief Uploads format-native voxels into a sub-volume of the given mip level.
          *
          * REMED-GFX-135. Identical contract to `ITextureCubeRenderer::SetData` -- see its
          * documentation for why there is no default body. `data` holds the requested box slice by
-         * slice (front to back), each slice as tightly packed RGBA8 rows with the top row first, so
-         * the row pitch is `w * 4` and the slice pitch is `w * h * 4`.
+         * slice (front to back), each slice as tightly packed rows in the texture's SurfaceFormat.
          *
          * @param level      Mip level to write.
          * @param x          Left edge of the requested box, in voxels.
@@ -495,20 +613,20 @@ namespace CNA::Internal::Renderers
          * @param w          Width of the requested box, in voxels.
          * @param h          Height of the requested box, in voxels.
          * @param depth      Depth of the requested box, in voxels.
-         * @param data       Source voxels, tightly packed RGBA8.
-         * @param dataLength Size of @p data in bytes; at least w * h * depth * 4.
+         * @param data       Source voxels, tightly packed in the texture's SurfaceFormat.
+         * @param dataLength Size of @p data in bytes.
          * @return True if the whole box was stored; false if this renderer stored nothing.
          */
         [[nodiscard]] virtual bool SetData(int level, int x, int y, int z,
                                            int w, int h, int depth,
                                            const void* data, int dataLength) = 0;
         /**
-         * @brief Reads back raw RGBA8 voxels from a sub-volume of the given mip level.
+         * @brief Reads back format-native voxels from a sub-volume of the given mip level.
          *
          * REMED-GFX-130. Identical contract to `ITextureCubeRenderer::GetData` above -- see its
          * documentation for why the default is `false` rather than a silent no-op. `data` receives
-         * the requested box slice by slice (front to back), each slice as tightly packed RGBA8 rows
-         * with the top row first, so the row pitch is `w * 4` and the slice pitch is `w * h * 4`.
+         * the requested box slice by slice (front to back), each slice as tightly packed rows in
+         * the texture's SurfaceFormat.
          *
          * @param level      Mip level to read.
          * @param x          Left edge of the requested box, in voxels.
@@ -517,8 +635,10 @@ namespace CNA::Internal::Renderers
          * @param w          Width of the requested box, in voxels.
          * @param h          Height of the requested box, in voxels.
          * @param depth      Depth of the requested box, in voxels.
-         * @param data       Destination for the tightly packed RGBA8 box.
-         * @param dataLength Size of @p data in bytes; exactly w * h * depth * 4.
+         * @param data       Destination for a tightly packed format-native box. A
+         *                   block-compressed volume renderer writes decoded RGBA8 because the
+         *                   public Texture3D readback contract receives Color elements.
+         * @param dataLength Size of @p data in bytes.
          * @return True if the whole box was written; false if this renderer read nothing back.
          */
         [[nodiscard]] virtual bool GetData(int level, int x, int y, int z,
@@ -539,6 +659,101 @@ namespace CNA::Internal::Renderers
         {
             width = height = depth = 0;
         }
+        /** @brief Returns the raw SurfaceFormat ordinal used to create this texture. */
+        [[nodiscard]] virtual int GetSurfaceFormatEXT() const noexcept { return 0; }
+    };
+
+    /**
+     * @brief Renderer-owned record for one sampled two-dimensional texture array.
+     *
+     * `CNA::Graphics::Texture2DArray` owns this record through shared lifetime identity so future
+     * sampled bindings can retain internal work safely without retaining or dereferencing the
+     * public `GraphicsResource`. The interface intentionally exposes no native image/view handle.
+     * Layer and mip transfers are part of plans/plan_modern.md `MOD-2226`; defaults refuse them
+     * so a renderer cannot claim success by silently discarding bytes.
+     */
+    class ITexture2DArrayRenderer
+        : public std::enable_shared_from_this<ITexture2DArrayRenderer>
+    {
+    public:
+        /** @brief Releases the renderer-owned texture-array record. */
+        virtual ~ITexture2DArrayRenderer() = default;
+
+        /**
+         * @brief Uploads one validated rectangle of one array subresource.
+         *
+         * @return True only after the entire byte range has been accepted by the renderer.
+         */
+        [[nodiscard]] virtual bool SetData(
+            int /*layer*/, int /*mipLevel*/, int /*x*/, int /*y*/, int /*width*/, int /*height*/,
+            const void* /*data*/, std::size_t /*byteCount*/)
+        {
+            return false;
+        }
+
+        /**
+         * @brief Reads one validated rectangle of one array subresource.
+         *
+         * @return True only after the entire requested byte range has been written.
+         */
+        [[nodiscard]] virtual bool GetData(
+            int /*layer*/, int /*mipLevel*/, int /*x*/, int /*y*/, int /*width*/, int /*height*/,
+            void* /*data*/, std::size_t /*byteCount*/) const
+        {
+            return false;
+        }
+    };
+
+    /**
+     * @brief Renderer-owned record for one two-dimensional storage texture.
+     *
+     * `CNA::Graphics::StorageTexture2D` owns this record through shared lifetime identity so a
+     * deferred compute binding can retain native work without retaining or dereferencing the
+     * public `GraphicsResource`. The interface deliberately exposes no native image/view handle.
+     * Defaults refuse transfers so an unimplemented renderer cannot silently discard bytes.
+     */
+    class IStorageTexture2DRenderer
+        : public std::enable_shared_from_this<IStorageTexture2DRenderer>
+    {
+    public:
+        /** @brief Releases the renderer-owned storage-texture record. */
+        virtual ~IStorageTexture2DRenderer() = default;
+
+        /**
+         * @brief Uploads one validated rectangle of one mip level.
+         * @param mipLevel Zero-based mip level.
+         * @param x Rectangle origin on the x axis.
+         * @param y Rectangle origin on the y axis.
+         * @param width Rectangle width in texels.
+         * @param height Rectangle height in texels.
+         * @param data Source bytes.
+         * @param byteCount Exact source-byte count.
+         * @return True only after the complete byte range has been accepted.
+         */
+        [[nodiscard]] virtual bool SetData(
+            int /*mipLevel*/, int /*x*/, int /*y*/, int /*width*/, int /*height*/,
+            const void* /*data*/, std::size_t /*byteCount*/)
+        {
+            return false;
+        }
+
+        /**
+         * @brief Reads one validated rectangle of one mip level.
+         * @param mipLevel Zero-based mip level.
+         * @param x Rectangle origin on the x axis.
+         * @param y Rectangle origin on the y axis.
+         * @param width Rectangle width in texels.
+         * @param height Rectangle height in texels.
+         * @param data Destination bytes.
+         * @param byteCount Exact destination-byte count.
+         * @return True only after the complete requested byte range has been written.
+         */
+        [[nodiscard]] virtual bool GetData(
+            int /*mipLevel*/, int /*x*/, int /*y*/, int /*width*/, int /*height*/,
+            void* /*data*/, std::size_t /*byteCount*/) const
+        {
+            return false;
+        }
     };
 
     /**
@@ -551,10 +766,10 @@ namespace CNA::Internal::Renderers
         virtual ~ITextureRenderer() = default;
         virtual int GetWidth() const = 0;
         virtual int GetHeight() const = 0;
-        /// Replaces full level-0 texture pixels in-place. stride = row bytes (width * 4 for RGBA).
-        virtual void UpdatePixels(const uint8_t* rgba, int stride) {}
+        /// Replaces full level-0 texture data in-place. stride is the format-native row size.
+        virtual void UpdatePixels(const uint8_t* data, int stride) {}
         /// Uploads a specific mip level. levelW/levelH are the dimensions at that level.
-        virtual void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) {}
+        virtual void UpdatePixelsLevel(int level, const uint8_t* data, int levelW, int levelH) {}
         /**
          * Reports whether the renderer owns deterministic readable bytes for a mip level even when
          * Texture2D has no caller-authored CPU shadow for it. The default is false: allocated GPU
@@ -579,7 +794,7 @@ namespace CNA::Internal::Renderers
         /// of keeping its own duplicate copy of the pixel data.
         virtual void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> /*pixels*/) {}
         /**
-         * @brief Reads back raw RGBA8 pixels from a sub-rectangle of the given mip level.
+         * @brief Reads back format-native texels from a sub-rectangle of the given mip level.
          *
          * REMED-GFX-127. Returns **true only when the complete requested region was written into
          * @p data**, and false when this renderer performed no readback at all. There is no third
@@ -604,7 +819,7 @@ namespace CNA::Internal::Renderers
          * @param y          Top edge of the requested region, in pixels.
          * @param w          Width of the requested region, in pixels.
          * @param h          Height of the requested region, in pixels.
-         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param data       Destination for tightly packed texels in the texture's SurfaceFormat.
          * @param dataLength Size of @p data in bytes.
          * @return True if the whole region was written; false if this renderer read nothing back.
          */
@@ -695,11 +910,12 @@ namespace CNA::Internal::Renderers
         /// See IRenderTargetRenderer::GetMultiSampleCount.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
         /**
-         * @brief Returns the depth/stencil format actually backing this cube target.
+         * @brief Cube equivalent of IRenderTargetRenderer::GetAppliedDepthStencilFormatEXT.
          *
-         * This is the cube counterpart of
-         * `IRenderTargetRenderer::GetAppliedDepthStencilFormatEXT`. The identity default preserves
-         * existing renderers which allocate exactly what was requested.
+         * plans/plan_vulkan.md `VULKAN-215`. Its 2D twin has had this since renderers began
+         * substituting depth formats; the cube did not, so `RenderTargetCube.DepthStencilFormat`
+         * could only ever echo the request. The identity default keeps every renderer that does
+         * not substitute exactly as it was.
          *
          * @param requestedDepthStencilFormat Requested DepthFormat ordinal.
          * @return Applied DepthFormat ordinal.
@@ -870,16 +1086,16 @@ namespace CNA::Internal::Renderers
     /// Renderer handle for a compiled shader program (vertex + fragment).
     /// Created via IGraphicsRenderer::CreateEffectRenderer().
     /**
-     * @brief The shading dialect a renderer's custom `ShaderEffect` sources must be written in.
+     * @brief The shader payload dialect a renderer's custom `ShaderEffect` must use.
      * CNAEXT.
      *
-     * A `ShaderEffect` has always been renderer-specific source text -- the framework hands the
-     * string to the renderer and the renderer's own compiler decides. What was missing was any
-     * SUPPORTED way for an application to ask which dialect it should supply, so the only way to
-     * know was to infer it from the build's renderer identity. That is wrong twice over: in a
-     * multi-renderer build the identity is not the active renderer, and a renderer that is itself
-     * an abstraction over several native APIs (IGL, LLGL, Diligent) does not have one answer per
-     * build at all -- IGL's is chosen per process by `CNA_IGL_BACKEND`.
+     * A `ShaderEffect` has always been renderer-specific -- the framework hands its two string
+     * payloads to the renderer and the renderer's own compiler or bytecode loader decides. What
+     * was missing was any SUPPORTED way for an application to ask which payload dialect it should
+     * supply, so the only way to know was to infer it from the build's renderer identity. That is
+     * wrong twice over: in a multi-renderer build the identity is not the active renderer, and a
+     * renderer that is itself an abstraction over several native APIs (IGL, LLGL, Diligent) does
+     * not have one answer per build at all -- IGL's is chosen per process by `CNA_IGL_BACKEND`.
      *
      * `Unknown` is the honest default and what every renderer that has not declared one answers.
      * It does not mean "no shaders"; it means this renderer has not stated a dialect, and an
@@ -900,7 +1116,9 @@ namespace CNA::Internal::Renderers
         /** @brief Metal Shading Language. */
         Msl,
         /** @brief WebGPU Shading Language. */
-        Wgsl
+        Wgsl,
+        /** @brief Already-compiled SPIR-V bytecode, not Vulkan GLSL source text. */
+        SpirV
     };
 
     class IEffectRenderer
@@ -993,6 +1211,34 @@ namespace CNA::Internal::Renderers
         /// simultaneously since each occupies a distinct binding target; the shader's own sampler
         /// type (`sampler2D`/`samplerCube`/`sampler3D`) determines which one is actually sampled.
         virtual void BindTexture3D(int unit, ITexture3DRenderer* texture) {}
+        /**
+         * @brief Binds or clears a sampled two-dimensional texture array.
+         *
+         * The shared record is intentional: an accepted deferred draw must not retain the public
+         * `GraphicsResource`, but its renderer work must remain alive until the consumer releases
+         * it. A null record clears the unit. False means the renderer did not implement this path.
+         *
+         * @param unit Zero-based texture-array sampler unit.
+         * @param texture Renderer-owned array record, or null to clear the unit.
+         * @return True when the binding operation was implemented and accepted.
+         */
+        [[nodiscard]] virtual bool BindTexture2DArrayEXT(
+            int /*unit*/, std::shared_ptr<ITexture2DArrayRenderer> /*texture*/)
+        {
+            return false;
+        }
+
+        /**
+         * @brief Binds or clears a storage texture through an ordinary sampled `texture2D` slot.
+         * @param unit Zero-based 2D sampler unit.
+         * @param texture Shared renderer record, or null to clear the unit.
+         * @return True when sampled storage textures are implemented and the request was accepted.
+         */
+        [[nodiscard]] virtual bool BindStorageTexture2DEXT(
+            int /*unit*/, std::shared_ptr<IStorageTexture2DRenderer> /*texture*/)
+        {
+            return false;
+        }
     };
 
     class ISpriteBatchRenderer
@@ -1023,9 +1269,25 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Sets every public `SamplerState` property for the current batch.
          *
-         * The default preserves older renderers by forwarding the filter and two historically
-         * exposed address axes through their existing virtual hooks. Renderers that can express
-         * anisotropy, mip clamps, LOD bias, or the W axis override this complete-state hook.
+         * This is the ONE hook SpriteBatch calls, and it carries all seven properties. Three
+         * designs for this job met here when `next` merged into `sdlgpu` (2026-09-11) and this is
+         * the one that survived, because it is the only one that is complete:
+         *
+         *   - `sdlgpu` added this complete-state hook. It alone carries `maxAnisotropy`.
+         *   - the `dx` branch added `SetSamplerAddressW` plus `SetSamplerMipState`
+         *     (plans/plan_dx.md DX-257).
+         *   - the `vulkan` branch added `SetSamplerAddressModeWEXT` (plans/plan_vulkan.md
+         *     VULKAN-164) for the same W axis under a different name.
+         *
+         * All three have real implementors in this tree -- SdlGpu, WebGPU, DirectX 9 and EasyGL
+         * override this one; DirectX 9/11/12 override `SetSamplerAddressW`/`SetSamplerMipState`;
+         * Vulkan and EasyGL override `SetSamplerAddressModeWEXT`. So the default below FANS OUT to
+         * every legacy hook rather than only to the two it originally forwarded. A renderer that
+         * overrides this method receives everything directly; one that overrides only the older
+         * hooks keeps receiving exactly what it did before, W and mip state included. Neither can
+         * silently stop being told, which is what calling just one of the three would have caused.
+         *
+         * This retires the "unifying them is a follow-up" note the `vulkan` merge left here.
          *
          * @param textureFilter Raw `TextureFilter` ordinal.
          * @param addressU Raw `TextureAddressMode` ordinal for U.
@@ -1035,12 +1297,52 @@ namespace CNA::Internal::Renderers
          * @param maxMipLevel Most detailed mip level the sampler may use.
          * @param lodBias Mipmap level-of-detail bias.
          */
-        virtual void SetSamplerState(int textureFilter, int addressU, int addressV, int /*addressW*/,
-                                     int /*maxAnisotropy*/, int /*maxMipLevel*/, float /*lodBias*/)
+        virtual void SetSamplerState(int textureFilter, int addressU, int addressV, int addressW,
+                                     int /*maxAnisotropy*/, int maxMipLevel, float lodBias)
         {
             SetSamplerFilter(textureFilter);
             SetSamplerAddressMode(addressU, addressV);
+            SetSamplerMipState(maxMipLevel, lodBias);
+            SetSamplerAddressW(addressW);
+            SetSamplerAddressModeWEXT(addressW);
         }
+
+        /**
+         * @brief Sets the mip-level clamp and bias applied to each Draw call.
+         *
+         * Reached through `SetSamplerState`'s default fan-out; see there.
+         *
+         * @param maxMipLevel Most detailed mip level the sampler may select.
+         * @param lodBias Bias added to the computed mip level.
+         */
+        virtual void SetSamplerMipState(int /*maxMipLevel*/, float /*lodBias*/) {}
+        /**
+         * @brief Sets the volume-texture W address mode applied to each Draw call.
+         *
+         * The `dx` branch's spelling; DirectX 9/11/12 implement this one. Reached through
+         * `SetSamplerState`'s default fan-out.
+         *
+         * @param addressW Raw TextureAddressMode int value for W (0=Wrap, 1=Clamp, 2=Mirror).
+         */
+        virtual void SetSamplerAddressW(int /*addressW*/) {}
+        /**
+         * @brief CNAEXT. Sets the W texture address mode of the batch's SamplerState.
+         *
+         * The `vulkan` branch's spelling of the same axis (plans/plan_vulkan.md VULKAN-164); Vulkan
+         * and EasyGL implement this one. Kept alongside `SetSamplerAddressW` because both have
+         * implementors, and both are reached through `SetSamplerState`'s default fan-out -- so a
+         * renderer is told exactly once per name it actually overrides.
+         *
+         * Separate from `SetSamplerAddressMode` because that method's two-argument signature is
+         * implemented by every renderer and widening it would break them all. XNA's SpriteBatch
+         * assigns the WHOLE SamplerState to `GraphicsDevice.SamplerStates[0]`, W included; CNA
+         * forwarded only the filter and the U/V axes, so a state that differed from a preset only
+         * in `AddressW` reached no renderer at all. That is invisible to 2D sampling -- which is
+         * why it went unnoticed -- and decides what a `sampler3D` reads outside [0,1].
+         *
+         * @param addressW The batch SamplerState's `TextureAddressMode` ordinal for W.
+         */
+        virtual void SetSamplerAddressModeWEXT(int /*addressW*/) {}
         /**
          * @brief CNAEXT. Tells the renderer whether the batch SpriteBatch::Begin() just started is
          *        SpriteSortMode::Immediate.
@@ -1370,6 +1672,9 @@ namespace CNA::Internal::Renderers
         bool pbr                 = false;
         /// Number of instances to draw (1 = non-instanced).
         int instanceCount = 1;
+        /// plans/plan_modern.md MOD-2232: first logical instance for the capability-gated
+        /// base-instance route. The XNA draw path and every older renderer see zero.
+        int firstInstance = 0;
         /// REMED-GFX-201/202: every active declared `VertexBufferBinding`, in public slot order,
         /// captured by value -- per-vertex and per-instance alike, on every draw route.
         /// `vertexStreams[0]` is always the stream `Draw*PrimitivesEx`'s own `vb` argument refers
@@ -1930,7 +2235,11 @@ namespace CNA::Internal::Renderers
         /// Called by GraphicsDevice when GraphicsDeviceManager::ApplyChanges() is used.
         virtual void SetPresentationMode(int mode) = 0;
         /// Updates the swap interval at runtime (0=immediate, 1=VSync, 2=half-rate).
-        /// Renderers that cannot change VSync at runtime (e.g. Vulkan) silently ignore this.
+        /// A renderer that cannot change VSync after construction ignores this; one that can is
+        /// expected to apply it, not merely record it. The Vulkan renderer used to be named here
+        /// as an example of the former and is no longer one -- it rebuilds its swapchain with the
+        /// matching VkPresentModeKHR (plans/plan_vulkan.md VULKAN-332), which is the same
+        /// mechanism it already ran on every resize.
         virtual void SetSwapInterval(int /*interval*/) {}
         /**
          * @brief The swap interval this renderer was last asked for, honoured by the driver or not.
@@ -2101,6 +2410,25 @@ namespace CNA::Internal::Renderers
             return ShaderDialectEXT::Unknown;
         }
 
+        /**
+         * @brief Whether this renderer's implemented path consumes one explicit shader payload.
+         *
+         * plans/plan_modern.md `MOD-2210`. The renderer boundary deliberately carries raw
+         * append-only ordinals rather than depending on a public extension enum. The shared
+         * default refuses every language/stage pair, including unknown and future values, so a
+         * renderer cannot acquire support merely because a new identity was appended.
+         *
+         * @param language `CNA::ShaderLanguageEXT` ordinal.
+         * @param stage `CNA::ShaderStageEXT` ordinal.
+         * @return True only when the implemented shader intake consumes that exact pair.
+         */
+        [[nodiscard]] virtual bool SupportsShaderLanguageEXT(int language, int stage) const
+        {
+            (void)language;
+            (void)stage;
+            return false;
+        }
+
         [[nodiscard]] virtual RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const
         {
             (void)surfaceFormat;
@@ -2234,6 +2562,23 @@ namespace CNA::Internal::Renderers
         }
 
         /**
+         * @brief Returns audited usage support for one `SurfaceFormat` ordinal.
+         *
+         * `knownUsages` and `supportedUsages` use `CNA::RendererFormatUsage` bits. The default
+         * leaves every usage unknown. A renderer sets a known bit only when both its native
+         * device and its implemented CNA path have been checked; native availability alone is
+         * not a support promise.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal to classify.
+         * @return Known and supported usage masks; supported is always a subset of known.
+         */
+        [[nodiscard]] virtual CNA::RendererFormatSupport GetSurfaceFormatUsageSupportEXT(
+            int /*surfaceFormat*/) const
+        {
+            return {};
+        }
+
+        /**
          * @brief Whether the content loaders should keep block-compressed content compressed.
          *
          * WEBGPU-144 Phase 2 / XNB-24: `Texture2D::FromStream` (DDS) and the `.xnb` Texture2D reader
@@ -2286,18 +2631,71 @@ namespace CNA::Internal::Renderers
         virtual std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) { return nullptr; }
         virtual std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) { return nullptr; }
 
+        /**
+         * @brief Creates a sampled two-dimensional texture array, or refuses it by returning null.
+         *
+         * This renderer-neutral factory is false by default. A renderer may override it only when
+         * its `MaxTextureArrayLayers` and every requested per-format usage bit describe the same
+         * implemented path. Native hardware availability alone is not sufficient.
+         *
+         * @param width Level-zero width in texels.
+         * @param height Level-zero height in texels.
+         * @param layerCount Number of array layers.
+         * @param mipLevelCount Number of allocated mip levels.
+         * @param surfaceFormat `SurfaceFormat` ordinal.
+         * @param usage `CNA::Graphics::Texture2DArrayUsage` bit mask.
+         * @return Renderer-owned record, or null when this path is unavailable.
+         */
+        virtual std::unique_ptr<ITexture2DArrayRenderer> CreateTexture2DArrayEXT(
+            int /*width*/, int /*height*/, int /*layerCount*/, int /*mipLevelCount*/,
+            int /*surfaceFormat*/, std::uint32_t /*usage*/)
+        {
+            return nullptr;
+        }
+
+        /**
+         * @brief Creates a two-dimensional storage texture, or refuses it by returning null.
+         *
+         * The factory is false by default. A renderer may override it only when its published
+         * storage-image limit and all requested per-format usages describe the same implemented
+         * allocation and transfer path.
+         *
+         * @param width Level-zero width in texels.
+         * @param height Level-zero height in texels.
+         * @param mipLevelCount Number of allocated mip levels.
+         * @param surfaceFormat `SurfaceFormat` ordinal.
+         * @param usage `CNA::Graphics::StorageTexture2DUsage` bit mask.
+         * @return Renderer-owned record, or null when this path is unavailable.
+         */
+        virtual std::unique_ptr<IStorageTexture2DRenderer> CreateStorageTexture2DEXT(
+            int /*width*/, int /*height*/, int /*mipLevelCount*/, int /*surfaceFormat*/,
+            std::uint32_t /*usage*/)
+        {
+            return nullptr;
+        }
+
         /// Creates an off-screen FBO-backed render target. Returns nullptr on
         /// renderers that do not support render targets. `depthFormat` is the raw ordinal of
         /// Microsoft::Xna::Framework::Graphics::DepthFormat (None=0, Depth16=1, Depth24=2,
         /// Depth24Stencil8=3), passed as `int` to avoid coupling this renderer-agnostic header
         /// to the XNA namespace — mirrors CreateTexture3D/CreateTextureCube's `surfaceFormat`
         /// convention. EasyGL and Bgfx honor the exact requested format (None omits the
-        /// depth/stencil attachment entirely); Vulkan always allocates a combined depth+stencil
-        /// buffer using its device-wide format regardless of the exact value requested, since
-        /// varying it per render target would require a depth-format-keyed render pass/pipeline
-        /// cache (Vulkan render-pass-compatibility rules require matching attachment formats
-        /// for the pipelines this renderer currently shares across the backbuffer and every
-        /// render target) — a real architectural change, tracked as Task 911 (Task 877).
+        /// depth/stencil attachment entirely); **Vulkan now does too** — Task 911 made the
+        /// architectural change this comment used to describe as pending, so each render target
+        /// picks its own real `VkFormat` via `PickDepthFormat` (`VK_FORMAT_UNDEFINED` for
+        /// `DepthFormat::None`, i.e. no attachment at all) and each distinct format gets its own
+        /// render pass and pipeline-cache entries. `plans/plan_vulkan.md` D-04 / `VULKAN-481`.
+        /// **What this said before, kept so the correction is visible rather than silent:**
+        /// "Vulkan always allocates a combined depth+stencil buffer using its device-wide format
+        /// regardless of the exact value requested … a real architectural change, tracked as Task
+        /// 911 (Task 877)." True when written; the change landed. Since `VULKAN-215` the applied
+        /// format is also *reported* — `RenderTarget2D`/`RenderTargetCube.DepthStencilFormat` show
+        /// what was allocated rather than what was asked for.
+        ///
+        /// The **back buffer** is the one place the old sentence still half-applies: it allocates
+        /// depth unconditionally, even for a `None` request. That is measured and deliberate —
+        /// `VULKAN-349` weighed it and left it, recording that the cost is portability rather than
+        /// memory.
         /// `mipMap` requests a full mip chain, auto-generated from level 0 when the target is
         /// unbound (matching FNA3D's OPENGL_ResolveTarget behavior) — all 3 renderers implement
         /// this (Task 336/878/906). `multiSampleCount` requests a multisampled color (and depth,
@@ -2399,6 +2797,25 @@ namespace CNA::Internal::Renderers
             return nullptr;
         }
 
+        /**
+         * @brief Creates a buffer with exact portable usage and direct CPU-access intent.
+         *
+         * This separate null default prevents an older renderer from accepting roles its native
+         * allocation did not declare. Individual roles carry their own capability requirements;
+         * in particular, indirect-only buffers do not require compute support. The compatible
+         * constructor continues through the factory above.
+         *
+         * @param byteSize Positive allocation size.
+         * @param usage Raw `CNA::Graphics::StorageBufferUsage` bits.
+         * @param cpuAccess Raw `CNA::Graphics::StorageBufferCpuAccess` bits.
+         * @return Renderer-side buffer record, or null when unsupported.
+         */
+        virtual std::unique_ptr<IStorageBufferRenderer> CreateStorageBufferEXT(
+            std::size_t /*byteSize*/, std::uint32_t /*usage*/, std::uint32_t /*cpuAccess*/)
+        {
+            return nullptr;
+        }
+
         /// Runs the bound compute program over a grid of work groups. A no-op where unsupported.
         virtual void DispatchCompute(IComputeShaderRenderer* /*shader*/, int /*groupsX*/,
                                      int /*groupsY*/, int /*groupsZ*/) {}
@@ -2444,6 +2861,13 @@ namespace CNA::Internal::Renderers
         /// SupportsComputeShadersEXT states.
         [[nodiscard]] virtual bool SupportsIndirectDrawEXT() const { return false; }
 
+        /**
+         * @brief Reports whether instanced draws consume a non-zero first-instance value.
+         *
+         * @return `true` when `GpuDrawParams::firstInstance` is supported; otherwise `false`.
+         */
+        [[nodiscard]] virtual bool SupportsBaseInstanceDrawingEXT() const { return false; }
+
         /// plans/plan_modern.md MOD-1514: whether a `Texture2D` can be bound to a compute shader as an
         /// image. Separate from `SupportsComputeShadersEXT` because the two genuinely differ: GL ES
         /// 3.1 requires an *immutable* texture (`glTexStorage2D`) for `glBindImageTexture`, and
@@ -2451,6 +2875,15 @@ namespace CNA::Internal::Renderers
         /// supports compute still cannot bind one. Desktop GL accepts a mutable texture. False by
         /// default, like every other promise here.
         [[nodiscard]] virtual bool SupportsComputeImageBindingEXT() const { return false; }
+
+        /// plan_vulkan.md VULKAN-164: whether a `Texture3D` bound through
+        /// `IEffectRenderer::BindTexture3D` is actually SAMPLED by the shader, as distinct from
+        /// `GraphicsCapability::Texture3D`, which only promises that a volume can be uploaded and
+        /// read back. The two were conflated until a renderer grew the second without the first.
+        ///
+        /// Defaults to false, the conservative answer: a renderer that samples volumes says so
+        /// here, and one that has not been measured under-claims rather than over-claims.
+        [[nodiscard]] virtual bool SupportsTexture3DSamplingEXT() const { return false; }
 
         /// plans/plan_modern.md MOD-2092: the colour space the swap chain is currently presenting in.
         /// `Srgb` by default and for every CNA renderer today -- an HDR swap chain is a property of
@@ -2507,6 +2940,84 @@ namespace CNA::Internal::Renderers
 
         /// The largest product of a compute shader's local sizes.
         [[nodiscard]] virtual int GetMaxComputeWorkGroupInvocationsEXT() const { return 0; }
+
+        /**
+         * @brief Returns the largest byte range usable by one storage-buffer binding.
+         * @return Maximum bytes, or zero when storage buffers are unavailable or unclassified.
+         */
+        [[nodiscard]] virtual std::uint64_t GetMaxStorageBufferBytesEXT() const { return 0; }
+
+        /**
+         * @brief Returns the largest byte range usable by one uniform/constant-buffer binding.
+         * @return Maximum bytes, or zero when constant buffers are unavailable or unclassified.
+         */
+        [[nodiscard]] virtual std::uint64_t GetMaxUniformBufferBytesEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum compute-stage storage-buffer binding count.
+         * @return Maximum binding count, or zero when unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxComputeStorageBufferBindingsEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum sampled two-dimensional texture-array layer count.
+         * @return Maximum layer count, or zero when texture arrays are unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxTextureArrayLayersEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum sampled-texture count visible to one shader stage.
+         * @return Maximum sampled textures, or zero when unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxSampledTexturesPerShaderStageEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum storage-image count visible to one shader stage.
+         * @return Maximum storage images, or zero when unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxStorageImagesPerShaderStageEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum native vertex-buffer bindings consumed by one draw.
+         * @return Maximum vertex bindings, or zero when unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxVertexInputBindingsEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum vertex attributes consumed by one draw.
+         * @return Maximum attributes, or zero when unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxVertexInputAttributesEXT() const { return 0; }
+
+        /**
+         * @brief Returns the maximum colour attachments writable by one graphics draw.
+         * @return Maximum colour attachments, or zero when unsupported or unclassified.
+         */
+        [[nodiscard]] virtual int GetMaxColorAttachmentsEXT() const { return 0; }
+
+        /**
+         * @brief Returns required storage-buffer binding-offset alignment in bytes.
+         * @return Required alignment, or zero when storage buffers are unavailable or unclassified.
+         */
+        [[nodiscard]] virtual std::uint64_t GetMinStorageBufferOffsetAlignmentEXT() const
+        {
+            return 0;
+        }
+
+        /**
+         * @brief Returns required uniform/constant-buffer binding-offset alignment in bytes.
+         * @return Required alignment, or zero when constant buffers are unavailable or unclassified.
+         */
+        [[nodiscard]] virtual std::uint64_t GetMinUniformBufferOffsetAlignmentEXT() const
+        {
+            return 0;
+        }
+
+        /**
+         * @brief Returns one GPU timestamp tick's duration in picoseconds.
+         * @return Picoseconds per tick, rounded to the nearest integer, or zero when unavailable.
+         */
+        [[nodiscard]] virtual std::uint64_t GetTimestampPeriodPicosecondsEXT() const { return 0; }
 
         /// Activates a specific face of a cube-map render target for rendering.
         /// Pass nullptr to restore the default back buffer.
@@ -3012,15 +3523,12 @@ namespace CNA::Internal::Renderers
         /// vkCmdInsertDebugUtilsLabelEXT when VK_EXT_debug_utils is available.
         virtual void SetStringMarkerEXT(const char* /*marker*/) {}
 
-        /// Simulates an OpenGL context loss.
-        /// On Web (Emscripten): triggers WEBGL_lose_context.loseContext().
-        /// On desktop: destroys the SDL GL context and immediately recreates it,
-        /// forcing all GPU resources to be re-initialised.
+        /// Simulates a native graphics context or device loss.
+        /// Renderer implementations may recover atomically or remain unavailable until
+        /// DebugRestoreContext() is called.
         virtual void DebugSimulateContextLoss() {}
 
-        /// Simulates an OpenGL context restore after a previous DebugSimulateContextLoss().
-        /// On Web: triggers WEBGL_lose_context.restoreContext().
-        /// On desktop: equivalent to DebugSimulateContextLoss() (destroy + recreate).
+        /// Restores a native context or device after DebugSimulateContextLoss().
         virtual void DebugRestoreContext() {}
 
         // ---- Window id → renderer registry ----
@@ -3108,7 +3616,16 @@ namespace CNA::Internal::Renderers
      * - Letterbox            – scale = min(surfW/virtW, surfH/virtH); adds bars.
      * - Overscan             – scale = max(surfW/virtW, surfH/virtH); crops edges.
      * - Stretch              – stretches to fill without preserving aspect ratio.
-     * - NativeBackBuffer     – no scaling; game draws at its requested size.
+     * - NativeBackBuffer     – no scaling: the logical surface IS the client area, so the
+     *                          requested virtual size is deliberately ignored and a
+     *                          resize changes the logical coordinate system. "Draws at
+     *                          its requested size" therefore means the back buffer the
+     *                          window actually gives it, NOT PreferredBackBufferWidth/
+     *                          Height, which have no effect in this mode. Settled by the
+     *                          project owner on 2026-09-10 when the `dx` branch's
+     *                          implementation (plans/plan_dx.md DX-217) met a `next` test
+     *                          asserting the opposite; the earlier one-line wording was
+     *                          ambiguous enough to support both readings.
      * - FixedHeightDynamicWidth – keeps the game's preferred height as the logical
      *                            height and computes logical width from the actual
      *                            surface aspect ratio:

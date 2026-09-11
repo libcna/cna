@@ -1,4 +1,15 @@
 #version 450
+//
+// plans/plan_vulkan.md VULKAN-227/VULKAN-232: compiled twice -- once plain and once with
+// CNA_INSTANCED, which declares the four per-instance matrix columns at locations 12..15 and
+// turns CNA_INSTANCE_POSITION()/CNA_INSTANCE_WORLD() from the identity into the per-instance
+// transform. Without the define each call expands to exactly the text that was here before,
+// so every ordinary module's SPIR-V is byte-identical. See compile_shaders.py.
+//
+// The instance matrix is folded into World for the normal, the tangent AND the handedness,
+// so a mirroring instance flips the bitangent exactly as a mirroring World does -- EasyGL
+// spells the same thing as a separate `instanceHandedness` factor, and the two agree
+// because sign(det(World x Instance)) == sign(det(World)) * sign(det(Instance)).
 
 // SkinnedPbrEffect vertex shader — stride 68 (VertexPositionNormalTangentTextureSkinned): the
 // stride-48 PbrEffect layout (position+normal+tangent+uv) with the stride-52/56 skinning suffix
@@ -11,7 +22,15 @@ layout(location = 1) in vec3  aNormal;
 layout(location = 2) in vec4  aTangent;
 layout(location = 3) in vec2  aUV;
 layout(location = 4) in vec4  aBoneWeights;
-layout(location = 5) in uvec4 aBoneIndices;
+// plans/plan_vulkan.md VULKAN-151: `vec4`, not `uvec4`. XNA lets a content processor spell
+// BLENDINDICES as Byte4 or as Vector4 (plans/plan_fx.md FX-127, and CustomModelAnimation's own
+// SkinnedModelProcessor writes Vector4), and a Vulkan shader input cannot take both an integer and
+// a float attribute. Taking the indices as floats lets ONE shader serve both spellings: Vector4
+// binds natively, and Byte4 binds through VK_FORMAT_R8G8B8A8_USCALED -- integer values converted
+// to float without normalisation, which is exactly what EasyGL's own
+// glVertexAttribPointer(..., GL_UNSIGNED_BYTE, GL_FALSE, ...) does. A bone palette is a handful of
+// entries, far inside float's exact-integer range, so nothing is lost in the conversion.
+layout(location = 5) in vec4 aBoneIndices;
 #ifdef CNA_PBR_DUAL_UV
 layout(location = 6) in vec2  aUV1;
 #endif
@@ -65,9 +84,8 @@ layout(set = 0, binding = 6) uniform PbrParams {
     vec4 specularFresnelInputs;  // xyz = unclamped dielectric F0, w = specular factor
     vec4 textureTransformRows[10];
     vec4 specularTextureTransformRows[4];
-#ifdef CNA_PBR_DUAL_UV
     vec4 textureCoordinateSets;  // x = seven-bit per-map TEXCOORD_1 selector mask
-#endif
+    vec4 iblParams;              // x = enabled, y = prefiltered mip count, z = intensity
 } pbr;
 
 vec3 cnaSkinNormal(mat3 m, vec3 n) {
@@ -84,11 +102,11 @@ float cnaDirectionHandedness(mat3 m) {
 
 void main() {
     float weightsPerVertex = pbr.fogColorEnabled.w; // REMED-GFX-010: alongside the fog vector
-    mat4 skinMat = bb.bones[aBoneIndices.x] * aBoneWeights.x;
-    if (weightsPerVertex >= 2.0) skinMat += bb.bones[aBoneIndices.y] * aBoneWeights.y;
-    if (weightsPerVertex >= 4.0) skinMat += bb.bones[aBoneIndices.z] * aBoneWeights.z
-                                          + bb.bones[aBoneIndices.w] * aBoneWeights.w;
-    vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
+    mat4 skinMat = bb.bones[int(aBoneIndices.x)] * aBoneWeights.x;
+    if (weightsPerVertex >= 2.0) skinMat += bb.bones[int(aBoneIndices.y)] * aBoneWeights.y;
+    if (weightsPerVertex >= 4.0) skinMat += bb.bones[int(aBoneIndices.z)] * aBoneWeights.z
+                                          + bb.bones[int(aBoneIndices.w)] * aBoneWeights.w;
+    vec4 skinnedPos = CNA_INSTANCE_POSITION(skinMat * vec4(aPos, 1.0));
     gl_Position = pc.mvp * skinnedPos;
     // REMED-GFX-011: matches skinned3d.vert.glsl, which does flip (the comment previously here
     // claimed it never does). Renderer-wide convention -- see pbr3d.vert.glsl.
@@ -101,12 +119,12 @@ void main() {
     // is only correct for rotation and uniform scale, and diverges from FNA's
     // mul(normal, WorldInverseTranspose) under non-uniform scale. It also contradicted this
     // renderer's own unskinned pbr3d.vert.glsl, which already uses the inverse transpose.
-    mat3 worldNormalMat = transpose(inverse(mat3(pbr.world)));
+    mat3 worldNormalMat = transpose(inverse(mat3(CNA_INSTANCE_WORLD(pbr.world))));
     vNormal = normalize(worldNormalMat * cnaSkinNormal(skinNormalMat, aNormal));
     // Tangent stays on raw World: tangents transform as directions, not as normals (glTF
     // convention, and unchanged from the previous behaviour).
-    vTangent = mat3(pbr.world) * (skinNormalMat * aTangent.xyz);
-    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(pbr.world))
+    vTangent = mat3(CNA_INSTANCE_WORLD(pbr.world)) * (skinNormalMat * aTangent.xyz);
+    vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(CNA_INSTANCE_WORLD(pbr.world)))
                                 * cnaDirectionHandedness(skinNormalMat);
     vUV = aUV;
 #ifdef CNA_PBR_DUAL_UV

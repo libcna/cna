@@ -116,17 +116,14 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
                            Vulkan, DirectX9, DirectX11, DirectX12, SdlGpu);
 }
 
-// The renderers whose instanced route this file has MEASURED on a real display, and which therefore
-// carry an assertion in one direction or the other. D3D9/D3D11/D3D12 stay outside it because no
-// D3D display was reachable (SDL reports "x11 not available" under Wine on the Xvfb displays this
-// environment permits) -- REMED-GFX-212 identifies D3D11/D3D12 from source as colouring the
-// instanced route from DiffuseColor, but an unmeasured renderer must not be asserted in either
-// direction. Every leg still PRINTS its reading there, which is the evidence those renderers lack.
+// The renderers whose instanced route this file has measured, and which therefore carry a contract
+// assertion. D3D11 and D3D12 joined this set with DX-222's private headless-compositor run; D3D9
+// remains unmeasured.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedVertexColorMeasured()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx,
-                           Vulkan, WebGPU, SdlGpu);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU,
+                           DirectX11, DirectX12, SdlGpu);
 }
 
 // The renderers whose instanced route was measured obeying the PUBLIC CONTRACT: EasyGL always did,
@@ -147,8 +144,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the public-contract set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedVertexColorContract()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan,
-                           WebGPU, Bgfx, SdlGpu);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU, Bgfx,
+                           DirectX11, DirectX12, SdlGpu);
 }
 
 

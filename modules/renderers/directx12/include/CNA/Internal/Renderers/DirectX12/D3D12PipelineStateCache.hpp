@@ -20,23 +20,34 @@
 // only the fields that differ from a per-variant default) if the full-tuple key's cache-object count
 // becomes a real, measured problem, but that is not assumed to be true yet.
 //
-// Stencil state and scissor-enable are deliberately NOT part of this first key/desc (matches the
-// concrete-first-implementation scope this and other DX-12x rows explicitly allow) -- a documented,
-// honest gap, not silently dropped.
+// plans/plan_dx.md DX-202 closed the stencil half of that gap: every field of XNA's DepthStencilState
+// except ReferenceStencil is now part of this key and of the D3D12_DEPTH_STENCIL_DESC below.
+// ReferenceStencil is deliberately NOT here, and that is not an omission: it is not part of
+// D3D12_DEPTH_STENCIL_DESC at all, it is an argument to OMSetStencilRef() at record time -- the
+// same split D3D11DepthStencilStateCache already documents for OMSetDepthStencilState() (DX-203).
+// Scissor-enable is still out; that is DX-201.
 
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DVertexFormatHelper.hpp"
 
 #include <d3d12.h>
 #include <wrl/client.h>
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <tuple>
+#include <utility>
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX12
 {
     using Microsoft::WRL::ComPtr;
     using CNA::Internal::Renderers::D3DCommon::D3DShaderVariant;
+
+    /** @brief Returns a process-unique identity for runtime-compiled D3D12 shader bytecode. */
+    [[nodiscard]] std::uint64_t NextD3D12CustomProgramIdEXT();
 
     /// The subset of D3D11_RASTERIZER_DESC/D3D11_BLEND_DESC/D3D11_DEPTH_STENCIL_DESC fields this
     /// first PSO cache covers -- raw XNA-level ordinals, exactly matching the parameter shapes
@@ -47,7 +58,17 @@ namespace CNA::Internal::Renderers::DirectX12
     struct D3D12PipelineStateDesc
     {
         D3DShaderVariant variant = D3DShaderVariant::Colored3d;
+        /// DX-223: nonzero identifies one runtime-compiled ShaderEffect program. The bytecode
+        /// pointers are deliberately not part of the key; this stable monotonic identity is.
+        std::uint64_t customProgramId = 0;
+        const void* customVertexShaderBytecode = nullptr;
+        std::size_t customVertexShaderBytecodeSize = 0;
+        const void* customPixelShaderBytecode = nullptr;
+        std::size_t customPixelShaderBytecodeSize = 0;
         std::size_t strideInBytes = 16;
+        std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> vertexElements;
+        /// DX-222: explicit native slots/classifications for a multi-stream or instanced draw.
+        std::vector<D3DCommon::D3DVertexInputElement> vertexInputElements;
 
         // Blend (D3DStateMapping::BlendToD3D11 / BlendFunctionToD3D11 ordinals -- raw
         // Microsoft::Xna::Framework::Graphics enum ordinals, fed through D3DStateMapping's own
@@ -75,17 +96,85 @@ namespace CNA::Internal::Renderers::DirectX12
         bool depthWriteEnable = true;
         int depthFunc = 3; // CompareFunction::LessEqual (XNA's own DepthStencilState.Default)
 
+        // DX-202: the stencil half, same raw-XNA-ordinal convention as everything above and the
+        // same field set D3D11DepthStencilStateCache::GetOrCreate already takes. Defaults are XNA's
+        // own DepthStencilState.Default: stencil off, CompareFunction::Always (ordinal 0),
+        // StencilOperation::Keep (ordinal 0), full 8-bit read/write masks, single-sided.
+        bool stencilEnable = false;
+        int stencilFunc = 0;        // CompareFunction::Always
+        int stencilPass = 0;        // StencilOperation::Keep
+        int stencilFail = 0;        // StencilOperation::Keep
+        int stencilDepthFail = 0;   // StencilOperation::Keep
+        int stencilMask = 0xFF;
+        int stencilWriteMask = 0xFF;
+        bool twoSidedStencilMode = false;
+        int ccwStencilFunc = 0;
+        int ccwStencilPass = 0;
+        int ccwStencilFail = 0;
+        int ccwStencilDepthFail = 0;
+
         // Rasterizer (D3DStateMapping::CullModeToD3D11 / FillModeToD3D11 ordinals).
         int cullMode = 2;  // CullMode::CullCounterClockwiseFace (XNA's own RasterizerState.CullCounterClockwise default)
         int fillMode = 0;  // FillMode::Solid
+        // plans/plan_dx.md DX-206/DX-256: RasterizerState.DepthBias / SlopeScaleDepthBias. The
+        // renderer converts XNA's normalized constant offset to the bound DSV format's native INT
+        // units before filling this descriptor. The converted integer participates in the key, so
+        // equivalent requests share a pipeline state instead of keying on float noise.
+        int depthBias = 0;
+        float slopeScaleDepthBias = 0.0f;
+        // RasterizerState.ScissorTestEnable is deliberately NOT here: D3D12_RASTERIZER_DESC has no
+        // ScissorEnable field (the scissor test is always on), so on this API a disabled test means
+        // "the rectangle covers the whole target" -- command-list state, not pipeline state. See
+        // DirectX12Renderer::GetEffectiveScissorEXT (DX-201).
 
-        // REMED-GFX-077: BlendState output-merger write state. Both are STATIC parts of the D3D12
-        // PSO (RenderTarget[0].RenderTargetWriteMask and D3D12_GRAPHICS_PIPELINE_STATE_DESC::
-        // SampleMask), so both participate in the PSO cache key. D3D12 draws are single-target here
-        // (no CNA shader emits >1 SV_Target), so only ColorWriteChannels slot 0 applies. XNA
+        // REMED-GFX-077/DX-224: BlendState output-merger write state. The four XNA MRT masks and
+        // SampleMask are STATIC parts of a D3D12 PSO, so all participate in the cache key. XNA
         // ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to D3D12_COLOR_WRITE_ENABLE_*.
-        int colorWriteMask = 15;             // ColorWriteChannels.All
+        std::array<int, 4> colorWriteMasks{15, 15, 15, 15};
         unsigned int sampleMask = 0xFFFFFFFFu; // MultiSampleMask == -1 (all samples)
+        // plans/plan_dx.md DX-207: the bound render target's real sample count. D3D12 requires a pipeline
+        // state's SampleDesc.Count to MATCH the render target it is used with -- unlike D3D11, which
+        // has no such coupling -- so a hardcoded 1 makes every draw into a multisampled
+        // RenderTarget2D/RenderTargetCube illegal, however correctly that target was created. 1 is
+        // the non-MSAA case and keeps every existing single-sample PSO byte-identical.
+        unsigned int sampleCount = 1;
+        // DX-224: D3D12 bakes the complete active MRT shape into each PSO. Defaults preserve the
+        // historical one-RGBA8-target behavior for direct cache clients such as the smoke test;
+        // renderer draw paths overwrite these fields from the actual bound target set.
+        unsigned int renderTargetCount = 1;
+        std::array<DXGI_FORMAT, D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT> renderTargetFormats{
+            DXGI_FORMAT_R8G8B8A8_UNORM,
+            DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN,
+            DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_UNKNOWN,
+            DXGI_FORMAT_UNKNOWN};
+        DXGI_FORMAT depthStencilFormat = DXGI_FORMAT_UNKNOWN;
+        // plans/plan_dx.md DX-208: the pipeline state's primitive topology CLASS. D3D12 bakes this in and
+        // requires it to agree with the topology the command list sets, which is the whole reason
+        // LineList/LineStrip/PointListEXT used to throw here. TRIANGLE keeps every existing
+        // pipeline state byte-identical.
+        int topologyType = static_cast<int>(D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+
+        /// DX-202: every field of this struct, by value, as the cache key. Adding a field to the
+        /// struct and forgetting it here is the one mistake that would make two different pipeline
+        /// states share one cached PSO, so this list and the field list above are kept adjacent
+        /// deliberately.
+        [[nodiscard]] auto AsCacheKeyEXT() const
+        {
+            return std::make_tuple(static_cast<int>(variant), customProgramId, strideInBytes,
+                                   D3DCommon::VertexDeclarationCacheKey(vertexElements),
+                                   D3DCommon::VertexInputLayoutCacheKey(vertexInputElements),
+                                   colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
+                                   colorBlendFunc, alphaBlendFunc,
+                                   depthEnable, depthWriteEnable, depthFunc,
+                                   stencilEnable, stencilFunc, stencilPass, stencilFail,
+                                   stencilDepthFail, stencilMask, stencilWriteMask,
+                                   twoSidedStencilMode, ccwStencilFunc, ccwStencilPass,
+                                   ccwStencilFail, ccwStencilDepthFail,
+                                   cullMode, fillMode, depthBias, slopeScaleDepthBias,
+                                   colorWriteMasks, sampleMask, sampleCount,
+                                   renderTargetCount, renderTargetFormats, depthStencilFormat,
+                                   topologyType);
+        }
     };
 
     /// Caches ID3D12PipelineState (graphics) objects keyed by D3D12PipelineStateDesc's full field
@@ -98,29 +187,28 @@ namespace CNA::Internal::Renderers::DirectX12
         /// D3D12 input layout for @p desc.strideInBytes, and @p desc's blend/depth/rasterizer
         /// fields mapped through D3DStateMapping. @p rootSignature must already be a real, live
         /// object (see D3D12RootSignatureCache) -- this cache does not create root signatures
-        /// itself. @p rtvFormat/@p dsvFormat describe the render target(s)/depth-stencil buffer
-        /// this PSO will be used against (D3D12 bakes these into the PSO, unlike D3D11's dynamic
-        /// OMSetRenderTargets binding) -- pass DXGI_FORMAT_UNKNOWN for @p dsvFormat if no depth
-        /// buffer is bound.
+        /// itself. The descriptor's renderTargetCount, renderTargetFormats, and
+        /// depthStencilFormat describe the output-merger views; D3D12 bakes all of them into the
+        /// PSO, unlike D3D11's dynamic binding.
         ///
         /// Returns a null ComPtr (does not throw) if the shader variant's DXBC bytecode is missing,
         /// the stride isn't one of the 5 established layouts, or CreateGraphicsPipelineState()
         /// itself fails -- callers check the returned ComPtr, matching this project's established
         /// D3DShaderCache/D3D11*Cache error-handling convention.
-        ComPtr<ID3D12PipelineState> GetOrCreate(ID3D12Device* device, ID3D12RootSignature* rootSignature,
-                                                 const D3D12PipelineStateDesc& desc,
-                                                 DXGI_FORMAT rtvFormat, DXGI_FORMAT dsvFormat);
+        ComPtr<ID3D12PipelineState> GetOrCreate(ID3D12Device* device,
+                                                ID3D12RootSignature* rootSignature,
+                                                const D3D12PipelineStateDesc& desc);
 
         /// Number of distinct PSOs created so far (CNAEXT diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:
-        using Key = std::tuple<int, std::size_t,
-                               int, int, int, int, int, int,
-                               bool, bool, int,
-                               int, int,
-                               int, unsigned,          // + colorWriteMask, sampleMask (REMED-GFX-077)
-                               unsigned, unsigned>; // + rtvFormat, dsvFormat
+        // DX-202: the key is derived from the desc rather than re-listed field by field. A hand-written
+        // tuple type plus a hand-written brace initialiser is two places to forget a new field, and
+        // forgetting one there is silent -- two genuinely different pipeline states would collide on
+        // one cache entry and the second draw would quietly get the first one's state.
+        using Key = decltype(
+            std::declval<const D3D12PipelineStateDesc&>().AsCacheKeyEXT());
         std::map<Key, ComPtr<ID3D12PipelineState>> cache_;
     };
 }

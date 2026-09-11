@@ -11,20 +11,14 @@
 // pattern exactly — no shader changes needed on EasyGL.
 //
 // CNA's fog formula (EasyGL-specific, simpler than FNA's WorldViewProj-derived `FogVector` dot
-// product, and — corrected under Task 1111 (see plans/plan_graphics.md) — genuinely equivalent to it
+// product, and - corrected under Task 1111 (see plans/plan_graphics.md) - genuinely equivalent to it
 // for these axis-aligned test cases, not just coincidentally matching at one point): `vFogFactor
 // = clamp((z+FogEnd)/(FogEnd-FogStart), 0, 1)` per-vertex (raw object-space Z, `World`/`View`/
 // `Projection` are all Identity in this test — meaning `gl_Position.z` equals raw vertex `z`
-// directly, unprojected, so `z` must stay within OpenGL's valid clip-space NDC range of `[-1,1]`
-// or the primitive is frustum-clipped away entirely and never reaches the fragment shader at all;
-// `FogStart`/`FogEnd` are chosen inside that range accordingly, not at FNA-typical world-space
-// distances), then `FragColor.rgb = mix(FogColor, original, vFogFactor)` — `vFogFactor=0`
-// (`z<=FogStart`) shows pure fog color; `vFogFactor=1` (`z>=FogEnd`) shows the original color
-// unblended (a real, easy-to-miss consequence: with `View=Identity`, `FogStart` is the FULLY
-// FOGGED boundary, not the unfogged one the property name might suggest — see
-// `fog_gradient_quad.scene`'s own comment / Task 1111 for the full derivation); values between
-// interpolate. A 3-point sweep (`z=FogStart` full fog, `z=FogEnd` no fog, `z=0` half fog) proves
-// the blend is a genuine interpolation, not just an on/off switch.
+// directly, unprojected, so this renderer-neutral fixture keeps z within [0,1], the clip-space
+// interval shared by OpenGL and Direct3D. FogStart=0 and FogEnd=-0.9 put the observable gradient
+// over z=[0,0.9]. A 3-point sweep (z=0 no fog, z=0.45 half fog, z=0.9 full fog) proves the blend is
+// a genuine interpolation, not just an on/off switch.
 //
 // CONFIRMED, NOT FIXED HERE (a much larger, pre-existing, project-wide gap discovered while
 // investigating this task, unrelated to `AlphaTestEffect` specifically): **fog is completely
@@ -68,20 +62,18 @@ static const Vector3 kDiffuse(0.8f, 0.2f, 0.4f);
 static const Vector3 kFogColor(0.1f, 0.6f, 0.9f);
 // Kept inside OpenGL's valid clip-space NDC range [-1,1] (World/View/Projection are all Identity
 // in this test, so raw vertex z IS gl_Position.z — anything outside [-1,1] would be frustum-
-// clipped away before the fragment shader ever runs).
-static constexpr float kFogStart = -0.9f;
-static constexpr float kFogEnd   =  0.9f;
+// clipped away before the fragment shader ever runs). The positive interval also remains visible
+// under Direct3D's [0,1] clip-space convention.
+static constexpr float kFogStart =  0.0f;
+static constexpr float kFogEnd   = -0.9f;
 
 // Formula corrected under Task 1111 (see plans/plan_graphics.md): the header comment's original
 // (FogEnd-z)/(FogEnd-FogStart) formula was never actually equivalent to FNA's real fog dot
 // product, only coincidentally right at z=0. Real formula (World=View=Identity):
 //   vFogFactor = clamp((z+FogEnd)/(FogEnd-FogStart), 0, 1)
-// A real, easy-to-miss consequence: with View=Identity, FogStart is the FULLY FOGGED boundary
-// here, not the unfogged one the property name might suggest -- see fog_gradient_quad.scene's
-// own comment / Task 1111 for the full derivation.
-static const Color kExpectedNoFog(204, 51, 102, 255);   // z=FogEnd:   factor=1, unblended material color
-static const Color kExpectedFullFog(26, 153, 230, 255); // z=FogStart: factor=0, pure fog color
-static const Color kExpectedHalfFog(115, 102, 166, 255);// z=0:        factor=0.5, halfway blend
+static const Color kExpectedNoFog(204, 51, 102, 255);   // z=0:    factor=1, unblended material color
+static const Color kExpectedFullFog(26, 153, 230, 255); // z=0.9:  factor=0, pure fog color
+static const Color kExpectedHalfFog(115, 102, 166, 255);// z=0.45: factor=0.5, halfway blend
 
 class AlphaTestFogTest : public Game
 {
@@ -161,17 +153,17 @@ protected:
     {
         auto& dev = getGraphicsDeviceProperty();
 
-        const Color noFogGot = renderAtZ(dev, kFogEnd);
+        const Color noFogGot = renderAtZ(dev, 0.0f);
         check(matches(noFogGot, kExpectedNoFog),
-              "z=0.9 (at FogEnd): unblended material color", noFogGot, "(204,51,102)");
+              "z=0: unblended material color", noFogGot, "(204,51,102)");
 
-        const Color fullFogGot = renderAtZ(dev, kFogStart);
+        const Color fullFogGot = renderAtZ(dev, 0.9f);
         check(matches(fullFogGot, kExpectedFullFog),
-              "z=-0.9 (at FogStart): pure fog color", fullFogGot, "(26,153,230)");
+              "z=0.9: pure fog color", fullFogGot, "(26,153,230)");
 
-        const Color halfFogGot = renderAtZ(dev, 0.0f);
+        const Color halfFogGot = renderAtZ(dev, 0.45f);
         check(matches(halfFogGot, kExpectedHalfFog),
-              "z=0 (halfway): 50/50 blend, proves real interpolation not on/off",
+              "z=0.45 (halfway): 50/50 blend, proves real interpolation not on/off",
               halfFogGot, "(115,102,166)");
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);

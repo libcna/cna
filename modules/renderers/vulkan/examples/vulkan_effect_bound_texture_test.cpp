@@ -1,0 +1,966 @@
+// SPDX-License-Identifier: MS-PL
+//
+// plan_vulkan.md VULKAN-253 -- a custom effect samples a texture it was EXPLICITLY BOUND, not the
+// one SpriteBatch happened to hand it.
+//
+// Before this row `VulkanEffectRenderer::BindTexture` threw: a `ShaderEffect` could only ever
+// sample whatever the draw supplied at set 0, so every effect that needs a second image -- a mask,
+// a lookup table, a normal map -- was out of reach. `VULKAN-163` had made that refusal loud, which
+// is the right state for a gap but not the end of it.
+//
+// The bound textures live in **descriptor set 1**; the sprite's own stays at set 0. Set 0 changes
+// per sprite and set 1 is fixed for the batch, so sharing one set would mean rebuilding it for
+// every draw. The shader below reads ONLY set 1, which is what makes this test discriminating: if
+// the binding did not reach the shader, the output is not "slightly wrong", it is the white filler
+// the renderer writes into unbound units.
+//
+//   A  A sprite drawn with a WHITE texture through an effect that samples the bound BLUE one comes
+//      out blue. The sprite's own texture is white specifically so that a failure to bind reads as
+//      white -- the same colour the filler produces, which is the honest failure signal here.
+//   B  Rebinding a different texture between two batches changes the output. One binding proves
+//      the plumbing exists; two prove the state is the effect's own and not a constant.
+//   C  A unit outside the supported range is refused by name rather than silently dropped.
+//   D  No validation message -- the set must be fully written before it is bound, and a shader
+//      reading a unit nothing was bound to must still get a real descriptor.
+//   E  plan_vulkan.md VULKAN-254: the same for a TextureCube, read through `samplerCube` at
+//      binding 4 + unit.
+//   F  ...and for a Texture3D, through `sampler3D` at binding 8 + unit. Each sampler kind gets its
+//      own binding range because a descriptor's view type has to match the dimensionality the
+//      shader declares -- a 2D filler cannot stand in for an unbound `samplerCube`, so sharing one
+//      range of four would have made every unused unit a usage error rather than a white texel.
+//   G  Texture2DArray upload/readback preserves two distinct layers byte-for-byte.
+//   H  The same transfer path preserves an odd-sized nonzero mip subresource.
+//   I  A custom sampler2DArray shader reads layer 0 through binding 16.
+//   J  The same native array view exposes independently uploaded layer 1.
+//   K  Array unit 3 is refused because the three set-1 array slots plus the other thirteen
+//      fragment-stage samplers exactly consume Vulkan's guaranteed minimum of sixteen.
+//   L  MOD-2228: compute writes a tracked storage image; public readback and a later sampled draw
+//      both observe the exact quantised texel.
+//   M  A sparse undeclared image slot and access that differs from SPIR-V qualifiers are refused.
+//   N  Clearing the sampled storage binding restores the ordinary 2D white filler.
+//   O  Repeated sampling of the same image layout emits no redundant Vulkan image barrier.
+//   P  Storage-image upload/compute/upload enqueue without a routine queue/device-wide wait.
+//   Q  One requested readback submits that exact order once and observes the final upload.
+//   R  MOD-2244: a Color Texture2D whose combined allocation supports storage is written by
+//      compute and then sampled normally, without an eager submit or a second image.
+//   S  A render-target clear feeds a compute imageLoad, the compute imageStore feeds an ordinary
+//      SpriteBatch sample; two compute/sample and two readback transitions are tracked without an
+//      eager submit/wait.
+//   T  MOD-2244: both core Rgba8Snorm and capability-declaring Rg8Snorm storage shaders execute
+//      against exact native images and return their signed-normalized bytes.
+//   U  Texture2D::SetData after image use stays in the same deferred order and overwrites the
+//      preceding compute write before a later ordinary sample.
+//   V  An ordinary texture without an exact storage representation refuses by capability, while
+//      a storage-capable texture with the wrong SPIR-V format refuses the format mismatch.
+//   W  An extended-format Rgba64 RenderTarget2D is written in-place by compute and direct
+//      readback observes the exact normalized 16-bit channels.
+//   X  Reading a compute destination also flushes an earlier, different render target that the
+//      dispatch reads; no accidental source GetData or Present is needed to order the dependency.
+//
+// Exit code 0 = all PASS, 1 = any FAIL.
+
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "System/NotSupportedException.hpp"
+#ifdef CNA_CNAEXT
+#include "CNA/Graphics/Texture2DArray.hpp"
+#include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/StorageTexture2D.hpp"
+#endif
+
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cstdlib>
+#include <cstdint>
+#include <cstdio>
+#include <exception>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+using namespace Microsoft::Xna::Framework;
+using namespace Microsoft::Xna::Framework::Graphics;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderTargetRenderer;
+using CNA::Internal::Renderers::Vulkan::VulkanRenderer;
+
+// ---------------------------------------------------------------------------
+// Pre-compiled SPIR-V, from the GLSL in this file's own comments, via libshaderc.
+//   vert: the ordinary sprite vertex -- pixel coords to NDC, pass UV and colour through
+//   frag: outColor = texture(sampler2D at set 1 binding 0, vUV)   <- the whole point
+// ---------------------------------------------------------------------------
+static const uint32_t kBoundVertSpv[] = {
+    0x07230203, 0x00010000, 0x000d000b, 0x00000032, 0x00000000, 0x00020011,
+    0x00000001, 0x0006000b, 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e,
+    0x00000000, 0x0003000e, 0x00000000, 0x00000001, 0x000b000f, 0x00000000,
+    0x00000004, 0x6e69616d, 0x00000000, 0x0000000b, 0x00000021, 0x0000002a,
+    0x0000002b, 0x0000002d, 0x0000002f, 0x00040047, 0x0000000b, 0x0000001e,
+    0x00000000, 0x00030047, 0x0000000d, 0x00000002, 0x00050048, 0x0000000d,
+    0x00000000, 0x00000023, 0x00000000, 0x00030047, 0x0000001f, 0x00000002,
+    0x00050048, 0x0000001f, 0x00000000, 0x0000000b, 0x00000000, 0x00050048,
+    0x0000001f, 0x00000001, 0x0000000b, 0x00000001, 0x00050048, 0x0000001f,
+    0x00000002, 0x0000000b, 0x00000003, 0x00050048, 0x0000001f, 0x00000003,
+    0x0000000b, 0x00000004, 0x00040047, 0x0000002a, 0x0000001e, 0x00000000,
+    0x00040047, 0x0000002b, 0x0000001e, 0x00000001, 0x00040047, 0x0000002d,
+    0x0000001e, 0x00000001, 0x00040047, 0x0000002f, 0x0000001e, 0x00000002,
+    0x00020013, 0x00000002, 0x00030021, 0x00000003, 0x00000002, 0x00030016,
+    0x00000006, 0x00000020, 0x00040017, 0x00000007, 0x00000006, 0x00000002,
+    0x00040020, 0x0000000a, 0x00000001, 0x00000007, 0x0004003b, 0x0000000a,
+    0x0000000b, 0x00000001, 0x0003001e, 0x0000000d, 0x00000007, 0x00040020,
+    0x0000000e, 0x00000009, 0x0000000d, 0x0004003b, 0x0000000e, 0x0000000f,
+    0x00000009, 0x00040015, 0x00000010, 0x00000020, 0x00000001, 0x0004002b,
+    0x00000010, 0x00000011, 0x00000000, 0x00040020, 0x00000012, 0x00000009,
+    0x00000007, 0x0004002b, 0x00000006, 0x00000016, 0x40000000, 0x0004002b,
+    0x00000006, 0x00000018, 0x3f800000, 0x00040017, 0x0000001b, 0x00000006,
+    0x00000004, 0x00040015, 0x0000001c, 0x00000020, 0x00000000, 0x0004002b,
+    0x0000001c, 0x0000001d, 0x00000001, 0x0004001c, 0x0000001e, 0x00000006,
+    0x0000001d, 0x0006001e, 0x0000001f, 0x0000001b, 0x00000006, 0x0000001e,
+    0x0000001e, 0x00040020, 0x00000020, 0x00000003, 0x0000001f, 0x0004003b,
+    0x00000020, 0x00000021, 0x00000003, 0x0004002b, 0x00000006, 0x00000023,
+    0x00000000, 0x00040020, 0x00000027, 0x00000003, 0x0000001b, 0x00040020,
+    0x00000029, 0x00000003, 0x00000007, 0x0004003b, 0x00000029, 0x0000002a,
+    0x00000003, 0x0004003b, 0x0000000a, 0x0000002b, 0x00000001, 0x0004003b,
+    0x00000027, 0x0000002d, 0x00000003, 0x00040020, 0x0000002e, 0x00000001,
+    0x0000001b, 0x0004003b, 0x0000002e, 0x0000002f, 0x00000001, 0x0005002c,
+    0x00000007, 0x00000031, 0x00000018, 0x00000018, 0x00050036, 0x00000002,
+    0x00000004, 0x00000000, 0x00000003, 0x000200f8, 0x00000005, 0x0004003d,
+    0x00000007, 0x0000000c, 0x0000000b, 0x00050041, 0x00000012, 0x00000013,
+    0x0000000f, 0x00000011, 0x0004003d, 0x00000007, 0x00000014, 0x00000013,
+    0x00050088, 0x00000007, 0x00000015, 0x0000000c, 0x00000014, 0x0005008e,
+    0x00000007, 0x00000017, 0x00000015, 0x00000016, 0x00050083, 0x00000007,
+    0x0000001a, 0x00000017, 0x00000031, 0x00050051, 0x00000006, 0x00000024,
+    0x0000001a, 0x00000000, 0x00050051, 0x00000006, 0x00000025, 0x0000001a,
+    0x00000001, 0x00070050, 0x0000001b, 0x00000026, 0x00000024, 0x00000025,
+    0x00000023, 0x00000018, 0x00050041, 0x00000027, 0x00000028, 0x00000021,
+    0x00000011, 0x0003003e, 0x00000028, 0x00000026, 0x0004003d, 0x00000007,
+    0x0000002c, 0x0000002b, 0x0003003e, 0x0000002a, 0x0000002c, 0x0004003d,
+    0x0000001b, 0x00000030, 0x0000002f, 0x0003003e, 0x0000002d, 0x00000030,
+    0x000100fd, 0x00010038,
+};
+static const uint32_t kBoundFragSpv[] = {
+    0x07230203, 0x00010000, 0x000d000b, 0x00000014, 0x00000000, 0x00020011,
+    0x00000001, 0x0006000b, 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e,
+    0x00000000, 0x0003000e, 0x00000000, 0x00000001, 0x0007000f, 0x00000004,
+    0x00000004, 0x6e69616d, 0x00000000, 0x00000009, 0x00000011, 0x00030010,
+    0x00000004, 0x00000007, 0x00040047, 0x00000009, 0x0000001e, 0x00000000,
+    0x00040047, 0x0000000d, 0x00000021, 0x00000000, 0x00040047, 0x0000000d,
+    0x00000022, 0x00000001, 0x00040047, 0x00000011, 0x0000001e, 0x00000000,
+    0x00020013, 0x00000002, 0x00030021, 0x00000003, 0x00000002, 0x00030016,
+    0x00000006, 0x00000020, 0x00040017, 0x00000007, 0x00000006, 0x00000004,
+    0x00040020, 0x00000008, 0x00000003, 0x00000007, 0x0004003b, 0x00000008,
+    0x00000009, 0x00000003, 0x00090019, 0x0000000a, 0x00000006, 0x00000001,
+    0x00000000, 0x00000000, 0x00000000, 0x00000001, 0x00000000, 0x0003001b,
+    0x0000000b, 0x0000000a, 0x00040020, 0x0000000c, 0x00000000, 0x0000000b,
+    0x0004003b, 0x0000000c, 0x0000000d, 0x00000000, 0x00040017, 0x0000000f,
+    0x00000006, 0x00000002, 0x00040020, 0x00000010, 0x00000001, 0x0000000f,
+    0x0004003b, 0x00000010, 0x00000011, 0x00000001, 0x00050036, 0x00000002,
+    0x00000004, 0x00000000, 0x00000003, 0x000200f8, 0x00000005, 0x0004003d,
+    0x0000000b, 0x0000000e, 0x0000000d, 0x0004003d, 0x0000000f, 0x00000012,
+    0x00000011, 0x00050057, 0x00000007, 0x00000013, 0x0000000e, 0x00000012,
+    0x0003003e, 0x00000009, 0x00000013, 0x000100fd, 0x00010038,
+};
+static const uint32_t kCubeFragSpv[] = {
+    0x07230203, 0x00010000, 0x000d000b, 0x00000014, 0x00000000, 0x00020011,
+    0x00000001, 0x0006000b, 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e,
+    0x00000000, 0x0003000e, 0x00000000, 0x00000001, 0x0006000f, 0x00000004,
+    0x00000004, 0x6e69616d, 0x00000000, 0x00000009, 0x00030010, 0x00000004,
+    0x00000007, 0x00040047, 0x00000009, 0x0000001e, 0x00000000, 0x00040047,
+    0x0000000d, 0x00000021, 0x00000004, 0x00040047, 0x0000000d, 0x00000022,
+    0x00000001, 0x00020013, 0x00000002, 0x00030021, 0x00000003, 0x00000002,
+    0x00030016, 0x00000006, 0x00000020, 0x00040017, 0x00000007, 0x00000006,
+    0x00000004, 0x00040020, 0x00000008, 0x00000003, 0x00000007, 0x0004003b,
+    0x00000008, 0x00000009, 0x00000003, 0x00090019, 0x0000000a, 0x00000006,
+    0x00000003, 0x00000000, 0x00000000, 0x00000000, 0x00000001, 0x00000000,
+    0x0003001b, 0x0000000b, 0x0000000a, 0x00040020, 0x0000000c, 0x00000000,
+    0x0000000b, 0x0004003b, 0x0000000c, 0x0000000d, 0x00000000, 0x00040017,
+    0x0000000f, 0x00000006, 0x00000003, 0x0004002b, 0x00000006, 0x00000010,
+    0x00000000, 0x0004002b, 0x00000006, 0x00000011, 0x3f800000, 0x0006002c,
+    0x0000000f, 0x00000012, 0x00000010, 0x00000010, 0x00000011, 0x00050036,
+    0x00000002, 0x00000004, 0x00000000, 0x00000003, 0x000200f8, 0x00000005,
+    0x0004003d, 0x0000000b, 0x0000000e, 0x0000000d, 0x00050057, 0x00000007,
+    0x00000013, 0x0000000e, 0x00000012, 0x0003003e, 0x00000009, 0x00000013,
+    0x000100fd, 0x00010038,
+};
+static const uint32_t kVolumeFragSpv[] = {
+    0x07230203, 0x00010000, 0x000d000b, 0x00000013, 0x00000000, 0x00020011,
+    0x00000001, 0x0006000b, 0x00000001, 0x4c534c47, 0x6474732e, 0x3035342e,
+    0x00000000, 0x0003000e, 0x00000000, 0x00000001, 0x0006000f, 0x00000004,
+    0x00000004, 0x6e69616d, 0x00000000, 0x00000009, 0x00030010, 0x00000004,
+    0x00000007, 0x00040047, 0x00000009, 0x0000001e, 0x00000000, 0x00040047,
+    0x0000000d, 0x00000021, 0x00000008, 0x00040047, 0x0000000d, 0x00000022,
+    0x00000001, 0x00020013, 0x00000002, 0x00030021, 0x00000003, 0x00000002,
+    0x00030016, 0x00000006, 0x00000020, 0x00040017, 0x00000007, 0x00000006,
+    0x00000004, 0x00040020, 0x00000008, 0x00000003, 0x00000007, 0x0004003b,
+    0x00000008, 0x00000009, 0x00000003, 0x00090019, 0x0000000a, 0x00000006,
+    0x00000002, 0x00000000, 0x00000000, 0x00000000, 0x00000001, 0x00000000,
+    0x0003001b, 0x0000000b, 0x0000000a, 0x00040020, 0x0000000c, 0x00000000,
+    0x0000000b, 0x0004003b, 0x0000000c, 0x0000000d, 0x00000000, 0x00040017,
+    0x0000000f, 0x00000006, 0x00000003, 0x0004002b, 0x00000006, 0x00000010,
+    0x3f000000, 0x0006002c, 0x0000000f, 0x00000011, 0x00000010, 0x00000010,
+    0x00000010, 0x00050036, 0x00000002, 0x00000004, 0x00000000, 0x00000003,
+    0x000200f8, 0x00000005, 0x0004003d, 0x0000000b, 0x0000000e, 0x0000000d,
+    0x00050057, 0x00000007, 0x00000012, 0x0000000e, 0x00000011, 0x0003003e,
+    0x00000009, 0x00000012, 0x000100fd, 0x00010038,
+};
+
+// SPIR-V 1.0 for a one-invocation compute shader with
+//   layout(set=0,binding=0,rgba8) writeonly uniform image2D outputImage;
+//   imageStore(outputImage, ivec2(0), vec4(0.25, 0.5, 0.75, 1.0));
+// Kept deliberately minimal so the native metadata pass is tested independently of a runtime
+// shader compiler.
+static const uint32_t kStorageImageWriteSpv[] = {
+    0x07230203, 0x00010000, 0x00000000, 0x00000014, 0x00000000,
+    0x00020011, 0x00000001,
+    0x0003000e, 0x00000000, 0x00000001,
+    0x0005000f, 0x00000005, 0x0000000a, 0x6e69616d, 0x00000000,
+    0x00060010, 0x0000000a, 0x00000011, 0x00000001, 0x00000001, 0x00000001,
+    0x00030047, 0x00000009, 0x00000019,
+    0x00040047, 0x00000009, 0x00000021, 0x00000000,
+    0x00040047, 0x00000009, 0x00000022, 0x00000000,
+    0x00020013, 0x00000001,
+    0x00030021, 0x00000002, 0x00000001,
+    0x00030016, 0x00000003, 0x00000020,
+    0x00040017, 0x00000004, 0x00000003, 0x00000004,
+    0x00040015, 0x00000005, 0x00000020, 0x00000001,
+    0x00040017, 0x00000006, 0x00000005, 0x00000002,
+    0x00090019, 0x00000007, 0x00000003, 0x00000001, 0x00000000,
+                0x00000000, 0x00000000, 0x00000002, 0x00000004,
+    0x00040020, 0x00000008, 0x00000000, 0x00000007,
+    0x0004003b, 0x00000008, 0x00000009, 0x00000000,
+    0x0004002b, 0x00000003, 0x0000000b, 0x3e800000,
+    0x0004002b, 0x00000003, 0x0000000c, 0x3f000000,
+    0x0004002b, 0x00000003, 0x0000000d, 0x3f400000,
+    0x0004002b, 0x00000003, 0x0000000e, 0x3f800000,
+    0x0007002c, 0x00000004, 0x0000000f, 0x0000000b, 0x0000000c,
+                0x0000000d, 0x0000000e,
+    0x0004002b, 0x00000005, 0x00000010, 0x00000000,
+    0x0005002c, 0x00000006, 0x00000011, 0x00000010, 0x00000010,
+    0x00050036, 0x00000001, 0x0000000a, 0x00000000, 0x00000002,
+    0x000200f8, 0x00000012,
+    0x0004003d, 0x00000007, 0x00000013, 0x00000009,
+    0x00040063, 0x00000013, 0x00000011, 0x0000000f,
+    0x000100fd,
+    0x00010038,
+};
+
+namespace
+{
+constexpr int kN = 8;
+const Color kWhite(255, 255, 255, 255);
+const Color kBlue(0, 0, 255, 255);
+const Color kGreen(0, 255, 0, 255);
+
+#ifdef CNA_CNAEXT
+std::string ArrayFragmentSpirV(const float layer)
+{
+    std::vector<std::uint32_t> words(std::begin(kVolumeFragSpv), std::end(kVolumeFragSpv));
+    bool patchedBinding = false;
+    bool patchedType = false;
+    bool patchedCoordinate = false;
+    for (std::size_t i = 0; i < words.size(); ++i)
+    {
+        if (i + 3 < words.size() && words[i] == 0x00040047 &&
+            words[i + 1] == 0x0000000d && words[i + 2] == 0x00000021)
+        {
+            words[i + 3] = 16;
+            patchedBinding = true;
+        }
+        if (i + 8 < words.size() && words[i] == 0x00090019)
+        {
+            words[i + 3] = 1; // Dim2D
+            words[i + 5] = 1; // arrayed
+            patchedType = true;
+        }
+        if (i + 3 < words.size() && words[i] == 0x0004002b &&
+            words[i + 1] == 0x00000006 && words[i + 3] == 0x3f000000)
+        {
+            words[i + 3] = layer < 0.5f ? 0x00000000 : 0x3f800000;
+            patchedCoordinate = true;
+        }
+    }
+    if (!patchedBinding || !patchedType || !patchedCoordinate)
+        throw std::runtime_error("the embedded sampler3D SPIR-V patch contract drifted");
+    return {reinterpret_cast<const char*>(words.data()), words.size() * sizeof(words[0])};
+}
+
+std::string ReadWriteStorageImageSpirV()
+{
+    std::vector<std::uint32_t> words(
+        std::begin(kStorageImageWriteSpv), std::end(kStorageImageWriteSpv));
+    words[3] = 0x00000016; // IDs through %21.
+
+    const std::array<std::uint32_t, 3> nonReadable{
+        0x00030047, 0x00000009, 0x00000019};
+    const auto decoration = std::search(
+        words.begin(), words.end(), nonReadable.begin(), nonReadable.end());
+    if (decoration == words.end())
+        throw std::runtime_error("the embedded storage-image access decoration drifted");
+    words.erase(decoration, decoration + static_cast<std::ptrdiff_t>(nonReadable.size()));
+
+    const std::array<std::uint32_t, 4> constantWrite{
+        0x00040063, 0x00000013, 0x00000011, 0x0000000f};
+    const auto write = std::search(
+        words.begin(), words.end(), constantWrite.begin(), constantWrite.end());
+    if (write == words.end())
+        throw std::runtime_error("the embedded storage-image write instruction drifted");
+    const std::array<std::uint32_t, 14> readShuffleWrite{
+        // %20 = OpImageRead %v4float %19 %zeroCoordinate
+        0x00050062, 0x00000004, 0x00000014, 0x00000013, 0x00000011,
+        // %21 = OpVectorShuffle %v4float %20 %20 2 0 1 3
+        0x0009004f, 0x00000004, 0x00000015, 0x00000014, 0x00000014,
+        0x00000002, 0x00000000, 0x00000001, 0x00000003};
+    const auto at = words.erase(write, write + static_cast<std::ptrdiff_t>(constantWrite.size()));
+    const auto after = words.insert(at, readShuffleWrite.begin(), readShuffleWrite.end());
+    words.insert(
+        after + static_cast<std::ptrdiff_t>(readShuffleWrite.size()),
+        {0x00040063, 0x00000013, 0x00000011, 0x00000015});
+    return {reinterpret_cast<const char*>(words.data()), words.size() * sizeof(words[0])};
+}
+
+std::string StorageImageWriteSpirV(
+    const std::uint32_t imageFormat, const bool needsExtendedCapability)
+{
+    std::vector<std::uint32_t> words(
+        std::begin(kStorageImageWriteSpv), std::end(kStorageImageWriteSpv));
+    bool patchedFormat = false;
+    for (std::size_t i = 0; i + 8 < words.size(); ++i)
+    {
+        if (words[i] == 0x00090019 && words[i + 8] == 4)
+        {
+            words[i + 8] = imageFormat;
+            patchedFormat = true;
+            break;
+        }
+    }
+    if (!patchedFormat)
+        throw std::runtime_error("the embedded storage-image format contract drifted");
+    if (needsExtendedCapability)
+    {
+        const std::array<std::uint32_t, 2> capability{
+            0x00020011, 49}; // OpCapability StorageImageExtendedFormats
+        words.insert(words.begin() + 7, capability.begin(), capability.end());
+    }
+    return {reinterpret_cast<const char*>(words.data()), words.size() * sizeof(words[0])};
+}
+
+std::string CrossTargetStorageCopySpirV()
+{
+    // layout(binding=0,rgba8) readonly image2D sourceImage;
+    // layout(binding=1,rgba8) writeonly image2D destinationImage;
+    // imageStore(destinationImage, ivec2(0), imageLoad(sourceImage, ivec2(0)));
+    static constexpr std::uint32_t words[] = {
+        0x07230203, 0x00010000, 0x00000000, 0x00000013, 0x00000000,
+        0x00020011, 0x00000001,
+        0x0003000e, 0x00000000, 0x00000001,
+        0x0005000f, 0x00000005, 0x0000000b, 0x6e69616d, 0x00000000,
+        0x00060010, 0x0000000b, 0x00000011, 0x00000001, 0x00000001, 0x00000001,
+        0x00030047, 0x00000009, 0x00000018,
+        0x00040047, 0x00000009, 0x00000021, 0x00000000,
+        0x00040047, 0x00000009, 0x00000022, 0x00000000,
+        0x00030047, 0x0000000a, 0x00000019,
+        0x00040047, 0x0000000a, 0x00000021, 0x00000001,
+        0x00040047, 0x0000000a, 0x00000022, 0x00000000,
+        0x00020013, 0x00000001,
+        0x00030021, 0x00000002, 0x00000001,
+        0x00030016, 0x00000003, 0x00000020,
+        0x00040017, 0x00000004, 0x00000003, 0x00000004,
+        0x00040015, 0x00000005, 0x00000020, 0x00000001,
+        0x00040017, 0x00000006, 0x00000005, 0x00000002,
+        0x00090019, 0x00000007, 0x00000003, 0x00000001, 0x00000000,
+                    0x00000000, 0x00000000, 0x00000002, 0x00000004,
+        0x00040020, 0x00000008, 0x00000000, 0x00000007,
+        0x0004003b, 0x00000008, 0x00000009, 0x00000000,
+        0x0004003b, 0x00000008, 0x0000000a, 0x00000000,
+        0x0004002b, 0x00000005, 0x0000000d, 0x00000000,
+        0x0005002c, 0x00000006, 0x0000000e, 0x0000000d, 0x0000000d,
+        0x00050036, 0x00000001, 0x0000000b, 0x00000000, 0x00000002,
+        0x000200f8, 0x0000000f,
+        0x0004003d, 0x00000007, 0x00000010, 0x00000009,
+        0x00050062, 0x00000004, 0x00000011, 0x00000010, 0x0000000e,
+        0x0004003d, 0x00000007, 0x00000012, 0x0000000a,
+        0x00040063, 0x00000012, 0x0000000e, 0x00000011,
+        0x000100fd,
+        0x00010038,
+    };
+    return {reinterpret_cast<const char*>(words), sizeof(words)};
+}
+#endif
+}  // namespace
+
+class VulkanEffectBoundTextureTest final : public Game
+{
+    std::unique_ptr<GraphicsDeviceManager> gdm_;
+    int pass_ = 0;
+    int fail_ = 0;
+
+    void check(bool ok, const std::string& label)
+    {
+        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label.c_str());
+        std::fflush(stdout);
+        ok ? ++pass_ : ++fail_;
+    }
+
+    VulkanRenderer& Renderer()
+    {
+        return *dynamic_cast<VulkanRenderer*>(&getGraphicsDeviceProperty().GetRenderer());
+    }
+
+    static bool Is(const Color& got, const Color& want)
+    {
+        return got.getRProperty() == want.getRProperty() &&
+               got.getGProperty() == want.getGProperty() &&
+               got.getBProperty() == want.getBProperty();
+    }
+
+    static std::string Text(const Color& c)
+    {
+        return "(" + std::to_string(c.getRProperty()) + "," + std::to_string(c.getGProperty()) +
+               "," + std::to_string(c.getBProperty()) + ")";
+    }
+
+    static std::unique_ptr<Texture2D> Solid(GraphicsDevice& dev, const Color& c)
+    {
+        auto t = std::make_unique<Texture2D>(dev, 2, 2, false, SurfaceFormat::Color);
+        const std::array<std::uint8_t, 16> px{
+            c.getRProperty(), c.getGProperty(), c.getBProperty(), c.getAProperty(),
+            c.getRProperty(), c.getGProperty(), c.getBProperty(), c.getAProperty(),
+            c.getRProperty(), c.getGProperty(), c.getBProperty(), c.getAProperty(),
+            c.getRProperty(), c.getGProperty(), c.getBProperty(), c.getAProperty()};
+        t->SetDataRGBA(px.data(), 4);
+        return t;
+    }
+
+    /// Draws `sprite` through `effect` into a fresh target and returns the centre texel.
+    Color DrawThrough(GraphicsDevice& dev, ShaderEffect& effect, Texture2D& sprite)
+    {
+        RenderTarget2D rt(dev, kN, kN, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                          RenderTargetUsage::DiscardContents);
+        dev.setBlendStateProperty(BlendState::Opaque);
+        dev.SetRenderTarget(&rt);
+        dev.Clear(kGreen);
+        {
+            SamplerState point = SamplerState::PointClamp;
+            SpriteBatch sb(dev);
+            sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr,
+                     &effect);
+            sb.Draw(sprite, Rectangle(0, 0, kN, kN), Rectangle(0, 0, 2, 2), kWhite);
+            sb.End();
+        }
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        std::vector<Color> p(static_cast<std::size_t>(kN * kN), Color(0, 0, 0, 0));
+        rt.GetData(p.data(), 0, kN * kN);
+        return p[kN * kN / 2];
+    }
+
+    Color DrawOrdinary(GraphicsDevice& dev, Texture2D& source)
+    {
+        RenderTarget2D rt(dev, kN, kN, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                          RenderTargetUsage::DiscardContents);
+        dev.setBlendStateProperty(BlendState::Opaque);
+        dev.SetRenderTarget(&rt);
+        dev.Clear(Color(1, 2, 3, 255));
+        {
+            SamplerState point = SamplerState::PointClamp;
+            SpriteBatch sb(dev);
+            sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+            sb.Draw(source, Rectangle(0, 0, kN, kN), kWhite);
+            sb.End();
+        }
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        std::vector<Color> p(static_cast<std::size_t>(kN * kN), Color(0, 0, 0, 0));
+        rt.GetData(p.data(), 0, kN * kN);
+        return p[kN * kN / 2];
+    }
+
+protected:
+    void Draw(const GameTime&) override
+    {
+        static bool done = false;
+        if (done) return;
+        done = true;
+
+        auto& dev = getGraphicsDeviceProperty();
+        const std::size_t messagesBefore = Renderer().GetValidationMessagesEXT().size();
+
+        const std::string vert(reinterpret_cast<const char*>(kBoundVertSpv), sizeof(kBoundVertSpv));
+        const std::string frag(reinterpret_cast<const char*>(kBoundFragSpv), sizeof(kBoundFragSpv));
+        ShaderEffect effect(dev, vert, frag);
+
+        auto white = Solid(dev, kWhite);
+        auto blue  = Solid(dev, kBlue);
+        auto green = Solid(dev, kGreen);
+
+#ifdef CNA_CNAEXT
+        {
+            using CNA::Graphics::ComputeShader;
+            RenderTarget2D bridge(
+                dev, 1, 1, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                RenderTargetUsage::DiscardContents);
+            dev.SetRenderTarget(&bridge);
+            dev.Clear(Color(32, 64, 192, 255));
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            ComputeShader imageProgram(dev, ReadWriteStorageImageSpirV());
+            auto ordinaryBridge = std::make_unique<Texture2D>(
+                dev, 1, 1, false, SurfaceFormat::Color);
+            const std::array<std::uint8_t, 4> ordinaryInitial{32, 64, 192, 255};
+            ordinaryBridge->SetDataRGBA(ordinaryInitial.data(), 4);
+            auto* ordinaryNative = dynamic_cast<
+                CNA::Internal::Renderers::Vulkan::VulkanTextureRenderer*>(
+                    &ordinaryBridge->GetRenderer());
+            imageProgram.bindImage(
+                0, *ordinaryBridge, CNA::GraphicsImageAccess::ReadWrite);
+            const std::uint64_t ordinaryOneTimeBefore =
+                Renderer().GetOneTimeCommandCountEXT();
+            const std::uint64_t ordinaryDeviceWaitBefore =
+                Renderer().GetDeviceWaitIdleCountEXT();
+            const std::uint64_t ordinaryBarriersBefore =
+                Renderer().GetLogicalResourceBarrierCountEXT();
+            imageProgram.dispatch(1);
+            const Color ordinaryResult = DrawOrdinary(dev, *ordinaryBridge);
+            const std::uint64_t ordinaryBarrierDelta =
+                Renderer().GetLogicalResourceBarrierCountEXT() - ordinaryBarriersBefore;
+            check(ordinaryNative != nullptr &&
+                      ordinaryNative->IsStorageImageCapableEXT() &&
+                      (ordinaryNative->GetVkImageUsageEXT() & VK_IMAGE_USAGE_STORAGE_BIT) != 0 &&
+                      Is(ordinaryResult, Color(192, 32, 64, 255)) &&
+                      ordinaryBarrierDelta == 4 &&
+                      Renderer().GetOneTimeCommandCountEXT() == ordinaryOneTimeBefore + 1 &&
+                      Renderer().GetDeviceWaitIdleCountEXT() == ordinaryDeviceWaitBefore,
+                  "R ordinary Color Texture2D compute bridge writes then samples in order: " +
+                      Text(ordinaryResult) + " barriers=" +
+                      std::to_string(ordinaryBarrierDelta));
+
+            const std::array<std::uint8_t, 4> overwrite{7, 89, 203, 255};
+            const std::uint64_t orderedOneTimeBefore =
+                Renderer().GetOneTimeCommandCountEXT();
+            imageProgram.dispatch(1);
+            ordinaryBridge->SetDataRGBA(overwrite.data(), 4);
+            const bool orderedQueuedWithoutWait =
+                Renderer().GetOneTimeCommandCountEXT() == orderedOneTimeBefore;
+            const Color overwriteResult = DrawOrdinary(dev, *ordinaryBridge);
+            check(orderedQueuedWithoutWait &&
+                      Is(overwriteResult, Color(7, 89, 203, 255)),
+                  "U ordinary Texture2D compute -> SetData -> sample order is exact: " +
+                      Text(overwriteResult));
+
+            bool packedRefused = false;
+            bool formatMismatchRefused = false;
+            Texture2D packed(dev, 1, 1, false, SurfaceFormat::Bgr565);
+            Texture2D snorm(dev, 1, 1, false, SurfaceFormat::NormalizedByte4);
+            try
+            {
+                imageProgram.bindImage(
+                    0, packed, CNA::GraphicsImageAccess::ReadWrite);
+            }
+            catch (const System::NotSupportedException&)
+            {
+                packedRefused = true;
+            }
+            try
+            {
+                imageProgram.bindImage(
+                    0, snorm, CNA::GraphicsImageAccess::ReadWrite);
+            }
+            catch (const std::invalid_argument&)
+            {
+                formatMismatchRefused = true;
+            }
+            check(packedRefused && formatMismatchRefused,
+                  "V unsupported and SPIR-V-format-mismatched Texture2D bridges refuse exactly");
+
+            imageProgram.bindImage(
+                0, bridge, CNA::GraphicsImageAccess::ReadWrite);
+            const std::uint64_t oneTimeBefore = Renderer().GetOneTimeCommandCountEXT();
+            const std::uint64_t deviceWaitBefore = Renderer().GetDeviceWaitIdleCountEXT();
+            const std::uint64_t barriersBefore =
+                Renderer().GetLogicalResourceBarrierCountEXT();
+            imageProgram.dispatch(1);
+            const bool queuedWithoutWait =
+                Renderer().GetOneTimeCommandCountEXT() == oneTimeBefore &&
+                Renderer().GetDeviceWaitIdleCountEXT() == deviceWaitBefore;
+            const Color bridged = DrawOrdinary(dev, bridge);
+            const std::uint64_t barrierDelta =
+                Renderer().GetLogicalResourceBarrierCountEXT() - barriersBefore;
+            check(Is(bridged, Color(192, 32, 64, 255)) && barrierDelta == 4 &&
+                      queuedWithoutWait && imageProgram.isImageBindingSupported(),
+                  "S render-target write -> compute read/write -> sampled render is ordered: " +
+                      Text(bridged) + " barriers=" + std::to_string(barrierDelta));
+        }
+
+        {
+            using CNA::Graphics::ComputeShader;
+            using CNA::Graphics::StorageTexture2D;
+            using CNA::Graphics::StorageTexture2DDescriptor;
+            using CNA::Graphics::StorageTexture2DUsage;
+            const auto usage = StorageTexture2DUsage::StorageRead |
+                               StorageTexture2DUsage::StorageWrite |
+                               StorageTexture2DUsage::Sampled |
+                               StorageTexture2DUsage::TransferSource |
+                               StorageTexture2DUsage::TransferDestination;
+            StorageTexture2D storage(
+                dev, StorageTexture2DDescriptor(1, 1, 1, SurfaceFormat::Color, usage));
+            const std::string compute(
+                reinterpret_cast<const char*>(kStorageImageWriteSpv),
+                sizeof(kStorageImageWriteSpv));
+            ComputeShader writer(dev, compute);
+            bool sparseSlotRefused = false;
+            bool mismatchedAccessRefused = false;
+            try {
+                writer.bindStorageTexture(7, storage, CNA::GraphicsImageAccess::WriteOnly);
+            } catch (const std::out_of_range&) {
+                sparseSlotRefused = true;
+            }
+            try {
+                writer.bindStorageTexture(0, storage, CNA::GraphicsImageAccess::ReadWrite);
+            } catch (const std::invalid_argument&) {
+                mismatchedAccessRefused = true;
+            }
+            writer.bindStorageTexture(0, storage, CNA::GraphicsImageAccess::WriteOnly);
+            writer.dispatch(1);
+
+            std::array<std::uint8_t, 4> readbackBytes{};
+            storage.getData(0, nullptr, readbackBytes.data(), readbackBytes.size());
+            const Color readback(
+                readbackBytes[0], readbackBytes[1], readbackBytes[2], readbackBytes[3]);
+            const Color expected(64, 128, 191, 255);
+            effect.SetStorageTextureEXT(0, storage);
+            const Color drawn = DrawThrough(dev, effect, *white);
+            const std::uint64_t barriersAfterFirstSample =
+                Renderer().GetLogicalResourceBarrierCountEXT();
+            const std::uint64_t elisionsBeforeSecondSample =
+                Renderer().GetLogicalResourceBarrierElisionCountEXT();
+            const Color drawnAgain = DrawThrough(dev, effect, *white);
+            const std::uint64_t barriersAfterSecondSample =
+                Renderer().GetLogicalResourceBarrierCountEXT();
+            const std::uint64_t elisionsAfterSecondSample =
+                Renderer().GetLogicalResourceBarrierElisionCountEXT();
+            check(Is(readback, expected) && Is(drawn, expected),
+                  "L compute-write is visible to storage readback and sampled draw: read=" +
+                      Text(readback) + " draw=" + Text(drawn) + " want=" + Text(expected));
+            check(sparseSlotRefused && mismatchedAccessRefused,
+                  "M reflected storage-image slot and access qualifier are enforced");
+            check(Is(drawnAgain, expected) &&
+                      barriersAfterSecondSample == barriersAfterFirstSample + 2 &&
+                      elisionsAfterSecondSample > elisionsBeforeSecondSample,
+                  "O repeated sampled-image use elides its redundant Vulkan barrier while "
+                  "the fresh readback target records only its two required barriers: " +
+                      Text(drawnAgain) + " barriers=" +
+                      std::to_string(barriersAfterFirstSample) + "->" +
+                      std::to_string(barriersAfterSecondSample) + " elisions=" +
+                      std::to_string(elisionsBeforeSecondSample) + "->" +
+                      std::to_string(elisionsAfterSecondSample));
+
+            const std::array<std::uint8_t, 4> blueBytes{0, 0, 255, 255};
+            const std::array<std::uint8_t, 4> greenBytes{0, 255, 0, 255};
+            const std::uint64_t oneTimeBeforeOrderedWork =
+                Renderer().GetOneTimeCommandCountEXT();
+            const std::uint64_t deviceWaitBeforeOrderedWork =
+                Renderer().GetDeviceWaitIdleCountEXT();
+            const std::uint64_t barriersBeforeOrderedWork =
+                Renderer().GetLogicalResourceBarrierCountEXT();
+            storage.setData(0, nullptr, blueBytes.data(), blueBytes.size());
+            writer.dispatch(1);
+            storage.setData(0, nullptr, greenBytes.data(), greenBytes.size());
+            const bool queuedWithoutWait =
+                Renderer().GetOneTimeCommandCountEXT() == oneTimeBeforeOrderedWork &&
+                Renderer().GetDeviceWaitIdleCountEXT() == deviceWaitBeforeOrderedWork;
+            check(queuedWithoutWait,
+                  "P upload -> compute -> upload enters one ordered stream without a routine "
+                  "queue/device wait");
+
+            std::array<std::uint8_t, 4> orderedBytes{};
+            storage.getData(0, nullptr, orderedBytes.data(), orderedBytes.size());
+            const Color ordered(
+                orderedBytes[0], orderedBytes[1], orderedBytes[2], orderedBytes[3]);
+            const std::uint64_t orderedBarriers =
+                Renderer().GetLogicalResourceBarrierCountEXT() - barriersBeforeOrderedWork;
+            check(Is(ordered, kGreen) &&
+                      Renderer().GetOneTimeCommandCountEXT() == oneTimeBeforeOrderedWork + 1 &&
+                      Renderer().GetDeviceWaitIdleCountEXT() == deviceWaitBeforeOrderedWork &&
+                      orderedBarriers == 4,
+                  "Q one requested readback preserves upload -> compute -> upload order: " +
+                      Text(ordered) + " submits=" +
+                      std::to_string(Renderer().GetOneTimeCommandCountEXT() -
+                                     oneTimeBeforeOrderedWork) +
+                      " barriers=" + std::to_string(orderedBarriers));
+            effect.ClearStorageTextureEXT(0);
+            const Color cleared = DrawThrough(dev, effect, *white);
+            check(Is(cleared, kWhite),
+                  "N clearing a sampled storage texture restores the dimensional white filler: " +
+                      Text(cleared));
+        }
+
+        {
+            using CNA::Graphics::ComputeShader;
+            using CNA::Graphics::StorageTexture2D;
+            using CNA::Graphics::StorageTexture2DDescriptor;
+            using CNA::Graphics::StorageTexture2DUsage;
+            constexpr auto usage = StorageTexture2DUsage::StorageWrite |
+                                   StorageTexture2DUsage::TransferSource;
+            const auto writeAndRead = [&](const SurfaceFormat format,
+                                          const std::uint32_t spirvFormat,
+                                          const bool extended,
+                                          const std::vector<int>& expected)
+            {
+                const auto support = dev.GetRendererSurfaceFormatSupportEXT(format);
+                if (!support.Supports(CNA::RendererFormatUsage::StorageWrite) ||
+                    !support.Supports(CNA::RendererFormatUsage::TransferSource))
+                    return false;
+                StorageTexture2D texture(
+                    dev, StorageTexture2DDescriptor(1, 1, 1, format, usage));
+                ComputeShader writer(dev, StorageImageWriteSpirV(spirvFormat, extended));
+                writer.bindStorageTexture(
+                    0, texture, CNA::GraphicsImageAccess::WriteOnly);
+                writer.dispatch(1);
+                std::vector<std::uint8_t> bytes(expected.size());
+                texture.getData(0, nullptr, bytes.data(), bytes.size());
+                for (std::size_t i = 0; i < bytes.size(); ++i)
+                {
+                    const int actual = static_cast<int>(static_cast<std::int8_t>(bytes[i]));
+                    if (std::abs(actual - expected[i]) > 1) return false;
+                }
+                return true;
+            };
+            const bool coreSnorm = writeAndRead(
+                SurfaceFormat::NormalizedByte4, 5, false, {32, 64, 95, 127});
+            const bool extendedSnorm = writeAndRead(
+                SurfaceFormat::NormalizedByte2, 18, true, {32, 64});
+            check(coreSnorm && extendedSnorm,
+                  "T core and StorageImageExtendedFormats SNORM images execute and read back");
+        }
+
+        {
+            using CNA::Graphics::ComputeShader;
+            RenderTarget2D wide(
+                dev, 1, 1, false, SurfaceFormat::Rgba64, DepthFormat::None, 0,
+                RenderTargetUsage::DiscardContents);
+            dev.SetRenderTarget(&wide);
+            dev.Clear(Color::Black);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ComputeShader writer(dev, StorageImageWriteSpirV(10, true));
+            writer.bindImage(0, wide, CNA::GraphicsImageAccess::WriteOnly);
+            writer.dispatch(1);
+            std::array<std::uint16_t, 4> channels{};
+            auto* wideNative = dynamic_cast<VulkanRenderTargetRenderer*>(&wide.GetRenderer());
+            const bool readBack = wideNative != nullptr &&
+                                  wideNative->GetData(
+                                      0, 0, 0, 1, 1, channels.data(), sizeof(channels));
+            const auto near = [](const std::uint16_t actual, const std::uint16_t expected)
+            {
+                return actual >= expected - 1 && actual <= expected + 1;
+            };
+            check(readBack && near(channels[0], 16384) && near(channels[1], 32768) &&
+                      near(channels[2], 49151) && channels[3] == 65535,
+                  "W extended Rgba64 RenderTarget2D compute bridge reads exact UNORM16 bytes");
+        }
+
+        {
+            using CNA::Graphics::ComputeShader;
+            RenderTarget2D source(
+                dev, 1, 1, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                RenderTargetUsage::DiscardContents);
+            RenderTarget2D destination(
+                dev, 1, 1, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                RenderTargetUsage::DiscardContents);
+            const Color expected(23, 101, 211, 255);
+            dev.SetRenderTarget(&source);
+            dev.Clear(expected);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            ComputeShader copy(dev, CrossTargetStorageCopySpirV());
+            copy.bindImage(0, source, CNA::GraphicsImageAccess::ReadOnly);
+            copy.bindImage(1, destination, CNA::GraphicsImageAccess::WriteOnly);
+            copy.dispatch(1);
+            std::array<Color, 1> copied{};
+            destination.GetData(copied.data(), 0, 1);
+            check(Is(copied[0], expected),
+                  "X destination readback closes cross-target graphics -> compute dependency: " +
+                      Text(copied[0]));
+        }
+#endif
+
+        // A. The sprite's own texture is WHITE and the effect samples only set 1. If the binding
+        //    never reached the shader, the unbound unit's filler is white too -- so white is the
+        //    failure colour and blue can only come from the bound texture.
+        effect.SetTexture(0, *blue);
+        {
+            const Color got = DrawThrough(dev, effect, *white);
+            check(Is(got, kBlue),
+                  "A a custom effect samples the texture it was bound, not the sprite's: " +
+                      Text(got) + " (want " + Text(kBlue) + "; " + Text(kWhite) +
+                      " is what an unbound unit reads)");
+        }
+
+        // B. Rebind, redraw. One binding proves plumbing; two prove it is the effect's own state.
+        effect.SetTexture(0, *green);
+        {
+            const Color got = DrawThrough(dev, effect, *white);
+            check(Is(got, kGreen),
+                  "B rebinding between batches changes what the shader samples: " + Text(got) +
+                      " (want " + Text(kGreen) + ")");
+        }
+
+        // C. Out of range is refused by name.
+        {
+            bool threw = false;
+            std::string what;
+            try { effect.SetTexture(64, *blue); }
+            catch (const std::exception& e) { threw = true; what = e.what(); }
+            check(threw && what.find("64") != std::string::npos,
+                  "C a sampler unit outside the supported range is refused by name: " +
+                      (threw ? what : std::string("NOT REFUSED")));
+        }
+
+        // E. VULKAN-254: a TextureCube through samplerCube at binding 4.
+        {
+            const std::string cubeFrag(reinterpret_cast<const char*>(kCubeFragSpv),
+                                       sizeof(kCubeFragSpv));
+            ShaderEffect cubeEffect(dev, vert, cubeFrag);
+            TextureCube cube(dev, 2, false, SurfaceFormat::Color);
+            const std::array<Color, 4> face{kBlue, kBlue, kBlue, kBlue};
+            for (int f = 0; f < 6; ++f)
+                cube.SetData(static_cast<CubeMapFace>(f), face.data(), 4);
+            cubeEffect.SetTexture(0, cube);
+            const Color got = DrawThrough(dev, cubeEffect, *white);
+            check(Is(got, kBlue),
+                  "E a bound TextureCube reaches samplerCube at binding 4: " + Text(got) +
+                      " (want " + Text(kBlue) + ")");
+        }
+
+        // F. VULKAN-254: a Texture3D through sampler3D at binding 8.
+        {
+            const std::string volFrag(reinterpret_cast<const char*>(kVolumeFragSpv),
+                                      sizeof(kVolumeFragSpv));
+            ShaderEffect volEffect(dev, vert, volFrag);
+            Texture3D volume(dev, 2, 2, 2, false, SurfaceFormat::Color);
+            std::vector<Color> voxels(8, kBlue);
+            volume.SetData(voxels.data(), static_cast<int>(voxels.size()));
+            volEffect.SetTexture(0, volume);
+            const Color got = DrawThrough(dev, volEffect, *white);
+            check(Is(got, kBlue),
+                  "F a bound Texture3D reaches sampler3D at binding 8: " + Text(got) +
+                      " (want " + Text(kBlue) + ")");
+        }
+
+#ifdef CNA_CNAEXT
+        // G/H/I/J. MOD-2226: real array storage, two distinct layers and an odd mip chain.
+        // ArrayFragmentSpirV changes the proven volume payload above into sampler2DArray at
+        // set 1 binding 16 without introducing a build-time shader-compiler dependency.
+        {
+            using CNA::Graphics::Texture2DArray;
+            using CNA::Graphics::Texture2DArrayDescriptor;
+            using CNA::Graphics::Texture2DArrayUsage;
+            constexpr auto usage =
+                Texture2DArrayUsage::Sampled | Texture2DArrayUsage::Filterable |
+                Texture2DArrayUsage::TransferSource |
+                Texture2DArrayUsage::TransferDestination;
+            Texture2DArray array(
+                dev, Texture2DArrayDescriptor(7, 5, 2, 3, SurfaceFormat::Color, usage));
+
+            const auto solidBytes = [](const Color& color, const int width, const int height) {
+                std::vector<std::uint8_t> bytes(
+                    static_cast<std::size_t>(width * height * 4));
+                for (std::size_t i = 0; i < bytes.size(); i += 4) {
+                    bytes[i] = color.getRProperty();
+                    bytes[i + 1] = color.getGProperty();
+                    bytes[i + 2] = color.getBProperty();
+                    bytes[i + 3] = color.getAProperty();
+                }
+                return bytes;
+            };
+            const std::vector<std::uint8_t> layer0 = solidBytes(kBlue, 7, 5);
+            const std::vector<std::uint8_t> layer1 = solidBytes(kGreen, 7, 5);
+            const std::vector<std::uint8_t> mipLayer0 =
+                solidBytes(Color(255, 0, 0, 255), 3, 2);
+            const std::vector<std::uint8_t> mipLayer1 =
+                solidBytes(Color(255, 255, 0, 255), 3, 2);
+            array.setData(0, 0, nullptr, layer0.data(), layer0.size());
+            array.setData(1, 0, nullptr, layer1.data(), layer1.size());
+            array.setData(0, 1, nullptr, mipLayer0.data(), mipLayer0.size());
+            array.setData(1, 1, nullptr, mipLayer1.data(), mipLayer1.size());
+
+            std::vector<std::uint8_t> readLayer0(layer0.size());
+            std::vector<std::uint8_t> readLayer1(layer1.size());
+            std::vector<std::uint8_t> readMip1(mipLayer1.size());
+            array.getData(0, 0, nullptr, readLayer0.data(), readLayer0.size());
+            array.getData(1, 0, nullptr, readLayer1.data(), readLayer1.size());
+            array.getData(1, 1, nullptr, readMip1.data(), readMip1.size());
+            check(readLayer0 == layer0 && readLayer1 == layer1,
+                  "G upload/readback preserves two distinct array layers byte-for-byte");
+            check(readMip1 == mipLayer1,
+                  "H upload/readback preserves layer 1 of odd 7x5 image's 3x2 mip");
+
+            ShaderEffect layer0Effect(dev, vert, ArrayFragmentSpirV(0.0f));
+            ShaderEffect layer1Effect(dev, vert, ArrayFragmentSpirV(1.0f));
+            layer0Effect.SetTextureArrayEXT(0, array);
+            layer1Effect.SetTextureArrayEXT(0, array);
+            const Color sampled0 = DrawThrough(dev, layer0Effect, *white);
+            const Color sampled1 = DrawThrough(dev, layer1Effect, *white);
+            check(Is(sampled0, kBlue),
+                  "I sampler2DArray reads layer 0 at set 1 binding 16: " + Text(sampled0));
+            check(Is(sampled1, kGreen),
+                  "J sampler2DArray reads layer 1 at set 1 binding 16: " + Text(sampled1));
+
+            bool unitThreeRefused = false;
+            try
+            {
+                layer0Effect.SetTextureArrayEXT(3, array);
+            }
+            catch (const System::NotSupportedException&)
+            {
+                unitThreeRefused = true;
+            }
+            check(unitThreeRefused,
+                  "K texture-array unit 3 is refused before it can alias a missing descriptor");
+        }
+#endif
+
+        {
+            const std::size_t after = Renderer().GetValidationMessagesEXT().size();
+            check(!VulkanRenderer::IsValidationActiveEXT() || after == messagesBefore,
+                  "D no validation message: " + std::to_string(messagesBefore) + " -> " +
+                      std::to_string(after) +
+                      " (an unwritten binding in a bound set is exactly what this would catch)");
+        }
+
+        std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
+        std::fflush(stdout);
+        Exit();
+    }
+
+public:
+    VulkanEffectBoundTextureTest()
+    {
+        gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setPreferredBackBufferWidthProperty(64);
+        gdm_->setPreferredBackBufferHeightProperty(64);
+    }
+
+    [[nodiscard]] int getResult() const { return fail_ == 0 ? 0 : 1; }
+};
+
+int main()
+{
+    VulkanEffectBoundTextureTest game;
+    game.Run();
+    return game.getResult();
+}

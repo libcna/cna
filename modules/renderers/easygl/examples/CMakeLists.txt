@@ -64,6 +64,47 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # plans/plan_software.md SOFTWARE-61/84: this renderer's half of the cross-renderer diagnostic
         # dump -- not registered as a ctest, just a plain executable a developer/script runs by
         # hand alongside SOFTWARE's own cna_diag_software and cna_diag_compare.
+        # plan_vulkan.md VULKAN-214: the control -- 'preserve survives a resize' is a claim
+        # about the XNA contract, so one renderer cannot answer it alone.
+        cna_easygl_test(cna_test_easygl_rendertarget_preserve_across_resize
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_preserve_across_resize_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_RenderTargetPreserveAcrossResize
+            COMMAND cna_test_easygl_rendertarget_preserve_across_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-058: the control that turned a candidate finding into a
+        # defect -- EasyGL masked the sprite correctly while Vulkan painted the whole target.
+        cna_easygl_test(cna_test_easygl_spritebatch_depthstencil_state
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_depthstencil_state_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatch_DepthStencilState
+            COMMAND cna_test_easygl_spritebatch_depthstencil_state
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-137: the control for Vulkan's zero-length buffer run. Vulkan pads
+        # the allocation and EasyGL does not, so agreement between the two is the whole claim.
+        # plan_vulkan.md VULKAN-169 (finding F-32): SaveAsPng/SaveAsJpeg read a render target back
+        # instead of refusing. Shared-layer, so the reference renderer answers for it too.
+        cna_easygl_test(cna_test_easygl_texture2d_saveas_rendertarget
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/texture2d_saveas_rendertarget_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Texture2D_SaveAsRenderTarget
+            COMMAND cna_test_easygl_texture2d_saveas_rendertarget
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_easygl_test(cna_test_easygl_zero_length_buffers
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/zero_length_buffer_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_ZeroLengthBuffers
+            COMMAND cna_test_easygl_zero_length_buffers
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-050: registered here as the CONTROL for the Vulkan run -- the
+        # whole question is whether two renderers with different submission models agree about
+        # SpriteSortMode::Immediate, and a one-renderer measurement cannot answer it.
+        cna_easygl_test(cna_test_easygl_spritebatch_sort_mode_semantics
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_sort_mode_semantics_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatch_SortModeSemantics
+            COMMAND cna_test_easygl_spritebatch_sort_mode_semantics
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_diag_easygl ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
 
         # plans/plan_direct2d.md D2D-129: the 2D counterpart of the dump above. The 3D scene next to it
@@ -621,6 +662,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         easygl_shadereffect_custom_vertex_layout_test.cpp)
         cna_register_renderer_test(NAME EasyGL_ShaderEffect_CustomVertexLayout COMMAND cna_test_easygl_shadereffect_custom_vertex_layout
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_dx.md DX-223: the same public reflection/resource/layout oracle used by both
+        # modern DirectX renderers. EasyGL is the independent implementation control.
+        cna_easygl_test(cna_test_easygl_shader_effect_reflection
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/shader_effect_reflection_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_ShaderEffect_ReflectionContract
+            COMMAND cna_test_easygl_shader_effect_reflection
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: NormalMapping.fx (tangent-space normal mapping + Phong specular) -- with
         # this, NormalMapping sample's shader blocker is fully cleared. Uses Task 1080's custom
@@ -1792,6 +1841,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_DxtFormat COMMAND cna_test_easygl_dxt_format
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_vulkan.md VULKAN-240: direct EasyGL control for compressed cube-map upload,
+        # readback, partial replacement and sampling.
+        cna_easygl_test(cna_test_easygl_dxt_texturecube
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/dxt_texturecube_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_DxtTextureCube COMMAND cna_test_easygl_dxt_texturecube
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+            WORKING_DIRECTORY "${CNA_SOURCE_DIR}")
+
         # REMED-GFX-244: the three packed 16-bit formats GraphicsProfile.Reach permits, uploaded
         # through their typed SetData overloads and sampled in a real draw -- the channel order
         # differs between XNA and GL for the two with alpha, so this is the case that proves the
@@ -1895,6 +1952,40 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         easygl_spritebatch_blendstate_leak_test.cpp)
         cna_register_renderer_test(NAME EasyGL_SpriteBatch_BlendStateLeak COMMAND cna_test_easygl_spritebatch_blendstate_leak
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-400: the control run. The finding this checks is documented as
+        # EasyGL's (migration-guide known issues, Task 933), so a Vulkan-only registration could
+        # not tell "absent on Vulkan" from "the test cannot detect it anywhere".
+        cna_easygl_test(cna_test_easygl_fullscreen_sprite_then_3d
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/fullscreen_spritebatch_then_3d_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_FullscreenSpriteThen3D COMMAND cna_test_easygl_fullscreen_sprite_then_3d
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-217: does a TEXTURED instanced draw sample its texture? The two
+        # renderers implement instancing differently -- EasyGL adds an optional per-instance matrix to
+        # every stock program, Vulkan selects a separate colour-only program pair -- so this is
+        # registered on both or it measures nothing.
+        cna_easygl_test(cna_test_easygl_instanced_textured
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/instanced_textured_draw_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_InstancedTexturedDraw COMMAND cna_test_easygl_instanced_textured
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-167 (EasyGL half): a SpriteBatch's SamplerState.AddressW must reach
+        # a sampler3D a custom effect bound. ApplySamplerState derived WrapR from addressU, which is
+        # right for every XNA preset and wrong for a state that set W on its own; the sibling proof
+        # on Vulkan is Vulkan_Texture3DAddressW.
+        cna_easygl_test(cna_test_easygl_texture3d_addressw
+                        easygl_texture3d_addressw_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Texture3DAddressW COMMAND cna_test_easygl_texture3d_addressw
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plan_vulkan.md VULKAN-194: the second renderer for the SamplerStates[0] publication
+        # contract. The change is in the shared SpriteBatch/GraphicsDevice layer, so a one-renderer
+        # registration could not tell "correct" from "this renderer happens not to notice".
+        cna_easygl_test(cna_test_easygl_spritebatch_sampler0_publication
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_sampler0_publication_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatch_Sampler0Publication COMMAND cna_test_easygl_spritebatch_sampler0_publication
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # GraphicsDeviceManager.SynchronizeWithVerticalRetrace/ApplyChanges() must actually reach
         # IGraphicsRenderer::SetSwapInterval() -- renderer-independent fix in GraphicsDevice::Reset().
@@ -2041,6 +2132,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_sampler_component_isolation
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        cna_easygl_test(cna_test_easygl_envmap_cube_sampler_state
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/envmap_cube_sampler_state_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_EnvMapCubeSamplerState
+            COMMAND cna_test_easygl_envmap_cube_sampler_state
+            TIMEOUT 600 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-175: a TextureFilter ordinal's MIPMAP component is a third, independent decision,
         # and ordinals 0 (Linear) and 1 (Point) were losing it -- both mapped onto a GL filter with no
         # mipmap term, so a texture that really owns a chain never mip-filtered under either, the
@@ -2051,6 +2148,22 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             ${CNA_GRAPHICS_EXAMPLES_DIR}/texture_filter_mip_contract_test.cpp)
         cna_register_renderer_test(NAME EasyGL_TextureFilterMipContract
             COMMAND cna_test_easygl_texture_filter_mip_contract
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_dx.md DX-257: flat-colour mip and volume-slice oracles prove MaxMipLevel,
+        # MipMapLevelOfDetailBias and AddressW by different rendered results, including reset legs.
+        cna_easygl_test(cna_test_easygl_sampler_lod_addressw_contract
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/sampler_lod_addressw_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SamplerLodAddressWContract
+            COMMAND cna_test_easygl_sampler_lod_addressw_contract
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # plans/plan_dx.md DX-215 cross-renderer control: floating-point render-target values must
+        # survive rendering and native-format readback; unsupported DXT targets must be refused.
+        cna_easygl_test(cna_test_easygl_rendertarget_surface_format
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_surface_format_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_RenderTarget_SurfaceFormat
+            COMMAND cna_test_easygl_rendertarget_surface_format
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-177 cross-renderer control: descriptor/binding bookkeeping must be a function of what
@@ -2163,6 +2276,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             cna_register_renderer_test(NAME EasyGL_GFX164_BoundMsaaAlpha
                 COMMAND cna_test_easygl_gfx164_bound_msaa_alpha
                 TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+            cna_easygl_test(cna_test_easygl_active_msaa_readback
+                ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_active_msaa_readback_test.cpp)
+            cna_register_renderer_test(NAME EasyGL_RenderTarget_ActiveMsaaReadback
+                COMMAND cna_test_easygl_active_msaa_readback
+                TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
         # REMED-GFX-186 cross-renderer control: the same PUBLIC generated-mip readback contract on this
@@ -2206,6 +2325,28 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             ${CNA_GRAPHICS_EXAMPLES_DIR}/backbuffer_headless_reject_test.cpp)
         cna_register_renderer_test(NAME EasyGL_BackbufferReject COMMAND cna_test_easygl_backbuffer_reject
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # DX-217 cross-renderer controls for the common presentation policy and
+        # GraphicsDeviceManager swap-interval forwarding contracts.
+        cna_easygl_test(cna_test_easygl_presentation_mode_contract
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/presentation_mode_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_PresentationModeContract
+            COMMAND cna_test_easygl_presentation_mode_contract
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_easygl_test(cna_test_easygl_swap_interval_forwarding
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/swap_interval_forwarding_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SwapIntervalForwarding
+            COMMAND cna_test_easygl_swap_interval_forwarding
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # DX-229's render-target variant independently proves that logical
+        # presentation scaling does not leak into an explicitly bound target.
+        cna_easygl_test(cna_test_easygl_spritebatch_custom_viewport_rt
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_rt_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatch_CustomViewportRT
+            COMMAND cna_test_easygl_spritebatch_custom_viewport_rt
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-155 cross-renderer control: a render target produced and unbound earlier in a public
         # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
