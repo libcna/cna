@@ -579,6 +579,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   in linear time and tests bounded neighbouring diamonds; a segment wholly inside one diamond emits
   no fragment. Five isolated Microsoft XNA 4.0 probes and both checked corpus scenes match Software
   byte-for-byte, and the same seven references match current Mesa EasyGL.
+- **RGBA8 render-target stores use UNORM round-to-nearest** (`SOFTWARE-345`). The Color framebuffer
+  no longer truncates `value * 255` while every wider Software UNORM format rounds. Exact half-byte
+  values measured through Microsoft XNA now store as 128/65/191, and a direct CPU-storage guard
+  pins those results. The complete XNA corpus rises from 10 to 18 byte-exact scenes and from 28 to
+  30 within one byte; three newly measured line gradients shrink from 32/32/142 differing pixels
+  to 2/2/34. The residual one-byte subpixel interpolation cases remain an explicit follow-up audit.
 - **`SpriteBatch` destinations remain sub-pixel precise** (`SOFTWARE-137`) — Vector2 positions,
   scalar/non-uniform scales and per-glyph DrawString rectangles reach CPU quad generation as floats
   rather than being truncated by the renderer interface's compatibility fallback. A shared

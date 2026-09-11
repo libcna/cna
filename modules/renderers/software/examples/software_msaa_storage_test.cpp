@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// SOFTWARE-110: allocation, clear and mode-transition proof for per-sample attachments.
+// SOFTWARE-110/345: allocation, clear and mode-transition proof for per-sample attachments, plus
+// XNA/D3D Color-target UNORM8 quantization at exact half-byte boundaries.
 
 #include "CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp"
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
@@ -48,6 +49,11 @@ int main()
 
     SoftwareFramebuffer framebuffer(true, true);
     framebuffer.Resize(8, 6);
+    framebuffer.WriteColor(0u, -1,
+                           {0.5f, 64.5f / 255.0f, 190.5f / 255.0f, 1.0f}, 0x0F);
+    ok &= Check(framebuffer.color[0] == 128u && framebuffer.color[1] == 65u &&
+                    framebuffer.color[2] == 191u && framebuffer.color[3] == 255u,
+                "Color-target UNORM8 stores round to nearest at half-byte boundaries");
     framebuffer.depthBuffer[0] = 0.25f;
     framebuffer.stencilBuffer[0] = 17u;
     framebuffer.SetMultiSampleCount(4);

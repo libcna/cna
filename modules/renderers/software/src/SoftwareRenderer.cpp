@@ -1143,8 +1143,8 @@ namespace CNA::Internal::Renderers::Software
             // REMED-GFX-182: written as nested LERPs (`a + (b-a)*t`) rather than as weighted sums
             // (`a*(1-t) + b*t`). The two are algebraically identical and cost the same four fetches,
             // but only this form is EXACT when the taps agree: `a + (a-a)*t` is `a` for every t,
-            // where the weighted sum can land one ULP below it and the framebuffer's truncating
-            // store then writes a byte one lower. Real hardware filters in fixed point and returns
+            // where the weighted sum can land one ULP below it and cross an RGBA8 quantization
+            // midpoint. Real hardware filters in fixed point and returns
             // the texel exactly for a uniform footprint; a linear filter over a uniform region must
             // return that region's value, on the 2D path as much as on the cube path this now
             // serves (a mip level of a flat cube face is exactly such a region).
@@ -1968,11 +1968,11 @@ namespace CNA::Internal::Renderers::Software
                          static_cast<int>(g_cubeTrace.sampleG * 255.0f + 0.5f),
                          static_cast<int>(g_cubeTrace.sampleB * 255.0f + 0.5f),
                          static_cast<int>(g_cubeTrace.sampleA * 255.0f + 0.5f),
-                         // Truncated exactly as the framebuffer store below truncates, so the trace
-                         // reports the byte that is really written and not a rounded approximation.
-                         static_cast<int>(std::clamp(outR, 0.0f, 1.0f) * 255.0f),
-                         static_cast<int>(std::clamp(outG, 0.0f, 1.0f) * 255.0f),
-                         static_cast<int>(std::clamp(outB, 0.0f, 1.0f) * 255.0f));
+                         // SOFTWARE-345: report the same round-to-nearest UNORM8 byte the
+                         // framebuffer writes, rather than the former truncating approximation.
+                         static_cast<int>(std::clamp(outR, 0.0f, 1.0f) * 255.0f + 0.5f),
+                         static_cast<int>(std::clamp(outG, 0.0f, 1.0f) * 255.0f + 0.5f),
+                         static_cast<int>(std::clamp(outB, 0.0f, 1.0f) * 255.0f + 0.5f));
         }
 #endif
 
