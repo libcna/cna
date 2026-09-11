@@ -1598,6 +1598,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             SDL_GPUShader* vertexShader = nullptr;
             SDL_GPUShader* pixelShader = nullptr;
+            /// SDLGPU-124: monotonic MojoShader identity; native wrapper addresses may be reused.
+            std::uint64_t programIdentity = 0;
             /// Keeps both native shader modules valid until this deferred binding is discarded.
             std::shared_ptr<CompiledEffectShaderLease> shaderLease;
             std::vector<SDL_GPUVertexAttribute> vertexAttributes;

@@ -34,6 +34,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -1022,6 +1023,85 @@ TEST(SdlGpuCompiledEffectDrawTest, QueuedSpriteRetainsShadersAfterEffectDisposal
     EXPECT_NEAR(centre.getRProperty(), 64, 3);
     EXPECT_NEAR(centre.getGProperty(), 128, 3);
     EXPECT_NEAR(centre.getBProperty(), 191, 3);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, RecreatedEffectsReceiveDistinctStablePipelineIdentities)
+{
+    GraphicsDevice device;
+    SdlGpuRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr ||
+        !CNA::TestSupport::SupportsCompiledEffects(device))
+    {
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    }
+
+    struct ClipVertex { float x, y, z; };
+    const ClipVertex quad[6] = {
+        {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+        {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+    };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    const auto effectBytes = CNA::TestSupport::BuildSyntheticDrawableEffect();
+    const Microsoft::Xna::Framework::Vector4 tint(0.2f, 0.5f, 0.8f, 1.0f);
+
+    std::vector<std::uint64_t> seenIdentities;
+
+    // Vulkan happens to retain shader wrappers through its pipeline objects, while the D3D12 and
+    // Metal backends free them immediately after the Effect releases its linked program.
+    // Therefore native wrapper addresses are not a cross-backend cache identity. Recreate the
+    // same Effect and alternate its two discriminating programs: pass 0 writes Tint.yzxw, while
+    // StatePass writes Tint unchanged. Every newly linked program must receive a fresh identity,
+    // and relinking it before destruction must preserve that identity.
+    for (int iteration = 0; iteration < 8; ++iteration)
+    {
+        const bool swizzled = (iteration % 2) == 0;
+        auto effect = std::make_unique<Effect>(device, effectBytes);
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect->getParametersProperty()["Tint"]->SetValue(tint);
+        effect->getTechniquesProperty()[0].getPassesProperty()[swizzled ? 0 : 1].Apply();
+
+        auto* runtime = dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(
+            effect->GetCompiledRuntimePtr());
+        ASSERT_NE(runtime, nullptr);
+
+        RenderTarget2D target(device, 8, 8);
+        device.SetRenderTarget(&target);
+        device.Clear(Color(9, 19, 29, 255));
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.DrawUserPrimitives(
+            PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
+
+        const std::uint64_t identity = runtime->LinkedProgramIdentityEXT();
+        ASSERT_NE(identity, 0u);
+        EXPECT_EQ(std::find(seenIdentities.begin(), seenIdentities.end(), identity),
+                  seenIdentities.end())
+            << "a destroyed program's cache identity was recycled at iteration " << iteration;
+        seenIdentities.push_back(identity);
+
+        // Applying and queueing the exact same pass again hits MojoShader's linker cache. Its
+        // identity must remain the one already folded into this renderer's pipeline key.
+        effect->getTechniquesProperty()[0].getPassesProperty()[swizzled ? 0 : 1].Apply();
+        device.DrawUserPrimitives(
+            PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2, declaration);
+        EXPECT_EQ(runtime->LinkedProgramIdentityEXT(), identity);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre(0, 0, 0, 0);
+        const Rectangle probe(4, 4, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        const Color expected = swizzled ? Color(128, 204, 51, 255)
+                                       : Color(51, 128, 204, 255);
+        EXPECT_NEAR(centre.getRProperty(), expected.getRProperty(), 3) << "iteration " << iteration;
+        EXPECT_NEAR(centre.getGProperty(), expected.getGProperty(), 3) << "iteration " << iteration;
+        EXPECT_NEAR(centre.getBProperty(), expected.getBProperty(), 3) << "iteration " << iteration;
+
+        effect->Dispose();
+        effect.reset();
+    }
 }
 
 TEST(SdlGpuCompiledEffectDrawTest, DeferredCompiledSpriteSurvivesTextureDestructionBeforeEnd)

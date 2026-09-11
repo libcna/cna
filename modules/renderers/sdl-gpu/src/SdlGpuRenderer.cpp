@@ -7286,8 +7286,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // fields, or SpriteBatch's own fixed SpriteVertex layout), so those are folded in here
         // instead of being implicit in which cache this key is looked up in. One cache and one key
         // scheme serves both the ordinary-draw and SpriteBatch routes.
-        key = HashCombine(key, std::hash<const void*>{}(binding.vertexShader));
-        key = HashCombine(key, std::hash<const void*>{}(binding.pixelShader));
+        key = HashCombine(key, std::hash<std::uint64_t>{}(binding.programIdentity));
         key = HashCombine(key, binding.vertexBuffers.size());
         for (const SDL_GPUVertexBufferDescription& buffer : binding.vertexBuffers)
         {
@@ -7348,6 +7347,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         CompiledEffectBinding binding;
         SdlGpuCompiledEffectVertexLayoutEXT vertexLayout =
             effect.LinkAndGetShadersMultiEXT(streams, binding.vertexShader, binding.pixelShader);
+        binding.programIdentity = effect.LinkedProgramIdentityEXT();
+        if (binding.programIdentity == 0)
+        {
+            throw std::runtime_error(
+                "CNA SDL_GPU: linked compiled effect has no stable program identity.");
+        }
         binding.pixelUsesLodBias = effect.LinkedPixelShaderUsesLodBiasEXT();
         binding.vertexAttributes = std::move(vertexLayout.attributes);
         binding.vertexBuffers = std::move(vertexLayout.buffers);

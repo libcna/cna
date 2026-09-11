@@ -1,0 +1,60 @@
+diff --git a/mojoshader.h b/mojoshader.h
+--- a/mojoshader.h
++++ b/mojoshader.h
+@@ -2209,6 +2209,9 @@ DECLSPEC MOJOSHADER_sdlProgram *MOJOSHADER_sdlLinkProgram(MOJOSHADER_sdlContext
+ /* Returns non-zero when the currently linked program's fragment module was transformed. */
+ DECLSPEC int MOJOSHADER_sdlGetPixelSpirvTransformApplied(MOJOSHADER_sdlContext *context);
+ 
++/* Returns a non-zero context-lifetime identity for the currently linked program. */
++DECLSPEC unsigned long long MOJOSHADER_sdlGetProgramIdentity(MOJOSHADER_sdlContext *context);
++
+ /*
+  * This binds the program to the active context, and does nothing particularly
+  * special until you start working with uniform buffers or shader modules.
+diff --git a/mojoshader_sdlgpu.c b/mojoshader_sdlgpu.c
+--- a/mojoshader_sdlgpu.c
++++ b/mojoshader_sdlgpu.c
+@@ -122,6 +122,7 @@ struct MOJOSHADER_sdlContext
+     MOJOSHADER_sdlShaderData *bound_pshader_data;
+     MOJOSHADER_sdlProgram *bound_program;
+     HashTable *linker_cache;
++    unsigned long long next_program_identity;
+     MOJOSHADER_sdlSpirvTransform spirv_transform;
+     void *spirv_transform_data;
+ };
+@@ -143,6 +144,7 @@ struct MOJOSHADER_sdlProgram
+     SDL_GPUShader *pixelShader;
+     MOJOSHADER_sdlShaderData *vertexShaderData;
+     MOJOSHADER_sdlShaderData *pixelShaderData;
++    unsigned long long identity;
+     int pixelSpirvTransformApplied;
+ };
+ 
+@@ -811,6 +813,13 @@ MOJOSHADER_sdlProgram *MOJOSHADER_sdlLinkProgram(
+ 
+     program->vertexShaderData = vshader;
+     program->pixelShaderData = pshader;
++    if (ctx->next_program_identity == ~0ULL)
++    {
++        MOJOSHADER_sdlDeleteProgram(ctx, program);
++        set_error("SDL_gpu linked-program identity space exhausted");
++        return NULL;
++    } // if
++    program->identity = ++ctx->next_program_identity;
+ 
+     LinkedShaderData *item = (LinkedShaderData *) ctx->malloc_fn(sizeof (LinkedShaderData),
+                                                          ctx->malloc_data);
+@@ -883,6 +892,13 @@ int MOJOSHADER_sdlGetPixelSpirvTransformApplied(MOJOSHADER_sdlContext *ctx)
+     return ctx->bound_program->pixelSpirvTransformApplied;
+ } // MOJOSHADER_sdlGetPixelSpirvTransformApplied
+ 
++unsigned long long MOJOSHADER_sdlGetProgramIdentity(MOJOSHADER_sdlContext *ctx)
++{
++    if (ctx == NULL || ctx->bound_program == NULL)
++        return 0;
++    return ctx->bound_program->identity;
++} // MOJOSHADER_sdlGetProgramIdentity
++
+ void MOJOSHADER_sdlShaderAddRef(MOJOSHADER_sdlShaderData *shader)
+ {
+     if (shader != NULL)

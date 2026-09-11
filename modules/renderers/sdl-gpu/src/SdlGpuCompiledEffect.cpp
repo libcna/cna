@@ -479,6 +479,13 @@ namespace CNA::Internal::Renderers::SdlGpu
                MOJOSHADER_sdlGetPixelSpirvTransformApplied(context_) != 0;
     }
 
+    std::uint64_t SdlGpuCompiledEffect::LinkedProgramIdentityEXT() const
+    {
+        return context_ != nullptr
+                   ? static_cast<std::uint64_t>(MOJOSHADER_sdlGetProgramIdentity(context_))
+                   : 0u;
+    }
+
     void SdlGpuCompiledEffect::GetBoundShadersEXT(MOJOSHADER_sdlShaderData*& vertex,
                                                   MOJOSHADER_sdlShaderData*& pixel) const
     {

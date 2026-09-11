@@ -228,6 +228,17 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         CNAEXT [[nodiscard]] bool LinkedPixelShaderUsesLodBiasEXT() const;
 
+        /**
+         * @brief Returns the context-lifetime identity of the currently linked SDL_gpu program.
+         *
+         * Unlike native shader wrapper addresses, this value is never recycled while the owning
+         * MojoShader context exists, so immutable pipeline caches can distinguish programs after
+         * their source Effect objects have been destroyed.
+         *
+         * @return A non-zero program identity after a successful link, otherwise zero.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t LinkedProgramIdentityEXT() const;
+
     private:
         SdlGpuCompiledEffect(SdlGpuRenderer& renderer, const SdlGpuCompiledEffect& cloneSource);
 
