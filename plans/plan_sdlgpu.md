@@ -1103,6 +1103,19 @@ not supply the ShaderCross runtime, and the built-in shaders bypass MojoShader.
   the 246 EasyGL example sources. Only `CnaGraphicsTests` was requested from the SDL build; the
   EasyGL confirmation compiled one changed test object and relinked an alternate binary from its
   unchanged stable objects instead of triggering the pending 134-object configuration cascade.
+  On the same machine and in the same minute, the unchanged
+  `PresentationRectangleTest.ALetterboxedDefaultViewportIsNotACustomSubViewport` exited 0 from
+  `cmake-build-sdlgpu/CnaGraphicsTests` (`SDL_GPU`) and exited 1 from the stable
+  `cmake-build-debug` OPENGL33 binary.
+- **Already repaired on `next`; do not cherry-pick here.** Substantive commit `2f3dca5f9` compares
+  against `GetDefaultViewportRect()` and hardening commit `7bcf3f496` records default-versus-custom
+  when the viewport is set instead of inferring it from stale GL state. A cross-branch check made
+  for this follow-up originally measured **439** commits in `next` but absent from `origin/sdlgpu`;
+  the local refs now measure **440** after another `next` documentation commit landed. That moving
+  distance includes merge `93ca4ffdf`, which changed the adjacent EasyGL sprite flush and sampler
+  path. Copying the two fixes onto this older EasyGL would create a stale fork and a future merge
+  conflict. Integrating `next` into `sdlgpu` is the honest direction and remains the repository
+  owner's sequencing decision; this branch records the provenance and makes no EasyGL change.
 
 ### SDLGPU-121 — apply stock sampler LOD bias in shaders on every SDL_gpu driver ✅
 
