@@ -733,19 +733,19 @@ namespace
         textureProgram.instructions[0].tokens = {
             94u, destination(predicateRegisterType, 0),
             source(constant, 0), source(constant, 1)};
-        bool setpRejectedAsPending = false;
+        textureProgram.instructions[0].controls = 1u;
+        bool setpExecuted = true;
         try
         {
             static_cast<void>(ExecuteSoftwarePixelShaderEXT(
                 textureProgram, floats, integers, booleans, inputs, &recordingSampler));
         }
-        catch (const std::runtime_error& error)
+        catch (const std::runtime_error&)
         {
-            setpRejectedAsPending =
-                std::string(error.what()).find("unsupported opcode 94") != std::string::npos;
+            setpExecuted = false;
         }
-        Check(setpRejectedAsPending && recordingSampler.sampleCount == samplesBeforeSetp,
-              "SETP opcode 94 was still misrouted through TEXLDD sampling");
+        Check(setpExecuted && recordingSampler.sampleCount == samplesBeforeSetp,
+              "SETP opcode 94 was rejected or misrouted through TEXLDD sampling");
 
         SoftwareShaderProgramEXT killProgram;
         killProgram.stage = SoftwareShaderStageEXT::Pixel;
@@ -762,6 +762,213 @@ namespace
             killProgram, floats, integers, booleans, killInputs);
         Check(killed.discarded && killed.colorWriteMask == 0u,
               "TEXKILL did not suppress the Shader Model 1 r0 output");
+    }
+
+    void CheckVertexConditionalSemantics()
+    {
+        constexpr std::uint32_t constant = 2u;
+        constexpr std::uint32_t outputRegister = 6u;
+        constexpr std::uint32_t booleanConstant = 14u;
+        constexpr std::uint32_t predicate = 19u;
+        const auto registerBits = [](std::uint32_t type)
+        {
+            return ((type & 0x7u) << 28u) | ((type >> 3u) << 11u);
+        };
+        const auto destination = [&](std::uint32_t type, std::uint32_t number,
+                                     std::uint32_t mask = 0xFu)
+        {
+            return 0x80000000u | registerBits(type) | number | (mask << 16u);
+        };
+        const auto source = [&](std::uint32_t type, std::uint32_t number,
+                                std::uint32_t swizzle = 0xE4u)
+        {
+            return 0x80000000u | registerBits(type) | number | (swizzle << 16u);
+        };
+        SoftwareShaderProgramEXT program;
+        program.stage = SoftwareShaderStageEXT::Vertex;
+        program.majorVersion = 3;
+        program.outputSemantics = {
+            {MOJOSHADER_USAGE_POSITION, 0u, 0u, outputRegister},
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, 1u, outputRegister},
+        };
+        for (std::uint8_t index = 0; index < 6u; ++index)
+        {
+            program.outputSemantics.push_back(
+                {MOJOSHADER_USAGE_TEXCOORD, static_cast<std::uint8_t>(index + 1u),
+                 static_cast<std::uint16_t>(index + 2u), outputRegister});
+        }
+        const auto add = [&](std::uint16_t opcode, std::initializer_list<std::uint32_t> tokens,
+                             std::uint8_t controls = 0u)
+        {
+            SoftwareShaderInstructionEXT instruction;
+            instruction.opcode = opcode;
+            instruction.controls = controls;
+            instruction.tokens.assign(tokens);
+            program.instructions.push_back(std::move(instruction));
+        };
+        add(1u, {1u, destination(outputRegister, 0u), source(constant, 0u)});
+        add(47u, {47u, destination(booleanConstant, 0u), 1u});
+        add(47u, {47u, destination(booleanConstant, 1u), 0u});
+        add(94u, {94u, destination(predicate, 0u, 0x3u), source(constant, 1u),
+                  source(constant, 2u)}, 1u);
+        add(40u, {40u, source(booleanConstant, 0u, 0x00u)});
+        add(40u, {40u, source(predicate, 0u, 0x00u)});
+        add(1u, {1u, destination(outputRegister, 1u, 0x3u), source(constant, 3u)});
+        add(42u, {42u});
+        add(1u, {1u, destination(outputRegister, 1u, 0x3u), source(constant, 4u)});
+        add(43u, {43u});
+        add(42u, {42u});
+        add(1u, {1u, destination(outputRegister, 1u, 0x3u), source(constant, 4u)});
+        add(43u, {43u});
+        add(40u, {40u, source(booleanConstant, 1u, 0x00u)});
+        add(40u, {40u, source(booleanConstant, 0u, 0x00u)});
+        add(1u, {1u, destination(outputRegister, 1u, 0x1u), source(constant, 4u)});
+        add(43u, {43u});
+        add(43u, {43u});
+        add(41u, {41u, source(constant, 1u, 0x00u), source(constant, 2u, 0x00u)}, 4u);
+        add(1u, {1u, destination(outputRegister, 1u, 0xCu), source(constant, 4u)});
+        add(42u, {42u});
+        add(1u, {1u, destination(outputRegister, 1u, 0xCu), source(constant, 5u)});
+        add(43u, {43u});
+        for (std::uint8_t control = 1u; control <= 6u; ++control)
+        {
+            add(94u, {94u, destination(predicate, 0u, 0x1u), source(constant, 6u, 0x00u),
+                      source(constant, 7u, 0x00u)}, control);
+            add(1u, {1u, destination(outputRegister, static_cast<std::uint32_t>(control + 1u),
+                                     0x1u),
+                     source(predicate, 0u, 0x00u)});
+        }
+
+        std::array<float, 256u * 4u> floats{};
+        const auto setConstant = [&](std::size_t index, std::array<float, 4> value)
+        {
+            std::copy(value.begin(), value.end(),
+                      floats.begin() + static_cast<std::ptrdiff_t>(index * 4u));
+        };
+        setConstant(0u, {0.0f, 0.0f, 0.0f, 1.0f});
+        setConstant(1u, {2.0f, 1.0f, 5.0f, 0.0f});
+        setConstant(2u, {1.0f, 2.0f, 5.0f, 0.0f});
+        setConstant(3u, {10.0f, 20.0f, 30.0f, 40.0f});
+        setConstant(4u, {50.0f, 60.0f, 70.0f, 80.0f});
+        setConstant(5u, {90.0f, 100.0f, 110.0f, 120.0f});
+        setConstant(6u, {2.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(7u, {1.0f, 0.0f, 0.0f, 0.0f});
+        const std::array<int, 16u * 4u> integers{};
+        const std::array<unsigned char, 16> booleans{};
+        const auto result = ExecuteSoftwareVertexShaderEXT(
+            program, floats, integers, booleans, {});
+        Check(result.position == std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f},
+              "vertex conditional program lost POSITION0");
+        const auto varying = [&](std::uint8_t index) -> const std::array<float, 4>&
+        {
+            const auto found = std::find_if(result.varyings.begin(), result.varyings.end(),
+                                            [&](const auto& value)
+                                            {
+                                                return value.usage == MOJOSHADER_USAGE_TEXCOORD &&
+                                                       value.usageIndex == index;
+                                            });
+            if (found == result.varyings.end())
+                throw std::runtime_error("Missing conditional TEXCOORD output");
+            return found->value;
+        };
+        Check(varying(0u) == std::array<float, 4>{10.0f, 20.0f, 110.0f, 120.0f},
+              "nested vertex IF/IFC/ELSE selection differs");
+        constexpr std::array<float, 6> expected = {1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f};
+        for (std::uint8_t index = 0u; index < expected.size(); ++index)
+        {
+            Check(varying(static_cast<std::uint8_t>(index + 1u))[0] == expected[index],
+                  "vertex SETP comparison control " + std::to_string(index + 1u) + " differs");
+        }
+    }
+
+    void CheckPixelConditionalSemantics()
+    {
+        constexpr std::uint32_t constant = 2u;
+        constexpr std::uint32_t colorOutput = 8u;
+        constexpr std::uint32_t booleanConstant = 14u;
+        constexpr std::uint32_t predicate = 19u;
+        const auto registerBits = [](std::uint32_t type)
+        {
+            return ((type & 0x7u) << 28u) | ((type >> 3u) << 11u);
+        };
+        const auto destination = [&](std::uint32_t type, std::uint32_t number,
+                                     std::uint32_t mask = 0xFu)
+        {
+            return 0x80000000u | registerBits(type) | number | (mask << 16u);
+        };
+        const auto source = [&](std::uint32_t type, std::uint32_t number,
+                                std::uint32_t swizzle = 0xE4u)
+        {
+            return 0x80000000u | registerBits(type) | number | (swizzle << 16u);
+        };
+        SoftwareShaderProgramEXT program;
+        program.stage = SoftwareShaderStageEXT::Pixel;
+        program.majorVersion = 3;
+        const auto add = [&](std::uint16_t opcode, std::initializer_list<std::uint32_t> tokens,
+                             std::uint8_t controls = 0u)
+        {
+            SoftwareShaderInstructionEXT instruction;
+            instruction.opcode = opcode;
+            instruction.controls = controls;
+            instruction.tokens.assign(tokens);
+            program.instructions.push_back(std::move(instruction));
+        };
+        add(47u, {47u, destination(booleanConstant, 0u), 1u});
+        add(47u, {47u, destination(booleanConstant, 1u), 0u});
+        add(94u, {94u, destination(predicate, 0u, 0xFu), source(constant, 0u),
+                  source(constant, 1u)}, 2u);
+        add(40u, {40u, source(booleanConstant, 0u, 0x00u)});
+        add(40u, {40u, source(predicate, 0u, 0xAAu)});
+        add(1u, {1u, destination(colorOutput, 0u), source(constant, 2u)});
+        add(42u, {42u});
+        add(1u, {1u, destination(colorOutput, 0u), source(constant, 3u)});
+        add(43u, {43u});
+        add(42u, {42u});
+        add(1u, {1u, destination(colorOutput, 0u), source(constant, 3u)});
+        add(43u, {43u});
+        add(40u, {40u, source(booleanConstant, 1u, 0x00u)});
+        add(1u, {1u, destination(colorOutput, 0u), source(constant, 3u)});
+        add(43u, {43u});
+        add(41u, {41u, source(constant, 0u, 0xFFu), source(constant, 1u, 0xFFu)}, 6u);
+        add(1u, {1u, destination(colorOutput, 0u, 0x8u), source(constant, 4u)});
+        add(43u, {43u});
+        add(1u, {1u, destination(colorOutput, 1u), source(constant, 5u)});
+        add(1u, {1u, destination(colorOutput, 2u), source(constant, 5u)});
+        for (std::uint8_t control = 1u; control <= 6u; ++control)
+        {
+            const std::uint32_t output = 1u + (control - 1u) / 4u;
+            const std::uint32_t mask = 1u << ((control - 1u) % 4u);
+            add(41u, {41u, source(constant, 6u, 0x00u),
+                      source(constant, 7u, 0x00u)}, control);
+            add(1u, {1u, destination(colorOutput, output, mask), source(constant, 8u)});
+            add(43u, {43u});
+        }
+
+        std::array<float, 256u * 4u> floats{};
+        const auto setConstant = [&](std::size_t index, std::array<float, 4> value)
+        {
+            std::copy(value.begin(), value.end(),
+                      floats.begin() + static_cast<std::ptrdiff_t>(index * 4u));
+        };
+        setConstant(0u, {1.0f, 2.0f, 3.0f, 4.0f});
+        setConstant(1u, {1.0f, 0.0f, 3.0f, 5.0f});
+        setConstant(2u, {0.1f, 0.2f, 0.3f, 0.4f});
+        setConstant(3u, {0.5f, 0.6f, 0.7f, 0.8f});
+        setConstant(4u, {0.0f, 0.0f, 0.0f, 0.9f});
+        setConstant(5u, {0.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(6u, {2.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(7u, {1.0f, 0.0f, 0.0f, 0.0f});
+        setConstant(8u, {1.0f, 1.0f, 1.0f, 1.0f});
+        const std::array<int, 16u * 4u> integers{};
+        const std::array<unsigned char, 16> booleans{};
+        const auto result = ExecuteSoftwarePixelShaderEXT(
+            program, floats, integers, booleans, {});
+        Check(result.colorWriteMask == 0x7u &&
+                  result.colors[0] == std::array<float, 4>{0.1f, 0.2f, 0.3f, 0.9f},
+              "nested pixel SETP/IF/IFC/ELSE or local DEFB result differs");
+        Check(result.colors[1] == std::array<float, 4>{1.0f, 0.0f, 1.0f, 0.0f} &&
+                  result.colors[2] == std::array<float, 4>{1.0f, 0.0f, 0.0f, 0.0f},
+              "pixel IFC comparison controls differ");
     }
 
     void CheckCompiledSamplerRasterization(SoftwareRenderer& renderer)
@@ -1480,6 +1687,8 @@ int main()
         SoftwareRenderer renderer(16, 16);
         CheckVertexInstructionSemantics();
         CheckPixelInstructionSemantics();
+        CheckVertexConditionalSemantics();
+        CheckPixelConditionalSemantics();
         CheckCompiledSamplerRasterization(renderer);
         CheckCompiledMrtRasterization(renderer);
         CheckCompiledLineAndWireframeRasterization(renderer);

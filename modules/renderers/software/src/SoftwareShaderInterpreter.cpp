@@ -140,6 +140,22 @@ namespace CNA::Internal::Renderers::Software
             return result;
         }
 
+        [[nodiscard]] bool Compare(float left, float right, std::uint8_t control)
+        {
+            switch (control)
+            {
+            case 1: return left > right;
+            case 2: return left == right;
+            case 3: return left >= right;
+            case 4: return left < right;
+            case 5: return left != right;
+            case 6: return left <= right;
+            default:
+                throw std::runtime_error(
+                    "Software vertex shader: invalid comparison control.");
+            }
+        }
+
         class VertexMachine
         {
         public:
@@ -175,8 +191,47 @@ namespace CNA::Internal::Renderers::Software
 
             [[nodiscard]] SoftwareVertexShaderResultEXT Execute()
             {
+                struct ConditionalFrame
+                {
+                    bool parentActive;
+                    bool condition;
+                    bool sawElse;
+                };
+                std::vector<ConditionalFrame> conditionals;
+                bool active = true;
                 for (const SoftwareShaderInstructionEXT& instruction : program_.instructions)
-                    ExecuteInstruction(instruction);
+                {
+                    if (instruction.opcode == 40u || instruction.opcode == 41u)
+                    {
+                        const bool condition = active && EvaluateConditional(instruction);
+                        conditionals.push_back({active, condition, false});
+                        active = active && condition;
+                    }
+                    else if (instruction.opcode == 42u)
+                    {
+                        if (conditionals.empty() || conditionals.back().sawElse)
+                            throw std::runtime_error(
+                                "Software vertex shader: ELSE without a matching IF.");
+                        conditionals.back().sawElse = true;
+                        active = conditionals.back().parentActive &&
+                                 !conditionals.back().condition;
+                    }
+                    else if (instruction.opcode == 43u)
+                    {
+                        if (conditionals.empty())
+                            throw std::runtime_error(
+                                "Software vertex shader: ENDIF without a matching IF.");
+                        active = conditionals.back().parentActive;
+                        conditionals.pop_back();
+                    }
+                    else if (active)
+                    {
+                        ExecuteInstruction(instruction);
+                    }
+                }
+                if (!conditionals.empty())
+                    throw std::runtime_error(
+                        "Software vertex shader: IF without a matching ENDIF.");
                 return BuildResult();
             }
 
@@ -273,10 +328,10 @@ namespace CNA::Internal::Renderers::Software
                     return {value, value, value, value};
                 }
                 case RegisterType::Predicate:
-                {
-                    const float value = predicateRegister_ ? 1.0f : 0.0f;
-                    return {value, value, value, value};
-                }
+                    return {predicateRegister_[0] ? 1.0f : 0.0f,
+                            predicateRegister_[1] ? 1.0f : 0.0f,
+                            predicateRegister_[2] ? 1.0f : 0.0f,
+                            predicateRegister_[3] ? 1.0f : 0.0f};
                 default:
                     throw std::runtime_error(
                         "Software vertex shader: unsupported source register type " +
@@ -374,6 +429,17 @@ namespace CNA::Internal::Renderers::Software
                 return value;
             }
 
+            [[nodiscard]] bool EvaluateConditional(
+                const SoftwareShaderInstructionEXT& instruction)
+            {
+                std::size_t cursor = 1u;
+                const Vector source0 = ReadSource(instruction.tokens, cursor);
+                if (instruction.opcode == 40u)
+                    return source0[0] != 0.0f;
+                const Vector source1 = ReadSource(instruction.tokens, cursor);
+                return Compare(source0[0], source1[0], instruction.controls);
+            }
+
             [[nodiscard]] Vector ReadMatrixRow(Operand base, int row)
             {
                 base.number += row;
@@ -433,7 +499,14 @@ namespace CNA::Internal::Renderers::Software
                     }
                     return;
                 case RegisterType::Predicate:
-                    predicateRegister_ = value[0] != 0.0f;
+                    for (int component = 0; component < 4; ++component)
+                    {
+                        if ((destination.writeMask & (1u << component)) != 0u)
+                        {
+                            predicateRegister_[static_cast<std::size_t>(component)] =
+                                value[static_cast<std::size_t>(component)] != 0.0f;
+                        }
+                    }
                     return;
                 default:
                     break;
@@ -557,6 +630,7 @@ namespace CNA::Internal::Renderers::Software
                 case 24: // M3X2
                 case 32: // POW
                 case 33: // CRS
+                case 94: // SETP
                     source1 = ReadSource(tokens, cursor);
                     break;
                 case 4:  // MAD
@@ -642,6 +716,14 @@ namespace CNA::Internal::Renderers::Software
                 case 79: // LOGP is the lower-precision LOG form; EasyGL keeps full precision.
                     for (int i = 0; i < 4; ++i)
                         result[i] = std::log2(source0[i]);
+                    break;
+                case 94:
+                    for (int i = 0; i < 4; ++i)
+                    {
+                        result[i] = Compare(source0[i], source1[i], instruction.controls)
+                                        ? 1.0f
+                                        : 0.0f;
+                    }
                     break;
                 case 16:
                 {
@@ -822,7 +904,7 @@ namespace CNA::Internal::Renderers::Software
             std::array<Vector, kOutputRegisterCount> outputRegisters_{};
             std::array<int, 4> addressRegister_{};
             int loopRegister_ = 0;
-            bool predicateRegister_ = false;
+            std::array<bool, 4> predicateRegister_{};
             std::array<Vector, kFloatConstantRegisterCount> localFloatConstants_{};
             std::array<bool, kFloatConstantRegisterCount> localFloatDefined_{};
             std::array<std::array<int, 4>, kIntegerConstantRegisterCount> localIntegerConstants_{};

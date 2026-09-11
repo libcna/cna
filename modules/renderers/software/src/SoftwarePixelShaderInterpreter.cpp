@@ -130,6 +130,26 @@ void NormalizeConstantRegister(Operand &operand) {
   return result;
 }
 
+[[nodiscard]] bool Compare(float left, float right, std::uint8_t control) {
+  switch (control) {
+  case 1:
+    return left > right;
+  case 2:
+    return left == right;
+  case 3:
+    return left >= right;
+  case 4:
+    return left < right;
+  case 5:
+    return left != right;
+  case 6:
+    return left <= right;
+  default:
+    throw std::runtime_error(
+        "Software pixel shader: invalid comparison control.");
+  }
+}
+
 class PixelMachine {
 public:
   PixelMachine(const SoftwareShaderProgramEXT &program,
@@ -183,12 +203,41 @@ public:
   }
 
   [[nodiscard]] SoftwarePixelShaderResultEXT Execute() {
+    struct ConditionalFrame {
+      bool parentActive;
+      bool condition;
+      bool sawElse;
+    };
+    std::vector<ConditionalFrame> conditionals;
+    bool active = true;
     for (const SoftwareShaderInstructionEXT &instruction :
          program_.instructions) {
       if (discarded_)
         break;
-      ExecuteInstruction(instruction);
+      if (instruction.opcode == 40u || instruction.opcode == 41u) {
+        const bool condition = active && EvaluateConditional(instruction);
+        conditionals.push_back({active, condition, false});
+        active = active && condition;
+      } else if (instruction.opcode == 42u) {
+        if (conditionals.empty() || conditionals.back().sawElse)
+          throw std::runtime_error(
+              "Software pixel shader: ELSE without a matching IF.");
+        conditionals.back().sawElse = true;
+        active =
+            conditionals.back().parentActive && !conditionals.back().condition;
+      } else if (instruction.opcode == 43u) {
+        if (conditionals.empty())
+          throw std::runtime_error(
+              "Software pixel shader: ENDIF without a matching IF.");
+        active = conditionals.back().parentActive;
+        conditionals.pop_back();
+      } else if (active) {
+        ExecuteInstruction(instruction);
+      }
     }
+    if (!discarded_ && !conditionals.empty())
+      throw std::runtime_error(
+          "Software pixel shader: IF without a matching ENDIF.");
     SoftwarePixelShaderResultEXT result;
     result.discarded = discarded_;
     result.depth = depthOutput_;
@@ -258,6 +307,13 @@ private:
               static_cast<float>(integerRegisters_[offset + 3u])};
     }
     case RegisterType::BooleanConstant: {
+      if (number < static_cast<int>(kBooleanConstantRegisterCount) &&
+          localBooleanDefined_[static_cast<std::size_t>(number)]) {
+        const float value =
+            localBooleanConstants_[static_cast<std::size_t>(number)] ? 1.0f
+                                                                     : 0.0f;
+        return {value, value, value, value};
+      }
       if (static_cast<std::size_t>(number) >= booleanRegisters_.size())
         throw std::runtime_error("Software pixel shader: Boolean constant "
                                  "register is out of range.");
@@ -266,6 +322,11 @@ private:
                                                                     : 0.0f;
       return {value, value, value, value};
     }
+    case RegisterType::Predicate:
+      return {predicateRegister_[0] ? 1.0f : 0.0f,
+              predicateRegister_[1] ? 1.0f : 0.0f,
+              predicateRegister_[2] ? 1.0f : 0.0f,
+              predicateRegister_[3] ? 1.0f : 0.0f};
     default:
       throw std::runtime_error(
           "Software pixel shader: unsupported source register type " +
@@ -357,6 +418,16 @@ private:
     return value;
   }
 
+  [[nodiscard]] bool EvaluateConditional(
+      const SoftwareShaderInstructionEXT &instruction) {
+    std::size_t cursor = 1u;
+    const Vector source0 = ReadSource(instruction.tokens, cursor);
+    if (instruction.opcode == 40u)
+      return source0[0] != 0.0f;
+    const Vector source1 = ReadSource(instruction.tokens, cursor);
+    return Compare(source0[0], source1[0], instruction.controls);
+  }
+
   [[nodiscard]] Vector ReadMatrixRow(Operand base, int row) const {
     base.number += row;
     const Vector raw = ReadRaw(base.type, base.number);
@@ -427,6 +498,13 @@ private:
       depthOutput_ = value[0];
       depthWritten_ = true;
       return;
+    case RegisterType::Predicate:
+      for (int component = 0; component < 4; ++component) {
+        if ((destination.writeMask & (1u << component)) != 0u)
+          predicateRegister_[static_cast<std::size_t>(component)] =
+              value[static_cast<std::size_t>(component)] != 0.0f;
+      }
+      return;
     default:
       break;
     }
@@ -461,6 +539,22 @@ private:
           tokens[static_cast<std::size_t>(component) + 2u]);
     }
     localFloatDefined_[static_cast<std::size_t>(destination.number)] = true;
+  }
+
+  void DefineBoolean(const std::vector<std::uint32_t> &tokens) {
+    if (tokens.size() != 3u)
+      throw std::runtime_error(
+          "Software pixel shader: malformed DEFB instruction.");
+    const Operand destination = DecodeDestination(tokens[1]);
+    if (destination.type != RegisterType::BooleanConstant ||
+        destination.number < 0 ||
+        static_cast<std::size_t>(destination.number) >=
+            localBooleanConstants_.size())
+      throw std::runtime_error(
+          "Software pixel shader: invalid DEFB destination.");
+    localBooleanConstants_[static_cast<std::size_t>(destination.number)] =
+        tokens[2] != 0u;
+    localBooleanDefined_[static_cast<std::size_t>(destination.number)] = true;
   }
 
   [[nodiscard]] SoftwareShaderSamplerTypeEXT
@@ -638,6 +732,10 @@ private:
       DefineFloat(tokens);
       return;
     }
+    if (instruction.opcode == 47u) {
+      DefineBoolean(tokens);
+      return;
+    }
     if (instruction.opcode == 64u) {
       if (tokens.size() != 2u)
         throw std::runtime_error(
@@ -690,6 +788,7 @@ private:
     case 24:
     case 32:
     case 33:
+    case 94:
       source1 = ReadSource(tokens, cursor);
       break;
     case 4:
@@ -868,6 +967,12 @@ private:
     case 90:
       result.fill(source0[0] * source1[0] + source0[1] * source1[1] + source2[0]);
       break;
+    case 94:
+      for (int i = 0; i < 4; ++i)
+        result[i] = Compare(source0[i], source1[i], instruction.controls)
+                        ? 1.0f
+                        : 0.0f;
+      break;
     default:
       throw std::runtime_error("Software pixel shader: unsupported opcode " +
                                std::to_string(instruction.opcode) + ".");
@@ -889,8 +994,11 @@ private:
   float depthOutput_ = 0.0f;
   bool depthWritten_ = false;
   bool discarded_ = false;
+  std::array<bool, 4> predicateRegister_{};
   std::array<Vector, kFloatConstantRegisterCount> localFloatConstants_{};
   std::array<bool, kFloatConstantRegisterCount> localFloatDefined_{};
+  std::array<bool, kBooleanConstantRegisterCount> localBooleanConstants_{};
+  std::array<bool, kBooleanConstantRegisterCount> localBooleanDefined_{};
 };
 } // namespace
 
