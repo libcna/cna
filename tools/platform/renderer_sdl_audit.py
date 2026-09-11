@@ -186,10 +186,19 @@ def audit(repo_root: Path) -> tuple[list[dict[str, object]], dict[str, str]]:
         symbols = per_family_symbols.get(family, Counter())
         areas: Counter = Counter()
         for symbol, count in symbols.items():
-            areas[classify_symbol(symbol)[0]] += count
+            # An unclassified symbol used to reach this as None and raise a TypeError, which read
+            # as a broken tool rather than as the missing classifier rule it actually is.
+            classified = classify_symbol(symbol)
+            if classified is None:
+                raise SystemExit(
+                    f"renderer_sdl_audit: {symbol} (in {family}) matches no rule in "
+                    "tools/platform/sdl_classify.py. Add one there first.")
+            areas[classified[0]] += count
 
         code_symbols = per_family_code_symbols.get(family, Counter())
-        code_sdl_specific = {s for s in code_symbols if classify_symbol(s)[0] == "sdl-renderer-specific"}
+        code_sdl_specific = {
+            s for s in code_symbols
+            if (classify_symbol(s) or (None,))[0] == "sdl-renderer-specific"}
         presentation = code_sdl_specific & PRESENTATION_CALLS
 
         # A real service need is any call into a platform area. SDL_Window named as a bare type does
