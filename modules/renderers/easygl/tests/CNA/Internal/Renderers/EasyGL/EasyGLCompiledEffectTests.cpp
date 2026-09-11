@@ -1066,6 +1066,31 @@ TEST(EasyGLCompiledEffectTest, RejectsLoopInPixelShaderModel2x)
     EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
+class EasyGLCompiledEffectMatrixOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidMatrixOperands>
+{
+};
+
+TEST_P(EasyGLCompiledEffectMatrixOperandTest, RejectsInvalidOperands)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderInvalidMatrixOperands = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidOperands,
+    EasyGLCompiledEffectMatrixOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidMatrixOperands::NegatedMatrixSource,
+        CNA::TestSupport::SyntheticInvalidMatrixOperands::SwizzledMatrixSource,
+        CNA::TestSupport::SyntheticInvalidMatrixOperands::DestinationAliasesVectorSource));
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;

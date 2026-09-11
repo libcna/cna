@@ -335,6 +335,19 @@ namespace CNA::TestSupport
         VertexPredicatedMov,
     };
 
+    /** @brief Invalid source/destination relationship deliberately emitted for a matrix opcode. */
+    enum class SyntheticInvalidMatrixOperands
+    {
+        /** @brief Emit no deliberately invalid matrix operands. */
+        None,
+        /** @brief Negate the matrix base source. */
+        NegatedMatrixSource,
+        /** @brief Swizzle the matrix base source. */
+        SwizzledMatrixSource,
+        /** @brief Use the destination register as the input vector source. */
+        DestinationAliasesVectorSource,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -531,6 +544,9 @@ namespace CNA::TestSupport
             SyntheticInvalidShaderModel20DynamicFeature::None;
         /** @brief Emits a `LOOP` block in a pixel Shader Model 2.x program. */
         bool pixelShaderModel2xUsesInvalidLoop = false;
+        /** @brief Emits the selected invalid matrix operand combination in the pixel shader. */
+        SyntheticInvalidMatrixOperands pixelShaderInvalidMatrixOperands =
+            SyntheticInvalidMatrixOperands::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -615,7 +631,9 @@ namespace CNA::TestSupport
             SyntheticInvalidPixelShaderModel20Opcode::None,
         SyntheticInvalidShaderModel20DynamicFeature shaderModel20InvalidDynamicFeature =
             SyntheticInvalidShaderModel20DynamicFeature::None,
-        bool shaderModel2xUsesInvalidLoop = false)
+        bool shaderModel2xUsesInvalidLoop = false,
+        SyntheticInvalidMatrixOperands invalidMatrixOperands =
+            SyntheticInvalidMatrixOperands::None)
     {
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
@@ -946,6 +964,46 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(regConst, 0));
             AppendUInt32(shader, source(regPredicate, 0, 0x00u));
+        }
+
+        if (invalidMatrixOperands != SyntheticInvalidMatrixOperands::None)
+        {
+            for (std::uint32_t row = 1; row <= 3; ++row)
+            {
+                AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c#, identity row
+                AppendUInt32(shader, destination(regConst, row, 0xFu));
+                for (std::uint32_t component = 0; component < 4; ++component)
+                    AppendUInt32(shader, FloatBits(component == row - 1 ? 1.0f : 0.0f));
+            }
+            if (invalidMatrixOperands ==
+                SyntheticInvalidMatrixOperands::DestinationAliasesVectorSource)
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, c0
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, source(regConst, 0));
+            }
+            AppendUInt32(shader, 0x00000015u | (3u << 24)); // m4x3 r0.xyz, src0, c1
+            AppendUInt32(shader, destination(regTemp, 0, 0x7u));
+            AppendUInt32(
+                shader,
+                source(invalidMatrixOperands ==
+                               SyntheticInvalidMatrixOperands::DestinationAliasesVectorSource
+                           ? regTemp
+                           : regConst,
+                       0));
+            constexpr std::uint32_t swizzleYzxw =
+                1u | (2u << 2u) | (0u << 4u) | (3u << 6u);
+            AppendUInt32(
+                shader,
+                source(regConst, 1,
+                       invalidMatrixOperands ==
+                               SyntheticInvalidMatrixOperands::SwizzledMatrixSource
+                           ? swizzleYzxw
+                           : 0xE4u,
+                       invalidMatrixOperands ==
+                               SyntheticInvalidMatrixOperands::NegatedMatrixSource
+                           ? 1u
+                           : 0u));
         }
 
         if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic)
@@ -2729,7 +2787,8 @@ namespace CNA::TestSupport
             options.pixelShaderModel1InvalidOpcode,
             options.pixelShaderModel20InvalidOpcode,
             options.shaderModel20InvalidDynamicFeature,
-            options.pixelShaderModel2xUsesInvalidLoop);
+            options.pixelShaderModel2xUsesInvalidLoop,
+            options.pixelShaderInvalidMatrixOperands);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

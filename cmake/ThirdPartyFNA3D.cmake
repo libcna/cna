@@ -78,7 +78,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-vertex-shader-model-one-opcode-validation.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-two-zero-opcode-validation.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-two-dynamic-profile-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-two-extended-loop-validation.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-two-extended-loop-validation.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-matrix-operand-validation.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

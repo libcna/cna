@@ -2924,6 +2924,33 @@ namespace
         Check(rejected, "compiled Effect parser accepted LOOP in pixel Shader Model 2.x");
     }
 
+    void CheckCompiledMatrixOperandValidation(SoftwareRenderer& renderer)
+    {
+        using Operands = CNA::TestSupport::SyntheticInvalidMatrixOperands;
+        constexpr std::array invalidOperands{
+            Operands::NegatedMatrixSource,
+            Operands::SwizzledMatrixSource,
+            Operands::DestinationAliasesVectorSource,
+        };
+        for (const Operands operands : invalidOperands)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderInvalidMatrixOperands = operands;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected, "compiled Effect parser accepted invalid matrix operands");
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4710,6 +4737,7 @@ int main()
         CheckCompiledPixelShaderModel20OpcodeValidation(renderer);
         CheckCompiledShaderModel20DynamicFeatureValidation(renderer);
         CheckCompiledPixelShaderModel2xOpcodeValidation(renderer);
+        CheckCompiledMatrixOperandValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();
