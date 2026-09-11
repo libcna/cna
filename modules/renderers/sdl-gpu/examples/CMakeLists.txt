@@ -591,6 +591,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_SamplerState COMMAND cna_test_sdlgpu_samplerstate
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
 
+    # SDLGPU-129: XNA publishes a Deferred SpriteBatch's sampler to device slot zero at End's
+    # flush, not at Begin, and the next 3D draw inherits it. Compile the exact EasyGL/Vulkan
+    # timing-and-pixel discriminator so the merged shared behavior has SDL GPU evidence too.
+    cna_sdlgpu_test(cna_test_sdlgpu_spritebatch_sampler0_publication
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_sampler0_publication_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_SpriteBatch_Sampler0Publication
+        COMMAND cna_test_sdlgpu_spritebatch_sampler0_publication
+        TIMEOUT 120 LABELS "SdlGpu;Parity" ENVIRONMENT "${CNA_SDLGPU_TEST_ENVIRONMENT}")
+    set_tests_properties(SdlGpu_SpriteBatch_Sampler0Publication PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # plans/plan_sdlgpu.md: real chronological draw-order proof (adversarial-review finding #4).
     cna_sdlgpu_test(cna_test_sdlgpu_draworder sdlgpu_draworder_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_DrawOrder COMMAND cna_test_sdlgpu_draworder
