@@ -30,7 +30,9 @@ reflection/state runtime, preshader register files and validated Software-owned 
 `SOFTWARE-163` executes the committed effects' vertex programs and carries their declared outputs
 through clipping and perspective interpolation. `SOFTWARE-355` adds the first bounded pixel phase:
 texture-free D3D9 pixel programs now run through triangle rasterization and the existing
-discard/depth/stencil/blend/color-write output path:
+discard/depth/stencil/blend/color-write output path. `SOFTWARE-356` binds the pass's live pixel
+texture slots and executes the observed SM1-3 2D/cube/volume texture forms with the Software
+sampler state, including W addressing, mip clamps and LOD bias:
 
 ```bash
 cmake -S . -B cmake-build-software-effects \
@@ -38,12 +40,12 @@ cmake -S . -B cmake-build-software-effects \
   -DCNA_SOFTWARE_COMPILED_EFFECTS=ON
 ```
 
-Those are real parser, vertex and texture-free pixel phases, not complete execution parity. Software still truthfully
+Those are real parser, vertex and sampled-pixel phases, not complete execution parity. Software still truthfully
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
 continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
 is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163/355` are complete, `SOFTWARE-356` owns pixel texture/sampler execution, and
-`SOFTWARE-164/165` remain the encompassing pixel/conformance backlog.
+`SOFTWARE-162/163/355/356` are complete, `SOFTWARE-357` owns MRT, render-target and SpriteBatch
+routing, and `SOFTWARE-164/165` remain the encompassing pixel/conformance backlog.
 
 The same challenge also confirmed a renderer-wide public-API hole: CNA stores
 `GraphicsDevice.VertexTextures` and `VertexSamplerStates`, but no renderer contract consumes them.
@@ -178,10 +180,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   instance divisors, homogeneous clipping and perspective-varying setup are wired. SOFTWARE-355
   executes texture-free pixel programs in ordinary, indexed, multi-stream and instanced triangle
   draws, including shader discard/depth and the established depth/stencil/blend/color-mask output
-  path. A texture instruction still refuses explicitly under SOFTWARE-356; line/wireframe,
-  sampler/MRT/SpriteBatch and full shader-profile closure also remain. Software therefore advertises
+  path. SOFTWARE-356 adds live 2D/cube/volume slots, sampler dimensions, Filter/U/V/W addressing,
+  anisotropy for the existing 2D/cube paths, max mip, LOD bias and the observed TEX/TEXLD/TEXLDD/
+  TEXLDL forms. Line/wireframe, COLOR1-3/MRT, render-target chains, SpriteBatch and full shader-profile
+  closure still remain. Software therefore advertises
   `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
-  remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.
+  remain the phased execution backlog, with the next bounded integration slice in `SOFTWARE-357`;
+  CNAEXT `ShaderEffect` is a separate excluded API.
 - **Public vertex-stage texture/sampler collections are inert renderer-wide** (`SOFTWARE-167`).
   `GraphicsDevice.VertexTextures` and `VertexSamplerStates` have the correct public shape and
   resource-disposal bookkeeping, but common code has no operation that publishes their contents
@@ -317,10 +322,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
     and fog.
 - **MRT and render-target cube maps are real.** Ordinary `Texture2D` and `TextureCube`
   mip storage and sampling are real. `Texture3D` has exact CPU declared-format storage for its full XNA mip
-  chain plus bounded full/partial `SetData` and `GetData`; this storage capability does not imply
-  either CNAEXT `ShaderEffect` or classic compiled-Effect volume sampling. The latter is an
-  in-scope gap tracked by `SOFTWARE-159`/`SOFTWARE-164` because opt-in EasyGL demonstrably supports
-  it.
+  chain plus bounded full/partial `SetData` and `GetData`. SOFTWARE-356 also provides opt-in classic
+  compiled-Effect volume sampling with independent U/V/W addressing, mip selection and trilinear
+  filtering. The public capability remains gated by the unfinished compiled-effect conformance work;
+  this does not imply support for the excluded CNAEXT `ShaderEffect` API.
   `RenderTarget2D` does implement an actual four-sample CPU colour plane and generated mip levels.
   Unbind resolves the samples before mip generation; a level-zero `GetData` while the target is
   active snapshots the live samples without unbinding it, while generated levels remain unavailable
@@ -767,8 +772,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   public volume gate accepts exactly XNA's fifteen uncompressed Color/packed/float/half formats,
   and typed full/window/box/mip transfers preserve their exact bytes. Software stores those bytes
   directly; EasyGL maps them to matching native volume images and uses an exact byte mirror for
-  readback. Reach still refuses volume textures entirely, and compiled-effect sampling remains the
-  separate `SOFTWARE-164` backlog.
+  readback. Reach still refuses volume textures entirely. The opt-in compiled runtime samples these
+  Software volumes under SOFTWARE-356, while public compiled-effect enablement remains the separate
+  `SOFTWARE-357/164/165` backlog.
 - **Texture3D accepts Microsoft's generic value-type transfer surface** (`SOFTWARE-278`) —
   application-defined trivially copyable types, packed vectors, scalar/vector floats, Color and
   byte elements all pass through the same exact-total and divisible-width validation. Their raw

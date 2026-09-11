@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
+#include "SoftwareTextureFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 
 #include <algorithm>
@@ -52,6 +53,7 @@ namespace CNA::Internal::Renderers::Software
             throw std::invalid_argument("SoftwareTexture3DRenderer: dimensions must be positive");
 
         levels_.resize(static_cast<std::size_t>(levelCount_));
+        sampleLevels_.resize(static_cast<std::size_t>(levelCount_));
         const int bytesPerTexel = Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
             static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat_));
         for (int level = 0; level < levelCount_; ++level)
@@ -61,6 +63,12 @@ namespace CNA::Internal::Renderers::Software
                                bytesPerTexel, bytes))
                 throw std::length_error("SoftwareTexture3DRenderer: volume byte size overflows");
             levels_[static_cast<std::size_t>(level)].assign(bytes, 0u);
+            sampleLevels_[static_cast<std::size_t>(level)].assign(
+                static_cast<std::size_t>(LevelWidth(level)) *
+                    static_cast<std::size_t>(LevelHeight(level)) *
+                    static_cast<std::size_t>(LevelDepth(level)) * 4u,
+                0.0f);
+            DecodeLevel(level);
         }
     }
 
@@ -77,6 +85,29 @@ namespace CNA::Internal::Renderers::Software
     int SoftwareTexture3DRenderer::LevelDepth(int level) const
     {
         return std::max(1, depth_ >> level);
+    }
+
+    void SoftwareTexture3DRenderer::DecodeLevel(int level)
+    {
+        const int levelW = LevelWidth(level);
+        const int levelH = LevelHeight(level);
+        const int levelD = LevelDepth(level);
+        const int bytesPerTexel = SoftwareTextureFormat::BytesPerTexel(surfaceFormat_);
+        const std::size_t sliceBytes =
+            static_cast<std::size_t>(levelW) * static_cast<std::size_t>(levelH) *
+            static_cast<std::size_t>(bytesPerTexel);
+        const auto& raw = levels_[static_cast<std::size_t>(level)];
+        auto& samples = sampleLevels_[static_cast<std::size_t>(level)];
+        std::vector<std::uint8_t> display;
+        std::vector<float> decoded;
+        for (int slice = 0; slice < levelD; ++slice)
+        {
+            SoftwareTextureFormat::DecodePixels(
+                surfaceFormat_, raw.data() + static_cast<std::size_t>(slice) * sliceBytes,
+                sliceBytes, levelW * bytesPerTexel, levelW, levelH, display, decoded);
+            std::copy(decoded.begin(), decoded.end(),
+                      samples.begin() + static_cast<std::ptrdiff_t>(slice) * levelW * levelH * 4);
+        }
     }
 
     bool SoftwareTexture3DRenderer::SetData(
@@ -129,6 +160,7 @@ namespace CNA::Internal::Renderers::Software
                             destination.begin() + static_cast<std::ptrdiff_t>(destinationOffset));
             }
         }
+        DecodeLevel(level);
         return true;
     }
 
@@ -191,5 +223,22 @@ namespace CNA::Internal::Renderers::Software
         width = width_;
         height = height_;
         depth = depth_;
+    }
+
+    std::array<float, 4> SoftwareTexture3DRenderer::FetchVolumeTexelEXT(
+        int level, int x, int y, int z) const
+    {
+        if (level < 0 || level >= levelCount_ || x < 0 || y < 0 || z < 0 ||
+            x >= LevelWidth(level) || y >= LevelHeight(level) || z >= LevelDepth(level))
+        {
+            throw std::out_of_range("SoftwareTexture3DRenderer: sampled voxel is out of range");
+        }
+        const std::size_t offset =
+            ((static_cast<std::size_t>(z) * static_cast<std::size_t>(LevelHeight(level)) +
+              static_cast<std::size_t>(y)) * static_cast<std::size_t>(LevelWidth(level)) +
+             static_cast<std::size_t>(x)) * 4u;
+        const auto& samples = sampleLevels_[static_cast<std::size_t>(level)];
+        return {samples[offset], samples[offset + 1u], samples[offset + 2u],
+                samples[offset + 3u]};
     }
 }

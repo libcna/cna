@@ -6,8 +6,16 @@
 
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
@@ -31,18 +39,32 @@ using CNA::Internal::Renderers::GpuDrawParams;
 using CNA::Internal::Renderers::GpuVertexStreamBinding;
 using CNA::Internal::Renderers::ICompiledEffectRuntime;
 using CNA::Internal::Renderers::Software::SoftwareCompiledEffect;
+using CNA::Internal::Renderers::Software::ISoftwarePixelSamplerEXT;
+using CNA::Internal::Renderers::Software::SoftwarePixelSampleRequestEXT;
 using CNA::Internal::Renderers::Software::SoftwareRenderer;
 using CNA::Internal::Renderers::Software::SoftwareShaderInstructionEXT;
 using CNA::Internal::Renderers::Software::SoftwareShaderSemanticValueEXT;
 using CNA::Internal::Renderers::Software::SoftwareShaderProgramEXT;
 using CNA::Internal::Renderers::Software::SoftwareShaderStageEXT;
+using CNA::Internal::Renderers::Software::SoftwareShaderSamplerEXT;
+using CNA::Internal::Renderers::Software::SoftwareShaderSamplerTypeEXT;
+using CNA::Internal::Renderers::Software::SoftwareTextureLodModeEXT;
 using CNA::Internal::Renderers::Software::ExecuteSoftwarePixelShaderEXT;
 using CNA::Internal::Renderers::Software::ExecuteSoftwareVertexShaderEXT;
 using Microsoft::Xna::Framework::Graphics::Blend;
 using Microsoft::Xna::Framework::Graphics::BlendState;
 using Microsoft::Xna::Framework::Graphics::CullMode;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
+using Microsoft::Xna::Framework::Graphics::SamplerState;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::Texture3D;
+using Microsoft::Xna::Framework::Graphics::TextureCube;
 using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
 using Microsoft::Xna::Framework::Graphics::TextureFilter;
 using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
@@ -55,6 +77,22 @@ using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 namespace
 {
     int failures = 0;
+
+    class RecordingPixelSampler final : public ISoftwarePixelSamplerEXT
+    {
+    public:
+        [[nodiscard]] std::array<float, 4> SampleEXT(
+            const SoftwarePixelSampleRequestEXT& request) const override
+        {
+            lastRequest = request;
+            ++sampleCount;
+            return result;
+        }
+
+        std::array<float, 4> result{0.125f, 0.25f, 0.5f, 1.0f};
+        mutable SoftwarePixelSampleRequestEXT lastRequest{};
+        mutable int sampleCount = 0;
+    };
 
     void Check(bool condition, const std::string& message)
     {
@@ -217,6 +255,51 @@ namespace
             }
         }
         return executed;
+    }
+
+    void ExerciseEveryPixelProgram(ICompiledEffectRuntime& runtime, const std::string& label)
+    {
+        auto* software = dynamic_cast<SoftwareCompiledEffect*>(&runtime);
+        if (software == nullptr)
+            throw std::runtime_error(label + " is not a Software compiled effect");
+        const SoftwareShaderSemanticValueEXT inputs[] = {
+            {MOJOSHADER_USAGE_COLOR, 0u, {0.25f, 0.5f, 0.75f, 1.0f}},
+            {MOJOSHADER_USAGE_COLOR, 1u, {0.75f, 0.5f, 0.25f, 1.0f}},
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, {0.25f, 0.75f, 0.5f, 1.0f}},
+            {MOJOSHADER_USAGE_TEXCOORD, 1u, {0.75f, 0.25f, 0.5f, 1.0f}},
+            {MOJOSHADER_USAGE_TEXCOORD, 2u, {0.5f, 0.25f, 0.75f, 1.0f}},
+            {MOJOSHADER_USAGE_TEXCOORD, 3u, {0.2f, 0.4f, 0.6f, 1.0f}},
+            {MOJOSHADER_USAGE_TEXCOORD, 4u, {0.6f, 0.4f, 0.2f, 1.0f}},
+            {MOJOSHADER_USAGE_TEXCOORD, 5u, {0.1f, 0.3f, 0.7f, 1.0f}},
+            {MOJOSHADER_USAGE_TEXCOORD, 6u, {0.7f, 0.3f, 0.1f, 1.0f}},
+            {MOJOSHADER_USAGE_TEXCOORD, 7u, {0.5f, 0.5f, 0.5f, 1.0f}},
+        };
+        RecordingPixelSampler sampler;
+        const auto& description = runtime.GetDescription();
+        int executed = 0;
+        for (std::size_t technique = 0; technique < description.techniques.size(); ++technique)
+        {
+            runtime.SetTechnique(static_cast<std::uint32_t>(technique));
+            for (std::size_t pass = 0; pass < description.techniques[technique].passes.size(); ++pass)
+            {
+                CompiledEffectPassStateChanges changes;
+                runtime.ApplyPass(static_cast<std::uint32_t>(pass), {}, changes);
+                if (software->GetPixelProgramEXT() == nullptr)
+                    continue;
+                try
+                {
+                    static_cast<void>(software->ExecutePixelEXT(inputs, &sampler));
+                }
+                catch (const std::exception& error)
+                {
+                    throw std::runtime_error(
+                        label + " technique " + std::to_string(technique) + " pass " +
+                        std::to_string(pass) + " pixel execution failed: " + error.what());
+                }
+                ++executed;
+            }
+        }
+        Check(executed > 0, label + " exposed no executable pixel program");
     }
 
     int CountBackbufferColor(SoftwareRenderer& renderer,
@@ -443,6 +526,65 @@ namespace
               "pixel depth-output result differs");
         Check(!result.discarded, "ordinary pixel invocation was discarded");
 
+        constexpr std::uint32_t samplerRegisterType = 10u;
+        SoftwareShaderProgramEXT textureProgram;
+        textureProgram.stage = SoftwareShaderStageEXT::Pixel;
+        textureProgram.majorVersion = 2;
+        textureProgram.minorVersion = 0;
+        textureProgram.inputSemantics = {
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, 0u, 3u},
+        };
+        textureProgram.samplers.push_back(
+            SoftwareShaderSamplerEXT{3u, SoftwareShaderSamplerTypeEXT::Volume});
+        SoftwareShaderInstructionEXT textureLookup;
+        textureLookup.opcode = 66u;
+        textureLookup.controls = 2u;
+        textureLookup.tokens = {
+            66u, destination(temporary, 0), source(texture, 0),
+            source(samplerRegisterType, 3)};
+        textureProgram.instructions.push_back(std::move(textureLookup));
+        SoftwareShaderInstructionEXT textureOutput;
+        textureOutput.opcode = 1u;
+        textureOutput.tokens = {
+            1u, destination(colorOutput, 0), source(temporary, 0)};
+        textureProgram.instructions.push_back(std::move(textureOutput));
+        RecordingPixelSampler recordingSampler;
+        const auto sampled = ExecuteSoftwarePixelShaderEXT(
+            textureProgram, floats, integers, booleans, inputs, &recordingSampler);
+        Check(recordingSampler.sampleCount == 1,
+              "TEX did not request exactly one renderer sample");
+        Check(recordingSampler.lastRequest.samplerRegister == 3u &&
+                  recordingSampler.lastRequest.coordinateRegister == 0u &&
+                  recordingSampler.lastRequest.samplerType ==
+                      SoftwareShaderSamplerTypeEXT::Volume,
+              "TEX lost its sampler register, coordinate register, or dimension");
+        Check(recordingSampler.lastRequest.coordinate == inputs[1].value &&
+                  recordingSampler.lastRequest.lod == inputs[1].value[3],
+              "TEX lost its coordinate or instruction LOD bias");
+        Check(sampled.colorWriteMask == 1u && sampled.colors[0] == recordingSampler.result,
+              "TEX result did not reach COLOR0");
+
+        textureProgram.instructions[0].opcode = 95u;
+        textureProgram.instructions[0].controls = 0u;
+        textureProgram.instructions[0].tokens[0] = 95u;
+        static_cast<void>(ExecuteSoftwarePixelShaderEXT(
+            textureProgram, floats, integers, booleans, inputs, &recordingSampler));
+        Check(recordingSampler.lastRequest.lodMode == SoftwareTextureLodModeEXT::Explicit &&
+                  recordingSampler.lastRequest.lod == inputs[1].value[3],
+              "TEXLDL did not publish its explicit level");
+
+        textureProgram.instructions[0].opcode = 94u;
+        textureProgram.instructions[0].tokens = {
+            94u, destination(temporary, 0), source(texture, 0),
+            source(samplerRegisterType, 3), source(input, 0), source(constant, 0)};
+        static_cast<void>(ExecuteSoftwarePixelShaderEXT(
+            textureProgram, floats, integers, booleans, inputs, &recordingSampler));
+        Check(recordingSampler.lastRequest.lodMode == SoftwareTextureLodModeEXT::Gradients &&
+                  recordingSampler.lastRequest.gradientX == inputs[0].value &&
+                  recordingSampler.lastRequest.gradientY ==
+                      std::array<float, 4>{2.0f, -1.0f, 0.5f, 1.0f},
+              "TEXLDD did not publish both explicit gradients");
+
         SoftwareShaderProgramEXT killProgram;
         killProgram.stage = SoftwareShaderStageEXT::Pixel;
         killProgram.majorVersion = 1;
@@ -460,6 +602,234 @@ namespace
               "TEXKILL did not suppress the Shader Model 1 r0 output");
     }
 
+    void CheckCompiledSamplerRasterization(SoftwareRenderer& renderer)
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        using CNA::TestSupport::SyntheticSamplerKind;
+
+        GraphicsDevice textureDevice(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            PresentationParameters());
+        struct SamplingVertex
+        {
+            float position[4];
+            float coordinate[4];
+        };
+        const VertexDeclaration declaration(
+            static_cast<int>(sizeof(SamplingVertex)),
+            {VertexElement(0, VertexElementFormat::Vector4, VertexElementUsage::Position, 0),
+             VertexElement(16, VertexElementFormat::Vector4,
+                           VertexElementUsage::TextureCoordinate, 0)});
+        auto vertexBuffer = renderer.CreateVertexBuffer(3);
+        vertexBuffer->SetVertexDeclaration(declaration);
+        const Matrix identity = Matrix::getIdentityProperty();
+        renderer.ApplyRasterizerState(0, 0, false);
+        renderer.ApplyBlendState(0, 0, 1, 1, 0, 0, BlendWriteState{});
+
+        const std::vector<CNA::TestSupport::SyntheticSamplerState> samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+            {Fx::SampAddressW, Fx::AddressClamp},
+            {Fx::SampMaxMipLevel, 0},
+            {Fx::SampMipMapLodBias, CNA::TestSupport::FloatBits(0.0f), true},
+        };
+        const auto createRuntime = [&](SyntheticSamplerKind kind, std::uint32_t slot = 0)
+        {
+            const auto bytes = CNA::TestSupport::BuildSyntheticSamplingEffect(
+                samplerStates, slot, kind);
+            auto runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+            const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+            runtime->SetParameterValue(FindParameter(*runtime, "Tint"), white, sizeof(white));
+            runtime->SetTechnique(0);
+            CompiledEffectPassStateChanges changes;
+            runtime->ApplyPass(1, {}, changes);
+            auto* software = dynamic_cast<SoftwareCompiledEffect*>(runtime.get());
+            Check(software != nullptr && software->GetPixelProgramEXT() != nullptr,
+                  "sampling fixture did not select a Software pixel program");
+            if (software != nullptr && software->GetPixelProgramEXT() != nullptr)
+            {
+                const auto& samplers = software->GetPixelProgramEXT()->samplers;
+                Check(samplers.size() == 1u && samplers[0].registerNumber == slot,
+                      "pixel sampler declaration lost its register");
+                const SoftwareShaderSamplerTypeEXT expected =
+                    kind == SyntheticSamplerKind::SamplerCube
+                        ? SoftwareShaderSamplerTypeEXT::Cube
+                        : kind == SyntheticSamplerKind::Sampler3D
+                              ? SoftwareShaderSamplerTypeEXT::Volume
+                              : SoftwareShaderSamplerTypeEXT::Texture2D;
+                Check(samplers.size() == 1u && samplers[0].type == expected,
+                      "pixel sampler declaration lost its dimension");
+            }
+            return runtime;
+        };
+        const auto draw = [&](ICompiledEffectRuntime& runtime,
+                              const std::array<float, 4>& coordinate)
+        {
+            const SamplingVertex vertices[3] = {
+                {{-0.75f, 0.75f, 0.5f, 1.0f},
+                 {coordinate[0], coordinate[1], coordinate[2], coordinate[3]}},
+                {{-0.75f, -0.75f, 0.5f, 1.0f},
+                 {coordinate[0], coordinate[1], coordinate[2], coordinate[3]}},
+                {{0.75f, 0.0f, 0.5f, 1.0f},
+                 {coordinate[0], coordinate[1], coordinate[2], coordinate[3]}},
+            };
+            vertexBuffer->SetData(vertices, 3, sizeof(SamplingVertex));
+            GpuDrawParams params;
+            params.compiledEffectRuntime = &runtime;
+            params.compiledDeviceTextures = &textureDevice.getTexturesProperty();
+            params.compiledDeviceSamplerStates = &textureDevice.getSamplerStatesProperty();
+            renderer.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            renderer.DrawPrimitivesEx(*vertexBuffer, identity, identity, identity,
+                                      PrimitiveType::TriangleList, 1, params);
+        };
+        const auto expectBackbuffer = [&](const std::array<std::uint8_t, 4>& color,
+                                          const std::string& label)
+        {
+            Check(CountBackbufferColor(renderer, color) > 0, label);
+        };
+        const auto applySampler = [&](std::uint32_t slot, int filter, int addressU,
+                                      int addressV, int addressW, int maxMip, float bias)
+        {
+            renderer.ApplySamplerState(static_cast<int>(slot), filter, addressU, addressV, 4);
+            renderer.ApplySamplerMipState(static_cast<int>(slot), maxMip, bias);
+            renderer.ApplySamplerAddressW(static_cast<int>(slot), addressW);
+        };
+
+        auto flatRuntime = createRuntime(SyntheticSamplerKind::Sampler2D, 2);
+        Texture2D red(textureDevice, 1, 1);
+        Texture2D blue(textureDevice, 1, 1);
+        const Microsoft::Xna::Framework::Color redPixel[1] = {
+            Microsoft::Xna::Framework::Color(255, 0, 0, 255)};
+        const Microsoft::Xna::Framework::Color bluePixel[1] = {
+            Microsoft::Xna::Framework::Color(0, 0, 255, 255)};
+        red.SetData(redPixel, 1);
+        blue.SetData(bluePixel, 1);
+        applySampler(2, static_cast<int>(TextureFilter::Point),
+                     static_cast<int>(TextureAddressMode::Clamp),
+                     static_cast<int>(TextureAddressMode::Clamp),
+                     static_cast<int>(TextureAddressMode::Clamp), 0, 0.0f);
+        textureDevice.getTexturesProperty()(2, &red);
+        draw(*flatRuntime, {0.5f, 0.5f, 0.0f, 1.0f});
+        expectBackbuffer({255u, 0u, 0u, 255u},
+                         "compiled sampler did not read the effect-selected texture slot");
+        textureDevice.getTexturesProperty()(2, &blue);
+        draw(*flatRuntime, {0.5f, 0.5f, 0.0f, 1.0f});
+        expectBackbuffer({0u, 0u, 255u, 255u},
+                         "compiled sampler did not observe texture replacement");
+        textureDevice.getTexturesProperty()(2, nullptr);
+        draw(*flatRuntime, {0.5f, 0.5f, 0.0f, 1.0f});
+        expectBackbuffer({0u, 0u, 0u, 255u},
+                         "unbound compiled sampler did not return D3D black");
+
+        auto addressRuntime = createRuntime(SyntheticSamplerKind::Sampler2D);
+        Texture2D columns(textureDevice, 2, 1);
+        const Microsoft::Xna::Framework::Color columnPixels[2] = {
+            Microsoft::Xna::Framework::Color(255, 0, 0, 255),
+            Microsoft::Xna::Framework::Color(0, 0, 255, 255)};
+        columns.SetData(columnPixels, 2);
+        textureDevice.getTexturesProperty()(0, &columns);
+        applySampler(0, static_cast<int>(TextureFilter::Point),
+                     static_cast<int>(TextureAddressMode::Wrap),
+                     static_cast<int>(TextureAddressMode::Clamp),
+                     static_cast<int>(TextureAddressMode::Clamp), 0, 0.0f);
+        draw(*addressRuntime, {1.75f, 0.5f, 0.0f, 1.0f});
+        expectBackbuffer({0u, 0u, 255u, 255u},
+                         "compiled sampler did not apply AddressU.Wrap");
+        applySampler(0, static_cast<int>(TextureFilter::Point),
+                     static_cast<int>(TextureAddressMode::Mirror),
+                     static_cast<int>(TextureAddressMode::Clamp),
+                     static_cast<int>(TextureAddressMode::Clamp), 0, 0.0f);
+        draw(*addressRuntime, {1.75f, 0.5f, 0.0f, 1.0f});
+        expectBackbuffer({255u, 0u, 0u, 255u},
+                         "compiled sampler did not apply AddressU.Mirror");
+        applySampler(0, static_cast<int>(TextureFilter::Linear),
+                     static_cast<int>(TextureAddressMode::Clamp),
+                     static_cast<int>(TextureAddressMode::Clamp),
+                     static_cast<int>(TextureAddressMode::Clamp), 0, 0.0f);
+        draw(*addressRuntime, {0.375f, 0.5f, 0.0f, 1.0f});
+        expectBackbuffer({191u, 0u, 64u, 255u},
+                         "compiled sampler did not apply linear filtering");
+
+        Texture2D mipped(textureDevice, 2, 2, true, SurfaceFormat::Color);
+        const Microsoft::Xna::Framework::Color level0[4] = {
+            redPixel[0], redPixel[0], redPixel[0], redPixel[0]};
+        const Microsoft::Xna::Framework::Color level1[1] = {
+            Microsoft::Xna::Framework::Color(0, 255, 0, 255)};
+        const Microsoft::Xna::Framework::Rectangle whole0(0, 0, 2, 2);
+        const Microsoft::Xna::Framework::Rectangle whole1(0, 0, 1, 1);
+        mipped.SetData(0, &whole0, level0, 0, 4);
+        mipped.SetData(1, &whole1, level1, 0, 1);
+        textureDevice.getTexturesProperty()(0, &mipped);
+        applySampler(0, static_cast<int>(TextureFilter::Point), 1, 1, 1, 1, 0.0f);
+        draw(*addressRuntime, {0.5f, 0.5f, 0.0f, 1.0f});
+        expectBackbuffer({0u, 255u, 0u, 255u},
+                         "compiled sampler did not apply MaxMipLevel");
+        applySampler(0, static_cast<int>(TextureFilter::Point), 1, 1, 1, 0, 1.0f);
+        draw(*addressRuntime, {0.5f, 0.5f, 0.0f, 1.0f});
+        expectBackbuffer({0u, 255u, 0u, 255u},
+                         "compiled sampler did not apply mip LOD bias");
+
+        auto cubeRuntime = createRuntime(SyntheticSamplerKind::SamplerCube);
+        Microsoft::Xna::Framework::Graphics::TextureCube cube(
+            textureDevice, 1, false, SurfaceFormat::Color);
+        for (int face = 0; face < 6; ++face)
+        {
+            const Microsoft::Xna::Framework::Color pixel[1] = {
+                face == 0 ? Microsoft::Xna::Framework::Color(255, 255, 0, 255)
+                          : Microsoft::Xna::Framework::Color(0, 0, 255, 255)};
+            cube.SetData(static_cast<Microsoft::Xna::Framework::Graphics::CubeMapFace>(face),
+                         pixel, 1);
+        }
+        textureDevice.getTexturesProperty()(0, &cube);
+        applySampler(0, static_cast<int>(TextureFilter::Point), 1, 1, 1, 0, 0.0f);
+        draw(*cubeRuntime, {1.0f, 0.0f, 0.0f, 1.0f});
+        expectBackbuffer({255u, 255u, 0u, 255u},
+                         "compiled sampler did not select the cube +X face");
+
+        auto volumeRuntime = createRuntime(SyntheticSamplerKind::Sampler3D);
+        Texture3D volume(textureDevice, 1, 1, 2, false, SurfaceFormat::Color);
+        const Microsoft::Xna::Framework::Color volumePixels[2] = {
+            Microsoft::Xna::Framework::Color(255, 0, 0, 255),
+            Microsoft::Xna::Framework::Color(0, 0, 255, 255)};
+        volume.SetData(volumePixels, 2);
+        textureDevice.getTexturesProperty()(0, &volume);
+        applySampler(0, static_cast<int>(TextureFilter::Point), 1, 1,
+                     static_cast<int>(TextureAddressMode::Wrap), 0, 0.0f);
+        draw(*volumeRuntime, {0.5f, 0.5f, 1.75f, 1.0f});
+        expectBackbuffer({0u, 0u, 255u, 255u},
+                         "compiled volume sampler did not apply AddressW.Wrap");
+        applySampler(0, static_cast<int>(TextureFilter::Point), 1, 1,
+                     static_cast<int>(TextureAddressMode::Mirror), 0, 0.0f);
+        draw(*volumeRuntime, {0.5f, 0.5f, 1.75f, 1.0f});
+        expectBackbuffer({255u, 0u, 0u, 255u},
+                         "compiled volume sampler did not apply AddressW.Mirror");
+        applySampler(0, static_cast<int>(TextureFilter::Point), 1, 1,
+                     static_cast<int>(TextureAddressMode::Clamp), 0, 0.0f);
+        draw(*volumeRuntime, {0.5f, 0.5f, 1.75f, 1.0f});
+        expectBackbuffer({0u, 0u, 255u, 255u},
+                         "compiled volume sampler did not apply AddressW.Clamp");
+        applySampler(0, static_cast<int>(TextureFilter::Linear), 1, 1, 1, 0, 0.0f);
+        draw(*volumeRuntime, {0.5f, 0.5f, 0.5f, 1.0f});
+        expectBackbuffer({128u, 0u, 128u, 255u},
+                         "compiled volume sampler did not apply trilinear voxel filtering");
+
+        textureDevice.getTexturesProperty()(0, &columns);
+        bool rejectedDimension = false;
+        try
+        {
+            draw(*cubeRuntime, {1.0f, 0.0f, 0.0f, 1.0f});
+        }
+        catch (const std::runtime_error&)
+        {
+            rejectedDimension = true;
+        }
+        Check(rejectedDimension,
+              "compiled sampler accepted a Texture2D for a samplerCUBE declaration");
+    }
+
 } // namespace
 
 int main()
@@ -469,6 +839,7 @@ int main()
         SoftwareRenderer renderer(16, 16);
         CheckVertexInstructionSemantics();
         CheckPixelInstructionSemantics();
+        CheckCompiledSamplerRasterization(renderer);
         Check(!renderer.SupportsCompiledEffects(),
               "incomplete SOFTWARE-164/165 path must not advertise compiled effects");
 
@@ -487,6 +858,7 @@ int main()
                 ExerciseEveryVertexProgram(*runtime, name);
                 textureFreePixelPrograms +=
                     ExerciseTextureFreePixelPrograms(*runtime, name);
+                ExerciseEveryPixelProgram(*runtime, name);
             }
         }
         Check(textureFreePixelPrograms > 0,
@@ -507,6 +879,7 @@ int main()
         ExerciseEveryVertexProgram(*authentic, "authentic XNA 4 effect");
         static_cast<void>(ExerciseTextureFreePixelPrograms(
             *authentic, "authentic XNA 4 effect"));
+        ExerciseEveryPixelProgram(*authentic, "authentic XNA 4 effect");
 
         const auto syntheticBytes = CNA::TestSupport::BuildSyntheticDrawableEffect(
             /*readsSecondStream=*/true);

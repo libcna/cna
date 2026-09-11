@@ -284,6 +284,21 @@ namespace CNA::Internal::Renderers::Software
                         semantic.usageIndex = static_cast<std::uint8_t>(registerNumber);
                         result.inputSemantics.push_back(semantic);
                     }
+                    else if (registerType == 10u)
+                    {
+                        const auto samplerType = static_cast<SoftwareShaderSamplerTypeEXT>(
+                            (declarationToken >> 27u) & 0xFu);
+                        if (samplerType != SoftwareShaderSamplerTypeEXT::Texture2D &&
+                            samplerType != SoftwareShaderSamplerTypeEXT::Cube &&
+                            samplerType != SoftwareShaderSamplerTypeEXT::Volume)
+                        {
+                            throw std::runtime_error(
+                                "Software compiled effect: pixel sampler declaration has an "
+                                "unsupported texture dimension.");
+                        }
+                        result.samplers.push_back(SoftwareShaderSamplerEXT{
+                            static_cast<std::uint8_t>(registerNumber), samplerType});
+                    }
                 }
                 result.instructions.push_back(std::move(instruction));
                 offset += instructionSize;
@@ -687,7 +702,8 @@ namespace CNA::Internal::Renderers::Software
     }
 
     SoftwarePixelShaderResultEXT SoftwareCompiledEffect::ExecutePixelEXT(
-        std::span<const SoftwareShaderSemanticValueEXT> inputs) const
+        std::span<const SoftwareShaderSemanticValueEXT> inputs,
+        const ISoftwarePixelSamplerEXT* sampler) const
     {
         const SoftwareShaderProgramEXT* program = GetPixelProgramEXT();
         if (program == nullptr)
@@ -695,7 +711,7 @@ namespace CNA::Internal::Renderers::Software
         return ExecuteSoftwarePixelShaderEXT(
             *program, GetFloatRegistersEXT(SoftwareShaderStageEXT::Pixel),
             GetIntegerRegistersEXT(SoftwareShaderStageEXT::Pixel),
-            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs);
+            GetBooleanRegistersEXT(SoftwareShaderStageEXT::Pixel), inputs, sampler);
     }
 
     std::size_t SoftwareCompiledEffect::GetVertexExecutionCountEXT() const noexcept

@@ -105,6 +105,76 @@ namespace CNA::Internal::Renderers::Software
         bool depthWritten = false;
     };
 
+    /** @brief Direct3D sampler dimensionality declared by a pixel program. */
+    enum class SoftwareShaderSamplerTypeEXT : std::uint8_t
+    {
+        /** @brief No declaration was available, as in Shader Model 1. */
+        Unknown = 0,
+        /** @brief A normalized two-dimensional texture sampler. */
+        Texture2D = 2,
+        /** @brief A direction-addressed cube-map sampler. */
+        Cube = 3,
+        /** @brief A normalized three-dimensional volume sampler. */
+        Volume = 4
+    };
+
+    /** @brief LOD source selected by a Direct3D texture instruction. */
+    enum class SoftwareTextureLodModeEXT : std::uint8_t
+    {
+        /** @brief Use the rasterizer's implicit coordinate derivatives. */
+        Implicit,
+        /** @brief Use the explicit scalar level in @ref SoftwarePixelSampleRequestEXT::lod. */
+        Explicit,
+        /** @brief Use the explicit x/y coordinate gradients in the sample request. */
+        Gradients
+    };
+
+    /** @brief One texture lookup requested by the CPU pixel machine. */
+    struct SoftwarePixelSampleRequestEXT
+    {
+        /** @brief Pixel sampler register number. */
+        std::uint8_t samplerRegister = 0;
+        /** @brief Texture-coordinate register used by the instruction. */
+        std::uint8_t coordinateRegister = 0;
+        /** @brief Declared sampler dimensionality. */
+        SoftwareShaderSamplerTypeEXT samplerType = SoftwareShaderSamplerTypeEXT::Unknown;
+        /** @brief Texture coordinates after source swizzle/modification. */
+        std::array<float, 4> coordinate{};
+        /** @brief LOD mode encoded by TEX/TEXLDD/TEXLDL. */
+        SoftwareTextureLodModeEXT lodMode = SoftwareTextureLodModeEXT::Implicit;
+        /** @brief Shader-provided LOD or additional implicit LOD bias. */
+        float lod = 0.0f;
+        /** @brief Explicit horizontal coordinate gradient for TEXLDD. */
+        std::array<float, 4> gradientX{};
+        /** @brief Explicit vertical coordinate gradient for TEXLDD. */
+        std::array<float, 4> gradientY{};
+    };
+
+    /** @brief Renderer-side texture provider used by the CPU pixel machine. */
+    class ISoftwarePixelSamplerEXT
+    {
+    public:
+        /** @brief Destroys the sampler provider. */
+        virtual ~ISoftwarePixelSamplerEXT() = default;
+
+        /**
+         * @brief Resolves one shader texture lookup.
+         * @param request Register, dimensionality, coordinates and LOD information.
+         * @return Four shader-visible sampled components.
+         */
+        CNAEXT [[nodiscard]] virtual std::array<float, 4> SampleEXT(
+            const SoftwarePixelSampleRequestEXT& request) const = 0;
+    };
+
+    /** @brief One sampler declaration retained from a Direct3D pixel program. */
+    struct SoftwareShaderSamplerEXT
+    {
+        /** @brief Direct3D sampler register number. */
+        std::uint8_t registerNumber = 0;
+        /** @brief Dimensionality encoded by the sampler DCL token. */
+        SoftwareShaderSamplerTypeEXT type = SoftwareShaderSamplerTypeEXT::Unknown;
+    };
+
     struct SoftwareShaderProgramEXT;
 
     /**
@@ -129,15 +199,16 @@ namespace CNA::Internal::Renderers::Software
      * @param integerRegisters Direct3D int4 constant register storage.
      * @param booleanRegisters Direct3D Boolean constant register storage.
      * @param inputs Perspective-correct declaration-semantic values for one fragment.
+     * @param sampler Renderer-side texture provider, or null for texture-free programs.
      * @return Colour/depth outputs and discard state.
-     * @throws std::runtime_error if the program reaches a texture instruction before the
-     *         SOFTWARE-356 sampler phase is installed.
+     * @throws std::runtime_error if a texture instruction has no sampler provider.
      */
     CNAEXT [[nodiscard]] SoftwarePixelShaderResultEXT ExecuteSoftwarePixelShaderEXT(
         const SoftwareShaderProgramEXT& program, std::span<const float> floatRegisters,
         std::span<const int> integerRegisters,
         std::span<const unsigned char> booleanRegisters,
-        std::span<const SoftwareShaderSemanticValueEXT> inputs);
+        std::span<const SoftwareShaderSemanticValueEXT> inputs,
+        const ISoftwarePixelSamplerEXT* sampler = nullptr);
 
     /** @brief A validated Direct3D 9 shader program prepared for the later CPU
      * execution phases. */
@@ -158,6 +229,8 @@ namespace CNA::Internal::Renderers::Software
         std::vector<SoftwareShaderSemanticEXT> inputSemantics;
         /** @brief Declared Shader Model 3 outputs, mapped to output registers. */
         std::vector<SoftwareShaderSemanticEXT> outputSemantics;
+        /** @brief Declared pixel sampler registers and their texture dimensions. */
+        std::vector<SoftwareShaderSamplerEXT> samplers;
     };
 
     /**
@@ -291,10 +364,12 @@ namespace CNA::Internal::Renderers::Software
         /**
          * @brief Executes the selected classic Direct3D pixel program for one fragment.
          * @param inputs Perspective-correct semantic values from the vertex stage.
+         * @param sampler Renderer-side texture provider, or null for texture-free programs.
          * @return Colour/depth outputs and discard state.
          */
         CNAEXT [[nodiscard]] SoftwarePixelShaderResultEXT ExecutePixelEXT(
-            std::span<const SoftwareShaderSemanticValueEXT> inputs) const;
+            std::span<const SoftwareShaderSemanticValueEXT> inputs,
+            const ISoftwarePixelSamplerEXT* sampler = nullptr) const;
 
         /**
          * @brief Returns how many successful vertex invocations this runtime executed.

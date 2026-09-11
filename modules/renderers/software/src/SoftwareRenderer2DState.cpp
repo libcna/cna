@@ -686,6 +686,13 @@ namespace CNA::Internal::Renderers::Software
         s.lodBias = lodBias;
     }
 
+    void SoftwareRenderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        if (slot < 0 || slot >= kMaxSamplerSlots)
+            throw std::runtime_error("SoftwareRenderer::ApplySamplerAddressW: slot must be 0..15");
+        samplerSlots_[static_cast<std::size_t>(slot)].addressW = addressW;
+    }
+
     // REMED-GFX-080: store the ScissorRectangle so the raster paths can intersect it into their
     // effective clip when scissor testing is enabled (previously a no-op, so ScissorRectangle never
     // clipped anything). GraphicsDevice pushes this on every setScissorRectangleProperty() and

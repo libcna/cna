@@ -1,6 +1,10 @@
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/Software/SoftwareCompiledEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #endif
 #include "SoftwareTextureFormat.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
@@ -1984,6 +1988,377 @@ namespace CNA::Internal::Renderers::Software
                 t[0] * dim, t[1] * dim, t[2] * dim, faceDim, faceDim);
         }
 
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        bool CompiledVaryingValue(const RasterVertex& vertex,
+                                  MOJOSHADER_usage usage, std::uint8_t usageIndex,
+                                  std::array<float, 4>& value)
+        {
+            for (std::size_t index = 0; index < vertex.compiledVaryingCount; ++index)
+            {
+                const auto& varying = vertex.compiledVaryings[index];
+                if (varying.usage != usage || varying.usageIndex != usageIndex)
+                    continue;
+                const float inverseW = vertex.invW != 0.0f ? vertex.invW : 1.0f;
+                for (std::size_t component = 0; component < value.size(); ++component)
+                    value[component] = varying.value[component] / inverseW;
+                return true;
+            }
+            return false;
+        }
+
+        const SoftwareShaderSemanticEXT* CompiledCoordinateSemantic(
+            const SoftwareShaderProgramEXT& program, std::uint8_t coordinateRegister)
+        {
+            const auto declaration = std::find_if(
+                program.inputSemantics.begin(), program.inputSemantics.end(),
+                [coordinateRegister](const SoftwareShaderSemanticEXT& candidate)
+                {
+                    return candidate.registerType == 3u &&
+                           candidate.registerNumber == coordinateRegister;
+                });
+            return declaration == program.inputSemantics.end() ? nullptr : &*declaration;
+        }
+
+        TextureFootprint CompiledTriangleTextureFootprint(
+            const SoftwareShaderProgramEXT& program, std::uint8_t coordinateRegister,
+            const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+            int width, int height)
+        {
+            const SoftwareShaderSemanticEXT* semantic =
+                CompiledCoordinateSemantic(program, coordinateRegister);
+            const MOJOSHADER_usage usage = semantic != nullptr
+                ? semantic->usage : MOJOSHADER_USAGE_TEXCOORD;
+            const std::uint8_t usageIndex = semantic != nullptr
+                ? semantic->usageIndex : coordinateRegister;
+            std::array<float, 4> c0{}, c1{}, c2{};
+            if (!CompiledVaryingValue(v0, usage, usageIndex, c0) ||
+                !CompiledVaryingValue(v1, usage, usageIndex, c1) ||
+                !CompiledVaryingValue(v2, usage, usageIndex, c2))
+                return TextureFootprint{};
+            return ScreenSpaceTextureFootprint(
+                v0, v1, v2,
+                c0[0] * static_cast<float>(width),
+                c1[0] * static_cast<float>(width),
+                c2[0] * static_cast<float>(width),
+                c0[1] * static_cast<float>(height),
+                c1[1] * static_cast<float>(height),
+                c2[1] * static_cast<float>(height), width, height);
+        }
+
+        TextureFootprint CompiledTriangleCubeTextureFootprint(
+            const SoftwareShaderProgramEXT& program, std::uint8_t coordinateRegister,
+            const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+            int faceDimension)
+        {
+            const SoftwareShaderSemanticEXT* semantic =
+                CompiledCoordinateSemantic(program, coordinateRegister);
+            const MOJOSHADER_usage usage = semantic != nullptr
+                ? semantic->usage : MOJOSHADER_USAGE_TEXCOORD;
+            const std::uint8_t usageIndex = semantic != nullptr
+                ? semantic->usageIndex : coordinateRegister;
+            std::array<float, 4> coordinates[3]{};
+            const RasterVertex* vertices[3] = {&v0, &v1, &v2};
+            for (int index = 0; index < 3; ++index)
+                if (!CompiledVaryingValue(
+                        *vertices[index], usage, usageIndex, coordinates[index]))
+                    return TextureFootprint{};
+
+            const Vector3 directions[3] = {
+                Vector3(coordinates[0][0], coordinates[0][1], coordinates[0][2]),
+                Vector3(coordinates[1][0], coordinates[1][1], coordinates[1][2]),
+                Vector3(coordinates[2][0], coordinates[2][1], coordinates[2][2]),
+            };
+            const Vector3 sum(directions[0].X + directions[1].X + directions[2].X,
+                              directions[0].Y + directions[1].Y + directions[2].Y,
+                              directions[0].Z + directions[1].Z + directions[2].Z);
+            int face = 0;
+            float ignoredS = 0.5f, ignoredT = 0.5f;
+            SelectCubeFace(sum, face, ignoredS, ignoredT);
+            float s[3]{}, t[3]{};
+            for (int index = 0; index < 3; ++index)
+                if (!CubeFaceLocal(directions[index], face, s[index], t[index]))
+                    return TextureFootprint{};
+            const float dimension = static_cast<float>(std::max(1, faceDimension));
+            return ScreenSpaceTextureFootprint(
+                v0, v1, v2,
+                s[0] * dimension, s[1] * dimension, s[2] * dimension,
+                t[0] * dimension, t[1] * dimension, t[2] * dimension,
+                faceDimension, faceDimension);
+        }
+
+        float CompiledTriangleVolumeLod(
+            const SoftwareShaderProgramEXT& program, std::uint8_t coordinateRegister,
+            const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+            int width, int height, int depth)
+        {
+            const SoftwareShaderSemanticEXT* semantic =
+                CompiledCoordinateSemantic(program, coordinateRegister);
+            const MOJOSHADER_usage usage = semantic != nullptr
+                ? semantic->usage : MOJOSHADER_USAGE_TEXCOORD;
+            const std::uint8_t usageIndex = semantic != nullptr
+                ? semantic->usageIndex : coordinateRegister;
+            std::array<float, 4> coordinates[3]{};
+            if (!CompiledVaryingValue(v0, usage, usageIndex, coordinates[0]) ||
+                !CompiledVaryingValue(v1, usage, usageIndex, coordinates[1]) ||
+                !CompiledVaryingValue(v2, usage, usageIndex, coordinates[2]))
+                return 0.0f;
+            const float area = (v1.x - v0.x) * (v2.y - v0.y) -
+                               (v2.x - v0.x) * (v1.y - v0.y);
+            if (!(std::abs(area) > 1e-12f))
+                return 0.0f;
+            const float dimensions[3] = {static_cast<float>(width),
+                                         static_cast<float>(height),
+                                         static_cast<float>(depth)};
+            float rateX2 = 0.0f;
+            float rateY2 = 0.0f;
+            for (int component = 0; component < 3; ++component)
+            {
+                const float a0 = coordinates[0][component] * dimensions[component];
+                const float a1 = coordinates[1][component] * dimensions[component];
+                const float a2 = coordinates[2][component] * dimensions[component];
+                const float derivativeX =
+                    ((a1 - a0) * (v2.y - v0.y) -
+                     (a2 - a0) * (v1.y - v0.y)) / area;
+                const float derivativeY =
+                    ((a2 - a0) * (v1.x - v0.x) -
+                     (a1 - a0) * (v2.x - v0.x)) / area;
+                rateX2 += derivativeX * derivativeX;
+                rateY2 += derivativeY * derivativeY;
+            }
+            return LodFromTexelRate(std::max(std::sqrt(rateX2), std::sqrt(rateY2)));
+        }
+
+        TextureFootprint ExplicitGradientFootprint(
+            const SoftwarePixelSampleRequestEXT& request, int width, int height)
+        {
+            RasterVertex origin;
+            RasterVertex horizontal;
+            RasterVertex vertical;
+            horizontal.x = 1.0f;
+            vertical.y = 1.0f;
+            return ScreenSpaceTextureFootprint(
+                origin, horizontal, vertical,
+                0.0f, request.gradientX[0] * static_cast<float>(width),
+                request.gradientY[0] * static_cast<float>(width),
+                0.0f, request.gradientX[1] * static_cast<float>(height),
+                request.gradientY[1] * static_cast<float>(height), width, height);
+        }
+
+        void SampleVolumeLevel(const SoftwareTexture3DRenderer& texture, int level,
+                               const SoftwareSamplerState& sampler, bool magnify,
+                               float u, float v, float w, std::array<float, 4>& result)
+        {
+            const int width = texture.VolumeWidthEXT(level);
+            const int height = texture.VolumeHeightEXT(level);
+            const int depth = texture.VolumeDepthEXT(level);
+            const bool point = magnify ? FilterMagnifiesWithPoint(sampler.filter)
+                                       : FilterMinifiesWithPoint(sampler.filter);
+            if (point)
+            {
+                result = texture.FetchVolumeTexelEXT(
+                    level,
+                    AddressTexel(FloorToTexelIndex(u * width), width, sampler.addressU),
+                    AddressTexel(FloorToTexelIndex(v * height), height, sampler.addressV),
+                    AddressTexel(FloorToTexelIndex(w * depth), depth, sampler.addressW));
+                return;
+            }
+
+            const float tx = u * static_cast<float>(width) - 0.5f;
+            const float ty = v * static_cast<float>(height) - 0.5f;
+            const float tz = w * static_cast<float>(depth) - 0.5f;
+            const long long x0raw = FloorToTexelIndex(tx);
+            const long long y0raw = FloorToTexelIndex(ty);
+            const long long z0raw = FloorToTexelIndex(tz);
+            const int xs[2] = {AddressTexel(x0raw, width, sampler.addressU),
+                               AddressTexel(x0raw + 1, width, sampler.addressU)};
+            const int ys[2] = {AddressTexel(y0raw, height, sampler.addressV),
+                               AddressTexel(y0raw + 1, height, sampler.addressV)};
+            const int zs[2] = {AddressTexel(z0raw, depth, sampler.addressW),
+                               AddressTexel(z0raw + 1, depth, sampler.addressW)};
+            float weights[3] = {tx - std::floor(tx), ty - std::floor(ty), tz - std::floor(tz)};
+            for (float& weight : weights)
+                if (!(weight >= 0.0f && weight <= 1.0f)) weight = 0.0f;
+
+            std::array<std::array<float, 4>, 8> texels{};
+            for (int iz = 0; iz < 2; ++iz)
+                for (int iy = 0; iy < 2; ++iy)
+                    for (int ix = 0; ix < 2; ++ix)
+                        texels[static_cast<std::size_t>(iz * 4 + iy * 2 + ix)] =
+                            texture.FetchVolumeTexelEXT(level, xs[ix], ys[iy], zs[iz]);
+            for (std::size_t component = 0; component < 4; ++component)
+            {
+                const auto lerp = [](float a, float b, float amount)
+                { return a + (b - a) * amount; };
+                const float row00 = lerp(texels[0][component], texels[1][component], weights[0]);
+                const float row01 = lerp(texels[2][component], texels[3][component], weights[0]);
+                const float row10 = lerp(texels[4][component], texels[5][component], weights[0]);
+                const float row11 = lerp(texels[6][component], texels[7][component], weights[0]);
+                const float slice0 = lerp(row00, row01, weights[1]);
+                const float slice1 = lerp(row10, row11, weights[1]);
+                result[component] = lerp(slice0, slice1, weights[2]);
+            }
+        }
+
+        std::array<float, 4> SampleVolume(
+            const SoftwareTexture3DRenderer& texture, const SoftwareSamplerState& sampler,
+            float lambda, float u, float v, float w)
+        {
+            const int levels = std::max(1, texture.VolumeLevelCountEXT());
+            const float biased = lambda + sampler.lodBias;
+            const float minimum = static_cast<float>(std::min(
+                static_cast<std::uint32_t>(sampler.maxMipLevel),
+                static_cast<std::uint32_t>(levels - 1)));
+            const float clamped = std::clamp(
+                std::max(biased, minimum), 0.0f, static_cast<float>(levels - 1));
+            const bool magnify = clamped <= 0.0f && biased < 0.0f;
+            int low = 0;
+            int high = 0;
+            float weight = 0.0f;
+            if (FilterSelectsMipWithPoint(sampler.filter))
+            {
+                low = std::clamp(static_cast<int>(std::ceil(clamped + 0.5f)) - 1,
+                                 0, levels - 1);
+                high = low;
+            }
+            else
+            {
+                low = std::clamp(static_cast<int>(std::floor(clamped)), 0, levels - 1);
+                weight = clamped - static_cast<float>(low);
+                high = weight > 0.0f && low < levels - 1 ? low + 1 : low;
+            }
+            std::array<float, 4> result{};
+            SampleVolumeLevel(texture, low, sampler, magnify, u, v, w, result);
+            if (high == low)
+                return result;
+            std::array<float, 4> upper{};
+            SampleVolumeLevel(texture, high, sampler, false, u, v, w, upper);
+            for (std::size_t component = 0; component < result.size(); ++component)
+                result[component] += (upper[component] - result[component]) * weight;
+            return result;
+        }
+
+        class CompiledPixelSampler final : public ISoftwarePixelSamplerEXT
+        {
+        public:
+            CompiledPixelSampler(const SoftwareRenderer& renderer,
+                                 const GpuDrawParams& params,
+                                 const SoftwareShaderProgramEXT& program,
+                                 const RasterVertex& v0, const RasterVertex& v1,
+                                 const RasterVertex& v2)
+                : renderer_(renderer), params_(params), program_(program),
+                  v0_(v0), v1_(v1), v2_(v2)
+            {
+            }
+
+            [[nodiscard]] std::array<float, 4> SampleEXT(
+                const SoftwarePixelSampleRequestEXT& request) const override
+            {
+                using Microsoft::Xna::Framework::Graphics::Texture;
+                using Microsoft::Xna::Framework::Graphics::Texture2D;
+                using Microsoft::Xna::Framework::Graphics::Texture3D;
+                using Microsoft::Xna::Framework::Graphics::TextureCube;
+                if (request.samplerRegister >= 16u)
+                    throw std::runtime_error(
+                        "Software compiled effect: sampler register exceeds the XNA limit.");
+                if (params_.compiledDeviceTextures == nullptr)
+                    throw std::runtime_error(
+                        "Software compiled effect: pixel texture collection was not provided.");
+                const Texture* texture =
+                    (*params_.compiledDeviceTextures)[request.samplerRegister];
+                if (texture == nullptr)
+                    return {0.0f, 0.0f, 0.0f, 1.0f};
+
+                const SoftwareSamplerState sampler =
+                    renderer_.GetSamplerState(request.samplerRegister);
+                if (request.samplerType == SoftwareShaderSamplerTypeEXT::Texture2D ||
+                    request.samplerType == SoftwareShaderSamplerTypeEXT::Unknown)
+                {
+                    const auto* texture2D = dynamic_cast<const Texture2D*>(texture);
+                    const auto* surface = texture2D != nullptr
+                        ? dynamic_cast<const SoftwareColorSurface*>(&texture2D->GetRenderer())
+                        : nullptr;
+                    if (surface == nullptr)
+                        throw std::runtime_error(
+                            "Software compiled effect: sampler2D requires a Software Texture2D.");
+                    TextureFootprint footprint = request.lodMode == SoftwareTextureLodModeEXT::Gradients
+                        ? ExplicitGradientFootprint(request, surface->ColorWidth(), surface->ColorHeight())
+                        : CompiledTriangleTextureFootprint(
+                            program_, request.coordinateRegister, v0_, v1_, v2_,
+                            surface->ColorWidth(), surface->ColorHeight());
+                    float lambda = request.lodMode == SoftwareTextureLodModeEXT::Explicit
+                        ? request.lod : LodFromTexelRate(footprint.isotropicRate) + request.lod;
+                    float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
+                    SampleTexture(*surface, sampler, lambda <= 0.0f, lambda,
+                                  request.coordinate[0], request.coordinate[1],
+                                  r, g, b, a, &footprint);
+                    return {r, g, b, a};
+                }
+                if (request.samplerType == SoftwareShaderSamplerTypeEXT::Cube)
+                {
+                    const auto* cube = dynamic_cast<const TextureCube*>(texture);
+                    const auto* surface = cube != nullptr
+                        ? dynamic_cast<const SoftwareCubeSurface*>(&cube->GetRenderer())
+                        : nullptr;
+                    if (surface == nullptr)
+                        throw std::runtime_error(
+                            "Software compiled effect: samplerCUBE requires a Software TextureCube.");
+                    const TextureFootprint footprint = CompiledTriangleCubeTextureFootprint(
+                        program_, request.coordinateRegister, v0_, v1_, v2_,
+                        surface->CubeSize());
+                    const float lambda = request.lodMode == SoftwareTextureLodModeEXT::Explicit
+                        ? request.lod : LodFromTexelRate(footprint.isotropicRate) + request.lod;
+                    float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
+                    SampleCubeMap(*surface, sampler, lambda <= 0.0f, lambda,
+                                  Vector3(request.coordinate[0], request.coordinate[1],
+                                          request.coordinate[2]),
+                                  r, g, b, a, &footprint);
+                    return {r, g, b, a};
+                }
+                if (request.samplerType == SoftwareShaderSamplerTypeEXT::Volume)
+                {
+                    const auto* volume = dynamic_cast<const Texture3D*>(texture);
+                    const auto* surface = volume != nullptr
+                        ? dynamic_cast<const SoftwareTexture3DRenderer*>(&volume->GetRenderer())
+                        : nullptr;
+                    if (surface == nullptr)
+                        throw std::runtime_error(
+                            "Software compiled effect: sampler3D requires a Software Texture3D.");
+                    float implicitLod = CompiledTriangleVolumeLod(
+                        program_, request.coordinateRegister, v0_, v1_, v2_,
+                        surface->VolumeWidthEXT(0), surface->VolumeHeightEXT(0),
+                        surface->VolumeDepthEXT(0));
+                    if (request.lodMode == SoftwareTextureLodModeEXT::Gradients)
+                    {
+                        const float dx = std::sqrt(
+                            std::pow(request.gradientX[0] * surface->VolumeWidthEXT(0), 2.0f) +
+                            std::pow(request.gradientX[1] * surface->VolumeHeightEXT(0), 2.0f) +
+                            std::pow(request.gradientX[2] * surface->VolumeDepthEXT(0), 2.0f));
+                        const float dy = std::sqrt(
+                            std::pow(request.gradientY[0] * surface->VolumeWidthEXT(0), 2.0f) +
+                            std::pow(request.gradientY[1] * surface->VolumeHeightEXT(0), 2.0f) +
+                            std::pow(request.gradientY[2] * surface->VolumeDepthEXT(0), 2.0f));
+                        implicitLod = LodFromTexelRate(std::max(dx, dy));
+                    }
+                    const float lambda = request.lodMode == SoftwareTextureLodModeEXT::Explicit
+                        ? request.lod : implicitLod + request.lod;
+                    return SampleVolume(*surface, sampler, lambda,
+                                        request.coordinate[0], request.coordinate[1],
+                                        request.coordinate[2]);
+                }
+                throw std::runtime_error(
+                    "Software compiled effect: unsupported sampler dimensionality.");
+            }
+
+        private:
+            const SoftwareRenderer& renderer_;
+            const GpuDrawParams& params_;
+            const SoftwareShaderProgramEXT& program_;
+            const RasterVertex& v0_;
+            const RasterVertex& v1_;
+            const RasterVertex& v2_;
+        };
+#endif
+
         /// REMED-GFX-182: one complete cube-sample line, emitted once the effect contribution is
         /// known. Every stage of the operation is on it, so a disputed pixel can be classified
         /// without a debugger: which slot state was captured, which face and face-local coordinate
@@ -2569,7 +2944,8 @@ namespace CNA::Internal::Renderers::Software
             SoftwareOcclusionQueryRenderer* occlusionQuery, SoftwareCompiledEffect& runtime,
             int x, int y, float depth, unsigned int coverageMask,
             const std::array<float, 4>* sampleDepths,
-            std::span<const SoftwareShaderSemanticValueEXT> inputs)
+            std::span<const SoftwareShaderSemanticValueEXT> inputs,
+            const ISoftwarePixelSamplerEXT* sampler)
         {
             SoftwareFramebuffer& depthTarget = *colorTargets[0];
             const unsigned int availableSamples =
@@ -2579,7 +2955,7 @@ namespace CNA::Internal::Renderers::Software
             if (activeSamples == 0u)
                 return;
 
-            const SoftwarePixelShaderResultEXT pixel = runtime.ExecutePixelEXT(inputs);
+            const SoftwarePixelShaderResultEXT pixel = runtime.ExecutePixelEXT(inputs, sampler);
             if (pixel.discarded)
                 return;
 
@@ -2661,7 +3037,8 @@ namespace CNA::Internal::Renderers::Software
             const RasterClipRect& clip, const RasterVertex& v0, const RasterVertex& v1,
             const RasterVertex& v2, const std::array<int, 4>& colorWriteMasks,
             unsigned int multiSampleMask, SoftwareOcclusionQueryRenderer* occlusionQuery,
-            SoftwareCompiledEffect& runtime, bool multiSampleAntiAlias)
+            SoftwareCompiledEffect& runtime, bool multiSampleAntiAlias,
+            const SoftwareRenderer& renderer, const GpuDrawParams& params)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f || ShouldCullTriangle(area, cullMode))
@@ -2681,6 +3058,12 @@ namespace CNA::Internal::Renderers::Software
                 return;
 
             SoftwareFramebuffer& primary = *colorTargets[0];
+            const SoftwareShaderProgramEXT* pixelProgram = runtime.GetPixelProgramEXT();
+            if (pixelProgram == nullptr)
+                throw std::runtime_error(
+                    "SoftwareRenderer: compiled triangle has no selected pixel program.");
+            const CompiledPixelSampler sampler(
+                renderer, params, *pixelProgram, v0, v1, v2);
             for (int y = minY; y <= maxY; ++y)
             {
                 for (int x = minX; x <= maxX; ++x)
@@ -2778,7 +3161,7 @@ namespace CNA::Internal::Renderers::Software
                         blendFactor, colorWriteMasks, multiSampleMask, occlusionQuery, runtime,
                         x, y, depth, coverageMask,
                         primary.HasMultiSampleColor() ? &sampleDepths : nullptr,
-                        std::span(inputs.data(), v0.compiledVaryingCount));
+                        std::span(inputs.data(), v0.compiledVaryingCount), &sampler);
                 }
             }
         }
@@ -5460,7 +5843,8 @@ namespace CNA::Internal::Renderers::Software
                         blendState, blendFactor, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
                         rv[0], rv[static_cast<std::size_t>(fan)],
                         rv[static_cast<std::size_t>(fan + 1)], colorWriteMasks_, multiSampleMask_,
-                        activeOcclusionQuery_, *compiledRuntime, multiSampleAntiAlias_);
+                        activeOcclusionQuery_, *compiledRuntime, multiSampleAntiAlias_,
+                        *this, params);
                     continue;
                 }
 #endif
@@ -5703,7 +6087,8 @@ namespace CNA::Internal::Renderers::Software
                         blendState, blendFactor, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
                         rv[0], rv[static_cast<std::size_t>(fan)],
                         rv[static_cast<std::size_t>(fan + 1)], colorWriteMasks_, multiSampleMask_,
-                        activeOcclusionQuery_, *compiledRuntime, multiSampleAntiAlias_);
+                        activeOcclusionQuery_, *compiledRuntime, multiSampleAntiAlias_,
+                        *this, params);
                     continue;
                 }
 #endif

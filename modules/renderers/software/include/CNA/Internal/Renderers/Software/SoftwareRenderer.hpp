@@ -378,6 +378,8 @@ namespace CNA::Internal::Renderers::Software
         int addressU = 1;
         /** @brief Raw TextureAddressMode ordinal for V (0 = Wrap, 1 = Clamp, 2 = Mirror). */
         int addressV = 1;
+        /** @brief Raw TextureAddressMode ordinal for W (0 = Wrap, 1 = Clamp, 2 = Mirror). */
+        int addressW = 1;
         /** @brief Requested maximum anisotropy; Software clamps work to its deterministic CPU cap. */
         int maxAnisotropy = 4;
         /** @brief Most detailed mip level the sampler may select. */
@@ -1181,10 +1183,34 @@ namespace CNA::Internal::Renderers::Software
          */
         void GetDimensionsEXT(int& width, int& height, int& depth) const noexcept override;
 
+        /** @brief Returns the number of sampleable volume mip levels. */
+        [[nodiscard]] int VolumeLevelCountEXT() const noexcept { return levelCount_; }
+
+        /** @brief Returns one mip level's width in voxels. */
+        [[nodiscard]] int VolumeWidthEXT(int level) const { return LevelWidth(level); }
+
+        /** @brief Returns one mip level's height in voxels. */
+        [[nodiscard]] int VolumeHeightEXT(int level) const { return LevelHeight(level); }
+
+        /** @brief Returns one mip level's depth in voxels. */
+        [[nodiscard]] int VolumeDepthEXT(int level) const { return LevelDepth(level); }
+
+        /**
+         * @brief Fetches one volume texel in the value range exposed to an XNA pixel shader.
+         * @param level Mip level beginning at zero.
+         * @param x Voxel x coordinate.
+         * @param y Voxel y coordinate.
+         * @param z Voxel z coordinate.
+         * @return Four decoded shader-visible components.
+         */
+        [[nodiscard]] std::array<float, 4> FetchVolumeTexelEXT(
+            int level, int x, int y, int z) const;
+
     private:
         [[nodiscard]] int LevelWidth(int level) const;
         [[nodiscard]] int LevelHeight(int level) const;
         [[nodiscard]] int LevelDepth(int level) const;
+        void DecodeLevel(int level);
 
         int width_ = 0;
         int height_ = 0;
@@ -1193,6 +1219,8 @@ namespace CNA::Internal::Renderers::Software
         int surfaceFormat_ = 0;
         /// levels_[level] is slice-major, row-major, tightly packed declared-format storage.
         std::vector<std::vector<std::uint8_t>> levels_;
+        /// Shader-visible canonical float4 voxels matching @ref levels_.
+        std::vector<std::vector<float>> sampleLevels_;
     };
 
     // Cube-map render targets remain a tracked parity gap. SOFTWARE-118 gives Texture3D an exact
@@ -1352,7 +1380,7 @@ namespace CNA::Internal::Renderers::Software
         /// re-established on every Begin and cannot leak from a previous batch). Pre-fix these three
         /// fields were written here and read nowhere, so the whole SamplerState argument was inert.
         [[nodiscard]] SoftwareSamplerState GetSamplerState() const
-        { return SoftwareSamplerState{textureFilter_, addressU_, addressV_, maxAnisotropy_,
+        { return SoftwareSamplerState{textureFilter_, addressU_, addressV_, 1, maxAnisotropy_,
                                       maxMipLevel_, lodBias_}; }
 
     private:
@@ -1560,6 +1588,7 @@ namespace CNA::Internal::Renderers::Software
         void ApplyRasterizerMultiSampleState(bool enabled) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+        void ApplySamplerAddressW(int slot, int addressW) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
         void SetReferenceStencil(int value) override;
         void SetScissorRect(int x, int y, int w, int h) override;

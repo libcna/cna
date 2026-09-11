@@ -136,10 +136,11 @@ public:
                std::span<const float> floatRegisters,
                std::span<const int> integerRegisters,
                std::span<const unsigned char> booleanRegisters,
-               std::span<const SoftwareShaderSemanticValueEXT> inputs)
+               std::span<const SoftwareShaderSemanticValueEXT> inputs,
+               const ISoftwarePixelSamplerEXT *sampler)
       : program_(program), floatRegisters_(floatRegisters),
         integerRegisters_(integerRegisters),
-        booleanRegisters_(booleanRegisters) {
+        booleanRegisters_(booleanRegisters), sampler_(sampler) {
     if (program.stage != SoftwareShaderStageEXT::Pixel)
       throw std::invalid_argument("Software pixel shader: a vertex program "
                                   "cannot run as a pixel program.");
@@ -443,6 +444,167 @@ private:
     localFloatDefined_[static_cast<std::size_t>(destination.number)] = true;
   }
 
+  [[nodiscard]] SoftwareShaderSamplerTypeEXT
+  SamplerType(int samplerRegister) const {
+    const auto declaration = std::find_if(
+        program_.samplers.begin(), program_.samplers.end(),
+        [samplerRegister](const SoftwareShaderSamplerEXT &candidate) {
+          return candidate.registerNumber == samplerRegister;
+        });
+    if (declaration != program_.samplers.end())
+      return declaration->type;
+    return program_.majorVersion < 2u
+               ? SoftwareShaderSamplerTypeEXT::Texture2D
+               : SoftwareShaderSamplerTypeEXT::Unknown;
+  }
+
+  [[nodiscard]] Operand DecodeSampler(
+      const std::vector<std::uint32_t> &tokens, std::size_t &cursor) const {
+    RegisterType relativeType;
+    int relativeComponent = 0;
+    const Operand operand = DecodeSource(tokens, cursor, program_.majorVersion,
+                                         relativeType, relativeComponent);
+    if (operand.relative || operand.type != RegisterType::Sampler ||
+        operand.number < 0 || operand.number >= 16)
+      throw std::runtime_error(
+          "Software pixel shader: invalid sampler source operand.");
+    return operand;
+  }
+
+  [[nodiscard]] Vector Sample(const Operand &coordinateOperand,
+                              const Vector &coordinate, int samplerRegister,
+                              SoftwareTextureLodModeEXT lodMode, float lod,
+                              const Vector &gradientX = {},
+                              const Vector &gradientY = {}) const {
+    if (sampler_ == nullptr)
+      throw std::runtime_error(
+          "Software pixel shader: texture instruction has no sampler provider.");
+    if (coordinateOperand.number < 0 || coordinateOperand.number >= 16)
+      throw std::runtime_error(
+          "Software pixel shader: texture-coordinate register is out of range.");
+    SoftwarePixelSampleRequestEXT request;
+    request.samplerRegister = static_cast<std::uint8_t>(samplerRegister);
+    request.coordinateRegister =
+        static_cast<std::uint8_t>(coordinateOperand.number);
+    request.samplerType = SamplerType(samplerRegister);
+    request.coordinate = coordinate;
+    request.lodMode = lodMode;
+    request.lod = lod;
+    request.gradientX = gradientX;
+    request.gradientY = gradientY;
+    return sampler_->SampleEXT(request);
+  }
+
+  void ExecuteTextureInstruction(
+      const SoftwareShaderInstructionEXT &instruction) {
+    const auto &tokens = instruction.tokens;
+    if (program_.majorVersion < 2u) {
+      if (program_.minorVersion == 4u) {
+        if (tokens.size() != 3u)
+          throw std::runtime_error(
+              "Software pixel shader: malformed ps_1_4 TEX instruction.");
+        const Operand destination = DecodeDestination(tokens[1]);
+        std::size_t cursor = 2u;
+        RegisterType relativeType;
+        int relativeComponent = 0;
+        const Operand coordinateOperand = DecodeSource(
+            tokens, cursor, program_.majorVersion, relativeType,
+            relativeComponent);
+        const Vector coordinate = ReadSourceFromOperand(coordinateOperand);
+        Write(destination,
+              Sample(coordinateOperand, coordinate, destination.number,
+                     SoftwareTextureLodModeEXT::Implicit, 0.0f));
+        return;
+      }
+      if (tokens.size() != 2u)
+        throw std::runtime_error(
+            "Software pixel shader: malformed Shader Model 1 TEX instruction.");
+      const Operand destination = DecodeDestination(tokens[1]);
+      const Vector coordinate = ReadRaw(destination.type, destination.number);
+      Write(destination,
+            Sample(destination, coordinate, destination.number,
+                   SoftwareTextureLodModeEXT::Implicit, 0.0f));
+      return;
+    }
+
+    if (tokens.size() != 4u)
+      throw std::runtime_error(
+          "Software pixel shader: malformed TEX instruction.");
+    const Operand destination = DecodeDestination(tokens[1]);
+    std::size_t cursor = 2u;
+    RegisterType relativeType;
+    int relativeComponent = 0;
+    const Operand coordinateOperand = DecodeSource(
+        tokens, cursor, program_.majorVersion, relativeType,
+        relativeComponent);
+    Vector coordinate = ReadSourceFromOperand(coordinateOperand);
+    const Operand sampler = DecodeSampler(tokens, cursor);
+    float lod = 0.0f;
+    if (instruction.controls == 1u) {
+      const float divisor = coordinate[3];
+      for (int component = 0; component < 3; ++component)
+        coordinate[static_cast<std::size_t>(component)] /= divisor;
+    } else if (instruction.controls == 2u) {
+      lod = coordinate[3];
+    } else if (instruction.controls != 0u) {
+      throw std::runtime_error(
+          "Software pixel shader: unsupported TEX instruction control.");
+    }
+    Write(destination,
+          Sample(coordinateOperand, coordinate, sampler.number,
+                 SoftwareTextureLodModeEXT::Implicit, lod));
+  }
+
+  [[nodiscard]] Vector ReadSourceFromOperand(const Operand &operand) const {
+    if (operand.relative)
+      throw std::runtime_error(
+          "Software pixel shader: relative texture coordinates require SOFTWARE-165.");
+    const Vector raw = ReadRaw(operand.type, operand.number);
+    Vector value{};
+    for (int component = 0; component < 4; ++component) {
+      const auto selected = static_cast<std::size_t>(
+          (operand.swizzle >> static_cast<unsigned>(component * 2)) & 0x3u);
+      value[static_cast<std::size_t>(component)] = raw[selected];
+    }
+    if (operand.sourceModifier == 1u)
+      for (float &component : value)
+        component = -component;
+    else if (operand.sourceModifier != 0u)
+      throw std::runtime_error(
+          "Software pixel shader: texture coordinate uses an unsupported modifier.");
+    return value;
+  }
+
+  void ExecuteTextureLodInstruction(
+      const SoftwareShaderInstructionEXT &instruction) {
+    const auto &tokens = instruction.tokens;
+    const std::size_t expected = instruction.opcode == 94u ? 6u : 4u;
+    if (tokens.size() != expected)
+      throw std::runtime_error(
+          "Software pixel shader: malformed explicit-LOD texture instruction.");
+    const Operand destination = DecodeDestination(tokens[1]);
+    std::size_t cursor = 2u;
+    RegisterType relativeType;
+    int relativeComponent = 0;
+    const Operand coordinateOperand = DecodeSource(
+        tokens, cursor, program_.majorVersion, relativeType,
+        relativeComponent);
+    const Vector coordinate = ReadSourceFromOperand(coordinateOperand);
+    const Operand sampler = DecodeSampler(tokens, cursor);
+    if (instruction.opcode == 95u) {
+      Write(destination,
+            Sample(coordinateOperand, coordinate, sampler.number,
+                   SoftwareTextureLodModeEXT::Explicit, coordinate[3]));
+      return;
+    }
+    const Vector gradientX = ReadSource(tokens, cursor);
+    const Vector gradientY = ReadSource(tokens, cursor);
+    Write(destination,
+          Sample(coordinateOperand, coordinate, sampler.number,
+                 SoftwareTextureLodModeEXT::Gradients, 0.0f, gradientX,
+                 gradientY));
+  }
+
   void ExecuteInstruction(const SoftwareShaderInstructionEXT &instruction) {
     const auto &tokens = instruction.tokens;
     if (tokens.empty())
@@ -475,8 +637,12 @@ private:
       return;
     }
     if (instruction.opcode == 66u) {
-      throw std::runtime_error(
-          "Software pixel shader: texture sampling requires SOFTWARE-356.");
+      ExecuteTextureInstruction(instruction);
+      return;
+    }
+    if (instruction.opcode == 94u || instruction.opcode == 95u) {
+      ExecuteTextureLodInstruction(instruction);
+      return;
     }
 
     if (tokens.size() < 3u)
@@ -642,6 +808,7 @@ private:
   std::span<const float> floatRegisters_;
   std::span<const int> integerRegisters_;
   std::span<const unsigned char> booleanRegisters_;
+  const ISoftwarePixelSamplerEXT *sampler_ = nullptr;
   std::array<Vector, kTemporaryRegisterCount> temporaryRegisters_{};
   std::array<bool, kTemporaryRegisterCount> temporaryWritten_{};
   std::array<Vector, kInputRegisterCount> inputRegisters_{};
@@ -661,9 +828,10 @@ SoftwarePixelShaderResultEXT ExecuteSoftwarePixelShaderEXT(
     std::span<const float> floatRegisters,
     std::span<const int> integerRegisters,
     std::span<const unsigned char> booleanRegisters,
-    std::span<const SoftwareShaderSemanticValueEXT> inputs) {
+    std::span<const SoftwareShaderSemanticValueEXT> inputs,
+    const ISoftwarePixelSamplerEXT *sampler) {
   return PixelMachine(program, floatRegisters, integerRegisters,
-                      booleanRegisters, inputs)
+                      booleanRegisters, inputs, sampler)
       .Execute();
 }
 } // namespace CNA::Internal::Renderers::Software
