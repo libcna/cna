@@ -4,6 +4,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 
 #include "RlglBridge.hpp"
 
@@ -23,6 +24,7 @@ namespace CNA::Internal::Renderers::Rlgl
         using Microsoft::Xna::Framework::Graphics::SetDataOptions;
         using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
         using Microsoft::Xna::Framework::Graphics::VertexElement;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 
         [[nodiscard]] int CheckedByteCapacity(
             const int elementCapacity, const std::size_t elementSize, const char* label)
@@ -93,6 +95,13 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
             [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
+            [[nodiscard]] unsigned int NativeId() const noexcept { return id_; }
+            [[nodiscard]] int Capacity() const noexcept { return capacity_; }
+            [[nodiscard]] std::size_t Stride() const noexcept { return stride_; }
+            [[nodiscard]] const std::vector<VertexElement>& Declaration() const noexcept
+            {
+                return declaration_;
+            }
 
             [[nodiscard]] BufferResourceSnapshot Snapshot() const
             {
@@ -232,6 +241,8 @@ namespace CNA::Internal::Renderers::Rlgl
 
             [[nodiscard]] int GetIndexCount() const override { return indexCount_; }
             [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
+            [[nodiscard]] unsigned int NativeId() const noexcept { return id_; }
+            [[nodiscard]] int Capacity() const noexcept { return capacity_; }
 
             [[nodiscard]] BufferResourceSnapshot Snapshot() const
             {
@@ -330,5 +341,109 @@ namespace CNA::Internal::Renderers::Rlgl
         if (buffer == nullptr)
             throw std::invalid_argument("RLGL: index resource belongs to another renderer");
         return buffer->Snapshot();
+    }
+
+    unsigned int GetNativeBufferId(const IVertexBufferRenderer& resource)
+    {
+        const auto* const buffer = dynamic_cast<const RlglVertexBufferRenderer*>(&resource);
+        if (buffer == nullptr)
+            throw std::invalid_argument("RLGL: vertex resource belongs to another renderer");
+        return buffer->NativeId();
+    }
+
+    unsigned int GetNativeBufferId(const IIndexBufferRenderer& resource)
+    {
+        const auto* const buffer = dynamic_cast<const RlglIndexBufferRenderer*>(&resource);
+        if (buffer == nullptr)
+            throw std::invalid_argument("RLGL: index resource belongs to another renderer");
+        return buffer->NativeId();
+    }
+
+    std::size_t GetVertexStride(const IVertexBufferRenderer& resource)
+    {
+        const auto* const buffer = dynamic_cast<const RlglVertexBufferRenderer*>(&resource);
+        if (buffer == nullptr)
+            throw std::invalid_argument("RLGL: vertex resource belongs to another renderer");
+        return buffer->Stride();
+    }
+
+    int GetBufferCapacity(const IVertexBufferRenderer& resource)
+    {
+        const auto* const buffer = dynamic_cast<const RlglVertexBufferRenderer*>(&resource);
+        if (buffer == nullptr)
+            throw std::invalid_argument("RLGL: vertex resource belongs to another renderer");
+        return buffer->Capacity();
+    }
+
+    int GetBufferCapacity(const IIndexBufferRenderer& resource)
+    {
+        const auto* const buffer = dynamic_cast<const RlglIndexBufferRenderer*>(&resource);
+        if (buffer == nullptr)
+            throw std::invalid_argument("RLGL: index resource belongs to another renderer");
+        return buffer->Capacity();
+    }
+
+    const std::vector<VertexElement>& GetVertexDeclaration(
+        const IVertexBufferRenderer& resource)
+    {
+        const auto* const buffer = dynamic_cast<const RlglVertexBufferRenderer*>(&resource);
+        if (buffer == nullptr)
+            throw std::invalid_argument("RLGL: vertex resource belongs to another renderer");
+        return buffer->Declaration();
+    }
+
+    VertexAttributeBinding DescribeVertexAttribute(
+        const VertexElement& element, const unsigned int location,
+        const int stride, const int baseOffset)
+    {
+        if (stride <= 0 || baseOffset < 0 || element.getOffsetProperty() < 0)
+        {
+            throw std::invalid_argument("RLGL: invalid vertex attribute byte range");
+        }
+
+        VertexAttributeBinding result;
+        result.location = location;
+        result.stride = stride;
+        int scalarSize = 0;
+        switch (element.getVertexElementFormatProperty())
+        {
+        case VertexElementFormat::Single:
+            result.componentCount = 1; result.scalarType = 0x1406; scalarSize = 4; break;
+        case VertexElementFormat::Vector2:
+            result.componentCount = 2; result.scalarType = 0x1406; scalarSize = 4; break;
+        case VertexElementFormat::Vector3:
+            result.componentCount = 3; result.scalarType = 0x1406; scalarSize = 4; break;
+        case VertexElementFormat::Vector4:
+            result.componentCount = 4; result.scalarType = 0x1406; scalarSize = 4; break;
+        case VertexElementFormat::Color:
+            result.componentCount = 4; result.scalarType = 0x1401;
+            result.normalized = true; scalarSize = 1; break;
+        case VertexElementFormat::Byte4:
+            result.componentCount = 4; result.scalarType = 0x1401; scalarSize = 1; break;
+        case VertexElementFormat::Short2:
+            result.componentCount = 2; result.scalarType = 0x1402; scalarSize = 2; break;
+        case VertexElementFormat::Short4:
+            result.componentCount = 4; result.scalarType = 0x1402; scalarSize = 2; break;
+        case VertexElementFormat::NormalizedShort2:
+            result.componentCount = 2; result.scalarType = 0x1402;
+            result.normalized = true; scalarSize = 2; break;
+        case VertexElementFormat::NormalizedShort4:
+            result.componentCount = 4; result.scalarType = 0x1402;
+            result.normalized = true; scalarSize = 2; break;
+        case VertexElementFormat::HalfVector2:
+            result.componentCount = 2; result.scalarType = 0x140B; scalarSize = 2; break;
+        case VertexElementFormat::HalfVector4:
+            result.componentCount = 4; result.scalarType = 0x140B; scalarSize = 2; break;
+        default:
+            throw std::invalid_argument("RLGL: invalid VertexElementFormat ordinal");
+        }
+        const int elementSize = result.componentCount * scalarSize;
+        if (element.getOffsetProperty() > stride - elementSize ||
+            baseOffset > std::numeric_limits<int>::max() - element.getOffsetProperty())
+        {
+            throw std::invalid_argument("RLGL: invalid vertex attribute byte range");
+        }
+        result.offset = baseOffset + element.getOffsetProperty();
+        return result;
     }
 }

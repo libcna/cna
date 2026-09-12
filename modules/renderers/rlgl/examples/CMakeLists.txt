@@ -46,6 +46,13 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_buffer PRIVATE SDL3::SDL3main)
     endif()
 
+    add_executable(cna_test_rlgl_primitive rlgl_primitive_test.cpp)
+    target_include_directories(cna_test_rlgl_primitive PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_primitive PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_primitive PRIVATE SDL3::SDL3main)
+    endif()
+
     if(CNA_BUILD_TESTS)
         enable_testing()
         cna_register_renderer_test(NAME Rlgl_Smoke COMMAND cna_test_rlgl_smoke
@@ -65,6 +72,9 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_Buffer COMMAND cna_test_rlgl_buffer
             TIMEOUT 60 LABELS "GraphicsBuffer;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_Primitive COMMAND cna_test_rlgl_primitive
+            TIMEOUT 60 LABELS "Graphics3D;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
     endif()
 endif()

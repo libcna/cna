@@ -98,7 +98,8 @@ jobs:
             cna_test_rlgl_sampler \
             cna_test_rlgl_state \
             cna_test_rlgl_spritebatch \
-            cna_test_rlgl_buffer
+            cna_test_rlgl_buffer \
+            cna_test_rlgl_primitive
 
       - name: Verify renderer registry consistency
         working-directory: cna

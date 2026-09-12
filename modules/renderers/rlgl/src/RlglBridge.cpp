@@ -28,6 +28,7 @@ namespace
 #undef TRACELOG
 
 #include "RlglBridge.hpp"
+#include "RlglResources.hpp"
 
 namespace
 {
@@ -445,6 +446,11 @@ namespace
 
 namespace CNA::Internal::Renderers::Rlgl::Bridge
 {
+    namespace
+    {
+        PrimitiveDrawSnapshot lastPrimitiveDraw;
+    }
+
     std::string Initialize(
         const CNA::Platform::GlProcAddressLoader loader, const int width, const int height)
     {
@@ -1108,6 +1114,274 @@ void main()
             rlEnableVertexBuffer(static_cast<unsigned int>(previous));
         }
         ThrowIfGlError("buffer snapshot");
+        return snapshot;
+    }
+
+    PrimitivePipeline CreatePrimitivePipeline()
+    {
+        RequireInitialized("primitive pipeline creation");
+        static constexpr const char* vertexShader = R"(#version 330 core
+layout(location = 0) in vec3 vertexPosition;
+layout(location = 1) in vec4 vertexColor;
+
+uniform mat4 worldViewProjection;
+uniform vec4 diffuseColor;
+uniform float vertexColorEnabled;
+
+out vec4 fragmentColor;
+
+void main()
+{
+    gl_Position = worldViewProjection * vec4(vertexPosition, 1.0);
+    gl_PointSize = 1.0;
+    fragmentColor = diffuseColor *
+        ((vertexColorEnabled > 0.5) ? vertexColor : vec4(1.0));
+}
+)";
+        static constexpr const char* fragmentShader = R"(#version 330 core
+in vec4 fragmentColor;
+out vec4 finalColor;
+
+void main()
+{
+    finalColor = fragmentColor;
+}
+)";
+
+        PrimitivePipeline pipeline;
+        try
+        {
+            pipeline.program = rlLoadShaderProgram(vertexShader, fragmentShader);
+            if (pipeline.program == 0 || pipeline.program == rlGetShaderIdDefault())
+                throw std::runtime_error("RLGL: primitive shader creation failed");
+            pipeline.worldViewProjectionLocation =
+                rlGetLocationUniform(pipeline.program, "worldViewProjection");
+            pipeline.diffuseColorLocation =
+                rlGetLocationUniform(pipeline.program, "diffuseColor");
+            pipeline.vertexColorEnabledLocation =
+                rlGetLocationUniform(pipeline.program, "vertexColorEnabled");
+            if (pipeline.worldViewProjectionLocation < 0 ||
+                pipeline.diffuseColorLocation < 0 ||
+                pipeline.vertexColorEnabledLocation < 0)
+            {
+                throw std::runtime_error("RLGL: primitive shader uniforms are incomplete");
+            }
+            pipeline.vertexArray = rlLoadVertexArray();
+            if (pipeline.vertexArray == 0)
+                throw std::runtime_error("RLGL: primitive VAO creation failed");
+            ThrowIfGlError("primitive pipeline creation");
+            return pipeline;
+        }
+        catch (...)
+        {
+            DestroyPrimitivePipeline(pipeline);
+            throw;
+        }
+    }
+
+    void DestroyPrimitivePipeline(PrimitivePipeline& pipeline) noexcept
+    {
+        if (bridgeInitialized)
+        {
+            if (pipeline.vertexArray != 0)
+                rlUnloadVertexArray(pipeline.vertexArray);
+            if (pipeline.program != 0 && pipeline.program != rlGetShaderIdDefault())
+                rlUnloadShaderProgram(pipeline.program);
+        }
+        pipeline = {};
+    }
+
+    void DrawPrimitiveGeometry(
+        const PrimitivePipeline& pipeline,
+        const unsigned int vertexBuffer, const unsigned int indexBuffer,
+        const VertexAttributeBinding* const attributes, const int attributeCount,
+        const float* const worldViewProjectionColumnMajor,
+        const float* const diffuseColor, const bool vertexColorEnabled,
+        const int primitiveType, const int elementCount,
+        const int firstVertex, const int startIndex, const int baseVertex,
+        const bool thirtyTwoBitIndices)
+    {
+        RequireInitialized("primitive draw");
+        if (pipeline.program == 0 || pipeline.vertexArray == 0 ||
+            vertexBuffer == 0 || attributes == nullptr || attributeCount <= 0 ||
+            worldViewProjectionColumnMajor == nullptr || diffuseColor == nullptr ||
+            elementCount <= 0 || firstVertex < 0 || startIndex < 0 || baseVertex < 0)
+        {
+            throw std::invalid_argument("RLGL: invalid primitive draw request");
+        }
+
+        GLenum mode = GL_TRIANGLES;
+        switch (primitiveType)
+        {
+        case 0: mode = GL_TRIANGLES; break;
+        case 1: mode = GL_TRIANGLE_STRIP; break;
+        case 2: mode = GL_LINES; break;
+        case 3: mode = GL_LINE_STRIP; break;
+        case 4: mode = GL_POINTS; break;
+        default:
+            throw std::invalid_argument("RLGL: invalid PrimitiveType ordinal");
+        }
+
+        FlushImmediateBatch();
+        rlEnableShader(pipeline.program);
+        ::Matrix matrix{};
+        matrix.m0 = worldViewProjectionColumnMajor[0];
+        matrix.m1 = worldViewProjectionColumnMajor[1];
+        matrix.m2 = worldViewProjectionColumnMajor[2];
+        matrix.m3 = worldViewProjectionColumnMajor[3];
+        matrix.m4 = worldViewProjectionColumnMajor[4];
+        matrix.m5 = worldViewProjectionColumnMajor[5];
+        matrix.m6 = worldViewProjectionColumnMajor[6];
+        matrix.m7 = worldViewProjectionColumnMajor[7];
+        matrix.m8 = worldViewProjectionColumnMajor[8];
+        matrix.m9 = worldViewProjectionColumnMajor[9];
+        matrix.m10 = worldViewProjectionColumnMajor[10];
+        matrix.m11 = worldViewProjectionColumnMajor[11];
+        matrix.m12 = worldViewProjectionColumnMajor[12];
+        matrix.m13 = worldViewProjectionColumnMajor[13];
+        matrix.m14 = worldViewProjectionColumnMajor[14];
+        matrix.m15 = worldViewProjectionColumnMajor[15];
+        rlSetUniformMatrix(pipeline.worldViewProjectionLocation, matrix);
+        rlSetUniform(
+            pipeline.diffuseColorLocation, diffuseColor, RL_SHADER_UNIFORM_VEC4, 1);
+        const float vertexColorFlag = vertexColorEnabled ? 1.0f : 0.0f;
+        rlSetUniform(
+            pipeline.vertexColorEnabledLocation, &vertexColorFlag,
+            RL_SHADER_UNIFORM_FLOAT, 1);
+
+        if (!rlEnableVertexArray(pipeline.vertexArray))
+        {
+            rlDisableShader();
+            throw std::runtime_error("RLGL: primitive VAO became unavailable");
+        }
+        for (unsigned int location = 0; location < 16u; ++location)
+        {
+            rlDisableVertexAttribute(location);
+            rlSetVertexAttributeDivisor(location, 0);
+        }
+        rlEnableVertexBuffer(vertexBuffer);
+        for (int index = 0; index < attributeCount; ++index)
+        {
+            const VertexAttributeBinding& attribute = attributes[index];
+            if (attribute.location >= 16u || attribute.componentCount <= 0 ||
+                attribute.stride <= 0 || attribute.offset < 0)
+            {
+                rlDisableVertexArray();
+                rlDisableVertexBuffer();
+                rlDisableShader();
+                throw std::invalid_argument("RLGL: invalid vertex attribute binding");
+            }
+            rlEnableVertexAttribute(attribute.location);
+            rlSetVertexAttribute(
+                attribute.location, attribute.componentCount, attribute.scalarType,
+                attribute.normalized, attribute.stride, attribute.offset);
+        }
+
+        PrimitiveDrawSnapshot snapshot;
+        snapshot.primitiveMode = static_cast<int>(mode);
+        snapshot.elementCount = elementCount;
+        snapshot.firstVertex = firstVertex;
+        snapshot.startIndex = startIndex;
+        snapshot.baseVertex = baseVertex;
+        snapshot.indexed = indexBuffer != 0;
+        if (indexBuffer == 0)
+        {
+            if (mode == GL_TRIANGLES)
+            {
+                rlDrawVertexArray(firstVertex, elementCount);
+                snapshot.usedRlglDrawWrapper = true;
+            }
+            else
+            {
+                // rlgl 6.0 hardcodes GL_TRIANGLES in its public draw wrapper.
+                glDrawArrays(mode, firstVertex, elementCount);
+            }
+        }
+        else
+        {
+            rlEnableVertexBufferElement(indexBuffer);
+            const GLenum indexType = thirtyTwoBitIndices
+                ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+            snapshot.indexType = static_cast<int>(indexType);
+            if (mode == GL_TRIANGLES && !thirtyTwoBitIndices &&
+                startIndex == 0 && baseVertex == 0)
+            {
+                rlDrawVertexArrayElements(0, elementCount, nullptr);
+                snapshot.usedRlglDrawWrapper = true;
+            }
+            else
+            {
+                const std::uintptr_t byteOffset =
+                    static_cast<std::uintptr_t>(startIndex) *
+                    (thirtyTwoBitIndices ? sizeof(std::uint32_t) : sizeof(std::uint16_t));
+                const void* const indices = reinterpret_cast<const void*>(byteOffset);
+                // rlgl's public indexed wrapper is triangle-only, unsigned-short-only, and has
+                // no base-vertex parameter. The loaded GL 3.3 dispatch supplies the exact gap.
+                if (baseVertex == 0)
+                    glDrawElements(mode, elementCount, indexType, indices);
+                else
+                    glDrawElementsBaseVertex(mode, elementCount, indexType, indices, baseVertex);
+            }
+        }
+
+        rlDisableVertexArray();
+        rlDisableVertexBuffer();
+        rlDisableShader();
+        ThrowIfGlError("primitive draw");
+        lastPrimitiveDraw = snapshot;
+    }
+
+    PrimitiveDrawSnapshot GetPrimitiveDrawSnapshotForTesting()
+    {
+        return lastPrimitiveDraw;
+    }
+
+    VertexAttributeSnapshot GetVertexAttributeSnapshotForTesting(
+        const unsigned int vertexBuffer, const VertexAttributeBinding& attribute)
+    {
+        RequireInitialized("vertex-attribute snapshot");
+        if (vertexBuffer == 0 || attribute.location >= 16u ||
+            attribute.componentCount <= 0 || attribute.stride <= 0 || attribute.offset < 0)
+        {
+            throw std::invalid_argument("RLGL: invalid vertex-attribute snapshot request");
+        }
+
+        GLint previousVertexArray = 0;
+        GLint previousVertexBuffer = 0;
+        glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previousVertexArray);
+        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousVertexBuffer);
+        const unsigned int vertexArray = rlLoadVertexArray();
+        if (vertexArray == 0 || !rlEnableVertexArray(vertexArray))
+        {
+            if (vertexArray != 0) rlUnloadVertexArray(vertexArray);
+            throw std::runtime_error("RLGL: attribute snapshot could not create a VAO");
+        }
+
+        VertexAttributeSnapshot snapshot;
+        rlEnableVertexBuffer(vertexBuffer);
+        rlEnableVertexAttribute(attribute.location);
+        rlSetVertexAttribute(
+            attribute.location, attribute.componentCount, attribute.scalarType,
+            attribute.normalized, attribute.stride, attribute.offset);
+        GLint value = 0;
+        glGetVertexAttribiv(attribute.location, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &value);
+        snapshot.enabled = value == GL_TRUE;
+        glGetVertexAttribiv(attribute.location, GL_VERTEX_ATTRIB_ARRAY_SIZE, &snapshot.componentCount);
+        glGetVertexAttribiv(attribute.location, GL_VERTEX_ATTRIB_ARRAY_TYPE, &snapshot.scalarType);
+        glGetVertexAttribiv(attribute.location, GL_VERTEX_ATTRIB_ARRAY_NORMALIZED, &value);
+        snapshot.normalized = value == GL_TRUE;
+        glGetVertexAttribiv(attribute.location, GL_VERTEX_ATTRIB_ARRAY_STRIDE, &snapshot.stride);
+        glGetVertexAttribiv(attribute.location, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING, &value);
+        snapshot.buffer = static_cast<unsigned int>(value);
+        void* pointer = nullptr;
+        glGetVertexAttribPointerv(attribute.location, GL_VERTEX_ATTRIB_ARRAY_POINTER, &pointer);
+        snapshot.offset = static_cast<int>(reinterpret_cast<std::uintptr_t>(pointer));
+
+        rlUnloadVertexArray(vertexArray);
+        if (previousVertexArray != 0)
+            (void)rlEnableVertexArray(static_cast<unsigned int>(previousVertexArray));
+        rlEnableVertexBuffer(static_cast<unsigned int>(previousVertexBuffer));
+        ThrowIfGlError("vertex-attribute snapshot");
         return snapshot;
     }
 

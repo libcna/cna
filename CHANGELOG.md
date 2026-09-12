@@ -21,8 +21,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   rlgl SpriteBatch path now covers built-in texture and SpriteFont drawing, transforms, sorting,
   blending, clipping, and sampler forwarding. Fixed-capacity rlgl VBO/EBO resources now cover
   static/dynamic vertex data, every classic vertex declaration format, 16/32-bit indices, and
-  `None`/`Discard`/`NoOverwrite` updates; primitive submission and the remaining resources are
-  under active development in `plans/plan_rlgl.md`. The append-only C
+  `None`/`Discard`/`NoOverwrite` updates. Primitive submission covers every indexed/non-indexed
+  XNA topology, public bound/user draw routes, semantic-driven declarations, vertex/index/base
+  offsets, and WVP transforms; stock shader families and remaining resources are under active
+  development in `plans/plan_rlgl.md`. The append-only C
   renderer identity advances the experimental C ABI to 0.27.0.
 - Capability-gated CNAEXT base-instance drawing through
   `GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT`, with the append-only

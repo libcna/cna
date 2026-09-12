@@ -9,6 +9,11 @@
 #include <string>
 #include <vector>
 
+namespace CNA::Internal::Renderers::Rlgl
+{
+    struct VertexAttributeBinding;
+}
+
 namespace CNA::Internal::Renderers::Rlgl::Bridge
 {
     /** @brief Native GL sampler values exposed only to focused renderer validation. */
@@ -87,6 +92,41 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int byteSize = 0;
         int usage = 0;
         std::vector<std::uint8_t> bytes;
+    };
+
+    /** @brief rlgl-owned shader and VAO used by the baseline primitive path. */
+    struct PrimitivePipeline
+    {
+        unsigned int program = 0;
+        unsigned int vertexArray = 0;
+        int worldViewProjectionLocation = -1;
+        int diffuseColorLocation = -1;
+        int vertexColorEnabledLocation = -1;
+    };
+
+    /** @brief Last native primitive submission, exposed only to focused validation. */
+    struct PrimitiveDrawSnapshot
+    {
+        int primitiveMode = 0;
+        int elementCount = 0;
+        int firstVertex = 0;
+        int startIndex = 0;
+        int baseVertex = 0;
+        int indexType = 0;
+        bool indexed = false;
+        bool usedRlglDrawWrapper = false;
+    };
+
+    /** @brief Native vertex-attribute state exposed only to focused validation. */
+    struct VertexAttributeSnapshot
+    {
+        bool enabled = false;
+        int componentCount = 0;
+        int scalarType = 0;
+        bool normalized = false;
+        int stride = 0;
+        int offset = 0;
+        unsigned int buffer = 0;
     };
 
     enum ClearPlane : unsigned int
@@ -321,6 +361,55 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      */
     [[nodiscard]] BufferSnapshot GetBufferSnapshotForTesting(
         unsigned int id, bool indexBuffer);
+
+    /** @brief Creates the baseline untextured, vertex-color-capable primitive pipeline. */
+    [[nodiscard]] PrimitivePipeline CreatePrimitivePipeline();
+
+    /**
+     * @brief Releases the baseline primitive pipeline through rlgl.
+     * @param pipeline Live or empty pipeline record.
+     */
+    void DestroyPrimitivePipeline(PrimitivePipeline& pipeline) noexcept;
+
+    /**
+     * @brief Submits one declaration-driven primitive draw through the rlgl-owned pipeline.
+     * @param pipeline Live primitive pipeline.
+     * @param vertexBuffer Vertex buffer name.
+     * @param indexBuffer Index buffer name, or zero for a non-indexed draw.
+     * @param attributes Semantic-selected vertex attributes.
+     * @param attributeCount Number of attribute records.
+     * @param worldViewProjectionColumnMajor Transform matrix in GL upload order.
+     * @param diffuseColor Four-component effect color.
+     * @param vertexColorEnabled Whether shader location one contributes to output.
+     * @param primitiveType Raw XNA PrimitiveType ordinal.
+     * @param elementCount Vertex or index count.
+     * @param firstVertex First vertex for non-indexed draws.
+     * @param startIndex First index for indexed draws.
+     * @param baseVertex Value added to decoded indices.
+     * @param thirtyTwoBitIndices Whether indexed data uses unsigned 32-bit elements.
+     */
+    void DrawPrimitiveGeometry(
+        const PrimitivePipeline& pipeline,
+        unsigned int vertexBuffer, unsigned int indexBuffer,
+        const VertexAttributeBinding* attributes, int attributeCount,
+        const float* worldViewProjectionColumnMajor, const float* diffuseColor,
+        bool vertexColorEnabled, int primitiveType, int elementCount,
+        int firstVertex, int startIndex, int baseVertex, bool thirtyTwoBitIndices);
+
+    /**
+     * @brief Returns the last primitive-call parameters for focused validation.
+     * @return Most recent draw snapshot.
+     */
+    [[nodiscard]] PrimitiveDrawSnapshot GetPrimitiveDrawSnapshotForTesting();
+
+    /**
+     * @brief Applies one generic attribute through rlgl and reads its native VAO state.
+     * @param vertexBuffer Vertex buffer name.
+     * @param attribute Attribute description to validate.
+     * @return Native pointer state captured from a temporary VAO.
+     */
+    [[nodiscard]] VertexAttributeSnapshot GetVertexAttributeSnapshotForTesting(
+        unsigned int vertexBuffer, const VertexAttributeBinding& attribute);
 
     /**
      * @brief Reads one default-framebuffer stencil value for focused validation.

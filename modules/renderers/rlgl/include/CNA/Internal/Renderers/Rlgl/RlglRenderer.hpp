@@ -9,6 +9,11 @@
 
 namespace CNA::Internal::Renderers::Rlgl
 {
+    namespace Bridge
+    {
+        struct PrimitivePipeline;
+    }
+
     /**
      * @brief Standalone-rlgl renderer device using a CNA-owned OpenGL 3.3 core context.
      *
@@ -205,8 +210,7 @@ namespace CNA::Internal::Renderers::Rlgl
         /**
          * @brief Creates the renderer-owned SpriteBatch implementation.
          *
-         * @return Never returns until RLGL-010 implements the batcher.
-         * @throws System::NotSupportedException Until RLGL-010 is complete.
+         * @return A CNA-scheduled low-level rlgl SpriteBatch renderer.
          */
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
 
@@ -434,7 +438,6 @@ namespace CNA::Internal::Renderers::Rlgl
          * @param projection Projection transform.
          * @param primitive Primitive topology.
          * @param primitiveCount Number of primitives.
-         * @throws System::NotSupportedException Until RLGL-031 is complete.
          */
         void DrawColoredPrimitives(
             const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
@@ -450,12 +453,43 @@ namespace CNA::Internal::Renderers::Rlgl
          * @param projection Projection transform.
          * @param primitive Primitive topology.
          * @param primitiveCount Number of primitives.
-         * @throws System::NotSupportedException Until RLGL-031 is complete.
          */
         void DrawIndexedColoredPrimitives(
             const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
             const Matrix& world, const Matrix& view, const Matrix& projection,
             PrimitiveType primitive, int primitiveCount) override;
+
+        /**
+         * @brief Draws the currently supported untextured stock-effect subset.
+         * @param vb Vertex buffer.
+         * @param world World transform.
+         * @param view View transform.
+         * @param projection Projection transform.
+         * @param primitive Primitive topology.
+         * @param primitiveCount Number of primitives.
+         * @param params Effect values and first-vertex selection.
+         */
+        void DrawPrimitivesEx(
+            const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
+            const Matrix& projection, PrimitiveType primitive, int primitiveCount,
+            const GpuDrawParams& params) override;
+
+        /**
+         * @brief Draws the currently supported indexed untextured stock-effect subset.
+         * @param vb Vertex buffer.
+         * @param ib Index buffer.
+         * @param world World transform.
+         * @param view View transform.
+         * @param projection Projection transform.
+         * @param primitive Primitive topology.
+         * @param primitiveCount Number of primitives.
+         * @param params Effect values and index/base-vertex selection.
+         */
+        void DrawIndexedPrimitivesEx(
+            const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, int primitiveCount,
+            const GpuDrawParams& params) override;
 
         /**
          * @brief Applies a physical GL viewport and depth range.
@@ -507,6 +541,7 @@ namespace CNA::Internal::Renderers::Rlgl
         void GetLogicalSize(int& width, int& height) const;
         SamplerRecord& GetSamplerRecord(int slot);
         void ApplySamplerRecord(int slot, SamplerRecord& sampler);
+        Bridge::PrimitivePipeline& GetPrimitivePipeline();
 
         PlatformGlSurfaceState surface_;
         CNA::Platform::IPlatformGlContext* platformGlService_ = nullptr;
@@ -529,5 +564,6 @@ namespace CNA::Internal::Renderers::Rlgl
         bool lifecycleClaimed_ = false;
         bool rlglInitialized_ = false;
         bool registered_ = false;
+        std::unique_ptr<Bridge::PrimitivePipeline> primitivePipeline_;
     };
 }

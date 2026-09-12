@@ -134,6 +134,11 @@ namespace CNA::Internal::Renderers::Rlgl
             try
             {
                 platformContext_->MakeCurrent();
+                if (primitivePipeline_)
+                {
+                    Bridge::DestroyPrimitivePipeline(*primitivePipeline_);
+                    primitivePipeline_.reset();
+                }
                 std::array<unsigned int, 16> samplerIds{};
                 for (std::size_t index = 0; index < samplers_.size(); ++index)
                     samplerIds[index] = samplers_[index].id;
@@ -620,34 +625,6 @@ namespace CNA::Internal::Renderers::Rlgl
         const int indexCapacity)
     {
         return CreateIndexBufferRenderer(indexCapacity, true);
-    }
-
-    void RlglRenderer::DrawColoredPrimitives(
-        const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
-        const Matrix& projection, const PrimitiveType primitive, const int primitiveCount)
-    {
-        (void)vb;
-        (void)world;
-        (void)view;
-        (void)projection;
-        (void)primitive;
-        (void)primitiveCount;
-        Unsupported("non-indexed primitive draws", "RLGL-031");
-    }
-
-    void RlglRenderer::DrawIndexedColoredPrimitives(
-        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
-        const Matrix& world, const Matrix& view, const Matrix& projection,
-        const PrimitiveType primitive, const int primitiveCount)
-    {
-        (void)vb;
-        (void)ib;
-        (void)world;
-        (void)view;
-        (void)projection;
-        (void)primitive;
-        (void)primitiveCount;
-        Unsupported("indexed primitive draws", "RLGL-031");
     }
 
     void RlglRenderer::SetViewport(

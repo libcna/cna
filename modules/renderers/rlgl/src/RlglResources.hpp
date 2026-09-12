@@ -49,6 +49,17 @@ namespace CNA::Internal::Renderers::Rlgl
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> declaration;
     };
 
+    /** @brief One GL-compatible attribute binding derived from an XNA vertex element. */
+    struct VertexAttributeBinding
+    {
+        unsigned int location = 0;
+        int componentCount = 0;
+        int scalarType = 0;
+        bool normalized = false;
+        int stride = 0;
+        int offset = 0;
+    };
+
     /**
      * @brief Creates a declaration-aware fixed-capacity vertex resource.
      * @param vertexCapacity Maximum vertex count.
@@ -81,4 +92,59 @@ namespace CNA::Internal::Renderers::Rlgl
      */
     [[nodiscard]] BufferResourceSnapshot GetBufferResourceSnapshotForTesting(
         const IIndexBufferRenderer& resource);
+
+    /**
+     * @brief Returns the native buffer name of an RLGL vertex resource.
+     * @param resource RLGL vertex resource.
+     * @return Non-zero native name once storage has been allocated.
+     */
+    [[nodiscard]] unsigned int GetNativeBufferId(const IVertexBufferRenderer& resource);
+
+    /**
+     * @brief Returns the native buffer name of an RLGL index resource.
+     * @param resource RLGL index resource.
+     * @return Non-zero native name.
+     */
+    [[nodiscard]] unsigned int GetNativeBufferId(const IIndexBufferRenderer& resource);
+
+    /**
+     * @brief Returns the uploaded stride of an RLGL vertex resource.
+     * @param resource RLGL vertex resource.
+     * @return Vertex stride in bytes.
+     */
+    [[nodiscard]] std::size_t GetVertexStride(const IVertexBufferRenderer& resource);
+
+    /**
+     * @brief Returns the fixed logical capacity of an RLGL vertex resource.
+     * @param resource RLGL vertex resource.
+     * @return Capacity in vertices.
+     */
+    [[nodiscard]] int GetBufferCapacity(const IVertexBufferRenderer& resource);
+
+    /**
+     * @brief Returns the fixed logical capacity of an RLGL index resource.
+     * @param resource RLGL index resource.
+     * @return Capacity in indices.
+     */
+    [[nodiscard]] int GetBufferCapacity(const IIndexBufferRenderer& resource);
+
+    /**
+     * @brief Returns the declaration retained by an RLGL vertex resource.
+     * @param resource RLGL vertex resource.
+     * @return Stable declaration element reference.
+     */
+    [[nodiscard]] const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>&
+    GetVertexDeclaration(const IVertexBufferRenderer& resource);
+
+    /**
+     * @brief Maps an XNA element format to the generic rlgl attribute description.
+     * @param element Source declaration element.
+     * @param location Shader attribute location selected by its semantic.
+     * @param stride Complete vertex record size.
+     * @param baseOffset Additional byte offset for the bound stream.
+     * @return Attribute shape accepted by rlgl's generic pointer API.
+     */
+    [[nodiscard]] VertexAttributeBinding DescribeVertexAttribute(
+        const Microsoft::Xna::Framework::Graphics::VertexElement& element,
+        unsigned int location, int stride, int baseOffset = 0);
 }
