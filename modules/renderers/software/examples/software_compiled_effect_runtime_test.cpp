@@ -3459,6 +3459,42 @@ namespace
                   acceptedInvalidProbes);
     }
 
+    void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
+        constexpr std::array invalidProbes{
+            Probe::PixelInteger,
+            Probe::PixelBoolean,
+            Probe::VertexInteger,
+            Probe::VertexBoolean,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.typedControlSourceProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted typed control constants as ordinary sources: " +
+                  acceptedInvalidProbes);
+    }
+
     void CheckCompiledOutputRegisterRangeValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticOutputRegisterProbe;
@@ -5668,6 +5704,7 @@ int main()
         CheckCompiledOutputRegisterSourceValidation(renderer);
         CheckCompiledAddressRegisterAccessValidation(renderer);
         CheckCompiledSamplerRegisterSourceValidation(renderer);
+        CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledOutputRegisterRangeValidation(renderer);
         CheckCompiledConstantControlRegisterRangeValidation(renderer);
         CheckCompiledVertexInstructionSlotValidation(renderer);

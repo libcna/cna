@@ -775,6 +775,21 @@ namespace CNA::TestSupport
         Vertex30,
     };
 
+    /** @brief A typed flow-control constant used as an ordinary arithmetic source by a probe. */
+    enum class SyntheticTypedControlSourceProbe
+    {
+        /** @brief Emit no dedicated typed-control source probe. */
+        None,
+        /** @brief Read ps_3_0 i0 directly through MOV. */
+        PixelInteger,
+        /** @brief Read ps_3_0 b0 directly through MOV. */
+        PixelBoolean,
+        /** @brief Read vs_3_0 i0 directly through MOV. */
+        VertexInteger,
+        /** @brief Read vs_3_0 b0 directly through MOV. */
+        VertexBoolean,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -1019,6 +1034,9 @@ namespace CNA::TestSupport
         /** @brief Selects a sampler pseudo-register used as an ordinary source. */
         SyntheticSamplerRegisterSourceProbe samplerRegisterSourceProbe =
             SyntheticSamplerRegisterSourceProbe::None;
+        /** @brief Selects a typed flow-control constant used as an ordinary source. */
+        SyntheticTypedControlSourceProbe typedControlSourceProbe =
+            SyntheticTypedControlSourceProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -1130,7 +1148,9 @@ namespace CNA::TestSupport
         SyntheticOutputRegisterSourceProbe outputRegisterSourceProbe =
             SyntheticOutputRegisterSourceProbe::None,
         SyntheticSamplerRegisterSourceProbe samplerRegisterSourceProbe =
-            SyntheticSamplerRegisterSourceProbe::None)
+            SyntheticSamplerRegisterSourceProbe::None,
+        SyntheticTypedControlSourceProbe typedControlSourceProbe =
+            SyntheticTypedControlSourceProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1239,6 +1259,9 @@ namespace CNA::TestSupport
             samplerRegisterSourceProbe == SyntheticSamplerRegisterSourceProbe::Pixel20;
         const bool probesPixel30SamplerSource =
             samplerRegisterSourceProbe == SyntheticSamplerRegisterSourceProbe::Pixel30;
+        const bool probesPixel30TypedControlSource =
+            typedControlSourceProbe == SyntheticTypedControlSourceProbe::PixelInteger ||
+            typedControlSourceProbe == SyntheticTypedControlSourceProbe::PixelBoolean;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -1251,7 +1274,8 @@ namespace CNA::TestSupport
                 SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelAllAbsolute ||
             probesPixel30Temporary || probesPixel30Input || probesPixel30InputDestination ||
             probesPixelOutput || probesPixel30DestinationAccess || probesPixel30OutputSource ||
-            probesPixel30SamplerSource || probesPixel30ConstantControl;
+            probesPixel30SamplerSource || probesPixel30TypedControlSource ||
+            probesPixel30ConstantControl;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -1631,6 +1655,15 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, s0
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(regSampler, 0));
+        }
+        if (probesPixel30TypedControlSource)
+        {
+            const bool boolean =
+                typedControlSourceProbe == SyntheticTypedControlSourceProbe::PixelBoolean;
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, i0/b0.x
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(boolean ? regConstBool : regConstInt, 0,
+                                        boolean ? 0x00u : 0xE4u));
         }
 
         if (readsUninitializedDestination)
@@ -3011,6 +3044,9 @@ namespace CNA::TestSupport
                                                                 SyntheticSamplerRegisterSourceProbe
                                                                     samplerRegisterSourceProbe =
                                                                         SyntheticSamplerRegisterSourceProbe::None,
+                                                                SyntheticTypedControlSourceProbe
+                                                                    typedControlSourceProbe =
+                                                                        SyntheticTypedControlSourceProbe::None,
                                                                 SyntheticVertexInstructionSlotProbe
                                                                     instructionSlotProbe =
                                                                         SyntheticVertexInstructionSlotProbe::None)
@@ -3087,6 +3123,9 @@ namespace CNA::TestSupport
                 SyntheticAddressRegisterAccessProbe::Vertex30MovDestination;
         const bool probesVertex30SamplerSource =
             samplerRegisterSourceProbe == SyntheticSamplerRegisterSourceProbe::Vertex30;
+        const bool probesVertex30TypedControlSource =
+            typedControlSourceProbe == SyntheticTypedControlSourceProbe::VertexInteger ||
+            typedControlSourceProbe == SyntheticTypedControlSourceProbe::VertexBoolean;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture ||
             invalidMixedConstantAbsolute ==
@@ -3099,7 +3138,8 @@ namespace CNA::TestSupport
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex30OutOfRange ||
             probesVertex30Input || probesVertex30InputDestination || probesVertex30Output ||
             probesVertex30ConstantControl || probesVertex30DestinationAccess ||
-            probesVertex30OutputSource || probesVertex30Address || probesVertex30SamplerSource;
+            probesVertex30OutputSource || probesVertex30Address || probesVertex30SamplerSource ||
+            probesVertex30TypedControlSource;
         const bool probesVertex2xTemporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xMaximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange;
@@ -3546,6 +3586,15 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, s0
             AppendUInt32(shader, destination(regTemp, 1));
             AppendUInt32(shader, source(regSampler, 0));
+        }
+        if (probesVertex30TypedControlSource)
+        {
+            const bool boolean =
+                typedControlSourceProbe == SyntheticTypedControlSourceProbe::VertexBoolean;
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, i0/b0.x
+            AppendUInt32(shader, destination(regTemp, 1));
+            AppendUInt32(shader, source(boolean ? regConstBool : regConstInt, 0,
+                                        boolean ? 0x00u : 0xE4u));
         }
         if (probesVertex20Output || probesVertex30Output)
         {
@@ -4459,7 +4508,8 @@ namespace CNA::TestSupport
             options.pixel1CoissueProbe,
             options.destinationRegisterAccessProbe,
             options.outputRegisterSourceProbe,
-            options.samplerRegisterSourceProbe);
+            options.samplerRegisterSourceProbe,
+            options.typedControlSourceProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -4547,6 +4597,7 @@ namespace CNA::TestSupport
                 options.outputRegisterSourceProbe,
                 options.addressRegisterAccessProbe,
                 options.samplerRegisterSourceProbe,
+                options.typedControlSourceProbe,
                 options.vertexInstructionSlotProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));

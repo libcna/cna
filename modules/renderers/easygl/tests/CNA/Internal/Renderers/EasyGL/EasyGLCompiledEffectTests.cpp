@@ -1471,6 +1471,32 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticSamplerRegisterSourceProbe::Pixel30,
         CNA::TestSupport::SyntheticSamplerRegisterSourceProbe::Vertex30));
 
+class EasyGLCompiledEffectTypedControlSourceTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTypedControlSourceProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectTypedControlSourceTest, RejectsOrdinaryArithmeticRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.typedControlSourceProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OrdinaryTypedControlSource,
+    EasyGLCompiledEffectTypedControlSourceTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTypedControlSourceProbe::PixelInteger,
+        CNA::TestSupport::SyntheticTypedControlSourceProbe::PixelBoolean,
+        CNA::TestSupport::SyntheticTypedControlSourceProbe::VertexInteger,
+        CNA::TestSupport::SyntheticTypedControlSourceProbe::VertexBoolean));
+
 class EasyGLCompiledEffectOutputRegisterRangeTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>
 {
