@@ -325,6 +325,76 @@ namespace CNA::Internal::Renderers::Rlgl
         void SetDepthWriteEnabled(bool enabled) override;
 
         /**
+         * @brief Applies complete XNA blend factors, equations, write masks, and sample mask.
+         * @param colorSrcBlend Raw color source `Blend` ordinal.
+         * @param alphaSrcBlend Raw alpha source `Blend` ordinal.
+         * @param colorDstBlend Raw color destination `Blend` ordinal.
+         * @param alphaDstBlend Raw alpha destination `Blend` ordinal.
+         * @param colorBlendFunc Raw color `BlendFunction` ordinal.
+         * @param alphaBlendFunc Raw alpha `BlendFunction` ordinal.
+         * @param writeState Per-target channel masks and multisample mask.
+         */
+        void ApplyBlendState(
+            int colorSrcBlend, int alphaSrcBlend,
+            int colorDstBlend, int alphaDstBlend,
+            int colorBlendFunc, int alphaBlendFunc,
+            const BlendWriteState& writeState) override;
+
+        /**
+         * @brief Applies the constant color used by BlendFactor modes.
+         * @param r Red component.
+         * @param g Green component.
+         * @param b Blue component.
+         * @param a Alpha component.
+         */
+        void SetBlendFactor(float r, float g, float b, float a) override;
+
+        /**
+         * @brief Applies complete XNA depth, stencil, and two-sided stencil state.
+         * @param depthEnable Whether depth testing is enabled.
+         * @param depthWriteEnable Whether depth writes are enabled.
+         * @param depthFunc Raw depth `CompareFunction` ordinal.
+         * @param stencilEnable Whether stencil testing is enabled.
+         * @param stencilFunc Raw front-face stencil comparison.
+         * @param stencilPass Raw front-face depth-pass operation.
+         * @param stencilFail Raw front-face stencil-fail operation.
+         * @param stencilDepthFail Raw front-face depth-fail operation.
+         * @param stencilMask Stencil comparison mask.
+         * @param stencilWriteMask Stencil write mask.
+         * @param referenceStencil Stencil reference.
+         * @param twoSidedStencilMode Whether front and back faces differ.
+         * @param ccwStencilFunc Raw back-face comparison.
+         * @param ccwStencilPass Raw back-face depth-pass operation.
+         * @param ccwStencilFail Raw back-face stencil-fail operation.
+         * @param ccwStencilDepthFail Raw back-face depth-fail operation.
+         */
+        void ApplyDepthStencilState(
+            bool depthEnable, bool depthWriteEnable, int depthFunc,
+            bool stencilEnable, int stencilFunc,
+            int stencilPass, int stencilFail, int stencilDepthFail,
+            int stencilMask, int stencilWriteMask, int referenceStencil,
+            bool twoSidedStencilMode, int ccwStencilFunc, int ccwStencilPass,
+            int ccwStencilFail, int ccwStencilDepthFail) override;
+
+        /**
+         * @brief Changes the active stencil reference without reassigning the state object.
+         * @param value New stencil reference value.
+         */
+        void SetReferenceStencil(int value) override;
+
+        /**
+         * @brief Applies culling, fill, scissor-enable, and depth-bias state.
+         * @param cullMode Raw `CullMode` ordinal.
+         * @param fillMode Raw `FillMode` ordinal.
+         * @param scissorTestEnable Whether scissor testing is enabled.
+         * @param depthBias XNA normalized constant depth bias.
+         * @param slopeScaleDepthBias Slope-scaled depth bias.
+         */
+        void ApplyRasterizerState(
+            int cullMode, int fillMode, bool scissorTestEnable,
+            float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
+
+        /**
          * @brief Creates a vertex buffer.
          *
          * @param vertexCapacity Maximum vertex count.
@@ -418,6 +488,16 @@ namespace CNA::Internal::Renderers::Rlgl
             float lodBias = 0.0f;
         };
 
+        struct StencilRecord
+        {
+            bool enabled = false;
+            bool twoSided = false;
+            int function = 0;
+            int counterClockwiseFunction = 0;
+            int readMask = 0;
+            int reference = 0;
+        };
+
         void CreateContext(int requestedMultiSampleCount);
         void GetPhysicalSize(int& width, int& height) const;
         void GetLogicalSize(int& width, int& height) const;
@@ -438,6 +518,7 @@ namespace CNA::Internal::Renderers::Rlgl
         int maxSamplerSlots_ = 0;
         float maxSamplerAnisotropy_ = 1.0f;
         std::array<SamplerRecord, 16> samplers_{};
+        StencilRecord stencil_{};
         bool lifecycleClaimed_ = false;
         bool rlglInitialized_ = false;
         bool registered_ = false;

@@ -508,6 +508,67 @@ namespace CNA::Internal::Renderers::Rlgl
         Bridge::SetDepthWriteEnabled(enabled);
     }
 
+    void RlglRenderer::ApplyBlendState(
+        const int colorSrcBlend, const int alphaSrcBlend,
+        const int colorDstBlend, const int alphaDstBlend,
+        const int colorBlendFunc, const int alphaBlendFunc,
+        const BlendWriteState& writeState)
+    {
+        Bridge::ApplyBlendState(
+            colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
+            colorBlendFunc, alphaBlendFunc,
+            writeState.colorWriteChannels, writeState.multiSampleMask);
+    }
+
+    void RlglRenderer::SetBlendFactor(
+        const float r, const float g, const float b, const float a)
+    {
+        Bridge::SetBlendFactor(r, g, b, a);
+    }
+
+    void RlglRenderer::ApplyDepthStencilState(
+        const bool depthEnable, const bool depthWriteEnable, const int depthFunc,
+        const bool stencilEnable, const int stencilFunc,
+        const int stencilPass, const int stencilFail, const int stencilDepthFail,
+        const int stencilMask, const int stencilWriteMask, const int referenceStencil,
+        const bool twoSidedStencilMode, const int ccwStencilFunc,
+        const int ccwStencilPass, const int ccwStencilFail,
+        const int ccwStencilDepthFail)
+    {
+        stencil_.enabled = stencilEnable;
+        stencil_.twoSided = twoSidedStencilMode;
+        stencil_.function = stencilFunc;
+        stencil_.counterClockwiseFunction = ccwStencilFunc;
+        stencil_.readMask = stencilMask;
+        stencil_.reference = referenceStencil;
+        Bridge::ApplyDepthStencilState(
+            depthEnable, depthWriteEnable, depthFunc,
+            stencilEnable, stencilFunc, stencilPass, stencilFail, stencilDepthFail,
+            stencilMask, stencilWriteMask, referenceStencil, twoSidedStencilMode,
+            ccwStencilFunc, ccwStencilPass, ccwStencilFail, ccwStencilDepthFail);
+    }
+
+    void RlglRenderer::SetReferenceStencil(const int value)
+    {
+        stencil_.reference = value;
+        Bridge::SetStencilReference(
+            stencil_.enabled, stencil_.twoSided,
+            stencil_.function, stencil_.counterClockwiseFunction,
+            stencil_.readMask, stencil_.reference);
+    }
+
+    void RlglRenderer::ApplyRasterizerState(
+        const int cullMode, const int fillMode, const bool scissorTestEnable,
+        const float depthBias, const float slopeScaleDepthBias)
+    {
+        const float depthScale = depthBits_ > 0
+            ? std::ldexp(1.0f, depthBits_) - 1.0f
+            : 0.0f;
+        Bridge::ApplyRasterizerState(
+            cullMode, fillMode, scissorTestEnable,
+            depthBias * depthScale, slopeScaleDepthBias);
+    }
+
     std::unique_ptr<IVertexBufferRenderer> RlglRenderer::CreateVertexBuffer(
         const int vertexCapacity)
     {

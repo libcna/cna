@@ -159,6 +159,76 @@ namespace
         }
     }
 
+    [[nodiscard]] GLenum GlBlendFactor(const int blend)
+    {
+        switch (blend)
+        {
+        case 0: return GL_ONE;
+        case 1: return GL_ZERO;
+        case 2: return GL_SRC_COLOR;
+        case 3: return GL_ONE_MINUS_SRC_COLOR;
+        case 4: return GL_SRC_ALPHA;
+        case 5: return GL_ONE_MINUS_SRC_ALPHA;
+        case 6: return GL_DST_COLOR;
+        case 7: return GL_ONE_MINUS_DST_COLOR;
+        case 8: return GL_DST_ALPHA;
+        case 9: return GL_ONE_MINUS_DST_ALPHA;
+        case 10: return GL_CONSTANT_COLOR;
+        case 11: return GL_ONE_MINUS_CONSTANT_COLOR;
+        case 12: return GL_SRC_ALPHA_SATURATE;
+        default:
+            throw std::invalid_argument("RLGL: invalid Blend ordinal");
+        }
+    }
+
+    [[nodiscard]] GLenum GlBlendEquation(const int function)
+    {
+        switch (function)
+        {
+        case 0: return GL_FUNC_ADD;
+        case 1: return GL_FUNC_SUBTRACT;
+        case 2: return GL_FUNC_REVERSE_SUBTRACT;
+        case 3: return GL_MAX;
+        case 4: return GL_MIN;
+        default:
+            throw std::invalid_argument("RLGL: invalid BlendFunction ordinal");
+        }
+    }
+
+    [[nodiscard]] GLenum GlCompareFunction(const int function)
+    {
+        switch (function)
+        {
+        case 0: return GL_ALWAYS;
+        case 1: return GL_NEVER;
+        case 2: return GL_LESS;
+        case 3: return GL_LEQUAL;
+        case 4: return GL_EQUAL;
+        case 5: return GL_GEQUAL;
+        case 6: return GL_GREATER;
+        case 7: return GL_NOTEQUAL;
+        default:
+            throw std::invalid_argument("RLGL: invalid CompareFunction ordinal");
+        }
+    }
+
+    [[nodiscard]] GLenum GlStencilOperation(const int operation)
+    {
+        switch (operation)
+        {
+        case 0: return GL_KEEP;
+        case 1: return GL_ZERO;
+        case 2: return GL_REPLACE;
+        case 3: return GL_INCR_WRAP;
+        case 4: return GL_DECR_WRAP;
+        case 5: return GL_INCR;
+        case 6: return GL_DECR;
+        case 7: return GL_INVERT;
+        default:
+            throw std::invalid_argument("RLGL: invalid StencilOperation ordinal");
+        }
+    }
+
     struct TextureFormatInfo
     {
         enum class Swizzle
@@ -455,6 +525,262 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     {
         if (enabled) rlEnableDepthMask();
         else rlDisableDepthMask();
+    }
+
+    void ApplyBlendState(
+        const int colorSourceBlend, const int alphaSourceBlend,
+        const int colorDestinationBlend, const int alphaDestinationBlend,
+        const int colorBlendFunction, const int alphaBlendFunction,
+        const int* colorWriteMasks, const unsigned int sampleMask)
+    {
+        RequireInitialized("blend-state application");
+        if (colorWriteMasks == nullptr)
+            throw std::invalid_argument("RLGL: color write masks must not be null");
+
+        const bool blendEnabled = !(colorSourceBlend == 0 && colorDestinationBlend == 1 &&
+                                    alphaSourceBlend == 0 && alphaDestinationBlend == 1);
+        if (blendEnabled)
+        {
+            // The public rlgl custom-separate route updates rlgl's cache before applying the
+            // exact XNA RGB/alpha factors and equations.
+            rlSetBlendFactorsSeparate(
+                static_cast<int>(GlBlendFactor(colorSourceBlend)),
+                static_cast<int>(GlBlendFactor(colorDestinationBlend)),
+                static_cast<int>(GlBlendFactor(alphaSourceBlend)),
+                static_cast<int>(GlBlendFactor(alphaDestinationBlend)),
+                static_cast<int>(GlBlendEquation(colorBlendFunction)),
+                static_cast<int>(GlBlendEquation(alphaBlendFunction)));
+            rlSetBlendMode(RL_BLEND_CUSTOM_SEPARATE);
+            rlEnableColorBlend();
+        }
+        else
+        {
+            rlDisableColorBlend();
+        }
+
+        // rlColorMask exposes only attachment zero. GL 3.3 core provides the four independent
+        // masks carried by CNA's BlendWriteState, so the bridge handles that measured gap.
+        for (unsigned int index = 0; index < 4; ++index)
+        {
+            const int mask = colorWriteMasks[index];
+            glColorMaski(
+                index, (mask & 1) != 0, (mask & 2) != 0,
+                (mask & 4) != 0, (mask & 8) != 0);
+        }
+
+        glSampleMaski(0, sampleMask);
+        if (sampleMask == 0xFFFFFFFFu) glDisable(GL_SAMPLE_MASK);
+        else glEnable(GL_SAMPLE_MASK);
+        ThrowIfGlError("blend-state application");
+    }
+
+    void SetBlendFactor(
+        const float r, const float g, const float b, const float a)
+    {
+        RequireInitialized("blend-factor application");
+        glBlendColor(r, g, b, a);
+        ThrowIfGlError("blend-factor application");
+    }
+
+    void ApplyDepthStencilState(
+        const bool depthEnable, const bool depthWriteEnable, const int depthFunction,
+        const bool stencilEnable, const int stencilFunction,
+        const int stencilPass, const int stencilFail, const int stencilDepthFail,
+        const int stencilReadMask, const int stencilWriteMask, const int referenceStencil,
+        const bool twoSidedStencilMode, const int counterClockwiseStencilFunction,
+        const int counterClockwiseStencilPass, const int counterClockwiseStencilFail,
+        const int counterClockwiseStencilDepthFail)
+    {
+        RequireInitialized("depth/stencil-state application");
+        if (depthEnable)
+        {
+            rlEnableDepthTest();
+            glDepthFunc(GlCompareFunction(depthFunction));
+        }
+        else
+        {
+            rlDisableDepthTest();
+        }
+        if (depthWriteEnable) rlEnableDepthMask();
+        else rlDisableDepthMask();
+
+        if (!stencilEnable)
+        {
+            glDisable(GL_STENCIL_TEST);
+            ThrowIfGlError("depth/stencil-state application");
+            return;
+        }
+
+        glEnable(GL_STENCIL_TEST);
+        const GLenum frontFail = GlStencilOperation(stencilFail);
+        const GLenum frontDepthFail = GlStencilOperation(stencilDepthFail);
+        const GLenum frontPass = GlStencilOperation(stencilPass);
+        if (twoSidedStencilMode)
+        {
+            glStencilFuncSeparate(
+                GL_FRONT, GlCompareFunction(stencilFunction),
+                referenceStencil, static_cast<GLuint>(stencilReadMask));
+            glStencilOpSeparate(GL_FRONT, frontFail, frontDepthFail, frontPass);
+            glStencilMaskSeparate(GL_FRONT, static_cast<GLuint>(stencilWriteMask));
+            glStencilFuncSeparate(
+                GL_BACK, GlCompareFunction(counterClockwiseStencilFunction),
+                referenceStencil, static_cast<GLuint>(stencilReadMask));
+            glStencilOpSeparate(
+                GL_BACK, GlStencilOperation(counterClockwiseStencilFail),
+                GlStencilOperation(counterClockwiseStencilDepthFail),
+                GlStencilOperation(counterClockwiseStencilPass));
+            glStencilMaskSeparate(GL_BACK, static_cast<GLuint>(stencilWriteMask));
+        }
+        else
+        {
+            glStencilFunc(
+                GlCompareFunction(stencilFunction), referenceStencil,
+                static_cast<GLuint>(stencilReadMask));
+            glStencilOp(frontFail, frontDepthFail, frontPass);
+            glStencilMask(static_cast<GLuint>(stencilWriteMask));
+        }
+        ThrowIfGlError("depth/stencil-state application");
+    }
+
+    void SetStencilReference(
+        const bool stencilEnable, const bool twoSidedStencilMode,
+        const int stencilFunction, const int counterClockwiseStencilFunction,
+        const int stencilReadMask, const int referenceStencil)
+    {
+        RequireInitialized("reference-stencil application");
+        if (!stencilEnable) return;
+        if (twoSidedStencilMode)
+        {
+            glStencilFuncSeparate(
+                GL_FRONT, GlCompareFunction(stencilFunction),
+                referenceStencil, static_cast<GLuint>(stencilReadMask));
+            glStencilFuncSeparate(
+                GL_BACK, GlCompareFunction(counterClockwiseStencilFunction),
+                referenceStencil, static_cast<GLuint>(stencilReadMask));
+        }
+        else
+        {
+            glStencilFunc(
+                GlCompareFunction(stencilFunction), referenceStencil,
+                static_cast<GLuint>(stencilReadMask));
+        }
+        ThrowIfGlError("reference-stencil application");
+    }
+
+    void ApplyRasterizerState(
+        const int cullMode, const int fillMode, const bool scissorTestEnable,
+        const float depthBiasUnits, const float slopeScaleDepthBias)
+    {
+        RequireInitialized("rasterizer-state application");
+        if (cullMode == 0)
+        {
+            rlDisableBackfaceCulling();
+        }
+        else if (cullMode == 1 || cullMode == 2)
+        {
+            rlEnableBackfaceCulling();
+            rlSetCullFace(cullMode == 1 ? RL_CULL_FACE_BACK : RL_CULL_FACE_FRONT);
+        }
+        else
+        {
+            throw std::invalid_argument("RLGL: invalid CullMode ordinal");
+        }
+
+        if (fillMode == 0) rlDisableWireMode();
+        else if (fillMode == 1) rlEnableWireMode();
+        else throw std::invalid_argument("RLGL: invalid FillMode ordinal");
+
+        if (scissorTestEnable) rlEnableScissorTest();
+        else rlDisableScissorTest();
+
+        // rlgl has no polygon-offset wrapper. Always-on zero offset is a true no-op and matches
+        // EasyGL's deterministic state policy.
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(slopeScaleDepthBias, depthBiasUnits);
+        ThrowIfGlError("rasterizer-state application");
+    }
+
+    PipelineSnapshot GetPipelineSnapshotForTesting()
+    {
+        RequireInitialized("pipeline-state query");
+        PipelineSnapshot snapshot;
+        snapshot.blendEnabled = glIsEnabled(GL_BLEND) == GL_TRUE;
+        glGetIntegerv(GL_BLEND_SRC_RGB, &snapshot.colorSourceBlend);
+        glGetIntegerv(GL_BLEND_DST_RGB, &snapshot.colorDestinationBlend);
+        glGetIntegerv(GL_BLEND_SRC_ALPHA, &snapshot.alphaSourceBlend);
+        glGetIntegerv(GL_BLEND_DST_ALPHA, &snapshot.alphaDestinationBlend);
+        glGetIntegerv(GL_BLEND_EQUATION_RGB, &snapshot.colorBlendFunction);
+        glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &snapshot.alphaBlendFunction);
+        for (unsigned int index = 0; index < snapshot.colorWriteMasks.size(); ++index)
+        {
+            GLboolean mask[4] = {};
+            glGetBooleani_v(GL_COLOR_WRITEMASK, index, mask);
+            snapshot.colorWriteMasks[index] =
+                (mask[0] ? 1 : 0) | (mask[1] ? 2 : 0) |
+                (mask[2] ? 4 : 0) | (mask[3] ? 8 : 0);
+        }
+        snapshot.sampleMaskEnabled = glIsEnabled(GL_SAMPLE_MASK) == GL_TRUE;
+        GLint sampleMask = 0;
+        glGetIntegeri_v(GL_SAMPLE_MASK_VALUE, 0, &sampleMask);
+        snapshot.sampleMask = static_cast<unsigned int>(sampleMask);
+        glGetFloatv(GL_BLEND_COLOR, snapshot.blendFactor.data());
+
+        snapshot.depthTestEnabled = glIsEnabled(GL_DEPTH_TEST) == GL_TRUE;
+        GLboolean depthWrite = GL_FALSE;
+        glGetBooleanv(GL_DEPTH_WRITEMASK, &depthWrite);
+        snapshot.depthWriteEnabled = depthWrite == GL_TRUE;
+        glGetIntegerv(GL_DEPTH_FUNC, &snapshot.depthFunction);
+
+        snapshot.stencilTestEnabled = glIsEnabled(GL_STENCIL_TEST) == GL_TRUE;
+        glGetIntegerv(GL_STENCIL_FUNC, &snapshot.frontStencilFunction);
+        glGetIntegerv(GL_STENCIL_REF, &snapshot.frontStencilReference);
+        GLint integerValue = 0;
+        glGetIntegerv(GL_STENCIL_VALUE_MASK, &integerValue);
+        snapshot.frontStencilReadMask = static_cast<unsigned int>(integerValue);
+        glGetIntegerv(GL_STENCIL_WRITEMASK, &integerValue);
+        snapshot.frontStencilWriteMask = static_cast<unsigned int>(integerValue);
+        glGetIntegerv(GL_STENCIL_FAIL, &snapshot.frontStencilFail);
+        glGetIntegerv(GL_STENCIL_PASS_DEPTH_FAIL, &snapshot.frontStencilDepthFail);
+        glGetIntegerv(GL_STENCIL_PASS_DEPTH_PASS, &snapshot.frontStencilPass);
+        glGetIntegerv(GL_STENCIL_BACK_FUNC, &snapshot.backStencilFunction);
+        glGetIntegerv(GL_STENCIL_BACK_REF, &snapshot.backStencilReference);
+        glGetIntegerv(GL_STENCIL_BACK_VALUE_MASK, &integerValue);
+        snapshot.backStencilReadMask = static_cast<unsigned int>(integerValue);
+        glGetIntegerv(GL_STENCIL_BACK_WRITEMASK, &integerValue);
+        snapshot.backStencilWriteMask = static_cast<unsigned int>(integerValue);
+        glGetIntegerv(GL_STENCIL_BACK_FAIL, &snapshot.backStencilFail);
+        glGetIntegerv(GL_STENCIL_BACK_PASS_DEPTH_FAIL, &snapshot.backStencilDepthFail);
+        glGetIntegerv(GL_STENCIL_BACK_PASS_DEPTH_PASS, &snapshot.backStencilPass);
+
+        snapshot.cullEnabled = glIsEnabled(GL_CULL_FACE) == GL_TRUE;
+        glGetIntegerv(GL_CULL_FACE_MODE, &snapshot.cullFace);
+        snapshot.scissorEnabled = glIsEnabled(GL_SCISSOR_TEST) == GL_TRUE;
+        glGetIntegerv(GL_SCISSOR_BOX, snapshot.scissorBox.data());
+        GLint polygonModes[2] = {};
+        glGetIntegerv(GL_POLYGON_MODE, polygonModes);
+        snapshot.polygonMode = polygonModes[0];
+        snapshot.polygonOffsetFillEnabled =
+            glIsEnabled(GL_POLYGON_OFFSET_FILL) == GL_TRUE;
+        glGetFloatv(GL_POLYGON_OFFSET_FACTOR, &snapshot.polygonOffsetFactor);
+        glGetFloatv(GL_POLYGON_OFFSET_UNITS, &snapshot.polygonOffsetUnits);
+        ThrowIfGlError("pipeline-state query");
+        return snapshot;
+    }
+
+    std::uint8_t ReadStencilForTesting(
+        const int x, const int y, const int framebufferHeight)
+    {
+        RequireInitialized("stencil readback");
+        std::uint8_t value = 0;
+        GLint previousPackAlignment = 4;
+        glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(
+            x, framebufferHeight - y - 1, 1, 1,
+            GL_STENCIL_INDEX, GL_UNSIGNED_BYTE, &value);
+        glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+        ThrowIfGlError("stencil readback");
+        return value;
     }
 
     void SetViewport(const int x, const int y, const int width, const int height,
@@ -905,9 +1231,25 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     void DrawBoundTextureSampleForTesting(
         const float u, const float v, const int width, const int height)
     {
-        RequireInitialized("focused sampler draw");
-        if (width <= 0 || height <= 0)
-            throw std::invalid_argument("RLGL: sampler test draw extent must be positive");
+        const GLboolean cullingWasEnabled = glIsEnabled(GL_CULL_FACE);
+        rlDisableBackfaceCulling();
+        DrawBoundTextureRectangleForTesting(
+            u, v, 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height),
+            width, height);
+        if (cullingWasEnabled) rlEnableBackfaceCulling();
+    }
+
+    void DrawBoundTextureRectangleForTesting(
+        const float u, const float v, const float x, const float y,
+        const float width, const float height,
+        const int framebufferWidth, const int framebufferHeight)
+    {
+        RequireInitialized("focused pipeline draw");
+        if (width <= 0.0f || height <= 0.0f ||
+            framebufferWidth <= 0 || framebufferHeight <= 0)
+        {
+            throw std::invalid_argument("RLGL: pipeline test draw extent must be positive");
+        }
 
         GLint previousActiveTexture = GL_TEXTURE0;
         GLint texture = 0;
@@ -918,17 +1260,17 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         glActiveTexture(static_cast<GLenum>(previousActiveTexture));
         glGetIntegerv(GL_VIEWPORT, previousViewport);
         if (texture == 0)
-            throw std::runtime_error("RLGL: sampler test requires a texture on unit zero");
+            throw std::runtime_error("RLGL: pipeline test requires a texture on unit zero");
 
-        const GLboolean cullingWasEnabled = glIsEnabled(GL_CULL_FACE);
         rlDrawRenderBatchActive();
-        rlViewport(0, 0, width, height);
-        rlDisableBackfaceCulling();
+        rlViewport(0, 0, framebufferWidth, framebufferHeight);
 
         rlMatrixMode(RL_PROJECTION);
         rlPushMatrix();
         rlLoadIdentity();
-        rlOrtho(0.0, static_cast<double>(width), static_cast<double>(height), 0.0, -1.0, 1.0);
+        rlOrtho(
+            0.0, static_cast<double>(framebufferWidth),
+            static_cast<double>(framebufferHeight), 0.0, -1.0, 1.0);
         rlMatrixMode(RL_MODELVIEW);
         rlPushMatrix();
         rlLoadIdentity();
@@ -936,10 +1278,10 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         rlSetTexture(static_cast<unsigned int>(texture));
         rlBegin(RL_QUADS);
         rlColor4ub(255, 255, 255, 255);
-        rlTexCoord2f(u, v); rlVertex2f(0.0f, 0.0f);
-        rlTexCoord2f(u, v); rlVertex2f(0.0f, static_cast<float>(height));
-        rlTexCoord2f(u, v); rlVertex2f(static_cast<float>(width), static_cast<float>(height));
-        rlTexCoord2f(u, v); rlVertex2f(static_cast<float>(width), 0.0f);
+        rlTexCoord2f(u, v); rlVertex2f(x, y);
+        rlTexCoord2f(u, v); rlVertex2f(x, y + height);
+        rlTexCoord2f(u, v); rlVertex2f(x + width, y + height);
+        rlTexCoord2f(u, v); rlVertex2f(x + width, y);
         rlEnd();
         rlDrawRenderBatchActive();
         rlSetTexture(0);
@@ -948,11 +1290,10 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         rlMatrixMode(RL_PROJECTION);
         rlPopMatrix();
         rlMatrixMode(RL_MODELVIEW);
-        if (cullingWasEnabled) rlEnableBackfaceCulling();
         glViewport(
             previousViewport[0], previousViewport[1],
             previousViewport[2], previousViewport[3]);
-        ThrowIfGlError("focused sampler draw");
+        ThrowIfGlError("focused pipeline draw");
     }
 
     void BindDefaultFramebuffer()

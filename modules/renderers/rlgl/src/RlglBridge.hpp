@@ -3,6 +3,7 @@
 
 #include "CNA/Platform/IPlatformGlContext.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -22,6 +23,48 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         float maxLod = 0.0f;
         float lodBias = 0.0f;
         float anisotropy = 1.0f;
+    };
+
+    /** @brief Complete native pipeline-state snapshot exposed only to focused validation. */
+    struct PipelineSnapshot
+    {
+        bool blendEnabled = false;
+        int colorSourceBlend = 0;
+        int colorDestinationBlend = 0;
+        int alphaSourceBlend = 0;
+        int alphaDestinationBlend = 0;
+        int colorBlendFunction = 0;
+        int alphaBlendFunction = 0;
+        std::array<int, 4> colorWriteMasks{};
+        bool sampleMaskEnabled = false;
+        unsigned int sampleMask = 0;
+        std::array<float, 4> blendFactor{};
+        bool depthTestEnabled = false;
+        bool depthWriteEnabled = false;
+        int depthFunction = 0;
+        bool stencilTestEnabled = false;
+        int frontStencilFunction = 0;
+        int frontStencilReference = 0;
+        unsigned int frontStencilReadMask = 0;
+        unsigned int frontStencilWriteMask = 0;
+        int frontStencilFail = 0;
+        int frontStencilDepthFail = 0;
+        int frontStencilPass = 0;
+        int backStencilFunction = 0;
+        int backStencilReference = 0;
+        unsigned int backStencilReadMask = 0;
+        unsigned int backStencilWriteMask = 0;
+        int backStencilFail = 0;
+        int backStencilDepthFail = 0;
+        int backStencilPass = 0;
+        bool cullEnabled = false;
+        int cullFace = 0;
+        bool scissorEnabled = false;
+        std::array<int, 4> scissorBox{};
+        int polygonMode = 0;
+        bool polygonOffsetFillEnabled = false;
+        float polygonOffsetFactor = 0.0f;
+        float polygonOffsetUnits = 0.0f;
     };
 
     enum ClearPlane : unsigned int
@@ -84,6 +127,102 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @param enabled True to enable depth writes.
      */
     void SetDepthWriteEnabled(bool enabled);
+
+    /**
+     * @brief Applies the complete XNA blend/output-write state.
+     * @param colorSourceBlend Raw color source `Blend` ordinal.
+     * @param alphaSourceBlend Raw alpha source `Blend` ordinal.
+     * @param colorDestinationBlend Raw color destination `Blend` ordinal.
+     * @param alphaDestinationBlend Raw alpha destination `Blend` ordinal.
+     * @param colorBlendFunction Raw color `BlendFunction` ordinal.
+     * @param alphaBlendFunction Raw alpha `BlendFunction` ordinal.
+     * @param colorWriteMasks Four raw `ColorWriteChannels` masks.
+     * @param sampleMask XNA multisample coverage mask.
+     */
+    void ApplyBlendState(
+        int colorSourceBlend, int alphaSourceBlend,
+        int colorDestinationBlend, int alphaDestinationBlend,
+        int colorBlendFunction, int alphaBlendFunction,
+        const int* colorWriteMasks, unsigned int sampleMask);
+
+    /**
+     * @brief Sets the constant blend color.
+     * @param r Red component.
+     * @param g Green component.
+     * @param b Blue component.
+     * @param a Alpha component.
+     */
+    void SetBlendFactor(float r, float g, float b, float a);
+
+    /**
+     * @brief Applies the complete XNA depth/stencil state.
+     * @param depthEnable Whether depth testing is enabled.
+     * @param depthWriteEnable Whether depth writes are enabled.
+     * @param depthFunction Raw depth `CompareFunction` ordinal.
+     * @param stencilEnable Whether stencil testing is enabled.
+     * @param stencilFunction Raw clockwise/front stencil comparison.
+     * @param stencilPass Raw clockwise/front depth-pass operation.
+     * @param stencilFail Raw clockwise/front stencil-fail operation.
+     * @param stencilDepthFail Raw clockwise/front depth-fail operation.
+     * @param stencilReadMask Stencil comparison mask.
+     * @param stencilWriteMask Stencil write mask.
+     * @param referenceStencil Stencil reference value.
+     * @param twoSidedStencilMode Whether front and back faces use different state.
+     * @param counterClockwiseStencilFunction Raw back-face comparison.
+     * @param counterClockwiseStencilPass Raw back-face depth-pass operation.
+     * @param counterClockwiseStencilFail Raw back-face stencil-fail operation.
+     * @param counterClockwiseStencilDepthFail Raw back-face depth-fail operation.
+     */
+    void ApplyDepthStencilState(
+        bool depthEnable, bool depthWriteEnable, int depthFunction,
+        bool stencilEnable, int stencilFunction,
+        int stencilPass, int stencilFail, int stencilDepthFail,
+        int stencilReadMask, int stencilWriteMask, int referenceStencil,
+        bool twoSidedStencilMode, int counterClockwiseStencilFunction,
+        int counterClockwiseStencilPass, int counterClockwiseStencilFail,
+        int counterClockwiseStencilDepthFail);
+
+    /**
+     * @brief Reissues the cached stencil comparisons with a new reference value.
+     * @param stencilEnable Whether stencil testing is currently enabled.
+     * @param twoSidedStencilMode Whether front and back comparisons differ.
+     * @param stencilFunction Raw front comparison ordinal.
+     * @param counterClockwiseStencilFunction Raw back comparison ordinal.
+     * @param stencilReadMask Stencil comparison mask.
+     * @param referenceStencil New reference value.
+     */
+    void SetStencilReference(
+        bool stencilEnable, bool twoSidedStencilMode,
+        int stencilFunction, int counterClockwiseStencilFunction,
+        int stencilReadMask, int referenceStencil);
+
+    /**
+     * @brief Applies XNA culling, fill, scissor-enable, and polygon-offset state.
+     * @param cullMode Raw `CullMode` ordinal.
+     * @param fillMode Raw `FillMode` ordinal.
+     * @param scissorTestEnable Whether scissor testing is enabled.
+     * @param depthBiasUnits Depth-format-scaled polygon offset units.
+     * @param slopeScaleDepthBias Polygon offset slope factor.
+     */
+    void ApplyRasterizerState(
+        int cullMode, int fillMode, bool scissorTestEnable,
+        float depthBiasUnits, float slopeScaleDepthBias);
+
+    /**
+     * @brief Captures the native pipeline state for focused transition validation.
+     * @return Current GL pipeline state.
+     */
+    [[nodiscard]] PipelineSnapshot GetPipelineSnapshotForTesting();
+
+    /**
+     * @brief Reads one default-framebuffer stencil value for focused validation.
+     * @param x Pixel X coordinate.
+     * @param y Top-left-origin pixel Y coordinate.
+     * @param framebufferHeight Current framebuffer height.
+     * @return The eight least-significant stencil bits.
+     */
+    [[nodiscard]] std::uint8_t ReadStencilForTesting(
+        int x, int y, int framebufferHeight);
 
     /**
      * @brief Sets the GL viewport and depth range.
@@ -258,6 +397,21 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @param height Backbuffer height.
      */
     void DrawBoundTextureSampleForTesting(float u, float v, int width, int height);
+
+    /**
+     * @brief Draws a constant-coordinate rectangle without overriding pipeline state.
+     * @param u Horizontal texture coordinate.
+     * @param v Vertical texture coordinate.
+     * @param x Rectangle left edge.
+     * @param y Rectangle top edge.
+     * @param width Rectangle width.
+     * @param height Rectangle height.
+     * @param framebufferWidth Backbuffer width.
+     * @param framebufferHeight Backbuffer height.
+     */
+    void DrawBoundTextureRectangleForTesting(
+        float u, float v, float x, float y, float width, float height,
+        int framebufferWidth, int framebufferHeight);
 
     /** @brief Restores the platform default framebuffer as the active draw target. */
     void BindDefaultFramebuffer();

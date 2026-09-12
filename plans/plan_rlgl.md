@@ -1,6 +1,6 @@
 # RLGL Renderer Plan
 
-**Status:** Active — device vertical slice, documentation/CI gate, every classic Texture2D format, and sampler objects complete
+**Status:** Active — device vertical slice, documentation/CI gate, classic Texture2D/samplers, and pipeline state complete
 **Target identity:** `RLGL`  
 **Primary parity reference:** EasyGL  
 **Initial profile:** OpenGL 3.3 core  
@@ -22,13 +22,14 @@ Only ✅ items count as complete. Compiling code alone is not sufficient evidenc
 - The first vertical slice is runtime-validated: selection → CNA-created GL context → rlgl loader/init → `GraphicsDevice` → selective clear → readback → present → resize → shutdown, including two sequential device lifecycles.
 - Every classic-XNA Texture2D format is runtime-validated. Uncompressed layouts preserve exact XNA bytes and sampling swizzles; DXT1/3/5 use native S3TC storage when rlgl detects it and otherwise decode to RGBA8 renderer storage while retaining exact compressed block-transfer/readback semantics. Both DXT paths have pixel and transfer evidence.
 - XNA sampler state is runtime-validated through independent GL 3.3 sampler objects on all 16 slots: all nine filter ordinals, U/V/W addressing, mip selection/bias, comparison disable, anisotropy capability/clamping, stale-state reset, slot independence, and sampled pixels have focused evidence.
+- XNA blend, depth/stencil, and rasterizer state is runtime-validated through rlgl wrappers plus narrowly-scoped GL 3.3 bridge calls: exhaustive enum/native-state transitions and representative blend, mask, depth, stencil, cull, wireframe, and scissor pixels pass.
 - `docs/rlgl-renderer.md` records the verified boundary, profile/platform status, build, offline dependency, update, licensing, and debugging procedures. A Linux compile-focused CI lane builds the renderer and all focused executables from an independently checked-out copy of the exact upstream commit without claiming hosted runtime coverage.
 - Classic XNA 4.0 parity is the priority. Existing CNA extensions are tracked separately and do not gate the classic parity declaration.
 
 ## Current limitations
 
 1. `RLGL` configures, fully builds, and passes its renderer-local smoke test with Mesa llvmpipe 25.0.7 through SDL's `offscreen` GL driver (OpenGL 4.5 core granted for the 3.3-core request). This proves the current Linux vertical slice, not untested Windows/macOS behavior.
-2. Device lifecycle, physical/logical presentation tracking, exact selective clears, viewport/scissor coordinates, swap interval, default-framebuffer restoration, basic depth/blend/write toggles, all 20 classic Texture2D formats, and GL sampler objects are implemented. SpriteBatch, buffer, draw, effect, render-target, reset, and query resources remain unavailable and throw stable diagnostics where a required factory exists.
+2. Device lifecycle, physical/logical presentation tracking, exact selective clears, viewport/scissor coordinates, swap interval, default-framebuffer restoration, complete backbuffer pipeline state, all 20 classic Texture2D formats, and GL sampler objects are implemented. SpriteBatch, buffer, draw, effect, render-target, reset, and query resources remain unavailable and throw stable diagnostics where a required factory exists.
 3. Upstream rlgl keeps one process-global `RLGL` state object. The initial backend will therefore enforce one live RLGL device and will not claim concurrent multi-context support.
 4. Several GL 3.3 operations required for XNA fidelity have no rlgl 6.0 public wrapper: arbitrary primitive modes and 32-bit index draws, depth comparison, stencil configuration, depth bias, indexed color masks, and some multisample attachment operations. Renderer-private bridge calls through the GL dispatch loaded by rlgl are permitted only for such measured gaps; they do not create CNA public API.
 5. OpenGL 3.3 cannot provide every modern CNA extension (for example GL 4.3 compute/SSBO/image-load-store facilities). These are not classic XNA parity blockers.
@@ -163,16 +164,16 @@ This matrix records measured implementation shape, not promises. “Direct GL br
 | Buffers | User primitives | Implemented | VBO or transient upload; default batch is semantically unsuitable | ⬜ | Requires architectural work; transient-ring design/test |
 | Buffers | Indexed user primitives | Implemented | Same plus index-type limitation | ⬜ | Requires architectural work; 16/32-bit tests |
 | Buffers | Instancing | Implemented | VAO attribute divisors and instanced draw wrappers | ⬜ | Requires architectural work; frequency/semantic tests |
-| Pipeline | BlendState | Full XNA mapping | Blend enable plus combined/separate factors/equations | ⬜ | Straightforward implementation; pixel equations |
-| Pipeline | DepthStencilState | Full XNA depth/stencil mapping | Depth enable/write exposed; compare and stencil ops have no public wrappers | ⬜ | Underlying rlgl limitation; bridge and exhaustive state tests |
-| Pipeline | RasterizerState | Cull/fill/scissor/depth bias | Cull/scissor/wire exposed; exact cull selection and bias need care/bridge | ⬜ | Requires architectural work; rasterizer parity |
+| Pipeline | BlendState | Full XNA mapping | Blend enable plus combined/separate factors/equations | ✅ | All factors/equations, constant factor, sample mask, and premultiplied/opaque transition pixels passed RLGL-013 |
+| Pipeline | DepthStencilState | Full XNA depth/stencil mapping | Depth enable/write exposed; compare and stencil ops have no public wrappers | ✅ | All compares/operations, writes, two-sided state, independent reference changes, and depth/stencil pixels passed RLGL-013 |
+| Pipeline | RasterizerState | Cull/fill/scissor/depth bias | Cull/scissor/wire exposed; exact cull selection and bias need care/bridge | ✅ | Native A→B transitions plus cull winding, solid/wireframe, and scissor pixels passed RLGL-013 |
 | Pipeline | SamplerState | Full XNA mapping | Texture parameters expose core behavior; sampler-object API is not wrapped | ✅ | Independent objects on 16 XNA slots passed complete native-state transitions and focused sampled-pixel validation in RLGL-025 |
-| Pipeline | Color write masks | Per-target masks | Global color mask wrapper only | ⬜ | Underlying rlgl limitation; indexed bridge where GL 3.3 permits |
-| Pipeline | Culling | Clockwise/counterclockwise/none | Enable/disable and face selection wrappers | ⬜ | Straightforward implementation; winding convention test |
-| Pipeline | Fill modes | Solid/wireframe | Wire/point helpers on desktop | ⬜ | Straightforward implementation; wireframe output |
-| Pipeline | Depth bias | DepthBias/SlopeScaleDepthBias | No public rlgl wrapper | ⬜ | Underlying rlgl limitation; polygon-offset bridge/test |
-| Pipeline | Stencil operations | Full front/back XNA stencil | No public rlgl wrapper | ⬜ | Underlying rlgl limitation; bridge/test front and back |
-| Pipeline | Separate blending | Required by XNA state | Separate factor/equation wrappers exist | ⬜ | Straightforward implementation; color/alpha pixel tests |
+| Pipeline | Color write masks | Per-target masks | Global color mask wrapper only | ✅ | Private indexed GL 3.3 masks passed all four native values and a masked-draw/Clear-restoration pixel oracle |
+| Pipeline | Culling | Clockwise/counterclockwise/none | Enable/disable and face selection wrappers | ✅ | Both cull selections and none passed native transitions; opposite winding selections produced accepted/rejected pixels |
+| Pipeline | Fill modes | Solid/wireframe | Wire/point helpers on desktop | ✅ | rlgl solid/wire wrappers passed native transitions and interior/edge pixel evidence |
+| Pipeline | Depth bias | DepthBias/SlopeScaleDepthBias | No public rlgl wrapper | ✅ | Private polygon-offset call scales normalized XNA bias by the granted backbuffer depth precision; native transition passed |
+| Pipeline | Stencil operations | Full front/back XNA stencil | No public rlgl wrapper | ✅ | Private GL 3.3 bridge passed all operations, two-sided functions/masks, stencil write/read pixels, and standalone reference mutation |
+| Pipeline | Separate blending | Required by XNA state | Separate factor/equation wrappers exist | ✅ | rlgl custom-separate cache path passed independent native RGB/alpha state and premultiplied output |
 | Shaders | BasicEffect | Implemented | Shader compile/link/uniform/attribute wrappers are sufficient | ⬜ | Requires architectural work; reuse `GpuDrawParams` and golden outputs |
 | Shaders | AlphaTestEffect | Implemented | Same | ⬜ | Requires architectural work; alpha-function matrix |
 | Shaders | DualTextureEffect | Implemented | Multiple texture/sampler binding available | ⬜ | Requires architectural work; texture-combine pixels |
@@ -243,7 +244,7 @@ Every state-family task must test both isolated application and transitions A �
 | RLGL-010 | ⬜ | RLGL-009 | Implement a CNA-owned low-level SpriteBatch path, then validate texture drawing, transforms, origin/effects, sorting, blending, clipping, and SpriteFont with existing tests/samples. |
 | RLGL-011 | ⬜ | RLGL-006 | Implement vertex declarations, static/dynamic vertex and 16/32-bit index buffers, user primitives, all XNA topologies, update options, and draw calls. Validate format/topology/update matrices. |
 | RLGL-012 | ⬜ | RLGL-009, RLGL-011 | Implement shader infrastructure and stock BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect, SkinnedEffect, and other classic effect hooks found by the final inventory. Validate semantic regressions and golden output. |
-| RLGL-013 | ⬜ | RLGL-009, RLGL-011 | Implement BlendState, DepthStencilState, RasterizerState, deterministic cache/invalidation, selective clear restoration, and transition tests including private bridge operations. |
+| RLGL-013 | ✅ | RLGL-006 | Implemented every blend factor/function, independent color/alpha state, constant blend factor, four indexed color-write masks, multisample mask, all depth comparisons/writes, all stencil operations, two-sided stencil state, standalone `ReferenceStencil`, cull direction, solid/wire fill, scissor enable, and depth-format-scaled polygon offset. rlgl wrappers own enable/cull/wire and the custom-separate blend cache; the private GL 3.3 bridge covers only unwrapped state. Full assignments are deterministic rather than relying on a second CNA cache, while the minimal stencil record supports the independent reference property. The task moved ahead of buffers after inspection proved it independent and a correctness prerequisite for SpriteBatch. Validated 2026-09-12: `cna_test_rlgl_state` passed exhaustive native state transitions plus premultiplied/opaque blend, color-mask/Clear restoration, depth reject/accept, stencil write/read/reference, cull winding, solid/wireframe, and top-left scissor pixel oracles on SDL3-offscreen/Mesa-llvmpipe. AddressSanitizer passed. RasterizerState.MultiSampleAntiAlias remains a shared renderer-seam omission also present in EasyGL; render-target depth-bias re-scaling will be validated with RLGL-014. |
 | RLGL-014 | ⬜ | RLGL-009, RLGL-013 | Implement RenderTarget2D, MRT, depth/stencil attachments, switching, readback, MSAA construction/resolve, and content preservation/discard rules. Validate multipass pixels. |
 | RLGL-015 | ⬜ | RLGL-009, RLGL-012, RLGL-014 | Implement TextureCube, cube render targets, compressed formats, broader readback/mipmap behavior, and 3D/model workload prerequisites. |
 | RLGL-016 | ⬜ | RLGL-011, RLGL-012, RLGL-013 | Implement instancing and occlusion queries using rlgl wrappers where present and the documented bridge where absent. Validate divisors, instance frequency, query availability/result/lifetime. |

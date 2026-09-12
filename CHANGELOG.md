@@ -16,7 +16,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   GraphicsDevice clear/readback/present/resize slice, all 20 classic Texture2D formats (including
   exact packed, signed-normalized, half/full-float, XNA channel expansion, and DXT1/3/5 with
   native-S3TC or software-decoded storage), and independent XNA sampler objects are
-  runtime-validated on Linux; remaining
+  runtime-validated on Linux. Complete blend, depth/stencil, rasterizer, write-mask, sample-mask,
+  scissor, and depth-bias state is also pixel- and native-state-validated; remaining
   resources and drawing are under active development in `plans/plan_rlgl.md`. The append-only C
   renderer identity advances the experimental C ABI to 0.27.0.
 - Capability-gated CNAEXT base-instance drawing through

@@ -95,7 +95,8 @@ jobs:
             cna_renderer_rlgl \
             cna_test_rlgl_smoke \
             cna_test_rlgl_texture \
-            cna_test_rlgl_sampler
+            cna_test_rlgl_sampler \
+            cna_test_rlgl_state
 
       - name: Verify renderer registry consistency
         working-directory: cna
