@@ -576,10 +576,26 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @param levelCount Number of allocated color-texture mip levels.
      * @param depthFormat Raw XNA DepthFormat ordinal.
      * @param multiSampleCount Requested multisample count, or zero.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
      * @return Complete framebuffer storage whose color texture is rlgl-owned.
      */
     [[nodiscard]] RenderTargetStorage CreateRenderTarget2D(
-        int width, int height, int levelCount, int depthFormat, int multiSampleCount);
+        int width, int height, int levelCount, int depthFormat,
+        int multiSampleCount, int surfaceFormat);
+
+    /**
+     * @brief Probes whether the live context can attach one exact XNA color format.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+     * @return True only when the exact mapped single-sample framebuffer is complete.
+     */
+    [[nodiscard]] bool ProbeRenderTargetFormat(int surfaceFormat);
+
+    /**
+     * @brief Returns the native texel width of a supported render-target format.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+     * @return Format-native byte count per texel.
+     */
+    [[nodiscard]] int RenderTargetBytesPerTexel(int surfaceFormat);
 
     /**
      * @brief Releases a RenderTarget2D while preserving an unrelated active framebuffer.
@@ -623,12 +639,13 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @param y Rectangle top edge.
      * @param width Rectangle width.
      * @param height Rectangle height.
-     * @param pixels Destination holding width * height * 4 bytes.
+     * @param pixels Destination holding the format-native rectangle bytes.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
      */
     void ReadRenderTarget2D(
         unsigned int framebuffer, unsigned int texture, int level,
         int levelWidth, int levelHeight, int x, int y, int width, int height,
-        std::uint8_t* pixels);
+        std::uint8_t* pixels, int surfaceFormat);
 
     /**
      * @brief Binds a two-dimensional texture through rlgl.

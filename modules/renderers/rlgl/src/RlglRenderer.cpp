@@ -359,8 +359,8 @@ namespace CNA::Internal::Renderers::Rlgl
             RendererFormatVerdict::Supported)
         {
             throw System::NotSupportedException(
-                "RLGL: requested RenderTarget2D SurfaceFormat is not implemented yet "
-                "(plans/plan_rlgl.md RLGL-042)");
+                "RLGL: requested RenderTarget2D SurfaceFormat is not renderable on this "
+                "OpenGL context (plans/plan_rlgl.md RLGL-042)");
         }
         return CreateRenderTargetRenderer(
             width, height, depthFormat, preserveContents,
@@ -409,8 +409,7 @@ namespace CNA::Internal::Renderers::Rlgl
     RendererFormatVerdict RlglRenderer::ClassifyRenderTargetFormatEXT(
         const int surfaceFormat) const
     {
-        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        return static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Color
+        return Bridge::ProbeRenderTargetFormat(surfaceFormat)
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
     }

@@ -47,6 +47,7 @@ namespace CNA::Internal::Renderers::Rlgl
         int width = 0;
         int height = 0;
         int depthFormat = 0;
+        int surfaceFormat = 0;
         int levelCount = 1;
         int multiSampleCount = 0;
         bool preserveContents = false;
@@ -60,7 +61,7 @@ namespace CNA::Internal::Renderers::Rlgl
      * @param preserveContents Whether target contents must survive target switches.
      * @param mipMap Whether to allocate and regenerate a full mip chain.
      * @param multiSampleCount Requested sample count, clamped to the live device limit.
-     * @param surfaceFormat Raw XNA SurfaceFormat ordinal; Color is the current baseline.
+     * @param surfaceFormat Raw supported XNA render-target SurfaceFormat ordinal.
      * @return Renderer-owned framebuffer resource.
      */
     [[nodiscard]] std::unique_ptr<IRenderTargetRenderer> CreateRenderTargetRenderer(

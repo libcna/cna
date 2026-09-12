@@ -388,6 +388,28 @@ namespace
         }
     }
 
+    [[nodiscard]] bool IsClassicRenderTargetFormat(const int surfaceFormat) noexcept
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+        case SurfaceFormat::Color:
+        case SurfaceFormat::Rgba1010102:
+        case SurfaceFormat::Rg32:
+        case SurfaceFormat::Rgba64:
+        case SurfaceFormat::Single:
+        case SurfaceFormat::Vector2:
+        case SurfaceFormat::Vector4:
+        case SurfaceFormat::HalfSingle:
+        case SurfaceFormat::HalfVector2:
+        case SurfaceFormat::HalfVector4:
+        case SurfaceFormat::HdrBlendable:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     [[nodiscard]] const std::uint8_t* ConvertPackedUpload(
         const TextureFormatInfo& format, const std::uint8_t* pixels,
         const std::size_t texelCount, std::vector<std::uint8_t>& converted)
@@ -2271,17 +2293,20 @@ void main()
 
     RenderTargetStorage CreateRenderTarget2D(
         const int width, const int height, const int levelCount, const int depthFormat,
-        const int multiSampleCount)
+        const int multiSampleCount, const int surfaceFormat)
     {
         RequireInitialized("RenderTarget2D creation");
         if (width <= 0 || height <= 0 || levelCount <= 0 ||
-            depthFormat < 0 || depthFormat > 3 || multiSampleCount < 0)
+            depthFormat < 0 || depthFormat > 3 || multiSampleCount < 0 ||
+            !IsClassicRenderTargetFormat(surfaceFormat))
         {
             throw std::invalid_argument("RLGL: invalid RenderTarget2D creation request");
         }
+        const TextureFormatInfo colorFormat = TextureFormat(surfaceFormat);
         const std::uint64_t texelCount =
             static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height);
-        if (texelCount > static_cast<std::uint64_t>(SIZE_MAX / 4u))
+        if (texelCount > static_cast<std::uint64_t>(
+                SIZE_MAX / static_cast<std::size_t>(colorFormat.bytesPerTexel)))
             throw std::overflow_error("RLGL: RenderTarget2D allocation size overflow");
 
         const FramebufferBindingRestore framebufferRestore;
@@ -2294,7 +2319,7 @@ void main()
             if (storage.multiSampleCount < 2) storage.multiSampleCount = 0;
         }
         storage.colorTexture = CreateTexture2D(
-            0, width, height, levelCount, nullptr);
+            surfaceFormat, width, height, levelCount, nullptr);
         try
         {
             storage.framebuffer = rlLoadFramebuffer();
@@ -2306,7 +2331,8 @@ void main()
                 glBindRenderbuffer(
                     GL_RENDERBUFFER, storage.multisampleColorRenderbuffer);
                 glRenderbufferStorageMultisample(
-                    GL_RENDERBUFFER, storage.multiSampleCount, GL_RGBA8, width, height);
+                    GL_RENDERBUFFER, storage.multiSampleCount,
+                    colorFormat.internalFormat, width, height);
                 GLint actualSamples = 0;
                 glGetRenderbufferParameteriv(
                     GL_RENDERBUFFER, GL_RENDERBUFFER_SAMPLES, &actualSamples);
@@ -2431,6 +2457,32 @@ void main()
         return storage;
     }
 
+    bool ProbeRenderTargetFormat(const int surfaceFormat)
+    {
+        RequireInitialized("RenderTarget2D format probe");
+        if (!IsClassicRenderTargetFormat(surfaceFormat)) return false;
+
+        RenderTargetStorage storage;
+        try
+        {
+            storage = CreateRenderTarget2D(1, 1, 1, 0, 0, surfaceFormat);
+        }
+        catch (...)
+        {
+            DestroyRenderTarget2D(storage);
+            return false;
+        }
+        DestroyRenderTarget2D(storage);
+        return true;
+    }
+
+    int RenderTargetBytesPerTexel(const int surfaceFormat)
+    {
+        if (!IsClassicRenderTargetFormat(surfaceFormat))
+            throw std::invalid_argument("RLGL: SurfaceFormat is not render-target compatible");
+        return TextureFormat(surfaceFormat).bytesPerTexel;
+    }
+
     void DestroyRenderTarget2D(RenderTargetStorage& storage) noexcept
     {
         if (!bridgeInitialized)
@@ -2500,17 +2552,20 @@ void main()
     void ReadRenderTarget2D(
         const unsigned int framebuffer, const unsigned int texture, const int level,
         const int levelWidth, const int levelHeight, const int x, const int y,
-        const int width, const int height, std::uint8_t* const pixels)
+        const int width, const int height, std::uint8_t* const pixels,
+        const int surfaceFormat)
     {
         RequireInitialized("RenderTarget2D readback");
         if (framebuffer == 0 || texture == 0 || level < 0 ||
             levelWidth <= 0 || levelHeight <= 0 || x < 0 || y < 0 ||
             width <= 0 || height <= 0 || x > levelWidth - width ||
-            y > levelHeight - height || pixels == nullptr)
+            y > levelHeight - height || pixels == nullptr ||
+            !IsClassicRenderTargetFormat(surfaceFormat))
         {
             throw std::invalid_argument("RLGL: invalid RenderTarget2D readback request");
         }
 
+        const TextureFormatInfo colorFormat = TextureFormat(surfaceFormat);
         const FramebufferBindingRestore framebufferRestore;
         unsigned int readFramebuffer = framebuffer;
         if (level > 0)
@@ -2535,13 +2590,14 @@ void main()
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
         glReadPixels(
             x, levelHeight - y - height, width, height,
-            GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+            colorFormat.transferFormat, colorFormat.transferType, pixels);
         glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
         const GLenum readError = glGetError();
 
         if (level > 0) rlUnloadFramebuffer(readFramebuffer);
 
-        const std::size_t rowBytes = static_cast<std::size_t>(width) * 4u;
+        const std::size_t rowBytes = static_cast<std::size_t>(width) *
+            static_cast<std::size_t>(colorFormat.bytesPerTexel);
         std::vector<std::uint8_t> temporary(rowBytes);
         for (int row = 0; row < height / 2; ++row)
         {

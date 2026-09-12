@@ -2,9 +2,6 @@
 
 #include "RlglResources.hpp"
 
-#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
-#include "System/NotSupportedException.hpp"
-
 #include "RlglBridge.hpp"
 
 #include <algorithm>
@@ -18,8 +15,6 @@ namespace CNA::Internal::Renderers::Rlgl
 {
     namespace
     {
-        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-
         [[nodiscard]] int CalculateMipLevels(int width, int height)
         {
             int levels = 1;
@@ -37,10 +32,12 @@ namespace CNA::Internal::Renderers::Rlgl
             return std::max(1, base >> level);
         }
 
-        [[nodiscard]] std::vector<std::uint8_t> FlipRgbaRows(
-            const std::uint8_t* const pixels, const int width, const int height)
+        [[nodiscard]] std::vector<std::uint8_t> FlipRows(
+            const std::uint8_t* const pixels, const int width, const int height,
+            const int bytesPerTexel)
         {
-            const std::size_t rowBytes = static_cast<std::size_t>(width) * 4u;
+            const std::size_t rowBytes = static_cast<std::size_t>(width) *
+                static_cast<std::size_t>(bytesPerTexel);
             std::vector<std::uint8_t> flipped(rowBytes * static_cast<std::size_t>(height));
             for (int row = 0; row < height; ++row)
             {
@@ -63,21 +60,18 @@ namespace CNA::Internal::Renderers::Rlgl
                 , height_(height)
                 , depthFormat_(depthFormat)
                 , levelCount_(mipMap ? CalculateMipLevels(width, height) : 1)
+                , surfaceFormat_(surfaceFormat)
                 , preserveContents_(preserveContents)
             {
                 if (width_ <= 0 || height_ <= 0)
                     throw std::invalid_argument(
                         "RLGL: RenderTarget2D dimensions must be positive");
-                if (surfaceFormat != static_cast<int>(SurfaceFormat::Color))
-                {
-                    throw System::NotSupportedException(
-                        "RLGL: this RenderTarget2D SurfaceFormat is not implemented yet "
-                        "(plans/plan_rlgl.md RLGL-042)");
-                }
                 if (depthFormat_ < 0 || depthFormat_ > 3)
                     throw std::invalid_argument("RLGL: invalid DepthFormat ordinal");
+                bytesPerTexel_ = Bridge::RenderTargetBytesPerTexel(surfaceFormat_);
                 storage_ = Bridge::CreateRenderTarget2D(
-                    width_, height_, levelCount_, depthFormat_, multiSampleCount);
+                    width_, height_, levelCount_, depthFormat_,
+                    multiSampleCount, surfaceFormat_);
             }
 
             ~RlglRenderTargetRenderer() override
@@ -92,16 +86,17 @@ namespace CNA::Internal::Renderers::Rlgl
             [[nodiscard]] int GetHeight() const override { return height_; }
             [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override
             {
-                return static_cast<int>(SurfaceFormat::Color);
+                return surfaceFormat_;
             }
 
             void UpdatePixels(const std::uint8_t* const data, const int stride) override
             {
-                if (data == nullptr || stride != width_ * 4)
+                if (data == nullptr || stride != width_ * bytesPerTexel_)
                     throw std::invalid_argument("RLGL: invalid RenderTarget2D level-zero upload");
-                const std::vector<std::uint8_t> flipped = FlipRgbaRows(data, width_, height_);
+                const std::vector<std::uint8_t> flipped =
+                    FlipRows(data, width_, height_, bytesPerTexel_);
                 Bridge::UpdateTexture2D(
-                    storage_.colorTexture, static_cast<int>(SurfaceFormat::Color),
+                    storage_.colorTexture, surfaceFormat_,
                     0, width_, height_, flipped.data());
             }
 
@@ -113,9 +108,9 @@ namespace CNA::Internal::Renderers::Rlgl
                 if (data == nullptr)
                     throw std::invalid_argument("RLGL: RenderTarget2D upload data is null");
                 const std::vector<std::uint8_t> flipped =
-                    FlipRgbaRows(data, levelWidth, levelHeight);
+                    FlipRows(data, levelWidth, levelHeight, bytesPerTexel_);
                 Bridge::UpdateTexture2D(
-                    storage_.colorTexture, static_cast<int>(SurfaceFormat::Color),
+                    storage_.colorTexture, surfaceFormat_,
                     level, levelWidth, levelHeight, flipped.data());
             }
 
@@ -140,7 +135,8 @@ namespace CNA::Internal::Renderers::Rlgl
                         "RLGL: RenderTarget2D readback rectangle is invalid");
                 }
                 const std::size_t required =
-                    static_cast<std::size_t>(width) * height * 4u;
+                    static_cast<std::size_t>(width) * height *
+                    static_cast<std::size_t>(bytesPerTexel_);
                 if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
                     throw std::out_of_range(
                         "RLGL: RenderTarget2D readback destination is too small");
@@ -150,7 +146,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 Bridge::ReadRenderTarget2D(
                     readFramebuffer, storage_.colorTexture, level,
                     levelWidth, levelHeight, x, y, width, height,
-                    static_cast<std::uint8_t*>(data));
+                    static_cast<std::uint8_t*>(data), surfaceFormat_);
                 return true;
             }
 
@@ -220,7 +216,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     storage_.colorTexture,
                     storage_.multisampleColorRenderbuffer,
                     storage_.depthStencilRenderbuffer,
-                    width_, height_, depthFormat_, levelCount_,
+                    width_, height_, depthFormat_, surfaceFormat_, levelCount_,
                     storage_.multiSampleCount, preserveContents_};
             }
 
@@ -240,7 +236,9 @@ namespace CNA::Internal::Renderers::Rlgl
             int width_ = 0;
             int height_ = 0;
             int depthFormat_ = 0;
+            int surfaceFormat_ = 0;
             int levelCount_ = 1;
+            int bytesPerTexel_ = 4;
             bool preserveContents_ = false;
         };
     }

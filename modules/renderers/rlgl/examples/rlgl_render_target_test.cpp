@@ -87,8 +87,9 @@ protected:
         namespace Rlgl = CNA::Internal::Renderers::Rlgl;
 
         Check(device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Color) &&
-                  !device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4),
-              "RenderTarget2D format query advertises only the implemented Color baseline");
+                  device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4) &&
+                  !device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Dxt1),
+              "RenderTarget2D format query advertises exact implemented formats only");
 
         RenderTarget2D noDepth(
             device, kTargetSize, kTargetSize, false, SurfaceFormat::Color,

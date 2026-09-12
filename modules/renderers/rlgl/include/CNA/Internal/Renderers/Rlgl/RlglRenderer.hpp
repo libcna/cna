@@ -186,9 +186,9 @@ namespace CNA::Internal::Renderers::Rlgl
             int surfaceFormat) const override;
 
         /**
-         * @brief Classifies the currently renderable two-dimensional target format.
+         * @brief Probes exact classic-XNA two-dimensional target renderability.
          * @param surfaceFormat Raw `SurfaceFormat` ordinal.
-         * @return Supported for Color and Unsupported for pending target formats.
+         * @return Supported only when the live context completes the exact mapped framebuffer.
          */
         [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(
             int surfaceFormat) const override;
