@@ -2742,6 +2742,28 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9SamplerSourceSwizzlesSampleResult)
     CNA::TestSupport::RunCompiledEffectSamplerResultSwizzleContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, D3D9TexlddUsesItsSecondSourceAsTheSampler)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.pixelShaderUsesTextureGradients = true;
+    options.samplerStates = {
+        {Fx::SampMagFilter, Fx::FilterPoint},
+        {Fx::SampMinFilter, Fx::FilterPoint},
+        {Fx::SampMipFilter, Fx::FilterPoint},
+        {Fx::SampAddressU, Fx::AddressClamp},
+        {Fx::SampAddressV, Fx::AddressClamp},
+    };
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    EXPECT_EQ(CNA::TestSupport::DrawCompiledEffectSamplerResultSwizzle(device, effect),
+              Color(32, 64, 128, 255));
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedVertexSamplerContract)
 {
     GraphicsDevice device(

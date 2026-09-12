@@ -3821,6 +3821,37 @@ namespace
                   acceptedInvalidProbes);
     }
 
+    void CheckCompiledTextureGradientSamplerOperand(SoftwareRenderer& renderer)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderUsesTextureGradients = true;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        auto runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+        const std::array<float, 4> tint{1.0f, 1.0f, 1.0f, 1.0f};
+        runtime->SetParameterValue(FindParameter(*runtime, "Tint"), tint.data(), sizeof(tint));
+        runtime->SetTechnique(0u);
+        CompiledEffectPassStateChanges changes;
+        runtime->ApplyPass(1u, {}, changes);
+        auto* software = dynamic_cast<SoftwareCompiledEffect*>(runtime.get());
+        Check(software != nullptr, "parsed TEXLDD Effect has the wrong backend type");
+        if (software == nullptr)
+            return;
+
+        const SoftwareShaderSemanticValueEXT input{
+            MOJOSHADER_USAGE_TEXCOORD, 0u, {0.25f, 0.5f, 0.0f, 1.0f}};
+        RecordingPixelSampler sampler;
+        const auto result = software->ExecutePixelEXT(std::span(&input, 1u), &sampler);
+        Check(sampler.sampleCount == 1 &&
+                  sampler.lastRequest.lodMode == SoftwareTextureLodModeEXT::Gradients &&
+                  sampler.lastRequest.gradientX == input.value &&
+                  sampler.lastRequest.gradientY == input.value,
+              "parsed TEXLDD did not route its sampler and both gradients");
+        Check(result.colorWriteMask == 1u && result.colors[0] == sampler.result,
+              "parsed TEXLDD did not write the sampled colour");
+    }
+
     void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
@@ -6403,6 +6434,7 @@ int main()
         CheckCompiledImmediateConstantDefinitionValidation(renderer);
         CheckCompiledVertexFloatConstantRedefinition();
         CheckCompiledDuplicateDeclarationValidation(renderer);
+        CheckCompiledTextureGradientSamplerOperand(renderer);
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);

@@ -1187,6 +1187,8 @@ namespace CNA::TestSupport
         /// Emits a Shader Model 3 pixel program that squares TEXCOORD0 before applying `DSX` and
         /// `DSY`. The output exposes horizontal and vertical 2x2-quad changes independently.
         bool pixelShaderUsesDerivatives = false;
+        /// Emits a Shader Model 3 pixel program that samples with explicit `TEXLDD` gradients.
+        bool pixelShaderUsesTextureGradients = false;
         /// Emits a Shader Model 3 pixel program that encodes integer-centred `vPos.xy` in red/green
         /// and the clockwise-positive `vFace` sign in blue.
         bool pixelShaderUsesRasterInputs = false;
@@ -1417,6 +1419,7 @@ namespace CNA::TestSupport
         std::int32_t loopStep = 2,
         bool usesSubroutine = false,
         bool usesDerivatives = false,
+        bool usesTextureGradients = false,
         bool usesRasterInputs = false,
         bool usesPredication = false,
         bool usesPredicatedTexkill = false,
@@ -1688,7 +1691,8 @@ namespace CNA::TestSupport
             callGraphProbe == SyntheticCallGraphProbe::Pixel2xDepth4 ||
             callGraphProbe == SyntheticCallGraphProbe::Pixel2xDepth5;
         const bool usesShaderModel3 =
-            usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
+            usesLoop || usesSubroutine || usesDerivatives || usesTextureGradients ||
+            usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
             usesDependentTemporaryTextureCoordinate || swizzlesSampleResult ||
             invalidMixedConstantAbsolute ==
@@ -3853,13 +3857,15 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regInput, 0));
         }
-        else if (samplesTexture)
+        else if (samplesTexture || usesTextureGradients)
         {
             // plans/plan_fx.md FX-110: a cube or volume sampler reads three components, a 2D one reads
             // two, and the declaration has to say which -- both in the coordinate register's write
             // mask and in the sampler's own texture-type field.
             const bool threeComponent = samplerKind != SyntheticSamplerKind::Sampler2D;
-            const std::uint32_t coordinateMask = threeComponent ? 0x7u : 0x3u;
+            const std::uint32_t coordinateMask = usesTextureGradients
+                                                     ? 0xFu
+                                                     : threeComponent ? 0x7u : 0x3u;
             const std::uint32_t samplerTextureType =
                 samplerKind == SyntheticSamplerKind::SamplerCube
                     ? EffectFormat::SamplerTypeCube
@@ -3867,19 +3873,20 @@ namespace CNA::TestSupport
                           ? EffectFormat::SamplerTypeVolume
                           : EffectFormat::SamplerType2D;
             const std::uint32_t coordinateRegister =
-                swizzlesSampleResult ? regInput : regTexture;
+                usesShaderModel3 ? regInput : regTexture;
             // dcl t0.xy(z) for ps_2_0 or dcl_texcoord0 v0.xy(z) for ps_3_0 -- the
             // interpolated texture coordinate the vertex shader forwards.
             AppendUInt32(shader, 0x0000001Fu | (2u << 24));
-            AppendUInt32(shader, 0x80000000u | (swizzlesSampleResult ? 5u : 0u));
+            AppendUInt32(shader, 0x80000000u | (usesShaderModel3 ? 5u : 0u));
             AppendUInt32(shader, destination(coordinateRegister, 0, coordinateMask));
             // dcl_<2d|cube|volume> s<samplerRegister> -- the texture type lives in bits 27..30 of
             // the usage token (D3DSAMPLER_TEXTURE_TYPE).
             AppendUInt32(shader, 0x0000001Fu | (2u << 24));
             AppendUInt32(shader, 0x80000000u | (samplerTextureType << 27));
             AppendUInt32(shader, destination(regSampler, samplerRegister, 0xFu));
-            // texld r0, t0, s<samplerRegister>
-            AppendUInt32(shader, 0x00000042u | (3u << 24));
+            // texld r0, t0, s# or texldd r0, v0, s#, v0, v0.
+            AppendUInt32(shader, (usesTextureGradients ? 0x0000005Du : 0x00000042u) |
+                                     ((usesTextureGradients ? 5u : 3u) << 24));
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(coordinateRegister, 0));
             constexpr std::uint32_t swizzleBgra =
@@ -3887,6 +3894,11 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regSampler, samplerRegister,
                                         swizzlesSampleResult ? swizzleBgra
                                                             : swizzleIdentity));
+            if (usesTextureGradients)
+            {
+                AppendUInt32(shader, source(coordinateRegister, 0));
+                AppendUInt32(shader, source(coordinateRegister, 0));
+            }
             // mul oC0, r0, c0 -- the sampled texel modulated by Tint, so a test can read the raw
             // texel back with Tint at (1,1,1,1) and still prove the compiled shader is what ran by
             // changing Tint.
@@ -6051,6 +6063,7 @@ namespace CNA::TestSupport
             options.pixelShaderWritesMrt, options.pixelShaderUsesLoop,
             options.pixelLoopCount, options.pixelLoopInitial, options.pixelLoopStep,
             options.pixelShaderUsesSubroutine, options.pixelShaderUsesDerivatives,
+            options.pixelShaderUsesTextureGradients,
             options.pixelShaderUsesRasterInputs, options.shadersUsePredication,
             options.pixelShaderUsesPredicatedTexkill,
             options.pixelShaderUsesProjectiveModifiers,
@@ -6120,6 +6133,7 @@ namespace CNA::TestSupport
             const std::vector<std::uint8_t> vertexShader = BuildSyntheticVertexShader(
                 options.vertexShaderReadsSecondStream,
                 options.vertexShaderSamplesTexture || options.pixelShaderSamplesTexture ||
+                    options.pixelShaderUsesTextureGradients ||
                     options.pixelShaderUsesDerivatives ||
                     options.pixelShaderUsesRelativeTextureCoordinate ||
                     options.pixelShaderUsesDependentTemporaryTextureCoordinate ||
@@ -6157,6 +6171,7 @@ namespace CNA::TestSupport
                         SyntheticLegacyDepthOutput::TextureMatrix2,
                 options.shadersUsePredication,
                 options.vertexShaderSamplesTexture ||
+                    options.pixelShaderUsesTextureGradients ||
                     options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesProjectiveSwizzleModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||

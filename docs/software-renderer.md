@@ -300,8 +300,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   rejects duplicate pixel/vertex sampler declarations, duplicate Shader Model 2 pixel and vertex
   input registers, and duplicate vertex semantics, matching nine independent failures measured
   with Microsoft's compiler. The shared check retains SOFTWARE-431's legal Shader Model 3
-  disjoint-mask semantic packing. The direct Software runtime, all 160 Software CTests and all 365
-  enabled EasyGL compiled-Effect tests pass. SOFTWARE-388 replaces the remaining SM3
+  disjoint-mask semantic packing. SOFTWARE-443 then corrects the sampler operand in that common
+  validation: Microsoft-valid `TEXLDD` places `s#` at source 1, not source 3. A direct Software
+  execution proves both explicit gradients and the sampled result, and an EasyGL draw proves the
+  exact texel; the direct runtime and all 366 enabled EasyGL compiled-Effect tests pass. A genuinely
+  fresh full Software relink separately exposed six baseline failures now tracked by SOFTWARE-444.
+  SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
   swizzles, source modifiers, projection and sample-dependent temporary chains. SOFTWARE-389
