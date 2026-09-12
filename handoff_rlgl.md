@@ -55,7 +55,7 @@ it.
   MojoShader effect translation, not FNA3D itself. Both dependencies use the zlib license.
 - `CNA_RLGL_COMPILED_EFFECTS` remains OFF by default, matching CNA's other optional MojoShader
   backends. When enabled, ordinary compiled-effect draws are implemented and advertised; the exact
-  remaining advanced routes are listed under RLGL-049 below.
+  remaining advanced routes are split between RLGL-051 and RLGL-049 below.
 
 Do not create separate renderer identities per rlgl GL profile. A future ES or GL 4.3 profile should be
 a measured build configuration under the same identity only after it has real implementation and tests.
@@ -87,7 +87,7 @@ runtime-validated on Linux with SDL3 offscreen and Mesa llvmpipe:
 Do not infer final parity from this list. `GraphicsCapability::ThreeD` remains false while its
 remaining gates are open. `GraphicsCapability::CompiledEffects` is true only when
 `CNA_RLGL_COMPILED_EFFECTS=ON`; this means the ordinary public user/buffer draw routes proven by
-RLGL-048, not the advanced routes still assigned to RLGL-049.
+RLGL-048, not the advanced routes still assigned to RLGL-051/RLGL-049.
 
 ## RLGL-047/048: latest completed tasks
 
@@ -116,9 +116,10 @@ Commit `7525abdb9` added the optional classic XNA Effect Framework bootstrap:
   copies for rendered Texture2D sources, XNA-compatible depth-range mapping, and clean state recovery.
 - Every ordinary public route now has pixel evidence: indexed/non-indexed user data and bound buffers,
   typed/raw declarations, 16/32-bit indices, and non-zero vertex/start/base offsets.
-- SpriteBatch composition, multi-stream input, instancing, vertex-stage samplers, and the rest of the
-  shared compiled-effect matrix remain explicit RLGL-049 work. Texture3D first needs the global RLGL
-  resource implementation; it is never substituted with a texture of another dimension.
+- SpriteBatch composition is the independent RLGL-051 slice. Multi-stream input, instancing,
+  vertex-stage samplers, and the rest of the shared compiled-effect matrix remain RLGL-049 after
+  their global prerequisites. Texture3D first needs the global RLGL resource implementation; it is
+  never substituted with a texture of another dimension.
 - Option-on builds now advertise `GraphicsCapability::CompiledEffects`; option-off builds remain inert.
 
 ## Validation already completed through RLGL-048
@@ -195,37 +196,63 @@ tests-on `/tmp/cna-rlgl-tests` build and the 13-test RLGL compiled-effect GTest 
 standalone executables remain useful with `CNA_BUILD_TESTS=OFF`, and CI registers them when its test
 dependencies exist.
 
-## Next recommended task: RLGL-049
+## Next recommended task: RLGL-051
 
-RLGL-049 is the next unblocked classic-XNA task. Its goal is to complete the advanced compiled-effect
-draw routes and remaining shared conformance matrix without weakening the ordinary path proven by
-RLGL-048.
+Do not start RLGL-049 as a monolithic task. The refreshed audit found that its declared global
+multi-stream and instancing prerequisites are still open, and enabling either capability only for a
+compiled-effect test would activate broad stock-renderer suites that the current backend cannot yet
+pass. The plan now records the independently executable compiled SpriteBatch work as RLGL-051; that is
+the next bounded task.
 
-Start by auditing these exact reference paths rather than designing a new shader system:
+The measured implementation shape for RLGL-051 is:
 
-- EasyGL's `BindCompiledEffectForDrawEXT`, SpriteBatch compiled-effect branches, stream/divisor setup,
-  and context-restoration behavior;
-- `RlglCompiledEffect.cpp`, `RlglPrimitiveRenderer.cpp`, and the dedicated resources in
-  `RlglBridge.cpp` before changing their state boundary;
-- every currently uncalled contract in `tests/support/CNA/TestSupport/CompiledEffectConformance.hpp`.
+1. Follow EasyGL's compiled SpriteBatch route in `modules/renderers/easygl/src/EasyGLRenderer.cpp`.
+   Generate a renderer-local embedded header from the already committed
+   `modules/renderers/fna3d/effects/SpriteEffect.fxb` using the same `embed_effects.py` mechanism.
+   Do not link the FNA3D renderer or invent a new public shader system.
+2. Give `RlglSpriteBatchRenderer` an option-guarded private compiled stock SpriteEffect runtime,
+   its `MatrixTransform` parameter index, the current custom `Effect*`, and retained renderer-owned
+   vertex/index buffers matching Position0 Vector2, TextureCoordinate0 Vector2, and Color0 Vector4.
+   `SetCustomEffect` must flush on change and store the effect instead of throwing when the effect has
+   a valid compiled runtime.
+3. Apply the embedded stock SpriteEffect pass first to establish XNA sprite vertex inheritance, then
+   draw the queued run once for every pass of the caller's current technique. Preserve EasyGL's
+   pass-major ordering; do not emit each sprite through all passes independently.
+4. Extend the renderer-private compiled draw helper with optional SpriteBatch binding inputs. The
+   drawn sprite texture must override sampler slot zero, while other unassigned effect slots use the
+   `GraphicsDevice` texture collection fallback. Keep exact texture dimensions and existing sampler
+   objects.
+5. The built-in SpriteBatch path currently flips rendered-source V coordinates on the CPU. The
+   compiled path already performs render-target sampler correction, so it must bypass that CPU flip
+   to avoid an upside-down double correction.
+6. Add the four shared contracts from
+   `tests/support/CNA/TestSupport/CompiledEffectConformance.hpp`: basic custom SpriteBatch, multi-pass,
+   texture-slot precedence/source rectangle+flip, and multi-hop render-target source. Complete the task
+   only with pixel evidence plus a following stock SpriteBatch draw that proves state restoration.
 
-The task should cover at least:
+After RLGL-051, execute the dependency chain rather than skipping it:
 
-1. Run and implement `RunCompiledEffectSpriteBatchContract`, its multi-pass and texture-slot variants,
-   and its render-target-source contract. The SpriteBatch texture must win slot 0 exactly as it does in
-   EasyGL, while the effect owns its other parameters and pass sequence.
-2. Implement `RunCompiledEffectMultiStreamDrawContract` using every `GpuVertexStreamBinding`, preserving
-   per-stream stride/offset and semantic mapping on the dedicated VAO. Never collapse streams into a
-   guessed packed declaration.
-3. Implement `RunCompiledEffectInstancingDrawContract`, including divisor setup/reset, instance count,
-   base instance where the GL 3.3 profile permits it, and refusal text for a genuine profile limit.
-4. Audit vertex-stage sampler reflection/binding under `MOJOSHADER_XNA4_VERTEX_TEXTURES`; reuse the
-   renderer's texture/sampler objects and keep pixel-stage slots independent.
-5. Prove context and all GL/rlgl state restoration on success and exception paths. The named
-   Texture2D/samplerCube refusal test already proves the dedicated draw state can recover; extend this
-   to every advanced route.
-6. Run every remaining shared compiled-effect contract. Do not broaden `CompiledEffects` claims beyond
-   measured behavior, and append a concrete task for any independent Texture3D resource prerequisite.
+- RLGL-032 implements the global classic multi-stream path for stock and later compiled shaders. Every
+  reflected semantic must be searched across all `GpuVertexStreamBinding` entries, with its own VBO,
+  stride, vertex offset, and declaration; do not concatenate or guess layouts.
+- The instancing half of RLGL-016 then implements the public stock path, attribute divisors, instance
+  frequency, indexed base-vertex behavior, and divisor reset. Keep the capability false until its broad
+  shared suites pass. Occlusion queries can be split into a new concrete task if that keeps commits
+  coherent.
+- RLGL-049 can then consume both proven global facilities for compiled multi-stream/instanced draws,
+  audit vertex-stage samplers, and close the remaining shared matrix.
+
+The current code makes this boundary explicit: `RlglCompiledEffect.cpp` refuses instance counts other
+than one, more than one stream, and every vertex-stage sampler; `RlglPrimitiveRenderer.cpp` refuses the
+same global stock shapes; `RlglRenderer` has no instanced override; and `SupportsCapability` leaves both
+global capabilities false. Do not remove those guards before their public routes are validated.
+
+For the later vertex-sampler audit, MojoShader was compiled with
+`MOJOSHADER_XNA4_VERTEX_TEXTURES`. Its GL adapter reserves physical texture units 16 through 19 only
+when `GL_MAX_TEXTURE_IMAGE_UNITS` exceeds 16, while RLGL currently owns exactly sixteen logical pixel
+sampler records and validates only those slots. Add distinct renderer-private vertex-stage sampler
+storage/binding only after querying the live limit. EasyGL itself currently refuses vertex samplers, so
+record an exact shared-adapter or GL-profile limitation if the route cannot be implemented honestly.
 
 ### Critical state-synchronization warning
 
@@ -249,9 +276,11 @@ The exact state is in `plans/plan_rlgl.md`. The open or umbrella tasks at handof
 - RLGL-032: classic multi-stream vertex input.
 - RLGL-038: custom/compiled effect umbrella.
 - RLGL-043: distinct custom MRT shader outputs after custom effects exist.
-- RLGL-049: compiled-effect SpriteBatch, multi-stream, instancing, vertex samplers, restoration, and the
-  remaining conformance matrix.
+- RLGL-049: compiled-effect multi-stream, instancing, vertex samplers, restoration, and the remaining
+  conformance matrix after its prerequisite tasks.
 - RLGL-050: existing CNAEXT source `ShaderEffect`, deliberately after classic compiled effects.
+- RLGL-051: the next unblocked task, compiled-effect SpriteBatch inheritance and its four shared pixel
+  contracts.
 - RLGL-016: instancing and occlusion queries.
 - RLGL-017: lifetime, disposal, context lease, device loss/reset, restoration, diagnostics.
 - RLGL-018: representative workload ladder.
