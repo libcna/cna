@@ -225,7 +225,7 @@ EasyGL, Vulkan, Skia, and the other selected paths.
 
 ## 6. 🔌 Renderer System
 
-CNA exposes **49 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
+CNA exposes **50 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
 configuration). The canonical registration, implementation-sharing, capability, and platform-gate
 inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 
@@ -294,6 +294,8 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 - `PORTABLEGL` (CPU software OpenGL 3.x-ish pipeline via `rswinkle/PortableGL`; no GPU/window required -- see [`docs/portablegl-renderer.md`](docs/portablegl-renderer.md))
 - `TINYGL` (CPU fixed-function OpenGL 1.x subset via `C-Chads/tinygl`; 1-bit colour-key transparency, no stencil/scissor/render targets/shaders -- see [`docs/tinygl-renderer.md`](docs/tinygl-renderer.md))
 - `IGL` (facebook/igl "Intermediate Graphics Library"; drives IGL's own OpenGL/GLX or Vulkan backend, selected per process with `CNA_IGL_BACKEND` -- see [`docs/igl-renderer.md`](docs/igl-renderer.md))
+- `NANOVG` (NanoVG's compiled GL2 vector renderer; 2D-only -- see [`docs/nanovg-renderer.md`](docs/nanovg-renderer.md))
+- `RLGL` (standalone raylib `rlgl.h` low-level wrappers on a CNA-owned OpenGL 3.3 core context; under active development -- see [`plans/plan_rlgl.md`](plans/plan_rlgl.md))
 
 ### Tradeoffs
 

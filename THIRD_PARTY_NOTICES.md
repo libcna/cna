@@ -2,6 +2,31 @@ This project contains code derived from or based on portions of FNA.
 FNA is licensed under the Microsoft Public License (Ms-PL).
 FNA copyright: Ethan Lee and the MonoGame Team.
 
+## rlgl (RLGL graphics renderer)
+
+The optional `RLGL` renderer compiles the standalone `src/rlgl.h` implementation from official
+raylib 6.0 at commit `dbc56a87da87d973a9c5baa4e7438a9d20121d28`. CMake fetches the source
+only when the renderer is selected; CNA does not build or initialize the raylib framework. The
+upstream source retains this zlib/libpng license notice:
+
+```text
+Copyright (c) 2013-2026 Ramon Santamaria (@raysan5)
+
+This software is provided "as-is", without any express or implied warranty. In no event
+will the authors be held liable for any damages arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose, including commercial
+applications, and to alter it and redistribute it freely, subject to the following restrictions:
+  1. The origin of this software must not be misrepresented; you must not claim that you
+  wrote the original software. If you use this software in a product, an acknowledgment
+  in the product documentation would be appreciated but is not required.
+
+  2. Altered source versions must be plainly marked as such, and must not be misrepresented
+  as being the original software.
+
+  3. This notice may not be removed or altered from any source distribution.
+```
+
 ## DirectXMesh (build-time mesh optimization in the Content Pipeline)
 
 `modules/content-pipeline/src/Internal/DirectXMeshOptimizeFaces.cpp` is adapted from Microsoft's

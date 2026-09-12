@@ -112,6 +112,8 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_PIXIJS UINT32_C(49)
 /** @brief Identifies the NanoVG backend. */
 #define CNA_GRAPHICS_RENDERER_NANOVG UINT32_C(50)
+/** @brief Identifies the standalone rlgl backend. */
+#define CNA_GRAPHICS_RENDERER_RLGL UINT32_C(51)
 
 /**
  * @brief Largest defined renderer identity.
@@ -122,7 +124,7 @@ typedef uint32_t CNA_GraphicsRendererType;
  * Every value above @ref CNA_GRAPHICS_RENDERER_MAXIMUM is refused by every route that takes a
  * @ref CNA_GraphicsRendererType, as is any retired value within the range.
  */
-#define CNA_GRAPHICS_RENDERER_MAXIMUM CNA_GRAPHICS_RENDERER_NANOVG
+#define CNA_GRAPHICS_RENDERER_MAXIMUM CNA_GRAPHICS_RENDERER_RLGL
 
 /** @brief Fixed-width identifier for a renderer-dependent graphics capability. */
 typedef uint32_t CNA_GraphicsCapability;

@@ -1,6 +1,6 @@
 # RLGL Renderer Plan
 
-**Status:** Active — architecture audit complete; implementation baseline not started  
+**Status:** Active — dependency and renderer identity integrated; device vertical slice next
 **Target identity:** `RLGL`  
 **Primary parity reference:** EasyGL  
 **Initial profile:** OpenGL 3.3 core  
@@ -18,14 +18,14 @@ Only ✅ items count as complete. Compiling code alone is not sufficient evidenc
 ## Status summary
 
 - Repository architecture, EasyGL responsibilities, platform GL ownership, renderer selection, resource interfaces, effect flow, test infrastructure, and upstream rlgl 6.0 have been audited.
-- No RLGL implementation exists yet. Every renderer capability in the matrix remains unimplemented until its task-specific validation passes.
+- `RLGL` is a registered compile-time/runtime renderer identity backed by a SHA-256-verified standalone-rlgl dependency target. Its factory deliberately refuses device construction until RLGL-006 replaces that explicit boundary with the real vertical slice.
 - The first vertical slice is selection → CNA-created GL context → rlgl loader/init → `GraphicsDevice` → clear → present → shutdown.
 - Classic XNA 4.0 parity is the priority. Existing CNA extensions are tracked separately and do not gate the classic parity declaration.
 
 ## Current limitations
 
-1. There is not yet a selectable `RLGL` renderer or an RLGL dependency in the build.
-2. No device, resource, draw, effect, render-target, reset, or query operation is implemented.
+1. `RLGL` configures and compiles, but its factory deliberately throws until RLGL-006 supplies a real device; it never reports a fake successful renderer.
+2. No device, resource, draw, effect, render-target, reset, or query operation is implemented yet.
 3. Upstream rlgl keeps one process-global `RLGL` state object. The initial backend will therefore enforce one live RLGL device and will not claim concurrent multi-context support.
 4. Several GL 3.3 operations required for XNA fidelity have no rlgl 6.0 public wrapper: arbitrary primitive modes and 32-bit index draws, depth comparison, stencil configuration, depth bias, indexed color masks, and some multisample attachment operations. Renderer-private bridge calls through the GL dispatch loaded by rlgl are permitted only for such measured gaps; they do not create CNA public API.
 5. OpenGL 3.3 cannot provide every modern CNA extension (for example GL 4.3 compute/SSBO/image-load-store facilities). These are not classic XNA parity blockers.
@@ -62,7 +62,7 @@ No new CNAEXT graphics API will be introduced to accommodate RLGL.
 
 ### Decision
 
-Use CMake `FetchContent` to acquire the official `raysan5/raylib` repository at the exact raylib 6.0 commit `dbc56a87da87d973a9c5baa4e7438a9d20121d28`, but expose and compile only the standalone `src/rlgl.h` implementation and its required `src/external` loader headers. Do not configure, build, or link the raylib library.
+Use CMake `FetchContent` to acquire the SHA-256-verified official `raysan5/raylib` source archive at the exact raylib 6.0 commit `dbc56a87da87d973a9c5baa4e7438a9d20121d28`, but expose and compile only the standalone `src/rlgl.h` implementation and its required `src/external` loader headers. Do not configure, build, or link the raylib library.
 
 This follows CNA's existing pinned-source dependency pattern used by Sokol and PortableGL while keeping the dependency surface substantially smaller than the full framework. An offline source override will be provided through `FETCHCONTENT_SOURCE_DIR_RLGL`, consistent with CMake's standard FetchContent convention.
 
@@ -71,7 +71,7 @@ This follows CNA's existing pinned-source dependency pattern used by Sokol and P
 | Item | Decision / evidence |
 |---|---|
 | Upstream project | `https://github.com/raysan5/raylib` |
-| Revision policy | Exact immutable commit for the selected stable release; never a moving branch |
+| Revision policy | Exact immutable commit archive plus SHA-256 for the selected stable release; never a moving branch or unverified download |
 | Initial revision | raylib 6.0, `dbc56a87da87d973a9c5baa4e7438a9d20121d28` |
 | License | zlib/libpng license; preserve the upstream notice and record it in CNA third-party documentation |
 | Used source | Standalone `src/rlgl.h`; one CNA-owned implementation translation unit defines `RLGL_IMPLEMENTATION` |
@@ -232,7 +232,7 @@ Every state-family task must test both isolated application and transitions A �
 | RLGL-002 | ✅ | — | Audit upstream rlgl 6.0 profiles, configuration, loader, lifecycle, resource/state/shader/FBO/draw APIs, batch behavior, formats, limits, and restrictions. Evidence is recorded in Sections 2–7 and the matrix. |
 | RLGL-003 | ✅ | RLGL-001, RLGL-002 | Decide the dependency, initial GL profile, context ownership, renderer identity, low-level strategy, singleton policy, and private bridge boundary. Decisions are recorded above. |
 | RLGL-004 | ✅ | RLGL-001, RLGL-002 | Establish the measured EasyGL/rlgl/RLGL capability matrix and seed the concrete implementation DAG. Matrix reviewed against the public/common renderer contracts. |
-| RLGL-005 | ⬜ | RLGL-003 | Add pinned standalone-rlgl CMake acquisition, renderer identity/registry/descriptor integration, explicit C/C++ ABI identity mappings, combination rules, and identity consistency checks. Validate configure/build and identity scripts. |
+| RLGL-005 | ✅ | RLGL-003 | Added `RLGL`/`Rlgl` throughout CMake, the generated registry, dense C++ enum/classifications/tests, append-only C ABI value 51 (ABI 0.27.0), physical-module and GL-combination inventories, and an honest throwing factory pending RLGL-006. `cmake/ThirdPartyRlgl.cmake` fetches the official immutable raylib 6.0 commit archive with SHA-256 `81b06c…e126`, exposes only `src/`, defines GL 3.3, and never configures raylib. Validated 2026-09-12: RLGL configure succeeded with `FETCHCONTENT_SOURCE_DIR_RLGL=/tmp/cna-raylib-6.0-source`; `cmake --build /tmp/cna-rlgl-build3 --target cna_renderer_rlgl -j 4` built the target; C and C++ ABI header probes compiled; identity, runtime-discipline, combination, platform-SDL and whitespace gates passed. |
 | RLGL-006 | ⬜ | RLGL-005 | Implement descriptor and minimal renderer: CNA GL 3.3 core context, one-live-device guard, rlgl loader/init, drawable tracking, clear, present, viewport, presentation interval, and orderly shutdown. Validate a complete build. |
 | RLGL-007 | ⬜ | RLGL-006 | Add automated or runnable context smoke coverage for device creation, clear/present, framebuffer readback where the environment permits, resize, and clean destruction. Record headless/Xvfb requirements. |
 | RLGL-008 | ⬜ | RLGL-006 | Document enablement, dependency/offline override, supported initial platforms/profile, debugging, licensing, and current limitations; add configure/compile CI coverage without overstating runtime coverage. |

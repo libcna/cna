@@ -1,27 +1,18 @@
 # CNA renderer registry
 
-Current as of the `IGL` and `PIXIJS` renderer integrations (2026-08-15/16, developed on parallel
-branches and merged together): CNA exposes exactly **49 public renderer identities**. `IGL`
-(facebook/igl) is CNA's second portable-abstraction identity after `LLGL` -- see
-`docs/igl-renderer.md` and `plans/plan_igl.md`. `PIXIJS` renders `SpriteBatch` output through PixiJS's own
-WebGL sprite batcher, Emscripten-only -- it drives PixiJS's scene graph but commits each
-`SpriteBatch` submission immediately rather than leaving it retained, which is what keeps XNA's
-ordering, per-batch state and texture-lifetime rules intact (`docs/pixijs-renderer.md`). Before these two, as of the TINYGL addition
-(2026-08-13), there were **47**; `TINYGL` (C-Chads/tinygl) is CNA's fixed-function CPU OpenGL
-renderer -- see `docs/tinygl-renderer.md` and `plans/plan_tinygl.md`. Before that, as of the eleven-lane
-renderer integration (2026-08-11), there were **46**. `ASCII` was removed as a public renderer
-identity and its reusable
-quantization/glyph-atlas logic migrated to a renderer-neutral post-process effect,
-`CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) — see
-`docs/ascii-post-process-effect.md`. `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`,
-`PORTABLEGL`, `TINYGL`, `IGL`, and `PIXIJS` were added since. EasyGL is an internal
-implementation shared by five public GL profiles and does not add a public identity. Internal
-renderer/API choices made by bgfx, Skia, Sokol, Diligent, LLGL, or another abstraction likewise do
-not add CNA identities.
+CNA exposes exactly **50 public renderer identities** over 46 implementation families. The newest,
+`RLGL`, is the standalone `rlgl.h` low-level OpenGL renderer tracked in `plans/plan_rlgl.md`; it is
+registered while its first runnable device slice is under development. It does not build or use
+the raylib application framework. EasyGL is an internal implementation shared by five public GL
+profiles and does not add a public identity. Internal renderer/API choices made by bgfx, Sokol,
+Diligent, LLGL, IGL, or another abstraction likewise do not add CNA identities.
+
+The dense C++ enum has 50 entries. The “C ABI value” column below is intentionally not dense:
+value 19 belonged to the removed Skia identity and is permanently retired.
 
 ## Canonical public identities
 
-| # | Enum | Selector | Compile definition | Implementation / factory | Primary gate |
+| C ABI value | Enum | Selector | Compile definition | Implementation / factory | Primary gate |
 |---:|---|---|---|---|---|
 | 1 | `SdlRenderer` | `SDL_RENDERER` | `CNA_RENDERER_SDL_RENDERER` | SDL Renderer / `SdlRenderer` | none |
 | 2 | `OpenGLES2` | `OPENGLES2` | `CNA_RENDERER_EASYGL` + `CNA_GL_PROFILE_OPENGLES2` | shared EasyGL factory | non-Emscripten |
@@ -41,7 +32,6 @@ not add CNA identities.
 | 16 | `Direct2D` | `DIRECT2D` | `CNA_RENDERER_DIRECT2D` | Direct2D / `Direct2DRenderer` | Windows |
 | 17 | `Canvas` | `CANVAS` | `CNA_RENDERER_CANVAS` | Canvas / `CanvasRenderer` | Emscripten |
 | 18 | `HtmlDom` | `HTML_DOM` | `CNA_RENDERER_HTML_DOM` | HTML DOM / `HtmlDomRenderer` | Emscripten |
-| 19 | `Skia` | `SKIA` | `CNA_RENDERER_SKIA` | Skia / `SkiaRenderer` | pinned Skia artifact |
 | 20 | `Blend2D` | `BLEND2D` | `CNA_RENDERER_BLEND2D` | Blend2D / `Blend2DRenderer` | pinned Blend2D+AsmJit FetchContent |
 | 21 | `FreeDirect` | `FREEDIRECT` | `CNA_RENDERER_FREEDIRECT` | FreeDirect / `FreeDirectRenderer` | free-direct dependency |
 | 22 | `DirectX9` | `DIRECTX9` | `CNA_RENDERER_DIRECTX9` | Direct3D 9 / `DirectX9Renderer` | Windows |
@@ -72,9 +62,11 @@ not add CNA identities.
 | 47 | `TinyGL` | `TINYGL` | `CNA_RENDERER_TINYGL` | TinyGL / `TinyGLRenderer` | none (CPU-only, fetched+built source) |
 | 48 | `Igl` | `IGL` | `CNA_RENDERER_IGL` | IGL / `IglRenderer` | IGL dependency (OpenGL/GLX or Vulkan) |
 | 49 | `PixiJs` | `PIXIJS` | `CNA_RENDERER_PIXIJS` | PixiJS / `PixiJsRenderer` | Emscripten + vendored PixiJS UMD build |
+| 50 | `NanoVg` | `NANOVG` | `CNA_RENDERER_NANOVG` | NanoVG / `NanoVgRenderer` | desktop OpenGL 2.x+ |
+| 51 | `Rlgl` | `RLGL` | `CNA_RENDERER_RLGL` | standalone rlgl / `RlglRenderer` | desktop OpenGL 3.3 core + fetched header |
 
-The five GL profiles share one implementation target, macro, and factory, so 49 public identities
-map to 45 concrete implementation factories. Their public contracts remain distinct because the
+The five GL profiles share one implementation target, macro, and factory, so 50 public identities
+map to 46 concrete implementation factories. Their public contracts remain distinct because the
 selected context, shader language/profile, and supported platform differ. `FREEDIRECT` is the
 renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3 implementation.
 `EASYGL` and the temporary `DX30` are not accepted selectors or compatibility aliases.
@@ -92,9 +84,9 @@ renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3
   narrowest of the GL family -- shader-based but bounded by core OpenGL ES 2.0, see
   `docs/opengles2-renderer.md`), `OPENGLES3`, `OPENGL33`, `WEBGL1`,
   `WEBGL2`, `BGFX`, `VULKAN`, `WEBGPU`, `MAGNUM`, `DIRECTX9`, `DIRECTX10`, `DIRECTX11`, `DIRECTX12`, `SDL_GPU`,
-  `OPENGL4`, `OPENGL2`, `WICKED`, `SOKOL`, `DILIGENT`, `LLGL`, and `METAL`.
+  `OPENGL4`, `OPENGL2`, `WICKED`, `SOKOL`, `DILIGENT`, `LLGL`, `METAL`, and `RLGL`.
 
-These classes are descriptive, not blanket parity claims. `WEBGPU` remains experimental. The
+These classes are descriptive, not blanket parity claims. `WEBGPU` and the new `RLGL` remain experimental. The
 accepted Sokol route is GLCORE; the accepted LLGL runtime is OpenGL on Linux/X11/x86_64; Diligent's
 internal native API is not another CNA identity; Metal's adapted native macOS validation remains an
 external gate. A capability query and each renderer document remain authoritative for the narrower

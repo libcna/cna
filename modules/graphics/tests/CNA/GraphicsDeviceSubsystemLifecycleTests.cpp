@@ -156,8 +156,8 @@ namespace
         /// even in a single-renderer build.
         [[nodiscard]] static std::optional<GraphicsRendererType> AbsentRenderer()
         {
-            for (int ordinal = 0;
-                 ordinal <= static_cast<int>(GraphicsRendererType::PixiJs); ++ordinal)
+        for (int ordinal = 0;
+                 ordinal <= static_cast<int>(GraphicsRendererType::Rlgl); ++ordinal)
             {
                 const auto candidate = static_cast<GraphicsRendererType>(ordinal);
                 if (!GraphicsRendererSelection::IsAvailable(candidate))

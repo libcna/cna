@@ -16,9 +16,9 @@ using CNA::toStringView;
 static_assert(getCurrentGraphicsBackendCategory() == getCurrentGraphicsBackendCategory());
 static_assert(!toStringView(getCurrentGraphicsBackendCategory()).empty());
 constexpr GraphicsBackendCategory kCompileTimeCategory = getCurrentGraphicsBackendCategory();
-constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::NanoVg) + 1;
-static_assert(kPublicRendererCount == 49,
-              "GraphicsRendererType must expose all 49 genuine renderer identities");
+constexpr int kPublicRendererCount = static_cast<int>(GraphicsRendererType::Rlgl) + 1;
+static_assert(kPublicRendererCount == 50,
+              "GraphicsRendererType must expose all 50 genuine renderer identities");
 
 TEST(GraphicsBackendCategoryTest, GetCurrentGraphicsBackendCategoryDoesNotThrow)
 {
@@ -83,6 +83,7 @@ namespace
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::OpenVg:
             case GraphicsRendererType::NanoVg:
+            case GraphicsRendererType::Rlgl:
                 return GraphicsBackendCategory::TranslationLayer;
 
             case GraphicsRendererType::Software:
