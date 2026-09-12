@@ -3632,6 +3632,41 @@ namespace
                   acceptedInvalidProbes);
     }
 
+    void CheckCompiledSamplerDeclarationValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticMissingSamplerDeclarationProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel20,
+            Probe::Pixel30,
+            Probe::Vertex30,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.missingSamplerDeclarationProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted undeclared sampler probes: " +
+                  acceptedInvalidProbes);
+    }
+
     void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
@@ -6210,6 +6245,7 @@ int main()
         CheckCompiledOutputRegisterSourceValidation(renderer);
         CheckCompiledAddressRegisterAccessValidation(renderer);
         CheckCompiledSamplerRegisterSourceValidation(renderer);
+        CheckCompiledSamplerDeclarationValidation(renderer);
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);

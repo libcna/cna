@@ -900,6 +900,19 @@ namespace CNA::TestSupport
         Vertex30,
     };
 
+    /** @brief Shader stage/profile that samples an undeclared sampler register. */
+    enum class SyntheticMissingSamplerDeclarationProbe
+    {
+        /** @brief Emit no missing sampler declaration. */
+        None,
+        /** @brief Sample undeclared s0 from a ps_2_0 program. */
+        Pixel20,
+        /** @brief Sample undeclared s0 from a ps_3_0 program. */
+        Pixel30,
+        /** @brief Sample undeclared s0 from a vs_3_0 program. */
+        Vertex30,
+    };
+
     /** @brief A typed flow-control constant used as an ordinary arithmetic source by a probe. */
     enum class SyntheticTypedControlSourceProbe
     {
@@ -1269,6 +1282,9 @@ namespace CNA::TestSupport
         /** @brief Selects a sampler pseudo-register used as an ordinary source. */
         SyntheticSamplerRegisterSourceProbe samplerRegisterSourceProbe =
             SyntheticSamplerRegisterSourceProbe::None;
+        /** @brief Selects a texture instruction whose sampler lacks a DCL. */
+        SyntheticMissingSamplerDeclarationProbe missingSamplerDeclarationProbe =
+            SyntheticMissingSamplerDeclarationProbe::None;
         /** @brief Selects a typed flow-control constant used as an ordinary source. */
         SyntheticTypedControlSourceProbe typedControlSourceProbe =
             SyntheticTypedControlSourceProbe::None;
@@ -1396,6 +1412,8 @@ namespace CNA::TestSupport
             SyntheticOutputRegisterSourceProbe::None,
         SyntheticSamplerRegisterSourceProbe samplerRegisterSourceProbe =
             SyntheticSamplerRegisterSourceProbe::None,
+        SyntheticMissingSamplerDeclarationProbe missingSamplerDeclarationProbe =
+            SyntheticMissingSamplerDeclarationProbe::None,
         SyntheticTypedControlSourceProbe typedControlSourceProbe =
             SyntheticTypedControlSourceProbe::None,
         SyntheticSpecialControlSourceProbe specialControlSourceProbe =
@@ -1516,6 +1534,14 @@ namespace CNA::TestSupport
             samplerRegisterSourceProbe == SyntheticSamplerRegisterSourceProbe::Pixel20;
         const bool probesPixel30SamplerSource =
             samplerRegisterSourceProbe == SyntheticSamplerRegisterSourceProbe::Pixel30;
+        const bool probesMissingPixelSamplerDeclaration =
+            missingSamplerDeclarationProbe ==
+                SyntheticMissingSamplerDeclarationProbe::Pixel20 ||
+            missingSamplerDeclarationProbe ==
+                SyntheticMissingSamplerDeclarationProbe::Pixel30;
+        const bool probesMissingPixel30SamplerDeclaration =
+            missingSamplerDeclarationProbe ==
+            SyntheticMissingSamplerDeclarationProbe::Pixel30;
         const bool probesPixel30TypedControlSource =
             typedControlSourceProbe == SyntheticTypedControlSourceProbe::PixelInteger ||
             typedControlSourceProbe == SyntheticTypedControlSourceProbe::PixelBoolean;
@@ -1577,7 +1603,8 @@ namespace CNA::TestSupport
             probesPixelMiscellaneousInput ||
             probesPixelSemanticDeclarations ||
             probesPixel30ConstantControl || probesPixelFlowControl ||
-            (probesPixelCallGraph && !probesPixel2xCallGraph);
+            (probesPixelCallGraph && !probesPixel2xCallGraph) ||
+            probesMissingPixel30SamplerDeclaration;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -3597,6 +3624,22 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
         }
+        else if (probesMissingPixelSamplerDeclaration)
+        {
+            const bool shaderModel3 = missingSamplerDeclarationProbe ==
+                                      SyntheticMissingSamplerDeclarationProbe::Pixel30;
+            const std::uint32_t coordinateRegister = shaderModel3 ? regInput : regTexture;
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl texture coordinate
+            AppendUInt32(shader, 0x80000000u | (shaderModel3 ? 5u : 0u));
+            AppendUInt32(shader, destination(coordinateRegister, 0, 0x3u));
+            AppendUInt32(shader, 0x00000042u | (3u << 24)); // texld r0, input, s0
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(coordinateRegister, 0));
+            AppendUInt32(shader, source(regSampler, 0));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+        }
         else if (samplesTexture)
         {
             // plans/plan_fx.md FX-110: a cube or volume sampler reads three components, a 2D one reads
@@ -3773,6 +3816,9 @@ namespace CNA::TestSupport
                                                                 SyntheticSamplerRegisterSourceProbe
                                                                     samplerRegisterSourceProbe =
                                                                         SyntheticSamplerRegisterSourceProbe::None,
+                                                                SyntheticMissingSamplerDeclarationProbe
+                                                                    missingSamplerDeclarationProbe =
+                                                                        SyntheticMissingSamplerDeclarationProbe::None,
                                                                 SyntheticTypedControlSourceProbe
                                                                     typedControlSourceProbe =
                                                                         SyntheticTypedControlSourceProbe::None,
@@ -3868,6 +3914,9 @@ namespace CNA::TestSupport
                 SyntheticAddressRegisterAccessProbe::Vertex30MovDestination;
         const bool probesVertex30SamplerSource =
             samplerRegisterSourceProbe == SyntheticSamplerRegisterSourceProbe::Vertex30;
+        const bool probesMissingVertexSamplerDeclaration =
+            missingSamplerDeclarationProbe ==
+            SyntheticMissingSamplerDeclarationProbe::Vertex30;
         const bool probesVertex30TypedControlSource =
             typedControlSourceProbe == SyntheticTypedControlSourceProbe::VertexInteger ||
             typedControlSourceProbe == SyntheticTypedControlSourceProbe::VertexBoolean;
@@ -3927,7 +3976,7 @@ namespace CNA::TestSupport
             probesVertex30OutputSource || probesVertex30Address || probesVertex30SamplerSource ||
             probesVertex30TypedControlSource || probesVertex30SpecialControlSource ||
             probesVertexRelativeAddressing || probesVertexSemanticDeclarations ||
-            probesVertex30CallGraph;
+            probesVertex30CallGraph || probesMissingVertexSamplerDeclaration;
         const bool probesVertex2xTemporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xMaximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange;
@@ -4862,7 +4911,20 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regInput, 0));
             AppendUInt32(shader, source(regTemp, 0));
         }
-        if (samplesTexture)
+        if (probesMissingVertexSamplerDeclaration)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, c0
+            AppendUInt32(shader, destination(regTemp, 0));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x0000005Fu | (3u << 24)); // texldl r1, r0, s0
+            AppendUInt32(shader, destination(regTemp, 1));
+            AppendUInt32(shader, source(regTemp, 0));
+            AppendUInt32(shader, source(regSampler, 0));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov o0, v0
+            AppendUInt32(shader, destination(regTexCoordOut, 0));
+            AppendUInt32(shader, source(regInput, 0));
+        }
+        else if (samplesTexture)
         {
             // texldl r0, v1, s#; mov o0, r0. The texture therefore owns the complete clip-space
             // position and makes the vertex-stage lookup directly observable in target coverage.
@@ -5703,6 +5765,7 @@ namespace CNA::TestSupport
             options.destinationRegisterAccessProbe,
             options.outputRegisterSourceProbe,
             options.samplerRegisterSourceProbe,
+            options.missingSamplerDeclarationProbe,
             options.typedControlSourceProbe,
             options.specialControlSourceProbe,
             options.relativeAddressingProbe,
@@ -5797,6 +5860,7 @@ namespace CNA::TestSupport
                 options.outputRegisterSourceProbe,
                 options.addressRegisterAccessProbe,
                 options.samplerRegisterSourceProbe,
+                options.missingSamplerDeclarationProbe,
                 options.typedControlSourceProbe,
                 options.specialControlSourceProbe,
                 options.vertexInstructionSlotProbe,

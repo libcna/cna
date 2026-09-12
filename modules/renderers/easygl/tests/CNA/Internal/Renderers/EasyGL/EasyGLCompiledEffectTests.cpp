@@ -1629,6 +1629,31 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticSamplerRegisterSourceProbe::Pixel30,
         CNA::TestSupport::SyntheticSamplerRegisterSourceProbe::Vertex30));
 
+class EasyGLCompiledEffectMissingSamplerDeclarationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticMissingSamplerDeclarationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectMissingSamplerDeclarationTest, RejectsTextureInstruction)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.missingSamplerDeclarationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    UndeclaredSampler,
+    EasyGLCompiledEffectMissingSamplerDeclarationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticMissingSamplerDeclarationProbe::Pixel20,
+        CNA::TestSupport::SyntheticMissingSamplerDeclarationProbe::Pixel30,
+        CNA::TestSupport::SyntheticMissingSamplerDeclarationProbe::Vertex30));
+
 class EasyGLCompiledEffectTypedControlSourceTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticTypedControlSourceProbe>
 {

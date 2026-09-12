@@ -288,7 +288,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   graphs, complete label definitions and explicit subroutine termination. SOFTWARE-439 repairs the
   adjacent over-validation bug: Shader Model 3 accepts the Microsoft-defined `l0..l2047` range while
   Shader Model 2.x remains capped at `l15`; four pixel/vertex boundary programs pass with all 334
-  enabled EasyGL compiled-Effect tests. SOFTWARE-388 replaces the remaining SM3
+  enabled EasyGL compiled-Effect tests. SOFTWARE-440 then proves, against the real Microsoft
+  assembler, that `ps_2_0`/`ps_3_0` `TEXLD` and `vs_3_0` `TEXLDL` require a sampler `DCL`;
+  both active MojoShader profiles already rejected all three undeclared forms, so this source-level
+  suspicion required tests and documentation but no renderer repair. SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
   swizzles, source modifiers, projection and sample-dependent temporary chains. SOFTWARE-389
