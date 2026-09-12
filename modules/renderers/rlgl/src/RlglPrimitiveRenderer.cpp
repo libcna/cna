@@ -70,7 +70,7 @@ namespace CNA::Internal::Renderers::Rlgl
         [[nodiscard]] std::vector<VertexAttributeBinding> BuildStockAttributes(
             const IVertexBufferRenderer& vertexBuffer,
             const bool vertexColorEnabled, const bool textureEnabled,
-            const bool lightingEnabled, const bool dualTexture)
+            const bool lightingEnabled, const bool dualTexture, const bool skinned)
         {
             const std::size_t nativeStride = GetVertexStride(vertexBuffer);
             if (nativeStride == 0 || nativeStride >
@@ -83,10 +83,19 @@ namespace CNA::Internal::Renderers::Rlgl
             VertexElement inferredPosition(
                 0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0);
             VertexElement inferredColor(
-                12, VertexElementFormat::Color, VertexElementUsage::Color, 0);
+                skinned ? 52 : 12,
+                VertexElementFormat::Color, VertexElementUsage::Color, 0);
             VertexElement inferredTextureCoordinate(
-                vertexColorEnabled ? 16 : 12,
+                skinned ? 24 : (vertexColorEnabled ? 16 : 12),
                 VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0);
+            VertexElement inferredNormal(
+                12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0);
+            VertexElement inferredBlendWeight(
+                32, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0);
+            VertexElement inferredByteBlendIndices(
+                48, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0);
+            VertexElement inferredVectorBlendIndices(
+                48, VertexElementFormat::Vector4, VertexElementUsage::BlendIndices, 0);
             const VertexElement* position = FindElement(
                 declaration, VertexElementUsage::Position, 0);
             const VertexElement* color = FindElement(
@@ -97,12 +106,26 @@ namespace CNA::Internal::Renderers::Rlgl
                 declaration, VertexElementUsage::TextureCoordinate, 1);
             const VertexElement* normal = FindElement(
                 declaration, VertexElementUsage::Normal, 0);
+            const VertexElement* blendWeight = FindElement(
+                declaration, VertexElementUsage::BlendWeight, 0);
+            const VertexElement* blendIndices = FindElement(
+                declaration, VertexElementUsage::BlendIndices, 0);
             if (declaration.empty() && stride >= 12) position = &inferredPosition;
-            if (declaration.empty() && stride >= 16) color = &inferredColor;
-            if (declaration.empty() &&
-                stride >= inferredTextureCoordinate.getOffsetProperty() + 8)
+            if (declaration.empty() && skinned &&
+                (stride == 52 || stride == 56 || stride == 64))
             {
                 textureCoordinate = &inferredTextureCoordinate;
+                normal = &inferredNormal;
+                blendWeight = &inferredBlendWeight;
+                blendIndices = stride == 64
+                    ? &inferredVectorBlendIndices : &inferredByteBlendIndices;
+                if (stride == 56) color = &inferredColor;
+            }
+            else if (declaration.empty())
+            {
+                if (stride >= 16) color = &inferredColor;
+                if (stride >= inferredTextureCoordinate.getOffsetProperty() + 8)
+                    textureCoordinate = &inferredTextureCoordinate;
             }
             if (position == nullptr ||
                 position->getVertexElementFormatProperty() != VertexElementFormat::Vector3)
@@ -145,11 +168,32 @@ namespace CNA::Internal::Renderers::Rlgl
                     "RLGL: DualTextureEffect requires TextureCoordinate1 as Vector2 "
                     "(plans/plan_rlgl.md RLGL-035)");
             }
+            if (skinned &&
+                (blendWeight == nullptr ||
+                 blendWeight->getVertexElementFormatProperty() !=
+                     VertexElementFormat::Vector4))
+            {
+                throw System::NotSupportedException(
+                    "RLGL: SkinnedEffect requires BlendWeight0 as Vector4 "
+                    "(plans/plan_rlgl.md RLGL-037)");
+            }
+            if (skinned &&
+                (blendIndices == nullptr ||
+                 (blendIndices->getVertexElementFormatProperty() !=
+                      VertexElementFormat::Byte4 &&
+                  blendIndices->getVertexElementFormatProperty() !=
+                      VertexElementFormat::Vector4)))
+            {
+                throw System::NotSupportedException(
+                    "RLGL: SkinnedEffect requires BlendIndices0 as Byte4 or Vector4 "
+                    "(plans/plan_rlgl.md RLGL-037)");
+            }
 
             std::vector<VertexAttributeBinding> result;
             result.reserve(
                 1u + (vertexColorEnabled ? 1u : 0u) + (textureEnabled ? 1u : 0u) +
-                (lightingEnabled ? 1u : 0u) + (dualTexture ? 1u : 0u));
+                (lightingEnabled ? 1u : 0u) + (dualTexture ? 1u : 0u) +
+                (skinned ? 2u : 0u));
             result.push_back(DescribeVertexAttribute(*position, 0, stride));
             if (vertexColorEnabled)
                 result.push_back(DescribeVertexAttribute(*color, 1, stride));
@@ -159,6 +203,11 @@ namespace CNA::Internal::Renderers::Rlgl
                 result.push_back(DescribeVertexAttribute(*normal, 3, stride));
             if (dualTexture)
                 result.push_back(DescribeVertexAttribute(*textureCoordinate1, 4, stride));
+            if (skinned)
+            {
+                result.push_back(DescribeVertexAttribute(*blendWeight, 5, stride));
+                result.push_back(DescribeVertexAttribute(*blendIndices, 6, stride));
+            }
             return result;
         }
 
@@ -170,7 +219,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     params.vertexStreams[stream].instanceFrequency != 0;
             if (params.customEffectRequested || params.customEffectRenderer != nullptr ||
                 params.compiledEffectRuntime != nullptr || params.envMapping ||
-                params.skinned || params.pbr ||
+                params.pbr ||
                 params.instanceCount != 1 || params.vertexStreamCount > 1 || hasInstanceStream)
             {
                 throw System::NotSupportedException(
@@ -209,7 +258,7 @@ namespace CNA::Internal::Renderers::Rlgl
 
             const std::vector<VertexAttributeBinding> attributes = BuildStockAttributes(
                 vertexBuffer, params.vertexColorEnabled, params.textureEnabled,
-                params.lightingEnabled, params.dualTexture);
+                params.lightingEnabled, params.dualTexture, params.skinned);
             Matrix worldViewProjection = world * view * projection;
             if (applyXnaPixelCenter && viewportWidth > 0 && viewportHeight > 0 &&
                 multiSampleCount <= 1)

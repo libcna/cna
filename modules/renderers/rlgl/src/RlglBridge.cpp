@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdarg>
 #include <cstdlib>
 #include <cstdio>
@@ -1126,6 +1127,8 @@ layout(location = 1) in vec4 vertexColor;
 layout(location = 2) in vec2 vertexTexCoord;
 layout(location = 3) in vec3 vertexNormal;
 layout(location = 4) in vec2 vertexTexCoord1;
+layout(location = 5) in vec4 vertexBoneWeights;
+layout(location = 6) in vec4 vertexBoneIndices;
 
 uniform mat4 worldViewProjection;
 uniform mat4 world;
@@ -1150,6 +1153,9 @@ uniform vec3 light1Specular;
 uniform vec3 light2Specular;
 uniform vec3 specularColor;
 uniform float specularPower;
+uniform float skinned;
+uniform vec4 boneRows[216];
+uniform int weightsPerVertex;
 
 out vec4 fragmentVertexColor;
 out vec2 fragmentTexCoord;
@@ -1160,6 +1166,29 @@ out vec3 fragmentNormal;
 out vec3 fragmentVertexLitRgb;
 out vec3 fragmentVertexSpecularRgb;
 out float fragmentVertexAlpha;
+
+void addBoneRows(int boneIndex, float weight,
+                 inout vec4 row0, inout vec4 row1, inout vec4 row2)
+{
+    int base = boneIndex * 3;
+    row0 += boneRows[base] * weight;
+    row1 += boneRows[base + 1] * weight;
+    row2 += boneRows[base + 2] * weight;
+}
+
+vec3 transformSkinNormal(mat3 matrix, vec3 normal)
+{
+    vec3 column0 = matrix[0];
+    vec3 column1 = matrix[1];
+    vec3 column2 = matrix[2];
+    vec3 cofactor0 = cross(column1, column2);
+    vec3 cofactor1 = cross(column2, column0);
+    vec3 cofactor2 = cross(column0, column1);
+    float determinant = dot(column0, cofactor0);
+    vec3 transformed = mat3(cofactor0, cofactor1, cofactor2) * normal;
+    return (abs(determinant) > 1e-6)
+        ? transformed * sign(determinant) : matrix * normal;
+}
 
 void computeLights(vec3 worldPosition, vec3 normal, out vec3 litRgb, out vec3 specularRgb)
 {
@@ -1187,16 +1216,51 @@ void computeLights(vec3 worldPosition, vec3 normal, out vec3 litRgb, out vec3 sp
 
 void main()
 {
-    gl_Position = worldViewProjection * vec4(vertexPosition, 1.0);
+    vec3 effectPosition = vertexPosition;
+    vec3 effectNormal = vertexNormal;
+    if (skinned > 0.5)
+    {
+        vec4 skinRow0 = vec4(0.0);
+        vec4 skinRow1 = vec4(0.0);
+        vec4 skinRow2 = vec4(0.0);
+        addBoneRows(int(vertexBoneIndices.x), vertexBoneWeights.x,
+                    skinRow0, skinRow1, skinRow2);
+        if (weightsPerVertex >= 2)
+        {
+            addBoneRows(int(vertexBoneIndices.y), vertexBoneWeights.y,
+                        skinRow0, skinRow1, skinRow2);
+        }
+        if (weightsPerVertex >= 4)
+        {
+            addBoneRows(int(vertexBoneIndices.z), vertexBoneWeights.z,
+                        skinRow0, skinRow1, skinRow2);
+            addBoneRows(int(vertexBoneIndices.w), vertexBoneWeights.w,
+                        skinRow0, skinRow1, skinRow2);
+        }
+        vec4 position = vec4(vertexPosition, 1.0);
+        effectPosition = vec3(
+            dot(skinRow0, position),
+            dot(skinRow1, position),
+            dot(skinRow2, position));
+        mat3 skinMatrix = mat3(
+            vec3(skinRow0.x, skinRow1.x, skinRow2.x),
+            vec3(skinRow0.y, skinRow1.y, skinRow2.y),
+            vec3(skinRow0.z, skinRow1.z, skinRow2.z));
+        vec3 skinNormal = transformSkinNormal(skinMatrix, vertexNormal);
+        float skinNormalLength = length(skinNormal);
+        effectNormal = skinNormalLength > 1e-6
+            ? skinNormal / skinNormalLength : vertexNormal;
+    }
+    gl_Position = worldViewProjection * vec4(effectPosition, 1.0);
     gl_PointSize = 1.0;
     fragmentVertexColor = (vertexColorEnabled > 0.5) ? vertexColor : vec4(1.0);
     fragmentTexCoord = vertexTexCoord;
     fragmentTexCoord1 = vertexTexCoord1;
     fragmentFogFactor = 1.0 - clamp(
-        dot(vec4(vertexPosition, 1.0), fogVector), 0.0, 1.0);
-    fragmentWorldPosition = (world * vec4(vertexPosition, 1.0)).xyz;
+        dot(vec4(effectPosition, 1.0), fogVector), 0.0, 1.0);
+    fragmentWorldPosition = (world * vec4(effectPosition, 1.0)).xyz;
     mat3 normalMatrix = mat3(normalMatrix0, normalMatrix1, normalMatrix2);
-    fragmentNormal = normalMatrix * vertexNormal;
+    fragmentNormal = normalMatrix * effectNormal;
     fragmentVertexLitRgb = vec3(0.0);
     fragmentVertexSpecularRgb = vec3(0.0);
     fragmentVertexAlpha = diffuseColor.a * fragmentVertexColor.a;
@@ -1310,6 +1374,15 @@ void main()
         PrimitivePipeline pipeline;
         try
         {
+            GLint maxVertexUniformComponents = 0;
+            glGetIntegerv(
+                GL_MAX_VERTEX_UNIFORM_COMPONENTS, &maxVertexUniformComponents);
+            if (maxVertexUniformComponents < 1024)
+            {
+                throw std::runtime_error(
+                    "RLGL: GL context does not provide the OpenGL 3.3 minimum of 1024 "
+                    "vertex uniform components required by the 72-bone stock pipeline");
+            }
             pipeline.program = rlLoadShaderProgram(vertexShader, fragmentShader);
             if (pipeline.program == 0 || pipeline.program == rlGetShaderIdDefault())
                 throw std::runtime_error("RLGL: primitive shader creation failed");
@@ -1342,6 +1415,12 @@ void main()
                 rlGetLocationUniform(pipeline.program, "lightingEnabled");
             pipeline.preferPerPixelLightingLocation =
                 rlGetLocationUniform(pipeline.program, "preferPerPixelLighting");
+            pipeline.skinnedLocation =
+                rlGetLocationUniform(pipeline.program, "skinned");
+            pipeline.boneRowsLocation =
+                rlGetLocationUniform(pipeline.program, "boneRows[0]");
+            pipeline.weightsPerVertexLocation =
+                rlGetLocationUniform(pipeline.program, "weightsPerVertex");
             pipeline.ambientColorLocation =
                 rlGetLocationUniform(pipeline.program, "ambientColor");
             pipeline.emissiveColorLocation =
@@ -1374,6 +1453,8 @@ void main()
                 pipeline.alphaTestLocation < 0 || pipeline.fogVectorLocation < 0 ||
                 pipeline.fogColorLocation < 0 || pipeline.lightingEnabledLocation < 0 ||
                 pipeline.preferPerPixelLightingLocation < 0 ||
+                pipeline.skinnedLocation < 0 || pipeline.boneRowsLocation < 0 ||
+                pipeline.weightsPerVertexLocation < 0 ||
                 pipeline.ambientColorLocation < 0 || pipeline.emissiveColorLocation < 0 ||
                 pipeline.eyePositionLocation < 0 ||
                 pipeline.lightDirectionLocations[0] < 0 ||
@@ -1536,6 +1617,43 @@ void main()
         rlSetUniform(
             pipeline.preferPerPixelLightingLocation, &perPixelFlag,
             RL_SHADER_UNIFORM_FLOAT, 1);
+        const float skinnedFlag = params.skinned ? 1.0f : 0.0f;
+        rlSetUniform(
+            pipeline.skinnedLocation, &skinnedFlag, RL_SHADER_UNIFORM_FLOAT, 1);
+        if (params.skinned)
+        {
+            if (params.boneCount <= 0 || params.boneCount > 72 ||
+                (params.weightsPerVertex != 1 && params.weightsPerVertex != 2 &&
+                 params.weightsPerVertex != 4))
+            {
+                rlDisableShader();
+                throw std::invalid_argument("RLGL: invalid SkinnedEffect bone parameters");
+            }
+            std::array<float, 72 * 12> boneRows{};
+            for (int bone = 0; bone < params.boneCount; ++bone)
+            {
+                const float* const matrixValues = params.boneTransforms + bone * 16;
+                float* const rows = boneRows.data() + bone * 12;
+                rows[0] = matrixValues[0];
+                rows[1] = matrixValues[4];
+                rows[2] = matrixValues[8];
+                rows[3] = matrixValues[12];
+                rows[4] = matrixValues[1];
+                rows[5] = matrixValues[5];
+                rows[6] = matrixValues[9];
+                rows[7] = matrixValues[13];
+                rows[8] = matrixValues[2];
+                rows[9] = matrixValues[6];
+                rows[10] = matrixValues[10];
+                rows[11] = matrixValues[14];
+            }
+            rlSetUniform(
+                pipeline.boneRowsLocation, boneRows.data(),
+                RL_SHADER_UNIFORM_VEC4, params.boneCount * 3);
+            rlSetUniform(
+                pipeline.weightsPerVertexLocation, &params.weightsPerVertex,
+                RL_SHADER_UNIFORM_INT, 1);
+        }
         rlSetUniform(
             pipeline.ambientColorLocation, params.ambientColor, RL_SHADER_UNIFORM_VEC3, 1);
         rlSetUniform(
@@ -1640,6 +1758,7 @@ void main()
         snapshot.texture1 = texture1;
         snapshot.textureEnabled = params.textureEnabled;
         snapshot.dualTexture = params.dualTexture;
+        snapshot.skinned = params.skinned;
         if (indexBuffer == 0)
         {
             if (mode == GL_TRIANGLES)
@@ -1701,6 +1820,15 @@ void main()
     PrimitiveDrawSnapshot GetPrimitiveDrawSnapshotForTesting()
     {
         return lastPrimitiveDraw;
+    }
+
+    int GetMaxVertexUniformComponentsForTesting()
+    {
+        RequireInitialized("vertex-uniform limit query");
+        GLint result = 0;
+        glGetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS, &result);
+        ThrowIfGlError("vertex-uniform limit query");
+        return result;
     }
 
     VertexAttributeSnapshot GetVertexAttributeSnapshotForTesting(

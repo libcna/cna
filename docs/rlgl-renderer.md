@@ -56,7 +56,8 @@ success.
 | Primitive and user draw calls | ✅ | Every point/line/triangle list/strip topology passed indexed and non-indexed pixels, exact 16/32-bit index dispatch, declaration semantic/type mapping, offsets, WVP transforms, public user routes, and SpriteBatch-to-primitive rebinding in `RLGL-031` |
 | BasicEffect and AlphaTestEffect | ✅ | Texture/default-white sampling, Position0/Normal0/Color0/UV0 semantics, diffuse/emissive/alpha/vertex color, all eight alpha comparisons, fog, WVP, pixel-center correction, three-light diffuse/specular BasicEffect lighting, per-vertex/per-pixel selection, inverse-transpose normals, and state transitions passed `RLGL-033`/`RLGL-034` |
 | DualTextureEffect | ✅ | Independent UV0/UV1 semantics and texture/sampler slots, doubled first-texture combine, null/default-white inputs, vertex color, diffuse/alpha, fog, missing-semantic diagnostics, and stock-effect state transitions passed `RLGL-035` |
-| Cube/skinned/custom effects and general 3D workloads | ❌ | These shapes remain explicit failures owned by `RLGL-036`–`RLGL-038`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
+| SkinnedEffect | ✅ | 1/2/4 weighted influences, all 72 bones, Byte4/Vector4 indices, joint/world normal transforms, textures/materials, three-light/specular shading, vertex color, per-vertex/per-pixel selection, post-skin fog, malformed declarations, and state transitions passed `RLGL-037` |
+| Cube/custom effects and general 3D workloads | ❌ | These shapes remain explicit failures owned by `RLGL-036`/`RLGL-038`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
 | Render targets, MRT, cube resources, instancing, queries | ❌ | Explicitly unavailable until their recorded tasks pass focused validation |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
@@ -65,6 +66,9 @@ success.
 all other capability results remain false. Native GL support alone is not treated as a CNA
 implementation promise. The renderer opts in only after its complete path and observable behavior
 are tested.
+
+`SkinnedEffect::VertexColorEnabled` is existing CNAEXT surface, not classic XNA 4.0. It works as a
+natural part of the same validated stock vertex path; no RLGL-specific public API was added.
 
 ## Profile and platforms
 
@@ -96,7 +100,8 @@ cmake --build cmake-build-rlgl --parallel 3 --target \
       cna_test_rlgl_state cna_test_rlgl_spritebatch cna_test_rlgl_buffer \
       cna_test_rlgl_primitive cna_test_rlgl_effect cna_test_rlgl_xna_pixel_center \
       cna_test_rlgl_basiceffect_lighting cna_test_rlgl_dual_texture_effect \
-      cna_test_rlgl_dual_texture_independent_uv
+      cna_test_rlgl_dual_texture_independent_uv cna_test_rlgl_skinned_effect \
+      cna_test_rlgl_skinned_terms
 ```
 
 The smoke target is deliberately available with `CNA_BUILD_TESTS=OFF`. On a Linux machine with
@@ -127,13 +132,17 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_dual_texture_effect
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_dual_texture_independent_uv
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_skinned_effect
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_skinned_terms
 ```
 
 With `CNA_BUILD_TESTS=ON`, the executables are registered as `Rlgl_Smoke`, `Rlgl_Texture`,
 `Rlgl_Sampler`, `Rlgl_State`, `Rlgl_SpriteBatch`, `Rlgl_Buffer`, `Rlgl_Primitive`, `Rlgl_Effect`,
 `Rlgl_XnaPixelCenter`, ten focused BasicEffect-lighting fixtures, and two DualTextureEffect
-fixtures. They are labelled `Rlgl` plus their focused graphics category, with the proven
-offscreen environment attached to each CTest entry.
+fixtures, plus fourteen SkinnedEffect fixtures. They are labelled `Rlgl` plus their focused
+graphics category, with the proven offscreen environment attached to each CTest entry.
 
 ## Dependency and offline builds
 
@@ -186,6 +195,6 @@ The dependency uses raylib's zlib/libpng license. Its required notice is preserv
 The dedicated `.github/workflows/rlgl-ci.yml` lane configures the Linux renderer against an
 independently checked-out copy of the exact upstream commit and compiles the renderer plus the
   smoke, texture, sampler, state, SpriteBatch, buffer, primitive, effect, XNA pixel-center, and
-  BasicEffect-lighting and DualTextureEffect executables. It intentionally does not yet claim
-  hosted runtime coverage; promotion to a CI runtime gate belongs to `RLGL-021` after the runner's
-  context path is proven.
+  BasicEffect-lighting, DualTextureEffect, and SkinnedEffect executables. It intentionally does not
+  yet claim hosted runtime coverage; promotion to a CI runtime gate belongs to `RLGL-021` after the
+  runner's context path is proven.

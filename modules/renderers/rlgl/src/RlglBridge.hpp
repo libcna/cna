@@ -118,6 +118,9 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int fogColorLocation = -1;
         int lightingEnabledLocation = -1;
         int preferPerPixelLightingLocation = -1;
+        int skinnedLocation = -1;
+        int boneRowsLocation = -1;
+        int weightsPerVertexLocation = -1;
         int ambientColorLocation = -1;
         int emissiveColorLocation = -1;
         int eyePositionLocation = -1;
@@ -142,6 +145,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         bool indexed = false;
         bool textureEnabled = false;
         bool dualTexture = false;
+        bool skinned = false;
         bool usedRlglDrawWrapper = false;
     };
 
@@ -432,6 +436,12 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @return Most recent draw snapshot.
      */
     [[nodiscard]] PrimitiveDrawSnapshot GetPrimitiveDrawSnapshotForTesting();
+
+    /**
+     * @brief Returns the live vertex-uniform component limit for palette validation.
+     * @return GL_MAX_VERTEX_UNIFORM_COMPONENTS reported by the current context.
+     */
+    [[nodiscard]] int GetMaxVertexUniformComponentsForTesting();
 
     /**
      * @brief Applies one generic attribute through rlgl and reads its native VAO state.

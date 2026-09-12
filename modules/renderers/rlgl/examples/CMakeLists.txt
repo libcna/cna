@@ -123,6 +123,47 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_dual_texture_independent_uv PRIVATE SDL3::SDL3main)
     endif()
 
+    add_executable(cna_test_rlgl_skinned_terms
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_skinned_terms.cpp")
+    target_link_libraries(cna_test_rlgl_skinned_terms
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_skinned_terms PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_skinned_effect rlgl_skinned_effect_test.cpp)
+    target_include_directories(cna_test_rlgl_skinned_effect
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_skinned_effect
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_skinned_effect PRIVATE SDL3::SDL3main)
+    endif()
+
+    set(RLGL_SKINNED_EFFECT_TESTS
+        identity_bones
+        translation_bone
+        twobone_blend
+        vector4_bone_indices
+        weightspervertex
+        multilight
+        specular
+        vertexcolor
+        preferperpixellighting
+        fog
+        world_normal
+        combined)
+    foreach(test_name IN LISTS RLGL_SKINNED_EFFECT_TESTS)
+        add_executable(cna_test_rlgl_skinnedeffect_${test_name}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_skinnedeffect_${test_name}_test.cpp")
+        target_link_libraries(cna_test_rlgl_skinnedeffect_${test_name}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_skinnedeffect_${test_name}
+                PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+
     if(CNA_BUILD_TESTS)
         enable_testing()
         cna_register_renderer_test(NAME Rlgl_Smoke COMMAND cna_test_rlgl_smoke
@@ -184,6 +225,23 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             COMMAND cna_test_rlgl_dual_texture_independent_uv
             TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_SkinnedEffect_terms
+            COMMAND cna_test_rlgl_skinned_terms
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_SkinnedEffect
+            COMMAND cna_test_rlgl_skinned_effect
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        foreach(test_name IN LISTS RLGL_SKINNED_EFFECT_TESTS)
+            cna_register_renderer_test(
+                NAME Rlgl_SkinnedEffect_${test_name}
+                COMMAND cna_test_rlgl_skinnedeffect_${test_name}
+                TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
     endif()
 endif()
 

@@ -113,7 +113,21 @@ jobs:
             cna_test_rlgl_basiceffect_normal_transform \
             cna_test_rlgl_basiceffect_lighting \
             cna_test_rlgl_dual_texture_effect \
-            cna_test_rlgl_dual_texture_independent_uv
+            cna_test_rlgl_dual_texture_independent_uv \
+            cna_test_rlgl_skinned_effect \
+            cna_test_rlgl_skinned_terms \
+            cna_test_rlgl_skinnedeffect_identity_bones \
+            cna_test_rlgl_skinnedeffect_translation_bone \
+            cna_test_rlgl_skinnedeffect_twobone_blend \
+            cna_test_rlgl_skinnedeffect_vector4_bone_indices \
+            cna_test_rlgl_skinnedeffect_weightspervertex \
+            cna_test_rlgl_skinnedeffect_multilight \
+            cna_test_rlgl_skinnedeffect_specular \
+            cna_test_rlgl_skinnedeffect_vertexcolor \
+            cna_test_rlgl_skinnedeffect_preferperpixellighting \
+            cna_test_rlgl_skinnedeffect_fog \
+            cna_test_rlgl_skinnedeffect_world_normal \
+            cna_test_rlgl_skinnedeffect_combined
 
       - name: Verify renderer registry consistency
         working-directory: cna
