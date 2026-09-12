@@ -3540,6 +3540,13 @@ namespace
         constexpr std::array invalidProbes{
             Probe::Pixel11Texture,
             Probe::Pixel14Dp4,
+            Probe::Pixel11OrphanAlpha,
+            Probe::Pixel11RgbThenRgb,
+            Probe::Pixel11FullThenAlpha,
+            Probe::Pixel11TextureThenAlpha,
+            Probe::Pixel11Triple,
+            Probe::Pixel14Dp4ThenAlpha,
+            Probe::Pixel14PhaseThenAlpha,
         };
         std::string acceptedInvalidProbes;
         for (const Probe probe : invalidProbes)

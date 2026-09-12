@@ -1620,7 +1620,7 @@ class EasyGLCompiledEffectPixel1CoissueTest :
 {
 };
 
-TEST_P(EasyGLCompiledEffectPixel1CoissueTest, RejectsInvalidCoissueOpcode)
+TEST_P(EasyGLCompiledEffectPixel1CoissueTest, RejectsInvalidCoissueEncoding)
 {
     GraphicsDevice device;
     EasyGLRenderer* renderer = RendererOf(device);
@@ -1633,10 +1633,17 @@ TEST_P(EasyGLCompiledEffectPixel1CoissueTest, RejectsInvalidCoissueOpcode)
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    InvalidPixel1CoissueOpcodes,
+    InvalidPixel1Coissue,
     EasyGLCompiledEffectPixel1CoissueTest,
     ::testing::Values(CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11Texture,
-                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel14Dp4));
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel14Dp4,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11OrphanAlpha,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11RgbThenRgb,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11FullThenAlpha,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11TextureThenAlpha,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11Triple,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel14Dp4ThenAlpha,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel14PhaseThenAlpha));
 
 TEST(EasyGLCompiledEffectTest, AcceptsBothValidPixel1CoissueOrders)
 {

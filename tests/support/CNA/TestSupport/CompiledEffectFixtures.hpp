@@ -655,8 +655,22 @@ namespace CNA::TestSupport
         Pixel11AlphaThenRgb,
         /** @brief Co-issue a forbidden texture-address instruction. */
         Pixel11Texture,
+        /** @brief Begin a program with an orphaned co-issued alpha instruction. */
+        Pixel11OrphanAlpha,
+        /** @brief Pair two instructions that both use the RGB pipeline. */
+        Pixel11RgbThenRgb,
+        /** @brief Pair an alpha instruction with a preceding full-pipeline write. */
+        Pixel11FullThenAlpha,
+        /** @brief Pair an alpha instruction with a preceding texture instruction. */
+        Pixel11TextureThenAlpha,
+        /** @brief Attempt to attach a third instruction to one co-issued pair. */
+        Pixel11Triple,
         /** @brief Co-issue DP4 even though it occupies both arithmetic pipelines. */
         Pixel14Dp4,
+        /** @brief Pair an alpha instruction with a preceding full-pipeline DP4. */
+        Pixel14Dp4ThenAlpha,
+        /** @brief Pair instructions across a phase boundary. */
+        Pixel14PhaseThenAlpha,
     };
 
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
@@ -1079,9 +1093,9 @@ namespace CNA::TestSupport
                 SyntheticPixel1DestinationMaskProbe::Pixel14MovArbitrary;
         const bool probesPixel11Coissue =
             pixel1CoissueProbe >= SyntheticPixel1CoissueProbe::Pixel11RgbThenAlpha &&
-            pixel1CoissueProbe <= SyntheticPixel1CoissueProbe::Pixel11Texture;
+            pixel1CoissueProbe <= SyntheticPixel1CoissueProbe::Pixel11Triple;
         const bool probesPixel14Coissue =
-            pixel1CoissueProbe == SyntheticPixel1CoissueProbe::Pixel14Dp4;
+            pixel1CoissueProbe >= SyntheticPixel1CoissueProbe::Pixel14Dp4;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -1707,13 +1721,53 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, destination(regTexture, 0, 0xFu));
                 appendMov(0xFu, false);
             }
-            else
+            else if (pixel1CoissueProbe == SyntheticPixel1CoissueProbe::Pixel11OrphanAlpha)
+            {
+                appendMov(0x8u, true);
+            }
+            else if (pixel1CoissueProbe == SyntheticPixel1CoissueProbe::Pixel11RgbThenRgb)
+            {
+                appendMov(0x7u, false);
+                appendMov(0x7u, true);
+            }
+            else if (pixel1CoissueProbe == SyntheticPixel1CoissueProbe::Pixel11FullThenAlpha)
+            {
+                appendMov(0xFu, false);
+                appendMov(0x8u, true);
+            }
+            else if (pixel1CoissueProbe == SyntheticPixel1CoissueProbe::Pixel11TextureThenAlpha)
+            {
+                AppendUInt32(shader, 0x00000040u); // texcoord t0
+                AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+                appendMov(0x8u, true);
+            }
+            else if (pixel1CoissueProbe == SyntheticPixel1CoissueProbe::Pixel11Triple)
+            {
+                appendMov(0x7u, false);
+                appendMov(0x8u, true);
+                appendMov(0x7u, true);
+            }
+            else if (pixel1CoissueProbe == SyntheticPixel1CoissueProbe::Pixel14Dp4)
             {
                 appendMov(0x7u, false);
                 AppendUInt32(shader, 0x40000009u); // +dp4 r0.a, c0, c0
                 AppendUInt32(shader, destination(regTemp, 0, 0x8u));
                 AppendUInt32(shader, source(regConst, 0));
                 AppendUInt32(shader, source(regConst, 0));
+            }
+            else if (pixel1CoissueProbe == SyntheticPixel1CoissueProbe::Pixel14Dp4ThenAlpha)
+            {
+                AppendUInt32(shader, 0x00000009u); // dp4 r0.rgb, c0, c0
+                AppendUInt32(shader, destination(regTemp, 0, 0x7u));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, source(regConst, 0));
+                appendMov(0x8u, true);
+            }
+            else
+            {
+                appendMov(0x7u, false);
+                AppendUInt32(shader, 0x0000FFFDu); // phase
+                appendMov(0x8u, true);
             }
         }
         else if (pixel1DestinationMaskProbe != SyntheticPixel1DestinationMaskProbe::None)
