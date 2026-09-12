@@ -3667,6 +3667,119 @@ namespace
                   acceptedInvalidProbes);
     }
 
+    void CheckCompiledImmediateConstantDefinitionValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe;
+        constexpr std::array validProbes{
+            Probe::VertexFloatDuplicate,
+            Probe::PixelIntegerMinimum,
+            Probe::PixelIntegerMaximum,
+            Probe::VertexIntegerMinimum,
+            Probe::VertexIntegerMaximum,
+        };
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.immediateConstantDefinitionProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Effect parser rejected valid immediate-constant probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+
+        constexpr std::array invalidProbes{
+            Probe::PixelFloatDuplicate,
+            Probe::PixelIntegerDuplicate,
+            Probe::VertexIntegerDuplicate,
+            Probe::PixelBooleanDuplicate,
+            Probe::VertexBooleanDuplicate,
+            Probe::PixelIntegerCountBelow,
+            Probe::PixelIntegerCountAbove,
+            Probe::PixelIntegerInitialBelow,
+            Probe::PixelIntegerInitialAbove,
+            Probe::PixelIntegerStepBelow,
+            Probe::PixelIntegerStepAbove,
+            Probe::PixelIntegerReservedW,
+            Probe::VertexIntegerReservedW,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.immediateConstantDefinitionProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid immediate-constant probes: " +
+                  acceptedInvalidProbes);
+    }
+
+    void CheckCompiledVertexFloatConstantRedefinition()
+    {
+        GraphicsDevice device;
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.immediateConstantDefinitionProbe =
+            CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexFloatDuplicate;
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        struct Vertex { float x, y, z; };
+        const Vertex quad[6] = {
+            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre = Color::Transparent;
+        const Rectangle rectangle(2, 2, 1, 1);
+        target.GetData(0, &rectangle, &centre, 0, 1);
+        Check(centre == Color::Lime,
+              "compiled vertex DEF redefinition did not retain the final constant value; got (" +
+                  std::to_string(static_cast<int>(centre.getRProperty())) + "," +
+                  std::to_string(static_cast<int>(centre.getGProperty())) + "," +
+                  std::to_string(static_cast<int>(centre.getBProperty())) + "," +
+                  std::to_string(static_cast<int>(centre.getAProperty())) + ")");
+    }
+
     void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
@@ -6246,6 +6359,8 @@ int main()
         CheckCompiledAddressRegisterAccessValidation(renderer);
         CheckCompiledSamplerRegisterSourceValidation(renderer);
         CheckCompiledSamplerDeclarationValidation(renderer);
+        CheckCompiledImmediateConstantDefinitionValidation(renderer);
+        CheckCompiledVertexFloatConstantRedefinition();
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);

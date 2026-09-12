@@ -1654,6 +1654,107 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticMissingSamplerDeclarationProbe::Pixel30,
         CNA::TestSupport::SyntheticMissingSamplerDeclarationProbe::Vertex30));
 
+class EasyGLCompiledEffectImmediateConstantValidTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectImmediateConstantValidTest, AcceptsDefinition)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.immediateConstantDefinitionProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidImmediateConstant,
+    EasyGLCompiledEffectImmediateConstantValidTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexFloatDuplicate,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerMinimum,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerMaximum,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexIntegerMinimum,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexIntegerMaximum));
+
+class EasyGLCompiledEffectImmediateConstantInvalidTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectImmediateConstantInvalidTest, RejectsDefinition)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.immediateConstantDefinitionProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidImmediateConstant,
+    EasyGLCompiledEffectImmediateConstantInvalidTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelFloatDuplicate,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerDuplicate,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexIntegerDuplicate,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelBooleanDuplicate,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexBooleanDuplicate,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerCountBelow,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerCountAbove,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerInitialBelow,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerInitialAbove,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerStepBelow,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerStepAbove,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerReservedW,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexIntegerReservedW));
+
+TEST(EasyGLCompiledEffectDrawTest, VertexFloatRedefinitionUsesTheFinalConstant)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.immediateConstantDefinitionProbe =
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexFloatDuplicate;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Transform"]->SetValue(
+        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+
+    struct Vertex { float x, y, z; };
+    const Vertex quad[6] = {
+        {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+        {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+    };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    RenderTarget2D target(device, 4, 4);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Magenta);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                              static_cast<const void*>(quad), 0, 2, declaration);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color centre = Color::Transparent;
+    const Rectangle rectangle(2, 2, 1, 1);
+    target.GetData(0, &rectangle, &centre, 0, 1);
+    EXPECT_EQ(centre, Color::Lime);
+}
+
 class EasyGLCompiledEffectTypedControlSourceTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticTypedControlSourceProbe>
 {

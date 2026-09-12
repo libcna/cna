@@ -913,6 +913,49 @@ namespace CNA::TestSupport
         Vertex30,
     };
 
+    /** @brief Immediate-constant definition rule exercised by a forged Shader Model 3 program. */
+    enum class SyntheticImmediateConstantDefinitionProbe
+    {
+        /** @brief Emit no immediate-constant definition probe. */
+        None,
+        /** @brief Define one pixel float-constant register twice. */
+        PixelFloatDuplicate,
+        /** @brief Define one vertex float-constant register twice. */
+        VertexFloatDuplicate,
+        /** @brief Define one pixel integer-constant register twice. */
+        PixelIntegerDuplicate,
+        /** @brief Define one vertex integer-constant register twice. */
+        VertexIntegerDuplicate,
+        /** @brief Define one pixel Boolean-constant register twice. */
+        PixelBooleanDuplicate,
+        /** @brief Define one vertex Boolean-constant register twice. */
+        VertexBooleanDuplicate,
+        /** @brief Define a pixel loop tuple at every lower inclusive bound. */
+        PixelIntegerMinimum,
+        /** @brief Define a pixel loop tuple at every upper inclusive bound. */
+        PixelIntegerMaximum,
+        /** @brief Define a negative pixel loop count. */
+        PixelIntegerCountBelow,
+        /** @brief Define a pixel loop count above 255. */
+        PixelIntegerCountAbove,
+        /** @brief Define a negative pixel loop initial value. */
+        PixelIntegerInitialBelow,
+        /** @brief Define a pixel loop initial value above 255. */
+        PixelIntegerInitialAbove,
+        /** @brief Define a pixel loop step below -128. */
+        PixelIntegerStepBelow,
+        /** @brief Define a pixel loop step above 127. */
+        PixelIntegerStepAbove,
+        /** @brief Define a pixel integer constant with a nonzero reserved W component. */
+        PixelIntegerReservedW,
+        /** @brief Define a vertex loop tuple at every lower inclusive bound. */
+        VertexIntegerMinimum,
+        /** @brief Define a vertex loop tuple at every upper inclusive bound. */
+        VertexIntegerMaximum,
+        /** @brief Define a vertex integer constant with a nonzero reserved W component. */
+        VertexIntegerReservedW,
+    };
+
     /** @brief A typed flow-control constant used as an ordinary arithmetic source by a probe. */
     enum class SyntheticTypedControlSourceProbe
     {
@@ -1285,6 +1328,9 @@ namespace CNA::TestSupport
         /** @brief Selects a texture instruction whose sampler lacks a DCL. */
         SyntheticMissingSamplerDeclarationProbe missingSamplerDeclarationProbe =
             SyntheticMissingSamplerDeclarationProbe::None;
+        /** @brief Selects an immediate-constant definition validation probe. */
+        SyntheticImmediateConstantDefinitionProbe immediateConstantDefinitionProbe =
+            SyntheticImmediateConstantDefinitionProbe::None;
         /** @brief Selects a typed flow-control constant used as an ordinary source. */
         SyntheticTypedControlSourceProbe typedControlSourceProbe =
             SyntheticTypedControlSourceProbe::None;
@@ -1414,6 +1460,8 @@ namespace CNA::TestSupport
             SyntheticSamplerRegisterSourceProbe::None,
         SyntheticMissingSamplerDeclarationProbe missingSamplerDeclarationProbe =
             SyntheticMissingSamplerDeclarationProbe::None,
+        SyntheticImmediateConstantDefinitionProbe immediateConstantDefinitionProbe =
+            SyntheticImmediateConstantDefinitionProbe::None,
         SyntheticTypedControlSourceProbe typedControlSourceProbe =
             SyntheticTypedControlSourceProbe::None,
         SyntheticSpecialControlSourceProbe specialControlSourceProbe =
@@ -1542,6 +1590,20 @@ namespace CNA::TestSupport
         const bool probesMissingPixel30SamplerDeclaration =
             missingSamplerDeclarationProbe ==
             SyntheticMissingSamplerDeclarationProbe::Pixel30;
+        const bool probesPixelImmediateConstantDefinition =
+            immediateConstantDefinitionProbe ==
+                SyntheticImmediateConstantDefinitionProbe::PixelFloatDuplicate ||
+            immediateConstantDefinitionProbe ==
+                SyntheticImmediateConstantDefinitionProbe::PixelIntegerDuplicate ||
+            immediateConstantDefinitionProbe ==
+                SyntheticImmediateConstantDefinitionProbe::PixelBooleanDuplicate ||
+            (immediateConstantDefinitionProbe >=
+                 SyntheticImmediateConstantDefinitionProbe::PixelIntegerMinimum &&
+             immediateConstantDefinitionProbe <=
+                 SyntheticImmediateConstantDefinitionProbe::PixelIntegerReservedW);
+        const bool probesVertexFloatRedefinition =
+            immediateConstantDefinitionProbe ==
+            SyntheticImmediateConstantDefinitionProbe::VertexFloatDuplicate;
         const bool probesPixel30TypedControlSource =
             typedControlSourceProbe == SyntheticTypedControlSourceProbe::PixelInteger ||
             typedControlSourceProbe == SyntheticTypedControlSourceProbe::PixelBoolean;
@@ -1604,7 +1666,8 @@ namespace CNA::TestSupport
             probesPixelSemanticDeclarations ||
             probesPixel30ConstantControl || probesPixelFlowControl ||
             (probesPixelCallGraph && !probesPixel2xCallGraph) ||
-            probesMissingPixel30SamplerDeclaration;
+            probesMissingPixel30SamplerDeclaration || probesPixelImmediateConstantDefinition ||
+            probesVertexFloatRedefinition;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -1797,6 +1860,77 @@ namespace CNA::TestSupport
             return 0x80000000u | registerBits(type) | number | (swizzle << 16) |
                    (modifier << 24);
         };
+
+        if (probesPixelImmediateConstantDefinition)
+        {
+            const auto appendFloatDefinition = [&](float red, float green) {
+                AppendUInt32(shader, 0x00000051u | (5u << 24));
+                AppendUInt32(shader, destination(regConst, 200, 0xFu));
+                AppendUInt32(shader, FloatBits(red));
+                AppendUInt32(shader, FloatBits(green));
+                AppendUInt32(shader, FloatBits(0.0f));
+                AppendUInt32(shader, FloatBits(1.0f));
+            };
+            const auto appendIntegerDefinition =
+                [&](std::int32_t count, std::int32_t initial, std::int32_t step,
+                    std::int32_t reserved) {
+                    AppendUInt32(shader, 0x00000030u | (5u << 24));
+                    AppendUInt32(shader, destination(regConstInt, 15, 0xFu));
+                    AppendUInt32(shader, static_cast<std::uint32_t>(count));
+                    AppendUInt32(shader, static_cast<std::uint32_t>(initial));
+                    AppendUInt32(shader, static_cast<std::uint32_t>(step));
+                    AppendUInt32(shader, static_cast<std::uint32_t>(reserved));
+                };
+            const auto appendBooleanDefinition = [&](bool value) {
+                AppendUInt32(shader, 0x0000002Fu | (2u << 24));
+                AppendUInt32(shader, destination(regConstBool, 15, 0xFu));
+                AppendUInt32(shader, value ? 1u : 0u);
+            };
+
+            switch (immediateConstantDefinitionProbe)
+            {
+                case SyntheticImmediateConstantDefinitionProbe::PixelFloatDuplicate:
+                    appendFloatDefinition(1.0f, 0.0f);
+                    appendFloatDefinition(0.0f, 1.0f);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::PixelIntegerDuplicate:
+                    appendIntegerDefinition(1, 0, 1, 0);
+                    appendIntegerDefinition(2, 0, 2, 0);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::PixelBooleanDuplicate:
+                    appendBooleanDefinition(true);
+                    appendBooleanDefinition(false);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::PixelIntegerMinimum:
+                    appendIntegerDefinition(0, 0, -128, 0);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::PixelIntegerMaximum:
+                    appendIntegerDefinition(255, 255, 127, 0);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::PixelIntegerCountBelow:
+                    appendIntegerDefinition(-1, 0, 1, 0);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::PixelIntegerCountAbove:
+                    appendIntegerDefinition(256, 0, 1, 0);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::PixelIntegerInitialBelow:
+                    appendIntegerDefinition(1, -1, 1, 0);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::PixelIntegerInitialAbove:
+                    appendIntegerDefinition(1, 256, 1, 0);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::PixelIntegerStepBelow:
+                    appendIntegerDefinition(1, 0, -129, 0);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::PixelIntegerStepAbove:
+                    appendIntegerDefinition(1, 0, 128, 0);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::PixelIntegerReservedW:
+                    appendIntegerDefinition(1, 0, 1, 1);
+                    break;
+                default: break;
+            }
+        }
 
         if (probesPixel11ColorInput || probesPixel11TextureInput ||
             probesPixel14TextureInput)
@@ -3640,6 +3774,15 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
         }
+        else if (probesVertexFloatRedefinition)
+        {
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_color0 v0
+            AppendUInt32(shader, 0x80000000u | 10u);
+            AppendUInt32(shader, destination(regInput, 0, 0xFu));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, v0
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regInput, 0));
+        }
         else if (samplesTexture)
         {
             // plans/plan_fx.md FX-110: a cube or volume sampler reads three components, a 2D one reads
@@ -3819,6 +3962,9 @@ namespace CNA::TestSupport
                                                                 SyntheticMissingSamplerDeclarationProbe
                                                                     missingSamplerDeclarationProbe =
                                                                         SyntheticMissingSamplerDeclarationProbe::None,
+                                                                SyntheticImmediateConstantDefinitionProbe
+                                                                    immediateConstantDefinitionProbe =
+                                                                        SyntheticImmediateConstantDefinitionProbe::None,
                                                                 SyntheticTypedControlSourceProbe
                                                                     typedControlSourceProbe =
                                                                         SyntheticTypedControlSourceProbe::None,
@@ -3917,6 +4063,19 @@ namespace CNA::TestSupport
         const bool probesMissingVertexSamplerDeclaration =
             missingSamplerDeclarationProbe ==
             SyntheticMissingSamplerDeclarationProbe::Vertex30;
+        const bool probesVertexImmediateConstantDefinition =
+            immediateConstantDefinitionProbe ==
+                SyntheticImmediateConstantDefinitionProbe::VertexFloatDuplicate ||
+            immediateConstantDefinitionProbe ==
+                SyntheticImmediateConstantDefinitionProbe::VertexIntegerDuplicate ||
+            immediateConstantDefinitionProbe ==
+                SyntheticImmediateConstantDefinitionProbe::VertexBooleanDuplicate ||
+            immediateConstantDefinitionProbe ==
+                SyntheticImmediateConstantDefinitionProbe::VertexIntegerMinimum ||
+            immediateConstantDefinitionProbe ==
+                SyntheticImmediateConstantDefinitionProbe::VertexIntegerMaximum ||
+            immediateConstantDefinitionProbe ==
+                SyntheticImmediateConstantDefinitionProbe::VertexIntegerReservedW;
         const bool probesVertex30TypedControlSource =
             typedControlSourceProbe == SyntheticTypedControlSourceProbe::VertexInteger ||
             typedControlSourceProbe == SyntheticTypedControlSourceProbe::VertexBoolean;
@@ -3976,7 +4135,8 @@ namespace CNA::TestSupport
             probesVertex30OutputSource || probesVertex30Address || probesVertex30SamplerSource ||
             probesVertex30TypedControlSource || probesVertex30SpecialControlSource ||
             probesVertexRelativeAddressing || probesVertexSemanticDeclarations ||
-            probesVertex30CallGraph || probesMissingVertexSamplerDeclaration;
+            probesVertex30CallGraph || probesMissingVertexSamplerDeclaration ||
+            probesVertexImmediateConstantDefinition;
         const bool probesVertex2xTemporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xMaximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange;
@@ -4129,6 +4289,59 @@ namespace CNA::TestSupport
                                  ((1u + static_cast<std::uint32_t>(ctab.size() / 4)) << 16));
         AppendUInt32(shader, 0x42415443u); // 'CTAB'
         shader.insert(shader.end(), ctab.begin(), ctab.end());
+
+        if (probesVertexImmediateConstantDefinition)
+        {
+            const auto appendFloatDefinition = [&](float red, float green) {
+                AppendUInt32(shader, 0x00000051u | (5u << 24));
+                AppendUInt32(shader, destination(regConst, 250, 0xFu));
+                AppendUInt32(shader, FloatBits(red));
+                AppendUInt32(shader, FloatBits(green));
+                AppendUInt32(shader, FloatBits(0.0f));
+                AppendUInt32(shader, FloatBits(1.0f));
+            };
+            const auto appendIntegerDefinition =
+                [&](std::int32_t count, std::int32_t initial, std::int32_t step,
+                    std::int32_t reserved) {
+                    AppendUInt32(shader, 0x00000030u | (5u << 24));
+                    AppendUInt32(shader, destination(regConstInt, 15, 0xFu));
+                    AppendUInt32(shader, static_cast<std::uint32_t>(count));
+                    AppendUInt32(shader, static_cast<std::uint32_t>(initial));
+                    AppendUInt32(shader, static_cast<std::uint32_t>(step));
+                    AppendUInt32(shader, static_cast<std::uint32_t>(reserved));
+                };
+            const auto appendBooleanDefinition = [&](bool value) {
+                AppendUInt32(shader, 0x0000002Fu | (2u << 24));
+                AppendUInt32(shader, destination(regConstBool, 15, 0xFu));
+                AppendUInt32(shader, value ? 1u : 0u);
+            };
+
+            switch (immediateConstantDefinitionProbe)
+            {
+                case SyntheticImmediateConstantDefinitionProbe::VertexFloatDuplicate:
+                    appendFloatDefinition(1.0f, 0.0f);
+                    appendFloatDefinition(0.0f, 1.0f);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::VertexIntegerDuplicate:
+                    appendIntegerDefinition(1, 0, 1, 0);
+                    appendIntegerDefinition(2, 0, 2, 0);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::VertexBooleanDuplicate:
+                    appendBooleanDefinition(true);
+                    appendBooleanDefinition(false);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::VertexIntegerMinimum:
+                    appendIntegerDefinition(0, 0, -128, 0);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::VertexIntegerMaximum:
+                    appendIntegerDefinition(255, 255, 127, 0);
+                    break;
+                case SyntheticImmediateConstantDefinitionProbe::VertexIntegerReservedW:
+                    appendIntegerDefinition(1, 0, 1, 1);
+                    break;
+                default: break;
+            }
+        }
 
         if (usesPredication)
         {
@@ -4366,6 +4579,13 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, destination(regTexCoordOut, maximum ? 11u : 12u));
             }
             if (usesPredication)
+            {
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_color0 o1
+                AppendUInt32(shader, 0x80000000u | 10u);
+                AppendUInt32(shader, destination(regTexCoordOut, 1));
+            }
+            if (immediateConstantDefinitionProbe ==
+                SyntheticImmediateConstantDefinitionProbe::VertexFloatDuplicate)
             {
                 AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_color0 o1
                 AppendUInt32(shader, 0x80000000u | 10u);
@@ -5340,6 +5560,13 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regLabel, 0));
             AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
         }
+        if (immediateConstantDefinitionProbe ==
+            SyntheticImmediateConstantDefinitionProbe::VertexFloatDuplicate)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov o1, c250
+            AppendUInt32(shader, destination(regTexCoordOut, 1));
+            AppendUInt32(shader, source(regConst, 250));
+        }
         AppendUInt32(shader, 0x0000FFFFu);
         return shader;
     }
@@ -5766,6 +5993,7 @@ namespace CNA::TestSupport
             options.outputRegisterSourceProbe,
             options.samplerRegisterSourceProbe,
             options.missingSamplerDeclarationProbe,
+            options.immediateConstantDefinitionProbe,
             options.typedControlSourceProbe,
             options.specialControlSourceProbe,
             options.relativeAddressingProbe,
@@ -5861,6 +6089,7 @@ namespace CNA::TestSupport
                 options.addressRegisterAccessProbe,
                 options.samplerRegisterSourceProbe,
                 options.missingSamplerDeclarationProbe,
+                options.immediateConstantDefinitionProbe,
                 options.typedControlSourceProbe,
                 options.specialControlSourceProbe,
                 options.vertexInstructionSlotProbe,

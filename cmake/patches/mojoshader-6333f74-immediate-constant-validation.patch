@@ -1,0 +1,111 @@
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1892,20 +1892,41 @@
+ } // alloc_constant_listitem
+ 
+ 
++static ConstantsList *find_constant_listitem(Context *ctx,
++                                             const MOJOSHADER_uniformType type,
++                                             const int index)
++{
++    ConstantsList *item = ctx->constants;
++    while (item != NULL)
++    {
++        if ((item->constant.type == type) && (item->constant.index == index))
++            return item;
++        item = item->next;
++    } // while
++    return NULL;
++} // find_constant_listitem
++
++
+ static void state_DEF(Context *ctx)
+ {
+     const RegisterType regtype = ctx->dest_arg.regtype;
+     const int regnum = ctx->dest_arg.regnum;
+ 
+-    // !!! FIXME: fail if same register is defined twice.
+-
+     if (ctx->instruction_count != 0)
+         fail(ctx, "DEF token must come before any instructions");
+     else if (regtype != REG_TYPE_CONST)
+         fail(ctx, "DEF token using invalid register");
++    else if (shader_is_pixel(ctx) && get_defined_register(ctx, regtype, regnum))
++        fail(ctx, "pixel-shader float constant register defined more than once");
+     else
+     {
+-        ConstantsList *item = alloc_constant_listitem(ctx);
++        // Microsoft permits a vertex float constant to be redefined; the final
++        // declaration owns the shader-local value. Pixel constants and every typed
++        // constant family reject duplicate definitions. -CNA
++        ConstantsList *item = get_defined_register(ctx, regtype, regnum)
++                                      ? find_constant_listitem(
++                                            ctx, MOJOSHADER_UNIFORM_FLOAT, regnum)
++                                      : alloc_constant_listitem(ctx);
+         if (item != NULL)
+         {
+             item->constant.index = regnum;
+@@ -1922,12 +1943,22 @@
+     const RegisterType regtype = ctx->dest_arg.regtype;
+     const int regnum = ctx->dest_arg.regnum;
+ 
+-    // !!! FIXME: fail if same register is defined twice.
++    const int32 *value = (const int32 *) ctx->dwords;
+ 
+     if (ctx->instruction_count != 0)
+         fail(ctx, "DEFI token must come before any instructions");
+     else if (regtype != REG_TYPE_CONSTINT)
+         fail(ctx, "DEFI token using invalid register");
++    else if (get_defined_register(ctx, regtype, regnum))
++        fail(ctx, "integer constant register defined more than once");
++    else if ((value[0] < 0) || (value[0] > 255))
++        fail(ctx, "DEFI loop/repeat count must be between 0 and 255");
++    else if ((value[1] < 0) || (value[1] > 255))
++        fail(ctx, "DEFI loop initial value must be between 0 and 255");
++    else if ((value[2] < -128) || (value[2] > 127))
++        fail(ctx, "DEFI loop step must be between -128 and 127");
++    else if (value[3] != 0)
++        fail(ctx, "DEFI reserved component must be zero");
+     else
+     {
+         ConstantsList *item = alloc_constant_listitem(ctx);
+@@ -1948,12 +1979,12 @@
+     const RegisterType regtype = ctx->dest_arg.regtype;
+     const int regnum = ctx->dest_arg.regnum;
+ 
+-    // !!! FIXME: fail if same register is defined twice.
+-
+     if (ctx->instruction_count != 0)
+         fail(ctx, "DEFB token must come before any instructions");
+     else if (regtype != REG_TYPE_CONSTBOOL)
+         fail(ctx, "DEFB token using invalid register");
++    else if (get_defined_register(ctx, regtype, regnum))
++        fail(ctx, "Boolean constant register defined more than once");
+     else
+     {
+         ConstantsList *item = alloc_constant_listitem(ctx);
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -2864,8 +2864,20 @@
+     char val3[32]; floatstr(ctx, val3, sizeof (val3), val[3], 1);
+ 
+     push_output(ctx, &ctx->globals);
+-    output_line(ctx, "const vec4 %s = vec4(%s, %s, %s, %s);",
+-                varname, val0, val1, val2, val3);
++    if (shader_is_vertex(ctx))
++    {
++        // Microsoft accepts repeated vertex DEF declarations and the last value
++        // wins. A macro can be replaced while retaining compile-time constant
++        // semantics for every later instruction and subroutine. -CNA
++        output_line(ctx, "#undef %s", varname);
++        output_line(ctx, "#define %s vec4(%s, %s, %s, %s)",
++                    varname, val0, val1, val2, val3);
++    } // if
++    else
++    {
++        output_line(ctx, "const vec4 %s = vec4(%s, %s, %s, %s);",
++                    varname, val0, val1, val2, val3);
++    } // else
+     pop_output(ctx);
+ } // emit_GLSL_DEF
+ 
