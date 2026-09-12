@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_rlgl.md RLGL-023/RLGL-026: focused native Texture2D storage evidence. Public Texture2D
-// construction and SetData feed rlgl or the documented bridge; direct renderer readback prevents
-// the public CPU shadow from hiding an upload defect. Exit 77 means no usable GL context.
+// plans/plan_rlgl.md RLGL-023/RLGL-026/RLGL-027: focused native Texture2D storage evidence. Public
+// Texture2D construction and SetData feed rlgl or the documented bridge; direct renderer readback
+// prevents the public CPU shadow from hiding an upload defect. Exit 77 means no usable GL context.
 
 #include "CNA/Internal/Renderers/Rlgl/RlglRenderer.hpp"
 
@@ -12,8 +12,15 @@
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
@@ -24,9 +31,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -91,6 +100,32 @@ namespace
                    0, 0, 0, 3, 2, actual.data(), static_cast<int>(actual.size()))
             && actual == encoded(words);
     }
+
+    template <typename Texel>
+    [[nodiscard]] bool FloatFormatRoundTrips(
+        GraphicsDevice& device, const SurfaceFormat format,
+        std::array<Texel, 6> expected, const Texel& patch)
+    {
+        static_assert(std::is_trivially_copyable_v<Texel>);
+        Texture2D texture(device, 3, 2, false, format);
+        texture.SetData(expected.data(), static_cast<int>(expected.size()));
+        auto& native = texture.GetRenderer();
+        std::array<std::uint8_t, sizeof(Texel) * 6u> actual{};
+        if (!native.GetData(
+                0, 0, 0, 3, 2, actual.data(), static_cast<int>(actual.size())) ||
+            std::memcmp(actual.data(), expected.data(), actual.size()) != 0)
+        {
+            return false;
+        }
+
+        const Rectangle patchRectangle(1, 0, 1, 1);
+        texture.SetData(0, &patchRectangle, &patch, 0, 1);
+        expected[1] = patch;
+        actual.fill(0);
+        return native.GetData(
+                   0, 0, 0, 3, 2, actual.data(), static_cast<int>(actual.size()))
+            && std::memcmp(actual.data(), expected.data(), actual.size()) == 0;
+    }
 }
 
 class RlglTextureTest final : public CNA::Examples::PixelTestGame
@@ -99,6 +134,7 @@ public:
     RlglTextureTest()
     {
         graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphics_->setPreferredBackBufferWidthProperty(64);
         graphics_->setPreferredBackBufferHeightProperty(48);
         graphics_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);
@@ -223,10 +259,145 @@ protected:
                    0x11223344u, 0xE1D1C1B1u}, 0x7F41DF01u),
               "NormalizedByte4 uses exact signed RGBA8 storage for native transfer");
 
+        Check(PackedFormatRoundTrips<Packed::Rgba1010102, std::uint32_t>(
+                  device, SurfaceFormat::Rgba1010102,
+                  {0xC00003FFu, 0xC00FFC00u, 0xFFF00000u, 0xFFFFFFFFu,
+                   0x12345678u, 0x89ABCDEFu}, 0xA5C39E71u),
+              "Rgba1010102 preserves XNA's least-significant-red packed layout");
+        Check(PackedFormatRoundTrips<Packed::Rg32, std::uint32_t>(
+                  device, SurfaceFormat::Rg32,
+                  {0x0000FFFFu, 0xFFFF0000u, 0x12345678u, 0x89ABCDEFu,
+                   0x00000000u, 0xFFFFFFFFu}, 0xA5C39E71u),
+              "Rg32 preserves exact two-channel unsigned-normalized words");
+        Check(PackedFormatRoundTrips<Packed::Rgba64, std::uint64_t>(
+                  device, SurfaceFormat::Rgba64,
+                  {0x000000000000FFFFull, 0x00000000FFFF0000ull,
+                   0x0000FFFF00000000ull, 0xFFFF000000000000ull,
+                   0x123456789ABCDEFull, 0xFEDCBA9876543210ull},
+                  0xA5C39E717E2D4B08ull),
+              "Rgba64 preserves exact four-channel unsigned-normalized words");
+        Check(PackedFormatRoundTrips<Packed::Alpha8, std::uint8_t>(
+                  device, SurfaceFormat::Alpha8,
+                  {0x00u, 0x20u, 0x40u, 0x80u, 0xC0u, 0xFFu}, 0xA5u),
+              "Alpha8 preserves exact one-byte texels across odd rows");
+        Check(PackedFormatRoundTrips<Packed::HalfSingle, std::uint16_t>(
+                  device, SurfaceFormat::HalfSingle,
+                  {0x0000u, 0x3C00u, 0xBC00u, 0x3800u, 0x4000u, 0xC100u}, 0x3400u),
+              "HalfSingle preserves exact IEEE binary16 words");
+        Check(PackedFormatRoundTrips<Packed::HalfVector2, std::uint32_t>(
+                  device, SurfaceFormat::HalfVector2,
+                  {0x3C000000u, 0x00003C00u, 0x3800BC00u, 0x40003400u,
+                   0xC1004200u, 0x4400C400u}, 0xB8003A00u),
+              "HalfVector2 preserves exact two-component binary16 words");
+        const std::array<std::uint64_t, 6> halfVector4Words{
+            0x3C00000000000000ull, 0x00003C0000000000ull,
+            0x000000003C000000ull, 0x0000000000003C00ull,
+            0x3C00380034003000ull, 0xBC00B800B400B000ull};
+        Check(PackedFormatRoundTrips<Packed::HalfVector4, std::uint64_t>(
+                  device, SurfaceFormat::HalfVector4, halfVector4Words,
+                  0x40003C0038003400ull),
+              "HalfVector4 preserves exact four-component binary16 words");
+        Check(PackedFormatRoundTrips<Packed::HalfVector4, std::uint64_t>(
+                  device, SurfaceFormat::HdrBlendable, halfVector4Words,
+                  0x4400420040003C00ull),
+              "HdrBlendable uses XNA-compatible HalfVector4 storage");
+
+        Check(FloatFormatRoundTrips<float>(
+                  device, SurfaceFormat::Single,
+                  {-4.0f, -0.5f, 0.0f, 0.25f, 1.0f, 8.0f}, 3.5f),
+              "Single preserves exact finite IEEE binary32 values");
+        Check(FloatFormatRoundTrips<Vector2>(
+                  device, SurfaceFormat::Vector2,
+                  {Vector2(-4.0f, 8.0f), Vector2(-0.5f, 0.25f), Vector2(0.0f, 1.0f),
+                   Vector2(2.0f, -2.0f), Vector2(3.5f, 7.25f), Vector2(-8.0f, 16.0f)},
+                  Vector2(0.125f, -0.25f)),
+              "Vector2 preserves exact two-component finite binary32 values");
+        Check(FloatFormatRoundTrips<Vector4>(
+                  device, SurfaceFormat::Vector4,
+                  {Vector4(-4.0f, -2.0f, -1.0f, 0.0f),
+                   Vector4(0.125f, 0.25f, 0.5f, 1.0f),
+                   Vector4(2.0f, 4.0f, 8.0f, 16.0f),
+                   Vector4(-0.5f, 3.5f, -7.25f, 9.0f),
+                   Vector4(11.0f, 12.0f, 13.0f, 14.0f),
+                   Vector4(-16.0f, -15.0f, -14.0f, -13.0f)},
+                  Vector4(0.125f, -0.25f, 0.5f, -1.0f)),
+              "Vector4 preserves exact four-component finite binary32 values");
+
+        Texture2D vectorMip(device, 4, 4, true, SurfaceFormat::Vector2);
+        const std::array<Vector2, 4> vectorMipValues{
+            Vector2(0.125f, 0.25f), Vector2(0.5f, 1.0f),
+            Vector2(-2.0f, 4.0f), Vector2(8.0f, -16.0f)};
+        vectorMip.SetData(1, nullptr, vectorMipValues.data(), 0,
+                          static_cast<int>(vectorMipValues.size()));
+        std::array<std::uint8_t, sizeof(Vector2) * 4u> vectorMipBytes{};
+        auto& nativeVectorMip = vectorMip.GetRenderer();
+        Check(nativeVectorMip.GetData(
+                  1, 0, 0, 2, 2, vectorMipBytes.data(),
+                  static_cast<int>(vectorMipBytes.size())) &&
+                  std::memcmp(vectorMipBytes.data(), vectorMipValues.data(),
+                              vectorMipBytes.size()) == 0,
+              "two-channel float storage supports exact non-zero mip updates");
+
+        const auto sample = [&](Texture2D& source) {
+            device.Clear(Color(17, 29, 43, 255));
+            source.GetRenderer().BindGL(0);
+            renderer.SetBlendEnabled(false);
+            CNA::Internal::Renderers::Rlgl::Bridge::DrawBoundTextureSampleForTesting(
+                0.5f, 0.5f, 64, 48);
+            Color pixel;
+            const Rectangle center(32, 24, 1, 1);
+            device.GetBackBufferData(&center, &pixel, 0, 1);
+            CNA::Internal::Renderers::Rlgl::Bridge::BindTexture2D(0, 0);
+            return pixel;
+        };
+        Texture2D alphaTexture(device, 1, 1, false, SurfaceFormat::Alpha8);
+        const Packed::Alpha8 alphaValue(0.5f);
+        alphaTexture.SetData(&alphaValue, 1);
+        const Color sampledAlpha = sample(alphaTexture);
+        Check(sampledAlpha.getRProperty() <= 1 && sampledAlpha.getGProperty() <= 1 &&
+                  sampledAlpha.getBProperty() <= 1 &&
+                  sampledAlpha.getAProperty() >= 127 && sampledAlpha.getAProperty() <= 129,
+              "Alpha8 sampling expands its stored red byte to alpha over zero RGB");
+
+        Texture2D singleTexture(device, 1, 1, false, SurfaceFormat::Single);
+        const float singleValue = 0.25f;
+        singleTexture.SetData(&singleValue, 1);
+        const Color sampledSingle = sample(singleTexture);
+        Check(sampledSingle.getRProperty() >= 63 && sampledSingle.getRProperty() <= 65 &&
+                  sampledSingle.getGProperty() == 255 && sampledSingle.getBProperty() == 255 &&
+                  sampledSingle.getAProperty() == 255,
+              "Single sampling applies XNA's (R,1,1,1) missing-channel expansion");
+
+        Texture2D vector2Texture(device, 1, 1, false, SurfaceFormat::Vector2);
+        const Vector2 vector2Value(0.25f, 0.5f);
+        vector2Texture.SetData(&vector2Value, 1);
+        const Color sampledVector2 = sample(vector2Texture);
+        Check(sampledVector2.getRProperty() >= 63 && sampledVector2.getRProperty() <= 65 &&
+                  sampledVector2.getGProperty() >= 127 && sampledVector2.getGProperty() <= 129 &&
+                  sampledVector2.getBProperty() == 255 && sampledVector2.getAProperty() == 255,
+              "Vector2 sampling applies XNA's (R,G,1,1) missing-channel expansion");
+
+        Texture2D normalized2Texture(
+            device, 1, 1, false, SurfaceFormat::NormalizedByte2);
+        const Packed::NormalizedByte2 normalized2Value(0.25f, 0.5f);
+        normalized2Texture.SetData(&normalized2Value, 1);
+        const Color sampledNormalized2 = sample(normalized2Texture);
+        Check(sampledNormalized2.getRProperty() >= 62 &&
+                  sampledNormalized2.getRProperty() <= 66 &&
+                  sampledNormalized2.getGProperty() >= 126 &&
+                  sampledNormalized2.getGProperty() <= 130 &&
+                  sampledNormalized2.getBProperty() == 255 &&
+                  sampledNormalized2.getAProperty() == 255,
+              "NormalizedByte2 sampling applies XNA's (R,G,1,1) channel expansion");
+
         const std::array supportedFormats{
             SurfaceFormat::Color, SurfaceFormat::Bgr565, SurfaceFormat::Bgra5551,
             SurfaceFormat::Bgra4444, SurfaceFormat::NormalizedByte2,
-            SurfaceFormat::NormalizedByte4};
+            SurfaceFormat::NormalizedByte4, SurfaceFormat::Rgba1010102,
+            SurfaceFormat::Rg32, SurfaceFormat::Rgba64, SurfaceFormat::Alpha8,
+            SurfaceFormat::Single, SurfaceFormat::Vector2, SurfaceFormat::Vector4,
+            SurfaceFormat::HalfSingle, SurfaceFormat::HalfVector2,
+            SurfaceFormat::HalfVector4, SurfaceFormat::HdrBlendable};
         bool classificationsExact = true;
         for (const SurfaceFormat format : supportedFormats)
         {
@@ -235,7 +406,7 @@ protected:
                     CNA::Internal::Renderers::RendererFormatVerdict::Supported;
         }
         classificationsExact = classificationsExact &&
-            renderer.ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Rgba1010102)) ==
+            renderer.ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Dxt1)) ==
                 CNA::Internal::Renderers::RendererFormatVerdict::Unsupported;
         Check(classificationsExact,
               "Texture2D format classification claims only completed native layouts");

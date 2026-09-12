@@ -47,9 +47,9 @@ success.
 | Drawable resize and presentation rectangle refresh | ✅ | A `GraphicsDeviceManager` resize is followed by dimension and post-resize pixel checks |
 | Viewport/scissor coordinate application | 🟨 | Top-left CNA rectangles are mapped to bottom-left GL coordinates; transition/pixel coverage remains in `RLGL-013` |
 | Backbuffer MSAA | 🟨 | Context samples are requested with a non-MSAA retry and the achieved count is reported; resolve/output coverage remains in `RLGL-014` |
-| `Texture2D` (`Color`, `Bgr565`, `Bgra5551`, `Bgra4444`, `NormalizedByte2/4`) | ✅ | Exact full/partial format-native uploads and native readback passed, including packed XNA/GL bit-layout translation, signed-normalized storage, odd-row alignment, row order, binding, and non-zero RGBA8 mips |
+| All 17 uncompressed classic-XNA `Texture2D` formats | ✅ | Exact full/partial native round-trips passed for 8/16-bit UNORM, packed 16/32/64-bit, signed-normalized, binary16, binary32, alpha-only, and HDR storage; one-/two-channel sampling expansion and non-zero mips also have focused evidence |
 | XNA `SamplerState` | ✅ | Independent GL sampler objects passed all filter/address ordinals, mip/bias, anisotropy, transition, slot-isolation, and sampled-pixel checks |
-| Other Texture2D formats | ❌ | High-precision/float formats and DXT1/3/5 are tracked by `RLGL-027`/`RLGL-028`; unsupported formats fail instead of changing their byte interpretation |
+| DXT1/DXT3/DXT5 `Texture2D` | ❌ | Tracked by `RLGL-028`; the formats remain explicitly refused until capability-gated compressed upload/readback validation passes |
 | SpriteBatch/SpriteFont | ❌ | Factory throws a diagnostic naming `RLGL-010` |
 | Vertex/index buffers and draw calls | ❌ | Factories/draw hooks throw diagnostics naming `RLGL-011` |
 | Stock/custom effects and normal 3D workloads | ❌ | Await the buffer, texture, and shader tasks; `GraphicsCapability::ThreeD` remains false |

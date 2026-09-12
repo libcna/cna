@@ -159,12 +159,21 @@ namespace
 
     struct TextureFormatInfo
     {
+        enum class Swizzle
+        {
+            Identity,
+            OneChannel,
+            TwoChannel,
+            AlphaOnly
+        };
+
         GLenum internalFormat = 0;
         GLenum transferFormat = 0;
         GLenum transferType = 0;
         int bytesPerTexel = 0;
         int rlglFormat = 0;
         int uploadRotateLeft = 0;
+        Swizzle swizzle = Swizzle::Identity;
     };
 
     [[nodiscard]] TextureFormatInfo TextureFormat(
@@ -186,9 +195,41 @@ namespace
             return {GL_RGBA4, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, 2,
                     RL_PIXELFORMAT_UNCOMPRESSED_R4G4B4A4, 4};
         case SurfaceFormat::NormalizedByte2:
-            return {GL_RG8_SNORM, GL_RG, GL_BYTE, 2, 0, 0};
+            return {GL_RG8_SNORM, GL_RG, GL_BYTE, 2, 0, 0,
+                    TextureFormatInfo::Swizzle::TwoChannel};
         case SurfaceFormat::NormalizedByte4:
             return {GL_RGBA8_SNORM, GL_RGBA, GL_BYTE, 4, 0, 0};
+        case SurfaceFormat::Rgba1010102:
+            return {GL_RGB10_A2, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, 4, 0, 0};
+        case SurfaceFormat::Rg32:
+            return {GL_RG16, GL_RG, GL_UNSIGNED_SHORT, 4, 0, 0,
+                    TextureFormatInfo::Swizzle::TwoChannel};
+        case SurfaceFormat::Rgba64:
+            return {GL_RGBA16, GL_RGBA, GL_UNSIGNED_SHORT, 8, 0, 0};
+        case SurfaceFormat::Alpha8:
+            return {GL_R8, GL_RED, GL_UNSIGNED_BYTE, 1, 0, 0,
+                    TextureFormatInfo::Swizzle::AlphaOnly};
+        case SurfaceFormat::Single:
+            return {GL_R32F, GL_RED, GL_FLOAT, 4,
+                    RL_PIXELFORMAT_UNCOMPRESSED_R32, 0,
+                    TextureFormatInfo::Swizzle::OneChannel};
+        case SurfaceFormat::Vector2:
+            return {GL_RG32F, GL_RG, GL_FLOAT, 8, 0, 0,
+                    TextureFormatInfo::Swizzle::TwoChannel};
+        case SurfaceFormat::Vector4:
+            return {GL_RGBA32F, GL_RGBA, GL_FLOAT, 16,
+                    RL_PIXELFORMAT_UNCOMPRESSED_R32G32B32A32, 0};
+        case SurfaceFormat::HalfSingle:
+            return {GL_R16F, GL_RED, GL_HALF_FLOAT, 2,
+                    RL_PIXELFORMAT_UNCOMPRESSED_R16, 0,
+                    TextureFormatInfo::Swizzle::OneChannel};
+        case SurfaceFormat::HalfVector2:
+            return {GL_RG16F, GL_RG, GL_HALF_FLOAT, 4, 0, 0,
+                    TextureFormatInfo::Swizzle::TwoChannel};
+        case SurfaceFormat::HalfVector4:
+        case SurfaceFormat::HdrBlendable:
+            return {GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, 8,
+                    RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16, 0};
         default:
             throw std::runtime_error(
                 "RLGL: SurfaceFormat has not passed its Texture2D implementation gate");
@@ -225,6 +266,38 @@ namespace
             value = static_cast<std::uint16_t>((value >> shift) | (value << (16 - shift)));
             std::memcpy(pixels.data() + offset, &value, sizeof(value));
         }
+    }
+
+    void ApplyTextureSwizzle(const TextureFormatInfo::Swizzle swizzle)
+    {
+        if (swizzle == TextureFormatInfo::Swizzle::Identity) return;
+
+        GLint red = GL_RED;
+        GLint green = GL_GREEN;
+        GLint blue = GL_BLUE;
+        GLint alpha = GL_ALPHA;
+        if (swizzle == TextureFormatInfo::Swizzle::OneChannel)
+        {
+            green = GL_ONE;
+            blue = GL_ONE;
+            alpha = GL_ONE;
+        }
+        else if (swizzle == TextureFormatInfo::Swizzle::TwoChannel)
+        {
+            blue = GL_ONE;
+            alpha = GL_ONE;
+        }
+        else
+        {
+            red = GL_ZERO;
+            green = GL_ZERO;
+            blue = GL_ZERO;
+            alpha = GL_RED;
+        }
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, red);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, green);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, blue);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, alpha);
     }
 }
 
@@ -446,6 +519,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
             // XNA's mip-carrying sampler defaults never make the object incomplete.
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipLevels - 1);
+            ApplyTextureSwizzle(format.swizzle);
             ThrowIfGlError("Texture2D allocation");
         }
         catch (...)
