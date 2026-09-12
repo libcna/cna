@@ -2962,6 +2962,43 @@ namespace
         }
     }
 
+    void CheckCompiledTemporaryTextureSelectorValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticTemporaryTextureSelectorProbe;
+        const auto accepts = [&](Probe probe) {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderTemporaryTextureSelectorProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+                return true;
+            }
+            catch (const std::runtime_error&)
+            {
+                return false;
+            }
+        };
+
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : {Probe::Xyw, Probe::Reordered})
+        {
+            if (accepts(probe))
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid ps_1_4 temporary TEXLD selectors: " +
+                  acceptedInvalidProbes);
+        Check(accepts(Probe::Identity),
+              "compiled Effect parser rejected implicit XYZ temporary TEXLD selector");
+        Check(accepts(Probe::Xyz),
+              "compiled Effect parser rejected explicit XYZ temporary TEXLD selector");
+    }
+
     void CheckCompiledUninitializedTemporaryValidation(SoftwareRenderer& renderer)
     {
         CNA::TestSupport::SyntheticEffectOptions options;
@@ -7377,6 +7414,7 @@ int main()
         CheckCompiledPixel1OutputLiveness(renderer);
         CheckCompiledBemOperandValidation(renderer);
         CheckCompiledTextureCoordinateSelectorValidation(renderer);
+        CheckCompiledTemporaryTextureSelectorValidation(renderer);
         CheckCompiledUninitializedTemporaryValidation(renderer);
         CheckCompiledTexkillTemporaryValidation(renderer);
         CheckCompiledSgnValidation(renderer);

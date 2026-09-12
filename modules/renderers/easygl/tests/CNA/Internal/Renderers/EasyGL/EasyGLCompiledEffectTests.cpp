@@ -942,6 +942,32 @@ TEST(EasyGLCompiledEffectTest, AcceptsValidD3D9ShaderModel14TextureSelectors)
     }
 }
 
+TEST(EasyGLCompiledEffectTest, EnforcesD3D9ShaderModel14TemporaryTextureSelectors)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticTemporaryTextureSelectorProbe;
+    for (const Probe probe : {Probe::Xyw, Probe::Reordered})
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderTemporaryTextureSelectorProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+    for (const Probe probe : {Probe::Identity, Probe::Xyz})
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderTemporaryTextureSelectorProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 TEST(EasyGLCompiledEffectTest, RejectsReadOfUninitializedTemporaryDestination)
 {
     GraphicsDevice device;

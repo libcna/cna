@@ -265,6 +265,21 @@ namespace CNA::TestSupport
         XywThenDw,
     };
 
+    /** @brief Shader Model 1.4 dependent temporary `TEXLD` selector probe. */
+    enum class SyntheticTemporaryTextureSelectorProbe
+    {
+        /** @brief Emit no dedicated temporary-coordinate selector probe. */
+        None,
+        /** @brief Invalidly select XYW from the temporary coordinate. */
+        Xyw,
+        /** @brief Invalidly reorder the temporary coordinate components. */
+        Reordered,
+        /** @brief Validly omit the selector, which means XYZ. */
+        Identity,
+        /** @brief Validly select XYZ explicitly. */
+        Xyz,
+    };
+
     /** @brief Legacy pixel-depth instruction emitted by the synthetic pixel shader. */
     enum class SyntheticLegacyDepthOutput
     {
@@ -1561,6 +1576,9 @@ namespace CNA::TestSupport
         /// Emits the selected Shader Model 1.4 texture-coordinate selector probe.
         SyntheticTextureCoordinateSelectorProbe pixelShaderTextureCoordinateSelectorProbe =
             SyntheticTextureCoordinateSelectorProbe::None;
+        /// Emits the selected Shader Model 1.4 temporary `TEXLD` selector probe.
+        SyntheticTemporaryTextureSelectorProbe pixelShaderTemporaryTextureSelectorProbe =
+            SyntheticTemporaryTextureSelectorProbe::None;
         /// Emits a second ps_1_4 PHASE marker so parser validation can reject it.
         bool pixelShaderDuplicatesShaderModel14Phase = false;
         /// Emits an SM3 texture load whose coordinates are `v0[aL]` inside a one-iteration loop.
@@ -1804,6 +1822,8 @@ namespace CNA::TestSupport
         SyntheticBemOperandProbe bemOperandProbe = SyntheticBemOperandProbe::None,
         SyntheticTextureCoordinateSelectorProbe textureCoordinateSelectorProbe =
             SyntheticTextureCoordinateSelectorProbe::None,
+        SyntheticTemporaryTextureSelectorProbe temporaryTextureSelectorProbe =
+            SyntheticTemporaryTextureSelectorProbe::None,
         bool duplicatesShaderModel14Phase = false,
         bool usesRelativeTextureCoordinate = false,
         bool usesDependentTemporaryTextureCoordinate = false,
@@ -2174,7 +2194,9 @@ namespace CNA::TestSupport
                                            SyntheticLegacyBumpEnvironment::Arithmetic ||
                                        bemOperandProbe != SyntheticBemOperandProbe::None ||
                                        textureCoordinateSelectorProbe !=
-                                           SyntheticTextureCoordinateSelectorProbe::None;
+                                           SyntheticTextureCoordinateSelectorProbe::None ||
+                                       temporaryTextureSelectorProbe !=
+                                           SyntheticTemporaryTextureSelectorProbe::None;
         const bool usesShaderModel13 =
             legacyDepthOutput == SyntheticLegacyDepthOutput::TextureMatrix2;
         const std::uint32_t versionToken = probesPixel11Temporary || probesPixel11ColorInput ||
@@ -3485,6 +3507,25 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
                 AppendUInt32(shader, source(regTemp, 0));
             }
+        }
+        else if (temporaryTextureSelectorProbe !=
+                 SyntheticTemporaryTextureSelectorProbe::None)
+        {
+            using Probe = SyntheticTemporaryTextureSelectorProbe;
+            AppendUInt32(shader, 0x00000040u); // texcrd r1.xyz, t0
+            AppendUInt32(shader, destination(regTemp, 1, 0x7u));
+            AppendUInt32(shader, source(regTexture, 0));
+            AppendUInt32(shader, 0x0000FFFDu); // phase
+            AppendUInt32(shader, 0x00000042u); // texld r0, r1.selector
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            const std::uint32_t selector = temporaryTextureSelectorProbe == Probe::Xyw
+                                               ? 0xF4u
+                                           : temporaryTextureSelectorProbe == Probe::Reordered
+                                               ? 0x52u
+                                           : temporaryTextureSelectorProbe == Probe::Xyz
+                                               ? 0xA4u
+                                               : swizzleIdentity;
+            AppendUInt32(shader, source(regTemp, 1, selector));
         }
         else if (textureCoordinateSelectorProbe !=
                  SyntheticTextureCoordinateSelectorProbe::None)
@@ -7224,6 +7265,7 @@ namespace CNA::TestSupport
             options.pixelShaderLegacyBumpEnvironment,
             options.pixelShaderBemOperandProbe,
             options.pixelShaderTextureCoordinateSelectorProbe,
+            options.pixelShaderTemporaryTextureSelectorProbe,
             options.pixelShaderDuplicatesShaderModel14Phase,
             options.pixelShaderUsesRelativeTextureCoordinate,
             options.pixelShaderUsesDependentTemporaryTextureCoordinate,
@@ -7325,6 +7367,8 @@ namespace CNA::TestSupport
                     options.pixelShaderBemOperandProbe != SyntheticBemOperandProbe::None ||
                     options.pixelShaderTextureCoordinateSelectorProbe !=
                         SyntheticTextureCoordinateSelectorProbe::None ||
+                    options.pixelShaderTemporaryTextureSelectorProbe !=
+                        SyntheticTemporaryTextureSelectorProbe::None ||
                     options.pixelShaderUsesLegacyTextureMatrix2 ||
                     options.pixelShaderUsesLegacyTextureMatrix3Sample ||
                     options.pixelShaderUsesLegacyTextureMatrix3Specular ||

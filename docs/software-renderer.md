@@ -383,9 +383,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   constant/constant fixture without changing its exact rendered result. A valid marker-free program
   proves that `BEM` does not itself require an explicit `PHASE`. SOFTWARE-460 then enforces the
   ps_1_4 texture-coordinate selector contract: only XYZ/XYW are accepted, omission means XYZ, and
-  one `t#` must retain that selection across `TEXCRD`, `TEXLD` and both phases. The dependency series
-  now contains 85 patches; other opcodes' distinct operand and component-use rules remain
-  SOFTWARE-164/165 work.
+  one `t#` must retain that selection across `TEXCRD`, `TEXLD` and both phases. SOFTWARE-461 closes
+  the separate dependent-temporary branch: ordinary `TEXLD` reads from previous-phase `r#` accept
+  only implicit/explicit XYZ. The dependency series now contains 86 patches; other opcodes'
+  distinct operand and component-use rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
