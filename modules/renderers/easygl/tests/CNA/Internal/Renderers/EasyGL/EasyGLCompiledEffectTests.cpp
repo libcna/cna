@@ -1445,6 +1445,32 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex20MovDestination,
         CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex30MovDestination));
 
+class EasyGLCompiledEffectSamplerRegisterSourceTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSamplerRegisterSourceProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectSamplerRegisterSourceTest, RejectsDirectRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.samplerRegisterSourceProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    DirectSamplerSource,
+    EasyGLCompiledEffectSamplerRegisterSourceTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSamplerRegisterSourceProbe::Pixel20,
+        CNA::TestSupport::SyntheticSamplerRegisterSourceProbe::Pixel30,
+        CNA::TestSupport::SyntheticSamplerRegisterSourceProbe::Vertex30));
+
 class EasyGLCompiledEffectOutputRegisterRangeTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>
 {

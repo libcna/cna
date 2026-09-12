@@ -762,6 +762,19 @@ namespace CNA::TestSupport
         Vertex30MovDestination,
     };
 
+    /** @brief A sampler pseudo-register used as an ordinary arithmetic source by a probe. */
+    enum class SyntheticSamplerRegisterSourceProbe
+    {
+        /** @brief Emit no dedicated sampler-source probe. */
+        None,
+        /** @brief Read ps_2_0 s0 directly through MOV. */
+        Pixel20,
+        /** @brief Read ps_3_0 s0 directly through MOV. */
+        Pixel30,
+        /** @brief Read vs_3_0 s0 directly through MOV. */
+        Vertex30,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -1003,6 +1016,9 @@ namespace CNA::TestSupport
         /** @brief Selects a profile-specific vertex address-register access probe. */
         SyntheticAddressRegisterAccessProbe addressRegisterAccessProbe =
             SyntheticAddressRegisterAccessProbe::None;
+        /** @brief Selects a sampler pseudo-register used as an ordinary source. */
+        SyntheticSamplerRegisterSourceProbe samplerRegisterSourceProbe =
+            SyntheticSamplerRegisterSourceProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -1112,7 +1128,9 @@ namespace CNA::TestSupport
         SyntheticDestinationRegisterAccessProbe destinationRegisterAccessProbe =
             SyntheticDestinationRegisterAccessProbe::None,
         SyntheticOutputRegisterSourceProbe outputRegisterSourceProbe =
-            SyntheticOutputRegisterSourceProbe::None)
+            SyntheticOutputRegisterSourceProbe::None,
+        SyntheticSamplerRegisterSourceProbe samplerRegisterSourceProbe =
+            SyntheticSamplerRegisterSourceProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1217,6 +1235,10 @@ namespace CNA::TestSupport
             outputRegisterSourceProbe == SyntheticOutputRegisterSourceProbe::Pixel20Color;
         const bool probesPixel30OutputSource =
             outputRegisterSourceProbe == SyntheticOutputRegisterSourceProbe::Pixel30Depth;
+        const bool probesPixel20SamplerSource =
+            samplerRegisterSourceProbe == SyntheticSamplerRegisterSourceProbe::Pixel20;
+        const bool probesPixel30SamplerSource =
+            samplerRegisterSourceProbe == SyntheticSamplerRegisterSourceProbe::Pixel30;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -1229,7 +1251,7 @@ namespace CNA::TestSupport
                 SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelAllAbsolute ||
             probesPixel30Temporary || probesPixel30Input || probesPixel30InputDestination ||
             probesPixelOutput || probesPixel30DestinationAccess || probesPixel30OutputSource ||
-            probesPixel30ConstantControl;
+            probesPixel30SamplerSource || probesPixel30ConstantControl;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -1259,7 +1281,8 @@ namespace CNA::TestSupport
                                            : probesPixel20Temporary || probesPixel20FloatControl ||
                                                      probesPixel20InputDestination ||
                                                      probesPixel20DestinationAccess ||
-                                                     probesPixel20OutputSource
+                                                     probesPixel20OutputSource ||
+                                                     probesPixel20SamplerSource
                                                ? 0xFFFF0200u
                                            : probesPixel2xTemporary
                                                ? 0xFFFF02FFu
@@ -1599,6 +1622,15 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(depth ? regDepthOut : regColorOut, 0,
                                         depth ? 0x00u : 0xE4u));
+        }
+        if (probesPixel20SamplerSource || probesPixel30SamplerSource)
+        {
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_2d s0
+            AppendUInt32(shader, 0x80000000u | (2u << 27));
+            AppendUInt32(shader, destination(regSampler, 0, 0xFu));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, s0
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regSampler, 0));
         }
 
         if (readsUninitializedDestination)
@@ -2976,6 +3008,9 @@ namespace CNA::TestSupport
                                                                 SyntheticAddressRegisterAccessProbe
                                                                     addressRegisterAccessProbe =
                                                                         SyntheticAddressRegisterAccessProbe::None,
+                                                                SyntheticSamplerRegisterSourceProbe
+                                                                    samplerRegisterSourceProbe =
+                                                                        SyntheticSamplerRegisterSourceProbe::None,
                                                                 SyntheticVertexInstructionSlotProbe
                                                                     instructionSlotProbe =
                                                                         SyntheticVertexInstructionSlotProbe::None)
@@ -3050,6 +3085,8 @@ namespace CNA::TestSupport
             addressRegisterAccessProbe == SyntheticAddressRegisterAccessProbe::Vertex30Source ||
             addressRegisterAccessProbe ==
                 SyntheticAddressRegisterAccessProbe::Vertex30MovDestination;
+        const bool probesVertex30SamplerSource =
+            samplerRegisterSourceProbe == SyntheticSamplerRegisterSourceProbe::Vertex30;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture ||
             invalidMixedConstantAbsolute ==
@@ -3062,7 +3099,7 @@ namespace CNA::TestSupport
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex30OutOfRange ||
             probesVertex30Input || probesVertex30InputDestination || probesVertex30Output ||
             probesVertex30ConstantControl || probesVertex30DestinationAccess ||
-            probesVertex30OutputSource || probesVertex30Address;
+            probesVertex30OutputSource || probesVertex30Address || probesVertex30SamplerSource;
         const bool probesVertex2xTemporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xMaximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange;
@@ -3077,7 +3114,8 @@ namespace CNA::TestSupport
                                                ? 0xFFFE0300u
                                                : 0xFFFE0200u;
         const std::uint32_t constantCount =
-            1u + (readsSecondStream ? 1u : 0u) + (samplesTexture ? 1u : 0u);
+            1u + (readsSecondStream ? 1u : 0u) +
+            (samplesTexture || probesVertex30SamplerSource ? 1u : 0u);
 
         std::vector<std::uint8_t> ctab;
         AppendUInt32(ctab, 28);                 // 0  sizeof(D3DXSHADER_CONSTANTTABLE)
@@ -3165,7 +3203,7 @@ namespace CNA::TestSupport
             ctab[constantInfo + 28] = 1;  // RegisterCount
             PatchUInt32(ctab, constantInfo + 32, streamMixType);
         }
-        if (samplesTexture)
+        if (samplesTexture || probesVertex30SamplerSource)
         {
             const std::uint32_t samplerInfo = constantInfo +
                 (readsSecondStream ? 40u : 20u);
@@ -3368,7 +3406,7 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x80000000u | 5u);        // D3DDECLUSAGE_TEXCOORD, index 0
             AppendUInt32(shader, destination(regInput, 1));
         }
-        if (samplesTexture)
+        if (samplesTexture || probesVertex30SamplerSource)
         {
             const std::uint32_t samplerTextureType =
                 samplerKind == SyntheticSamplerKind::SamplerCube
@@ -3502,6 +3540,12 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, destination(regTemp, 1));
                 AppendUInt32(shader, source(regAddress, 0, 0x00u));
             }
+        }
+        if (probesVertex30SamplerSource)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, s0
+            AppendUInt32(shader, destination(regTemp, 1));
+            AppendUInt32(shader, source(regSampler, 0));
         }
         if (probesVertex20Output || probesVertex30Output)
         {
@@ -4414,7 +4458,8 @@ namespace CNA::TestSupport
             options.pixel1DestinationMaskProbe,
             options.pixel1CoissueProbe,
             options.destinationRegisterAccessProbe,
-            options.outputRegisterSourceProbe);
+            options.outputRegisterSourceProbe,
+            options.samplerRegisterSourceProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -4501,6 +4546,7 @@ namespace CNA::TestSupport
                 options.destinationRegisterAccessProbe,
                 options.outputRegisterSourceProbe,
                 options.addressRegisterAccessProbe,
+                options.samplerRegisterSourceProbe,
                 options.vertexInstructionSlotProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));

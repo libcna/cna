@@ -1,0 +1,77 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -704,6 +704,24 @@ static void validate_address_register_source(Context *ctx,
+     } // if
+ } // validate_address_register_source
+ 
++static void validate_sampler_register_source(Context *ctx,
++                                             const RegisterType regtype,
++                                             const int source_index)
++{
++    if (regtype != REG_TYPE_SAMPLER)
++        return;
++
++    if (((ctx->current_opcode == OPCODE_TEXLD) ||
++         (ctx->current_opcode == OPCODE_TEXLDL)) &&
++        (source_index == 1))
++        return;
++
++    if ((ctx->current_opcode == OPCODE_TEXLDD) && (source_index == 3))
++        return;
++
++    fail(ctx, "sampler pseudo-register cannot be read directly");
++} // validate_sampler_register_source
++
+ static void validate_constant_control_register(Context *ctx,
+                                                const RegisterType regtype,
+                                                const int regnum)
+@@ -1048,5 +1067,6 @@ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+ {
+     int retval = 1;
++    const int source_index = ctx->current_source_arg++;
+ 
+     if (ctx->tokencount == 0)
+     {
+@@ -1088,6 +1108,7 @@ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+     validate_input_register(ctx, info->regtype, info->regnum);
+     validate_output_register_source(ctx, info->regtype);
+     validate_address_register_source(ctx, info->regtype);
++    validate_sampler_register_source(ctx, info->regtype, source_index);
+     validate_constant_control_register(ctx, info->regtype, info->regnum);
+ 
+     info->swizzle = adjust_swizzle(ctx, info->regtype, info->regnum, swizzle);
+@@ -2934,6 +2955,8 @@ static int parse_instruction_token(Context *ctx)
+     memset(ctx->dwords, '\0', sizeof (ctx->dwords));
+     ctx->instruction_controls = controls;
+     ctx->predicated = predicated;
++    ctx->current_opcode = opcode;
++    ctx->current_source_arg = 0;
+     ctx->have_dest_arg = 0;
+ 
+     // Update the context with instruction's arguments.
+diff --git a/mojoshader_internal.h b/mojoshader_internal.h
+--- a/mojoshader_internal.h
++++ b/mojoshader_internal.h
+@@ -452,7 +452,9 @@ void buffer_patch(Buffer *buffer, const size_t start,
+ #define OPCODE_BREAK 44
+ #define OPCODE_BREAKC 45
+ #define OPCODE_TEXLD 66
++#define OPCODE_TEXLDD 93
+ #define OPCODE_SETP 94
++#define OPCODE_TEXLDL 95
+ 
+ // TEXLD becomes a different instruction with these instruction controls.
+ #define CONTROL_TEXLD  0
+diff --git a/profiles/mojoshader_profile.h b/profiles/mojoshader_profile.h
+--- a/profiles/mojoshader_profile.h
++++ b/profiles/mojoshader_profile.h
+@@ -134,6 +134,8 @@ typedef struct Context
+     int pixel_arithmetic_instruction_count;
+     int pixel_texture_instruction_count;
+     uint32 instruction_controls;
++    uint32 current_opcode;
++    int current_source_arg;
+     uint32 previous_opcode;
+     int previous_had_dest_arg;
+     int previous_writemask;
