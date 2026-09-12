@@ -728,6 +728,10 @@ namespace CNA::TestSupport
         None,
         /** @brief Read an uninitialized temporary in a ps_3_0 program. */
         Pixel30,
+        /** @brief Read an uninitialized temporary in a ps_2_x program. */
+        Pixel2x,
+        /** @brief Let ps_2_x TEXKILL read a wholly uninitialized temporary. */
+        Pixel2xTexkill,
         /** @brief In ps_2_0, write r0.x and then read that initialized X component. */
         Pixel20MoveWrittenX,
         /** @brief In ps_2_0, write r0.x and then read the uninitialized Y component. */
@@ -2160,6 +2164,10 @@ namespace CNA::TestSupport
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel30OutOfRange;
         const bool probesPixel30TemporaryInitialization =
             temporaryInitializationProbe == SyntheticTemporaryInitializationProbe::Pixel30;
+        const bool probesPixel2xTemporaryInitialization =
+            temporaryInitializationProbe == SyntheticTemporaryInitializationProbe::Pixel2x ||
+            temporaryInitializationProbe ==
+                SyntheticTemporaryInitializationProbe::Pixel2xTexkill;
         const bool probesPixel20MoveComponentInitialization =
             temporaryInitializationProbe ==
                 SyntheticTemporaryInitializationProbe::Pixel20MoveWrittenX ||
@@ -2482,7 +2490,8 @@ namespace CNA::TestSupport
                                                ? 0xFFFF0200u
                                            : probesPixel2xTemporary || probesPixel2xCallGraph ||
                                                      probesPixel2xTextureInstructionProfile ||
-                                                     probesPixel2xTexlddOperand
+                                                     probesPixel2xTexlddOperand ||
+                                                     probesPixel2xTemporaryInitialization
                                                ? 0xFFFF02FFu
                                            : usesShaderModel14
                                                ? 0xFFFF0104u
@@ -2980,11 +2989,18 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
         }
-        if (probesPixel30TemporaryInitialization)
+        if (probesPixel30TemporaryInitialization ||
+            temporaryInitializationProbe == SyntheticTemporaryInitializationProbe::Pixel2x)
         {
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, uninitialized r0
             AppendUInt32(shader, destination(regTemp, 1, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
+        }
+        if (temporaryInitializationProbe ==
+            SyntheticTemporaryInitializationProbe::Pixel2xTexkill)
+        {
+            AppendUInt32(shader, 0x00000041u | (1u << 24)); // texkill r0
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
         }
         if (probesPixel20MoveComponentInitialization)
         {

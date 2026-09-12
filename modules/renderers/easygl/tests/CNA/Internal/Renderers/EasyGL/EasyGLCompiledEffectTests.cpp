@@ -1017,6 +1017,8 @@ INSTANTIATE_TEST_SUITE_P(
     EasyGLCompiledEffectPermissiveTemporaryInitializationTest,
     ::testing::Values(
         CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel30,
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel2x,
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel2xTexkill,
         CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex20,
         CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex30));
 

@@ -400,8 +400,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   two sources, and `CRS` consumes XYZ from both sources, regardless of destination mask. The dependency
   series' 92nd patch then restores `CND`: pre-1.4 pixel shaders read their mandatory `r0.a`
   condition plus the destination-selected alternative channels, while ps_1_4 applies destination
-  masks and source swizzles component-wise to all three inputs. Remaining opcode-specific source rules remain
-  SOFTWARE-164/165 work.
+  masks and source swizzles component-wise to all three inputs. SOFTWARE-468 then challenges the
+  profile predicate shared by that validation series: real Microsoft assembly rejects an entirely
+  uninitialized ordinary read and `TEXKILL` in exact `ps_2_0`, but accepts both in `ps_2_x` (as well
+  as an all-uninitialized `ps_2_x TEXLDD`). Managed patch 93 therefore limits generic, matrix and
+  `TEXKILL` liveness to Pixel Shader 1.x/exact 2.0 and Vertex Shader 1.1. Remaining opcode-specific
+  source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
