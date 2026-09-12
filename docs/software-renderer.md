@@ -276,7 +276,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   the enabled EasyGL translator's composite arithmetic writes:
   `DST` and `CRS` now select the result components named by a partial destination mask before
   assigning the correspondingly narrow GLSL lvalue, while Software's existing masked write
-  remains the independent CPU control. SOFTWARE-388 replaces the remaining SM3
+  remains the independent CPU control. SOFTWARE-435 then hardens the shared parser's structured
+  flow grammar: it tracks typed `IF`/`ELSE`, `LOOP` and `REP` blocks, rejects orphaned, duplicate,
+  crossing and unterminated terminators, and enforces the documented Shader Model 3 conditional
+  and loop/repeat nesting limits plus exact `vs_2_0` loop/repeat depth. Twelve invalid programs and
+  five maximum/legal controls pass through Software and all 301 enabled EasyGL compiled-Effect
+  tests. SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
   swizzles, source modifiers, projection and sample-dependent temporary chains. SOFTWARE-389

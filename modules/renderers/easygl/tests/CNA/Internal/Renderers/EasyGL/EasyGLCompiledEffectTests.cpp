@@ -1086,6 +1086,67 @@ TEST(EasyGLCompiledEffectTest, RejectsLoopInPixelShaderModel2x)
     EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
+class EasyGLCompiledEffectInvalidFlowControlTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticFlowControlProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidFlowControlTest, RejectsInvalidStructureOrNesting)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.flowControlProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidStructures,
+    EasyGLCompiledEffectInvalidFlowControlTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticFlowControlProbe::ElseWithoutIf,
+        CNA::TestSupport::SyntheticFlowControlProbe::EndIfWithoutIf,
+        CNA::TestSupport::SyntheticFlowControlProbe::IfWithoutEndIf,
+        CNA::TestSupport::SyntheticFlowControlProbe::DuplicateElse,
+        CNA::TestSupport::SyntheticFlowControlProbe::LoopEndsBeforeIf,
+        CNA::TestSupport::SyntheticFlowControlProbe::IfEndsBeforeLoop,
+        CNA::TestSupport::SyntheticFlowControlProbe::RepEndsBeforeIf,
+        CNA::TestSupport::SyntheticFlowControlProbe::IfEndsBeforeRep,
+        CNA::TestSupport::SyntheticFlowControlProbe::StaticIfDepth25,
+        CNA::TestSupport::SyntheticFlowControlProbe::DynamicIfDepth25,
+        CNA::TestSupport::SyntheticFlowControlProbe::LoopRepDepth5,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth2));
+
+class EasyGLCompiledEffectValidFlowControlTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticFlowControlProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidFlowControlTest, AcceptsLegalStructureAndBoundaryDepth)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.flowControlProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    BoundaryDepths,
+    EasyGLCompiledEffectValidFlowControlTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticFlowControlProbe::ProperlyNestedLoopIf,
+        CNA::TestSupport::SyntheticFlowControlProbe::StaticIfDepth24,
+        CNA::TestSupport::SyntheticFlowControlProbe::DynamicIfDepth24,
+        CNA::TestSupport::SyntheticFlowControlProbe::LoopRepDepth4,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth1));
+
 class EasyGLCompiledEffectMatrixOperandTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidMatrixOperands>
 {

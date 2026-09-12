@@ -3016,6 +3016,69 @@ namespace
         Check(rejected, "compiled Effect parser accepted LOOP in pixel Shader Model 2.x");
     }
 
+    void CheckCompiledFlowControlStructureValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticFlowControlProbe;
+        constexpr std::array invalidProbes{
+            Probe::ElseWithoutIf,
+            Probe::EndIfWithoutIf,
+            Probe::IfWithoutEndIf,
+            Probe::DuplicateElse,
+            Probe::LoopEndsBeforeIf,
+            Probe::IfEndsBeforeLoop,
+            Probe::RepEndsBeforeIf,
+            Probe::IfEndsBeforeRep,
+            Probe::StaticIfDepth25,
+            Probe::DynamicIfDepth25,
+            Probe::LoopRepDepth5,
+            Probe::Vertex20LoopRepDepth2,
+        };
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.flowControlProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected,
+                  "compiled Effect parser accepted invalid structured flow control");
+        }
+
+        constexpr std::array validProbes{
+            Probe::ProperlyNestedLoopIf,
+            Probe::StaticIfDepth24,
+            Probe::DynamicIfDepth24,
+            Probe::LoopRepDepth4,
+            Probe::Vertex20LoopRepDepth1,
+        };
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.flowControlProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Effect parser rejected legal structured flow control");
+        }
+    }
+
     void CheckCompiledMatrixOperandValidation(SoftwareRenderer& renderer)
     {
         using Operands = CNA::TestSupport::SyntheticInvalidMatrixOperands;
@@ -6057,6 +6120,7 @@ int main()
         CheckCompiledPixelShaderModel20OpcodeValidation(renderer);
         CheckCompiledShaderModel20DynamicFeatureValidation(renderer);
         CheckCompiledPixelShaderModel2xOpcodeValidation(renderer);
+        CheckCompiledFlowControlStructureValidation(renderer);
         CheckCompiledMatrixOperandValidation(renderer);
         CheckCompiledPreShaderModel3AbsoluteSourceValidation(renderer);
         CheckCompiledShaderModel3MixedConstantAbsoluteValidation(renderer);

@@ -346,6 +346,47 @@ namespace CNA::TestSupport
         VertexPredicatedMov,
     };
 
+    /** @brief Structured-flow program used to probe D3D9 block matching and nesting limits. */
+    enum class SyntheticFlowControlProbe
+    {
+        /** @brief Emit no dedicated structured-flow probe. */
+        None,
+        /** @brief Emit a correctly nested loop containing an if block. */
+        ProperlyNestedLoopIf,
+        /** @brief Emit `ELSE` without a preceding `IF`. */
+        ElseWithoutIf,
+        /** @brief Emit `ENDIF` without a preceding `IF`. */
+        EndIfWithoutIf,
+        /** @brief Emit `IF` without a closing `ENDIF`. */
+        IfWithoutEndIf,
+        /** @brief Emit two `ELSE` instructions for one `IF`. */
+        DuplicateElse,
+        /** @brief End a loop before an if block opened inside it. */
+        LoopEndsBeforeIf,
+        /** @brief End an if block before a loop opened inside it. */
+        IfEndsBeforeLoop,
+        /** @brief End a repeat block before an if block opened inside it. */
+        RepEndsBeforeIf,
+        /** @brief End an if block before a repeat block opened inside it. */
+        IfEndsBeforeRep,
+        /** @brief Emit the maximum 24 nested static if blocks. */
+        StaticIfDepth24,
+        /** @brief Emit 25 nested static if blocks. */
+        StaticIfDepth25,
+        /** @brief Emit the maximum 24 nested dynamic if blocks. */
+        DynamicIfDepth24,
+        /** @brief Emit 25 nested dynamic if blocks. */
+        DynamicIfDepth25,
+        /** @brief Emit the maximum four nested loop/repeat blocks. */
+        LoopRepDepth4,
+        /** @brief Emit five nested loop/repeat blocks. */
+        LoopRepDepth5,
+        /** @brief Emit one legal loop/repeat level in an exact vertex Shader Model 2.0 program. */
+        Vertex20LoopRepDepth1,
+        /** @brief Emit two loop/repeat levels in an exact vertex Shader Model 2.0 program. */
+        Vertex20LoopRepDepth2,
+    };
+
     /** @brief Invalid source/destination relationship deliberately emitted for a matrix opcode. */
     enum class SyntheticInvalidMatrixOperands
     {
@@ -1113,6 +1154,8 @@ namespace CNA::TestSupport
         SyntheticInvalidShaderModel3MixedConstantAbsolute
             invalidShaderModel3MixedConstantAbsolute =
                 SyntheticInvalidShaderModel3MixedConstantAbsolute::None;
+        /** @brief Selects a Shader Model 3 structured-flow validation probe. */
+        SyntheticFlowControlProbe flowControlProbe = SyntheticFlowControlProbe::None;
         /** @brief Selects a fixed-profile temporary-register boundary probe. */
         SyntheticTemporaryRegisterProbe temporaryRegisterProbe =
             SyntheticTemporaryRegisterProbe::None;
@@ -1287,7 +1330,8 @@ namespace CNA::TestSupport
         SyntheticMiscellaneousInputProbe miscellaneousInputProbe =
             SyntheticMiscellaneousInputProbe::None,
         SyntheticSemanticDeclarationProbe semanticDeclarationProbe =
-            SyntheticSemanticDeclarationProbe::None)
+            SyntheticSemanticDeclarationProbe::None,
+        SyntheticFlowControlProbe flowControlProbe = SyntheticFlowControlProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1431,6 +1475,9 @@ namespace CNA::TestSupport
                 SyntheticSemanticDeclarationProbe::PixelOverlappingMasks ||
             semanticDeclarationProbe ==
                 SyntheticSemanticDeclarationProbe::PixelDuplicateSemantic;
+        const bool probesPixelFlowControl =
+            flowControlProbe >= SyntheticFlowControlProbe::ProperlyNestedLoopIf &&
+            flowControlProbe <= SyntheticFlowControlProbe::LoopRepDepth5;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -1447,7 +1494,7 @@ namespace CNA::TestSupport
             probesPixel30SpecialControlSource || probesPixelRelativeAddressing ||
             probesPixelMiscellaneousInput ||
             probesPixelSemanticDeclarations ||
-            probesPixel30ConstantControl;
+            probesPixel30ConstantControl || probesPixelFlowControl;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -3146,6 +3193,131 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
         }
+        else if (probesPixelFlowControl)
+        {
+            const auto appendIf = [&]()
+            {
+                AppendUInt32(shader, 0x00000028u | (1u << 24)); // if b0
+                AppendUInt32(shader, source(regConstBool, 0, 0x00u));
+            };
+            const auto appendIfc = [&]()
+            {
+                AppendUInt32(shader,
+                             0x00000029u | (1u << 16) | (2u << 24)); // if_gt c0.x, c0.y
+                AppendUInt32(shader, source(regConst, 0, 0x00u));
+                AppendUInt32(shader, source(regConst, 0, 0x55u));
+            };
+            const auto appendLoop = [&]()
+            {
+                AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
+                AppendUInt32(shader, source(regLoop, 0, 0x00u));
+                AppendUInt32(shader, source(regConstInt, 0));
+            };
+            const auto appendRep = [&]()
+            {
+                AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
+                AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+            };
+
+            AppendUInt32(shader, 0x0000002Fu | (2u << 24)); // defb b0, true
+            AppendUInt32(shader, destination(regConstBool, 0, 0x1u));
+            AppendUInt32(shader, 1u);
+            AppendUInt32(shader, 0x00000030u | (5u << 24)); // defi i0, 1, 0, 1, 0
+            AppendUInt32(shader, destination(regConstInt, 0, 0xFu));
+            AppendUInt32(shader, 1u);
+            AppendUInt32(shader, 0u);
+            AppendUInt32(shader, 1u);
+            AppendUInt32(shader, 0u);
+
+            switch (flowControlProbe)
+            {
+                case SyntheticFlowControlProbe::ProperlyNestedLoopIf:
+                    appendLoop();
+                    appendIf();
+                    AppendUInt32(shader, 0x0000002Bu); // endif
+                    AppendUInt32(shader, 0x0000001Du); // endloop
+                    break;
+                case SyntheticFlowControlProbe::ElseWithoutIf:
+                    AppendUInt32(shader, 0x0000002Au); // else
+                    break;
+                case SyntheticFlowControlProbe::EndIfWithoutIf:
+                    AppendUInt32(shader, 0x0000002Bu); // endif
+                    break;
+                case SyntheticFlowControlProbe::IfWithoutEndIf:
+                    appendIf();
+                    break;
+                case SyntheticFlowControlProbe::DuplicateElse:
+                    appendIf();
+                    AppendUInt32(shader, 0x0000002Au); // else
+                    AppendUInt32(shader, 0x0000002Au); // else
+                    AppendUInt32(shader, 0x0000002Bu); // endif
+                    break;
+                case SyntheticFlowControlProbe::LoopEndsBeforeIf:
+                    appendLoop();
+                    appendIf();
+                    AppendUInt32(shader, 0x0000001Du); // endloop
+                    AppendUInt32(shader, 0x0000002Bu); // endif
+                    break;
+                case SyntheticFlowControlProbe::IfEndsBeforeLoop:
+                    appendIf();
+                    appendLoop();
+                    AppendUInt32(shader, 0x0000002Bu); // endif
+                    AppendUInt32(shader, 0x0000001Du); // endloop
+                    break;
+                case SyntheticFlowControlProbe::RepEndsBeforeIf:
+                    appendRep();
+                    appendIf();
+                    AppendUInt32(shader, 0x00000027u); // endrep
+                    AppendUInt32(shader, 0x0000002Bu); // endif
+                    break;
+                case SyntheticFlowControlProbe::IfEndsBeforeRep:
+                    appendIf();
+                    appendRep();
+                    AppendUInt32(shader, 0x0000002Bu); // endif
+                    AppendUInt32(shader, 0x00000027u); // endrep
+                    break;
+                case SyntheticFlowControlProbe::StaticIfDepth24:
+                case SyntheticFlowControlProbe::StaticIfDepth25:
+                {
+                    const int depth = flowControlProbe == SyntheticFlowControlProbe::StaticIfDepth24
+                                          ? 24
+                                          : 25;
+                    for (int i = 0; i < depth; ++i) appendIf();
+                    for (int i = 0; i < depth; ++i) AppendUInt32(shader, 0x0000002Bu);
+                    break;
+                }
+                case SyntheticFlowControlProbe::DynamicIfDepth24:
+                case SyntheticFlowControlProbe::DynamicIfDepth25:
+                {
+                    const int depth =
+                        flowControlProbe == SyntheticFlowControlProbe::DynamicIfDepth24 ? 24 : 25;
+                    for (int i = 0; i < depth; ++i) appendIfc();
+                    for (int i = 0; i < depth; ++i) AppendUInt32(shader, 0x0000002Bu);
+                    break;
+                }
+                case SyntheticFlowControlProbe::LoopRepDepth4:
+                case SyntheticFlowControlProbe::LoopRepDepth5:
+                {
+                    const int depth = flowControlProbe == SyntheticFlowControlProbe::LoopRepDepth4
+                                          ? 4
+                                          : 5;
+                    for (int i = 0; i < depth; ++i)
+                    {
+                        if ((i & 1) == 0) appendLoop();
+                        else appendRep();
+                    }
+                    for (int i = depth - 1; i >= 0; --i)
+                        AppendUInt32(shader, (i & 1) == 0 ? 0x0000001Du : 0x00000027u);
+                    break;
+                }
+                case SyntheticFlowControlProbe::None:
+                case SyntheticFlowControlProbe::Vertex20LoopRepDepth1:
+                case SyntheticFlowControlProbe::Vertex20LoopRepDepth2: break;
+            }
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, c0
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 0));
+        }
         else if (usesLoop || shaderModel2xUsesInvalidLoop)
         {
             // def c1, 0.25, 0, 0, 0
@@ -3452,7 +3624,9 @@ namespace CNA::TestSupport
                                                                         SyntheticSemanticDeclarationProbe::None,
                                                                 SyntheticCompositeWriteMaskProbe
                                                                     compositeWriteMaskProbe =
-                                                                        SyntheticCompositeWriteMaskProbe::None)
+                                                                        SyntheticCompositeWriteMaskProbe::None,
+                                                                SyntheticFlowControlProbe flowControlProbe =
+                                                                    SyntheticFlowControlProbe::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -3555,6 +3729,9 @@ namespace CNA::TestSupport
             semanticDeclarationProbe ==
                 SyntheticSemanticDeclarationProbe::PixelCentroidImplicitColor ||
             probesCentroid20;
+        const bool probesVertex20FlowControl =
+            flowControlProbe == SyntheticFlowControlProbe::Vertex20LoopRepDepth1 ||
+            flowControlProbe == SyntheticFlowControlProbe::Vertex20LoopRepDepth2;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture ||
             invalidMixedConstantAbsolute ==
@@ -4559,6 +4736,29 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regInput, 0));
             AppendUInt32(shader, source(regConst, 0));
         }
+        else if (probesVertex20FlowControl)
+        {
+            AppendUInt32(shader, 0x00000030u | (5u << 24)); // defi i0, 1, 0, 1, 0
+            AppendUInt32(shader, destination(regConstInt, 0, 0xFu));
+            AppendUInt32(shader, 1u);
+            AppendUInt32(shader, 0u);
+            AppendUInt32(shader, 1u);
+            AppendUInt32(shader, 0u);
+            AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
+            AppendUInt32(shader, source(regLoop, 0, 0x00u));
+            AppendUInt32(shader, source(regConstInt, 0));
+            if (flowControlProbe == SyntheticFlowControlProbe::Vertex20LoopRepDepth2)
+            {
+                AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
+                AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                AppendUInt32(shader, 0x00000027u); // endrep
+            }
+            AppendUInt32(shader, 0x0000001Du); // endloop
+            AppendUInt32(shader, 0x00000014u | (3u << 24)); // m4x4 oPos, v0, c0
+            AppendUInt32(shader, destination(regRastOut, 0));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(regConst, 0));
+        }
         else if (invalidMixedConstantAbsolute ==
                  SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAllAbsolute)
         {
@@ -5146,7 +5346,8 @@ namespace CNA::TestSupport
             options.specialControlSourceProbe,
             options.relativeAddressingProbe,
             options.miscellaneousInputProbe,
-            options.semanticDeclarationProbe);
+            options.semanticDeclarationProbe,
+            options.flowControlProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -5239,7 +5440,8 @@ namespace CNA::TestSupport
                 options.vertexInstructionSlotProbe,
                 options.relativeAddressingProbe,
                 options.semanticDeclarationProbe,
-                options.vertexShaderCompositeWriteMaskProbe);
+                options.vertexShaderCompositeWriteMaskProbe,
+                options.flowControlProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());
