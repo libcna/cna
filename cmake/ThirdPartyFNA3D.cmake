@@ -105,7 +105,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-miscellaneous-input-contract.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sm3-semantic-packing.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-centroid-interpolation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-sm2-centroid-interpolation.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-sm2-centroid-interpolation.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-composite-write-mask.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

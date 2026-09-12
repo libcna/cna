@@ -1875,6 +1875,38 @@ namespace
               "parsed pixel NRM derived its length from the destination mask");
     }
 
+    void CheckParsedCompositeWriteMaskEffects(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticCompositeWriteMaskProbe;
+        for (const Probe probe : {Probe::VertexDst, Probe::VertexCrs})
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.vertexShaderCompositeWriteMaskProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            auto runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+            const Matrix identity = Matrix::getIdentityProperty();
+            runtime->SetParameterValue(FindParameter(*runtime, "Transform"), &identity,
+                                       sizeof(identity));
+            runtime->SetTechnique(0u);
+            CompiledEffectPassStateChanges changes;
+            runtime->ApplyPass(1u, {}, changes);
+            auto* software = dynamic_cast<SoftwareCompiledEffect*>(runtime.get());
+            Check(software != nullptr,
+                  "parsed composite write-mask Effect has the wrong backend type");
+            if (software == nullptr)
+                continue;
+            const SoftwareShaderSemanticValueEXT input = {
+                MOJOSHADER_USAGE_POSITION, 0u, {0.25f, -0.5f, 0.75f, 1.0f},
+            };
+            const auto result = software->ExecuteVertexEXT(std::span(&input, 1u));
+            Check(result.position == input.value,
+                  probe == Probe::VertexDst
+                      ? "parsed vertex DST did not preserve/apply its XZ write mask"
+                      : "parsed vertex CRS did not preserve/apply its XZ write mask");
+        }
+    }
+
     void CheckParsedShaderModel11VertexEffects(SoftwareRenderer& renderer)
     {
         CNA::TestSupport::SyntheticEffectOptions options;
@@ -6000,6 +6032,7 @@ int main()
         CheckParsedSubroutineEffect(renderer);
         CheckParsedSignedLogEffect(renderer);
         CheckParsedNrmWriteMaskEffect(renderer);
+        CheckParsedCompositeWriteMaskEffects(renderer);
         CheckParsedShaderModel11VertexEffects(renderer);
         CheckCompiledRelativeInputTextureCoordinate();
         CheckCompiledDependentTemporaryTextureCoordinate();

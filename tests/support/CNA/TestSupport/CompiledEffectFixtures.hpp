@@ -233,6 +233,17 @@ namespace CNA::TestSupport
         NonTemporary,
     };
 
+    /** @brief Composite arithmetic result exercised through a partial destination write mask. */
+    enum class SyntheticCompositeWriteMaskProbe
+    {
+        /** @brief Emit no composite-result write-mask probe. */
+        None,
+        /** @brief Emit vertex `DST r0.xz, c240, c241`. */
+        VertexDst,
+        /** @brief Emit vertex `CRS r0.xz, c240, c241`. */
+        VertexCrs,
+    };
+
     /** @brief Shader Model 2+ arithmetic opcode deliberately emitted in a ps_1_4 program. */
     enum class SyntheticInvalidPixelShaderModel1Opcode
     {
@@ -948,6 +959,10 @@ namespace CNA::TestSupport
         /// Emits vertex `SGN` with the selected scratch-operand form.
         SyntheticSgnScratchOperands vertexShaderSgnScratchOperands =
             SyntheticSgnScratchOperands::None;
+        /// Emits a vertex instruction whose vector result is written through a non-contiguous
+        /// destination mask, then uses all four preserved/result components for clip position.
+        SyntheticCompositeWriteMaskProbe vertexShaderCompositeWriteMaskProbe =
+            SyntheticCompositeWriteMaskProbe::None;
         /// plans/plan_fx.md FX-104: adds a `Caption` parameter of reflected type String, with an initial
         /// value, so the XNA `SetValue(string)`/`GetValueString()` pair can be exercised on a
         /// parameter that really is one instead of only through its rejection path.
@@ -3434,7 +3449,10 @@ namespace CNA::TestSupport
                                                                         SyntheticRelativeAddressingProbe::None,
                                                                 SyntheticSemanticDeclarationProbe
                                                                     semanticDeclarationProbe =
-                                                                        SyntheticSemanticDeclarationProbe::None)
+                                                                        SyntheticSemanticDeclarationProbe::None,
+                                                                SyntheticCompositeWriteMaskProbe
+                                                                    compositeWriteMaskProbe =
+                                                                        SyntheticCompositeWriteMaskProbe::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -3832,6 +3850,28 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, FloatBits(0.75f));
                 AppendUInt32(shader, FloatBits(1.0f));
             }
+        }
+        if (compositeWriteMaskProbe != SyntheticCompositeWriteMaskProbe::None)
+        {
+            const auto appendDef = [&](std::uint32_t number, float x, float y, float z, float w) {
+                AppendUInt32(shader, 0x00000051u | (5u << 24));
+                AppendUInt32(shader, destination(regConst, number));
+                AppendUInt32(shader, FloatBits(x));
+                AppendUInt32(shader, FloatBits(y));
+                AppendUInt32(shader, FloatBits(z));
+                AppendUInt32(shader, FloatBits(w));
+            };
+            if (compositeWriteMaskProbe == SyntheticCompositeWriteMaskProbe::VertexDst)
+            {
+                appendDef(240u, 0.0f, 1.0f, 1.0f, 1.0f);
+                appendDef(241u, 0.0f, 1.0f, 0.0f, 1.0f);
+            }
+            else
+            {
+                appendDef(240u, 0.0f, 1.0f, -1.0f, 0.0f);
+                appendDef(241u, -1.0f, 0.0f, 1.0f, 0.0f);
+            }
+            appendDef(242u, 1.0f, 1.0f, 1.0f, 1.0f);
         }
 
         // dcl_position v0
@@ -4442,6 +4482,24 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 4));
             AppendUInt32(shader, source(regInput, 0));
         }
+        if (compositeWriteMaskProbe != SyntheticCompositeWriteMaskProbe::None)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, c242
+            AppendUInt32(shader, destination(regTemp, 0));
+            AppendUInt32(shader, source(regConst, 242u));
+            AppendUInt32(shader,
+                         (compositeWriteMaskProbe == SyntheticCompositeWriteMaskProbe::VertexDst
+                              ? 0x00000011u
+                              : 0x00000021u) |
+                             (3u << 24)); // dst/crs r0.xz, c240, c241
+            AppendUInt32(shader, destination(regTemp, 0, 0x5u));
+            AppendUInt32(shader, source(regConst, 240u));
+            AppendUInt32(shader, source(regConst, 241u));
+            AppendUInt32(shader, 0x00000005u | (3u << 24)); // mul r0, v0, r0
+            AppendUInt32(shader, destination(regTemp, 0));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(regTemp, 0));
+        }
         if (samplesTexture)
         {
             // texldl r0, v1, s#; mov o0, r0. The texture therefore owns the complete clip-space
@@ -4513,7 +4571,11 @@ namespace CNA::TestSupport
             // m4x4 oPos, <r0|v0>, c0
             AppendUInt32(shader, 0x00000014u | (3u << 24));
             AppendUInt32(shader, destination(usesShaderModel3 ? regTexCoordOut : regRastOut, 0));
-            AppendUInt32(shader, readsSecondStream ? source(regTemp, 0) : source(regInput, 0));
+            AppendUInt32(shader,
+                         readsSecondStream ||
+                                 compositeWriteMaskProbe != SyntheticCompositeWriteMaskProbe::None
+                             ? source(regTemp, 0)
+                             : source(regInput, 0));
             AppendUInt32(
                 shader,
                 source(regConst, 0, 0xE4u,
@@ -5176,7 +5238,8 @@ namespace CNA::TestSupport
                 options.specialControlSourceProbe,
                 options.vertexInstructionSlotProbe,
                 options.relativeAddressingProbe,
-                options.semanticDeclarationProbe);
+                options.semanticDeclarationProbe,
+                options.vertexShaderCompositeWriteMaskProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

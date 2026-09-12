@@ -44,7 +44,7 @@ Those are real parser, vertex and sampled-pixel phases, not complete execution p
 reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
 continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
 is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371/373/374/375/376/377/378/379/380/381/382/383/384/385/386/387/388/389/390/391` are complete: the opt-in runtime now includes compiled MRT,
+`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371/373/374/375/376/377/378/379/380/381/382/383/384/385/386/387/388/389/390/391/433/434` are complete: the opt-in runtime now includes compiled MRT,
 render-target/cube sampling, SpriteBatch custom-effect routing and classic line/wireframe rasterization. `SOFTWARE-164/165` remain the
 encompassing shader-profile, lifecycle and content-conformance backlog.
 The independent EasyGL challenge in `SOFTWARE-367` also repaired MojoShader's invalid writemask-
@@ -272,7 +272,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   semantics at partially covered MSAA pixels. Software substitutes a covered sample's
   perspective-correct interpolation only when the center lies outside the primitive; EasyGL's
   managed MojoShader translation specializes a matching vertex-output varying at program link
-  time instead of permanently doubling every shader varying. SOFTWARE-388 replaces the remaining SM3
+  time instead of permanently doubling every shader varying. SOFTWARE-434 additionally repairs
+  the enabled EasyGL translator's composite arithmetic writes:
+  `DST` and `CRS` now select the result components named by a partial destination mask before
+  assigning the correspondingly narrow GLSL lvalue, while Software's existing masked write
+  remains the independent CPU control. SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
   swizzles, source modifiers, projection and sample-dependent temporary chains. SOFTWARE-389

@@ -1062,6 +1062,53 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Contract: composite arithmetic results honor non-contiguous destination masks.
+     *
+     * The vertex program initializes a temporary to one, writes only X/Z with `DST` or `CRS`,
+     * and multiplies clip position by all four components. Both instructions deliberately
+     * produce one in the written channels, so a conforming masked write preserves a full-target
+     * white quad. This also catches translators that assign a vec4/vec3 result directly to the
+     * two-component lvalue instead of selecting the masked result components.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     * @param probe Composite-result instruction to execute.
+     */
+    inline void RunCompiledEffectCompositeWriteMaskContract(
+        GraphicsDevice& device, SyntheticCompositeWriteMaskProbe probe)
+    {
+        ASSERT_NE(probe, SyntheticCompositeWriteMaskProbe::None);
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexShaderCompositeWriteMaskProbe = probe;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4::One);
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle sample(2, 2, 1, 1);
+        target.GetData(0, &sample, &centre, 0, 1);
+        EXPECT_EQ(centre, Color::White);
+    }
+
+    /**
      * @brief Draws a Shader Model 1.1 vertex-input or legacy-EXPP discriminator.
      *
      * @param device Device whose renderer executes classic compiled Effects.

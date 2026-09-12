@@ -609,6 +609,26 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9NrmUsesXYZLengthRegardlessOfDestinationMa
     CNA::TestSupport::RunCompiledEffectNrmWriteMaskContract(device);
 }
 
+class EasyGLCompiledEffectCompositeWriteMaskTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticCompositeWriteMaskProbe>
+{};
+
+TEST_P(EasyGLCompiledEffectCompositeWriteMaskTest,
+       WritesOnlySelectedCompositeResultComponents)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectCompositeWriteMaskContract(device, GetParam());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9DstAndCrs,
+    EasyGLCompiledEffectCompositeWriteMaskTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticCompositeWriteMaskProbe::VertexDst,
+        CNA::TestSupport::SyntheticCompositeWriteMaskProbe::VertexCrs));
+
 TEST(EasyGLCompiledEffectDrawTest, ShaderModel11ExppUsesLegacyFourPartResult)
 {
     GraphicsDevice device;
