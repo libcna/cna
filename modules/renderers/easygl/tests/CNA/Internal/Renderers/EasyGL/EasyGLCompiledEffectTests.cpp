@@ -815,6 +815,56 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex20,
         CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex30));
 
+class EasyGLCompiledEffectInvalidMoveComponentInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTemporaryInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidMoveComponentInitializationTest,
+       RejectsUninitializedSourceComponent)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.temporaryInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidMoveComponentInitialization,
+    EasyGLCompiledEffectInvalidMoveComponentInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel20MoveUnwrittenY,
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex11MoveUnwrittenY));
+
+class EasyGLCompiledEffectValidMoveComponentInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTemporaryInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidMoveComponentInitializationTest,
+       AcceptsInitializedSourceComponent)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.temporaryInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidMoveComponentInitialization,
+    EasyGLCompiledEffectValidMoveComponentInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel20MoveWrittenX,
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex11MoveWrittenX));
+
 TEST(EasyGLCompiledEffectTest, RejectsTexkillWithUndefinedTemporaryComponents)
 {
     GraphicsDevice device;

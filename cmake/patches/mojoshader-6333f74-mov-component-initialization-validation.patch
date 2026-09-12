@@ -1,0 +1,29 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1483,6 +1483,25 @@ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+             (info->regtype == REG_TYPE_TEMP) && (reg) &&
+             ((!reg->written) || uninitialized_destination_self_read))
+             failf(ctx, "Temp register r%d used uninitialized", info->regnum);
++        else if (validates_uninitialized_temporaries &&
++                 !ctx->ignore_temp_read_validation &&
++                 (ctx->current_opcode == 1) &&  // MOV.
++                 (info->regtype == REG_TYPE_TEMP) && (reg) && ctx->have_dest_arg)
++        {
++            const int dest_writemask = ctx->dest_arg.writemask;
++            int required_writemask = 0;
++            if (dest_writemask & 0x1) required_writemask |= 1 << info->swizzle_x;
++            if (dest_writemask & 0x2) required_writemask |= 1 << info->swizzle_y;
++            if (dest_writemask & 0x4) required_writemask |= 1 << info->swizzle_z;
++            if (dest_writemask & 0x8) required_writemask |= 1 << info->swizzle_w;
++            const int same_destination =
++                (ctx->dest_arg.regtype == REG_TYPE_TEMP) &&
++                (ctx->dest_arg.regnum == info->regnum);
++            const int prior_writemask = same_destination
++                ? ctx->dest_arg_prior_writemask : reg->written;
++            if ((prior_writemask & required_writemask) != required_writemask)
++                failf(ctx, "MOV reads uninitialized component(s) of r%d", info->regnum);
++        } // else if
+     } // if
+ 
+     return retval;

@@ -364,7 +364,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   temporary initialization validation: Microsoft rejects uninitialized reads in pixel Shader
   Models 1/2 and vertex Shader Model 1.1, but accepts both self-reads and different-register reads
   in `ps_3_0`, `vs_2_0` and `vs_3_0`. Common validation now retains the strict profiles without
-  suppressing the three permissive profiles. The dependency series now contains 80 patches.
+  suppressing the three permissive profiles. The dependency series then contained 80 patches.
+  SOFTWARE-456 adds the first exact component-consumption rule: in strict profiles, `MOV` validates
+  only the source components selected by the destination mask and source swizzle. Pixel SM2 and
+  vertex SM1.1 controls that initialize X then read Y now reject, while matching X reads remain
+  accepted. The dependency series now contains 81 patches; other opcodes' distinct component-use
+  rules remain part of SOFTWARE-164/165 rather than being approximated by the `MOV` rule.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

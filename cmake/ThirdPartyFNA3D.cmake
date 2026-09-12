@@ -123,7 +123,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-projected-cube-texture.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texbem-source-lifetime.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texkill-operand-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-temp-initialization-profile-validation.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-temp-initialization-profile-validation.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-mov-component-initialization-validation.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

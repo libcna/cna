@@ -2788,6 +2788,52 @@ namespace
             Check(accepted,
                   "compiled Effect parser rejected a profile-permitted uninitialized temporary read");
         }
+
+        constexpr CNA::TestSupport::SyntheticTemporaryInitializationProbe invalidComponents[] = {
+            CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel20MoveUnwrittenY,
+            CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex11MoveUnwrittenY,
+        };
+        for (const auto probe : invalidComponents)
+        {
+            options.temporaryInitializationProbe = probe;
+            const auto componentBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool componentRejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(componentBytes.data(),
+                                                                componentBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                componentRejected = true;
+            }
+            Check(componentRejected,
+                  "compiled Effect parser accepted MOV from an uninitialized temporary component in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+
+        constexpr CNA::TestSupport::SyntheticTemporaryInitializationProbe validComponents[] = {
+            CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel20MoveWrittenX,
+            CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex11MoveWrittenX,
+        };
+        for (const auto probe : validComponents)
+        {
+            options.temporaryInitializationProbe = probe;
+            const auto componentBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool componentAccepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(componentBytes.data(),
+                                                                componentBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                componentAccepted = false;
+            }
+            Check(componentAccepted,
+                  "compiled Effect parser rejected MOV from an initialized temporary component in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
     }
 
     void CheckCompiledTexkillTemporaryValidation(SoftwareRenderer& renderer)

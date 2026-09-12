@@ -584,8 +584,16 @@ namespace CNA::TestSupport
         None,
         /** @brief Read an uninitialized temporary in a ps_3_0 program. */
         Pixel30,
+        /** @brief In ps_2_0, write r0.x and then read that initialized X component. */
+        Pixel20MoveWrittenX,
+        /** @brief In ps_2_0, write r0.x and then read the uninitialized Y component. */
+        Pixel20MoveUnwrittenY,
         /** @brief Read an uninitialized temporary in a vs_1_1 program. */
         Vertex11,
+        /** @brief In vs_1_1, write r0.x and then read that initialized X component. */
+        Vertex11MoveWrittenX,
+        /** @brief In vs_1_1, write r0.x and then read the uninitialized Y component. */
+        Vertex11MoveUnwrittenY,
         /** @brief Read an uninitialized temporary in a vs_2_0 program. */
         Vertex20,
         /** @brief Read an uninitialized temporary in a vs_3_0 program. */
@@ -1743,6 +1751,11 @@ namespace CNA::TestSupport
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel30OutOfRange;
         const bool probesPixel30TemporaryInitialization =
             temporaryInitializationProbe == SyntheticTemporaryInitializationProbe::Pixel30;
+        const bool probesPixel20MoveComponentInitialization =
+            temporaryInitializationProbe ==
+                SyntheticTemporaryInitializationProbe::Pixel20MoveWrittenX ||
+            temporaryInitializationProbe ==
+                SyntheticTemporaryInitializationProbe::Pixel20MoveUnwrittenY;
         const bool probesPixel30Texkill =
             texkillOperandProbe >= SyntheticTexkillOperandProbe::Pixel30TemporaryXy;
         const bool probesPixel20ColorInput =
@@ -2519,6 +2532,17 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, uninitialized r0
             AppendUInt32(shader, destination(regTemp, 1, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
+        }
+        if (probesPixel20MoveComponentInitialization)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.x, c0.x
+            AppendUInt32(shader, destination(regTemp, 0, 0x1u));
+            AppendUInt32(shader, source(regConst, 0, 0x00u));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, r0.x/y
+            AppendUInt32(shader, destination(regTemp, 1, 0xFu));
+            const bool readsY = temporaryInitializationProbe ==
+                SyntheticTemporaryInitializationProbe::Pixel20MoveUnwrittenY;
+            AppendUInt32(shader, source(regTemp, 0, readsY ? 0x55u : 0x00u));
         }
 
         if (temporaryRegisterProbe != SyntheticTemporaryRegisterProbe::None &&
@@ -4626,6 +4650,10 @@ namespace CNA::TestSupport
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
                                        temporaryInitializationProbe ==
                                            SyntheticTemporaryInitializationProbe::Vertex11 ||
+                                       temporaryInitializationProbe ==
+                                           SyntheticTemporaryInitializationProbe::Vertex11MoveWrittenX ||
+                                       temporaryInitializationProbe ==
+                                           SyntheticTemporaryInitializationProbe::Vertex11MoveUnwrittenY ||
                                        shaderModel1InvalidOpcode !=
                                            SyntheticInvalidVertexShaderModel1Opcode::None ||
                                        temporaryRegisterProbe ==
@@ -5805,11 +5833,33 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 1, 0xE4u, absoluteSecond ? 11u : 0u));
         }
         if (temporaryInitializationProbe != SyntheticTemporaryInitializationProbe::None &&
-            temporaryInitializationProbe != SyntheticTemporaryInitializationProbe::Pixel30)
+            temporaryInitializationProbe != SyntheticTemporaryInitializationProbe::Pixel30 &&
+            temporaryInitializationProbe !=
+                SyntheticTemporaryInitializationProbe::Pixel20MoveWrittenX &&
+            temporaryInitializationProbe !=
+                SyntheticTemporaryInitializationProbe::Pixel20MoveUnwrittenY &&
+            temporaryInitializationProbe !=
+                SyntheticTemporaryInitializationProbe::Vertex11MoveWrittenX &&
+            temporaryInitializationProbe !=
+                SyntheticTemporaryInitializationProbe::Vertex11MoveUnwrittenY)
         {
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, uninitialized r0
             AppendUInt32(shader, destination(regTemp, 1));
             AppendUInt32(shader, source(regTemp, 0));
+        }
+        if (temporaryInitializationProbe ==
+                SyntheticTemporaryInitializationProbe::Vertex11MoveWrittenX ||
+            temporaryInitializationProbe ==
+                SyntheticTemporaryInitializationProbe::Vertex11MoveUnwrittenY)
+        {
+            AppendUInt32(shader, 0x00000001u); // mov r0.x, c0.x
+            AppendUInt32(shader, destination(regTemp, 0, 0x1u));
+            AppendUInt32(shader, source(regConst, 0, 0x00u));
+            AppendUInt32(shader, 0x00000001u); // mov r1, r0.x/y
+            AppendUInt32(shader, destination(regTemp, 1));
+            const bool readsY = temporaryInitializationProbe ==
+                SyntheticTemporaryInitializationProbe::Vertex11MoveUnwrittenY;
+            AppendUInt32(shader, source(regTemp, 0, readsY ? 0x55u : 0x00u));
         }
         if (readsSecondStream)
         {
