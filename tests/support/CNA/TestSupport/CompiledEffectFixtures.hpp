@@ -422,6 +422,12 @@ namespace CNA::TestSupport
         Pixel30BackwardCall,
         /** @brief Emit a backward Boolean conditional call in a pixel Shader Model 3.0 program. */
         Pixel30BackwardCallNz,
+        /** @brief Call a pixel Shader Model 3.0 label that is never defined. */
+        Pixel30UndefinedLabel,
+        /** @brief Define the same pixel Shader Model 3.0 label twice. */
+        Pixel30DuplicateLabel,
+        /** @brief End a pixel Shader Model 3.0 subroutine without `RET`. */
+        Pixel30MissingReturn,
         /** @brief Emit one legal call in an exact vertex Shader Model 2.0 program. */
         Vertex20Depth1,
         /** @brief Emit two nested calls in an exact vertex Shader Model 2.0 program. */
@@ -438,6 +444,12 @@ namespace CNA::TestSupport
         Vertex30BackwardCall,
         /** @brief Emit a backward Boolean conditional call in a vertex Shader Model 3.0 program. */
         Vertex30BackwardCallNz,
+        /** @brief Call a vertex Shader Model 3.0 label that is never defined. */
+        Vertex30UndefinedLabel,
+        /** @brief Define the same vertex Shader Model 3.0 label twice. */
+        Vertex30DuplicateLabel,
+        /** @brief End a vertex Shader Model 3.0 subroutine without `RET`. */
+        Vertex30MissingReturn,
     };
 
     /** @brief Invalid source/destination relationship deliberately emitted for a matrix opcode. */
@@ -1536,7 +1548,7 @@ namespace CNA::TestSupport
             flowControlProbe <= SyntheticFlowControlProbe::LoopRepDepth5;
         const bool probesPixelCallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Pixel2xDepth4 &&
-            callGraphProbe <= SyntheticCallGraphProbe::Pixel30BackwardCallNz;
+            callGraphProbe <= SyntheticCallGraphProbe::Pixel30MissingReturn;
         const bool probesPixel2xCallGraph =
             callGraphProbe == SyntheticCallGraphProbe::Pixel2xDepth4 ||
             callGraphProbe == SyntheticCallGraphProbe::Pixel2xDepth5;
@@ -3143,6 +3155,12 @@ namespace CNA::TestSupport
                 callGraphProbe == SyntheticCallGraphProbe::Pixel30BackwardCallNz;
             const bool conditionalBackward =
                 callGraphProbe == SyntheticCallGraphProbe::Pixel30BackwardCallNz;
+            const bool undefinedLabel =
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30UndefinedLabel;
+            const bool duplicateLabel =
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30DuplicateLabel;
+            const bool missingReturn =
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30MissingReturn;
             const int depth =
                 callGraphProbe == SyntheticCallGraphProbe::Pixel2xDepth5 ||
                         callGraphProbe == SyntheticCallGraphProbe::Pixel30Depth5
@@ -3161,11 +3179,16 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regLabel, backward ? 1u : 0u));
             AppendUInt32(shader, 0x0000001Cu); // ret from main
 
-            const int labelCount = backward ? 2 : depth;
+            const int labelCount = undefinedLabel ? 0 : backward || duplicateLabel ? 2
+                                                                            : missingReturn ? 1
+                                                                                            : depth;
             for (int label = 0; label < labelCount; ++label)
             {
                 AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l#
-                AppendUInt32(shader, source(regLabel, static_cast<std::uint32_t>(label)));
+                AppendUInt32(shader,
+                             source(regLabel, duplicateLabel
+                                                  ? 0u
+                                                  : static_cast<std::uint32_t>(label)));
                 if (backward && label == 1)
                 {
                     AppendUInt32(shader,
@@ -3177,11 +3200,21 @@ namespace CNA::TestSupport
                 }
                 else if (!backward && label + 1 < labelCount)
                 {
-                    AppendUInt32(shader, 0x00000019u | (1u << 24)); // call next label
-                    AppendUInt32(shader,
-                                 source(regLabel, static_cast<std::uint32_t>(label + 1)));
+                    if (!duplicateLabel)
+                    {
+                        AppendUInt32(shader, 0x00000019u | (1u << 24)); // call next label
+                        AppendUInt32(shader,
+                                     source(regLabel, static_cast<std::uint32_t>(label + 1)));
+                    }
                 }
-                AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+                if (missingReturn)
+                {
+                    AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, c0
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regConst, 0));
+                }
+                else
+                    AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
             }
         }
         else if (usesSubroutine)
@@ -3850,13 +3883,13 @@ namespace CNA::TestSupport
             flowControlProbe == SyntheticFlowControlProbe::Vertex2xStaticFlowCount17;
         const bool probesVertexCallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Vertex20Depth1 &&
-            callGraphProbe <= SyntheticCallGraphProbe::Vertex30BackwardCallNz;
+            callGraphProbe <= SyntheticCallGraphProbe::Vertex30MissingReturn;
         const bool probesVertex2xCallGraph =
             callGraphProbe == SyntheticCallGraphProbe::Vertex2xDepth4 ||
             callGraphProbe == SyntheticCallGraphProbe::Vertex2xDepth5;
         const bool probesVertex30CallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Vertex30Depth4 &&
-            callGraphProbe <= SyntheticCallGraphProbe::Vertex30BackwardCallNz;
+            callGraphProbe <= SyntheticCallGraphProbe::Vertex30MissingReturn;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture ||
             invalidMixedConstantAbsolute ==
@@ -4873,6 +4906,12 @@ namespace CNA::TestSupport
                 callGraphProbe == SyntheticCallGraphProbe::Vertex30BackwardCallNz;
             const bool conditionalBackward =
                 callGraphProbe == SyntheticCallGraphProbe::Vertex30BackwardCallNz;
+            const bool undefinedLabel =
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30UndefinedLabel;
+            const bool duplicateLabel =
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30DuplicateLabel;
+            const bool missingReturn =
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30MissingReturn;
             const int depth =
                 callGraphProbe == SyntheticCallGraphProbe::Vertex20Depth1
                     ? 1
@@ -4897,11 +4936,16 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regLabel, backward ? 1u : 0u));
             AppendUInt32(shader, 0x0000001Cu); // ret from main
 
-            const int labelCount = backward ? 2 : depth;
+            const int labelCount = undefinedLabel ? 0 : backward || duplicateLabel ? 2
+                                                                            : missingReturn ? 1
+                                                                                            : depth;
             for (int label = 0; label < labelCount; ++label)
             {
                 AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l#
-                AppendUInt32(shader, source(regLabel, static_cast<std::uint32_t>(label)));
+                AppendUInt32(shader,
+                             source(regLabel, duplicateLabel
+                                                  ? 0u
+                                                  : static_cast<std::uint32_t>(label)));
                 if (backward && label == 1)
                 {
                     AppendUInt32(shader,
@@ -4913,11 +4957,21 @@ namespace CNA::TestSupport
                 }
                 else if (!backward && label + 1 < labelCount)
                 {
-                    AppendUInt32(shader, 0x00000019u | (1u << 24)); // call next label
-                    AppendUInt32(shader,
-                                 source(regLabel, static_cast<std::uint32_t>(label + 1)));
+                    if (!duplicateLabel)
+                    {
+                        AppendUInt32(shader, 0x00000019u | (1u << 24)); // call next label
+                        AppendUInt32(shader,
+                                     source(regLabel, static_cast<std::uint32_t>(label + 1)));
+                    }
                 }
-                AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+                if (missingReturn)
+                {
+                    AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, c0
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regConst, 0));
+                }
+                else
+                    AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
             }
         }
         else if (probesVertex20FlowControl)

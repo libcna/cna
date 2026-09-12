@@ -1181,11 +1181,17 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticCallGraphProbe::Pixel30Depth5,
         CNA::TestSupport::SyntheticCallGraphProbe::Pixel30BackwardCall,
         CNA::TestSupport::SyntheticCallGraphProbe::Pixel30BackwardCallNz,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30UndefinedLabel,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30DuplicateLabel,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30MissingReturn,
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex20Depth2,
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex2xDepth5,
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Depth5,
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex30BackwardCall,
-        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30BackwardCallNz));
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30BackwardCallNz,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30UndefinedLabel,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30DuplicateLabel,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30MissingReturn));
 
 class EasyGLCompiledEffectValidCallGraphTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticCallGraphProbe>

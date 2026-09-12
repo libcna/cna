@@ -3096,11 +3096,17 @@ namespace
             Probe::Pixel30Depth5,
             Probe::Pixel30BackwardCall,
             Probe::Pixel30BackwardCallNz,
+            Probe::Pixel30UndefinedLabel,
+            Probe::Pixel30DuplicateLabel,
+            Probe::Pixel30MissingReturn,
             Probe::Vertex20Depth2,
             Probe::Vertex2xDepth5,
             Probe::Vertex30Depth5,
             Probe::Vertex30BackwardCall,
             Probe::Vertex30BackwardCallNz,
+            Probe::Vertex30UndefinedLabel,
+            Probe::Vertex30DuplicateLabel,
+            Probe::Vertex30MissingReturn,
         };
         for (const Probe probe : invalidProbes)
         {
