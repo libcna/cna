@@ -43,6 +43,7 @@ namespace CNA::Internal::Renderers::Rlgl
         int size = 0;
         int levelCount = 1;
         int surfaceFormat = 0;
+        bool nativeCompressed = false;
     };
 
     /**

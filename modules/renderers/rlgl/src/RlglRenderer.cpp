@@ -431,9 +431,11 @@ namespace CNA::Internal::Renderers::Rlgl
         const int surfaceFormat) const
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        return static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Color
-            ? RendererFormatVerdict::Supported
-            : RendererFormatVerdict::Unsupported;
+        const auto format = static_cast<SurfaceFormat>(surfaceFormat);
+        return format == SurfaceFormat::Color || format == SurfaceFormat::Dxt1 ||
+            format == SurfaceFormat::Dxt3 || format == SurfaceFormat::Dxt5
+                ? RendererFormatVerdict::Supported
+                : RendererFormatVerdict::Unsupported;
     }
 
     RendererFormatVerdict RlglRenderer::ClassifyRenderTargetFormatEXT(
@@ -463,6 +465,12 @@ namespace CNA::Internal::Renderers::Rlgl
         const auto format = static_cast<SurfaceFormat>(surfaceFormat);
         return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
             format == SurfaceFormat::Dxt5;
+    }
+
+    bool RlglRenderer::IsCompressedCubeTransferFormatEXT(const int surfaceFormat) const
+    {
+        return IsCompressedTransferFormatEXT(surfaceFormat) &&
+            ClassifyTextureCubeFormatEXT(surfaceFormat) == RendererFormatVerdict::Supported;
     }
 
     bool RlglRenderer::LoadsCompressedContentNativelyEXT() const

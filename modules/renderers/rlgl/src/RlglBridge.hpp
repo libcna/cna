@@ -611,6 +611,24 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     [[nodiscard]] unsigned int CreateTextureCubeColor(int size, int mipLevels);
 
     /**
+     * @brief Reports whether rlgl mapped one DXT format to native cube storage.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+     * @return True when the live GL context exposes the exact S3TC internal format.
+     */
+    [[nodiscard]] bool SupportsDxtTextureCube(int surfaceFormat) noexcept;
+
+    /**
+     * @brief Allocates all faces and levels of a DXT cube through rlgl.
+     * @param surfaceFormat Dxt1, Dxt3, or Dxt5 ordinal.
+     * @param size Width and height of every face.
+     * @param mipLevels Number of mip levels to allocate.
+     * @param nativeCompressed Whether to request native S3TC rather than RGBA8 fallback storage.
+     * @return Non-zero rlgl-owned cube texture name.
+     */
+    [[nodiscard]] unsigned int CreateTextureCubeDxt(
+        int surfaceFormat, int size, int mipLevels, bool nativeCompressed);
+
+    /**
      * @brief Releases a cube texture through rlgl while the device is live.
      * @param id Texture name, or zero.
      */
@@ -630,6 +648,25 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     void UpdateTextureCubeColor(
         unsigned int id, int face, int level, int x, int y,
         int width, int height, const std::uint8_t* pixels);
+
+    /**
+     * @brief Uploads one block-aligned DXT region to native or decoded cube storage.
+     * @param id Cube texture name.
+     * @param surfaceFormat Dxt1, Dxt3, or Dxt5 ordinal.
+     * @param nativeCompressed Whether @p id uses native S3TC storage.
+     * @param face Cube face index in XNA order.
+     * @param level Mip level.
+     * @param x Region left edge in texels.
+     * @param y Region top edge in texels.
+     * @param width Region width in texels.
+     * @param height Region height in texels.
+     * @param blocks Exact tightly packed DXT blocks.
+     * @param byteCount Number of source bytes.
+     */
+    void UpdateTextureCubeDxt(
+        unsigned int id, int surfaceFormat, bool nativeCompressed,
+        int face, int level, int x, int y, int width, int height,
+        const std::uint8_t* blocks, std::size_t byteCount);
 
     /**
      * @brief Reads one RGBA8 cube-face rectangle without framebuffer row inversion.

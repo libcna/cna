@@ -2336,6 +2336,66 @@ void main()
         return id;
     }
 
+    bool SupportsDxtTextureCube(const int surfaceFormat) noexcept
+    {
+        return SupportsDxtTexture2D(surfaceFormat);
+    }
+
+    unsigned int CreateTextureCubeDxt(
+        const int surfaceFormat, const int size, const int mipLevels,
+        const bool nativeCompressed)
+    {
+        RequireInitialized("compressed TextureCube creation");
+        if (size <= 0 || mipLevels <= 0)
+            throw std::invalid_argument("RLGL: invalid compressed TextureCube creation request");
+
+        const TextureFormatInfo format = TextureFormat(surfaceFormat);
+        if (!format.compressed || nativeCompressed != SupportsDxtTextureCube(surfaceFormat))
+        {
+            throw std::invalid_argument(
+                "RLGL: compressed TextureCube storage mode does not match the live context");
+        }
+
+        if (!nativeCompressed)
+            return CreateTextureCubeColor(size, mipLevels);
+
+        // rlgl refuses null-data compressed cubemaps. Supplying zeroed blocks keeps texture-name,
+        // face ordering, internal-format selection, and every mip allocation inside its public
+        // cubemap loader rather than replacing that resource path with a parallel GL allocator.
+        std::size_t totalBytes = 0;
+        int levelSize = size;
+        for (int level = 0; level < mipLevels; ++level)
+        {
+            totalBytes += 6u * CompressedLevelBytes(format, levelSize, levelSize);
+            levelSize = std::max(1, levelSize / 2);
+        }
+        std::vector<std::uint8_t> zeroBlocks(totalBytes, 0u);
+
+        const TextureBindingRestore bindingRestore;
+        const unsigned int id = rlLoadTextureCubemap(
+            zeroBlocks.data(), size, format.rlglFormat, mipLevels);
+        if (id == 0)
+        {
+            throw std::runtime_error(
+                "RLGL: compressed TextureCube allocation returned a zero texture name");
+        }
+
+        try
+        {
+            glBindTexture(GL_TEXTURE_CUBE_MAP, id);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, mipLevels - 1);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+            ThrowIfGlError("compressed TextureCube allocation");
+        }
+        catch (...)
+        {
+            rlUnloadTexture(id);
+            throw;
+        }
+        return id;
+    }
+
     void DestroyTextureCube(const unsigned int id) noexcept
     {
         if (bridgeInitialized && id != 0) rlUnloadTexture(id);
@@ -2361,6 +2421,44 @@ void main()
             static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face),
             level, x, y, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
         ThrowIfGlError("TextureCube update");
+    }
+
+    void UpdateTextureCubeDxt(
+        const unsigned int id, const int surfaceFormat, const bool nativeCompressed,
+        const int face, const int level, const int x, const int y,
+        const int width, const int height, const std::uint8_t* blocks,
+        const std::size_t byteCount)
+    {
+        RequireInitialized("compressed TextureCube update");
+        const TextureFormatInfo format = TextureFormat(surfaceFormat);
+        const std::size_t required = CompressedLevelBytes(format, width, height);
+        if (id == 0 || !format.compressed || face < 0 || face >= 6 || level < 0 ||
+            x < 0 || y < 0 || width <= 0 || height <= 0 || blocks == nullptr ||
+            byteCount != required)
+        {
+            throw std::invalid_argument("RLGL: invalid compressed TextureCube update request");
+        }
+
+        const TextureBindingRestore bindingRestore;
+        const UnpackAlignmentRestore unpackRestore;
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, id);
+        const GLenum target = static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face);
+        if (nativeCompressed)
+        {
+            glCompressedTexSubImage2D(
+                target, level, x, y, width, height, format.internalFormat,
+                static_cast<GLsizei>(byteCount), blocks);
+        }
+        else
+        {
+            const std::vector<std::uint8_t> rgba =
+                DecodeDxt(surfaceFormat, blocks, byteCount, width, height);
+            glTexSubImage2D(
+                target, level, x, y, width, height,
+                GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+        }
+        ThrowIfGlError("compressed TextureCube update");
     }
 
     void ReadTextureCubeColor(

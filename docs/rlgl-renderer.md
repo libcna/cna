@@ -57,11 +57,11 @@ success.
 | BasicEffect and AlphaTestEffect | ✅ | Texture/default-white sampling, Position0/Normal0/Color0/UV0 semantics, diffuse/emissive/alpha/vertex color, all eight alpha comparisons, fog, WVP, pixel-center correction, three-light diffuse/specular BasicEffect lighting, per-vertex/per-pixel selection, inverse-transpose normals, and state transitions passed `RLGL-033`/`RLGL-034` |
 | DualTextureEffect | ✅ | Independent UV0/UV1 semantics and texture/sampler slots, doubled first-texture combine, null/default-white inputs, vertex color, diffuse/alpha, fog, missing-semantic diagnostics, and stock-effect state transitions passed `RLGL-035` |
 | SkinnedEffect | ✅ | 1/2/4 weighted influences, all 72 bones, Byte4/Vector4 indices, joint/world normal transforms, textures/materials, three-light/specular shading, vertex color, per-vertex/per-pixel selection, post-skin fog, malformed declarations, and state transitions passed `RLGL-037` |
-| Plain `TextureCube` | 🟨 | `SurfaceFormat::Color` has exact six-face and mip allocation through rlgl, full/partial upload and readback without row inversion, cube-unit binding, state restoration, and profile-size validation from `RLGL-044`; other classic formats wait for `RLGL-045` |
+| Plain `TextureCube` | ✅ | `Color` and DXT1/DXT3/DXT5 cover every transfer shape exposed by CNA's current cube API. Exact faces/mips/regions, native-or-decoded DXT storage, content loading, cube-unit binding, state restoration, and Color readback passed `RLGL-044`/`RLGL-045`; the other 16 classic labels are refused because CNA exposes no format-native transfer route for them |
 | `RenderTarget2D` (all eleven classic FNA target formats) | ✅ | Color, Rgba1010102, Rg32, Rgba64, Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, and HdrBlendable have exact single/MSAA storage, resolve, format-native CPU transfer/readback, mips, depth/stencil, switching, Preserve/Discard, and upright sampling evidence from `RLGL-039`/`041`/`042` |
 | Multiple render targets | ✅ | HiDef supports ordered sets of two through four `RenderTarget2D` objects through transactional rlgl-created FBOs and `rlActiveDrawBuffers`; indexed masks/Clear, slot-zero depth, mixed formats, MSAA resolve/mips, usage, transitions, and refusal safety passed `RLGL-040`. Reach correctly remains limited to one target |
-| Cube/custom effects and general 3D workloads | ❌ | These shapes remain explicit failures owned by `RLGL-036`/`RLGL-038`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
-| Render-target/non-Color cubes, instancing, queries | ❌ | Explicitly unavailable; their implementation and validation are tracked by `RLGL-045`/`RLGL-046` and `RLGL-016` |
+| Environment/custom effects and general 3D workloads | ❌ | These shapes remain explicit failures owned by `RLGL-036`/`RLGL-038`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
+| Render-target cubes, instancing, queries | ❌ | Explicitly unavailable; their implementation and validation are tracked by `RLGL-046` and `RLGL-016` |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
 
@@ -211,8 +211,9 @@ The dependency uses raylib's zlib/libpng license. Its required notice is preserv
   during initialization/readback, or a second live device produces an explicit exception.
 - For a deterministic Linux software-driver reproduction, set
   `SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1` and run `cna_test_rlgl_smoke` directly.
-- Set `CNA_RLGL_FORCE_DXT_FALLBACK=1` when running `cna_test_rlgl_texture` to validate the
-  no-S3TC software-decode path even on a driver that advertises native DXT storage. This is a
+- Set `CNA_RLGL_FORCE_DXT_FALLBACK=1` when running `cna_test_rlgl_texture` or
+  `cna_test_rlgl_texture_cube` to validate the no-S3TC software-decode paths even on a driver that
+  advertises native DXT storage. This is a
   renderer debug/test override, not a public graphics option.
 - An unsupported resource path names its owning `RLGL-*` plan task. Do not replace these failures
   with no-ops while bringing up new functionality.

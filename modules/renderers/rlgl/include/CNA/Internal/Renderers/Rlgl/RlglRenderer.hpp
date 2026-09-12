@@ -206,7 +206,7 @@ namespace CNA::Internal::Renderers::Rlgl
         /**
          * @brief Classifies formats with a complete RLGL cube storage and transfer path.
          * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
-         * @return Supported for Color at the RLGL-044 baseline; Unsupported otherwise.
+         * @return Supported for Color and the three DXT block formats; Unsupported otherwise.
          */
         [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
             int surfaceFormat) const override;
@@ -233,6 +233,14 @@ namespace CNA::Internal::Renderers::Rlgl
          * @return True for DXT1/3/5; the resource selects native storage or software decode.
          */
         [[nodiscard]] bool IsCompressedTransferFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
+         * @brief Reports exact DXT block transfer support for plain cube textures.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+         * @return True for Dxt1, Dxt3, and Dxt5.
+         */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(
             int surfaceFormat) const override;
 
         /**

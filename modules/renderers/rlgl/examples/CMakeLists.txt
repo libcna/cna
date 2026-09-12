@@ -246,6 +246,12 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             TIMEOUT 60 LABELS "GraphicsTexture;GraphicsParity;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(
+            NAME Rlgl_TextureCube_dxt_fallback
+            COMMAND cna_test_rlgl_texture_cube
+            TIMEOUT 60 LABELS "GraphicsTexture;GraphicsParity;Rlgl"
+            ENVIRONMENT
+                "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1;CNA_RLGL_FORCE_DXT_FALLBACK=1")
+        cna_register_renderer_test(
             NAME Rlgl_TextureCube_oracle
             COMMAND cna_test_rlgl_texture_cube_oracle
             TIMEOUT 60 LABELS "GraphicsTexture;GraphicsParity;Rlgl"

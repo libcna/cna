@@ -34,6 +34,12 @@ namespace CNA::Internal::Renderers::Rlgl
             return std::max(1, base >> level);
         }
 
+        [[nodiscard]] bool IsDxt(const SurfaceFormat format)
+        {
+            return format == SurfaceFormat::Dxt1 ||
+                format == SurfaceFormat::Dxt3 || format == SurfaceFormat::Dxt5;
+        }
+
         class RlglTextureCubeRenderer final : public ITextureCubeRenderer
         {
         public:
@@ -45,12 +51,24 @@ namespace CNA::Internal::Renderers::Rlgl
             {
                 if (size_ <= 0)
                     throw std::invalid_argument("RLGL: TextureCube size must be positive");
-                if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+                const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+                compressed_ = IsDxt(format);
+                if (format != SurfaceFormat::Color && !compressed_)
                 {
                     throw std::invalid_argument(
-                        "RLGL: plain TextureCube baseline supports only SurfaceFormat.Color");
+                        "RLGL: TextureCube format has no exact public transfer path");
                 }
-                id_ = Bridge::CreateTextureCubeColor(size_, levelCount_);
+                if (compressed_)
+                {
+                    blockBytes_ = format == SurfaceFormat::Dxt1 ? 8 : 16;
+                    nativeCompressed_ = Bridge::SupportsDxtTextureCube(surfaceFormat_);
+                    id_ = Bridge::CreateTextureCubeDxt(
+                        surfaceFormat_, size_, levelCount_, nativeCompressed_);
+                }
+                else
+                {
+                    id_ = Bridge::CreateTextureCubeColor(size_, levelCount_);
+                }
             }
 
             ~RlglTextureCubeRenderer() override
@@ -67,12 +85,41 @@ namespace CNA::Internal::Renderers::Rlgl
                 const int width, const int height,
                 const void* data, const int dataLength) override
             {
-                const int levelSize = ValidateRegion(
-                    face, level, x, y, width, height, data, dataLength);
-                (void)levelSize;
+                if (compressed_) return false;
+                (void)ValidateRegion(face, level, x, y, width, height, data);
+                ValidateByteCount(width, height, 4, dataLength);
                 Bridge::UpdateTextureCubeColor(
                     id_, face, level, x, y, width, height,
                     static_cast<const std::uint8_t*>(data));
+                return true;
+            }
+
+            [[nodiscard]] bool SetCompressedDataEXT(
+                const int face, const int level, const int x, const int y,
+                const int width, const int height,
+                const void* data, const int dataLength) override
+            {
+                if (!compressed_) return false;
+                const int levelSize = ValidateRegion(
+                    face, level, x, y, width, height, data);
+                if ((x % 4) != 0 || (y % 4) != 0 ||
+                    ((width % 4) != 0 && x + width != levelSize) ||
+                    ((height % 4) != 0 && y + height != levelSize))
+                {
+                    throw std::out_of_range(
+                        "RLGL: compressed TextureCube rectangle is not block-aligned");
+                }
+                const std::size_t required =
+                    static_cast<std::size_t>((width + 3) / 4) *
+                    static_cast<std::size_t>((height + 3) / 4) * blockBytes_;
+                if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+                {
+                    throw std::out_of_range(
+                        "RLGL: compressed TextureCube transfer buffer is too small");
+                }
+                Bridge::UpdateTextureCubeDxt(
+                    id_, surfaceFormat_, nativeCompressed_, face, level,
+                    x, y, width, height, static_cast<const std::uint8_t*>(data), required);
                 return true;
             }
 
@@ -82,7 +129,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 void* data, const int dataLength) const override
             {
                 const int levelSize = ValidateRegion(
-                    face, level, x, y, width, height, data, dataLength);
+                    face, level, x, y, width, height, data);
+                ValidateByteCount(width, height, 4, dataLength);
                 Bridge::ReadTextureCubeColor(
                     id_, face, level, levelSize, x, y, width, height,
                     static_cast<std::uint8_t*>(data));
@@ -103,14 +151,14 @@ namespace CNA::Internal::Renderers::Rlgl
 
             [[nodiscard]] TextureCubeResourceSnapshot Snapshot() const noexcept
             {
-                return {id_, size_, levelCount_, surfaceFormat_};
+                return {id_, size_, levelCount_, surfaceFormat_, nativeCompressed_};
             }
 
         private:
             [[nodiscard]] int ValidateRegion(
                 const int face, const int level, const int x, const int y,
                 const int width, const int height,
-                const void* data, const int dataLength) const
+                const void* data) const
             {
                 if (face < 0 || face >= 6)
                     throw std::out_of_range("RLGL: TextureCube face is invalid");
@@ -122,17 +170,26 @@ namespace CNA::Internal::Renderers::Rlgl
                 {
                     throw std::out_of_range("RLGL: TextureCube transfer rectangle is invalid");
                 }
-                const std::size_t required =
-                    static_cast<std::size_t>(width) * height * 4u;
+                return levelSize;
+            }
+
+            static void ValidateByteCount(
+                const int width, const int height, const int bytesPerTexel,
+                const int dataLength)
+            {
+                const std::size_t required = static_cast<std::size_t>(width) *
+                    static_cast<std::size_t>(height) * bytesPerTexel;
                 if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
                     throw std::out_of_range("RLGL: TextureCube transfer buffer is too small");
-                return levelSize;
             }
 
             unsigned int id_ = 0;
             int size_ = 0;
             int levelCount_ = 1;
             int surfaceFormat_ = 0;
+            int blockBytes_ = 0;
+            bool compressed_ = false;
+            bool nativeCompressed_ = false;
         };
     }
 
