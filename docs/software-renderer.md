@@ -344,7 +344,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   and 3, while the active HLSL and GLSL translators explicitly refused them. They now divide the
   cube direction by W before lookup. A negative-W exact-pixel test distinguishes the green -X face
   from an unprojected red +X sample in both profiles and both renderers; all 413 isolated EasyGL
-  compiled-Effect tests pass. The dependency series now contains 77 patches.
+  compiled-Effect tests pass. SOFTWARE-452 then found a Software-only execution error behind an
+  otherwise-valid `TEXLDP`: direct interpolator coordinates did not request helper-quad
+  evaluation, so implicit 2D mip LOD was derived from raw U/V before division by W. A
+  point-filtered red-base/blue-mip discriminator selects red before the repair and blue on EasyGL.
+  Projective loads now enter 2x2 evaluation and feed the divided coordinates into Software's
+  existing convergent derivative pass; both `ps_2_0` and `ps_3_0` controls select blue. The
+  dependency series still contains 77 patches because this repair is renderer-local.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

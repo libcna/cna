@@ -2001,6 +2001,8 @@ namespace CNA::Internal::Renderers::Software
                         return true;
                     if (instruction.opcode != 66u || instruction.tokens.size() < 3u)
                         return false;
+                    if (instruction.controls == 1u)
+                        return true;
                     const std::uint32_t coordinateToken = instruction.tokens[2];
                     const std::uint32_t registerType =
                         ((coordinateToken >> 28u) & 0x7u) |

@@ -78,6 +78,7 @@ struct Operand {
   std::uint8_t writeMask = 0xFu;
   std::uint8_t resultModifier = 0;
   std::uint8_t resultShift = 0;
+  bool coordinatesEvaluatedByInstruction = false;
 };
 
 [[nodiscard]] RegisterType DecodeRegisterType(std::uint32_t token) {
@@ -1037,7 +1038,8 @@ private:
     if (lodMode == SoftwareTextureLodModeEXT::Implicit &&
         (coordinateOperand.type == RegisterType::Temporary ||
          coordinateOperand.sourceModifier == 9u ||
-         coordinateOperand.sourceModifier == 10u) &&
+         coordinateOperand.sourceModifier == 10u ||
+         coordinateOperand.coordinatesEvaluatedByInstruction) &&
         implicitSampleSources_ != nullptr) {
       implicitSampleSources_->push_back(
           ImplicitSampleSource{currentInstruction_, samplerRegister, coordinate});
@@ -1112,6 +1114,7 @@ private:
       const float divisor = coordinate[3];
       for (int component = 0; component < 3; ++component)
         coordinate[static_cast<std::size_t>(component)] /= divisor;
+      coordinateOperand.coordinatesEvaluatedByInstruction = true;
     } else if (instruction.controls == 2u) {
       lod = coordinate[3];
     } else if (instruction.controls != 0u) {

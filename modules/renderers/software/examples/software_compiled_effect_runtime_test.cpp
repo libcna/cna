@@ -4268,6 +4268,75 @@ namespace
         }
     }
 
+    void CheckCompiledProjected2DLod(
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe textureProbe,
+        const std::string& profile)
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            PresentationParameters());
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.texldDestinationModifierProbe = textureProbe;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect->getParametersProperty()["Tint"]->SetValue(Vector4::One);
+        Texture2D texture(device, 8, 8, true, SurfaceFormat::Color);
+        const std::vector<Color> base(64, Color::Red);
+        texture.SetData(0, nullptr, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            const std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent), Color::Blue);
+            texture.SetData(level, nullptr, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect->getParametersProperty()["FxTexture"]->SetValue(&texture);
+        struct Vertex { float x, y, z, u, v, q, w; };
+        const Vertex quad[6] = {
+            {-1, 1, 0, .25f, .25f, 0, .125f},
+            {-1, -1, 0, .25f, .25f, 0, .125f},
+            {1, -1, 0, .25f, .25f, 0, .5f},
+            {-1, 1, 0, .25f, .25f, 0, .125f},
+            {1, -1, 0, .25f, .25f, 0, .5f},
+            {1, 1, 0, .25f, .25f, 0, .5f},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        Check(centre == Color::Blue,
+              "compiled " + profile + " TEXLDP implicit LOD used unprojected coordinates: " +
+                  std::to_string(centre.getRProperty()) + "," +
+                  std::to_string(centre.getGProperty()) + "," +
+                  std::to_string(centre.getBProperty()) + "," +
+                  std::to_string(centre.getAProperty()));
+    }
+
     void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
@@ -6858,6 +6927,14 @@ int main()
         CheckCompiledTexldlDestinationModifierValidation(renderer);
         CheckCompiledTexldDestinationModifierValidation(renderer);
         CheckCompiledProjectedCubeTextureLoad();
+        CheckCompiledProjected2DLod(
+            CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+                Pixel20TexldpPartialPrecision,
+            "ps_2_0");
+        CheckCompiledProjected2DLod(
+            CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+                Pixel30TexldpPartialPrecision,
+            "ps_3_0");
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);
