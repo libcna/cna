@@ -1323,6 +1323,66 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x2VectorWrittenXyz,
         CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x2MatrixRowsWrittenXyz));
 
+class EasyGLCompiledEffectInvalidSpecialVectorInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSpecialVectorInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidSpecialVectorInitializationTest,
+       RejectsUninitializedSpecialVectorComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.specialVectorInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidSpecialVectorInitialization,
+    EasyGLCompiledEffectInvalidSpecialVectorInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Vertex11LitUnwrittenW,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+            Vertex11DstSource0UnwrittenZ,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+            Vertex11DstSource1UnwrittenW,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+            Pixel20CrsSource0UnwrittenZ,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+            Pixel20CrsSource1UnwrittenZ));
+
+class EasyGLCompiledEffectValidSpecialVectorInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSpecialVectorInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidSpecialVectorInitializationTest,
+       AcceptsInitializedSpecialVectorComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.specialVectorInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidSpecialVectorInitialization,
+    EasyGLCompiledEffectValidSpecialVectorInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Vertex11LitWrittenXyw,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Vertex11DstSource0WrittenYz,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Vertex11DstSource1WrittenYw,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Pixel20CrsSource0WrittenXyz,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Pixel20CrsSource1WrittenXyz));
+
 TEST(EasyGLCompiledEffectTest, RejectsTexkillWithUndefinedTemporaryComponents)
 {
     GraphicsDevice device;

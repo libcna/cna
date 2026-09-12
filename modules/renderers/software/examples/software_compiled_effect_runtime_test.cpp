@@ -3372,6 +3372,70 @@ namespace
                   "components in probe " +
                       std::to_string(static_cast<int>(probe)));
         }
+
+        options.matrixInitializationProbe =
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::None;
+        constexpr CNA::TestSupport::SyntheticSpecialVectorInitializationProbe invalidSpecial[] = {
+            CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Vertex11LitUnwrittenW,
+            CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+                Vertex11DstSource0UnwrittenZ,
+            CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+                Vertex11DstSource1UnwrittenW,
+            CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+                Pixel20CrsSource0UnwrittenZ,
+            CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+                Pixel20CrsSource1UnwrittenZ,
+        };
+        for (const auto probe : invalidSpecial)
+        {
+            options.specialVectorInitializationProbe = probe;
+            const auto specialBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool specialRejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(specialBytes.data(),
+                                                                specialBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                specialRejected = true;
+            }
+            Check(specialRejected,
+                  "compiled Effect parser accepted a special-vector read from uninitialized "
+                  "temporary components in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+
+        constexpr CNA::TestSupport::SyntheticSpecialVectorInitializationProbe validSpecial[] = {
+            CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Vertex11LitWrittenXyw,
+            CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+                Vertex11DstSource0WrittenYz,
+            CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+                Vertex11DstSource1WrittenYw,
+            CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+                Pixel20CrsSource0WrittenXyz,
+            CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+                Pixel20CrsSource1WrittenXyz,
+        };
+        for (const auto probe : validSpecial)
+        {
+            options.specialVectorInitializationProbe = probe;
+            const auto specialBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool specialAccepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(specialBytes.data(),
+                                                                specialBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                specialAccepted = false;
+            }
+            Check(specialAccepted,
+                  "compiled Effect parser rejected a special-vector read from initialized "
+                  "temporary components in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
     }
 
     void CheckCompiledTexkillTemporaryValidation(SoftwareRenderer& renderer)

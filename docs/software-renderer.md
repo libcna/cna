@@ -395,8 +395,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   consumes XY from its first two sources plus the selected scalar channel from its third.
   SOFTWARE-465 then validates all five matrix instruction shapes: the vector consumes XYZ or
   XYZW as dictated by its column count, and every consecutive temporary matrix row consumes the
-  same width even though only its base register has an explicit bytecode token. The dependency
-  series now contains 90 patches; remaining special opcode-specific source rules remain
+  same width even though only its base register has an explicit bytecode token. SOFTWARE-466
+  completes the adjacent special-vector group: `LIT` consumes XYW, `DST` consumes YZ/YW from its
+  two sources, and `CRS` consumes XYZ from both sources, regardless of destination mask. The dependency
+  series now contains 91 patches; remaining opcode-specific source rules remain
   SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
