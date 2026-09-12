@@ -1185,6 +1185,74 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource1WrittenX,
         CNA::TestSupport::SyntheticScalarInitializationProbe::Vertex11RcpWrittenX));
 
+class EasyGLCompiledEffectInvalidFixedVectorInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticFixedVectorInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidFixedVectorInitializationTest,
+       RejectsUninitializedSelectedComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.fixedVectorInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidFixedVectorInitialization,
+    EasyGLCompiledEffectInvalidFixedVectorInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20Dp3UnwrittenYz,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20Dp4UnwrittenYzw,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+            Pixel20Dp2AddSource0UnwrittenY,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+            Pixel20Dp2AddSource1UnwrittenY,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+            Pixel20Dp2AddSource2UnwrittenY,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20NrmUnwrittenYz,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Vertex11Dp3UnwrittenYz,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Vertex11Dp4UnwrittenYzw));
+
+class EasyGLCompiledEffectValidFixedVectorInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticFixedVectorInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidFixedVectorInitializationTest,
+       AcceptsInitializedSelectedComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.fixedVectorInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidFixedVectorInitialization,
+    EasyGLCompiledEffectValidFixedVectorInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20Dp3ReplicatedX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20Dp4ReplicatedX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+            Pixel20Dp2AddSource0ReplicatedX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+            Pixel20Dp2AddSource1ReplicatedX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+            Pixel20Dp2AddSource2WrittenX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20NrmReplicatedX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Vertex11Dp3ReplicatedX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Vertex11Dp4ReplicatedX));
+
 TEST(EasyGLCompiledEffectTest, RejectsTexkillWithUndefinedTemporaryComponents)
 {
     GraphicsDevice device;

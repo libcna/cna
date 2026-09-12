@@ -796,6 +796,45 @@ namespace CNA::TestSupport
         Vertex11RcpWrittenX,
     };
 
+    /** @brief Fixed-vector arithmetic reads from partially initialized temporaries. */
+    enum class SyntheticFixedVectorInitializationProbe
+    {
+        /** @brief Emit no dedicated fixed-vector initialization probe. */
+        None,
+        /** @brief In ps_2_0, DP3 reads undefined YZ through an identity swizzle. */
+        Pixel20Dp3UnwrittenYz,
+        /** @brief In ps_2_0, DP4 reads undefined YZW through an identity swizzle. */
+        Pixel20Dp4UnwrittenYzw,
+        /** @brief In ps_2_0, DP2ADD source zero reads undefined Y. */
+        Pixel20Dp2AddSource0UnwrittenY,
+        /** @brief In ps_2_0, DP2ADD source one reads undefined Y. */
+        Pixel20Dp2AddSource1UnwrittenY,
+        /** @brief In ps_2_0, DP2ADD scalar source two selects undefined Y. */
+        Pixel20Dp2AddSource2UnwrittenY,
+        /** @brief In ps_2_0, NRM reads undefined YZ through an identity swizzle. */
+        Pixel20NrmUnwrittenYz,
+        /** @brief In ps_2_0, DP3 replicates initialized X. */
+        Pixel20Dp3ReplicatedX,
+        /** @brief In ps_2_0, DP4 replicates initialized X. */
+        Pixel20Dp4ReplicatedX,
+        /** @brief In ps_2_0, DP2ADD source zero replicates initialized X. */
+        Pixel20Dp2AddSource0ReplicatedX,
+        /** @brief In ps_2_0, DP2ADD source one replicates initialized X. */
+        Pixel20Dp2AddSource1ReplicatedX,
+        /** @brief In ps_2_0, DP2ADD scalar source two selects initialized X. */
+        Pixel20Dp2AddSource2WrittenX,
+        /** @brief In ps_2_0, NRM replicates initialized X. */
+        Pixel20NrmReplicatedX,
+        /** @brief In vs_1_1, DP3 reads undefined YZ through an identity swizzle. */
+        Vertex11Dp3UnwrittenYz,
+        /** @brief In vs_1_1, DP4 reads undefined YZW through an identity swizzle. */
+        Vertex11Dp4UnwrittenYzw,
+        /** @brief In vs_1_1, DP3 replicates initialized X. */
+        Vertex11Dp3ReplicatedX,
+        /** @brief In vs_1_1, DP4 replicates initialized X. */
+        Vertex11Dp4ReplicatedX,
+    };
+
     /** @brief Shader profile and input-register boundary exercised by a synthetic program. */
     enum class SyntheticInputRegisterProbe
     {
@@ -1669,6 +1708,9 @@ namespace CNA::TestSupport
         /// Emits a scalar arithmetic read from one component of a partially initialized r#.
         SyntheticScalarInitializationProbe scalarInitializationProbe =
             SyntheticScalarInitializationProbe::None;
+        /// Emits a fixed-vector arithmetic read from selected components of a partial r#.
+        SyntheticFixedVectorInitializationProbe fixedVectorInitializationProbe =
+            SyntheticFixedVectorInitializationProbe::None;
         /// Writes only r0.xy before TEXKILL reads XYZ. D3D9 shader validation must reject the
         /// undefined Z component in Shader Model 2.0.
         bool pixelShaderTexkillReadsPartialTemporary = false;
@@ -1969,7 +2011,9 @@ namespace CNA::TestSupport
         SyntheticComponentwiseInitializationProbe componentwiseInitializationProbe =
             SyntheticComponentwiseInitializationProbe::None,
         SyntheticScalarInitializationProbe scalarInitializationProbe =
-            SyntheticScalarInitializationProbe::None)
+            SyntheticScalarInitializationProbe::None,
+        SyntheticFixedVectorInitializationProbe fixedVectorInitializationProbe =
+            SyntheticFixedVectorInitializationProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -2896,6 +2940,59 @@ namespace CNA::TestSupport
             if (sourceOne) AppendUInt32(shader, source(regConst, 0, 0x00u));
             AppendUInt32(shader, partialSource);
             if (pow && !sourceOne) AppendUInt32(shader, source(regConst, 0, 0x00u));
+        }
+        if (fixedVectorInitializationProbe >=
+                SyntheticFixedVectorInitializationProbe::Pixel20Dp3UnwrittenYz &&
+            fixedVectorInitializationProbe <=
+                SyntheticFixedVectorInitializationProbe::Pixel20NrmReplicatedX)
+        {
+            using Probe = SyntheticFixedVectorInitializationProbe;
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.x, c0.x
+            AppendUInt32(shader, destination(regTemp, 0, 0x1u));
+            AppendUInt32(shader, source(regConst, 0, 0x00u));
+            const bool dp3 = fixedVectorInitializationProbe == Probe::Pixel20Dp3UnwrittenYz ||
+                             fixedVectorInitializationProbe == Probe::Pixel20Dp3ReplicatedX;
+            const bool dp4 = fixedVectorInitializationProbe == Probe::Pixel20Dp4UnwrittenYzw ||
+                             fixedVectorInitializationProbe == Probe::Pixel20Dp4ReplicatedX;
+            const bool nrm = fixedVectorInitializationProbe == Probe::Pixel20NrmUnwrittenYz ||
+                             fixedVectorInitializationProbe == Probe::Pixel20NrmReplicatedX;
+            const bool sourceOne =
+                fixedVectorInitializationProbe == Probe::Pixel20Dp2AddSource1UnwrittenY ||
+                fixedVectorInitializationProbe == Probe::Pixel20Dp2AddSource1ReplicatedX;
+            const bool sourceTwo =
+                fixedVectorInitializationProbe == Probe::Pixel20Dp2AddSource2UnwrittenY ||
+                fixedVectorInitializationProbe == Probe::Pixel20Dp2AddSource2WrittenX;
+            const bool initialized =
+                fixedVectorInitializationProbe >= Probe::Pixel20Dp3ReplicatedX;
+            const std::uint32_t opcode = dp3 ? 0x00000008u
+                : dp4                           ? 0x00000009u
+                : nrm                           ? 0x00000024u
+                                                : 0x0000005Au;
+            const bool dp2add = !dp3 && !dp4 && !nrm;
+            const std::uint32_t operandCount = nrm ? 2u : dp2add ? 4u : 3u;
+            AppendUInt32(shader, opcode | (operandCount << 24));
+            AppendUInt32(shader, destination(regTemp, 1, nrm ? 0xFu : 0x1u));
+            const std::uint32_t partialSource = source(
+                regTemp, 0, sourceTwo && !initialized ? 0x55u
+                                                      : initialized ? 0x00u : swizzleIdentity);
+            if (sourceOne)
+            {
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, partialSource);
+                AppendUInt32(shader, source(regConst, 0, 0x00u));
+            }
+            else if (sourceTwo)
+            {
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, partialSource);
+            }
+            else
+            {
+                AppendUInt32(shader, partialSource);
+                if (!nrm) AppendUInt32(shader, source(regConst, 0));
+                if (dp2add) AppendUInt32(shader, source(regConst, 0, 0x00u));
+            }
         }
 
         if (pixel1OutputLivenessProbe != SyntheticPixel1OutputLivenessProbe::None)
@@ -5339,7 +5436,10 @@ namespace CNA::TestSupport
                                                                         SyntheticComponentwiseInitializationProbe::None,
                                                                 SyntheticScalarInitializationProbe
                                                                     scalarInitializationProbe =
-                                                                        SyntheticScalarInitializationProbe::None)
+                                                                        SyntheticScalarInitializationProbe::None,
+                                                                SyntheticFixedVectorInitializationProbe
+                                                                    fixedVectorInitializationProbe =
+                                                                        SyntheticFixedVectorInitializationProbe::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -5363,6 +5463,9 @@ namespace CNA::TestSupport
                                                Vertex11ExppUnwrittenY ||
                                        scalarInitializationProbe ==
                                            SyntheticScalarInitializationProbe::Vertex11RcpWrittenX ||
+                                       fixedVectorInitializationProbe >=
+                                           SyntheticFixedVectorInitializationProbe::
+                                               Vertex11Dp3UnwrittenYz ||
                                        shaderModel1InvalidOpcode !=
                                            SyntheticInvalidVertexShaderModel1Opcode::None ||
                                        temporaryRegisterProbe ==
@@ -6610,6 +6713,25 @@ namespace CNA::TestSupport
                            ? 0x00u
                            : 0x55u));
         }
+        if (fixedVectorInitializationProbe >=
+            SyntheticFixedVectorInitializationProbe::Vertex11Dp3UnwrittenYz)
+        {
+            using Probe = SyntheticFixedVectorInitializationProbe;
+            AppendUInt32(shader, 0x00000001u); // mov r0.x, c0.x
+            AppendUInt32(shader, destination(regTemp, 0, 0x1u));
+            AppendUInt32(shader, source(regConst, 0, 0x00u));
+            const bool dp4 =
+                fixedVectorInitializationProbe == Probe::Vertex11Dp4UnwrittenYzw ||
+                fixedVectorInitializationProbe == Probe::Vertex11Dp4ReplicatedX;
+            const bool initialized =
+                fixedVectorInitializationProbe == Probe::Vertex11Dp3ReplicatedX ||
+                fixedVectorInitializationProbe == Probe::Vertex11Dp4ReplicatedX;
+            AppendUInt32(shader, dp4 ? 0x00000009u : 0x00000008u); // dp4/dp3 r1.x, ...
+            AppendUInt32(shader, destination(regTemp, 1, 0x1u));
+            AppendUInt32(shader,
+                         source(regTemp, 0, initialized ? 0x00u : 0xE4u));
+            AppendUInt32(shader, source(regConst, 0));
+        }
         if (readsSecondStream)
         {
             // mad r0, v1, c4, v0
@@ -7543,7 +7665,8 @@ namespace CNA::TestSupport
             options.texlddOperandProbe,
             options.texldlDestinationModifierProbe,
             options.componentwiseInitializationProbe,
-            options.scalarInitializationProbe);
+            options.scalarInitializationProbe,
+            options.fixedVectorInitializationProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -7689,7 +7812,8 @@ namespace CNA::TestSupport
                 options.textureInstructionProfileProbe,
                 options.texldlDestinationModifierProbe,
                 options.componentwiseInitializationProbe,
-                options.scalarInitializationProbe);
+                options.scalarInitializationProbe,
+                options.fixedVectorInitializationProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

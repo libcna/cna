@@ -3224,6 +3224,80 @@ namespace
                   "temporary component in probe " +
                       std::to_string(static_cast<int>(probe)));
         }
+
+        options.scalarInitializationProbe =
+            CNA::TestSupport::SyntheticScalarInitializationProbe::None;
+        constexpr CNA::TestSupport::SyntheticFixedVectorInitializationProbe
+            invalidFixedVector[] = {
+                CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+                    Pixel20Dp3UnwrittenYz,
+                CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+                    Pixel20Dp4UnwrittenYzw,
+                CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+                    Pixel20Dp2AddSource0UnwrittenY,
+                CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+                    Pixel20Dp2AddSource1UnwrittenY,
+                CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+                    Pixel20Dp2AddSource2UnwrittenY,
+                CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+                    Pixel20NrmUnwrittenYz,
+                CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+                    Vertex11Dp3UnwrittenYz,
+                CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+                    Vertex11Dp4UnwrittenYzw,
+            };
+        for (const auto probe : invalidFixedVector)
+        {
+            options.fixedVectorInitializationProbe = probe;
+            const auto fixedBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool fixedRejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(fixedBytes.data(),
+                                                                fixedBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                fixedRejected = true;
+            }
+            Check(fixedRejected,
+                  "compiled Effect parser accepted fixed-vector arithmetic from uninitialized "
+                  "temporary components in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+
+        constexpr CNA::TestSupport::SyntheticFixedVectorInitializationProbe validFixedVector[] = {
+            CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20Dp3ReplicatedX,
+            CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20Dp4ReplicatedX,
+            CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+                Pixel20Dp2AddSource0ReplicatedX,
+            CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+                Pixel20Dp2AddSource1ReplicatedX,
+            CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+                Pixel20Dp2AddSource2WrittenX,
+            CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20NrmReplicatedX,
+            CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Vertex11Dp3ReplicatedX,
+            CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Vertex11Dp4ReplicatedX,
+        };
+        for (const auto probe : validFixedVector)
+        {
+            options.fixedVectorInitializationProbe = probe;
+            const auto fixedBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool fixedAccepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(fixedBytes.data(),
+                                                                fixedBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                fixedAccepted = false;
+            }
+            Check(fixedAccepted,
+                  "compiled Effect parser rejected fixed-vector arithmetic from initialized "
+                  "temporary components in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
     }
 
     void CheckCompiledTexkillTemporaryValidation(SoftwareRenderer& renderer)

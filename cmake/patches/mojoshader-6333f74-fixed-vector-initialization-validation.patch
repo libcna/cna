@@ -1,0 +1,57 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1305,6 +1305,24 @@
+ } // opcode_reads_sources_scalar
+ 
+ 
++static int fixed_vector_source_component_count(const uint32 opcode,
++                                               const int source_index)
++{
++    switch (opcode)
++    {
++        case 8:  // DP3
++        case 36: // NRM
++            return 3;
++        case 9:  // DP4
++            return 4;
++        case 90: // DP2ADD
++            return (source_index == 2) ? 1 : 2;
++        default:
++            return 0;
++    } // switch
++} // fixed_vector_source_component_count
++
++
+ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+ {
+     int retval = 1;
+@@ -1627,6 +1645,28 @@
+             if ((prior_writemask & required_writemask) == 0)
+                 failf(ctx, "Scalar instruction reads uninitialized component of r%d", info->regnum);
+         } // else if
++        else if (validates_uninitialized_temporaries &&
++                 !ctx->ignore_temp_read_validation &&
++                 (fixed_vector_source_component_count(ctx->current_opcode,
++                                                      source_index) > 0) &&
++                 (info->regtype == REG_TYPE_TEMP) && (reg))
++        {
++            const int component_count =
++                fixed_vector_source_component_count(ctx->current_opcode,
++                                                    source_index);
++            int required_writemask = 1 << info->swizzle_x;
++            if (component_count >= 2) required_writemask |= 1 << info->swizzle_y;
++            if (component_count >= 3) required_writemask |= 1 << info->swizzle_z;
++            if (component_count >= 4) required_writemask |= 1 << info->swizzle_w;
++            const int same_destination = ctx->have_dest_arg &&
++                (ctx->dest_arg.regtype == REG_TYPE_TEMP) &&
++                (ctx->dest_arg.regnum == info->regnum);
++            const int prior_writemask = same_destination
++                ? ctx->dest_arg_prior_writemask : reg->written;
++            if ((prior_writemask & required_writemask) != required_writemask)
++                failf(ctx, "Fixed-vector instruction reads uninitialized component(s) of r%d",
++                      info->regnum);
++        } // else if
+     } // if
+ 
+     return retval;
