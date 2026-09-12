@@ -63,6 +63,16 @@ jobs:
           ref: dbc56a87da87d973a9c5baa4e7438a9d20121d28
           path: raylib
 
+      # RLGL-047 uses only the pinned MojoShader submodule and CNA's shared translation target;
+      # FNA3D itself remains excluded from the build graph.
+      - name: Checkout pinned FNA3D and MojoShader source
+        uses: actions/checkout@v4
+        with:
+          repository: FNA-XNA/FNA3D
+          ref: 3240147
+          path: fna3d
+          submodules: recursive
+
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
@@ -81,12 +91,14 @@ jobs:
             -DCNA_GRAPHICS_RENDERER=RLGL \
             -DCNA_BUILD_TESTS=OFF \
             -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_RLGL_COMPILED_EFFECTS=ON \
             -DCNA_ENABLE_VIDEO=OFF \
             -DCNA_ENABLE_NET=OFF \
             -DCNA_ENABLE_DRACO=OFF \
             -DCNA_USE_CCACHE=OFF \
             -DCNA_MAX_VENDORED_BUILD_JOBS=2 \
-            -DFETCHCONTENT_SOURCE_DIR_RLGL="${GITHUB_WORKSPACE}/raylib"
+            -DFETCHCONTENT_SOURCE_DIR_RLGL="${GITHUB_WORKSPACE}/raylib" \
+            -DFETCHCONTENT_SOURCE_DIR_FNA3D="${GITHUB_WORKSPACE}/fna3d"
 
       - name: Build renderer and focused smoke executable
         working-directory: cna
@@ -159,7 +171,8 @@ jobs:
             cna_test_rlgl_skinnedeffect_preferperpixellighting \
             cna_test_rlgl_skinnedeffect_fog \
             cna_test_rlgl_skinnedeffect_world_normal \
-            cna_test_rlgl_skinnedeffect_combined
+            cna_test_rlgl_skinnedeffect_combined \
+            cna_test_rlgl_compiled_effect_runtime
 
       - name: Verify renderer registry consistency
         working-directory: cna

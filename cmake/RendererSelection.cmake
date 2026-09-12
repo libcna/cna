@@ -1135,6 +1135,17 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "RLGL")
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_RLGL")
     include(cmake/ThirdPartyRlgl.cmake)
     cna_configure_rlgl()
+    # plans/plan_rlgl.md RLGL-047: classic XNA Effect Framework bytecode uses the same pinned
+    # MojoShader parser/OpenGL adapter and renderer-neutral translation as EasyGL. Keep this
+    # opt-in until the complete public draw matrix closes in RLGL-048/049: merely parsing an
+    # effect is not enough to advertise GraphicsCapability::CompiledEffects.
+    option(CNA_RLGL_COMPILED_EFFECTS
+           "Build RLGL support for compiled XNA Effect bytecode (plans/plan_rlgl.md RLGL-047)" OFF)
+    if(CNA_RLGL_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_RLGL_COMPILED_EFFECTS)
+    endif()
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics renderer: ${CNA_GRAPHICS_RENDERER}")

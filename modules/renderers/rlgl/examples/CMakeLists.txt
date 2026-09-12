@@ -352,6 +352,18 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         endif()
     endforeach()
 
+    if(CNA_RLGL_COMPILED_EFFECTS)
+        add_executable(cna_test_rlgl_compiled_effect_runtime
+            rlgl_compiled_effect_runtime_test.cpp)
+        target_compile_definitions(cna_test_rlgl_compiled_effect_runtime
+            PRIVATE CNA_RLGL_SOURCE_DIR="${CNA_SOURCE_DIR}")
+        target_link_libraries(cna_test_rlgl_compiled_effect_runtime
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_compiled_effect_runtime PRIVATE SDL3::SDL3main)
+        endif()
+    endif()
+
     if(CNA_BUILD_TESTS)
         enable_testing()
         cna_register_renderer_test(NAME Rlgl_Smoke COMMAND cna_test_rlgl_smoke
@@ -538,6 +550,13 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
                 TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
                 ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         endforeach()
+        if(CNA_RLGL_COMPILED_EFFECTS)
+            cna_register_renderer_test(
+                NAME Rlgl_CompiledEffect_runtime
+                COMMAND cna_test_rlgl_compiled_effect_runtime
+                TIMEOUT 120 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endif()
     endif()
 endif()
 

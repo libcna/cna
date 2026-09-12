@@ -140,6 +140,9 @@ namespace CNA::Internal::Renderers::Rlgl
                     Bridge::DestroyPrimitivePipeline(*primitivePipeline_);
                     primitivePipeline_.reset();
                 }
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+                DestroyCompiledEffectContext();
+#endif
                 Bridge::DestroyMrtFramebuffer(mrtFramebuffer_);
                 std::array<unsigned int, 16> samplerIds{};
                 for (std::size_t index = 0; index < samplers_.size(); ++index)

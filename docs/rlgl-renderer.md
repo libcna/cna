@@ -62,7 +62,8 @@ success.
 | `RenderTarget2D` (all eleven classic FNA target formats) | ✅ | Color, Rgba1010102, Rg32, Rgba64, Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, and HdrBlendable have exact single/MSAA storage, resolve, format-native CPU transfer/readback, mips, depth/stencil, switching, Preserve/Discard, and upright sampling evidence from `RLGL-039`/`041`/`042` |
 | `RenderTargetCube` (all eleven classic FNA target formats) | ✅ | Exact six-face/mip storage, per-face binding/readback, six independent MSAA color buffers, Depth16/Depth24/Depth24Stencil8, resolve/mips, Preserve/Discard, switching, and Color upload passed `RLGL-046`; public non-Color transfer is refused because CNA's current cube interface cannot express its format-native bytes |
 | Multiple render targets | ✅ | HiDef supports ordered sets of two through four RenderTarget2D objects, cube faces, or compatible mixtures through transactional rlgl-created FBOs and `rlActiveDrawBuffers`; indexed masks/Clear, slot-zero depth, mixed formats, MSAA resolve/mips, usage, transitions, and refusal safety passed `RLGL-040`/`046`. Reach correctly remains limited to one target |
-| Custom effects and general 3D workloads | ❌ | Custom/compiled effects remain explicit failures owned by `RLGL-038`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
+| Compiled XNA effects | 🟨 | With `CNA_RLGL_COMPILED_EFFECTS=ON`, the existing pinned MojoShader path parses bytecode, compiles pass shaders in the CNA-owned context, reflects parameters/techniques/passes, translates legacy states and samplers, validates textures, and clones runtimes (`RLGL-047`). `GraphicsCapability::CompiledEffects` deliberately remains false until RLGL-048 validates actual draws. |
+| CNAEXT source `ShaderEffect` and general 3D workloads | ❌ | Source shaders remain an explicit failure owned separately by `RLGL-050`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
 | Instancing and queries | ❌ | Explicitly unavailable; their implementation and validation are tracked by `RLGL-016` |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
@@ -120,6 +121,22 @@ cmake --build cmake-build-rlgl --parallel 3 --target \
       cna_test_rlgl_rendertargetcube_plural_binding \
       cna_test_rlgl_render_target_orientation cna_test_rlgl_render_target_full \
       cna_test_rlgl_msaa_first_readback cna_test_rlgl_msaa_mip_readback
+```
+
+Classic XNA Effect Framework bytecode has an optional in-progress path through CNA's existing
+pinned MojoShader dependency. Enable it with `-DCNA_RLGL_COMPILED_EFFECTS=ON`; this currently adds
+the parse/reflection/state runtime and its focused executable but intentionally does not advertise
+compiled-effect capability until the draw gates finish:
+
+```bash
+cmake -S . -B cmake-build-rlgl-fx -G Ninja \
+      -DCMAKE_BUILD_TYPE=Debug \
+      -DCNA_GRAPHICS_RENDERER=RLGL \
+      -DCNA_RLGL_COMPILED_EFFECTS=ON
+cmake --build cmake-build-rlgl-fx --parallel 3 --target \
+      cna_test_rlgl_compiled_effect_runtime
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+      ./cmake-build-rlgl-fx/cna_test_rlgl_compiled_effect_runtime
 ```
 
 The smoke target is deliberately available with `CNA_BUILD_TESTS=OFF`. On a Linux machine with
@@ -189,7 +206,8 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
 With `CNA_BUILD_TESTS=ON`, the executables are registered as `Rlgl_Smoke`, `Rlgl_Texture`,
 `Rlgl_Sampler`, `Rlgl_State`, `Rlgl_SpriteBatch`, `Rlgl_Buffer`, `Rlgl_Primitive`, `Rlgl_Effect`,
 `Rlgl_XnaPixelCenter`, ten focused BasicEffect-lighting fixtures, two DualTextureEffect fixtures,
-eighteen EnvironmentMapEffect fixtures, and fourteen SkinnedEffect fixtures. They are labelled
+eighteen EnvironmentMapEffect fixtures, fourteen SkinnedEffect fixtures, and, when the opt-in is
+enabled, `Rlgl_CompiledEffect_runtime`. They are labelled
 `Rlgl` plus their focused graphics category, with the proven offscreen environment attached to
 each CTest entry. The
 RenderTarget2D fixtures cover focused resource/state behavior, all eleven exact classic formats,
@@ -219,6 +237,13 @@ cmake -S . -B cmake-build-rlgl \
 
 The dependency uses raylib's zlib/libpng license. Its required notice is preserved in
 [`../THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md).
+
+The compiled-effect opt-in additionally reuses the dependency already described by
+`cmake/ThirdPartyFNA3D.cmake`: FNA3D revision `3240147` carries MojoShader revision `6333f74`, and
+CNA applies its declared robustness/translation patch series reproducibly. RLGL links only the
+zlib-licensed MojoShader archive and CNA's shared effect translation library, not FNA3D. Offline
+compiled-effect builds can add
+`-DFETCHCONTENT_SOURCE_DIR_FNA3D=/absolute/path/to/fna3d-with-initialized-submodules`.
 
 ### Updating rlgl
 
@@ -253,7 +278,7 @@ The dependency uses raylib's zlib/libpng license. Its required notice is preserv
 The dedicated `.github/workflows/rlgl-ci.yml` lane configures the Linux renderer against an
 independently checked-out copy of the exact upstream commit and compiles the renderer plus the
   smoke, texture, sampler, state, SpriteBatch, buffer, primitive, effect, XNA pixel-center, and
-  BasicEffect-lighting, DualTextureEffect, SkinnedEffect, RenderTarget2D, and RenderTargetCube
-  format/contract executables. It
+  BasicEffect-lighting, DualTextureEffect, SkinnedEffect, RenderTarget2D, RenderTargetCube, and
+  optional compiled-effect runtime executables. It
   intentionally does not yet claim hosted runtime coverage; promotion to a CI runtime gate belongs
   to `RLGL-021` after the runner's context path is proven.

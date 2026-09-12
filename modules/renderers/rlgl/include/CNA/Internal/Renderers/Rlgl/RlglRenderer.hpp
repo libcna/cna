@@ -9,6 +9,8 @@
 
 namespace CNA::Internal::Renderers::Rlgl
 {
+    class RlglCompiledEffect;
+
     namespace Bridge
     {
         struct PrimitivePipeline;
@@ -128,6 +130,18 @@ namespace CNA::Internal::Renderers::Rlgl
          * @return True only when both planes were granted.
          */
         [[nodiscard]] bool SupportsDepthStencil() const override;
+
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        /**
+         * @brief Creates the renderer-local runtime for classic XNA Effect Framework bytecode.
+         * @param effectCode Effect Framework bytes.
+         * @param effectCodeBytes Number of bytes at @p effectCode.
+         * @return Parsed and GL-compiled runtime. Capability advertisement remains disabled until
+         *         the complete draw path is validated by RLGL-048.
+         */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+#endif
 
         /**
          * @brief Reports whether the created back buffer has a depth plane.
@@ -628,6 +642,8 @@ namespace CNA::Internal::Renderers::Rlgl
         void SetScissorRect(int x, int y, int w, int h) override;
 
     private:
+        friend class RlglCompiledEffect;
+
         struct SamplerRecord
         {
             unsigned int id = 0;
@@ -659,6 +675,11 @@ namespace CNA::Internal::Renderers::Rlgl
         [[nodiscard]] int GetCurrentSampleCount() const;
         void ApplyCurrentRasterizerState();
         void FinalizeCurrentRenderTargets();
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        [[nodiscard]] void* GetMojoShaderContext();
+        void MakeCompiledEffectContextCurrent();
+        void DestroyCompiledEffectContext() noexcept;
+#endif
 
         PlatformGlSurfaceState surface_;
         CNA::Platform::IPlatformGlContext* platformGlService_ = nullptr;
@@ -696,5 +717,8 @@ namespace CNA::Internal::Renderers::Rlgl
         bool rlglInitialized_ = false;
         bool registered_ = false;
         std::unique_ptr<Bridge::PrimitivePipeline> primitivePipeline_;
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        void* mojoShaderContext_ = nullptr;
+#endif
     };
 }
