@@ -3241,6 +3241,75 @@ namespace
         }
     }
 
+    void CheckCompiledConstantControlRegisterRangeValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticConstantControlRegisterProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel11FloatOutOfRange,
+            Probe::Pixel20FloatOutOfRange,
+            Probe::Pixel30FloatOutOfRange,
+            Probe::Pixel30IntegerOutOfRange,
+            Probe::Pixel30BooleanOutOfRange,
+            Probe::Pixel30PredicateOutOfRange,
+            Probe::Vertex30IntegerOutOfRange,
+            Probe::Vertex30BooleanOutOfRange,
+            Probe::Vertex30PredicateOutOfRange,
+            Probe::Vertex20AddressOutOfRange,
+            Probe::Vertex20LoopOutOfRange,
+        };
+        std::size_t rejectedCount = 0;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.constantControlRegisterProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                ++rejectedCount;
+            }
+        }
+        Check(rejectedCount == invalidProbes.size(),
+              "compiled Effect parser accepted " +
+                  std::to_string(invalidProbes.size() - rejectedCount) +
+                  " out-of-range constant/control registers");
+        constexpr std::array validProbes{
+            Probe::Pixel11FloatMaximum,
+            Probe::Pixel20FloatMaximum,
+            Probe::Pixel30FloatMaximum,
+            Probe::Pixel30IntegerMaximum,
+            Probe::Pixel30BooleanMaximum,
+            Probe::Pixel30PredicateMaximum,
+            Probe::Vertex30IntegerMaximum,
+            Probe::Vertex30BooleanMaximum,
+            Probe::Vertex30PredicateMaximum,
+            Probe::Vertex20AddressMaximum,
+            Probe::Vertex20LoopMaximum,
+        };
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.constantControlRegisterProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Effect parser rejected maximum valid constant/control register");
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -5034,6 +5103,7 @@ int main()
         CheckCompiledTemporaryRegisterRangeValidation(renderer);
         CheckCompiledInputRegisterRangeValidation(renderer);
         CheckCompiledOutputRegisterRangeValidation(renderer);
+        CheckCompiledConstantControlRegisterRangeValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();

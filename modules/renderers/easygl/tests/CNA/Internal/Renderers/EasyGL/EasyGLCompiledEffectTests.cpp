@@ -1357,6 +1357,67 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedOutputRegisters)
     }
 }
 
+class EasyGLCompiledEffectConstantControlRegisterRangeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticConstantControlRegisterProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectConstantControlRegisterRangeTest, RejectsFirstOutOfRangeRegister)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.constantControlRegisterProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangeConstantControl,
+    EasyGLCompiledEffectConstantControlRegisterRangeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Pixel11FloatOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Pixel20FloatOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Pixel30FloatOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Pixel30IntegerOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Pixel30BooleanOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Pixel30PredicateOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Vertex30IntegerOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Vertex30BooleanOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Vertex30PredicateOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Vertex20AddressOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Vertex20LoopOutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedConstantControlRegisters)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticConstantControlRegisterProbe;
+    for (const Probe probe : {
+             Probe::Pixel11FloatMaximum,
+             Probe::Pixel20FloatMaximum,
+             Probe::Pixel30FloatMaximum,
+             Probe::Pixel30IntegerMaximum,
+             Probe::Pixel30BooleanMaximum,
+             Probe::Pixel30PredicateMaximum,
+             Probe::Vertex30IntegerMaximum,
+             Probe::Vertex30BooleanMaximum,
+             Probe::Vertex30PredicateMaximum,
+             Probe::Vertex20AddressMaximum,
+             Probe::Vertex20LoopMaximum,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.constantControlRegisterProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;

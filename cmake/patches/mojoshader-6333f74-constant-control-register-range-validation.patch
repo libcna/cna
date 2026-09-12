@@ -1,0 +1,51 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -424,6 +424,30 @@
+     } // if
+ } // validate_output_register
+ 
++static void validate_constant_control_register(Context *ctx,
++                                               const RegisterType regtype,
++                                               const int regnum)
++{
++    if ((regtype == REG_TYPE_CONST) && shader_is_pixel(ctx))
++    {
++        const int count = (ctx->major_ver == 1) ? 8 :
++                          (shader_version_atleast(ctx, 3, 0) ? 224 : 32);
++        if (regnum >= count)
++            failf(ctx, "pixel float constant c%d is out of range", regnum);
++    } // if
++    else if ((regtype == REG_TYPE_CONSTINT) && (regnum >= 16))
++        failf(ctx, "integer constant i%d is out of range", regnum);
++    else if ((regtype == REG_TYPE_CONSTBOOL) && (regnum >= 16))
++        failf(ctx, "Boolean constant b%d is out of range", regnum);
++    else if ((regtype == REG_TYPE_PREDICATE) && (regnum >= 1))
++        failf(ctx, "predicate register p%d is out of range", regnum);
++    else if (shader_is_vertex(ctx) && (regtype == REG_TYPE_ADDRESS) &&
++             (regnum >= 1))
++        failf(ctx, "address register a%d is out of range", regnum);
++    else if ((regtype == REG_TYPE_LOOP) && (regnum >= 1))
++        fail(ctx, "loop counter register is out of range");
++} // validate_constant_control_register
++
+ #undef DEFINE_PROFILE
+ 
+ // This is for profiles that extend other profiles...
+@@ -499,6 +523,7 @@
+     validate_temporary_register(ctx, info->regtype, info->regnum);
+     validate_input_register(ctx, info->regtype, info->regnum);
+     validate_output_register(ctx, info->regtype, info->regnum);
++    validate_constant_control_register(ctx, info->regtype, info->regnum);
+ 
+     // swallow token for now, for multiple calls in a row.
+     adjust_token_position(ctx, 1);
+@@ -781,6 +806,7 @@
+ 
+     validate_temporary_register(ctx, info->regtype, info->regnum);
+     validate_input_register(ctx, info->regtype, info->regnum);
++    validate_constant_control_register(ctx, info->regtype, info->regnum);
+ 
+     info->swizzle = adjust_swizzle(ctx, info->regtype, info->regnum, swizzle);
+     info->swizzle_x = ((info->swizzle >> 0) & 0x3);
+
