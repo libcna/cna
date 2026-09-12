@@ -3058,6 +3058,67 @@ namespace
         checkRejected(true, 4u);
     }
 
+    void CheckCompiledTemporaryRegisterRangeValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticTemporaryRegisterProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel11OutOfRange,
+            Probe::Pixel14OutOfRange,
+            Probe::Pixel20OutOfRange,
+            Probe::Pixel2xOutOfRange,
+            Probe::Pixel30OutOfRange,
+            Probe::Vertex11OutOfRange,
+            Probe::Vertex20OutOfRange,
+            Probe::Vertex2xOutOfRange,
+            Probe::Vertex30OutOfRange,
+        };
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.temporaryRegisterProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected, "compiled Effect parser accepted out-of-range temporary register");
+        }
+        constexpr std::array validProbes{
+            Probe::Pixel11Maximum,
+            Probe::Pixel14Maximum,
+            Probe::Pixel20Maximum,
+            Probe::Pixel2xMaximum,
+            Probe::Pixel30Maximum,
+            Probe::Vertex11Maximum,
+            Probe::Vertex20Maximum,
+            Probe::Vertex2xMaximum,
+            Probe::Vertex30Maximum,
+        };
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.temporaryRegisterProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted, "compiled Effect parser rejected maximum valid temporary register");
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4848,6 +4909,7 @@ int main()
         CheckCompiledPreShaderModel3AbsoluteSourceValidation(renderer);
         CheckCompiledShaderModel3MixedConstantAbsoluteValidation(renderer);
         CheckCompiledSamplerRegisterRangeValidation(renderer);
+        CheckCompiledTemporaryRegisterRangeValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();
