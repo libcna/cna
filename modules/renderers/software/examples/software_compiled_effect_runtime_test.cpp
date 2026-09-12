@@ -1956,7 +1956,7 @@ namespace
               "parsed vs_1_1 EXPP used the Shader Model 2 replicated result");
     }
 
-    void CheckCompiledRelativeTextureCoordinate()
+    void CheckCompiledRelativeInputTextureCoordinate()
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
         GraphicsDevice device(
@@ -2015,8 +2015,8 @@ namespace
         Color centre;
         const Rectangle probe(2, 2, 1, 1);
         target.GetData(0, &probe, &centre, 0, 1);
-        Check(centre == Color::Green,
-              "compiled relative c0[aL] texture coordinate did not sample the uniform base mip");
+        Check(centre == Color::Blue,
+              "compiled relative v0[aL] texture coordinate lost the interpolated input mip");
     }
 
     void CheckCompiledDependentTemporaryTextureCoordinate()
@@ -3531,6 +3531,70 @@ namespace
         Check(acceptedInvalidProbes.empty(),
               "compiled Effect parser accepted special control registers as ordinary sources: " +
                   acceptedInvalidProbes);
+    }
+
+    void CheckCompiledRelativeAddressingValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticRelativeAddressingProbe;
+        constexpr std::array invalidProbes{
+            Probe::PixelInputOutsideLoop,
+            Probe::PixelInputAddressInsideLoop,
+            Probe::PixelConstantInsideLoop,
+            Probe::VertexConstantOutsideLoop,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.relativeAddressingProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                (void) renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+            }
+            catch (const std::exception&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid relative-addressing probes: " +
+                  acceptedInvalidProbes);
+
+        constexpr std::array validProbes{
+            Probe::PixelInputSubroutineInsideLoop,
+            Probe::VertexConstantInsideLoop,
+            Probe::VertexConstantSubroutineInsideLoop,
+            Probe::VertexInputInsideLoop,
+        };
+        std::string rejectedValidProbes;
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.relativeAddressingProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            try
+            {
+                (void) renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+            }
+            catch (const std::exception& error)
+            {
+                if (!rejectedValidProbes.empty()) rejectedValidProbes += ", ";
+                rejectedValidProbes += std::to_string(static_cast<int>(probe)) + ": " +
+                                       error.what();
+            }
+        }
+        Check(rejectedValidProbes.empty(),
+              "compiled Effect parser rejected valid relative-addressing probes: " +
+                  rejectedValidProbes);
     }
 
     void CheckCompiledOutputRegisterRangeValidation(SoftwareRenderer& renderer)
@@ -5708,7 +5772,7 @@ int main()
         CheckParsedSignedLogEffect(renderer);
         CheckParsedNrmWriteMaskEffect(renderer);
         CheckParsedShaderModel11VertexEffects(renderer);
-        CheckCompiledRelativeTextureCoordinate();
+        CheckCompiledRelativeInputTextureCoordinate();
         CheckCompiledDependentTemporaryTextureCoordinate();
         CheckCompiledDependentTemporaryCubeCoordinate();
         CheckCompiledDependentTemporaryVolumeCoordinate();
@@ -5744,6 +5808,7 @@ int main()
         CheckCompiledSamplerRegisterSourceValidation(renderer);
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
+        CheckCompiledRelativeAddressingValidation(renderer);
         CheckCompiledOutputRegisterRangeValidation(renderer);
         CheckCompiledConstantControlRegisterRangeValidation(renderer);
         CheckCompiledVertexInstructionSlotValidation(renderer);

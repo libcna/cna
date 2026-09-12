@@ -1186,18 +1186,17 @@ namespace CNA::TestSupport
     }
 
     /**
-     * @brief Draws an SM3 texture load whose coordinate is the relatively addressed `c0[aL]`.
+     * @brief Draws an SM3 texture load whose coordinate is the relatively addressed `v0[aL]`.
      *
-     * `aL` is zero for the fixture's single loop iteration, so the lookup must use the reflected
-     * Tint value in c0. TEXCOORD0 deliberately spans eight repeats across four pixels: treating
-     * the constant source as that interpolator when deriving implicit LOD selects the blue mip,
-     * while the required uniform footprint samples the green base level.
+     * `aL` is zero for the fixture's single loop iteration, so the lookup must use interpolated
+     * TEXCOORD0. It spans eight repeats across four pixels and therefore selects the blue mip;
+     * treating the relative input as a uniform or fixed zero coordinate selects green instead.
      *
      * @param device Device used for the draw.
      * @param effect Parsed fixture effect, allowing Software's opt-in test path to bypass its
      *        deliberately false aggregate capability flag.
      */
-    [[nodiscard]] inline Color DrawCompiledEffectRelativeTextureCoordinate(
+    [[nodiscard]] inline Color DrawCompiledEffectRelativeInputTextureCoordinate(
         GraphicsDevice& device, Effect& effect)
     {
         effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
@@ -1249,7 +1248,7 @@ namespace CNA::TestSupport
      * @brief Builds and runs the SM3 relative texture-coordinate contract.
      * @param device Device whose renderer executes classic compiled Effects.
      */
-    inline void RunCompiledEffectRelativeTextureCoordinateContract(GraphicsDevice& device)
+    inline void RunCompiledEffectRelativeInputTextureCoordinateContract(GraphicsDevice& device)
     {
         namespace Fx = EffectFormat;
         SyntheticEffectOptions options;
@@ -1264,11 +1263,11 @@ namespace CNA::TestSupport
             {Fx::SampAddressV, Fx::AddressClamp},
         };
         Effect effect(device, BuildSyntheticEffect(options));
-        const Color centre = DrawCompiledEffectRelativeTextureCoordinate(device, effect);
+        const Color centre = DrawCompiledEffectRelativeInputTextureCoordinate(device, effect);
         EXPECT_NEAR(centre.getRProperty(), 0, 3);
-        EXPECT_NEAR(centre.getGProperty(), Color::Green.getGProperty(), 3)
-            << "relative c0[aL] must remain a uniform base-level coordinate";
-        EXPECT_NEAR(centre.getBProperty(), 0, 3);
+        EXPECT_NEAR(centre.getGProperty(), 0, 3);
+        EXPECT_NEAR(centre.getBProperty(), Color::Blue.getBProperty(), 3)
+            << "relative v0[aL] must retain the interpolated input footprint";
         EXPECT_NEAR(centre.getAProperty(), 255, 3);
     }
 

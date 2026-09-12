@@ -252,10 +252,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   patch adds the missing validation/GLSL, while EasyGL now uploads the stage values before drawing.
   SOFTWARE-386 closes the adjacent shared parser hole by rejecting a second ps_1_4 `PHASE`
   marker; valid two-phase programs remain accepted. Other unproven marker-placement and shader-
-  profile cases stay in the explicit backlog. SOFTWARE-387 then executes variable-length SM3
-  texture instructions whose constant-coordinate source carries a relative `aL`/address token;
-  resolved constant coordinates are marked uniform so implicit LOD cannot be borrowed from an
-  unrelated same-numbered TEXCOORD interpolator. SOFTWARE-388 replaces the remaining SM3
+  profile cases stay in the explicit backlog. SOFTWARE-387 added variable-length relative-source
+  decoding, but SOFTWARE-429 later proved with the real Microsoft assembler that its original
+  pixel `c0[aL]` fixture was invalid. The corrected shared contract executes legal pixel
+  `v0[aL]` and vertex `v0[aL]`/`c0[aL]` sources only inside a loop or a subroutine called by that
+  loop, rejects pixel relative constants and `a0.x` addressing, and exposes addressable GLSL input
+  arrays. It also keeps the EasyGL vertex coordinate/depth epilogue inside `main` instead of
+  emitting it after a subroutine `RET`. SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
   swizzles, source modifiers, projection and sample-dependent temporary chains. SOFTWARE-389

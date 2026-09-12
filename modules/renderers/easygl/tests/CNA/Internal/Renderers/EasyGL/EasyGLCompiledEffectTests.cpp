@@ -633,12 +633,12 @@ TEST(EasyGLCompiledEffectDrawTest, ShaderModel11ExtendedVertexInputMap)
     CNA::TestSupport::RunCompiledEffectShaderModel11ExtendedInputContract(device);
 }
 
-TEST(EasyGLCompiledEffectDrawTest, D3D9RelativeConstantTextureCoordinates)
+TEST(EasyGLCompiledEffectDrawTest, D3D9RelativeInputTextureCoordinates)
 {
     GraphicsDevice device;
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
-    CNA::TestSupport::RunCompiledEffectRelativeTextureCoordinateContract(device);
+    CNA::TestSupport::RunCompiledEffectRelativeInputTextureCoordinateContract(device);
 }
 
 TEST(EasyGLCompiledEffectDrawTest, D3D9DependentTemporaryTextureCoordinatesDriveLod)
@@ -1524,6 +1524,58 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticSpecialControlSourceProbe::VertexPredicate,
         CNA::TestSupport::SyntheticSpecialControlSourceProbe::VertexLabel,
         CNA::TestSupport::SyntheticSpecialControlSourceProbe::VertexLoop));
+
+class EasyGLCompiledEffectInvalidRelativeAddressingTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticRelativeAddressingProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidRelativeAddressingTest, RejectsInvalidRegisterOrScope)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.relativeAddressingProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectInvalidRelativeAddressingTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::PixelInputOutsideLoop,
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::PixelInputAddressInsideLoop,
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::PixelConstantInsideLoop,
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::VertexConstantOutsideLoop));
+
+class EasyGLCompiledEffectValidRelativeAddressingTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticRelativeAddressingProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidRelativeAddressingTest, AcceptsLoopInheritedAddress)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.relativeAddressingProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectValidRelativeAddressingTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::PixelInputSubroutineInsideLoop,
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::VertexConstantInsideLoop,
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::VertexConstantSubroutineInsideLoop,
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::VertexInputInsideLoop));
 
 class EasyGLCompiledEffectOutputRegisterRangeTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>

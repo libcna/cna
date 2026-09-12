@@ -809,6 +809,29 @@ namespace CNA::TestSupport
         VertexLoop,
     };
 
+    /** @brief D3D9 relative-source addressing rule exercised by a program. */
+    enum class SyntheticRelativeAddressingProbe
+    {
+        /** @brief Emit no dedicated relative-addressing validation program. */
+        None,
+        /** @brief Read `v0[aL]` in a pixel shader outside any loop. */
+        PixelInputOutsideLoop,
+        /** @brief Read `v0[a0.x]` in a pixel shader even though only `aL` is legal. */
+        PixelInputAddressInsideLoop,
+        /** @brief Read `c0[aL]` in a pixel shader even though pixel constants are not indexable. */
+        PixelConstantInsideLoop,
+        /** @brief Read `v0[aL]` in a subroutine called from a pixel-shader loop. */
+        PixelInputSubroutineInsideLoop,
+        /** @brief Read `c0[aL]` in a vertex shader outside any loop. */
+        VertexConstantOutsideLoop,
+        /** @brief Read `c0[aL]` directly inside a vertex-shader loop. */
+        VertexConstantInsideLoop,
+        /** @brief Read `c0[aL]` in a subroutine called from a vertex-shader loop. */
+        VertexConstantSubroutineInsideLoop,
+        /** @brief Read `v0[aL]` directly inside a vertex-shader loop. */
+        VertexInputInsideLoop,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -937,9 +960,9 @@ namespace CNA::TestSupport
             SyntheticLegacyBumpEnvironment::None;
         /// Emits a second ps_1_4 PHASE marker so parser validation can reject it.
         bool pixelShaderDuplicatesShaderModel14Phase = false;
-        /// Emits an SM3 texture load whose coordinates are `c0[aL]` inside a one-iteration loop.
-        /// This distinguishes genuine relative constant addressing from reading TEXCOORD0 and
-        /// also requires implicit LOD to treat the resolved constant coordinate as uniform.
+        /// Emits an SM3 texture load whose coordinates are `v0[aL]` inside a one-iteration loop.
+        /// This is the pixel-input relative-addressing form accepted by Microsoft's D3D9
+        /// assembler and requires the translator/interpreter to execute the indexed varying.
         bool pixelShaderUsesRelativeTextureCoordinate = false;
         /// Scales interpolated coordinates into a temporary before an implicit SM3 texture load.
         /// This requires LOD derivatives from the executed expression rather than from the
@@ -1059,6 +1082,9 @@ namespace CNA::TestSupport
         /** @brief Selects a special flow-control register used as an ordinary source. */
         SyntheticSpecialControlSourceProbe specialControlSourceProbe =
             SyntheticSpecialControlSourceProbe::None;
+        /** @brief Selects a D3D9 relative-source addressing scope/register probe. */
+        SyntheticRelativeAddressingProbe relativeAddressingProbe =
+            SyntheticRelativeAddressingProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -1174,7 +1200,9 @@ namespace CNA::TestSupport
         SyntheticTypedControlSourceProbe typedControlSourceProbe =
             SyntheticTypedControlSourceProbe::None,
         SyntheticSpecialControlSourceProbe specialControlSourceProbe =
-            SyntheticSpecialControlSourceProbe::None)
+            SyntheticSpecialControlSourceProbe::None,
+        SyntheticRelativeAddressingProbe relativeAddressingProbe =
+            SyntheticRelativeAddressingProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1290,6 +1318,11 @@ namespace CNA::TestSupport
             specialControlSourceProbe == SyntheticSpecialControlSourceProbe::PixelPredicate ||
             specialControlSourceProbe == SyntheticSpecialControlSourceProbe::PixelLabel ||
             specialControlSourceProbe == SyntheticSpecialControlSourceProbe::PixelLoop;
+        const bool probesPixelRelativeAddressing =
+            relativeAddressingProbe >=
+                SyntheticRelativeAddressingProbe::PixelInputOutsideLoop &&
+            relativeAddressingProbe <=
+                SyntheticRelativeAddressingProbe::PixelInputSubroutineInsideLoop;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -1303,7 +1336,7 @@ namespace CNA::TestSupport
             probesPixel30Temporary || probesPixel30Input || probesPixel30InputDestination ||
             probesPixelOutput || probesPixel30DestinationAccess || probesPixel30OutputSource ||
             probesPixel30SamplerSource || probesPixel30TypedControlSource ||
-            probesPixel30SpecialControlSource ||
+            probesPixel30SpecialControlSource || probesPixelRelativeAddressing ||
             probesPixel30ConstantControl;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
@@ -2682,6 +2715,68 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regColorOut, 0, 0x2u));
             AppendUInt32(shader, source(regTemp, 2, 0x55u));
         }
+        else if (probesPixelRelativeAddressing)
+        {
+            const bool outsideLoop = relativeAddressingProbe ==
+                                     SyntheticRelativeAddressingProbe::PixelInputOutsideLoop;
+            const bool addressRegister = relativeAddressingProbe ==
+                SyntheticRelativeAddressingProbe::PixelInputAddressInsideLoop;
+            const bool constantRegister = relativeAddressingProbe ==
+                SyntheticRelativeAddressingProbe::PixelConstantInsideLoop;
+            const bool subroutine = relativeAddressingProbe ==
+                SyntheticRelativeAddressingProbe::PixelInputSubroutineInsideLoop;
+
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_texcoord0 v0
+            AppendUInt32(shader, 0x80000000u | 5u);
+            AppendUInt32(shader, destination(regInput, 0, 0xFu));
+            if (!outsideLoop)
+            {
+                AppendUInt32(shader, 0x00000030u | (5u << 24)); // defi i0, 1, 0, 1, 0
+                AppendUInt32(shader, destination(regConstInt, 0, 0xFu));
+                AppendUInt32(shader, 1u);
+                AppendUInt32(shader, 0u);
+                AppendUInt32(shader, 1u);
+                AppendUInt32(shader, 0u);
+                if (subroutine)
+                {
+                    AppendUInt32(shader, 0x00000001u | (2u << 24)); // initialize r0
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regConst, 0));
+                }
+                AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
+                AppendUInt32(shader, source(regLoop, 0));
+                AppendUInt32(shader, source(regConstInt, 0));
+            }
+            if (subroutine)
+            {
+                AppendUInt32(shader, 0x00000019u | (1u << 24)); // call l0
+                AppendUInt32(shader, source(regLabel, 0));
+                AppendUInt32(shader, 0x0000001Du); // endloop
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
+                AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+                AppendUInt32(shader, source(regTemp, 0));
+                AppendUInt32(shader, 0x0000001Cu); // ret from main
+                AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l0
+                AppendUInt32(shader, source(regLabel, 0));
+            }
+            AppendUInt32(shader, 0x00000001u | (3u << 24)); // mov r0, v0/c0[aL/a0.x]
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader,
+                         source(constantRegister ? regConst : regInput, 0) | (1u << 13u));
+            AppendUInt32(shader, source(addressRegister ? regTexture : regLoop, 0,
+                                        addressRegister ? 0x00u : 0xE4u));
+            if (subroutine)
+            {
+                AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+            }
+            else
+            {
+                if (!outsideLoop) AppendUInt32(shader, 0x0000001Du); // endloop
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
+                AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+                AppendUInt32(shader, source(regTemp, 0));
+            }
+        }
         else if (usesSubroutine)
         {
             // Local constants make the called writes independent from reflected parameter data.
@@ -2775,24 +2870,26 @@ namespace CNA::TestSupport
                     : samplerKind == SyntheticSamplerKind::Sampler3D
                           ? EffectFormat::SamplerTypeVolume
                           : EffectFormat::SamplerType2D;
-            // A one-iteration loop supplies aL=0. The coordinate source is therefore the
-            // reflected Tint vector at c0, but it still uses the complete SM3 relative-source
-            // token form accepted by D3D9 and emitted by fxc for indexed constant arrays.
+            // A one-iteration loop supplies aL=0. Microsoft's D3D9 assembler accepts relative
+            // pixel INPUTS only in loop scope; pixel float constants are not indexable.
             AppendUInt32(shader, 0x00000030u | (5u << 24)); // defi i0, 1, 0, 1, 0
             AppendUInt32(shader, destination(regConstInt, 0, 0xFu));
             AppendUInt32(shader, 1u);
             AppendUInt32(shader, 0u);
             AppendUInt32(shader, 1u);
             AppendUInt32(shader, 0u);
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_texcoord0 v0
+            AppendUInt32(shader, 0x80000000u | 5u);
+            AppendUInt32(shader, destination(regInput, 0, 0x3u));
             AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_2d s#
             AppendUInt32(shader, 0x80000000u | (samplerTextureType << 27));
             AppendUInt32(shader, destination(regSampler, samplerRegister, 0xFu));
             AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
             AppendUInt32(shader, source(regLoop, 0));
             AppendUInt32(shader, source(regConstInt, 0));
-            AppendUInt32(shader, 0x00000042u | (4u << 24)); // texld r0, c0[aL], s#
+            AppendUInt32(shader, 0x00000042u | (4u << 24)); // texld r0, v0[aL], s#
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
-            AppendUInt32(shader, source(regConst, 0) | (1u << 13u));
+            AppendUInt32(shader, source(regInput, 0) | (1u << 13u));
             AppendUInt32(shader, source(regLoop, 0));
             AppendUInt32(shader, source(regSampler, samplerRegister));
             AppendUInt32(shader, 0x0000001Du); // endloop
@@ -3093,7 +3190,10 @@ namespace CNA::TestSupport
                                                                         SyntheticSpecialControlSourceProbe::None,
                                                                 SyntheticVertexInstructionSlotProbe
                                                                     instructionSlotProbe =
-                                                                        SyntheticVertexInstructionSlotProbe::None)
+                                                                        SyntheticVertexInstructionSlotProbe::None,
+                                                                SyntheticRelativeAddressingProbe
+                                                                    relativeAddressingProbe =
+                                                                        SyntheticRelativeAddressingProbe::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -3174,6 +3274,11 @@ namespace CNA::TestSupport
             specialControlSourceProbe == SyntheticSpecialControlSourceProbe::VertexPredicate ||
             specialControlSourceProbe == SyntheticSpecialControlSourceProbe::VertexLabel ||
             specialControlSourceProbe == SyntheticSpecialControlSourceProbe::VertexLoop;
+        const bool probesVertexRelativeAddressing =
+            relativeAddressingProbe >=
+                SyntheticRelativeAddressingProbe::VertexConstantOutsideLoop &&
+            relativeAddressingProbe <=
+                SyntheticRelativeAddressingProbe::VertexInputInsideLoop;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture ||
             invalidMixedConstantAbsolute ==
@@ -3187,7 +3292,8 @@ namespace CNA::TestSupport
             probesVertex30Input || probesVertex30InputDestination || probesVertex30Output ||
             probesVertex30ConstantControl || probesVertex30DestinationAccess ||
             probesVertex30OutputSource || probesVertex30Address || probesVertex30SamplerSource ||
-            probesVertex30TypedControlSource || probesVertex30SpecialControlSource;
+            probesVertex30TypedControlSource || probesVertex30SpecialControlSource ||
+            probesVertexRelativeAddressing;
         const bool probesVertex2xTemporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xMaximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange;
@@ -3487,7 +3593,8 @@ namespace CNA::TestSupport
         }
         // One declaration serves both consumers: the multi-stream fixture scales POSITION0 by it,
         // the sampling fixture forwards it, and a fixture that does both declares it once.
-        if (readsSecondStream || forwardsTexCoord)
+        if (readsSecondStream || forwardsTexCoord ||
+            relativeAddressingProbe == SyntheticRelativeAddressingProbe::VertexInputInsideLoop)
         {
             // dcl_texcoord v1
             AppendUInt32(shader, 0x0000001Fu | (2u << 24));
@@ -3505,6 +3612,41 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_<kind> s#
             AppendUInt32(shader, 0x80000000u | (samplerTextureType << 27));
             AppendUInt32(shader, destination(regSampler, samplerRegister));
+        }
+        if (probesVertexRelativeAddressing)
+        {
+            const bool outsideLoop = relativeAddressingProbe ==
+                SyntheticRelativeAddressingProbe::VertexConstantOutsideLoop;
+            const bool subroutine = relativeAddressingProbe ==
+                SyntheticRelativeAddressingProbe::VertexConstantSubroutineInsideLoop;
+            const bool inputRegister = relativeAddressingProbe ==
+                SyntheticRelativeAddressingProbe::VertexInputInsideLoop;
+            if (!outsideLoop)
+            {
+                AppendUInt32(shader, 0x00000030u | (5u << 24)); // defi i0, 1, start, 1, 0
+                AppendUInt32(shader, destination(regConstInt, 0));
+                AppendUInt32(shader, 1u);
+                AppendUInt32(shader, inputRegister ? 1u : 0u);
+                AppendUInt32(shader, 1u);
+                AppendUInt32(shader, 0u);
+                AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
+                AppendUInt32(shader, source(regLoop, 0));
+                AppendUInt32(shader, source(regConstInt, 0));
+            }
+            if (subroutine)
+            {
+                AppendUInt32(shader, 0x00000019u | (1u << 24)); // call l0
+                AppendUInt32(shader, source(regLabel, 0));
+            }
+            else
+            {
+                AppendUInt32(shader, 0x00000001u | (3u << 24)); // mov r10, c0/v0[aL]
+                AppendUInt32(shader, destination(regTemp, 10));
+                AppendUInt32(shader, source(inputRegister ? regInput : regConst, 0) |
+                                         (1u << 13u));
+                AppendUInt32(shader, source(regLoop, 0));
+            }
+            if (!outsideLoop) AppendUInt32(shader, 0x0000001Du); // endloop
         }
         if (instructionSlotProbe != SyntheticVertexInstructionSlotProbe::None)
         {
@@ -4136,6 +4278,18 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regTexCoordOut, 1));
             AppendUInt32(shader, source(regConst, 241u));
         }
+        if (relativeAddressingProbe ==
+            SyntheticRelativeAddressingProbe::VertexConstantSubroutineInsideLoop)
+        {
+            AppendUInt32(shader, 0x0000001Cu); // ret from main
+            AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l0
+            AppendUInt32(shader, source(regLabel, 0));
+            AppendUInt32(shader, 0x00000001u | (3u << 24)); // mov r10, c0[aL]
+            AppendUInt32(shader, destination(regTemp, 10));
+            AppendUInt32(shader, source(regConst, 0) | (1u << 13u));
+            AppendUInt32(shader, source(regLoop, 0));
+            AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+        }
         if (shaderModel20InvalidDynamicFeature ==
             SyntheticInvalidShaderModel20DynamicFeature::VertexCallnzPredicate)
         {
@@ -4570,7 +4724,8 @@ namespace CNA::TestSupport
             options.outputRegisterSourceProbe,
             options.samplerRegisterSourceProbe,
             options.typedControlSourceProbe,
-            options.specialControlSourceProbe);
+            options.specialControlSourceProbe,
+            options.relativeAddressingProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -4660,7 +4815,8 @@ namespace CNA::TestSupport
                 options.samplerRegisterSourceProbe,
                 options.typedControlSourceProbe,
                 options.specialControlSourceProbe,
-                options.vertexInstructionSlotProbe);
+                options.vertexInstructionSlotProbe,
+                options.relativeAddressingProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

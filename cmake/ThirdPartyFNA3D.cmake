@@ -99,7 +99,9 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-address-register-access-validation.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sampler-register-source-validation.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-typed-control-source-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-special-control-source-validation.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-special-control-source-validation.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-relative-addressing-contract.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-glsl-vertex-subroutine-epilogue.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 
