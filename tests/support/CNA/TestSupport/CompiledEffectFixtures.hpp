@@ -598,6 +598,64 @@ namespace CNA::TestSupport
         TexldTemporaryDzIdentity,
     };
 
+    /** @brief Shader Model 1.4 phase/state rule exercised by a synthetic program. */
+    enum class SyntheticShaderModel14PhaseProbe
+    {
+        /** @brief Emit no dedicated Shader Model 1.4 phase probe. */
+        None,
+        /** @brief Put a texture instruction after arithmetic in the single phase-2 block. */
+        TextureAfterArithmetic,
+        /** @brief Put a texture instruction after arithmetic in the explicit second phase. */
+        SecondPhaseTextureAfterArithmetic,
+        /** @brief Read a color input before an explicit phase marker. */
+        ColorReadBeforePhase,
+        /** @brief Execute `TEXKILL` before an explicit phase marker. */
+        TexkillBeforePhase,
+        /** @brief Feed a texture result into another texture instruction in the same block. */
+        DependentTextureReadInSameBlock,
+        /** @brief Reuse one texture destination stage in the same texture block. */
+        TextureDestinationReuse,
+        /** @brief Execute `TEXDEPTH` before its required phase marker. */
+        TexdepthBeforePhase,
+        /** @brief Read r5 after `TEXDEPTH` consumed it. */
+        TexdepthReadAfter,
+        /** @brief Read a temporary alpha component invalidated by `PHASE`. */
+        AlphaReadAfterPhase,
+        /** @brief Leave r0 alpha unwritten after `PHASE` invalidated its old value. */
+        OutputAlphaLostAtPhase,
+        /** @brief Read a color input in implicit phase 2 when no marker is present. */
+        NoMarkerColorRead,
+        /** @brief Execute `TEXKILL` in implicit phase 2 when no marker is present. */
+        NoMarkerTexkill,
+        /** @brief Carry temporary RGB, but not alpha, across `PHASE`. */
+        PreserveRgbAcrossPhase,
+        /** @brief Reinitialize temporary alpha after `PHASE` before reading it. */
+        ReinitializeAlphaAfterPhase,
+        /** @brief Use texture-then-arithmetic blocks in both explicit phases. */
+        TextureThenArithmeticBothPhases,
+        /** @brief Use phase-1 texture output as a phase-2 dependent texture coordinate. */
+        DependentTextureReadFromPreviousPhase,
+        /** @brief Kill without overwriting a coordinate before a later texture read. */
+        TexkillPreservesCoordinate,
+        /** @brief Execute `TEXDEPTH` after its required phase marker. */
+        TexdepthAfterPhase,
+    };
+
+    /** @brief Pixel Shader Model 1.x r0 output-component liveness probe. */
+    enum class SyntheticPixel1OutputLivenessProbe
+    {
+        /** @brief Emit no dedicated Pixel Shader Model 1.x output-liveness probe. */
+        None,
+        /** @brief Leave ps_1_1 output alpha unwritten. */
+        Pixel11RgbOnly,
+        /** @brief Leave ps_1_1 output RGB unwritten. */
+        Pixel11AlphaOnly,
+        /** @brief Leave ps_1_4 output green and alpha unwritten. */
+        Pixel14XzOnly,
+        /** @brief Initialize ps_1_4 output through complementary XZ and YW writes. */
+        Pixel14SplitFull,
+    };
+
     /** @brief Shader profile exercised for a read from an uninitialized temporary register. */
     enum class SyntheticTemporaryInitializationProbe
     {
@@ -1418,6 +1476,12 @@ namespace CNA::TestSupport
         bool pixelShaderUsesShaderModel14TextureLoad = false;
         /// Emits a two-phase Shader Model 1.4 pixel program and carries temporary RGB across it.
         bool pixelShaderUsesShaderModel14Phase = false;
+        /// Emits the selected Shader Model 1.4 phase/state validation program.
+        SyntheticShaderModel14PhaseProbe shaderModel14PhaseProbe =
+            SyntheticShaderModel14PhaseProbe::None;
+        /// Emits the selected Pixel Shader Model 1.x r0 output-liveness program.
+        SyntheticPixel1OutputLivenessProbe pixel1OutputLivenessProbe =
+            SyntheticPixel1OutputLivenessProbe::None;
         /// Emits the Shader Model 1.2 stateful `TEXM3X3PAD`/`TEXM3X3` sequence.
         bool pixelShaderUsesLegacyTextureMatrix = false;
         /// Emits the sampled Shader Model 1.2 `TEXM3X2PAD`/`TEXM3X2TEX` sequence.
@@ -1666,6 +1730,10 @@ namespace CNA::TestSupport
             SyntheticShaderModel14TextureOperandProbe::None,
         bool usesShaderModel14TextureLoad = false,
         bool usesShaderModel14Phase = false,
+        SyntheticShaderModel14PhaseProbe shaderModel14PhaseProbe =
+            SyntheticShaderModel14PhaseProbe::None,
+        SyntheticPixel1OutputLivenessProbe pixel1OutputLivenessProbe =
+            SyntheticPixel1OutputLivenessProbe::None,
         bool usesLegacyTextureMatrix = false,
         SyntheticLegacyTextureRemap legacyTextureRemap = SyntheticLegacyTextureRemap::None,
         bool usesLegacyTextureMatrix2 = false,
@@ -1858,6 +1926,12 @@ namespace CNA::TestSupport
         const bool probesPixel14DestinationMask =
             pixel1DestinationMaskProbe >=
                 SyntheticPixel1DestinationMaskProbe::Pixel14MovArbitrary;
+        const bool probesPixel11OutputLiveness =
+            pixel1OutputLivenessProbe == SyntheticPixel1OutputLivenessProbe::Pixel11RgbOnly ||
+            pixel1OutputLivenessProbe == SyntheticPixel1OutputLivenessProbe::Pixel11AlphaOnly;
+        const bool probesPixel14OutputLiveness =
+            pixel1OutputLivenessProbe == SyntheticPixel1OutputLivenessProbe::Pixel14XzOnly ||
+            pixel1OutputLivenessProbe == SyntheticPixel1OutputLivenessProbe::Pixel14SplitFull;
         const bool probesPixel11Coissue =
             pixel1CoissueProbe >= SyntheticPixel1CoissueProbe::Pixel11RgbThenAlpha &&
             pixel1CoissueProbe <= SyntheticPixel1CoissueProbe::Pixel11Triple;
@@ -2030,6 +2104,9 @@ namespace CNA::TestSupport
                                            SyntheticShaderModel14TextureOperandProbe::None ||
                                        usesShaderModel14TextureLoad ||
                                        usesShaderModel14Phase || duplicatesShaderModel14Phase ||
+                                       shaderModel14PhaseProbe !=
+                                           SyntheticShaderModel14PhaseProbe::None ||
+                                       probesPixel14OutputLiveness ||
                                        shaderModel1InvalidOpcode !=
                                            SyntheticInvalidPixelShaderModel1Opcode::None ||
                                        texkillOperandProbe ==
@@ -2045,12 +2122,14 @@ namespace CNA::TestSupport
                                                    probesPixel11FloatControl ||
                                                    probesPixel11InstructionSlots ||
                                                    probesPixel11DestinationMask ||
-                                                   probesPixel11Coissue
+                                                   probesPixel11Coissue ||
+                                                   probesPixel11OutputLiveness
                                                ? 0xFFFF0101u
                                            : probesPixel14Temporary || probesPixel14TextureInput ||
                                                      probesPixel14InstructionSlots ||
                                                      probesPixel14DestinationMask ||
-                                                     probesPixel14Coissue
+                                                     probesPixel14Coissue ||
+                                                     probesPixel14OutputLiveness
                                                ? 0xFFFF0104u
                                            : probesPixel12InstructionSlots
                                                ? 0xFFFF0102u
@@ -2138,11 +2217,12 @@ namespace CNA::TestSupport
         const std::uint32_t target = appendCtabString(
             probesPixel11Temporary || probesPixel11ColorInput || probesPixel11TextureInput ||
                     probesPixel11FloatControl || probesPixel11InstructionSlots ||
-                    probesPixel11DestinationMask || probesPixel11Coissue
+                    probesPixel11DestinationMask || probesPixel11Coissue ||
+                    probesPixel11OutputLiveness
                 ? "ps_1_1"
                 : probesPixel14Temporary || probesPixel14TextureInput ||
                           probesPixel14InstructionSlots || probesPixel14DestinationMask ||
-                          probesPixel14Coissue
+                          probesPixel14Coissue || probesPixel14OutputLiveness
                       ? "ps_1_4"
                       : probesPixel12InstructionSlots
                             ? "ps_1_2"
@@ -2575,6 +2655,161 @@ namespace CNA::TestSupport
             const bool readsY = temporaryInitializationProbe ==
                 SyntheticTemporaryInitializationProbe::Pixel20MoveUnwrittenY;
             AppendUInt32(shader, source(regTemp, 0, readsY ? 0x55u : 0x00u));
+        }
+
+        if (pixel1OutputLivenessProbe != SyntheticPixel1OutputLivenessProbe::None)
+        {
+            const bool alphaOnly =
+                pixel1OutputLivenessProbe == SyntheticPixel1OutputLivenessProbe::Pixel11AlphaOnly;
+            const bool splitFull =
+                pixel1OutputLivenessProbe == SyntheticPixel1OutputLivenessProbe::Pixel14SplitFull;
+            const std::uint32_t firstMask = alphaOnly ? 0x8u
+                : pixel1OutputLivenessProbe ==
+                      SyntheticPixel1OutputLivenessProbe::Pixel11RgbOnly
+                    ? 0x7u
+                    : 0x5u;
+            AppendUInt32(shader, 0x00000001u); // mov r0.mask, c0
+            AppendUInt32(shader, destination(regTemp, 0, firstMask));
+            AppendUInt32(shader, source(regConst, 0));
+            if (splitFull)
+            {
+                AppendUInt32(shader, 0x00000001u); // mov r0.yw, c0
+                AppendUInt32(shader, destination(regTemp, 0, 0xAu));
+                AppendUInt32(shader, source(regConst, 0));
+            }
+        }
+
+        if (shaderModel14PhaseProbe != SyntheticShaderModel14PhaseProbe::None)
+        {
+            using Probe = SyntheticShaderModel14PhaseProbe;
+            const auto appendMov = [&](std::uint32_t destinationRegister,
+                                       std::uint32_t writeMask,
+                                       std::uint32_t sourceRegister,
+                                       std::uint32_t sourceSwizzle = 0xE4u,
+                                       std::uint32_t sourceType = 2u) {
+                AppendUInt32(shader, 0x00000001u); // mov r#, source
+                AppendUInt32(shader, destination(regTemp, destinationRegister, writeMask));
+                AppendUInt32(shader, source(sourceType, sourceRegister, sourceSwizzle));
+            };
+            const auto appendTexcrd = [&](std::uint32_t destinationRegister,
+                                          std::uint32_t sourceRegister) {
+                AppendUInt32(shader, 0x00000040u); // texcrd r#.xyz, t#
+                AppendUInt32(shader, destination(regTemp, destinationRegister, 0x7u));
+                AppendUInt32(shader, source(regTexture, sourceRegister));
+            };
+            const auto appendTexkill = [&](std::uint32_t registerType,
+                                           std::uint32_t registerNumber) {
+                AppendUInt32(shader, 0x00000041u); // texkill register
+                AppendUInt32(shader, destination(registerType, registerNumber, 0xFu));
+            };
+            const auto appendPhase = [&]() { AppendUInt32(shader, 0x0000FFFDu); };
+
+            switch (shaderModel14PhaseProbe)
+            {
+                case Probe::TextureAfterArithmetic:
+                    appendMov(0, 0xFu, 0);
+                    appendTexkill(regTexture, 0);
+                    break;
+                case Probe::SecondPhaseTextureAfterArithmetic:
+                    appendMov(1, 0xFu, 0);
+                    appendPhase();
+                    appendMov(0, 0xFu, 0);
+                    appendTexkill(regTexture, 0);
+                    break;
+                case Probe::ColorReadBeforePhase:
+                    appendMov(1, 0xFu, 0, swizzleIdentity, regInput);
+                    appendPhase();
+                    appendMov(0, 0xFu, 0);
+                    break;
+                case Probe::TexkillBeforePhase:
+                    appendTexkill(regTexture, 0);
+                    appendPhase();
+                    appendMov(0, 0xFu, 0);
+                    break;
+                case Probe::DependentTextureReadInSameBlock:
+                    appendTexcrd(1, 0);
+                    AppendUInt32(shader, 0x00000042u); // texld r0, r1
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regTemp, 1));
+                    break;
+                case Probe::TextureDestinationReuse:
+                    appendTexcrd(1, 0);
+                    appendTexcrd(1, 1);
+                    appendMov(0, 0xFu, 0);
+                    break;
+                case Probe::TexdepthBeforePhase:
+                    appendMov(5, 0x3u, 0);
+                    AppendUInt32(shader, 0x00000057u); // texdepth r5
+                    AppendUInt32(shader, destination(regTemp, 5, 0xFu));
+                    appendPhase();
+                    appendMov(0, 0xFu, 0);
+                    break;
+                case Probe::TexdepthReadAfter:
+                    appendMov(5, 0x3u, 0);
+                    appendPhase();
+                    AppendUInt32(shader, 0x00000057u); // texdepth r5
+                    AppendUInt32(shader, destination(regTemp, 5, 0xFu));
+                    appendMov(0, 0xFu, 5, swizzleIdentity, regTemp);
+                    break;
+                case Probe::AlphaReadAfterPhase:
+                    appendMov(1, 0x8u, 0, 0xFFu);
+                    appendPhase();
+                    appendMov(0, 0xFu, 1, 0xFFu, regTemp);
+                    break;
+                case Probe::OutputAlphaLostAtPhase:
+                    appendMov(0, 0xFu, 0);
+                    appendPhase();
+                    break;
+                case Probe::NoMarkerColorRead:
+                    appendMov(0, 0xFu, 0, swizzleIdentity, regInput);
+                    break;
+                case Probe::NoMarkerTexkill:
+                    appendTexkill(regTexture, 0);
+                    appendMov(0, 0xFu, 0);
+                    break;
+                case Probe::PreserveRgbAcrossPhase:
+                    appendMov(1, 0x7u, 0);
+                    appendPhase();
+                    appendMov(0, 0x7u, 1, swizzleIdentity, regTemp);
+                    appendMov(0, 0x8u, 0, 0xFFu);
+                    break;
+                case Probe::ReinitializeAlphaAfterPhase:
+                    appendMov(1, 0x8u, 0, 0xFFu);
+                    appendPhase();
+                    appendMov(1, 0x8u, 0, 0xFFu);
+                    appendMov(0, 0xFu, 1, 0xFFu, regTemp);
+                    break;
+                case Probe::TextureThenArithmeticBothPhases:
+                    appendTexcrd(1, 0);
+                    appendMov(1, 0x8u, 0, 0xFFu);
+                    appendPhase();
+                    appendTexcrd(2, 1);
+                    appendMov(0, 0xFu, 0);
+                    break;
+                case Probe::DependentTextureReadFromPreviousPhase:
+                    appendTexcrd(1, 0);
+                    appendPhase();
+                    AppendUInt32(shader, 0x00000042u); // texld r0, r1
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regTemp, 1));
+                    break;
+                case Probe::TexkillPreservesCoordinate:
+                    appendTexcrd(1, 0);
+                    appendPhase();
+                    appendTexkill(regTemp, 1);
+                    AppendUInt32(shader, 0x00000042u); // texld r0, r1
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regTemp, 1));
+                    break;
+                case Probe::TexdepthAfterPhase:
+                    appendMov(5, 0x3u, 0);
+                    appendPhase();
+                    AppendUInt32(shader, 0x00000057u); // texdepth r5
+                    AppendUInt32(shader, destination(regTemp, 5, 0xFu));
+                    appendMov(0, 0xFu, 0);
+                    break;
+                case Probe::None: break;
+            }
         }
 
         if (temporaryRegisterProbe != SyntheticTemporaryRegisterProbe::None &&
@@ -3016,6 +3251,27 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, 0x00000001u); // mov r0.mask, c0
                 AppendUInt32(shader, destination(regTemp, 0, writeMask));
                 AppendUInt32(shader, source(regConst, 0));
+                if (pixel1DestinationMaskProbe ==
+                    SyntheticPixel1DestinationMaskProbe::Pixel11MovRgb)
+                {
+                    AppendUInt32(shader, 0x00000001u); // mov r0.a, c0.a
+                    AppendUInt32(shader, destination(regTemp, 0, 0x8u));
+                    AppendUInt32(shader, source(regConst, 0, 0xFFu));
+                }
+                else if (pixel1DestinationMaskProbe ==
+                         SyntheticPixel1DestinationMaskProbe::Pixel11MovAlpha)
+                {
+                    AppendUInt32(shader, 0x00000001u); // mov r0.rgb, c0
+                    AppendUInt32(shader, destination(regTemp, 0, 0x7u));
+                    AppendUInt32(shader, source(regConst, 0));
+                }
+                else if (pixel1DestinationMaskProbe ==
+                         SyntheticPixel1DestinationMaskProbe::Pixel14MovArbitrary)
+                {
+                    AppendUInt32(shader, 0x00000001u); // mov r0.ga, c0
+                    AppendUInt32(shader, destination(regTemp, 0, 0xAu));
+                    AppendUInt32(shader, source(regConst, 0));
+                }
             }
         }
         else if (pixel1InstructionSlotProbe != SyntheticPixel1InstructionSlotProbe::None)
@@ -3072,13 +3328,13 @@ namespace CNA::TestSupport
                      pixel1InstructionSlotProbe ==
                          SyntheticPixel1InstructionSlotProbe::Pixel14TextureOutOfRange)
             {
-                appendMov();
                 const std::uint32_t textureSlots = outOfRange ? 7u : 6u;
                 for (std::uint32_t slot = 0; slot < textureSlots; ++slot)
                 {
-                    AppendUInt32(shader, 0x00000041u); // texkill r0
-                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, 0x00000041u); // texkill t0
+                    AppendUInt32(shader, destination(regTexture, 0, 0xFu));
                 }
+                appendMov();
             }
             else if (pixel1InstructionSlotProbe ==
                          SyntheticPixel1InstructionSlotProbe::Pixel11TexbemlArithmeticMaximum ||
@@ -4536,6 +4792,12 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, source(regTemp, 0));
                 AppendUInt32(shader, source(regConst, 0));
             }
+        }
+        else if (shaderModel14PhaseProbe != SyntheticShaderModel14PhaseProbe::None ||
+                 pixel1OutputLivenessProbe != SyntheticPixel1OutputLivenessProbe::None)
+        {
+            // The dedicated phase/output-liveness program already completed or intentionally
+            // omitted the required r0 components.
         }
         else if (shaderModel1InvalidOpcode != SyntheticInvalidPixelShaderModel1Opcode::None)
         {
@@ -6800,6 +7062,8 @@ namespace CNA::TestSupport
             options.shaderModel14TextureOperandProbe,
             options.pixelShaderUsesShaderModel14TextureLoad,
             options.pixelShaderUsesShaderModel14Phase,
+            options.shaderModel14PhaseProbe,
+            options.pixel1OutputLivenessProbe,
             options.pixelShaderUsesLegacyTextureMatrix,
             options.pixelShaderLegacyTextureRemap,
             options.pixelShaderUsesLegacyTextureMatrix2,
@@ -6899,6 +7163,7 @@ namespace CNA::TestSupport
                     options.pixelShaderUsesShaderModel14TextureLoad ||
                     options.pixelShaderUsesShaderModel14Phase ||
                     options.pixelShaderDuplicatesShaderModel14Phase ||
+                    options.shaderModel14PhaseProbe != SyntheticShaderModel14PhaseProbe::None ||
                     options.pixelShaderLegacyTextureRemap !=
                         SyntheticLegacyTextureRemap::None ||
                     options.pixelShaderLegacyDependentTexture !=
@@ -6948,6 +7213,7 @@ namespace CNA::TestSupport
                     options.pixelShaderUsesShaderModel14TextureLoad ||
                     options.pixelShaderUsesShaderModel14Phase ||
                     options.pixelShaderDuplicatesShaderModel14Phase ||
+                    options.shaderModel14PhaseProbe != SyntheticShaderModel14PhaseProbe::None ||
                     options.pixelShaderLegacyTextureRemap !=
                         SyntheticLegacyTextureRemap::None,
                 options.pixelShaderUsesLegacyTextureMatrix,

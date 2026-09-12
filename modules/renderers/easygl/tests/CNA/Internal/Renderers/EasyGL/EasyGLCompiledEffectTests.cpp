@@ -771,6 +771,87 @@ TEST(EasyGLCompiledEffectTest, RejectsDuplicateD3D9ShaderModel14Phase)
     EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
+TEST(EasyGLCompiledEffectTest, RejectsInvalidD3D9ShaderModel14PhaseState)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticShaderModel14PhaseProbe;
+    for (const Probe probe : {
+             Probe::TextureAfterArithmetic,
+             Probe::SecondPhaseTextureAfterArithmetic,
+             Probe::ColorReadBeforePhase,
+             Probe::TexkillBeforePhase,
+             Probe::DependentTextureReadInSameBlock,
+             Probe::TextureDestinationReuse,
+             Probe::TexdepthBeforePhase,
+             Probe::TexdepthReadAfter,
+             Probe::AlphaReadAfterPhase,
+             Probe::OutputAlphaLostAtPhase,
+         })
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.shaderModel14PhaseProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectTest, AcceptsValidD3D9ShaderModel14PhaseState)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticShaderModel14PhaseProbe;
+    for (const Probe probe : {
+             Probe::NoMarkerColorRead,
+             Probe::NoMarkerTexkill,
+             Probe::PreserveRgbAcrossPhase,
+             Probe::ReinitializeAlphaAfterPhase,
+             Probe::TextureThenArithmeticBothPhases,
+             Probe::DependentTextureReadFromPreviousPhase,
+             Probe::TexkillPreservesCoordinate,
+             Probe::TexdepthAfterPhase,
+         })
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.shaderModel14PhaseProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectTest, EnforcesD3D9PixelShader1OutputLiveness)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticPixel1OutputLivenessProbe;
+    for (const Probe probe : {
+             Probe::Pixel11RgbOnly,
+             Probe::Pixel11AlphaOnly,
+             Probe::Pixel14XzOnly,
+         })
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixel1OutputLivenessProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixel1OutputLivenessProbe = Probe::Pixel14SplitFull;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
 TEST(EasyGLCompiledEffectTest, RejectsReadOfUninitializedTemporaryDestination)
 {
     GraphicsDevice device;

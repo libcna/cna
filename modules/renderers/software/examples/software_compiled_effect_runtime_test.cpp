@@ -2756,6 +2756,108 @@ namespace
         Check(rejected, "compiled ps_1_4 parser accepted a duplicate PHASE marker");
     }
 
+    void CheckCompiledShaderModel14PhaseStateValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticShaderModel14PhaseProbe;
+        const auto accepts = [&](Probe probe) {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.shaderModel14PhaseProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+                return true;
+            }
+            catch (const std::runtime_error&)
+            {
+                return false;
+            }
+        };
+
+        constexpr std::array invalidProbes{
+            Probe::TextureAfterArithmetic,
+            Probe::SecondPhaseTextureAfterArithmetic,
+            Probe::ColorReadBeforePhase,
+            Probe::TexkillBeforePhase,
+            Probe::DependentTextureReadInSameBlock,
+            Probe::TextureDestinationReuse,
+            Probe::TexdepthBeforePhase,
+            Probe::TexdepthReadAfter,
+            Probe::AlphaReadAfterPhase,
+            Probe::OutputAlphaLostAtPhase,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            if (accepts(probe))
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid ps_1_4 phase-state probes: " +
+                  acceptedInvalidProbes);
+
+        constexpr std::array validProbes{
+            Probe::NoMarkerColorRead,
+            Probe::NoMarkerTexkill,
+            Probe::PreserveRgbAcrossPhase,
+            Probe::ReinitializeAlphaAfterPhase,
+            Probe::TextureThenArithmeticBothPhases,
+            Probe::DependentTextureReadFromPreviousPhase,
+            Probe::TexkillPreservesCoordinate,
+            Probe::TexdepthAfterPhase,
+        };
+        for (const Probe probe : validProbes)
+        {
+            Check(accepts(probe),
+                  "compiled Effect parser rejected valid ps_1_4 phase-state probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+    }
+
+    void CheckCompiledPixel1OutputLiveness(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticPixel1OutputLivenessProbe;
+        const auto accepts = [&](Probe probe) {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixel1OutputLivenessProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+                return true;
+            }
+            catch (const std::runtime_error&)
+            {
+                return false;
+            }
+        };
+
+        constexpr std::array invalidProbes{
+            Probe::Pixel11RgbOnly,
+            Probe::Pixel11AlphaOnly,
+            Probe::Pixel14XzOnly,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            if (accepts(probe))
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted incomplete ps_1_x r0 outputs: " +
+                  acceptedInvalidProbes);
+        Check(accepts(Probe::Pixel14SplitFull),
+              "compiled Effect parser rejected complementary ps_1_4 r0 writes");
+    }
+
     void CheckCompiledUninitializedTemporaryValidation(SoftwareRenderer& renderer)
     {
         CNA::TestSupport::SyntheticEffectOptions options;
@@ -7167,6 +7269,8 @@ int main()
         CheckCompiledShaderModel14TextureLoad();
         CheckCompiledShaderModel14Phase();
         CheckCompiledShaderModel14PhaseValidation(renderer);
+        CheckCompiledShaderModel14PhaseStateValidation(renderer);
+        CheckCompiledPixel1OutputLiveness(renderer);
         CheckCompiledUninitializedTemporaryValidation(renderer);
         CheckCompiledTexkillTemporaryValidation(renderer);
         CheckCompiledSgnValidation(renderer);

@@ -370,8 +370,15 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   vertex SM1.1 controls that initialize X then read Y now reject, while matching X reads remain
   accepted. SOFTWARE-457 then corrects the invalid Shader Model 1.4 projective fixtures behind
   SOFTWARE-375/376/390 and enforces the measured `TEXCRD`/`TEXLD` register, selector, modifier and
-  destination-mask rules. The dependency series now contains 82 patches; other opcodes' distinct
-  component-use rules and ps_1_4 phase placement/lifetime remain part of SOFTWARE-164/165.
+  destination-mask rules. SOFTWARE-458 next enforces Microsoft's per-phase texture-before-arithmetic
+  blocks, texture-stage reuse and cross-phase dependency rules, pre-marker color/TEXKILL restrictions,
+  prior-phase `TEXDEPTH` input and r5 consumption, alpha invalidation at `PHASE`, and complete r0
+  output liveness for every Pixel Shader 1.x profile. Its parser distinguishes a texture stage being
+  used from a texture value actually being written, because valid `TEXKILL r1; TEXLD r0,r1` must
+  retain r1. The task also corrected two older test families whose ps_1_4 texture operations followed
+  arithmetic or whose partial mask controls left r0 incomplete. The dependency series now contains
+  83 patches; BEM and other opcodes' distinct operand/component-use rules remain part of
+  SOFTWARE-164/165.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
