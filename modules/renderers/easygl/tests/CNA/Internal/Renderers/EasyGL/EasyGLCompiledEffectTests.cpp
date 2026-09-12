@@ -1561,6 +1561,52 @@ TEST(EasyGLCompiledEffectTest, RejectsVertexSgnWithNonTemporaryScratchRegisters)
     EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
+class EasyGLCompiledEffectSgnOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSgnScratchOperands>
+{
+};
+
+TEST_P(EasyGLCompiledEffectSgnOperandTest, RejectsInvalidScratchOrValueAliasing)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.vertexShaderSgnScratchOperands = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidSgnOperands,
+    EasyGLCompiledEffectSgnOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSgnScratchOperands::Scratch1Negate,
+        CNA::TestSupport::SyntheticSgnScratchOperands::Scratch1Swizzle,
+        CNA::TestSupport::SyntheticSgnScratchOperands::Scratch2Negate,
+        CNA::TestSupport::SyntheticSgnScratchOperands::Scratch2Swizzle,
+        CNA::TestSupport::SyntheticSgnScratchOperands::ValueAliasesScratch1,
+        CNA::TestSupport::SyntheticSgnScratchOperands::ValueAliasesScratch2));
+
+TEST(EasyGLCompiledEffectSgnOperandTest, AcceptsValueModifierAndDestinationScratchAliasing)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticSgnScratchOperands;
+    for (const Probe probe : {Probe::ValueNegate,
+                              Probe::DestinationAliasesScratch1,
+                              Probe::DestinationAliasesScratch2})
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexShaderSgnScratchOperands = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 TEST(EasyGLCompiledEffectTest, RejectsPixelSgnOpcode)
 {
     GraphicsDevice device;

@@ -1,0 +1,28 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2396,6 +2396,7 @@ static void state_FRC(Context *ctx)
+ 
+ static void state_SGN(Context *ctx)
+ {
++    const SourceArgInfo *value = &ctx->source_args[0];
+     const SourceArgInfo *scratch0 = &ctx->source_args[1];
+     const SourceArgInfo *scratch1 = &ctx->source_args[2];
+     if ((scratch0->regtype != REG_TYPE_TEMP) ||
+@@ -2404,6 +2405,16 @@ static void state_SGN(Context *ctx)
+         fail(ctx, "SGN scratch operands must be temporary registers");
+     else if (scratch0->regnum == scratch1->regnum)
+         fail(ctx, "SGN scratch operands must use different registers");
++    else if ((scratch0->src_mod != SRCMOD_NONE) ||
++             (scratch1->src_mod != SRCMOD_NONE))
++        fail(ctx, "SGN scratch operands must have no modifiers");
++    else if (!no_swizzle(scratch0->swizzle) ||
++             !no_swizzle(scratch1->swizzle))
++        fail(ctx, "SGN scratch operands must not swizzle");
++    else if ((value->regtype == REG_TYPE_TEMP) &&
++             ((value->regnum == scratch0->regnum) ||
++              (value->regnum == scratch1->regnum)))
++        fail(ctx, "SGN value source must not alias a scratch register");
+ } // state_SGN
+ 
+ 

@@ -1,6 +1,6 @@
 # CNA Software Renderer Adversarial Parity Handoff
 
-Updated: 2026-09-12
+Updated: 2026-09-12, continued through SOFTWARE-471
 
 This document is the restart point for the hostile Software-versus-EasyGL classic XNA 4.0/Core
 parity review. Do not interpret the large completed task count or green regression suites as proof
@@ -42,6 +42,8 @@ infallible oracle.
   a future final report because the handoff commit and subsequent work change them.
 - `aa162d1ae` is pushed to `origin/software`. This handoff is the immediately following
   documentation-only commit.
+- Work resumed after the original handoff and completed `SOFTWARE-471`; inspect the current
+  `git log` for its task commit rather than treating `aa162d1ae` as the current tip.
 - The only expected worktree entry after the handoff commit is the user's untracked `.junie/`.
   Preserve it. Do not stage it.
 
@@ -93,7 +95,7 @@ the exact evidence and task mapping are in the `Final adversarial parity challen
 executes classic Effect Framework data through MojoShader/FNA3D-compatible structures. It is a real
 classic-XNA parity requirement, not a CNAEXT deferral.
 
-## Latest completed work: SOFTWARE-470
+## Latest completed work: SOFTWARE-470 and SOFTWARE-471
 
 `SOFTWARE-470` audited the Shader Model 2 `SINCOS` scratch operands.
 
@@ -118,6 +120,13 @@ Verification at `aa162d1ae`:
 The task changed the managed patch list, fixture generator, Software runtime test, EasyGL tests,
 plan, renderer documentation and parity ledger in one task commit.
 
+`SOFTWARE-471` immediately challenged the adjacent vertex `SGN` scratch contract. Microsoft accepts
+a negated value source and destination aliasing either scratch temporary, but rejects modifier or
+swizzle tokens on either scratch (X5472) and rejects value-source aliasing with either scratch
+(X5471). Both CNA paths accepted all six invalid forms before managed patch 96. Six negative and
+four positive controls now pass; Software remains 160/160 and the EasyGL compiled family is
+546/546.
+
 ## Recent compiled-Effect validation commits
 
 These commits form one evidence chain. Preserve their distinctions when debugging regressions:
@@ -131,6 +140,8 @@ These commits form one evidence chain. Preserve their distinctions when debuggin
 - `1c49cd93e` — SOFTWARE-469, exact `ps_2_0 TEXLD` coordinate components by sampler dimension
   and projective/bias control.
 - `aa162d1ae` — SOFTWARE-470, Shader Model 2 SINCOS scratch operand identity.
+- SOFTWARE-471 — complete vertex SGN scratch modifier/swizzle and alias rules; inspect the current
+  log for the commit created with this living handoff update.
 
 The lesson from SOFTWARE-468 is important: never generalize an exact `ps_2_0` assembler result to
 `ps_2_x`, `ps_3_0`, or a vertex profile without measuring it. The Microsoft profile boundaries can
@@ -152,8 +163,8 @@ The following are the only non-complete rows in `plans/plan_software.md` at this
 | `SOFTWARE-86` | Historical optional performance work. Explicitly not a goal without a real impractical test. |
 
 All rows through `SOFTWARE-163`, the completed later ranges stated in the plan, and
-`SOFTWARE-315..470` are closed except for the rows above. Assign the next demonstrated issue as
-`SOFTWARE-471`; never add a task merely to keep numbering moving.
+`SOFTWARE-315..471` are closed except for the rows above. Assign the next demonstrated issue as
+`SOFTWARE-472`; never add a task merely to keep numbering moving.
 
 ## Recommended next audit direction
 
@@ -201,7 +212,7 @@ the flag incrementally.
 - Durable audit evidence: `plans/plan_software.md` and
   `docs/software-easygl-parity-ledger.md`
 
-The patch series contains 95 ordered patches at this handoff. New patches must be appended in
+The patch series contains 96 ordered patches at this handoff. New patches must be appended in
 dependency order and must apply to pinned MojoShader commit
 `6333f74dbd5644789a63e903816441b16c1e8b60` through FNA3D pin `3240147`.
 
@@ -319,12 +330,12 @@ nearby Microsoft-positive control so an apparent rejection is not merely bad ass
 The last broad results relevant to the latest technical commit are:
 
 - Software renderer CTest label: 160/160 pass, display-free.
-- EasyGL compiled-Effect family: 539/539 pass on isolated Mesa/Xvfb.
-- Focused SOFTWARE-470 EasyGL cases: 5/5 pass.
+- EasyGL compiled-Effect family: 546/546 pass on isolated Mesa/Xvfb.
+- Focused SOFTWARE-470 EasyGL cases: 5/5 pass; focused SOFTWARE-471 cases: 7/7 pass.
 - The last full Software `CnaGraphicsTests` checkpoint documented in the ledger is
-  2,625/2,688 with 63 classified skips. It was not rerun for SOFTWARE-470 because the task changed
-  only compiled-Effect test/validation inputs covered by the focused runtime, full Software label,
-  and complete EasyGL compiled family.
+  2,625/2,688 with 63 classified skips. It was not rerun for SOFTWARE-470/471 because those tasks
+  changed only compiled-Effect test/validation inputs covered by the focused runtime, full Software
+  label, and complete EasyGL compiled family.
 
 The exact 63-skip classification is in
 `docs/software-easygl-parity-ledger.md` under `Exact Software CnaGraphicsTests skip classification`:

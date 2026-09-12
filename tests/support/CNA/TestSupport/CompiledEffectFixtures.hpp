@@ -302,6 +302,24 @@ namespace CNA::TestSupport
         Aliased,
         /** @brief Invalidly use constant registers instead of temporary scratch registers. */
         NonTemporary,
+        /** @brief Invalidly negate the first temporary scratch register. */
+        Scratch1Negate,
+        /** @brief Invalidly swizzle the first temporary scratch register. */
+        Scratch1Swizzle,
+        /** @brief Invalidly negate the second temporary scratch register. */
+        Scratch2Negate,
+        /** @brief Invalidly swizzle the second temporary scratch register. */
+        Scratch2Swizzle,
+        /** @brief Invalidly reuse the first scratch register as the value source. */
+        ValueAliasesScratch1,
+        /** @brief Invalidly reuse the second scratch register as the value source. */
+        ValueAliasesScratch2,
+        /** @brief Legally negate the value source while leaving both scratch operands plain. */
+        ValueNegate,
+        /** @brief Legally reuse the first scratch register as the destination. */
+        DestinationAliasesScratch1,
+        /** @brief Legally reuse the second scratch register as the destination. */
+        DestinationAliasesScratch2,
     };
 
     /** @brief Composite arithmetic result exercised through a partial destination write mask. */
@@ -6875,16 +6893,43 @@ namespace CNA::TestSupport
         }
         if (sgnScratchOperands != SyntheticSgnScratchOperands::None)
         {
+            using Probe = SyntheticSgnScratchOperands;
             const bool nonTemporary =
-                sgnScratchOperands == SyntheticSgnScratchOperands::NonTemporary;
+                sgnScratchOperands == Probe::NonTemporary;
             const std::uint32_t scratchType = nonTemporary ? regConst : regTemp;
             const std::uint32_t secondScratch =
-                sgnScratchOperands == SyntheticSgnScratchOperands::Aliased ? 1u : 2u;
-            AppendUInt32(shader, 0x00000022u | (4u << 24)); // sgn r0, v0, scratch1, scratch2
-            AppendUInt32(shader, destination(regTemp, 0));
-            AppendUInt32(shader, source(regInput, 0));
-            AppendUInt32(shader, source(scratchType, nonTemporary ? 0u : 1u));
-            AppendUInt32(shader, source(scratchType, nonTemporary ? 1u : secondScratch));
+                sgnScratchOperands == Probe::Aliased ? 1u : 2u;
+            const bool valueAliasesScratch1 =
+                sgnScratchOperands == Probe::ValueAliasesScratch1;
+            const bool valueAliasesScratch2 =
+                sgnScratchOperands == Probe::ValueAliasesScratch2;
+            const std::uint32_t valueRegister = valueAliasesScratch2 ? 2u : 1u;
+            if (valueAliasesScratch1 || valueAliasesScratch2)
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov valueRegister, v0
+                AppendUInt32(shader, destination(regTemp, valueRegister));
+                AppendUInt32(shader, source(regInput, 0));
+            }
+            const std::uint32_t destinationRegister =
+                sgnScratchOperands == Probe::DestinationAliasesScratch1 ? 1u :
+                sgnScratchOperands == Probe::DestinationAliasesScratch2 ? 2u : 0u;
+            const bool scratch1Negate = sgnScratchOperands == Probe::Scratch1Negate;
+            const bool scratch1Swizzle = sgnScratchOperands == Probe::Scratch1Swizzle;
+            const bool scratch2Negate = sgnScratchOperands == Probe::Scratch2Negate;
+            const bool scratch2Swizzle = sgnScratchOperands == Probe::Scratch2Swizzle;
+            const bool valueNegate = sgnScratchOperands == Probe::ValueNegate;
+            AppendUInt32(shader, 0x00000022u | (4u << 24)); // sgn destination, value, scratch1, scratch2
+            AppendUInt32(shader, destination(regTemp, destinationRegister));
+            AppendUInt32(shader,
+                         source(valueAliasesScratch1 || valueAliasesScratch2 ? regTemp : regInput,
+                                valueAliasesScratch1 || valueAliasesScratch2 ? valueRegister : 0u,
+                                0xE4u, valueNegate ? 1u : 0u));
+            AppendUInt32(shader, source(scratchType, nonTemporary ? 0u : 1u,
+                                        scratch1Swizzle ? 0x00u : 0xE4u,
+                                        scratch1Negate ? 1u : 0u));
+            AppendUInt32(shader, source(scratchType, nonTemporary ? 1u : secondScratch,
+                                        scratch2Swizzle ? 0x00u : 0xE4u,
+                                        scratch2Negate ? 1u : 0u));
         }
         if (usesInvalidExppSwizzle)
         {

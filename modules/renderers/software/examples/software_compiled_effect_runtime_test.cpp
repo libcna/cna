@@ -3636,6 +3636,45 @@ namespace
         expectRejected("compiled Effect parser accepted aliased SGN scratch registers");
         options.vertexShaderSgnScratchOperands = SyntheticSgnScratchOperands::NonTemporary;
         expectRejected("compiled Effect parser accepted non-temporary SGN scratch registers");
+        constexpr std::array invalidOperandProbes{
+            SyntheticSgnScratchOperands::Scratch1Negate,
+            SyntheticSgnScratchOperands::Scratch1Swizzle,
+            SyntheticSgnScratchOperands::Scratch2Negate,
+            SyntheticSgnScratchOperands::Scratch2Swizzle,
+            SyntheticSgnScratchOperands::ValueAliasesScratch1,
+            SyntheticSgnScratchOperands::ValueAliasesScratch2,
+        };
+        for (const SyntheticSgnScratchOperands probe : invalidOperandProbes)
+        {
+            options.vertexShaderSgnScratchOperands = probe;
+            const std::string message =
+                "compiled Effect parser accepted invalid SGN operand form " +
+                std::to_string(static_cast<int>(probe));
+            expectRejected(message.c_str());
+        }
+
+        constexpr std::array validAliasingAndModifierProbes{
+            SyntheticSgnScratchOperands::ValueNegate,
+            SyntheticSgnScratchOperands::DestinationAliasesScratch1,
+            SyntheticSgnScratchOperands::DestinationAliasesScratch2,
+        };
+        for (const SyntheticSgnScratchOperands probe : validAliasingAndModifierProbes)
+        {
+            options.vertexShaderSgnScratchOperands = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool probeAccepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                probeAccepted = false;
+            }
+            Check(probeAccepted,
+                  "compiled Effect parser rejected valid SGN operand form " +
+                      std::to_string(static_cast<int>(probe)));
+        }
         options.vertexShaderSgnScratchOperands = SyntheticSgnScratchOperands::None;
         options.pixelShaderUsesInvalidSgn = true;
         expectRejected("compiled Effect parser accepted pixel-shader SGN");

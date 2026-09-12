@@ -411,6 +411,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   SOFTWARE-470 then closes the Shader Model 2 `SINCOS` scratch-operand branch: managed patch 95
   requires both constant scratch operands to use identity swizzles without source modifiers, as
   measured from Microsoft's assembler, while retaining legal modifiers on the scalar value source.
+  SOFTWARE-471 completes the adjacent vertex `SGN` operand contract: patch 96 additionally requires
+  its temporary scratch sources to be unmodified and identity-swizzled, and forbids either from
+  aliasing the value source while preserving Microsoft's legal destination/scratch aliasing.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
