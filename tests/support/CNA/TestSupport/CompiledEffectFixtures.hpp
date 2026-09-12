@@ -215,6 +215,31 @@ namespace CNA::TestSupport
         TextureReadSourceByBumpLater,
     };
 
+    /** @brief Shader Model 1.4 `BEM` operand/component contract probe. */
+    enum class SyntheticBemOperandProbe
+    {
+        /** @brief Emit no dedicated `BEM` operand probe. */
+        None,
+        /** @brief Invalidly use a texture register as source zero. */
+        Source0Texture,
+        /** @brief Invalidly use a constant register as source one. */
+        Source1Constant,
+        /** @brief Invalidly use a texture register as source one. */
+        Source1Texture,
+        /** @brief Read an uninitialized source-zero Y component. */
+        Source0UninitializedY,
+        /** @brief Read an uninitialized source-one Y component. */
+        Source1UninitializedY,
+        /** @brief Use the valid constant/temporary form without an explicit phase marker. */
+        ConstantTemporary,
+        /** @brief Read only initialized X through replicated source swizzles. */
+        ReplicatedX,
+        /** @brief Use the valid saturating destination modifier. */
+        DestinationSaturate,
+        /** @brief Use valid temporary negate and signed-scale source modifiers. */
+        TemporarySourceModifiers,
+    };
+
     /** @brief Legacy pixel-depth instruction emitted by the synthetic pixel shader. */
     enum class SyntheticLegacyDepthOutput
     {
@@ -1506,6 +1531,8 @@ namespace CNA::TestSupport
         /// Emits a legacy texture-stage bump-environment instruction.
         SyntheticLegacyBumpEnvironment pixelShaderLegacyBumpEnvironment =
             SyntheticLegacyBumpEnvironment::None;
+        /// Emits the selected Shader Model 1.4 `BEM` operand/component probe.
+        SyntheticBemOperandProbe pixelShaderBemOperandProbe = SyntheticBemOperandProbe::None;
         /// Emits a second ps_1_4 PHASE marker so parser validation can reject it.
         bool pixelShaderDuplicatesShaderModel14Phase = false;
         /// Emits an SM3 texture load whose coordinates are `v0[aL]` inside a one-iteration loop.
@@ -1746,6 +1773,7 @@ namespace CNA::TestSupport
             SyntheticLegacyDependentTexture::None,
         SyntheticLegacyBumpEnvironment legacyBumpEnvironment =
             SyntheticLegacyBumpEnvironment::None,
+        SyntheticBemOperandProbe bemOperandProbe = SyntheticBemOperandProbe::None,
         bool duplicatesShaderModel14Phase = false,
         bool usesRelativeTextureCoordinate = false,
         bool usesDependentTemporaryTextureCoordinate = false,
@@ -2113,7 +2141,8 @@ namespace CNA::TestSupport
                                            SyntheticTexkillOperandProbe::Pixel14TemporaryXyz ||
                                        legacyDepthOutput == SyntheticLegacyDepthOutput::Register ||
                                        legacyBumpEnvironment ==
-                                           SyntheticLegacyBumpEnvironment::Arithmetic;
+                                           SyntheticLegacyBumpEnvironment::Arithmetic ||
+                                       bemOperandProbe != SyntheticBemOperandProbe::None;
         const bool usesShaderModel13 =
             legacyDepthOutput == SyntheticLegacyDepthOutput::TextureMatrix2;
         const std::uint32_t versionToken = probesPixel11Temporary || probesPixel11ColorInput ||
@@ -3425,8 +3454,10 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, source(regTemp, 0));
             }
         }
-        else if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic)
+        else if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic ||
+                 bemOperandProbe != SyntheticBemOperandProbe::None)
         {
+            using Probe = SyntheticBemOperandProbe;
             AppendUInt32(shader, 0x00000051u); // def c1, .1, .2, .3, .4
             AppendUInt32(shader, destination(regConst, 1, 0xFu));
             AppendUInt32(shader, FloatBits(0.1f));
@@ -3439,10 +3470,44 @@ namespace CNA::TestSupport
             AppendUInt32(shader, FloatBits(0.25f));
             AppendUInt32(shader, FloatBits(0.0f));
             AppendUInt32(shader, FloatBits(0.0f));
-            AppendUInt32(shader, 0x00000059u); // bem r0.xy, c1, c2
-            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+            const bool source0UninitializedY =
+                bemOperandProbe == Probe::Source0UninitializedY;
+            const bool source1UninitializedY =
+                bemOperandProbe == Probe::Source1UninitializedY;
+            const bool replicatedX = bemOperandProbe == Probe::ReplicatedX;
+            const bool temporaryModifiers =
+                bemOperandProbe == Probe::TemporarySourceModifiers;
+            const bool source0Temporary =
+                source0UninitializedY || replicatedX || temporaryModifiers;
+            AppendUInt32(shader, 0x00000001u); // mov r1.xy/x, c1
+            AppendUInt32(shader, destination(
+                regTemp, 1, source0UninitializedY || replicatedX ? 0x1u : 0x3u));
             AppendUInt32(shader, source(regConst, 1));
+            AppendUInt32(shader, 0x00000001u); // mov r2.xy/x, c2
+            AppendUInt32(shader, destination(
+                regTemp, 2, source1UninitializedY || replicatedX ? 0x1u : 0x3u));
             AppendUInt32(shader, source(regConst, 2));
+            AppendUInt32(shader, 0x00000059u); // bem r0.xy, source0, source1
+            AppendUInt32(shader, destination(regTemp, 0, 0x3u) |
+                                     (bemOperandProbe == Probe::DestinationSaturate
+                                          ? (1u << 20)
+                                          : 0u));
+            AppendUInt32(shader, source(
+                bemOperandProbe == Probe::Source0Texture
+                    ? regTexture
+                    : source0Temporary ? regTemp : regConst,
+                source0Temporary ? 1u : bemOperandProbe == Probe::Source0Texture ? 0u : 1u,
+                replicatedX ? 0x00u : swizzleIdentity,
+                temporaryModifiers ? 1u : 0u));
+            AppendUInt32(shader, source(
+                bemOperandProbe == Probe::Source1Constant
+                    ? regConst
+                    : bemOperandProbe == Probe::Source1Texture ? regTexture : regTemp,
+                bemOperandProbe == Probe::Source1Constant
+                    ? 2u
+                    : bemOperandProbe == Probe::Source1Texture ? 0u : 2u,
+                replicatedX ? 0x00u : swizzleIdentity,
+                temporaryModifiers ? 4u : 0u));
             AppendUInt32(shader, 0x00000001u); // mov r0.zw, c1
             AppendUInt32(shader, destination(regTemp, 0, 0xCu));
             AppendUInt32(shader, source(regConst, 1));
@@ -7074,6 +7139,7 @@ namespace CNA::TestSupport
             options.pixelShaderLegacyDepthZeroDivisor,
             options.pixelShaderLegacyDependentTexture,
             options.pixelShaderLegacyBumpEnvironment,
+            options.pixelShaderBemOperandProbe,
             options.pixelShaderDuplicatesShaderModel14Phase,
             options.pixelShaderUsesRelativeTextureCoordinate,
             options.pixelShaderUsesDependentTemporaryTextureCoordinate,
@@ -7172,6 +7238,7 @@ namespace CNA::TestSupport
                          SyntheticLegacyBumpEnvironment::None &&
                      options.pixelShaderLegacyBumpEnvironment !=
                          SyntheticLegacyBumpEnvironment::Arithmetic) ||
+                    options.pixelShaderBemOperandProbe != SyntheticBemOperandProbe::None ||
                     options.pixelShaderUsesLegacyTextureMatrix2 ||
                     options.pixelShaderUsesLegacyTextureMatrix3Sample ||
                     options.pixelShaderUsesLegacyTextureMatrix3Specular ||

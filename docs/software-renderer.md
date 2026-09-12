@@ -377,8 +377,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   used from a texture value actually being written, because valid `TEXKILL r1; TEXLD r0,r1` must
   retain r1. The task also corrected two older test families whose ps_1_4 texture operations followed
   arithmetic or whose partial mask controls left r0 incomplete. The dependency series now contains
-  83 patches; BEM and other opcodes' distinct operand/component-use rules remain part of
-  SOFTWARE-164/165.
+  83 patches at that point. SOFTWARE-459 then measures `BEM` separately: source 0 is constant or temporary,
+  source 1 is temporary, and only the swizzle-selected XY components must already be initialized.
+  Managed patch 84 applies that contract to both compiled paths and corrects SOFTWARE-385's invalid
+  constant/constant fixture without changing its exact rendered result. A valid marker-free program
+  proves that `BEM` does not itself require an explicit `PHASE`. The dependency series now contains
+  84 patches; other opcodes' distinct operand and component-use rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

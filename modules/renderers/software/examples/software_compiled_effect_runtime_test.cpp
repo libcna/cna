@@ -2858,6 +2858,58 @@ namespace
               "compiled Effect parser rejected complementary ps_1_4 r0 writes");
     }
 
+    void CheckCompiledBemOperandValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticBemOperandProbe;
+        const auto accepts = [&](Probe probe) {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderBemOperandProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+                return true;
+            }
+            catch (const std::runtime_error&)
+            {
+                return false;
+            }
+        };
+
+        constexpr std::array invalidProbes{
+            Probe::Source0Texture,
+            Probe::Source1Constant,
+            Probe::Source1Texture,
+            Probe::Source0UninitializedY,
+            Probe::Source1UninitializedY,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            if (accepts(probe))
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid ps_1_4 BEM operands: " +
+                  acceptedInvalidProbes);
+
+        for (const Probe probe : {
+                 Probe::ConstantTemporary,
+                 Probe::ReplicatedX,
+                 Probe::DestinationSaturate,
+                 Probe::TemporarySourceModifiers,
+             })
+        {
+            Check(accepts(probe),
+                  "compiled Effect parser rejected valid ps_1_4 BEM operand probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+    }
+
     void CheckCompiledUninitializedTemporaryValidation(SoftwareRenderer& renderer)
     {
         CNA::TestSupport::SyntheticEffectOptions options;
@@ -7271,6 +7323,7 @@ int main()
         CheckCompiledShaderModel14PhaseValidation(renderer);
         CheckCompiledShaderModel14PhaseStateValidation(renderer);
         CheckCompiledPixel1OutputLiveness(renderer);
+        CheckCompiledBemOperandValidation(renderer);
         CheckCompiledUninitializedTemporaryValidation(renderer);
         CheckCompiledTexkillTemporaryValidation(renderer);
         CheckCompiledSgnValidation(renderer);
