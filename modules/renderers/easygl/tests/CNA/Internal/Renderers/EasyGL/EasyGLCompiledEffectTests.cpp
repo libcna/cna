@@ -776,6 +776,45 @@ TEST(EasyGLCompiledEffectTest, RejectsReadOfUninitializedTemporaryDestination)
     EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
+TEST(EasyGLCompiledEffectTest, RejectsVertex11UninitializedTemporaryRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.temporaryInitializationProbe =
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex11;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+class EasyGLCompiledEffectPermissiveTemporaryInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTemporaryInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPermissiveTemporaryInitializationTest,
+       AcceptsUninitializedTemporaryRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.temporaryInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    PermissiveTemporaryInitializationProfiles,
+    EasyGLCompiledEffectPermissiveTemporaryInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel30,
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex20,
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex30));
+
 TEST(EasyGLCompiledEffectTest, RejectsTexkillWithUndefinedTemporaryComponents)
 {
     GraphicsDevice device;

@@ -360,7 +360,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   in `ps_3_0` accepts an incompletely initialized temporary or a fully declared input `v#`. The
   shared destination parser now recognizes `TEXKILL` as a read despite its destination-token
   encoding, then applies the exact profile-specific register and component contract. The dependency
-  series now contains 79 patches.
+  series then contained 79 patches. SOFTWARE-455 subsequently measured the scope of ordinary
+  temporary initialization validation: Microsoft rejects uninitialized reads in pixel Shader
+  Models 1/2 and vertex Shader Model 1.1, but accepts both self-reads and different-register reads
+  in `ps_3_0`, `vs_2_0` and `vs_3_0`. Common validation now retains the strict profiles without
+  suppressing the three permissive profiles. The dependency series now contains 80 patches.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

@@ -577,6 +577,21 @@ namespace CNA::TestSupport
         Pixel30InputFull,
     };
 
+    /** @brief Shader profile exercised for a read from an uninitialized temporary register. */
+    enum class SyntheticTemporaryInitializationProbe
+    {
+        /** @brief Emit no dedicated temporary-initialization probe. */
+        None,
+        /** @brief Read an uninitialized temporary in a ps_3_0 program. */
+        Pixel30,
+        /** @brief Read an uninitialized temporary in a vs_1_1 program. */
+        Vertex11,
+        /** @brief Read an uninitialized temporary in a vs_2_0 program. */
+        Vertex20,
+        /** @brief Read an uninitialized temporary in a vs_3_0 program. */
+        Vertex30,
+    };
+
     /** @brief Shader profile and input-register boundary exercised by a synthetic program. */
     enum class SyntheticInputRegisterProbe
     {
@@ -1422,6 +1437,9 @@ namespace CNA::TestSupport
         /// Prepends `mov r0, r0` before r0 has been initialized. D3D9 shader validation must
         /// reject the self-read even though the same instruction also names r0 as its destination.
         bool pixelShaderReadsUninitializedDestination = false;
+        /// Emits the selected profile-specific uninitialized-temporary read.
+        SyntheticTemporaryInitializationProbe temporaryInitializationProbe =
+            SyntheticTemporaryInitializationProbe::None;
         /// Writes only r0.xy before TEXKILL reads XYZ. D3D9 shader validation must reject the
         /// undefined Z component in Shader Model 2.0.
         bool pixelShaderTexkillReadsPartialTemporary = false;
@@ -1630,6 +1648,8 @@ namespace CNA::TestSupport
         bool usesSignedLog = false,
         bool usesNrmWriteMask = false,
         bool readsUninitializedDestination = false,
+        SyntheticTemporaryInitializationProbe temporaryInitializationProbe =
+            SyntheticTemporaryInitializationProbe::None,
         bool texkillReadsPartialTemporary = false,
         bool texkillReadsSplitTemporary = false,
         SyntheticTexkillOperandProbe texkillOperandProbe =
@@ -1721,6 +1741,8 @@ namespace CNA::TestSupport
         const bool probesPixel30Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel30Maximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel30OutOfRange;
+        const bool probesPixel30TemporaryInitialization =
+            temporaryInitializationProbe == SyntheticTemporaryInitializationProbe::Pixel30;
         const bool probesPixel30Texkill =
             texkillOperandProbe >= SyntheticTexkillOperandProbe::Pixel30TemporaryXy;
         const bool probesPixel20ColorInput =
@@ -1940,7 +1962,7 @@ namespace CNA::TestSupport
             usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
             usesDependentTemporaryTextureCoordinate || swizzlesSampleResult ||
-            probesPixel30Texkill ||
+            probesPixel30Texkill || probesPixel30TemporaryInitialization ||
             invalidMixedConstantAbsolute ==
                 SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelPlainThenAbsolute ||
             invalidMixedConstantAbsolute ==
@@ -2490,6 +2512,12 @@ namespace CNA::TestSupport
         {
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, r0
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 0));
+        }
+        if (probesPixel30TemporaryInitialization)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, uninitialized r0
+            AppendUInt32(shader, destination(regTemp, 1, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
         }
 
@@ -4517,6 +4545,9 @@ namespace CNA::TestSupport
                                                                     SyntheticSgnScratchOperands::None,
                                                                 bool usesInvalidExppSwizzle = false,
                                                                 bool usesInvalidExpSwizzle = false,
+                                                                SyntheticTemporaryInitializationProbe
+                                                                    temporaryInitializationProbe =
+                                                                        SyntheticTemporaryInitializationProbe::None,
                                                                 SyntheticInvalidVertexShaderModel1Opcode
                                                                     shaderModel1InvalidOpcode =
                                                                         SyntheticInvalidVertexShaderModel1Opcode::None,
@@ -4593,6 +4624,8 @@ namespace CNA::TestSupport
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
+                                       temporaryInitializationProbe ==
+                                           SyntheticTemporaryInitializationProbe::Vertex11 ||
                                        shaderModel1InvalidOpcode !=
                                            SyntheticInvalidVertexShaderModel1Opcode::None ||
                                        temporaryRegisterProbe ==
@@ -4751,6 +4784,8 @@ namespace CNA::TestSupport
         const bool usesShaderModel3 =
             usesPredication || samplesTexture || probesVertexTextureSourceModifier ||
             probesVertexTexldlDestinationModifier ||
+            temporaryInitializationProbe ==
+                SyntheticTemporaryInitializationProbe::Vertex30 ||
             invalidMixedConstantAbsolute ==
                 SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexPlainThenAbsolute ||
             invalidMixedConstantAbsolute ==
@@ -5769,6 +5804,13 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regTemp, 1));
             AppendUInt32(shader, source(regConst, 1, 0xE4u, absoluteSecond ? 11u : 0u));
         }
+        if (temporaryInitializationProbe != SyntheticTemporaryInitializationProbe::None &&
+            temporaryInitializationProbe != SyntheticTemporaryInitializationProbe::Pixel30)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, uninitialized r0
+            AppendUInt32(shader, destination(regTemp, 1));
+            AppendUInt32(shader, source(regTemp, 0));
+        }
         if (readsSecondStream)
         {
             // mad r0, v1, c4, v0
@@ -6649,6 +6691,7 @@ namespace CNA::TestSupport
             options.pixelShaderUsesSignedLog,
             options.pixelShaderUsesNrmWriteMask,
             options.pixelShaderReadsUninitializedDestination,
+            options.temporaryInitializationProbe,
             options.pixelShaderTexkillReadsPartialTemporary,
             options.pixelShaderTexkillReadsSplitTemporary,
             options.pixelShaderTexkillOperandProbe,
@@ -6801,6 +6844,7 @@ namespace CNA::TestSupport
                 options.vertexShaderSgnScratchOperands,
                 options.vertexShaderUsesInvalidExppSwizzle,
                 options.vertexShaderUsesInvalidExpSwizzle,
+                options.temporaryInitializationProbe,
                 options.vertexShaderModel1InvalidOpcode,
                 options.shaderModel20InvalidDynamicFeature,
                 options.invalidPreShaderModel3AbsoluteSource,

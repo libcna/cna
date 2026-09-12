@@ -2748,6 +2748,46 @@ namespace
         }
         Check(rejected,
               "compiled Effect parser accepted a temporary self-read before initialization");
+
+        options.pixelShaderReadsUninitializedDestination = false;
+        options.temporaryInitializationProbe =
+            CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex11;
+        const auto vertex11Bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        rejected = false;
+        try
+        {
+            static_cast<void>(renderer.CreateCompiledEffect(vertex11Bytes.data(),
+                                                            vertex11Bytes.size()));
+        }
+        catch (const std::runtime_error&)
+        {
+            rejected = true;
+        }
+        Check(rejected,
+              "compiled Effect parser accepted a vs_1_1 uninitialized temporary read");
+
+        constexpr CNA::TestSupport::SyntheticTemporaryInitializationProbe permissiveProfiles[] = {
+            CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel30,
+            CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex20,
+            CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex30,
+        };
+        for (const auto profile : permissiveProfiles)
+        {
+            options.temporaryInitializationProbe = profile;
+            const auto permissiveBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(permissiveBytes.data(),
+                                                                permissiveBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Effect parser rejected a profile-permitted uninitialized temporary read");
+        }
     }
 
     void CheckCompiledTexkillTemporaryValidation(SoftwareRenderer& renderer)
