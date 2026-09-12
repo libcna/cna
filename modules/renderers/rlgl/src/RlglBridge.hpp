@@ -110,6 +110,28 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int multiSampleCount = 0;
     };
 
+    /** @brief Borrowed native storage attached to one slot of an MRT framebuffer. */
+    struct MrtAttachment
+    {
+        unsigned int colorTexture = 0;
+        unsigned int multisampleColorRenderbuffer = 0;
+        unsigned int depthStencilRenderbuffer = 0;
+        int depthFormat = 0;
+        int multiSampleCount = 0;
+    };
+
+    /** @brief Native MRT framebuffer state exposed only to focused validation. */
+    struct MrtFramebufferSnapshot
+    {
+        unsigned int framebuffer = 0;
+        std::array<unsigned int, 4> colorObjects{};
+        unsigned int depthObject = 0;
+        unsigned int stencilObject = 0;
+        std::array<int, 4> drawBuffers{};
+        int readBuffer = 0;
+        bool complete = false;
+    };
+
     /** @brief rlgl-owned shader and VAO used by the BasicEffect/AlphaTestEffect path. */
     struct PrimitivePipeline
     {
@@ -582,6 +604,41 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     [[nodiscard]] RenderTargetStorage CreateRenderTarget2D(
         int width, int height, int levelCount, int depthFormat,
         int multiSampleCount, int surfaceFormat);
+
+    /**
+     * @brief Returns the usable simultaneous-color-target count of the live GL context.
+     * @return The smaller of the draw-buffer and color-attachment limits, capped at XNA's four.
+     */
+    [[nodiscard]] int GetMaxRenderTargets();
+
+    /**
+     * @brief Creates and validates a new MRT framebuffer from borrowed target storage.
+     * @param attachments Ordered color attachments; slot zero also supplies depth/stencil.
+     * @param count Number of attachments in the range two through four.
+     * @return A complete rlgl-created framebuffer that owns no attachment resources.
+     */
+    [[nodiscard]] unsigned int CreateMrtFramebuffer(
+        const MrtAttachment* attachments, int count);
+
+    /**
+     * @brief Deletes an MRT framebuffer without deleting its borrowed target attachments.
+     * @param framebuffer Live or zero framebuffer name, cleared on return.
+     */
+    void DestroyMrtFramebuffer(unsigned int& framebuffer) noexcept;
+
+    /**
+     * @brief Captures slot, draw-buffer, depth, stencil, and completeness state for a live MRT FBO.
+     * @param framebuffer Non-zero MRT framebuffer name.
+     * @return Native framebuffer state restored without disturbing the active target.
+     */
+    [[nodiscard]] MrtFramebufferSnapshot GetMrtFramebufferSnapshotForTesting(
+        unsigned int framebuffer);
+
+    /**
+     * @brief Captures the currently bound draw framebuffer as an MRT validation snapshot.
+     * @return Native state for the non-default active draw framebuffer.
+     */
+    [[nodiscard]] MrtFramebufferSnapshot GetBoundMrtFramebufferSnapshotForTesting();
 
     /**
      * @brief Probes whether the live context can attach one exact XNA color format.

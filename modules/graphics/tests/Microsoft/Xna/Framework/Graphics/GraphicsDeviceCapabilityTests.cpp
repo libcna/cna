@@ -210,6 +210,12 @@ struct CapabilityExpectation
         case GraphicsRendererType::Igl:
             return {true, false, true};
 
+        // plans/plan_rlgl.md RLGL-040: the default GraphicsDevice uses Reach, whose XNA profile
+        // ceiling is one target. The renderer-local HiDef test separately proves all four native
+        // slots; queries and binding must agree for this default-profile fixture.
+        case GraphicsRendererType::Rlgl:
+            return {false, false, false};
+
         default:
             return {true, true, true};
     }

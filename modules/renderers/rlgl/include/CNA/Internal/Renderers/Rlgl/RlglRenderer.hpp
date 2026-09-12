@@ -252,9 +252,9 @@ namespace CNA::Internal::Renderers::Rlgl
             int multiSampleCount, int surfaceFormat) override;
 
         /**
-         * @brief Applies the current task's single-target profile ceiling.
+         * @brief Applies XNA's profile ceiling to the measured native MRT limit.
          * @param graphicsProfile Raw XNA GraphicsProfile ordinal.
-         * @return One until RLGL-040 validates multiple render targets.
+         * @return One for Reach, otherwise up to four supported native attachments.
          */
         [[nodiscard]] int GetMaxRenderTargetsForProfileEXT(
             int graphicsProfile) const override;
@@ -588,6 +588,7 @@ namespace CNA::Internal::Renderers::Rlgl
         void ApplySamplerRecord(int slot, SamplerRecord& sampler);
         Bridge::PrimitivePipeline& GetPrimitivePipeline();
         void ApplyCurrentRasterizerState();
+        void FinalizeCurrentRenderTargets();
 
         PlatformGlSurfaceState surface_;
         CNA::Platform::IPlatformGlContext* platformGlService_ = nullptr;
@@ -601,6 +602,7 @@ namespace CNA::Internal::Renderers::Rlgl
         int stencilBits_ = 0;
         int maxTextureSize_ = 0;
         int maxSamplerSlots_ = 0;
+        int maxRenderTargets_ = 1;
         float maxSamplerAnisotropy_ = 1.0f;
         std::array<SamplerRecord, 16> samplers_{};
         StencilRecord stencil_{};
@@ -608,6 +610,9 @@ namespace CNA::Internal::Renderers::Rlgl
         int currentViewportHeight_ = 0;
         bool viewportIsDefault_ = true;
         IRenderTargetRenderer* currentRenderTarget_ = nullptr;
+        std::array<IRenderTargetRenderer*, 4> currentRenderTargets_{};
+        int currentRenderTargetCount_ = 0;
+        unsigned int mrtFramebuffer_ = 0;
         int currentRenderTargetWidth_ = 0;
         int currentRenderTargetHeight_ = 0;
         int currentTargetDepthBits_ = 0;

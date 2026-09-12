@@ -83,6 +83,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
@@ -212,8 +213,7 @@ namespace
 
     /** @brief Whether `SetRenderTargets` with more than one attachment is executed here. */
     constexpr bool kMrtSupported =
-#if defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_HEADLESS) || \
-    defined(CNA_RENDERER_RLGL)
+#if defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;
@@ -1658,6 +1658,11 @@ public:
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);
+#if defined(CNA_RENDERER_RLGL)
+        // RLGL enforces XNA's Reach ceiling of one simultaneous target; exercise the native MRT
+        // path under the profile that exposes XNA's four-slot contract.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
+#endif
     }
 
     /** @brief 0 when every check passed, 1 otherwise. */

@@ -3760,10 +3760,9 @@ namespace CNA::Internal::Renderers
         /// continue to ignore this field exactly as before it existed.
         bool isFullScreen = false;
         /// CNAEXT (plans/plan_dx9.md D9-30/D9-32). Requested Microsoft::Xna::Framework::Graphics::
-        /// GraphicsProfile ordinal (Reach=0, HiDef=1). Only D3D9 can honestly enforce this today
-        /// (a real D3DCAPS9 to consult) -- see plans/plan_dx9.md's "CNA's divergences from XNA 4.0",
-        /// Divergence 3. Every other renderer's GraphicsAdapter::IsProfileSupported() keeps its
-        /// existing, honest `return true;` and may ignore this field.
+        /// GraphicsProfile ordinal (Reach=0, HiDef=1). Profile-aware renderers may use this during
+        /// creation; GraphicsDevice also applies dynamic per-profile resource ceilings through
+        /// the dedicated renderer queries when GraphicsDeviceManager changes the profile later.
         int graphicsProfile = 0;  // GraphicsProfile::Reach
         /// CNAEXT (plans/plan_dx9.md D9-34). Callback a renderer may invoke to report a REAL,
         /// driver-triggered device lifecycle event back to GraphicsDevice (which raises the

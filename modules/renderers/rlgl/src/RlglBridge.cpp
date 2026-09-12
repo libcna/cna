@@ -563,18 +563,21 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     }
 
     void Clear(const unsigned int planes, const float r, const float g, const float b,
-               const float a, const float depth, const int stencil)
+        const float a, const float depth, const int stencil)
     {
         GLbitfield mask = 0;
-        GLboolean oldColorMask[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
+        std::array<std::array<GLboolean, 4>, 4> oldColorMasks{};
         GLboolean oldDepthMask = GL_TRUE;
         GLint oldFrontStencilMask = -1;
         GLint oldBackStencilMask = -1;
 
         if ((planes & ColorPlane) != 0)
         {
-            glGetBooleanv(GL_COLOR_WRITEMASK, oldColorMask);
-            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+            for (unsigned int slot = 0; slot < oldColorMasks.size(); ++slot)
+            {
+                glGetBooleani_v(GL_COLOR_WRITEMASK, slot, oldColorMasks[slot].data());
+                glColorMaski(slot, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+            }
             glClearColor(r, g, b, a);
             mask |= GL_COLOR_BUFFER_BIT;
         }
@@ -598,7 +601,14 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         glClear(mask);
 
         if ((planes & ColorPlane) != 0)
-            glColorMask(oldColorMask[0], oldColorMask[1], oldColorMask[2], oldColorMask[3]);
+        {
+            for (unsigned int slot = 0; slot < oldColorMasks.size(); ++slot)
+            {
+                const auto& colorMask = oldColorMasks[slot];
+                glColorMaski(
+                    slot, colorMask[0], colorMask[1], colorMask[2], colorMask[3]);
+            }
+        }
         if ((planes & DepthPlane) != 0) glDepthMask(oldDepthMask);
         if ((planes & StencilPlane) != 0)
         {
@@ -2457,6 +2467,167 @@ void main()
         return storage;
     }
 
+    int GetMaxRenderTargets()
+    {
+        RequireInitialized("MRT limit query");
+        GLint drawBuffers = 0;
+        GLint colorAttachments = 0;
+        glGetIntegerv(GL_MAX_DRAW_BUFFERS, &drawBuffers);
+        glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &colorAttachments);
+        ThrowIfGlError("MRT limit query");
+        return std::clamp(
+            std::min(static_cast<int>(drawBuffers), static_cast<int>(colorAttachments)),
+            1, 4);
+    }
+
+    unsigned int CreateMrtFramebuffer(
+        const MrtAttachment* const attachments, const int count)
+    {
+        RequireInitialized("MRT framebuffer creation");
+        if (attachments == nullptr || count < 2 || count > 4)
+            throw std::invalid_argument("RLGL: MRT requires two through four attachments");
+
+        const int samples = attachments[0].multiSampleCount;
+        for (int slot = 0; slot < count; ++slot)
+        {
+            const bool hasTexture = attachments[slot].colorTexture != 0;
+            const bool hasRenderbuffer =
+                attachments[slot].multisampleColorRenderbuffer != 0;
+            if (!hasTexture || (samples > 0) != hasRenderbuffer ||
+                attachments[slot].multiSampleCount != samples)
+            {
+                throw std::invalid_argument(
+                    "RLGL: MRT attachments have invalid or mismatched native storage");
+            }
+        }
+
+        const FramebufferBindingRestore framebufferRestore;
+        unsigned int framebuffer = rlLoadFramebuffer();
+        if (framebuffer == 0)
+            throw std::runtime_error("RLGL: MRT framebuffer allocation returned a zero name");
+        try
+        {
+            for (int slot = 0; slot < count; ++slot)
+            {
+                const unsigned int colorObject = samples > 0
+                    ? attachments[slot].multisampleColorRenderbuffer
+                    : attachments[slot].colorTexture;
+                rlFramebufferAttach(
+                    framebuffer, colorObject, RL_ATTACHMENT_COLOR_CHANNEL0 + slot,
+                    samples > 0 ? RL_ATTACHMENT_RENDERBUFFER : RL_ATTACHMENT_TEXTURE2D, 0);
+            }
+
+            if (attachments[0].depthStencilRenderbuffer != 0)
+            {
+                rlFramebufferAttach(
+                    framebuffer, attachments[0].depthStencilRenderbuffer,
+                    RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
+                if (attachments[0].depthFormat == 3)
+                {
+                    rlFramebufferAttach(
+                        framebuffer, attachments[0].depthStencilRenderbuffer,
+                        RL_ATTACHMENT_STENCIL, RL_ATTACHMENT_RENDERBUFFER, 0);
+                }
+            }
+
+            rlEnableFramebuffer(framebuffer);
+            rlActiveDrawBuffers(count);
+            glReadBuffer(GL_COLOR_ATTACHMENT0);
+            if (!rlFramebufferComplete(framebuffer))
+                throw std::runtime_error("RLGL: MRT framebuffer is incomplete");
+            ThrowIfGlError("MRT framebuffer creation");
+        }
+        catch (...)
+        {
+            DestroyMrtFramebuffer(framebuffer);
+            throw;
+        }
+        return framebuffer;
+    }
+
+    void DestroyMrtFramebuffer(unsigned int& framebuffer) noexcept
+    {
+        if (framebuffer == 0) return;
+        if (!bridgeInitialized)
+        {
+            framebuffer = 0;
+            return;
+        }
+
+        FramebufferBindingRestore restore;
+        restore.ForgetDeletedFramebuffer(framebuffer);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        glFramebufferRenderbuffer(
+            GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+        glFramebufferRenderbuffer(
+            GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        rlUnloadFramebuffer(framebuffer);
+        framebuffer = 0;
+    }
+
+    MrtFramebufferSnapshot GetMrtFramebufferSnapshotForTesting(
+        const unsigned int framebuffer)
+    {
+        RequireInitialized("MRT framebuffer query");
+        if (framebuffer == 0)
+            throw std::invalid_argument("RLGL: cannot query a zero MRT framebuffer");
+
+        const FramebufferBindingRestore framebufferRestore;
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+        MrtFramebufferSnapshot snapshot;
+        snapshot.framebuffer = framebuffer;
+        for (unsigned int slot = 0; slot < snapshot.colorObjects.size(); ++slot)
+        {
+            GLint type = GL_NONE;
+            glGetFramebufferAttachmentParameteriv(
+                GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + slot,
+                GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &type);
+            if (type != GL_NONE)
+            {
+                GLint object = 0;
+                glGetFramebufferAttachmentParameteriv(
+                    GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + slot,
+                    GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &object);
+                snapshot.colorObjects[slot] = static_cast<unsigned int>(object);
+            }
+            glGetIntegerv(
+                GL_DRAW_BUFFER0 + slot, &snapshot.drawBuffers[slot]);
+        }
+        const auto queryAttachment = [](const GLenum attachment)
+        {
+            GLint type = GL_NONE;
+            glGetFramebufferAttachmentParameteriv(
+                GL_FRAMEBUFFER, attachment,
+                GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &type);
+            if (type == GL_NONE) return 0u;
+            GLint object = 0;
+            glGetFramebufferAttachmentParameteriv(
+                GL_FRAMEBUFFER, attachment,
+                GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &object);
+            return static_cast<unsigned int>(object);
+        };
+        snapshot.depthObject = queryAttachment(GL_DEPTH_ATTACHMENT);
+        snapshot.stencilObject = queryAttachment(GL_STENCIL_ATTACHMENT);
+        glGetIntegerv(GL_READ_BUFFER, &snapshot.readBuffer);
+        snapshot.complete =
+            glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+        ThrowIfGlError("MRT framebuffer query");
+        return snapshot;
+    }
+
+    MrtFramebufferSnapshot GetBoundMrtFramebufferSnapshotForTesting()
+    {
+        RequireInitialized("bound MRT framebuffer query");
+        GLint framebuffer = 0;
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &framebuffer);
+        ThrowIfGlError("bound MRT framebuffer query");
+        if (framebuffer == 0)
+            throw std::runtime_error("RLGL: no non-default draw framebuffer is bound");
+        return GetMrtFramebufferSnapshotForTesting(
+            static_cast<unsigned int>(framebuffer));
+    }
+
     bool ProbeRenderTargetFormat(const int surfaceFormat)
     {
         RequireInitialized("RenderTarget2D format probe");
@@ -2508,6 +2679,7 @@ void main()
         if (framebuffer == 0)
             throw std::invalid_argument("RLGL: cannot bind a zero render-target framebuffer");
         rlEnableFramebuffer(framebuffer);
+        ThrowIfGlError("framebuffer binding");
     }
 
     void ResolveRenderTarget2D(

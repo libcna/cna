@@ -2523,6 +2523,15 @@ namespace Microsoft::Xna::Framework::Graphics
         // MOD-2090: and so is the indirect draw, for the same reason again.
         if (capability == CNA::GraphicsCapability::IndirectDraw)
             return GetRenderer().SupportsIndirectDrawEXT();
+        // RLGL-040: MRT availability is both a renderer capability and an XNA profile limit.
+        // GraphicsDeviceManager may change this device's profile after its renderer was created,
+        // so deriving the answer here keeps SupportsCapability and SetRenderTargets consistent.
+        if (capability == CNA::GraphicsCapability::MultipleRenderTargets)
+        {
+            return GetRenderer().SupportsCapability(capability) &&
+                GetRenderer().GetMaxRenderTargetsForProfileEXT(
+                    static_cast<int>(graphicsProfile_)) > 1;
+        }
         return GetRenderer().SupportsCapability(capability);
     }
 

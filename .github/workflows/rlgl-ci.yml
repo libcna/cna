@@ -100,6 +100,7 @@ jobs:
             cna_test_rlgl_spritebatch \
             cna_test_rlgl_render_target \
             cna_test_rlgl_render_target_formats \
+            cna_test_rlgl_mrt \
             cna_test_rlgl_render_target_orientation \
             cna_test_rlgl_render_target_full \
             cna_test_rlgl_msaa_first_readback \

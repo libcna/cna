@@ -92,6 +92,7 @@ namespace CNA::Internal::Renderers::Rlgl
             rlglInitialized_ = true;
             maxTextureSize_ = Bridge::GetMaxTextureSize();
             maxSamplerSlots_ = Bridge::GetMaxSamplerSlots();
+            maxRenderTargets_ = Bridge::GetMaxRenderTargets();
             maxSamplerAnisotropy_ = Bridge::GetMaxSamplerAnisotropy();
             if (maxSamplerSlots_ < static_cast<int>(samplers_.size()))
             {
@@ -139,6 +140,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     Bridge::DestroyPrimitivePipeline(*primitivePipeline_);
                     primitivePipeline_.reset();
                 }
+                Bridge::DestroyMrtFramebuffer(mrtFramebuffer_);
                 std::array<unsigned int, 16> samplerIds{};
                 for (std::size_t index = 0; index < samplers_.size(); ++index)
                     samplerIds[index] = samplers_[index].id;
@@ -319,6 +321,8 @@ namespace CNA::Internal::Renderers::Rlgl
         {
         case CNA::GraphicsCapability::AnisotropicFiltering:
             return maxSamplerAnisotropy_ > 1.0f;
+        case CNA::GraphicsCapability::MultipleRenderTargets:
+            return maxRenderTargets_ >= 2;
         default:
             return false;
         }
@@ -369,8 +373,7 @@ namespace CNA::Internal::Renderers::Rlgl
 
     int RlglRenderer::GetMaxRenderTargetsForProfileEXT(const int graphicsProfile) const
     {
-        (void)graphicsProfile;
-        return 1;
+        return graphicsProfile == 1 ? maxRenderTargets_ : 1;
     }
 
     RendererFormatVerdict RlglRenderer::ClassifySurfaceFormatEXT(
@@ -541,37 +544,120 @@ namespace CNA::Internal::Renderers::Rlgl
             throw std::invalid_argument("RLGL: render-target count cannot be negative");
         if (count == 0)
         {
-            if (currentRenderTarget_ != nullptr)
-                currentRenderTarget_->UnbindAsRenderTarget();
-            else
-                Bridge::BindDefaultFramebuffer();
-            currentRenderTarget_ = nullptr;
-            currentRenderTargetWidth_ = 0;
-            currentRenderTargetHeight_ = 0;
-            currentTargetDepthBits_ = depthBits_;
+            FinalizeCurrentRenderTargets();
+            Bridge::DestroyMrtFramebuffer(mrtFramebuffer_);
+            Bridge::BindDefaultFramebuffer();
             ApplyCurrentRasterizerState();
             return;
         }
         if (renderTargets == nullptr)
             throw std::invalid_argument(
                 "RLGL: nonzero render-target count requires a binding array");
-        if (count > 1) Unsupported("multiple render targets", "RLGL-040");
-        if (!renderTargets[0].IsRenderTarget2D())
-            Unsupported("cube render-target faces", "RLGL-015");
 
-        IRenderTargetRenderer* const target = renderTargets[0].GetRenderTarget2D();
-        if (target == nullptr)
-            throw std::invalid_argument("RLGL: null RenderTarget2D binding");
-        (void)GetRenderTargetResourceSnapshotForTesting(*target);
-        if (currentRenderTarget_ != nullptr && currentRenderTarget_ != target)
-            currentRenderTarget_->UnbindAsRenderTarget();
-        target->BindAsRenderTarget();
-        currentRenderTarget_ = target;
-        currentRenderTargetWidth_ = target->GetWidth();
-        currentRenderTargetHeight_ = target->GetHeight();
-        currentTargetDepthBits_ = target->HasRealDepthBuffer(true)
-            ? target->DepthBufferBitsEXT() : 0;
+        if (count > maxRenderTargets_)
+        {
+            throw System::NotSupportedException(
+                "RLGL: requested render-target count exceeds the live OpenGL MRT limit");
+        }
+
+        std::array<IRenderTargetRenderer*, 4> targets{};
+        std::array<RenderTargetResourceSnapshot, 4> snapshots{};
+        for (int slot = 0; slot < count; ++slot)
+        {
+            if (!renderTargets[slot].IsRenderTarget2D())
+                Unsupported("cube render-target faces", "RLGL-015");
+            targets[slot] = renderTargets[slot].GetRenderTarget2D();
+            if (targets[slot] == nullptr)
+                throw std::invalid_argument("RLGL: null RenderTarget2D binding");
+            snapshots[slot] =
+                GetRenderTargetResourceSnapshotForTesting(*targets[slot]);
+            if (snapshots[slot].width != renderTargets[slot].GetWidth() ||
+                snapshots[slot].height != renderTargets[slot].GetHeight() ||
+                snapshots[slot].multiSampleCount !=
+                    renderTargets[slot].GetAppliedMultiSampleCount())
+            {
+                throw std::invalid_argument(
+                    "RLGL: RenderTarget2D descriptor does not match native storage");
+            }
+            if (slot > 0 &&
+                (snapshots[slot].width != snapshots[0].width ||
+                 snapshots[slot].height != snapshots[0].height ||
+                 snapshots[slot].multiSampleCount != snapshots[0].multiSampleCount))
+            {
+                throw std::invalid_argument(
+                    "RLGL: MRT dimensions and applied sample counts must match");
+            }
+            for (int previous = 0; previous < slot; ++previous)
+            {
+                if (targets[previous] == targets[slot])
+                    throw std::invalid_argument(
+                        "RLGL: one RenderTarget2D cannot occupy multiple MRT slots");
+            }
+        }
+
+        if (count == 1)
+        {
+            if (currentRenderTargetCount_ != 1 || currentRenderTarget_ != targets[0])
+            {
+                FinalizeCurrentRenderTargets();
+                Bridge::DestroyMrtFramebuffer(mrtFramebuffer_);
+            }
+            targets[0]->BindAsRenderTarget();
+        }
+        else
+        {
+            std::array<Bridge::MrtAttachment, 4> attachments{};
+            for (int slot = 0; slot < count; ++slot)
+            {
+                attachments[slot] = {
+                    snapshots[slot].colorTexture,
+                    snapshots[slot].multisampleColorRenderbuffer,
+                    snapshots[slot].depthStencilRenderbuffer,
+                    snapshots[slot].depthFormat,
+                    snapshots[slot].multiSampleCount};
+            }
+
+            unsigned int candidate = Bridge::CreateMrtFramebuffer(
+                attachments.data(), count);
+            try
+            {
+                FinalizeCurrentRenderTargets();
+                Bridge::DestroyMrtFramebuffer(mrtFramebuffer_);
+                Bridge::BindFramebuffer(candidate);
+                mrtFramebuffer_ = candidate;
+                candidate = 0;
+            }
+            catch (...)
+            {
+                Bridge::DestroyMrtFramebuffer(candidate);
+                throw;
+            }
+        }
+
+        currentRenderTargets_ = targets;
+        currentRenderTargetCount_ = count;
+        currentRenderTarget_ = targets[0];
+        currentRenderTargetWidth_ = snapshots[0].width;
+        currentRenderTargetHeight_ = snapshots[0].height;
+        currentTargetDepthBits_ = snapshots[0].depthFormat != 0
+            ? targets[0]->DepthBufferBitsEXT() : 0;
         ApplyCurrentRasterizerState();
+    }
+
+    void RlglRenderer::FinalizeCurrentRenderTargets()
+    {
+        const auto targets = currentRenderTargets_;
+        const int count = currentRenderTargetCount_;
+        for (int slot = 0; slot < count; ++slot)
+        {
+            if (targets[slot] != nullptr) targets[slot]->UnbindAsRenderTarget();
+        }
+        currentRenderTargets_.fill(nullptr);
+        currentRenderTargetCount_ = 0;
+        currentRenderTarget_ = nullptr;
+        currentRenderTargetWidth_ = 0;
+        currentRenderTargetHeight_ = 0;
+        currentTargetDepthBits_ = depthBits_;
     }
 
     void RlglRenderer::ClearColorAndDepth(

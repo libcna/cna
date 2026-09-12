@@ -58,15 +58,17 @@ success.
 | DualTextureEffect | ✅ | Independent UV0/UV1 semantics and texture/sampler slots, doubled first-texture combine, null/default-white inputs, vertex color, diffuse/alpha, fog, missing-semantic diagnostics, and stock-effect state transitions passed `RLGL-035` |
 | SkinnedEffect | ✅ | 1/2/4 weighted influences, all 72 bones, Byte4/Vector4 indices, joint/world normal transforms, textures/materials, three-light/specular shading, vertex color, per-vertex/per-pixel selection, post-skin fog, malformed declarations, and state transitions passed `RLGL-037` |
 | `RenderTarget2D` (all eleven classic FNA target formats) | ✅ | Color, Rgba1010102, Rg32, Rgba64, Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, and HdrBlendable have exact single/MSAA storage, resolve, format-native CPU transfer/readback, mips, depth/stencil, switching, Preserve/Discard, and upright sampling evidence from `RLGL-039`/`041`/`042` |
+| Multiple render targets | ✅ | HiDef supports ordered sets of two through four `RenderTarget2D` objects through transactional rlgl-created FBOs and `rlActiveDrawBuffers`; indexed masks/Clear, slot-zero depth, mixed formats, MSAA resolve/mips, usage, transitions, and refusal safety passed `RLGL-040`. Reach correctly remains limited to one target |
 | Cube/custom effects and general 3D workloads | ❌ | These shapes remain explicit failures owned by `RLGL-036`/`RLGL-038`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
-| MRT, cube resources, instancing, queries | ❌ | Explicitly unavailable; their implementation and validation are tracked by `RLGL-040`, `RLGL-015`, and `RLGL-016` |
+| Cube resources, instancing, queries | ❌ | Explicitly unavailable; their implementation and validation are tracked by `RLGL-015` and `RLGL-016` |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
 
-`SupportsCapability(AnisotropicFiltering)` follows rlgl's live extension probe and measured ceiling;
-all other capability results remain false. Native GL support alone is not treated as a CNA
-implementation promise. The renderer opts in only after its complete path and observable behavior
-are tested.
+`SupportsCapability(AnisotropicFiltering)` follows rlgl's live extension probe and measured ceiling.
+`MultipleRenderTargets` additionally requires the current device profile's ceiling to exceed one,
+so it is false for Reach and true for a validated HiDef device with sufficient GL limits. Other
+capability results remain false. Native GL support alone is not treated as a CNA implementation
+promise; the renderer opts in only after its complete path and observable behavior are tested.
 
 `SkinnedEffect::VertexColorEnabled` is existing CNAEXT surface, not classic XNA 4.0. It works as a
 natural part of the same validated stock vertex path; no RLGL-specific public API was added.
@@ -103,7 +105,7 @@ cmake --build cmake-build-rlgl --parallel 3 --target \
       cna_test_rlgl_basiceffect_lighting cna_test_rlgl_dual_texture_effect \
       cna_test_rlgl_dual_texture_independent_uv cna_test_rlgl_skinned_effect \
       cna_test_rlgl_skinned_terms cna_test_rlgl_render_target \
-      cna_test_rlgl_render_target_formats \
+      cna_test_rlgl_render_target_formats cna_test_rlgl_mrt \
       cna_test_rlgl_render_target_orientation cna_test_rlgl_render_target_full \
       cna_test_rlgl_msaa_first_readback cna_test_rlgl_msaa_mip_readback
 ```
@@ -145,6 +147,8 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_render_target_formats
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_mrt
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_render_target_orientation
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_render_target_full
@@ -160,8 +164,8 @@ With `CNA_BUILD_TESTS=ON`, the executables are registered as `Rlgl_Smoke`, `Rlgl
 fixtures, plus fourteen SkinnedEffect fixtures. They are labelled `Rlgl` plus their focused
 graphics category, with the proven offscreen environment attached to each CTest entry. The
 RenderTarget2D fixtures cover focused resource/state behavior, all eleven exact classic formats,
-the unchanged EasyGL quadrant and OpenGL4 full-target oracles, and shared first-read/mipmap MSAA
-regression matrices.
+ordered two-through-four-target MRT behavior, the unchanged EasyGL quadrant and OpenGL4 full-target
+oracles, and shared first-read/mipmap MSAA regression matrices.
 
 ## Dependency and offline builds
 
