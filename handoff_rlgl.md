@@ -12,8 +12,8 @@ updated with evidence whenever a task changes state.
 - Repository: `/rv/data/development/github.com/libcna/cnarlgl`
 - Branch: `rlgl`, tracking `origin/rlgl`
 - Workstream starting commit: `1b3151f2f1b7b712cfd26637580bebbb2e3602e4`
-- Latest implementation commit: `b15c3223b09fef32caa95f05e568904e725498c2`
-  (`feat(RLGL-032): implement ordinary multi-stream input`)
+- Latest implementation commit: `f5cc00db06b5de45376b62701d3b67f2860f3f87`
+  (`feat(RLGL-016): implement stock effect instancing`)
 - Upstream remote: `origin` (`libcna/cna`)
 - Handoff date: 2026-09-12
 
@@ -67,7 +67,8 @@ llvmpipe. Exact evidence and counts live in `plans/plan_rlgl.md`.
 - all classic sampler modes across 16 slots, independent GL sampler objects, anisotropy, and reset;
 - complete classic blend, depth/stencil, rasterizer, cull, fill, color-mask, and depth-bias state;
 - fixed/dynamic vertex buffers and 16/32-bit index buffers, declarations, all primitive topologies,
-  and ordinary user/bound indexed/non-indexed routes with up to sixteen per-vertex streams;
+  ordinary user/bound indexed/non-indexed routes, and stock-effect hardware instancing with up to
+  sixteen independently bound per-vertex/per-instance streams;
 - CNA-owned SpriteBatch and SpriteFont scheduling, sorting, transforms, rotation/origin/flips,
   sampler/blend/scissor/viewport behavior, render-target orientation, and capacity flushing;
 - AlphaTestEffect, BasicEffect including lighting/fog, DualTextureEffect, EnvironmentMapEffect, and
@@ -77,41 +78,47 @@ llvmpipe. Exact evidence and counts live in `plans/plan_rlgl.md`.
 - optional classic compiled-Effect parsing/reflection/state, ordinary draws, 2D/cube sampling,
   render-target correction, and SpriteBatch composition.
 
-Do not infer final parity from this list. `GraphicsCapability::MultiStreamVertexInput` is now true,
-but the umbrella `ThreeD` capability remains false while instancing, queries, reset/loss,
-representative workloads, and final audits remain open.
+Do not infer final parity from this list. `GraphicsCapability::MultiStreamVertexInput` and
+`GraphicsCapability::Instancing` are true for the validated stock paths, but the umbrella `ThreeD`
+capability remains false while queries, reset/loss, representative workloads, and final audits
+remain open. Compiled-effect multi-stream and instanced routes remain explicitly refused by
+`RLGL-049`.
 
-## Latest completed slice: RLGL-032
+## Latest completed slice: RLGL-016
 
-Commit `b15c3223b` completed ordinary classic-XNA multi-stream vertex input:
+Commit `f5cc00db0` completed classic stock-effect hardware instancing:
 
-- `RlglPrimitiveRenderer` resolves every stock semantic across CNA's combined declaration, maps the
-  combined offset back to its owning `GpuVertexStreamBinding`, and installs that stream's native VBO,
-  stride, declaration offset, and residual `VertexBufferBinding.VertexOffset`.
-- Draw-level `firstVertex` or `baseVertex` remains common to every per-vertex stream, so independent
-  stream offsets are added exactly once while `startIndex`, 16/32-bit indices, and topology remain
-  unchanged. No CPU concatenation or interleaving was introduced.
-- The route accepts two through sixteen per-vertex streams, including non-contiguous public slots,
-  and validates binding shape, declaration/stride agreement, native resource capacity, and required
-  effect semantics before submission. Per-instance frequencies still fail under RLGL-016.
-- Every primitive submission disables all sixteen attributes and resets their divisors before
-  rebuilding the exact attribute/VBO association. Test snapshots capture each location's native
-  buffer, stride, and byte offset.
-- CNA's existing FNA-compatible semantic-composition behavior is preserved: a completely duplicate
-  later stream is dropped, while a partially colliding stream throws before native submission.
-- `GraphicsCapability::MultiStreamVertexInput` is now true. `GraphicsCapability::ThreeD` and
-  `GraphicsCapability::Instancing` remain false.
-- The existing shared split-stream parity sample is now an RLGL executable and CTest target; no
-  parallel renderer-specific application was invented.
+- `RlglRenderer::DrawInstancedPrimitivesEx` is a true indexed instanced route, not a CPU loop. The
+  existing rlgl wrapper handles zero-offset 16-bit triangle lists; a narrow call through rlgl's
+  already-loaded GL 3.3 dispatch preserves every other topology, 32-bit indices, `startIndex`, and
+  `baseVertex`.
+- The stock GLSL program reserves locations 12-15 for four positional `Vector4` matrix columns. The
+  instance transform runs after skinning and before the effect World matrix, matching EasyGL for
+  position, normal, lighting, fog, environment mapping, and effect-World composition.
+- Each per-vertex and per-instance binding keeps its own native VBO, declaration, stride, element
+  offset, public slot, `VertexOffset`, and exact `InstanceFrequency` divisor. Matrix columns may be
+  split across several instance streams. No CPU concatenation, upload, or per-instance draw loop was
+  introduced.
+- The public `firstInstance == 0` classic path is supported. CNAEXT base-instance remains
+  unadvertised, while compiled-effect multi-stream/divisor execution remains a named `RLGL-049`
+  refusal.
+- Attribute shapes, locations, buffers, offsets, and divisors are validated before native state
+  mutation. Every stock draw rebuilds the exact VAO state and resets nonzero divisors after drawing.
+- `GraphicsCapability::Instancing` is now true. `GraphicsCapability::ThreeD` remains false pending
+  the representative workload and final capability audits.
+- Existing shared instancing tests and `parity_instanced_draw.cpp` were reused. The renderer-local
+  primitive fixture adds only the missing native buffer/offset/divisor snapshot.
 
 Validation on SDL3-offscreen/Mesa-llvmpipe:
 
-- 21/21 `OrdinaryDrawMultiStreamTest.*` shared tests passed with no skips, including independent
-  offsets, non-indexed and 16/32-bit indexed start/base handling, secondary-range rejection, dynamic
-  updates, two/three streams, public slot 15, resource recreation, and repeated single/multi draws;
-- `cna_test_rlgl_multi_stream` passed 6/6 pixel checks and `cna_test_rlgl_primitive` passed 27/27
-  focused checks, including semantic-collision recovery and exact per-location VBO state;
-- 22 related renderer/compiled-effect tests remained green after the capability was enabled;
+- 70/72 tests passed across `InstancedDrawMultiStreamTest.*`, `InstancedDrawRangeTest.*`,
+  `InstancedVertexColorTest.*`, `InstancedDiffuseColorTest.*`, and
+  `OrdinaryDrawMultiStreamTest.*`; the only two skips are explicitly EasyGL- and D3D-specific;
+- the matrix covers every topology, both index widths, start/base offsets, multiple per-vertex and
+  per-instance streams, frequencies, dynamic replacement, resource lifetime, stock-effect World
+  composition, color/diffuse behavior, and ordinary/instanced state transitions;
+- `cna_test_rlgl_instanced_parity` passed 6/6 pixel checks and `cna_test_rlgl_primitive` passed 28/28
+  focused gates, including exact native buffers, byte offsets, divisors, and rlgl wrapper selection;
 - both focused executables passed rebuilt AddressSanitizer runs with `detect_leaks=0`;
 - complete compiled-effects-on and option-off graphs built with `-j 3`;
 - renderer identity, combination, target/runtime discipline, 46-family descriptor, CNAEXT Doxygen,
@@ -137,12 +144,14 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
 
 ```bash
 CCACHE_DIR=/tmp/cna-ccache cmake --build /tmp/cna-rlgl-tests \
-  --target CnaTests CnaRendererTests cna_test_rlgl_multi_stream cna_test_rlgl_primitive -j 3
+  --target CnaTests CnaRendererTests cna_test_rlgl_multi_stream \
+  cna_test_rlgl_instanced_parity cna_test_rlgl_primitive -j 3
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   /tmp/cna-rlgl-tests/CnaTests \
-  --gtest_filter='OrdinaryDrawMultiStreamTest.*' --gtest_color=no --gtest_brief=1
+  --gtest_filter='InstancedDrawMultiStreamTest.*:InstancedDrawRangeTest.*:InstancedVertexColorTest.*:InstancedDiffuseColorTest.*:OrdinaryDrawMultiStreamTest.*' \
+  --gtest_color=no --gtest_brief=1
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
-  ctest --test-dir /tmp/cna-rlgl-tests -R 'Rlgl_(Primitive|MultiStream)$' --output-on-failure
+  ctest --test-dir /tmp/cna-rlgl-tests -R 'Rlgl_(Primitive|InstancedParity)$' --output-on-failure
 ```
 
 `/tmp/cna-rlgl-ci-check-008` is the option-off build used to prove guarded source compatibility.
@@ -151,11 +160,11 @@ and compiled effects enabled:
 
 ```bash
 CCACHE_DIR=/tmp/cna-ccache cmake --build /tmp/cna-rlgl-asan \
-  --target cna_test_rlgl_primitive cna_test_rlgl_multi_stream -j 3
+  --target cna_test_rlgl_primitive cna_test_rlgl_instanced_parity -j 3
 ASAN_OPTIONS=detect_leaks=0 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   /tmp/cna-rlgl-asan/cna_test_rlgl_primitive
 ASAN_OPTIONS=detect_leaks=0 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
-  /tmp/cna-rlgl-asan/cna_test_rlgl_multi_stream
+  /tmp/cna-rlgl-asan/cna_test_rlgl_instanced_parity
 ```
 
 LeakSanitizer is disabled for Mesa processes because this environment's ptrace restrictions make it
@@ -163,58 +172,57 @@ unreliable. AddressSanitizer itself passes. The sandbox cannot write CNA's confi
 under `/rv`; use `CCACHE_DIR=/tmp/cna-ccache` (or disable ccache) when needed. The locally available
 SDL3 supports the offscreen GL driver but not the expected X11 route.
 
-## Next recommended task: RLGL-016 instancing slice
+## Next recommended task: RLGL-052 occlusion queries
 
-The next unblocked classic-XNA work is the instancing half of RLGL-016. Keep the task in progress until
-its separate occlusion-query half is also validated, or first split the ledger into two stable concrete
-tasks if the audit proves that produces cleaner one-task commits. Do not start RLGL-049's compiled
-instancing route before the global stock route works, and do not enable `GraphicsCapability::Instancing`
-until the public pixel/range/state suite passes.
+The next unblocked classic-XNA resource gap is `RLGL-052`. Standalone rlgl 6.0 has no public query
+object wrapper, but desktop GL 3.3 core provides exact `GL_SAMPLES_PASSED` query objects through the
+same loader already used for narrowly measured rlgl gaps. Keep the bridge renderer-private and do not
+add or alter public XNA/CNAEXT surface.
 
 Start with these sources:
 
-- `modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp`, especially
-  `GpuVertexStreamBinding`, `FirstInstanceStream`, `PerVertexStreamCount`,
-  `MapCombinedOffsetToStream`, and the default `DrawInstancedPrimitivesEx` refusal;
-- `modules/graphics/src/Xna/GraphicsDevice.cpp` around `DrawInstancedPrimitivesCore` and
-  `ValidateInstanceStreamRanges`; shared code already computes exact public ranges and populates
-  `instanceCount`, `firstInstance`, `baseVertex`, `startIndex`, offsets, and frequencies;
-- `modules/renderers/rlgl/src/RlglPrimitiveRenderer.cpp`; factor the proven RLGL-032 per-vertex mapping
-  rather than forking it, but keep ordinary single-stream behavior byte-identical;
-- `modules/renderers/rlgl/src/RlglBridge.*`; divisors are already reset at all sixteen locations, while
-  the draw bridge needs exact indexed-instanced submission for arbitrary topology, both index widths,
-  nonzero index offsets, and base vertex;
-- EasyGL's `DrawInstancedPrimitivesEx`, `PlaceInstanceStreams`, declaration configuration, and reverse
-  attribute cleanup in `modules/renderers/easygl/src/EasyGLRenderer.cpp`;
-- `modules/graphics/tests/Microsoft/Xna/Framework/Graphics/InstancedDrawMultiStreamTests.cpp`, including
-  the classic single-instance-stream tests and the mixed multi-stream oracle. Read the file's capability
-  and renderer-oracle gates before adding RLGL; enabling the capability activates a broad matrix.
+- `IOcclusionQueryRenderer` and the default `CreateOcclusionQuery()` in
+  `modules/graphics/include/CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp`;
+- the thin XNA owner in `modules/graphics/src/Xna/OcclusionQuery.cpp`; it already delegates
+  `Begin`, `End`, `IsComplete`, `PixelCount`, and existing CNAEXT precision reporting;
+- EasyGL's `EasyGLOcclusionQueryRenderer` and `CreateOcclusionQuery()` in
+  `modules/renderers/easygl/src/EasyGLRenderer.cpp`, especially desktop
+  `GL_SAMPLES_PASSED`, nonblocking availability, result-before-ready behavior, and context-loss
+  handling;
+- the already-loaded private GL declarations and lifecycle boundaries in
+  `modules/renderers/rlgl/src/RlglBridge.*`, plus resource ownership patterns in
+  `modules/renderers/rlgl/src/RlglResources.*` and `RlglRenderer`;
+- `modules/graphics/tests/Microsoft/Xna/Framework/Graphics/OcclusionQueryPixelCountPrecisionTests.cpp`
+  and `GraphicsDeviceCapabilityTests.cpp`;
+- the existing shared workloads `modules/graphics/examples/occlusion_query_test.cpp` and EasyGL's
+  visible/occluded-quad query examples. Reuse them as RLGL targets instead of cloning their logic.
 
-Required behavior for the instancing slice:
+Required behavior for RLGL-052:
 
-1. Implement `RlglRenderer::DrawInstancedPrimitivesEx` as a real indexed instanced route; do not loop
-   instances on the CPU and do not silently fall back to an ordinary draw.
-2. Reuse the RLGL-032 mapping for every per-vertex stream. Add each per-instance declaration at stable,
-   non-colliding attribute locations with its own VBO, stride, declaration offset, `vertexOffset`, and
-   exact public `instanceFrequency` divisor.
-3. Apply `baseVertex` only to per-vertex streams. Apply `firstInstance` only to per-instance record
-   selection if the route supports the existing CNAEXT base-instance call naturally; classic XNA
-   `firstInstance == 0` is the parity gate and must remain correct.
-4. Preserve `startIndex`, both index widths, every primitive topology, and exact consumption arithmetic:
-   `1 + (instanceCount - 1) / instanceFrequency` records from each instance stream.
-5. Validate declarations, location count, resources, capacities, offsets, and frequencies before native
-   state changes. A missing effect semantic or malformed layout must throw by name, never sample another
-   stream or produce a fake success.
-6. Deterministically clear all enabled attributes and divisors after success and failure. Run sequences
-   that alternate ordinary single-stream, ordinary multi-stream, instanced, SpriteBatch, stock effects,
-   and compiled effects to detect leaked VAO/VBO/EBO/program state.
-7. Only then advertise `GraphicsCapability::Instancing`, add RLGL to the appropriate shared oracle, add
-   one focused executable if existing samples do not expose exact native state, and record all evidence
-   in `plans/plan_rlgl.md`.
+1. Own a real GL query name whose creation/destruction occurs with the CNA context current. Return a
+   real renderer object from `CreateOcclusionQuery()` and only then advertise
+   `GraphicsCapability::OcclusionQuery`.
+2. Use `GL_SAMPLES_PASSED` on the selected desktop GL 3.3 profile so `PixelCount()` is a precise
+   tally and `PixelCountIsPreciseEXT()` remains true. Do not replace the count with
+   `GL_ANY_SAMPLES_PASSED` when exact desktop support is present.
+3. `IsComplete()` must use result availability without blocking. `PixelCount()` must return zero
+   until complete, then the completed count, with overflow behavior measured against the existing
+   renderer contract rather than guessed.
+4. Preserve FNA/CNA's existing public call-sequence behavior. The XNA layer deliberately adds no
+   Begin/End guards, and the shared integration test exercises End-before-Begin, double-Begin, and
+   double-End. Measure EasyGL/native GL behavior and keep diagnostics truthful; do not invent a new
+   public state machine.
+5. Validate zero-draw, visible, occluded, repeated, overlapping-resource, early destruction, device
+   shutdown, and subsequent normal drawing. Check that query state never desynchronizes rlgl's
+   program/VAO/framebuffer/state caches.
+6. Add focused native-state instrumentation only if the shared pixel/result tests cannot prove a
+   required lifetime or target fact. Run the affected tests normally and under AddressSanitizer,
+   rebuild both compiled-effects-on and option-off graphs with `-j 3`, update the plan/docs, and make
+   one `RLGL-052` commit.
 
-After global instancing is complete, either finish RLGL-016 with a real occlusion-query resource or use
-the already-recorded task split. RLGL-049 can then consume RLGL-032/RLGL-016 for compiled-effect
-multi-stream/instancing and audit vertex-stage samplers plus the remaining compiled matrix.
+After RLGL-052, proceed to RLGL-017 lifecycle/reset hardening. RLGL-049 is also unblocked, but its
+compiled-effect multi-stream/instancing and vertex-stage sampler work should not delay classic query
+and device-lifecycle parity.
 
 ## State-synchronization warning
 
@@ -232,8 +240,7 @@ multi-context safe.
 The exact task states and dependency graph are in `plans/plan_rlgl.md`. Important open work is:
 
 - RLGL-010/RLGL-012/RLGL-038: umbrellas whose completed stock/compiled slices are recorded separately;
-- RLGL-016: next task, instancing and occlusion queries; split coherently if the initial audit proves
-  two stable tasks are cleaner;
+- RLGL-052: next classic task, real desktop GL occlusion-query resource and exact sample count;
 - RLGL-049: compiled multi-stream/instancing, vertex samplers, and remaining conformance after its
   global prerequisites;
 - RLGL-050: CNAEXT source `ShaderEffect`, deliberately unable to delay classic parity;
@@ -251,6 +258,7 @@ its public behavior and validation evidence are recorded, not when the code mere
 ## Recent milestone commits
 
 ```text
+f5cc00db0 feat(RLGL-016): implement stock effect instancing
 b15c3223b feat(RLGL-032): implement ordinary multi-stream input
 87cc6f317 feat(RLGL-051): execute compiled SpriteBatch effects
 87a90ee31 feat(RLGL-048): execute compiled effect draws
