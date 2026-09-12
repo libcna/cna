@@ -207,6 +207,12 @@ namespace CNA::TestSupport
         TextureLuminance,
         /** @brief Emit ps_1_4 arithmetic `BEM`. */
         Arithmetic,
+        /** @brief Invalidly read a `TEXBEM` source through ordinary arithmetic afterward. */
+        TextureReadSourceLater,
+        /** @brief Invalidly read a `TEXBEML` source through ordinary arithmetic afterward. */
+        TextureLuminanceReadSourceLater,
+        /** @brief Legally read a consumed source through another bump-environment instruction. */
+        TextureReadSourceByBumpLater,
     };
 
     /** @brief Legacy pixel-depth instruction emitted by the synthetic pixel shader. */
@@ -3015,15 +3021,34 @@ namespace CNA::TestSupport
         }
         else if (legacyBumpEnvironment != SyntheticLegacyBumpEnvironment::None)
         {
+            const bool usesTexbem =
+                legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Texture ||
+                legacyBumpEnvironment ==
+                    SyntheticLegacyBumpEnvironment::TextureReadSourceLater ||
+                legacyBumpEnvironment ==
+                    SyntheticLegacyBumpEnvironment::TextureReadSourceByBumpLater;
             AppendUInt32(shader,
-                         legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Texture
-                             ? 0x00000043u
-                             : 0x00000044u); // texbem/texbeml t1, t0_bx2
+                         usesTexbem ? 0x00000043u : 0x00000044u); // texbem/l t1, t0_bx2
             AppendUInt32(shader, destination(regTexture, samplerRegister, 0xFu));
             AppendUInt32(shader, source(regTexture, 0, swizzleIdentity, 4u));
-            AppendUInt32(shader, 0x00000001u); // mov r0, t1
+            const bool readsSourceByBump =
+                legacyBumpEnvironment ==
+                    SyntheticLegacyBumpEnvironment::TextureReadSourceByBumpLater;
+            if (readsSourceByBump)
+            {
+                AppendUInt32(shader, 0x00000044u); // texbeml t2, t0_bx2
+                AppendUInt32(shader, destination(regTexture, 2, 0xFu));
+                AppendUInt32(shader, source(regTexture, 0, swizzleIdentity, 4u));
+            }
+            const bool readsConsumedSource =
+                legacyBumpEnvironment ==
+                    SyntheticLegacyBumpEnvironment::TextureReadSourceLater ||
+                legacyBumpEnvironment ==
+                    SyntheticLegacyBumpEnvironment::TextureLuminanceReadSourceLater;
+            AppendUInt32(shader, 0x00000001u); // mov r0, t1 or invalidly t0
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
-            AppendUInt32(shader, source(regTexture, samplerRegister));
+            AppendUInt32(shader, source(
+                regTexture, readsConsumedSource ? 0u : readsSourceByBump ? 2u : samplerRegister));
         }
         else if (legacyDependentTexture != SyntheticLegacyDependentTexture::None)
         {

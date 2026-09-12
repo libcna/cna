@@ -2893,6 +2893,48 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyBumpEnvironmentOperations)
     CNA::TestSupport::RunCompiledEffectLegacyBumpEnvironmentContract(device);
 }
 
+class EasyGLCompiledEffectInvalidTexbemSourceLifetimeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticLegacyBumpEnvironment>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidTexbemSourceLifetimeTest, RejectsOrdinaryLaterRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.samplerRegister = 1;
+    options.pixelShaderLegacyBumpEnvironment = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTexbemSourceLifetime,
+    EasyGLCompiledEffectInvalidTexbemSourceLifetimeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticLegacyBumpEnvironment::TextureReadSourceLater,
+        CNA::TestSupport::SyntheticLegacyBumpEnvironment::
+            TextureLuminanceReadSourceLater));
+
+TEST(EasyGLCompiledEffectTexbemSourceLifetimeTest, AcceptsAnotherBumpEnvironmentRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.samplerRegister = 1;
+    options.pixelShaderLegacyBumpEnvironment =
+        CNA::TestSupport::SyntheticLegacyBumpEnvironment::TextureReadSourceByBumpLater;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedMultiStreamDrawContract)
 {
     GraphicsDevice device;

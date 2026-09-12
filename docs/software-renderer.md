@@ -350,7 +350,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   point-filtered red-base/blue-mip discriminator selects red before the repair and blue on EasyGL.
   Projective loads now enter 2x2 evaluation and feed the divided coordinates into Software's
   existing convergent derivative pass; both `ps_2_0` and `ps_3_0` controls select blue. The
-  dependency series still contains 77 patches because this repair is renderer-local.
+  next explicit parser FIXME exposed SOFTWARE-453. Microsoft rejects ordinary reads after a
+  texture register has supplied `TEXBEM` or `TEXBEML`, while permitting the consumed register as
+  another bump-environment source. Both CNA paths accepted the invalid form. Managed common
+  validation now tracks that lifetime; two rejection probes and one chained-bump control pass in
+  Software and EasyGL. The dependency series now contains 78 patches.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

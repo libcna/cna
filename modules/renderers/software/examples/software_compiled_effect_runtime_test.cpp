@@ -5800,6 +5800,62 @@ namespace
               "compiled ps_1_4 BEM ignored the destination-stage matrix");
     }
 
+    void CheckCompiledTexbemSourceLifetimeValidation(SoftwareRenderer& renderer)
+    {
+        using Operation = CNA::TestSupport::SyntheticLegacyBumpEnvironment;
+        constexpr std::array invalidOperations{
+            Operation::TextureReadSourceLater,
+            Operation::TextureLuminanceReadSourceLater,
+        };
+        std::string acceptedInvalidOperations;
+        for (const Operation operation : invalidOperations)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.samplerRegister = 1;
+            options.pixelShaderLegacyBumpEnvironment = operation;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidOperations.empty()) acceptedInvalidOperations += ", ";
+                acceptedInvalidOperations += std::to_string(static_cast<int>(operation));
+            }
+        }
+        Check(acceptedInvalidOperations.empty(),
+              "compiled Effect parser accepted a later ordinary read of a TEXBEM/L source: " +
+                  acceptedInvalidOperations);
+
+        CNA::TestSupport::SyntheticEffectOptions validOptions;
+        validOptions.includeDrawableProgram = true;
+        validOptions.includeSampler = true;
+        validOptions.samplerRegister = 1;
+        validOptions.pixelShaderLegacyBumpEnvironment =
+            Operation::TextureReadSourceByBumpLater;
+        const auto validBytes = CNA::TestSupport::BuildSyntheticEffect(validOptions);
+        bool accepted = true;
+        try
+        {
+            static_cast<void>(
+                renderer.CreateCompiledEffect(validBytes.data(), validBytes.size()));
+        }
+        catch (const std::runtime_error&)
+        {
+            accepted = false;
+        }
+        Check(accepted,
+              "compiled Effect parser rejected a legal later TEXBEM/L source read");
+    }
+
     void CheckCompiledVertexSamplerRasterization()
     {
         namespace Fx = CNA::TestSupport::EffectFormat;
@@ -6957,6 +7013,7 @@ int main()
         CheckCompiledLegacyTextureRemap();
         CheckCompiledLegacyDependentTextures();
         CheckCompiledLegacyBumpEnvironment();
+        CheckCompiledTexbemSourceLifetimeValidation(renderer);
         CheckCompiledVertexSamplerRasterization();
         CheckCompiledVertexSamplerDimensions();
         CheckCompiledSamplerRasterization(renderer);
