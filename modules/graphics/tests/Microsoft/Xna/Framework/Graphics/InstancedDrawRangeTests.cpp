@@ -134,7 +134,7 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 [[nodiscard]] inline bool InstancedBindingOffsetOracle()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                           DirectX11, DirectX12, Vulkan, Bgfx, WebGPU);
+                           DirectX11, DirectX12, Vulkan, Bgfx, WebGPU, Rlgl);
 }
 
 namespace
@@ -660,16 +660,13 @@ namespace
         // for the state-setup calls that follow it, which only run once SetUp() has already let
         // the test proceed.
         //
-        // Hardware instancing is this whole file's subject and needs BOTH a 3D pipeline and an
-        // instancing path, so both capabilities are gated: a renderer with no 3D pipeline at all
-        // (e.g. OPENVG) and a renderer whose profile reports GraphicsCapability::Instancing =
+        // Hardware instancing is this whole file's subject, so its capability is gated. A
+        // renderer whose profile reports GraphicsCapability::Instancing =
         // false (e.g. OPENGLES2 -- core OpenGL ES 2.0 has no glDrawElementsInstanced/
         // glVertexAttribDivisor, see docs/opengles2-renderer.md) each skip every leg here up
         // front.
         void SetUp() override
         {
-            if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
             if (!device.SupportsCapability(GraphicsCapability::Instancing))
                 GTEST_SKIP() << "Renderer reports GraphicsCapability::Instancing = false: hardware "
                                 "instancing is unavailable on this renderer profile";
@@ -677,8 +674,6 @@ namespace
 
         void RequireInstancedRendering()
         {
-            if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);

@@ -636,6 +636,24 @@ namespace CNA::Internal::Renderers::Rlgl
             const GpuDrawParams& params) override;
 
         /**
+         * @brief Draws indexed stock-effect geometry using per-instance vertex streams.
+         * @param vb Primary per-vertex buffer.
+         * @param ib Index buffer.
+         * @param world Effect world transform.
+         * @param view Effect view transform.
+         * @param projection Effect projection transform.
+         * @param primitive Primitive topology.
+         * @param primitiveCount Number of primitives per instance.
+         * @param instanceCount Number of instances.
+         * @param params Effect values, stream bindings, and indexed draw range.
+         */
+        void DrawInstancedPrimitivesEx(
+            const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, int primitiveCount, int instanceCount,
+            const GpuDrawParams& params) override;
+
+        /**
          * @brief Applies a physical GL viewport and depth range.
          *
          * @param x Left edge in top-left-origin drawable coordinates.

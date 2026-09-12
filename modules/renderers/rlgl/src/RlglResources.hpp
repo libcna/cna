@@ -190,6 +190,7 @@ namespace CNA::Internal::Renderers::Rlgl
         bool normalized = false;
         int stride = 0;
         int offset = 0;
+        int divisor = 0;
     };
 
     /**

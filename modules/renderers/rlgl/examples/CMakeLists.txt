@@ -157,6 +157,13 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_multi_stream PRIVATE SDL3::SDL3main)
     endif()
 
+    add_executable(cna_test_rlgl_instanced_parity
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_instanced_draw.cpp")
+    target_link_libraries(cna_test_rlgl_instanced_parity PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_instanced_parity PRIVATE SDL3::SDL3main)
+    endif()
+
     add_executable(cna_test_rlgl_effect rlgl_effect_test.cpp)
     target_link_libraries(cna_test_rlgl_effect PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
     if(TARGET SDL3::SDL3main)
@@ -466,6 +473,11 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             TIMEOUT 60 LABELS "Graphics3D;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_MultiStream COMMAND cna_test_rlgl_multi_stream
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_InstancedParity
+            COMMAND cna_test_rlgl_instanced_parity
             TIMEOUT 60 LABELS "Graphics3D;GraphicsParity;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_Effect COMMAND cna_test_rlgl_effect

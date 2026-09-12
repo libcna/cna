@@ -182,6 +182,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int lightingEnabledLocation = -1;
         int preferPerPixelLightingLocation = -1;
         int skinnedLocation = -1;
+        int instancedLocation = -1;
         int boneRowsLocation = -1;
         int weightsPerVertexLocation = -1;
         int ambientColorLocation = -1;
@@ -221,12 +222,14 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         std::array<unsigned int, 16> attributeBuffers{};
         std::array<int, 16> attributeStrides{};
         std::array<int, 16> attributeOffsets{};
+        std::array<int, 16> attributeDivisors{};
         int primitiveMode = 0;
         int attributeCount = 0;
         int elementCount = 0;
         int firstVertex = 0;
         int startIndex = 0;
         int baseVertex = 0;
+        int instanceCount = 1;
         int indexType = 0;
         unsigned int texture = 0;
         unsigned int texture1 = 0;
@@ -235,6 +238,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         bool dualTexture = false;
         bool environmentMapping = false;
         bool skinned = false;
+        bool instanced = false;
         bool usedRlglDrawWrapper = false;
     };
 

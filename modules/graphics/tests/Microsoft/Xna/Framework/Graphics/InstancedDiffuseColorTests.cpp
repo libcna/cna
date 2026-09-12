@@ -139,7 +139,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool InstancedDiffuse()
 {
     return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU,
-                           Vulkan, DirectX9, DirectX11, DirectX12, SdlGpu);
+                           Vulkan, DirectX9, DirectX11, DirectX12, SdlGpu, Rlgl);
 }
 
 // The renderers whose instanced route this file has MEASURED on a GPU-backed display. D3D11 and
@@ -153,7 +153,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool InstancedDiffuseMeasured()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU,
-                           DirectX11, DirectX12, SdlGpu);
+                           DirectX11, DirectX12, SdlGpu, Rlgl);
 }
 
 
@@ -654,8 +654,6 @@ protected:
 
     void RequireInstancedRendering()
     {
-        if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-            GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);

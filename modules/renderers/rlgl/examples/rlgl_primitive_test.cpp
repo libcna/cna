@@ -574,6 +574,75 @@ protected:
                   multiStreamCall.attributeOffsets[0] == 0 &&
                   multiStreamCall.attributeOffsets[1] == 0,
               "a rejected partial collision leaves exact per-stream VBO state recoverable");
+
+        struct InstanceColumns012
+        {
+            float values[12];
+        };
+        struct InstanceColumn3
+        {
+            float values[4];
+        };
+        const VertexDeclaration instanceColumns012Declaration(
+            48, {{0, VertexElementFormat::Vector4, VertexElementUsage::TextureCoordinate, 1},
+                 {16, VertexElementFormat::Vector4,
+                  VertexElementUsage::TextureCoordinate, 2},
+                 {32, VertexElementFormat::Vector4,
+                  VertexElementUsage::TextureCoordinate, 3}});
+        const VertexDeclaration instanceColumn3Declaration(
+            16, {{0, VertexElementFormat::Vector4,
+                  VertexElementUsage::TextureCoordinate, 4}});
+        const InstanceColumns012 zeroColumns012{{
+            0.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 0.0f}};
+        const InstanceColumns012 identityColumns012{{
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f}};
+        const InstanceColumn3 zeroColumn3{{0.0f, 0.0f, 0.0f, 0.0f}};
+        const InstanceColumn3 identityColumn3{{0.0f, 0.0f, 0.0f, 1.0f}};
+        const std::array<InstanceColumns012, 2> columns012{{
+            zeroColumns012, identityColumns012}};
+        const std::array<InstanceColumn3, 2> column3{{zeroColumn3, identityColumn3}};
+        VertexBuffer instanceColumns012(
+            device, instanceColumns012Declaration, 2, BufferUsage::None);
+        instanceColumns012.SetDataRaw(
+            columns012.data(), 2, sizeof(InstanceColumns012));
+        VertexBuffer instanceColumn3(
+            device, instanceColumn3Declaration, 2, BufferUsage::None);
+        instanceColumn3.SetDataRaw(column3.data(), 2, sizeof(InstanceColumn3));
+        IndexBuffer instanceIndex(
+            device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+        const std::array<std::uint16_t, 3> instanceIndices{{0, 1, 2}};
+        instanceIndex.SetData(instanceIndices.data(), 3);
+
+        effect.setTextureEnabledProperty(false);
+        effect.setVertexColorEnabledProperty(true);
+        effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+        device.SetVertexBuffers({
+            VertexBufferBinding(&publicPosition, 0, 0),
+            VertexBufferBinding(&publicColor, 0, 0),
+            VertexBufferBinding(&instanceColumns012, 1, 2),
+            VertexBufferBinding(&instanceColumn3, 1, 2)});
+        device.SetIndexBuffer(&instanceIndex);
+        clear();
+        device.DrawInstancedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, 3, 0, 1, 1);
+        const auto instancedCall = Bridge::GetPrimitiveDrawSnapshotForTesting();
+        Check(IsColor(read(kWidth / 2, kHeight / 2), Color(255, 128, 0, 255)) &&
+                  instancedCall.instanced && instancedCall.indexed &&
+                  instancedCall.instanceCount == 1 && instancedCall.attributeCount == 6 &&
+                  instancedCall.attributeBuffers[12] ==
+                      Rlgl::GetNativeBufferId(instanceColumns012.GetRenderer()) &&
+                  instancedCall.attributeBuffers[15] ==
+                      Rlgl::GetNativeBufferId(instanceColumn3.GetRenderer()) &&
+                  instancedCall.attributeOffsets[12] == 48 &&
+                  instancedCall.attributeOffsets[15] == 16 &&
+                  instancedCall.attributeDivisors[12] == 2 &&
+                  instancedCall.attributeDivisors[15] == 2 &&
+                  instancedCall.usedRlglDrawWrapper,
+              "split instance streams preserve their own offsets, divisors, and rlgl draw path");
     }
 
 private:

@@ -1200,6 +1200,10 @@ layout(location = 3) in vec3 vertexNormal;
 layout(location = 4) in vec2 vertexTexCoord1;
 layout(location = 5) in vec4 vertexBoneWeights;
 layout(location = 6) in vec4 vertexBoneIndices;
+layout(location = 12) in vec4 cnaInstanceCol0;
+layout(location = 13) in vec4 cnaInstanceCol1;
+layout(location = 14) in vec4 cnaInstanceCol2;
+layout(location = 15) in vec4 cnaInstanceCol3;
 
 uniform mat4 worldViewProjection;
 uniform mat4 world;
@@ -1229,6 +1233,7 @@ uniform float environmentMapAmount;
 uniform float fresnelEnabled;
 uniform float fresnelFactor;
 uniform float skinned;
+uniform float instanced;
 uniform vec4 boneRows[216];
 uniform int weightsPerVertex;
 
@@ -1328,16 +1333,25 @@ void main()
         effectNormal = skinNormalLength > 1e-6
             ? skinNormal / skinNormalLength : vertexNormal;
     }
-    gl_Position = worldViewProjection * vec4(effectPosition, 1.0);
+    vec3 instancePosition = effectPosition;
+    vec3 instanceNormal = effectNormal;
+    if (instanced > 0.5)
+    {
+        mat4 instanceMatrix = mat4(
+            cnaInstanceCol0, cnaInstanceCol1, cnaInstanceCol2, cnaInstanceCol3);
+        instancePosition = (instanceMatrix * vec4(effectPosition, 1.0)).xyz;
+        instanceNormal = mat3(instanceMatrix) * effectNormal;
+    }
+    gl_Position = worldViewProjection * vec4(instancePosition, 1.0);
     gl_PointSize = 1.0;
     fragmentVertexColor = (vertexColorEnabled > 0.5) ? vertexColor : vec4(1.0);
     fragmentTexCoord = vertexTexCoord;
     fragmentTexCoord1 = vertexTexCoord1;
     fragmentFogFactor = 1.0 - clamp(
-        dot(vec4(effectPosition, 1.0), fogVector), 0.0, 1.0);
-    fragmentWorldPosition = (world * vec4(effectPosition, 1.0)).xyz;
+        dot(vec4(instancePosition, 1.0), fogVector), 0.0, 1.0);
+    fragmentWorldPosition = (world * vec4(instancePosition, 1.0)).xyz;
     mat3 normalMatrix = mat3(normalMatrix0, normalMatrix1, normalMatrix2);
-    fragmentNormal = normalMatrix * effectNormal;
+    fragmentNormal = normalMatrix * instanceNormal;
     fragmentEyeDirection = normalize(eyePosition - fragmentWorldPosition);
     float viewAngle = dot(fragmentEyeDirection, normalize(fragmentNormal));
     fragmentEnvironmentBlend = clamp((fresnelEnabled > 0.5)
@@ -1541,6 +1555,8 @@ void main()
                 rlGetLocationUniform(pipeline.program, "preferPerPixelLighting");
             pipeline.skinnedLocation =
                 rlGetLocationUniform(pipeline.program, "skinned");
+            pipeline.instancedLocation =
+                rlGetLocationUniform(pipeline.program, "instanced");
             pipeline.boneRowsLocation =
                 rlGetLocationUniform(pipeline.program, "boneRows[0]");
             pipeline.weightsPerVertexLocation =
@@ -1584,7 +1600,8 @@ void main()
                 pipeline.alphaTestLocation < 0 || pipeline.fogVectorLocation < 0 ||
                 pipeline.fogColorLocation < 0 || pipeline.lightingEnabledLocation < 0 ||
                 pipeline.preferPerPixelLightingLocation < 0 ||
-                pipeline.skinnedLocation < 0 || pipeline.boneRowsLocation < 0 ||
+                pipeline.skinnedLocation < 0 || pipeline.instancedLocation < 0 ||
+                pipeline.boneRowsLocation < 0 ||
                 pipeline.weightsPerVertexLocation < 0 ||
                 pipeline.ambientColorLocation < 0 || pipeline.emissiveColorLocation < 0 ||
                 pipeline.eyePositionLocation < 0 ||
@@ -1859,6 +1876,26 @@ void main()
         {
             throw std::invalid_argument("RLGL: invalid primitive draw request");
         }
+        const bool instanced = FirstInstanceStream(params) != nullptr;
+        if (instanced && (indexBuffer == 0 || params.instanceCount <= 0 ||
+                          params.firstInstance != 0))
+        {
+            throw std::invalid_argument("RLGL: invalid instanced primitive draw request");
+        }
+        std::array<bool, 16> occupiedAttributeLocations{};
+        for (int index = 0; index < attributeCount; ++index)
+        {
+            const VertexAttributeBinding& attribute = attributes[index];
+            if (attribute.location >= occupiedAttributeLocations.size() ||
+                occupiedAttributeLocations[attribute.location] ||
+                attribute.componentCount <= 0 || attribute.stride <= 0 ||
+                attribute.offset < 0 || attribute.divisor < 0 ||
+                (attribute.vertexBuffer == 0 && vertexBuffer == 0))
+            {
+                throw std::invalid_argument("RLGL: invalid vertex attribute binding");
+            }
+            occupiedAttributeLocations[attribute.location] = true;
+        }
 
         GLenum mode = GL_TRIANGLES;
         switch (primitiveType)
@@ -1998,6 +2035,9 @@ void main()
         const float skinnedFlag = params.skinned ? 1.0f : 0.0f;
         rlSetUniform(
             pipeline.skinnedLocation, &skinnedFlag, RL_SHADER_UNIFORM_FLOAT, 1);
+        const float instancedFlag = instanced ? 1.0f : 0.0f;
+        rlSetUniform(
+            pipeline.instancedLocation, &instancedFlag, RL_SHADER_UNIFORM_FLOAT, 1);
         if (params.skinned)
         {
             if (params.boneCount <= 0 || params.boneCount > 72 ||
@@ -2128,15 +2168,6 @@ void main()
         for (int index = 0; index < attributeCount; ++index)
         {
             const VertexAttributeBinding& attribute = attributes[index];
-            if (attribute.location >= 16u || attribute.componentCount <= 0 ||
-                attribute.stride <= 0 || attribute.offset < 0)
-            {
-                rlDisableVertexArray();
-                rlDisableVertexBuffer();
-                releaseTextures();
-                rlDisableShader();
-                throw std::invalid_argument("RLGL: invalid vertex attribute binding");
-            }
             const unsigned int attributeBuffer = attribute.vertexBuffer != 0
                 ? attribute.vertexBuffer : vertexBuffer;
             rlEnableVertexBuffer(attributeBuffer);
@@ -2144,6 +2175,7 @@ void main()
             rlSetVertexAttribute(
                 attribute.location, attribute.componentCount, attribute.scalarType,
                 attribute.normalized, attribute.stride, attribute.offset);
+            rlSetVertexAttributeDivisor(attribute.location, attribute.divisor);
         }
 
         PrimitiveDrawSnapshot snapshot;
@@ -2156,12 +2188,14 @@ void main()
                 ? attribute.vertexBuffer : vertexBuffer;
             snapshot.attributeStrides[location] = attribute.stride;
             snapshot.attributeOffsets[location] = attribute.offset;
+            snapshot.attributeDivisors[location] = attribute.divisor;
         }
         snapshot.primitiveMode = static_cast<int>(mode);
         snapshot.elementCount = elementCount;
         snapshot.firstVertex = firstVertex;
         snapshot.startIndex = startIndex;
         snapshot.baseVertex = baseVertex;
+        snapshot.instanceCount = params.instanceCount;
         snapshot.indexed = indexBuffer != 0;
         snapshot.texture = texture;
         snapshot.texture1 = texture1;
@@ -2169,7 +2203,8 @@ void main()
         snapshot.dualTexture = params.dualTexture;
         snapshot.environmentMapping = params.envMapping;
         snapshot.skinned = params.skinned;
-        if (indexBuffer == 0)
+        snapshot.instanced = instanced;
+        if (!instanced && indexBuffer == 0)
         {
             if (mode == GL_TRIANGLES)
             {
@@ -2182,7 +2217,7 @@ void main()
                 glDrawArrays(mode, firstVertex, elementCount);
             }
         }
-        else
+        else if (!instanced)
         {
             rlEnableVertexBufferElement(indexBuffer);
             const GLenum indexType = thirtyTwoBitIndices
@@ -2207,6 +2242,44 @@ void main()
                 else
                     glDrawElementsBaseVertex(mode, elementCount, indexType, indices, baseVertex);
             }
+        }
+        else
+        {
+            rlEnableVertexBufferElement(indexBuffer);
+            const GLenum indexType = thirtyTwoBitIndices
+                ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+            snapshot.indexType = static_cast<int>(indexType);
+            if (mode == GL_TRIANGLES && !thirtyTwoBitIndices &&
+                startIndex == 0 && baseVertex == 0)
+            {
+                rlDrawVertexArrayElementsInstanced(
+                    0, elementCount, nullptr, params.instanceCount);
+                snapshot.usedRlglDrawWrapper = true;
+            }
+            else
+            {
+                const std::uintptr_t byteOffset =
+                    static_cast<std::uintptr_t>(startIndex) *
+                    (thirtyTwoBitIndices ? sizeof(std::uint32_t) : sizeof(std::uint16_t));
+                const void* const indices = reinterpret_cast<const void*>(byteOffset);
+                if (baseVertex == 0)
+                {
+                    glDrawElementsInstanced(
+                        mode, elementCount, indexType, indices, params.instanceCount);
+                }
+                else
+                {
+                    glDrawElementsInstancedBaseVertex(
+                        mode, elementCount, indexType, indices,
+                        params.instanceCount, baseVertex);
+                }
+            }
+        }
+
+        for (int index = 0; index < attributeCount; ++index)
+        {
+            if (attributes[index].divisor != 0)
+                rlSetVertexAttributeDivisor(attributes[index].location, 0);
         }
 
         rlDisableVertexArray();

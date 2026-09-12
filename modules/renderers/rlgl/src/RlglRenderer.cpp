@@ -333,6 +333,7 @@ namespace CNA::Internal::Renderers::Rlgl
         case CNA::GraphicsCapability::MultipleRenderTargets:
             return maxRenderTargets_ >= 2;
         case CNA::GraphicsCapability::MultiStreamVertexInput:
+        case CNA::GraphicsCapability::Instancing:
             return true;
         default:
             return false;

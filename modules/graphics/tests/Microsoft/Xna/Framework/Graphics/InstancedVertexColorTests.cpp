@@ -113,7 +113,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool InstancedVertexColor()
 {
     return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU,
-                           Vulkan, DirectX9, DirectX11, DirectX12, SdlGpu);
+                           Vulkan, DirectX9, DirectX11, DirectX12, SdlGpu, Rlgl);
 }
 
 // The renderers whose instanced route this file has measured, and which therefore carry a contract
@@ -123,7 +123,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool InstancedVertexColorMeasured()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU,
-                           DirectX11, DirectX12, SdlGpu);
+                           DirectX11, DirectX12, SdlGpu, Rlgl);
 }
 
 // The renderers whose instanced route was measured obeying the PUBLIC CONTRACT: EasyGL always did,
@@ -145,7 +145,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool InstancedVertexColorContract()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU, Bgfx,
-                           DirectX11, DirectX12, SdlGpu);
+                           DirectX11, DirectX12, SdlGpu, Rlgl);
 }
 
 
@@ -536,15 +536,12 @@ protected:
     /// GTEST_SKIP() only suppresses the remaining TEST BODY when raised from SetUp() --
     /// raised inside a helper the body calls, it merely returns from the helper (the exact
     /// reason the multi-stream skip is a macro). Hardware instancing is this whole file's
-    /// subject and needs BOTH a 3D pipeline and an instancing path, so both capabilities
-    /// are gated here: a renderer with no 3D pipeline at all (e.g. OPENVG) and a renderer
+    /// subject and needs an instancing path, so that capability is gated here. A renderer
     /// whose profile reports GraphicsCapability::Instancing = false (e.g. OPENGLES2 -- core
     /// OpenGL ES 2.0 has no glDrawElementsInstanced/glVertexAttribDivisor, see
     /// docs/opengles2-renderer.md) each skip every leg here up front.
     void SetUp() override
     {
-        if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-            GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
         if (!device.SupportsCapability(GraphicsCapability::Instancing))
             GTEST_SKIP() << "Renderer reports GraphicsCapability::Instancing = false: hardware "
                             "instancing is unavailable on this renderer profile";
@@ -552,8 +549,6 @@ protected:
 
     void RequireInstancedRendering()
     {
-        if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-            GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);

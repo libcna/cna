@@ -245,16 +245,17 @@ namespace CNA::Internal::Renderers::Rlgl
             int combinedByteOffset = 0;
         };
 
-        void ValidateMultiStreamShape(
+        void ValidateStreamShape(
             const IVertexBufferRenderer& primaryVertexBuffer,
-            const GpuDrawParams& params)
+            const GpuDrawParams& params, const bool allowInstanceStreams)
         {
             if (params.vertexStreamCount < 2 ||
                 params.vertexStreamCount > static_cast<int>(params.vertexStreams.size()))
             {
                 throw std::invalid_argument("RLGL: invalid multi-stream binding count");
             }
-            if (params.vertexStreams[0].buffer != &primaryVertexBuffer)
+            if (params.vertexStreams[0].buffer != &primaryVertexBuffer ||
+                params.vertexStreams[0].instanceFrequency != 0)
                 throw std::invalid_argument("RLGL: stream zero does not match the primary buffer");
 
             int expectedCombinedByteBase = 0;
@@ -263,16 +264,16 @@ namespace CNA::Internal::Renderers::Rlgl
             for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
             {
                 const GpuVertexStreamBinding& stream = params.vertexStreams[streamIndex];
-                if (stream.buffer == nullptr || stream.instanceFrequency != 0 ||
+                if (stream.buffer == nullptr || stream.instanceFrequency < 0 ||
+                    (!allowInstanceStreams && stream.instanceFrequency != 0) ||
                     stream.slot < 0 || stream.slot >= kMaxVertexStreams ||
                     occupiedSlots[static_cast<std::size_t>(stream.slot)] ||
                     stream.strideInBytes <= 0 || stream.vertexOffset < 0 ||
-                    stream.combinedByteBase != expectedCombinedByteBase ||
                     stream.vertexCount < 0 ||
                     stream.vertexCount > GetBufferCapacity(*stream.buffer) ||
                     GetNativeBufferId(*stream.buffer) == 0)
                 {
-                    throw std::invalid_argument("RLGL: invalid per-vertex stream binding");
+                    throw std::invalid_argument("RLGL: invalid vertex stream binding");
                 }
                 occupiedSlots[static_cast<std::size_t>(stream.slot)] = true;
 
@@ -283,7 +284,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 {
                     throw System::NotSupportedException(
                         "RLGL: every multi-stream binding requires its own non-empty, matching "
-                        "VertexDeclaration (plans/plan_rlgl.md RLGL-032)");
+                        "VertexDeclaration (plans/plan_rlgl.md RLGL-016/RLGL-032)");
                 }
 
                 for (const VertexElement& element : declaration)
@@ -297,16 +298,24 @@ namespace CNA::Internal::Renderers::Rlgl
                     {
                         throw System::NotSupportedException(
                             "RLGL: a multi-stream declaration set cannot bind the same "
-                            "vertex semantic more than once (plans/plan_rlgl.md RLGL-032)");
+                            "vertex semantic more than once "
+                            "(plans/plan_rlgl.md RLGL-016/RLGL-032)");
                     }
                     declaredSemantics.push_back(semantic);
                 }
 
+                if (stream.instanceFrequency != 0)
+                {
+                    if (stream.combinedByteBase != 0)
+                        throw std::invalid_argument(
+                            "RLGL: an instance stream cannot contribute to vertex stride");
+                    continue;
+                }
+                if (stream.combinedByteBase != expectedCombinedByteBase)
+                    throw std::invalid_argument("RLGL: invalid combined vertex stream offset");
                 if (stream.strideInBytes >
                     std::numeric_limits<int>::max() - expectedCombinedByteBase)
-                {
                     throw std::overflow_error("RLGL: combined vertex stride exceeds Int32");
-                }
                 expectedCombinedByteBase += stream.strideInBytes;
             }
             if (params.combinedVertexStride != expectedCombinedByteBase)
@@ -320,6 +329,8 @@ namespace CNA::Internal::Renderers::Rlgl
             for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
             {
                 const GpuVertexStreamBinding& stream = params.vertexStreams[streamIndex];
+                if (stream.instanceFrequency != 0)
+                    continue;
                 const VertexElement* const element = FindElement(
                     GetVertexDeclaration(*stream.buffer), usage, usageIndex);
                 if (element == nullptr)
@@ -356,7 +367,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 return result;
             }
 
-            ValidateMultiStreamShape(vertexBuffer, params);
+            const bool instanced = FirstInstanceStream(params) != nullptr;
+            ValidateStreamShape(vertexBuffer, params, instanced);
             const LocatedVertexElement position = FindMultiStreamElement(
                 params, VertexElementUsage::Position, 0);
             const LocatedVertexElement color = FindMultiStreamElement(
@@ -437,7 +449,7 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
             std::vector<VertexAttributeBinding> result;
-            result.reserve(7);
+            result.reserve(instanced ? 11u : 7u);
             const auto append = [&params, &result](
                 const LocatedVertexElement& located, const unsigned int location)
             {
@@ -471,10 +483,60 @@ namespace CNA::Internal::Renderers::Rlgl
                 append(blendWeight, 5);
                 append(blendIndices, 6);
             }
+            if (instanced)
+            {
+                unsigned int location = 12;
+                for (int streamIndex = 0;
+                     streamIndex < params.vertexStreamCount; ++streamIndex)
+                {
+                    const GpuVertexStreamBinding& stream =
+                        params.vertexStreams[streamIndex];
+                    if (stream.instanceFrequency == 0)
+                        continue;
+                    if (location >= 16)
+                    {
+                        throw System::NotSupportedException(
+                            "RLGL: every per-instance stream must contribute to the four-column "
+                            "instance transform (plans/plan_rlgl.md RLGL-016)");
+                    }
+                    if (stream.vertexOffset >
+                        std::numeric_limits<int>::max() / stream.strideInBytes)
+                    {
+                        throw std::overflow_error(
+                            "RLGL: instance stream byte offset exceeds Int32");
+                    }
+                    const int baseOffset = stream.vertexOffset * stream.strideInBytes;
+                    const auto& declaration = GetVertexDeclaration(*stream.buffer);
+                    for (const VertexElement& element : declaration)
+                    {
+                        if (location >= 16)
+                            break;
+                        if (element.getVertexElementFormatProperty() !=
+                            VertexElementFormat::Vector4)
+                        {
+                            throw System::NotSupportedException(
+                                "RLGL: the stock instanced path requires four positional "
+                                "Vector4 matrix columns (plans/plan_rlgl.md RLGL-016)");
+                        }
+                        VertexAttributeBinding binding = DescribeVertexAttribute(
+                            element, location++, stream.strideInBytes, baseOffset);
+                        binding.vertexBuffer = GetNativeBufferId(*stream.buffer);
+                        binding.divisor = stream.instanceFrequency;
+                        result.push_back(binding);
+                    }
+                }
+                if (location != 16)
+                {
+                    throw System::NotSupportedException(
+                        "RLGL: the stock instanced path requires four positional Vector4 "
+                        "matrix columns (plans/plan_rlgl.md RLGL-016)");
+                }
+            }
             return result;
         }
 
-        void RequireBaselineEffect(const GpuDrawParams& params)
+        void RequireBaselineEffect(
+            const GpuDrawParams& params, const bool allowInstancing = false)
         {
             bool hasInstanceStream = false;
             for (int stream = 0; stream < params.vertexStreamCount; ++stream)
@@ -482,11 +544,18 @@ namespace CNA::Internal::Renderers::Rlgl
                     params.vertexStreams[stream].instanceFrequency != 0;
             if (params.customEffectRequested || params.customEffectRenderer != nullptr ||
                 params.compiledEffectRuntime != nullptr || params.pbr ||
-                params.instanceCount != 1 || hasInstanceStream)
+                (!allowInstancing && (params.instanceCount != 1 || hasInstanceStream)))
             {
                 throw System::NotSupportedException(
                     "RLGL: this effect or vertex-stream shape requires the stock/custom shader "
                     "campaign (plans/plan_rlgl.md RLGL-012)");
+            }
+            if (allowInstancing &&
+                (params.instanceCount <= 0 || !hasInstanceStream || params.firstInstance != 0))
+            {
+                throw System::NotSupportedException(
+                    "RLGL: classic instancing requires a per-instance stream and firstInstance "
+                    "zero (plans/plan_rlgl.md RLGL-016)");
             }
             if (params.envMapping && params.envMap == nullptr)
             {
@@ -630,6 +699,24 @@ namespace CNA::Internal::Renderers::Rlgl
         }
 #endif
         RequireBaselineEffect(params);
+        Submit(
+            GetPrimitivePipeline(), vertexBuffer, &indexBuffer,
+            world, view, projection, primitive, primitiveCount,
+            0, params.startIndex, params.baseVertex, params, true,
+            currentViewportWidth_, currentViewportHeight_,
+            GetCurrentSampleCount());
+    }
+
+    void RlglRenderer::DrawInstancedPrimitivesEx(
+        const IVertexBufferRenderer& vertexBuffer,
+        const IIndexBufferRenderer& indexBuffer,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        const PrimitiveType primitive, const int primitiveCount,
+        const int instanceCount, const GpuDrawParams& params)
+    {
+        if (instanceCount != params.instanceCount)
+            throw std::invalid_argument("RLGL: inconsistent instance count");
+        RequireBaselineEffect(params, true);
         Submit(
             GetPrimitivePipeline(), vertexBuffer, &indexBuffer,
             world, view, projection, primitive, primitiveCount,
