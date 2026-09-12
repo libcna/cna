@@ -1,0 +1,33 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -3001,17 +3001,18 @@ static void state_TEXLD(Context *ctx)
+         // !!! FIXME: ...and texldb, too.
+         //http://msdn.microsoft.com/en-us/library/bb206217(VS.85).aspx
+ 
+-        //const RegisterType rt0 = src0->regtype;
+-
+-        // !!! FIXME: msdn says it has to be temp, but Microsoft's HLSL
+-        // !!! FIXME:  compiler is generating code that uses oC0 for a dest.
+-        //if (ctx->dest_arg.regtype != REG_TYPE_TEMP)
+-        //    fail(ctx, "TEXLD dest must be a temp register");
+-
+-        // !!! FIXME: this can be an REG_TYPE_INPUT, DCL'd to TEXCOORD.
+-        //else if ((rt0 != REG_TYPE_TEXTURE) && (rt0 != REG_TYPE_TEMP))
+-        //    fail(ctx, "TEXLD src0 must be texture or temp register");
+-        //else
++        if (!shader_version_atleast(ctx, 3, 0))
++        {
++            const RegisterType rt0 = src0->regtype;
++            if (ctx->dest_arg.regtype != REG_TYPE_TEMP)
++                fail(ctx, "Shader Model 2 TEXLD dest must be a temp register");
++            else if (ctx->dest_arg.orig_writemask != 0xF)
++                fail(ctx, "Shader Model 2 TEXLD dest must use a full write mask");
++            else if (ctx->dest_arg.result_mod & MOD_SATURATE)
++                fail(ctx, "Shader Model 2 TEXLD dest must not saturate");
++            else if ((rt0 != REG_TYPE_TEXTURE) && (rt0 != REG_TYPE_TEMP))
++                fail(ctx, "Shader Model 2 TEXLD src0 must be texture or temp register");
++        } // if
+ 
+         if (src0->src_mod != SRCMOD_NONE)
+             fail(ctx, "TEXLD src0 must have no modifiers");

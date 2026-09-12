@@ -3895,6 +3895,65 @@ namespace
                   acceptedInvalidProbes);
     }
 
+    void CheckCompiledTexld20OperandValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticTexld20OperandProbe;
+        CNA::TestSupport::SyntheticEffectOptions validOptions;
+        validOptions.includeDrawableProgram = true;
+        validOptions.includeSampler = true;
+        validOptions.texld20OperandProbe = Probe::PartialPrecisionDestination;
+        const auto validBytes = CNA::TestSupport::BuildSyntheticEffect(validOptions);
+        bool acceptedValidProbe = true;
+        try
+        {
+            static_cast<void>(
+                renderer.CreateCompiledEffect(validBytes.data(), validBytes.size()));
+        }
+        catch (const std::runtime_error&)
+        {
+            acceptedValidProbe = false;
+        }
+        Check(acceptedValidProbe,
+              "compiled Effect parser rejected ps_2_0 TEXLD partial precision");
+
+        constexpr std::array invalidProbes{
+            Probe::InputDestination,
+            Probe::TextureDestination,
+            Probe::OutputDestination,
+            Probe::PartialDestination,
+            Probe::SaturateDestination,
+            Probe::ColorCoordinate,
+            Probe::ConstantCoordinate,
+            Probe::SamplerSwizzle,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.texld20OperandProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid ps_2_0 TEXLD operands: " +
+                  acceptedInvalidProbes);
+    }
+
     void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
@@ -6479,6 +6538,7 @@ int main()
         CheckCompiledDuplicateDeclarationValidation(renderer);
         CheckCompiledTextureGradientSamplerOperand(renderer);
         CheckCompiledTextureSourceModifierValidation(renderer);
+        CheckCompiledTexld20OperandValidation(renderer);
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);

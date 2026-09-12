@@ -1821,6 +1821,51 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticTextureSourceModifierProbe::VertexTexldlCoordinate,
         CNA::TestSupport::SyntheticTextureSourceModifierProbe::VertexTexldlSampler));
 
+class EasyGLCompiledEffectTexld20OperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTexld20OperandProbe>
+{
+};
+
+TEST(EasyGLCompiledEffectTexld20OperandTest, AcceptsPartialPrecision)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texld20OperandProbe =
+        CNA::TestSupport::SyntheticTexld20OperandProbe::PartialPrecisionDestination;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST_P(EasyGLCompiledEffectTexld20OperandTest, RejectsOperand)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texld20OperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTexld20Operand,
+    EasyGLCompiledEffectTexld20OperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexld20OperandProbe::InputDestination,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::TextureDestination,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::OutputDestination,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::PartialDestination,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::SaturateDestination,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::ColorCoordinate,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::ConstantCoordinate,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::SamplerSwizzle));
+
 class EasyGLCompiledEffectTypedControlSourceTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticTypedControlSourceProbe>
 {

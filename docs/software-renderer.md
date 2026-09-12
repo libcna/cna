@@ -311,6 +311,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   sampler accept source modifiers. Both compiled paths had accepted every negated form. The common
   parser now rejects them while retaining the legal Shader Model 3 sampler-result swizzles and
   unmodified explicit-gradient execution already proven by SOFTWARE-392/393/443.
+  SOFTWARE-446 closes the adjacent Pixel Shader Model 2 `TEXLD` contract. Both paths had accepted
+  direct colour-output and partial-mask destinations, `_sat`, and constant coordinates. The common
+  parser now requires a full-mask temporary destination, no saturation, and a texture or temporary
+  coordinate register before Shader Model 3. A separately assembled Microsoft control proves that
+  `_pp` remains legal; eight invalid operand probes and that positive form run through both paths.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
