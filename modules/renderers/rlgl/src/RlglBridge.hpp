@@ -110,6 +110,17 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int multiSampleCount = 0;
     };
 
+    /** @brief Native TextureCube storage facts exposed only to focused validation. */
+    struct TextureCubeSnapshot
+    {
+        unsigned int texture = 0;
+        std::array<int, 6> levelZeroWidths{};
+        std::array<int, 6> finalLevelWidths{};
+        int baseLevel = 0;
+        int maxLevel = 0;
+        int internalFormat = 0;
+    };
+
     /** @brief Borrowed native storage attached to one slot of an MRT framebuffer. */
     struct MrtAttachment
     {
@@ -590,6 +601,74 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     void ReadTexture2D(
         unsigned int id, int surfaceFormat, int level, int levelWidth, int levelHeight,
         int x, int y, int width, int height, std::uint8_t* pixels);
+
+    /**
+     * @brief Allocates all faces and mip levels of an RGBA8 cube through rlgl.
+     * @param size Width and height of every face.
+     * @param mipLevels Number of mip levels to allocate.
+     * @return Non-zero rlgl-owned cube texture name.
+     */
+    [[nodiscard]] unsigned int CreateTextureCubeColor(int size, int mipLevels);
+
+    /**
+     * @brief Releases a cube texture through rlgl while the device is live.
+     * @param id Texture name, or zero.
+     */
+    void DestroyTextureCube(unsigned int id) noexcept;
+
+    /**
+     * @brief Uploads tightly packed RGBA8 pixels to one cube face region.
+     * @param id Cube texture name.
+     * @param face Cube face index in XNA order.
+     * @param level Mip level.
+     * @param x Region left edge.
+     * @param y Region top edge in upload-memory order.
+     * @param width Region width.
+     * @param height Region height.
+     * @param pixels Source RGBA8 bytes.
+     */
+    void UpdateTextureCubeColor(
+        unsigned int id, int face, int level, int x, int y,
+        int width, int height, const std::uint8_t* pixels);
+
+    /**
+     * @brief Reads one RGBA8 cube-face rectangle without framebuffer row inversion.
+     * @param id Cube texture name.
+     * @param face Cube face index in XNA order.
+     * @param level Mip level.
+     * @param levelSize Complete mip edge length.
+     * @param x Region left edge.
+     * @param y Region top edge in upload-memory order.
+     * @param width Region width.
+     * @param height Region height.
+     * @param pixels Destination RGBA8 bytes.
+     */
+    void ReadTextureCubeColor(
+        unsigned int id, int face, int level, int levelSize,
+        int x, int y, int width, int height, std::uint8_t* pixels);
+
+    /**
+     * @brief Binds a cube texture to one rlgl texture unit.
+     * @param id Cube texture name, or zero.
+     * @param unit Texture unit index.
+     */
+    void BindTextureCube(unsigned int id, int unit);
+
+    /**
+     * @brief Returns the cube texture bound to one unit for focused validation.
+     * @param unit Texture unit index.
+     * @return Native cube texture name.
+     */
+    [[nodiscard]] unsigned int GetBoundTextureCubeForTesting(int unit);
+
+    /**
+     * @brief Captures the allocated faces and mip range of a cube texture.
+     * @param id Cube texture name.
+     * @param levelCount Declared number of levels.
+     * @return Native allocation facts without disturbing caller bindings.
+     */
+    [[nodiscard]] TextureCubeSnapshot GetTextureCubeSnapshotForTesting(
+        unsigned int id, int levelCount);
 
     /**
      * @brief Creates a framebuffer with a Color texture and exact XNA depth/stencil storage.

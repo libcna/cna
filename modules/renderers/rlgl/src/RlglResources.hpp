@@ -36,6 +36,33 @@ namespace CNA::Internal::Renderers::Rlgl
     [[nodiscard]] std::unique_ptr<ITextureRenderer> CreateTextureRenderer(
         const CNA::Internal::Graphics::ImageData& data);
 
+    /** @brief Complete renderer/native TextureCube facts exposed to focused validation. */
+    struct TextureCubeResourceSnapshot
+    {
+        unsigned int texture = 0;
+        int size = 0;
+        int levelCount = 1;
+        int surfaceFormat = 0;
+    };
+
+    /**
+     * @brief Creates the current RLGL plain cube texture implementation.
+     * @param size Width and height of every cube face.
+     * @param mipMap Whether to allocate a complete mip chain.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+     * @return Renderer-owned cube resource.
+     */
+    [[nodiscard]] std::unique_ptr<ITextureCubeRenderer> CreateTextureCubeRenderer(
+        int size, bool mipMap, int surfaceFormat);
+
+    /**
+     * @brief Captures TextureCube resource state for focused validation.
+     * @param resource RLGL cube resource.
+     * @return Native identity and applied creation parameters.
+     */
+    [[nodiscard]] TextureCubeResourceSnapshot GetTextureCubeResourceSnapshotForTesting(
+        const ITextureCubeRenderer& resource);
+
     /** @brief Complete renderer/native RenderTarget2D facts exposed to focused validation. */
     struct RenderTargetResourceSnapshot
     {

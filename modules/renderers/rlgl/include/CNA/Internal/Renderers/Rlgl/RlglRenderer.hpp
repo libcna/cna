@@ -172,10 +172,28 @@ namespace CNA::Internal::Renderers::Rlgl
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
 
         /**
+         * @brief Creates a sampled cube texture with six independently writable faces.
+         * @param size Width and height of every face.
+         * @param mipMap Whether to allocate the complete mip chain.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+         * @return Renderer-owned cube texture record.
+         */
+        std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(
+            int size, bool mipMap, int surfaceFormat) override;
+
+        /**
          * @brief Returns the current OpenGL context's maximum two-dimensional texture edge.
          * @return The `GL_MAX_TEXTURE_SIZE` value measured after rlgl initialization.
          */
         [[nodiscard]] int GetMaxTextureDimension() const override { return maxTextureSize_; }
+
+        /**
+         * @brief Applies XNA's cube-size ceiling to the live GL texture limit.
+         * @param graphicsProfile Raw XNA GraphicsProfile ordinal.
+         * @return At most 512 for Reach and 4096 for HiDef.
+         */
+        [[nodiscard]] int GetMaxCubeSizeForProfileEXT(
+            int graphicsProfile) const override;
 
         /**
          * @brief Classifies Texture2D formats whose complete storage path has passed validation.
@@ -183,6 +201,14 @@ namespace CNA::Internal::Renderers::Rlgl
          * @return Supported only for implemented exact layouts; Unsupported otherwise.
          */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
+         * @brief Classifies formats with a complete RLGL cube storage and transfer path.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+         * @return Supported for Color at the RLGL-044 baseline; Unsupported otherwise.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
             int surfaceFormat) const override;
 
         /**

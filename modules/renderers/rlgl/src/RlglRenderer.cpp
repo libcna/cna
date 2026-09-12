@@ -343,6 +343,19 @@ namespace CNA::Internal::Renderers::Rlgl
         return CreateTextureRenderer(data);
     }
 
+    std::unique_ptr<ITextureCubeRenderer> RlglRenderer::CreateTextureCube(
+        const int size, const bool mipMap, const int surfaceFormat)
+    {
+        if (ClassifyTextureCubeFormatEXT(surfaceFormat) !=
+            RendererFormatVerdict::Supported)
+        {
+            throw System::NotSupportedException(
+                "RLGL: requested TextureCube SurfaceFormat is not implemented "
+                "(plans/plan_rlgl.md RLGL-045)");
+        }
+        return CreateTextureCubeRenderer(size, mipMap, surfaceFormat);
+    }
+
     std::unique_ptr<IRenderTargetRenderer> RlglRenderer::CreateRenderTarget2D(
         const int width, const int height, const int depthFormat,
         const bool preserveContents, const bool mipMap,
@@ -376,6 +389,11 @@ namespace CNA::Internal::Renderers::Rlgl
         return graphicsProfile == 1 ? maxRenderTargets_ : 1;
     }
 
+    int RlglRenderer::GetMaxCubeSizeForProfileEXT(const int graphicsProfile) const
+    {
+        return std::min(maxTextureSize_, graphicsProfile == 1 ? 4096 : 512);
+    }
+
     RendererFormatVerdict RlglRenderer::ClassifySurfaceFormatEXT(
         const int surfaceFormat) const
     {
@@ -407,6 +425,15 @@ namespace CNA::Internal::Renderers::Rlgl
         default:
             return RendererFormatVerdict::Unsupported;
         }
+    }
+
+    RendererFormatVerdict RlglRenderer::ClassifyTextureCubeFormatEXT(
+        const int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        return static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Color
+            ? RendererFormatVerdict::Supported
+            : RendererFormatVerdict::Unsupported;
     }
 
     RendererFormatVerdict RlglRenderer::ClassifyRenderTargetFormatEXT(

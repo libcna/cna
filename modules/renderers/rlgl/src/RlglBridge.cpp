@@ -105,12 +105,14 @@ namespace
         {
             glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture_);
             glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture2D_);
+            glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &textureCube_);
         }
 
         ~TextureBindingRestore()
         {
             glActiveTexture(static_cast<GLenum>(activeTexture_));
             glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture2D_));
+            glBindTexture(GL_TEXTURE_CUBE_MAP, static_cast<GLuint>(textureCube_));
         }
 
         TextureBindingRestore(const TextureBindingRestore&) = delete;
@@ -119,6 +121,7 @@ namespace
     private:
         GLint activeTexture_ = GL_TEXTURE0;
         GLint texture2D_ = 0;
+        GLint textureCube_ = 0;
     };
 
     class UnpackAlignmentRestore final
@@ -2299,6 +2302,160 @@ void main()
                 pixels + static_cast<std::size_t>(row) * destinationRowBytes,
                 source, destinationRowBytes);
         }
+    }
+
+    unsigned int CreateTextureCubeColor(const int size, const int mipLevels)
+    {
+        RequireInitialized("TextureCube creation");
+        if (size <= 0 || mipLevels <= 0)
+            throw std::invalid_argument("RLGL: invalid TextureCube creation request");
+
+        const TextureBindingRestore bindingRestore;
+        const UnpackAlignmentRestore unpackRestore;
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        const unsigned int id = rlLoadTextureCubemap(
+            nullptr, size, RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, mipLevels);
+        if (id == 0)
+            throw std::runtime_error("RLGL: TextureCube allocation returned a zero texture name");
+
+        try
+        {
+            glBindTexture(GL_TEXTURE_CUBE_MAP, id);
+            // rlLoadTextureCubemap owns every face/level allocation, but it does not clamp the
+            // declared range. XNA textures with one level must remain complete under mip samplers.
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, mipLevels - 1);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+            ThrowIfGlError("TextureCube allocation");
+        }
+        catch (...)
+        {
+            rlUnloadTexture(id);
+            throw;
+        }
+        return id;
+    }
+
+    void DestroyTextureCube(const unsigned int id) noexcept
+    {
+        if (bridgeInitialized && id != 0) rlUnloadTexture(id);
+    }
+
+    void UpdateTextureCubeColor(
+        const unsigned int id, const int face, const int level,
+        const int x, const int y, const int width, const int height,
+        const std::uint8_t* pixels)
+    {
+        RequireInitialized("TextureCube update");
+        if (id == 0 || face < 0 || face >= 6 || level < 0 ||
+            x < 0 || y < 0 || width <= 0 || height <= 0 || pixels == nullptr)
+        {
+            throw std::invalid_argument("RLGL: invalid TextureCube update request");
+        }
+
+        const TextureBindingRestore bindingRestore;
+        const UnpackAlignmentRestore unpackRestore;
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, id);
+        glTexSubImage2D(
+            static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face),
+            level, x, y, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        ThrowIfGlError("TextureCube update");
+    }
+
+    void ReadTextureCubeColor(
+        const unsigned int id, const int face, const int level, const int levelSize,
+        const int x, const int y, const int width, const int height,
+        std::uint8_t* pixels)
+    {
+        RequireInitialized("TextureCube readback");
+        if (id == 0 || face < 0 || face >= 6 || level < 0 || levelSize <= 0 ||
+            x < 0 || y < 0 || width <= 0 || height <= 0 ||
+            x > levelSize - width || y > levelSize - height || pixels == nullptr)
+        {
+            throw std::invalid_argument("RLGL: invalid TextureCube readback request");
+        }
+
+        const TextureBindingRestore bindingRestore;
+        glBindTexture(GL_TEXTURE_CUBE_MAP, id);
+        GLint previousPackAlignment = 4;
+        glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        std::vector<std::uint8_t> levelPixels(
+            static_cast<std::size_t>(levelSize) * levelSize * 4u);
+        glGetTexImage(
+            static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face),
+            level, GL_RGBA, GL_UNSIGNED_BYTE, levelPixels.data());
+        glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+        ThrowIfGlError("TextureCube readback");
+
+        const std::size_t sourceRowBytes = static_cast<std::size_t>(levelSize) * 4u;
+        const std::size_t destinationRowBytes = static_cast<std::size_t>(width) * 4u;
+        for (int row = 0; row < height; ++row)
+        {
+            const std::uint8_t* source = levelPixels.data()
+                + static_cast<std::size_t>(y + row) * sourceRowBytes
+                + static_cast<std::size_t>(x) * 4u;
+            std::memcpy(
+                pixels + static_cast<std::size_t>(row) * destinationRowBytes,
+                source, destinationRowBytes);
+        }
+    }
+
+    void BindTextureCube(const unsigned int id, const int unit)
+    {
+        RequireInitialized("TextureCube binding");
+        if (unit < 0)
+            throw std::out_of_range("RLGL: texture unit must be non-negative");
+        rlActiveTextureSlot(unit);
+        if (id == 0) rlDisableTextureCubemap();
+        else rlEnableTextureCubemap(id);
+        ThrowIfGlError("TextureCube binding");
+    }
+
+    unsigned int GetBoundTextureCubeForTesting(const int unit)
+    {
+        RequireInitialized("TextureCube binding query");
+        if (unit < 0)
+            throw std::out_of_range("RLGL: texture unit must be non-negative");
+
+        GLint previousActiveTexture = GL_TEXTURE0;
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+        glActiveTexture(static_cast<GLenum>(GL_TEXTURE0 + unit));
+        GLint texture = 0;
+        glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &texture);
+        glActiveTexture(static_cast<GLenum>(previousActiveTexture));
+        ThrowIfGlError("TextureCube binding query");
+        return static_cast<unsigned int>(texture);
+    }
+
+    TextureCubeSnapshot GetTextureCubeSnapshotForTesting(
+        const unsigned int id, const int levelCount)
+    {
+        RequireInitialized("TextureCube snapshot");
+        if (id == 0 || levelCount <= 0)
+            throw std::invalid_argument("RLGL: invalid TextureCube snapshot request");
+
+        const TextureBindingRestore bindingRestore;
+        glBindTexture(GL_TEXTURE_CUBE_MAP, id);
+        TextureCubeSnapshot snapshot;
+        snapshot.texture = id;
+        for (int face = 0; face < 6; ++face)
+        {
+            const GLenum target = static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face);
+            glGetTexLevelParameteriv(
+                target, 0, GL_TEXTURE_WIDTH, &snapshot.levelZeroWidths[face]);
+            glGetTexLevelParameteriv(
+                target, levelCount - 1, GL_TEXTURE_WIDTH,
+                &snapshot.finalLevelWidths[face]);
+        }
+        glGetTexParameteriv(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, &snapshot.baseLevel);
+        glGetTexParameteriv(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, &snapshot.maxLevel);
+        glGetTexLevelParameteriv(
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, GL_TEXTURE_INTERNAL_FORMAT,
+            &snapshot.internalFormat);
+        ThrowIfGlError("TextureCube snapshot");
+        return snapshot;
     }
 
     RenderTargetStorage CreateRenderTarget2D(

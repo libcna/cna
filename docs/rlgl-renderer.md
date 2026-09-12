@@ -57,10 +57,11 @@ success.
 | BasicEffect and AlphaTestEffect | ✅ | Texture/default-white sampling, Position0/Normal0/Color0/UV0 semantics, diffuse/emissive/alpha/vertex color, all eight alpha comparisons, fog, WVP, pixel-center correction, three-light diffuse/specular BasicEffect lighting, per-vertex/per-pixel selection, inverse-transpose normals, and state transitions passed `RLGL-033`/`RLGL-034` |
 | DualTextureEffect | ✅ | Independent UV0/UV1 semantics and texture/sampler slots, doubled first-texture combine, null/default-white inputs, vertex color, diffuse/alpha, fog, missing-semantic diagnostics, and stock-effect state transitions passed `RLGL-035` |
 | SkinnedEffect | ✅ | 1/2/4 weighted influences, all 72 bones, Byte4/Vector4 indices, joint/world normal transforms, textures/materials, three-light/specular shading, vertex color, per-vertex/per-pixel selection, post-skin fog, malformed declarations, and state transitions passed `RLGL-037` |
+| Plain `TextureCube` | 🟨 | `SurfaceFormat::Color` has exact six-face and mip allocation through rlgl, full/partial upload and readback without row inversion, cube-unit binding, state restoration, and profile-size validation from `RLGL-044`; other classic formats wait for `RLGL-045` |
 | `RenderTarget2D` (all eleven classic FNA target formats) | ✅ | Color, Rgba1010102, Rg32, Rgba64, Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, and HdrBlendable have exact single/MSAA storage, resolve, format-native CPU transfer/readback, mips, depth/stencil, switching, Preserve/Discard, and upright sampling evidence from `RLGL-039`/`041`/`042` |
 | Multiple render targets | ✅ | HiDef supports ordered sets of two through four `RenderTarget2D` objects through transactional rlgl-created FBOs and `rlActiveDrawBuffers`; indexed masks/Clear, slot-zero depth, mixed formats, MSAA resolve/mips, usage, transitions, and refusal safety passed `RLGL-040`. Reach correctly remains limited to one target |
 | Cube/custom effects and general 3D workloads | ❌ | These shapes remain explicit failures owned by `RLGL-036`/`RLGL-038`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
-| Cube resources, instancing, queries | ❌ | Explicitly unavailable; their implementation and validation are tracked by `RLGL-015` and `RLGL-016` |
+| Render-target/non-Color cubes, instancing, queries | ❌ | Explicitly unavailable; their implementation and validation are tracked by `RLGL-045`/`RLGL-046` and `RLGL-016` |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
 
@@ -100,6 +101,7 @@ cmake -S . -B cmake-build-rlgl -G Ninja \
       -DCNA_BUILD_TESTS=OFF
 cmake --build cmake-build-rlgl --parallel 3 --target \
       cna_renderer_rlgl cna_test_rlgl_smoke cna_test_rlgl_texture cna_test_rlgl_sampler \
+      cna_test_rlgl_texture_cube cna_test_rlgl_texture_cube_oracle \
       cna_test_rlgl_state cna_test_rlgl_spritebatch cna_test_rlgl_buffer \
       cna_test_rlgl_primitive cna_test_rlgl_effect cna_test_rlgl_xna_pixel_center \
       cna_test_rlgl_basiceffect_lighting cna_test_rlgl_dual_texture_effect \
