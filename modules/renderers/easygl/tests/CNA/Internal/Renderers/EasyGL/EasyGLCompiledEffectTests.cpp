@@ -2059,6 +2059,66 @@ TEST(EasyGLCompiledEffectMatrixImplicitAliasTest, AcceptsLegalSourceAndDestinati
     }
 }
 
+class EasyGLCompiledEffectLegacyTextureMatrixSequenceTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectLegacyTextureMatrixSequenceTest, RejectsInvalidSequence)
+{
+    using Probe = CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe;
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.samplerRegister = 3;
+    options.pixelShaderLegacyTextureMatrixSequenceProbe = GetParam();
+    if (GetParam() == Probe::Matrix3SecondPadGap ||
+        GetParam() == Probe::Matrix3RepeatedPad ||
+        GetParam() == Probe::Matrix3IncompleteOnePad ||
+        GetParam() == Probe::Matrix3IncompleteTwoPads)
+        options.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidSequences,
+    EasyGLCompiledEffectLegacyTextureMatrixSequenceTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix2FinalGap,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix2RepeatedPad,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix2SourceMismatch,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix2Incomplete,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix3SecondPadGap,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix3RepeatedPad,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix3IncompleteOnePad,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix3IncompleteTwoPads));
+
+TEST(EasyGLCompiledEffectLegacyTextureMatrixSequenceTest, AcceptsConsecutiveSequences)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+
+    CNA::TestSupport::SyntheticEffectOptions matrix2;
+    matrix2.includeDrawableProgram = true;
+    matrix2.samplerRegister = 2;
+    matrix2.pixelShaderUsesLegacyTextureMatrix2 = true;
+    const auto matrix2Bytes = CNA::TestSupport::BuildSyntheticEffect(matrix2);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(matrix2Bytes.data(), matrix2Bytes.size()));
+
+    CNA::TestSupport::SyntheticEffectOptions matrix3;
+    matrix3.includeDrawableProgram = true;
+    matrix3.samplerRegister = 3;
+    matrix3.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+    matrix3.pixelShaderUsesLegacyTextureMatrix3Sample = true;
+    const auto matrix3Bytes = CNA::TestSupport::BuildSyntheticEffect(matrix3);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(matrix3Bytes.data(), matrix3Bytes.size()));
+}
+
 class EasyGLCompiledEffectPreShaderModel3AbsoluteSourceTest :
     public ::testing::TestWithParam<
         CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource>

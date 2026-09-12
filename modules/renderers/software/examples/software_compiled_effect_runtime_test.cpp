@@ -4083,6 +4083,80 @@ namespace
         }
     }
 
+    void CheckCompiledLegacyTextureMatrixSequenceValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe;
+        constexpr std::array invalidSequences{
+            Probe::Matrix2FinalGap,
+            Probe::Matrix2RepeatedPad,
+            Probe::Matrix2SourceMismatch,
+            Probe::Matrix2Incomplete,
+            Probe::Matrix3SecondPadGap,
+            Probe::Matrix3RepeatedPad,
+            Probe::Matrix3IncompleteOnePad,
+            Probe::Matrix3IncompleteTwoPads,
+        };
+        for (const Probe probe : invalidSequences)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.samplerRegister = 3;
+            options.pixelShaderLegacyTextureMatrixSequenceProbe = probe;
+            if (probe == Probe::Matrix3SecondPadGap || probe == Probe::Matrix3RepeatedPad ||
+                probe == Probe::Matrix3IncompleteOnePad ||
+                probe == Probe::Matrix3IncompleteTwoPads)
+                options.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected,
+                  "compiled Effect parser accepted invalid legacy TEXM sequence " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+
+        CNA::TestSupport::SyntheticEffectOptions matrix2;
+        matrix2.includeDrawableProgram = true;
+        matrix2.samplerRegister = 2;
+        matrix2.pixelShaderUsesLegacyTextureMatrix2 = true;
+        const auto matrix2Bytes = CNA::TestSupport::BuildSyntheticEffect(matrix2);
+        bool acceptedMatrix2 = true;
+        try
+        {
+            static_cast<void>(
+                renderer.CreateCompiledEffect(matrix2Bytes.data(), matrix2Bytes.size()));
+        }
+        catch (const std::runtime_error&)
+        {
+            acceptedMatrix2 = false;
+        }
+        Check(acceptedMatrix2, "compiled Effect parser rejected a valid legacy TEXM3X2 sequence");
+
+        CNA::TestSupport::SyntheticEffectOptions matrix3;
+        matrix3.includeDrawableProgram = true;
+        matrix3.samplerRegister = 3;
+        matrix3.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+        matrix3.pixelShaderUsesLegacyTextureMatrix3Sample = true;
+        const auto matrix3Bytes = CNA::TestSupport::BuildSyntheticEffect(matrix3);
+        bool acceptedMatrix3 = true;
+        try
+        {
+            static_cast<void>(
+                renderer.CreateCompiledEffect(matrix3Bytes.data(), matrix3Bytes.size()));
+        }
+        catch (const std::runtime_error&)
+        {
+            acceptedMatrix3 = false;
+        }
+        Check(acceptedMatrix3, "compiled Effect parser rejected a valid legacy TEXM3X3 sequence");
+    }
+
     void CheckCompiledPreShaderModel3AbsoluteSourceValidation(SoftwareRenderer& renderer)
     {
         using Source = CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource;
@@ -8046,6 +8120,7 @@ int main()
         CheckCompiledFlowControlStructureValidation(renderer);
         CheckCompiledCallGraphValidation(renderer);
         CheckCompiledMatrixOperandValidation(renderer);
+        CheckCompiledLegacyTextureMatrixSequenceValidation(renderer);
         CheckCompiledPreShaderModel3AbsoluteSourceValidation(renderer);
         CheckCompiledShaderModel3MixedConstantAbsoluteValidation(renderer);
         CheckCompiledSamplerRegisterRangeValidation(renderer);

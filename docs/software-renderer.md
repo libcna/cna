@@ -418,6 +418,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   and liveness audits. Patch 97 rejects a destination that aliases any additional matrix row
   implied by the explicit base token, while retaining Microsoft's legal destination/base and
   vector/matrix-row overlaps.
+  SOFTWARE-473 closes the remaining legacy texture-matrix sequence FIXME. Patch 98 rejects a
+  changed source register, nonconsecutive destination stages, surplus pads, mixed active matrix
+  families and an unfinished `TEXM3X2`/`TEXM3X3` sequence at shader end, while retaining the
+  sampled two-row and three-row positive paths.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is

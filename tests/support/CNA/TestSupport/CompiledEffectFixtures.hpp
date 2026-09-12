@@ -291,6 +291,29 @@ namespace CNA::TestSupport
         Register,
     };
 
+    /** @brief Invalid legacy texture-matrix instruction sequence emitted by the pixel shader. */
+    enum class SyntheticLegacyTextureMatrixSequenceProbe
+    {
+        /** @brief Emit no deliberately invalid legacy texture-matrix sequence. */
+        None,
+        /** @brief Skip one destination stage between `TEXM3X2PAD` and `TEXM3X2TEX`. */
+        Matrix2FinalGap,
+        /** @brief Emit a second `TEXM3X2PAD` before the final texture instruction. */
+        Matrix2RepeatedPad,
+        /** @brief Use a different source texture register for the final `TEXM3X2TEX`. */
+        Matrix2SourceMismatch,
+        /** @brief End the shader after `TEXM3X2PAD` without a final matrix instruction. */
+        Matrix2Incomplete,
+        /** @brief Skip one destination stage between the two `TEXM3X3PAD` instructions. */
+        Matrix3SecondPadGap,
+        /** @brief Emit a third `TEXM3X3PAD` before the final texture instruction. */
+        Matrix3RepeatedPad,
+        /** @brief End the shader after the first `TEXM3X3PAD`. */
+        Matrix3IncompleteOnePad,
+        /** @brief End the shader after the second `TEXM3X3PAD`. */
+        Matrix3IncompleteTwoPads,
+    };
+
     /** @brief Scratch-operand form emitted for the synthetic vertex `SGN` instruction. */
     enum class SyntheticSgnScratchOperands
     {
@@ -1827,6 +1850,9 @@ namespace CNA::TestSupport
         bool pixelShaderUsesLegacyTextureMatrix2 = false;
         /// Emits the sampled Shader Model 1.2 `TEXM3X3PAD`/`TEXM3X3TEX` sequence.
         bool pixelShaderUsesLegacyTextureMatrix3Sample = false;
+        /** @brief Emits the selected invalid legacy texture-matrix sequence. */
+        SyntheticLegacyTextureMatrixSequenceProbe pixelShaderLegacyTextureMatrixSequenceProbe =
+            SyntheticLegacyTextureMatrixSequenceProbe::None;
         /// Emits sampled Shader Model 1.2 `TEXM3X3SPEC` with a constant eye ray.
         bool pixelShaderUsesLegacyTextureMatrix3Specular = false;
         /// Emits sampled Shader Model 1.2 `TEXM3X3VSPEC` with a varying eye ray.
@@ -2109,6 +2135,8 @@ namespace CNA::TestSupport
         SyntheticLegacyTextureRemap legacyTextureRemap = SyntheticLegacyTextureRemap::None,
         bool usesLegacyTextureMatrix2 = false,
         bool usesLegacyTextureMatrix3Sample = false,
+        SyntheticLegacyTextureMatrixSequenceProbe legacyTextureMatrixSequenceProbe =
+            SyntheticLegacyTextureMatrixSequenceProbe::None,
         bool usesLegacyTextureMatrix3Specular = false,
         bool usesLegacyTextureMatrix3VertexSpecular = false,
         SyntheticLegacyDepthOutput legacyDepthOutput = SyntheticLegacyDepthOutput::None,
@@ -2579,6 +2607,8 @@ namespace CNA::TestSupport
                                                      ? 0xFFFF0103u
                                                : usesLegacyTextureMatrix || usesLegacyTextureMatrix2 ||
                                                          usesLegacyTextureMatrix3Sample ||
+                                                         legacyTextureMatrixSequenceProbe !=
+                                                             SyntheticLegacyTextureMatrixSequenceProbe::None ||
                                                          usesLegacyTextureMatrix3Specular ||
                                                          usesLegacyTextureMatrix3VertexSpecular ||
                                                          legacyTextureRemap !=
@@ -2667,6 +2697,8 @@ namespace CNA::TestSupport
                       ? "ps_1_3"
                 : usesLegacyTextureMatrix || usesLegacyTextureMatrix2 ||
                           usesLegacyTextureMatrix3Sample ||
+                          legacyTextureMatrixSequenceProbe !=
+                              SyntheticLegacyTextureMatrixSequenceProbe::None ||
                           usesLegacyTextureMatrix3Specular ||
                           usesLegacyTextureMatrix3VertexSpecular ||
                           legacyTextureRemap != SyntheticLegacyTextureRemap::None ||
@@ -4438,6 +4470,88 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u); // mov r0, c0
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(regConst, 0));
+        }
+        else if (legacyTextureMatrixSequenceProbe !=
+                 SyntheticLegacyTextureMatrixSequenceProbe::None)
+        {
+            using Probe = SyntheticLegacyTextureMatrixSequenceProbe;
+            const bool matrix2 = legacyTextureMatrixSequenceProbe == Probe::Matrix2FinalGap ||
+                                 legacyTextureMatrixSequenceProbe == Probe::Matrix2RepeatedPad ||
+                                 legacyTextureMatrixSequenceProbe == Probe::Matrix2SourceMismatch ||
+                                 legacyTextureMatrixSequenceProbe == Probe::Matrix2Incomplete;
+            const bool incompleteAfterFirst =
+                legacyTextureMatrixSequenceProbe == Probe::Matrix2Incomplete ||
+                legacyTextureMatrixSequenceProbe == Probe::Matrix3IncompleteOnePad;
+            AppendUInt32(shader, 0x00000040u); // texcrd t0
+            AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+            if (legacyTextureMatrixSequenceProbe == Probe::Matrix2SourceMismatch)
+            {
+                AppendUInt32(shader, 0x00000040u); // texcrd t1
+                AppendUInt32(shader, destination(regTexture, 1, 0xFu));
+            }
+            AppendUInt32(shader, matrix2 ? 0x00000047u : 0x00000049u);
+            AppendUInt32(
+                shader,
+                destination(regTexture,
+                            legacyTextureMatrixSequenceProbe == Probe::Matrix2SourceMismatch ? 2u
+                                                                                              : 1u,
+                            0xFu));
+            AppendUInt32(shader, source(regTexture, 0));
+
+            if (incompleteAfterFirst)
+            {
+                AppendUInt32(shader, 0x00000001u); // mov r0, t0
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, source(regTexture, 0));
+            }
+            else if (legacyTextureMatrixSequenceProbe == Probe::Matrix2RepeatedPad)
+            {
+                AppendUInt32(shader, 0x00000047u); // invalid second texm3x2pad t2, t0
+                AppendUInt32(shader, destination(regTexture, 2, 0xFu));
+                AppendUInt32(shader, source(regTexture, 0));
+            }
+            else if (!matrix2)
+            {
+                AppendUInt32(shader, 0x00000049u); // texm3x3pad t#, t0
+                AppendUInt32(
+                    shader,
+                    destination(
+                        regTexture,
+                        legacyTextureMatrixSequenceProbe == Probe::Matrix3SecondPadGap ? 3u
+                                                                                       : 2u,
+                        0xFu));
+                AppendUInt32(shader, source(regTexture, 0));
+                if (legacyTextureMatrixSequenceProbe == Probe::Matrix3RepeatedPad)
+                {
+                    AppendUInt32(shader, 0x00000049u); // invalid third texm3x3pad t3, t0
+                    AppendUInt32(shader, destination(regTexture, 3, 0xFu));
+                    AppendUInt32(shader, source(regTexture, 0));
+                }
+            }
+
+            if (!incompleteAfterFirst)
+            {
+                if (legacyTextureMatrixSequenceProbe == Probe::Matrix3IncompleteTwoPads)
+                {
+                    AppendUInt32(shader, 0x00000001u); // mov r0, t0
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regTexture, 0));
+                }
+                else
+                {
+                    AppendUInt32(shader, matrix2 ? 0x00000048u : 0x0000004Au);
+                    AppendUInt32(shader, destination(regTexture, 3, 0xFu));
+                    AppendUInt32(
+                        shader,
+                        source(regTexture,
+                               legacyTextureMatrixSequenceProbe == Probe::Matrix2SourceMismatch
+                                   ? 1u
+                                   : 0u));
+                    AppendUInt32(shader, 0x00000001u); // mov r0, t3
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regTexture, 3));
+                }
+            }
         }
         else if (usesLegacyTextureMatrix3Specular)
         {
@@ -8246,6 +8360,7 @@ namespace CNA::TestSupport
             options.pixelShaderLegacyTextureRemap,
             options.pixelShaderUsesLegacyTextureMatrix2,
             options.pixelShaderUsesLegacyTextureMatrix3Sample,
+            options.pixelShaderLegacyTextureMatrixSequenceProbe,
             options.pixelShaderUsesLegacyTextureMatrix3Specular,
             options.pixelShaderUsesLegacyTextureMatrix3VertexSpecular,
             options.pixelShaderLegacyDepthOutput,
