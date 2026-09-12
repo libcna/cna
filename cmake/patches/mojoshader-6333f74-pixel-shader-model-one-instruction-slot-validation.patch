@@ -1,0 +1,71 @@
+diff --git a/mojoshader.c b/mojoshader.c
+index d6b10bf..09ee728 100644
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -372,5 +372,49 @@ static void validate_pixel_shader_model_two_zero_instruction_slot_count(
+ } // validate_pixel_shader_model_two_zero_instruction_slot_count
+ 
++static int pixel_shader_model_one_texture_opcode(const uint32 opcode)
++{
++    return (((opcode >= 64) && (opcode <= 77)) ||
++            ((opcode >= 82) && (opcode <= 87)));
++} // pixel_shader_model_one_texture_opcode
++
++static int pixel_shader_model_one_arithmetic_slots(Context *ctx, const uint32 opcode)
++{
++    if ((opcode == 0) || (opcode == 81))  // NOP or DEF.
++        return 0;
++    if (opcode == 68)  // TEXBEML also consumes one arithmetic slot.
++        return 1;
++    if (pixel_shader_model_one_texture_opcode(opcode))
++        return 0;
++    if ((opcode == 9) || (opcode == 88))  // DP4 or CMP.
++        return (ctx->minor_ver >= 4) ? 1 : 2;
++    if (opcode == 89)  // BEM.
++        return 2;
++    return 1;
++} // pixel_shader_model_one_arithmetic_slots
++
++static void validate_pixel_shader_model_one_instruction_slot_count(
++    Context *ctx, const uint32 opcode)
++{
++    if (!shader_is_pixel(ctx) || (ctx->major_ver != 1))
++        return;
++
++    const int texture_slots = pixel_shader_model_one_texture_opcode(opcode) ? 1 : 0;
++    int arithmetic_slots = pixel_shader_model_one_arithmetic_slots(ctx, opcode);
++    if (ctx->coissue && (arithmetic_slots == 1))
++        arithmetic_slots = 0;
++
++    ctx->pixel_texture_instruction_count += texture_slots;
++    ctx->pixel_arithmetic_instruction_count += arithmetic_slots;
++
++    const int texture_limit = (ctx->minor_ver >= 4) ? 6 : 4;
++    if (ctx->pixel_texture_instruction_count > texture_limit)
++        failf(ctx, "pixel shader texture instruction count %d exceeds the ps_1_%d limit of %d slots",
++              ctx->pixel_texture_instruction_count, ctx->minor_ver, texture_limit);
++    if (ctx->pixel_arithmetic_instruction_count > 8)
++        failf(ctx, "pixel shader arithmetic instruction count %d exceeds the ps_1_%d limit of 8 slots",
++              ctx->pixel_arithmetic_instruction_count, ctx->minor_ver);
++} // validate_pixel_shader_model_one_instruction_slot_count
++
+ static int temporary_register_count(const Context *ctx)
+ {
+     if (shader_is_vertex(ctx))
+@@ -2706,7 +2750,8 @@ static int parse_instruction_token(Context *ctx)
+     ctx->instruction_count += instruction->slots;
+     validate_vertex_instruction_slot_count(ctx);
+     validate_pixel_shader_model_two_zero_instruction_slot_count(
+         ctx, opcode, instruction->slots);
++    validate_pixel_shader_model_one_instruction_slot_count(ctx, opcode);
+ 
+     if (!isfail(ctx))
+         emitter(ctx);  // call the profile's emitter.
+@@ -3537,5 +3582,7 @@ static int parse_phase_token(Context *ctx)
+     if (!isfail(ctx))
+     {
+         ctx->phase_count++;
++        ctx->pixel_arithmetic_instruction_count = 0;
++        ctx->pixel_texture_instruction_count = 0;
+         ctx->profile->phase_emitter(ctx);
+     } // if

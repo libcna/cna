@@ -3408,6 +3408,70 @@ namespace
         }
     }
 
+    void CheckCompiledPixel1InstructionSlotValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticPixel1InstructionSlotProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel11ArithmeticOutOfRange,
+            Probe::Pixel11TextureOutOfRange,
+            Probe::Pixel12DoubleArithmeticOutOfRange,
+            Probe::Pixel14ArithmeticOutOfRange,
+            Probe::Pixel14TextureOutOfRange,
+            Probe::Pixel14SecondPhaseArithmeticOutOfRange,
+            Probe::Pixel11CoissuedArithmeticOutOfRange,
+            Probe::Pixel11TexbemlArithmeticOutOfRange,
+        };
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixel1InstructionSlotProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected,
+                  "compiled Effect parser accepted an over-limit ps_1_x program, probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+        constexpr std::array validProbes{
+            Probe::Pixel11ArithmeticMaximum,
+            Probe::Pixel11TextureMaximum,
+            Probe::Pixel12DoubleArithmeticMaximum,
+            Probe::Pixel14ArithmeticMaximum,
+            Probe::Pixel14TextureMaximum,
+            Probe::Pixel14TwoPhaseArithmeticMaximum,
+            Probe::Pixel11CoissuedArithmeticMaximum,
+            Probe::Pixel11TexbemlArithmeticMaximum,
+            Probe::Pixel11ZeroSlotNopControl,
+        };
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixel1InstructionSlotProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Effect parser rejected a ps_1_x program at its slot limit, probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -5204,6 +5268,7 @@ int main()
         CheckCompiledConstantControlRegisterRangeValidation(renderer);
         CheckCompiledVertexInstructionSlotValidation(renderer);
         CheckCompiledPixel20InstructionSlotValidation(renderer);
+        CheckCompiledPixel1InstructionSlotValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();

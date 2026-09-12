@@ -580,6 +580,47 @@ namespace CNA::TestSupport
         TextureOutOfRange,
     };
 
+    /** @brief Fixed pixel Shader Model 1.x instruction-slot boundary exercised by a program. */
+    enum class SyntheticPixel1InstructionSlotProbe
+    {
+        /** @brief Emit no dedicated instruction-slot boundary program. */
+        None,
+        /** @brief Emit exactly eight arithmetic slots in ps_1_1. */
+        Pixel11ArithmeticMaximum,
+        /** @brief Emit nine arithmetic slots in ps_1_1. */
+        Pixel11ArithmeticOutOfRange,
+        /** @brief Emit exactly four texture slots in ps_1_1. */
+        Pixel11TextureMaximum,
+        /** @brief Emit five texture slots in ps_1_1. */
+        Pixel11TextureOutOfRange,
+        /** @brief Emit four two-slot DP4 instructions in ps_1_2. */
+        Pixel12DoubleArithmeticMaximum,
+        /** @brief Emit five two-slot DP4 instructions in ps_1_2. */
+        Pixel12DoubleArithmeticOutOfRange,
+        /** @brief Emit exactly eight arithmetic slots in ps_1_4. */
+        Pixel14ArithmeticMaximum,
+        /** @brief Emit nine arithmetic slots in ps_1_4. */
+        Pixel14ArithmeticOutOfRange,
+        /** @brief Emit exactly six texture slots in ps_1_4. */
+        Pixel14TextureMaximum,
+        /** @brief Emit seven texture slots in ps_1_4. */
+        Pixel14TextureOutOfRange,
+        /** @brief Emit eight arithmetic slots in each ps_1_4 phase. */
+        Pixel14TwoPhaseArithmeticMaximum,
+        /** @brief Emit eight then nine arithmetic slots across the two ps_1_4 phases. */
+        Pixel14SecondPhaseArithmeticOutOfRange,
+        /** @brief Emit eight co-issued RGB/alpha pairs occupying eight ps_1_1 slots. */
+        Pixel11CoissuedArithmeticMaximum,
+        /** @brief Emit nine co-issued RGB/alpha pairs occupying nine ps_1_1 slots. */
+        Pixel11CoissuedArithmeticOutOfRange,
+        /** @brief Combine TEXBEML's extra arithmetic slot with seven ps_1_1 MOV slots. */
+        Pixel11TexbemlArithmeticMaximum,
+        /** @brief Combine TEXBEML's extra arithmetic slot with eight ps_1_1 MOV slots. */
+        Pixel11TexbemlArithmeticOutOfRange,
+        /** @brief Prove zero-slot ps_1_1 NOP instructions do not consume the arithmetic budget. */
+        Pixel11ZeroSlotNopControl,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -804,6 +845,9 @@ namespace CNA::TestSupport
         /** @brief Selects a fixed ps_2_0 instruction-slot boundary program. */
         SyntheticPixel20InstructionSlotProbe pixel20InstructionSlotProbe =
             SyntheticPixel20InstructionSlotProbe::None;
+        /** @brief Selects a fixed ps_1_x instruction-slot boundary program. */
+        SyntheticPixel1InstructionSlotProbe pixel1InstructionSlotProbe =
+            SyntheticPixel1InstructionSlotProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -904,7 +948,9 @@ namespace CNA::TestSupport
         SyntheticConstantControlRegisterProbe constantControlRegisterProbe =
             SyntheticConstantControlRegisterProbe::None,
         SyntheticPixel20InstructionSlotProbe instructionSlotProbe =
-            SyntheticPixel20InstructionSlotProbe::None)
+            SyntheticPixel20InstructionSlotProbe::None,
+        SyntheticPixel1InstructionSlotProbe pixel1InstructionSlotProbe =
+            SyntheticPixel1InstructionSlotProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -959,6 +1005,25 @@ namespace CNA::TestSupport
                 SyntheticConstantControlRegisterProbe::Pixel30FloatMaximum &&
             constantControlRegisterProbe <=
                 SyntheticConstantControlRegisterProbe::Pixel30PredicateOutOfRange;
+        const bool probesPixel11InstructionSlots =
+            (pixel1InstructionSlotProbe >=
+                 SyntheticPixel1InstructionSlotProbe::Pixel11ArithmeticMaximum &&
+             pixel1InstructionSlotProbe <=
+                 SyntheticPixel1InstructionSlotProbe::Pixel11TextureOutOfRange) ||
+            (pixel1InstructionSlotProbe >=
+                 SyntheticPixel1InstructionSlotProbe::Pixel11CoissuedArithmeticMaximum &&
+             pixel1InstructionSlotProbe <=
+                 SyntheticPixel1InstructionSlotProbe::Pixel11ZeroSlotNopControl);
+        const bool probesPixel12InstructionSlots =
+            pixel1InstructionSlotProbe >=
+                SyntheticPixel1InstructionSlotProbe::Pixel12DoubleArithmeticMaximum &&
+            pixel1InstructionSlotProbe <=
+                SyntheticPixel1InstructionSlotProbe::Pixel12DoubleArithmeticOutOfRange;
+        const bool probesPixel14InstructionSlots =
+            pixel1InstructionSlotProbe >=
+                SyntheticPixel1InstructionSlotProbe::Pixel14ArithmeticMaximum &&
+            pixel1InstructionSlotProbe <=
+                SyntheticPixel1InstructionSlotProbe::Pixel14SecondPhaseArithmeticOutOfRange;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -984,10 +1049,14 @@ namespace CNA::TestSupport
             legacyDepthOutput == SyntheticLegacyDepthOutput::TextureMatrix2;
         const std::uint32_t versionToken = probesPixel11Temporary || probesPixel11ColorInput ||
                                                    probesPixel11TextureInput ||
-                                                   probesPixel11FloatControl
+                                                   probesPixel11FloatControl ||
+                                                   probesPixel11InstructionSlots
                                                ? 0xFFFF0101u
-                                           : probesPixel14Temporary || probesPixel14TextureInput
+                                           : probesPixel14Temporary || probesPixel14TextureInput ||
+                                                     probesPixel14InstructionSlots
                                                ? 0xFFFF0104u
+                                           : probesPixel12InstructionSlots
+                                               ? 0xFFFF0102u
                                            : probesPixel20Temporary || probesPixel20FloatControl
                                                ? 0xFFFF0200u
                                            : probesPixel2xTemporary
@@ -1065,10 +1134,13 @@ namespace CNA::TestSupport
         const std::uint32_t samplerName = appendCtabString("FxSampler");
         const std::uint32_t target = appendCtabString(
             probesPixel11Temporary || probesPixel11ColorInput || probesPixel11TextureInput ||
-                    probesPixel11FloatControl
+                    probesPixel11FloatControl || probesPixel11InstructionSlots
                 ? "ps_1_1"
-                : probesPixel14Temporary || probesPixel14TextureInput
+                : probesPixel14Temporary || probesPixel14TextureInput ||
+                          probesPixel14InstructionSlots
                       ? "ps_1_4"
+                      : probesPixel12InstructionSlots
+                            ? "ps_1_2"
                       : probesPixel20Temporary || probesPixel20FloatControl
                             ? "ps_2_0"
                       : probesPixel2xTemporary
@@ -1547,7 +1619,115 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 1, 0xE4u, absoluteSecond ? 11u : 0u));
         }
 
-        if (instructionSlotProbe != SyntheticPixel20InstructionSlotProbe::None)
+        if (pixel1InstructionSlotProbe != SyntheticPixel1InstructionSlotProbe::None)
+        {
+            const bool outOfRange =
+                pixel1InstructionSlotProbe ==
+                    SyntheticPixel1InstructionSlotProbe::Pixel11ArithmeticOutOfRange ||
+                pixel1InstructionSlotProbe ==
+                    SyntheticPixel1InstructionSlotProbe::Pixel11TextureOutOfRange ||
+                pixel1InstructionSlotProbe ==
+                    SyntheticPixel1InstructionSlotProbe::Pixel12DoubleArithmeticOutOfRange ||
+                pixel1InstructionSlotProbe ==
+                    SyntheticPixel1InstructionSlotProbe::Pixel14ArithmeticOutOfRange ||
+                pixel1InstructionSlotProbe ==
+                    SyntheticPixel1InstructionSlotProbe::Pixel14TextureOutOfRange ||
+                pixel1InstructionSlotProbe ==
+                    SyntheticPixel1InstructionSlotProbe::Pixel14SecondPhaseArithmeticOutOfRange ||
+                pixel1InstructionSlotProbe ==
+                    SyntheticPixel1InstructionSlotProbe::Pixel11CoissuedArithmeticOutOfRange ||
+                pixel1InstructionSlotProbe ==
+                    SyntheticPixel1InstructionSlotProbe::Pixel11TexbemlArithmeticOutOfRange;
+            const auto appendMov = [&](std::uint32_t writeMask = 0xFu,
+                                       bool coissued = false) {
+                AppendUInt32(shader, 0x00000001u | (coissued ? 0x40000000u : 0u));
+                AppendUInt32(shader, destination(regTemp, 0, writeMask));
+                AppendUInt32(shader, source(regConst, 0));
+            };
+            if (pixel1InstructionSlotProbe ==
+                    SyntheticPixel1InstructionSlotProbe::Pixel11TextureMaximum ||
+                pixel1InstructionSlotProbe ==
+                    SyntheticPixel1InstructionSlotProbe::Pixel11TextureOutOfRange)
+            {
+                const std::uint32_t textureSlots = outOfRange ? 5u : 4u;
+                for (std::uint32_t slot = 0; slot < textureSlots; ++slot)
+                {
+                    AppendUInt32(shader, 0x00000041u); // texkill t0
+                    AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+                }
+                appendMov();
+            }
+            else if (probesPixel12InstructionSlots)
+            {
+                const std::uint32_t instructions = outOfRange ? 5u : 4u;
+                for (std::uint32_t slot = 0; slot < instructions; ++slot)
+                {
+                    AppendUInt32(shader, 0x00000009u); // dp4 r0, c0, c0
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regConst, 0));
+                    AppendUInt32(shader, source(regConst, 0));
+                }
+            }
+            else if (pixel1InstructionSlotProbe ==
+                         SyntheticPixel1InstructionSlotProbe::Pixel14TextureMaximum ||
+                     pixel1InstructionSlotProbe ==
+                         SyntheticPixel1InstructionSlotProbe::Pixel14TextureOutOfRange)
+            {
+                appendMov();
+                const std::uint32_t textureSlots = outOfRange ? 7u : 6u;
+                for (std::uint32_t slot = 0; slot < textureSlots; ++slot)
+                {
+                    AppendUInt32(shader, 0x00000041u); // texkill r0
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                }
+            }
+            else if (pixel1InstructionSlotProbe ==
+                         SyntheticPixel1InstructionSlotProbe::Pixel11TexbemlArithmeticMaximum ||
+                     pixel1InstructionSlotProbe ==
+                         SyntheticPixel1InstructionSlotProbe::Pixel11TexbemlArithmeticOutOfRange)
+            {
+                AppendUInt32(shader, 0x00000044u); // texbeml t1, t0
+                AppendUInt32(shader, destination(regTexture, 1, 0xFu));
+                AppendUInt32(shader, source(regTexture, 0));
+                const std::uint32_t movSlots = outOfRange ? 8u : 7u;
+                for (std::uint32_t slot = 0; slot < movSlots; ++slot) appendMov();
+            }
+            else if (pixel1InstructionSlotProbe ==
+                     SyntheticPixel1InstructionSlotProbe::Pixel11ZeroSlotNopControl)
+            {
+                for (std::uint32_t slot = 0; slot < 32u; ++slot)
+                    AppendUInt32(shader, 0x00000000u); // nop
+                for (std::uint32_t slot = 0; slot < 8u; ++slot) appendMov();
+            }
+            else if (pixel1InstructionSlotProbe ==
+                         SyntheticPixel1InstructionSlotProbe::Pixel11CoissuedArithmeticMaximum ||
+                     pixel1InstructionSlotProbe ==
+                         SyntheticPixel1InstructionSlotProbe::Pixel11CoissuedArithmeticOutOfRange)
+            {
+                const std::uint32_t pairs = outOfRange ? 9u : 8u;
+                for (std::uint32_t slot = 0; slot < pairs; ++slot)
+                {
+                    appendMov(0x7u);
+                    appendMov(0x8u, true);
+                }
+            }
+            else if (pixel1InstructionSlotProbe ==
+                         SyntheticPixel1InstructionSlotProbe::Pixel14TwoPhaseArithmeticMaximum ||
+                     pixel1InstructionSlotProbe ==
+                         SyntheticPixel1InstructionSlotProbe::Pixel14SecondPhaseArithmeticOutOfRange)
+            {
+                for (std::uint32_t slot = 0; slot < 8u; ++slot) appendMov();
+                AppendUInt32(shader, 0x0000FFFDu); // phase
+                const std::uint32_t secondPhaseSlots = outOfRange ? 9u : 8u;
+                for (std::uint32_t slot = 0; slot < secondPhaseSlots; ++slot) appendMov();
+            }
+            else
+            {
+                const std::uint32_t arithmeticSlots = outOfRange ? 9u : 8u;
+                for (std::uint32_t slot = 0; slot < arithmeticSlots; ++slot) appendMov();
+            }
+        }
+        else if (instructionSlotProbe != SyntheticPixel20InstructionSlotProbe::None)
         {
             const bool texture =
                 instructionSlotProbe == SyntheticPixel20InstructionSlotProbe::TextureMaximum ||
@@ -3697,7 +3877,8 @@ namespace CNA::TestSupport
             options.inputRegisterProbe,
             options.outputRegisterProbe,
             options.constantControlRegisterProbe,
-            options.pixel20InstructionSlotProbe);
+            options.pixel20InstructionSlotProbe,
+            options.pixel1InstructionSlotProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

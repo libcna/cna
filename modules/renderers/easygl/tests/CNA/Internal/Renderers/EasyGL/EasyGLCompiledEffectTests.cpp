@@ -1508,6 +1508,66 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumPixel20InstructionSlots)
     }
 }
 
+class EasyGLCompiledEffectPixel1InstructionSlotTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticPixel1InstructionSlotProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPixel1InstructionSlotTest,
+       RejectsFirstInstructionSlotBeyondProfileLimit)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixel1InstructionSlotProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangePixel1InstructionSlots,
+    EasyGLCompiledEffectPixel1InstructionSlotTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::Pixel11ArithmeticOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::Pixel11TextureOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::Pixel12DoubleArithmeticOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::Pixel14ArithmeticOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::Pixel14TextureOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::
+            Pixel14SecondPhaseArithmeticOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::
+            Pixel11CoissuedArithmeticOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::
+            Pixel11TexbemlArithmeticOutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumPixel1InstructionSlots)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticPixel1InstructionSlotProbe;
+    for (const Probe probe : {
+             Probe::Pixel11ArithmeticMaximum,
+             Probe::Pixel11TextureMaximum,
+             Probe::Pixel12DoubleArithmeticMaximum,
+             Probe::Pixel14ArithmeticMaximum,
+             Probe::Pixel14TextureMaximum,
+             Probe::Pixel14TwoPhaseArithmeticMaximum,
+             Probe::Pixel11CoissuedArithmeticMaximum,
+             Probe::Pixel11TexbemlArithmeticMaximum,
+             Probe::Pixel11ZeroSlotNopControl,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixel1InstructionSlotProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;
