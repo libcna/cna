@@ -1577,6 +1577,58 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticRelativeAddressingProbe::VertexConstantSubroutineInsideLoop,
         CNA::TestSupport::SyntheticRelativeAddressingProbe::VertexInputInsideLoop));
 
+class EasyGLCompiledEffectMiscellaneousInputTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticMiscellaneousInputProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectMiscellaneousInputTest, RejectsInvalidPositionOrFaceUse)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.miscellaneousInputProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectMiscellaneousInputTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::PositionMaskZ,
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::PositionMaskXYZ,
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::PositionMaskFull,
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::FaceOrdinaryMove));
+
+class EasyGLCompiledEffectValidMiscellaneousInputTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticMiscellaneousInputProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidMiscellaneousInputTest, AcceptsPositionMasksAndFaceCondition)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.miscellaneousInputProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectValidMiscellaneousInputTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::PositionMaskX,
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::PositionMaskY,
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::PositionMaskXY,
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::FaceConditionalCompare));
+
 class EasyGLCompiledEffectOutputRegisterRangeTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>
 {

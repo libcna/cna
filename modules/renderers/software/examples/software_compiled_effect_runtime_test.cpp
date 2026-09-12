@@ -3597,6 +3597,70 @@ namespace
                   rejectedValidProbes);
     }
 
+    void CheckCompiledMiscellaneousInputValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticMiscellaneousInputProbe;
+        constexpr std::array invalidProbes{
+            Probe::PositionMaskZ,
+            Probe::PositionMaskXYZ,
+            Probe::PositionMaskFull,
+            Probe::FaceOrdinaryMove,
+        };
+        std::string acceptedProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.miscellaneousInputProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                (void) renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+            }
+            catch (const std::exception&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedProbes.empty()) acceptedProbes += ", ";
+                acceptedProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedProbes.empty(),
+              "compiled Effect parser accepted invalid vPos/vFace probes: " +
+                  acceptedProbes);
+
+        constexpr std::array validProbes{
+            Probe::PositionMaskX,
+            Probe::PositionMaskY,
+            Probe::PositionMaskXY,
+            Probe::FaceConditionalCompare,
+        };
+        std::string rejectedProbes;
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.miscellaneousInputProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            try
+            {
+                (void) renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+            }
+            catch (const std::exception& error)
+            {
+                if (!rejectedProbes.empty()) rejectedProbes += ", ";
+                rejectedProbes += std::to_string(static_cast<int>(probe)) + ": " +
+                                  error.what();
+            }
+        }
+        Check(rejectedProbes.empty(),
+              "compiled Effect parser rejected valid vPos/vFace probes: " +
+                  rejectedProbes);
+    }
+
     void CheckCompiledOutputRegisterRangeValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticOutputRegisterProbe;
@@ -5809,6 +5873,7 @@ int main()
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);
+        CheckCompiledMiscellaneousInputValidation(renderer);
         CheckCompiledOutputRegisterRangeValidation(renderer);
         CheckCompiledConstantControlRegisterRangeValidation(renderer);
         CheckCompiledVertexInstructionSlotValidation(renderer);

@@ -1,0 +1,53 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -777,5 +777,23 @@ static void validate_special_control_register_source(Context *ctx,
+ } // validate_special_control_register_source
+ 
++static void validate_miscellaneous_input_source(Context *ctx,
++                                                const RegisterType regtype,
++                                                const int regnum,
++                                                const int source_index)
++{
++    if ((regtype != REG_TYPE_MISCTYPE) ||
++        (regnum != MISCTYPE_TYPE_FACE))
++        return;
++
++    if (((ctx->current_opcode == 88) && (source_index == 0)) ||  // CMP condition.
++        (ctx->current_opcode == OPCODE_SETP) ||
++        (ctx->current_opcode == OPCODE_IFC) ||
++        (ctx->current_opcode == OPCODE_BREAKC))
++        return;
++
++    fail(ctx, "vFace register requires a comparison condition operand");
++} // validate_miscellaneous_input_source
++
+ static void validate_constant_control_register(Context *ctx,
+                                                const RegisterType regtype,
+                                                const int regnum)
+@@ -1178,6 +1196,9 @@ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+                                            source_index);
+     validate_special_control_register_source(ctx, info->regtype,
+                                              source_index);
++    validate_miscellaneous_input_source(ctx, info->regtype,
++                                        info->regnum,
++                                        source_index);
+     validate_constant_control_register(ctx, info->regtype, info->regnum);
+ 
+     info->swizzle = adjust_swizzle(ctx, info->regtype, info->regnum, swizzle);
+@@ -1506,8 +1527,15 @@ static int parse_args_DCL(Context *ctx)
+         else if (regtype == REG_TYPE_MISCTYPE)
+         {
+             const MiscTypeType mt = (MiscTypeType) regnum;
+             if (mt == MISCTYPE_TYPE_POSITION)
++            {
+                 reserved_mask = 0x7FFFFFFF;
++                const int mask = ctx->dest_arg.orig_writemask;
++                if ((mask != 0x1) && (mask != 0x2) && (mask != 0x3))
++                {
++                    fail(ctx, "DCL position writemask must be .x, .y, or .xy");
++                } // if
++            } // if
+             else if (mt == MISCTYPE_TYPE_FACE)
+             {
+                 reserved_mask = 0x7FFFFFFF;

@@ -832,6 +832,29 @@ namespace CNA::TestSupport
         VertexInputInsideLoop,
     };
 
+    /** @brief D3D9 pixel miscellaneous-input rule exercised by a program. */
+    enum class SyntheticMiscellaneousInputProbe
+    {
+        /** @brief Emit no dedicated miscellaneous-input validation program. */
+        None,
+        /** @brief Declare `vPos` with the forbidden `.z` mask. */
+        PositionMaskZ,
+        /** @brief Declare `vPos` with the forbidden `.xyz` mask. */
+        PositionMaskXYZ,
+        /** @brief Declare `vPos` with the forbidden full mask. */
+        PositionMaskFull,
+        /** @brief Read the condition-only `vFace` through an ordinary `MOV`. */
+        FaceOrdinaryMove,
+        /** @brief Declare the legal `.x` subset of `vPos`. */
+        PositionMaskX,
+        /** @brief Declare the legal `.y` subset of `vPos`. */
+        PositionMaskY,
+        /** @brief Declare the legal `.xy` subset of `vPos`. */
+        PositionMaskXY,
+        /** @brief Read `vFace` as the condition of `CMP`. */
+        FaceConditionalCompare,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -1085,6 +1108,9 @@ namespace CNA::TestSupport
         /** @brief Selects a D3D9 relative-source addressing scope/register probe. */
         SyntheticRelativeAddressingProbe relativeAddressingProbe =
             SyntheticRelativeAddressingProbe::None;
+        /** @brief Selects a D3D9 pixel miscellaneous-input validation probe. */
+        SyntheticMiscellaneousInputProbe miscellaneousInputProbe =
+            SyntheticMiscellaneousInputProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -1202,7 +1228,9 @@ namespace CNA::TestSupport
         SyntheticSpecialControlSourceProbe specialControlSourceProbe =
             SyntheticSpecialControlSourceProbe::None,
         SyntheticRelativeAddressingProbe relativeAddressingProbe =
-            SyntheticRelativeAddressingProbe::None)
+            SyntheticRelativeAddressingProbe::None,
+        SyntheticMiscellaneousInputProbe miscellaneousInputProbe =
+            SyntheticMiscellaneousInputProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1323,6 +1351,8 @@ namespace CNA::TestSupport
                 SyntheticRelativeAddressingProbe::PixelInputOutsideLoop &&
             relativeAddressingProbe <=
                 SyntheticRelativeAddressingProbe::PixelInputSubroutineInsideLoop;
+        const bool probesPixelMiscellaneousInput =
+            miscellaneousInputProbe != SyntheticMiscellaneousInputProbe::None;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -1337,6 +1367,7 @@ namespace CNA::TestSupport
             probesPixelOutput || probesPixel30DestinationAccess || probesPixel30OutputSource ||
             probesPixel30SamplerSource || probesPixel30TypedControlSource ||
             probesPixel30SpecialControlSource || probesPixelRelativeAddressing ||
+            probesPixelMiscellaneousInput ||
             probesPixel30ConstantControl;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
@@ -2622,6 +2653,48 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, 0));
+        }
+        else if (probesPixelMiscellaneousInput)
+        {
+            const bool face =
+                miscellaneousInputProbe ==
+                    SyntheticMiscellaneousInputProbe::FaceOrdinaryMove ||
+                miscellaneousInputProbe ==
+                    SyntheticMiscellaneousInputProbe::FaceConditionalCompare;
+            const bool conditionalFace = miscellaneousInputProbe ==
+                SyntheticMiscellaneousInputProbe::FaceConditionalCompare;
+            std::uint32_t mask = 0xFu;
+            if (miscellaneousInputProbe == SyntheticMiscellaneousInputProbe::PositionMaskZ)
+                mask = 0x4u;
+            else if (miscellaneousInputProbe ==
+                     SyntheticMiscellaneousInputProbe::PositionMaskXYZ)
+                mask = 0x7u;
+            else if (miscellaneousInputProbe ==
+                     SyntheticMiscellaneousInputProbe::PositionMaskX)
+                mask = 0x1u;
+            else if (miscellaneousInputProbe ==
+                     SyntheticMiscellaneousInputProbe::PositionMaskY)
+                mask = 0x2u;
+            else if (miscellaneousInputProbe ==
+                     SyntheticMiscellaneousInputProbe::PositionMaskXY)
+                mask = 0x3u;
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl vPos/vFace
+            AppendUInt32(shader, 0x80000000u);
+            AppendUInt32(shader, destination(regMiscellaneous, face ? 1u : 0u, mask));
+            if (conditionalFace)
+            {
+                AppendUInt32(shader, 0x00000058u | (4u << 24)); // cmp oC0, vFace, c0, c0
+                AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+                AppendUInt32(shader, source(regMiscellaneous, 1u));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, source(regConst, 0));
+            }
+            else
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, vPos/vFace
+                AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+                AppendUInt32(shader, source(regMiscellaneous, face ? 1u : 0u));
+            }
         }
         else if (usesRasterInputs)
         {
@@ -4725,7 +4798,8 @@ namespace CNA::TestSupport
             options.samplerRegisterSourceProbe,
             options.typedControlSourceProbe,
             options.specialControlSourceProbe,
-            options.relativeAddressingProbe);
+            options.relativeAddressingProbe,
+            options.miscellaneousInputProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
