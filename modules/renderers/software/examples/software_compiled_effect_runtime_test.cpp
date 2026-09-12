@@ -3132,6 +3132,10 @@ namespace
             Probe::Vertex20Depth1,
             Probe::Vertex2xDepth4,
             Probe::Vertex30Depth4,
+            Probe::Pixel30Label16,
+            Probe::Pixel30Label2047,
+            Probe::Vertex30Label16,
+            Probe::Vertex30Label2047,
         };
         for (const Probe probe : validProbes)
         {

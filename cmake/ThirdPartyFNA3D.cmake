@@ -110,7 +110,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-flow-control-structure-validation.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-vs20-static-flow-count.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-call-graph-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-label-lifecycle-validation.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-label-lifecycle-validation.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-three-label-range.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

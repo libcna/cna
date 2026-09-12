@@ -1218,7 +1218,11 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticCallGraphProbe::Pixel30Depth4,
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex20Depth1,
         CNA::TestSupport::SyntheticCallGraphProbe::Vertex2xDepth4,
-        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Depth4));
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Depth4,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30Label16,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30Label2047,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Label16,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Label2047));
 
 class EasyGLCompiledEffectMatrixOperandTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidMatrixOperands>

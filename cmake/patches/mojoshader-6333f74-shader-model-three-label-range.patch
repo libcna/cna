@@ -1,0 +1,18 @@
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2160,9 +2160,12 @@
+         failf(ctx, "%s with a non-label register specified", opcode);
+     if (!shader_version_atleast(ctx, 2, 0))
+         failf(ctx, "%s not supported in Shader Model 1", opcode);
+-    if ((shader_version_atleast(ctx, 2, 255)) && (regnum > 2047))
+-        fail(ctx, "label register number must be <= 2047");
+-    if (regnum > 15)
++    if (shader_version_atleast(ctx, 3, 0))
++    {
++        if (regnum > 2047)
++            fail(ctx, "label register number must be <= 2047");
++    } // if
++    else if (regnum > 15)
+         fail(ctx, "label register number must be <= 15");
+ } // check_label_register
+ 

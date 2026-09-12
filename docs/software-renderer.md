@@ -283,8 +283,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   five maximum/legal controls pass through Software and all 301 then-current enabled EasyGL
   compiled-Effect tests. SOFTWARE-436 additionally enforces the 16-count static-flow budget shared
   by `vs_2_0` and `vs_2_x`; seven independent overflows and two mixed maximum programs cover
-  Boolean `IF`/`ELSE`, `LOOP`, `REP`, `CALL` and Boolean `CALLNZ`, and all 310 enabled EasyGL
-  compiled-Effect tests pass. SOFTWARE-388 replaces the remaining SM3
+  Boolean `IF`/`ELSE`, `LOOP`, `REP`, `CALL` and Boolean `CALLNZ`, and all 310 then-current EasyGL
+  compiled-Effect tests pass. SOFTWARE-437/438 then enforce forward-only, profile-bounded call
+  graphs, complete label definitions and explicit subroutine termination. SOFTWARE-439 repairs the
+  adjacent over-validation bug: Shader Model 3 accepts the Microsoft-defined `l0..l2047` range while
+  Shader Model 2.x remains capped at `l15`; four pixel/vertex boundary programs pass with all 334
+  enabled EasyGL compiled-Effect tests. SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
   swizzles, source modifiers, projection and sample-dependent temporary chains. SOFTWARE-389
