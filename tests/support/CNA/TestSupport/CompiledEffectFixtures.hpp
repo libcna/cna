@@ -546,6 +546,25 @@ namespace CNA::TestSupport
         Vertex20LoopOutOfRange,
     };
 
+    /** @brief Fixed vertex-profile instruction-slot boundary exercised by a synthetic program. */
+    enum class SyntheticVertexInstructionSlotProbe
+    {
+        /** @brief Emit no dedicated instruction-slot boundary program. */
+        None,
+        /** @brief Emit exactly the 128 instruction slots allowed by vs_1_1. */
+        Vertex11Maximum,
+        /** @brief Emit 129 instruction slots in vs_1_1. */
+        Vertex11OutOfRange,
+        /** @brief Emit exactly the 256 instruction slots allowed by vs_2_0. */
+        Vertex20Maximum,
+        /** @brief Emit 257 instruction slots in vs_2_0. */
+        Vertex20OutOfRange,
+        /** @brief Emit exactly the 256 instruction slots allowed by vs_2_x. */
+        Vertex2xMaximum,
+        /** @brief Emit 257 instruction slots in vs_2_x. */
+        Vertex2xOutOfRange,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -764,6 +783,9 @@ namespace CNA::TestSupport
         /** @brief Selects a constant or singleton-control register boundary probe. */
         SyntheticConstantControlRegisterProbe constantControlRegisterProbe =
             SyntheticConstantControlRegisterProbe::None;
+        /** @brief Selects a fixed vertex-profile instruction-slot boundary program. */
+        SyntheticVertexInstructionSlotProbe vertexInstructionSlotProbe =
+            SyntheticVertexInstructionSlotProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -2310,7 +2332,10 @@ namespace CNA::TestSupport
                                                                     SyntheticOutputRegisterProbe::None,
                                                                 SyntheticConstantControlRegisterProbe
                                                                     constantControlRegisterProbe =
-                                                                        SyntheticConstantControlRegisterProbe::None)
+                                                                        SyntheticConstantControlRegisterProbe::None,
+                                                                SyntheticVertexInstructionSlotProbe
+                                                                    instructionSlotProbe =
+                                                                        SyntheticVertexInstructionSlotProbe::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -2319,7 +2344,14 @@ namespace CNA::TestSupport
                                        temporaryRegisterProbe ==
                                            SyntheticTemporaryRegisterProbe::Vertex11Maximum ||
                                        temporaryRegisterProbe ==
-                                           SyntheticTemporaryRegisterProbe::Vertex11OutOfRange;
+                                           SyntheticTemporaryRegisterProbe::Vertex11OutOfRange ||
+                                       instructionSlotProbe ==
+                                           SyntheticVertexInstructionSlotProbe::Vertex11Maximum ||
+                                       instructionSlotProbe ==
+                                           SyntheticVertexInstructionSlotProbe::Vertex11OutOfRange;
+        const bool probesVertex11InstructionSlots =
+            instructionSlotProbe == SyntheticVertexInstructionSlotProbe::Vertex11Maximum ||
+            instructionSlotProbe == SyntheticVertexInstructionSlotProbe::Vertex11OutOfRange;
         const bool probesVertex30Input =
             inputRegisterProbe == SyntheticInputRegisterProbe::Vertex30Maximum ||
             inputRegisterProbe == SyntheticInputRegisterProbe::Vertex30OutOfRange;
@@ -2360,9 +2392,12 @@ namespace CNA::TestSupport
         const bool probesVertex2xTemporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xMaximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange;
+        const bool probesVertex2xInstructionSlots =
+            instructionSlotProbe == SyntheticVertexInstructionSlotProbe::Vertex2xMaximum ||
+            instructionSlotProbe == SyntheticVertexInstructionSlotProbe::Vertex2xOutOfRange;
         const std::uint32_t versionToken = usesShaderModel11
                                                ? 0xFFFE0101u
-                                           : probesVertex2xTemporary
+                                           : probesVertex2xTemporary || probesVertex2xInstructionSlots
                                                ? 0xFFFE02FFu
                                            : usesShaderModel3
                                                ? 0xFFFE0300u
@@ -2433,7 +2468,7 @@ namespace CNA::TestSupport
         const std::uint32_t samplerName = appendCtabString("FxSampler");
         const std::uint32_t target = appendCtabString(
             usesShaderModel11 ? "vs_1_1"
-                              : probesVertex2xTemporary
+                              : probesVertex2xTemporary || probesVertex2xInstructionSlots
                                     ? "vs_2_x"
                                     : usesShaderModel3
                                           ? "vs_3_0"
@@ -2670,6 +2705,19 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_<kind> s#
             AppendUInt32(shader, 0x80000000u | (samplerTextureType << 27));
             AppendUInt32(shader, destination(regSampler, samplerRegister));
+        }
+        if (instructionSlotProbe != SyntheticVertexInstructionSlotProbe::None)
+        {
+            const bool maximum =
+                instructionSlotProbe == SyntheticVertexInstructionSlotProbe::Vertex11Maximum ||
+                instructionSlotProbe == SyntheticVertexInstructionSlotProbe::Vertex20Maximum ||
+                instructionSlotProbe == SyntheticVertexInstructionSlotProbe::Vertex2xMaximum;
+            const std::uint32_t profileLimit = probesVertex11InstructionSlots ? 128u : 256u;
+            // The ordinary terminal M4X4 below consumes four slots. Fill the remainder with NOPs
+            // so these programs land exactly on the profile limit or one slot beyond it.
+            const std::uint32_t nopCount = profileLimit - 4u + (maximum ? 0u : 1u);
+            for (std::uint32_t index = 0; index < nopCount; ++index)
+                AppendUInt32(shader, 0x00000000u);
         }
         if (probesVertex20Input || probesVertex30Input)
         {
@@ -3668,7 +3716,8 @@ namespace CNA::TestSupport
                 options.temporaryRegisterProbe,
                 options.inputRegisterProbe,
                 options.outputRegisterProbe,
-                options.constantControlRegisterProbe);
+                options.constantControlRegisterProbe,
+                options.vertexInstructionSlotProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

@@ -3310,6 +3310,59 @@ namespace
         }
     }
 
+    void CheckCompiledVertexInstructionSlotValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticVertexInstructionSlotProbe;
+        constexpr std::array invalidProbes{
+            Probe::Vertex11OutOfRange,
+            Probe::Vertex20OutOfRange,
+            Probe::Vertex2xOutOfRange,
+        };
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.vertexInstructionSlotProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected,
+                  "compiled Effect parser accepted an over-limit vertex program, probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+        constexpr std::array validProbes{
+            Probe::Vertex11Maximum,
+            Probe::Vertex20Maximum,
+            Probe::Vertex2xMaximum,
+        };
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.vertexInstructionSlotProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Effect parser rejected a vertex program at its instruction-slot limit, probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -5104,6 +5157,7 @@ int main()
         CheckCompiledInputRegisterRangeValidation(renderer);
         CheckCompiledOutputRegisterRangeValidation(renderer);
         CheckCompiledConstantControlRegisterRangeValidation(renderer);
+        CheckCompiledVertexInstructionSlotValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();

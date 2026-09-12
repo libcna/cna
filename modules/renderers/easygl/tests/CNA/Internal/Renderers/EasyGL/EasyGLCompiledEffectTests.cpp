@@ -1418,6 +1418,51 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedConstantControlRegisters)
     }
 }
 
+class EasyGLCompiledEffectVertexInstructionSlotTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticVertexInstructionSlotProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectVertexInstructionSlotTest, RejectsFirstInstructionSlotBeyondProfileLimit)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.vertexInstructionSlotProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangeVertexInstructionSlots,
+    EasyGLCompiledEffectVertexInstructionSlotTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticVertexInstructionSlotProbe::Vertex11OutOfRange,
+        CNA::TestSupport::SyntheticVertexInstructionSlotProbe::Vertex20OutOfRange,
+        CNA::TestSupport::SyntheticVertexInstructionSlotProbe::Vertex2xOutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumVertexInstructionSlots)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticVertexInstructionSlotProbe;
+    for (const Probe probe : {
+             Probe::Vertex11Maximum,
+             Probe::Vertex20Maximum,
+             Probe::Vertex2xMaximum,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexInstructionSlotProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;
