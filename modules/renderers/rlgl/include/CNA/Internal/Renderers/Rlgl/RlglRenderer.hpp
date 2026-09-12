@@ -405,8 +405,7 @@ namespace CNA::Internal::Renderers::Rlgl
          * @brief Creates a vertex buffer.
          *
          * @param vertexCapacity Maximum vertex count.
-         * @return Never returns until RLGL-011 implements the resource.
-         * @throws System::NotSupportedException Until RLGL-011 is complete.
+         * @return A declaration-aware fixed-capacity rlgl buffer resource.
          */
         std::unique_ptr<IVertexBufferRenderer> CreateVertexBuffer(int vertexCapacity) override;
 
@@ -414,8 +413,7 @@ namespace CNA::Internal::Renderers::Rlgl
          * @brief Creates a 16-bit index buffer.
          *
          * @param indexCapacity Maximum index count.
-         * @return Never returns until RLGL-011 implements the resource.
-         * @throws System::NotSupportedException Until RLGL-011 is complete.
+         * @return A fixed-capacity rlgl element-buffer resource.
          */
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int indexCapacity) override;
 
@@ -423,8 +421,7 @@ namespace CNA::Internal::Renderers::Rlgl
          * @brief Creates a 32-bit index buffer.
          *
          * @param indexCapacity Maximum index count.
-         * @return Never returns until RLGL-011 implements the resource.
-         * @throws System::NotSupportedException Until RLGL-011 is complete.
+         * @return A fixed-capacity rlgl element-buffer resource.
          */
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int indexCapacity) override;
 
@@ -437,7 +434,7 @@ namespace CNA::Internal::Renderers::Rlgl
          * @param projection Projection transform.
          * @param primitive Primitive topology.
          * @param primitiveCount Number of primitives.
-         * @throws System::NotSupportedException Until RLGL-011 is complete.
+         * @throws System::NotSupportedException Until RLGL-031 is complete.
          */
         void DrawColoredPrimitives(
             const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
@@ -453,7 +450,7 @@ namespace CNA::Internal::Renderers::Rlgl
          * @param projection Projection transform.
          * @param primitive Primitive topology.
          * @param primitiveCount Number of primitives.
-         * @throws System::NotSupportedException Until RLGL-011 is complete.
+         * @throws System::NotSupportedException Until RLGL-031 is complete.
          */
         void DrawIndexedColoredPrimitives(
             const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,

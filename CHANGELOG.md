@@ -19,8 +19,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
   runtime-validated on Linux. Complete blend, depth/stencil, rasterizer, write-mask, sample-mask,
   scissor, and depth-bias state is also pixel- and native-state-validated. A CNA-owned low-level
   rlgl SpriteBatch path now covers built-in texture and SpriteFont drawing, transforms, sorting,
-  blending, clipping, and sampler forwarding; remaining
-  resources and drawing are under active development in `plans/plan_rlgl.md`. The append-only C
+  blending, clipping, and sampler forwarding. Fixed-capacity rlgl VBO/EBO resources now cover
+  static/dynamic vertex data, every classic vertex declaration format, 16/32-bit indices, and
+  `None`/`Discard`/`NoOverwrite` updates; primitive submission and the remaining resources are
+  under active development in `plans/plan_rlgl.md`. The append-only C
   renderer identity advances the experimental C ABI to 0.27.0.
 - Capability-gated CNAEXT base-instance drawing through
   `GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT`, with the append-only

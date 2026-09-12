@@ -607,22 +607,19 @@ namespace CNA::Internal::Renderers::Rlgl
     std::unique_ptr<IVertexBufferRenderer> RlglRenderer::CreateVertexBuffer(
         const int vertexCapacity)
     {
-        (void)vertexCapacity;
-        Unsupported("vertex buffers", "RLGL-011");
+        return CreateVertexBufferRenderer(vertexCapacity);
     }
 
     std::unique_ptr<IIndexBufferRenderer> RlglRenderer::CreateIndexBuffer16(
         const int indexCapacity)
     {
-        (void)indexCapacity;
-        Unsupported("16-bit index buffers", "RLGL-011");
+        return CreateIndexBufferRenderer(indexCapacity, false);
     }
 
     std::unique_ptr<IIndexBufferRenderer> RlglRenderer::CreateIndexBuffer32(
         const int indexCapacity)
     {
-        (void)indexCapacity;
-        Unsupported("32-bit index buffers", "RLGL-011");
+        return CreateIndexBufferRenderer(indexCapacity, true);
     }
 
     void RlglRenderer::DrawColoredPrimitives(
@@ -635,7 +632,7 @@ namespace CNA::Internal::Renderers::Rlgl
         (void)projection;
         (void)primitive;
         (void)primitiveCount;
-        Unsupported("non-indexed primitive draws", "RLGL-011");
+        Unsupported("non-indexed primitive draws", "RLGL-031");
     }
 
     void RlglRenderer::DrawIndexedColoredPrimitives(
@@ -650,7 +647,7 @@ namespace CNA::Internal::Renderers::Rlgl
         (void)projection;
         (void)primitive;
         (void)primitiveCount;
-        Unsupported("indexed primitive draws", "RLGL-011");
+        Unsupported("indexed primitive draws", "RLGL-031");
     }
 
     void RlglRenderer::SetViewport(

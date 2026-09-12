@@ -16,6 +16,7 @@
 namespace
 {
     bool bridgeInitialized = false;
+    unsigned int bufferUploadVertexArray = 0;
 
     void RlglTraceLog(int level, const char* format, ...);
 }
@@ -65,6 +66,35 @@ namespace
                 std::string("RLGL: ") + operation + " requires a live rlgl device");
         }
     }
+
+    class ElementBufferScope final
+    {
+    public:
+        ElementBufferScope()
+        {
+            glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previousVertexArray_);
+            if (bufferUploadVertexArray == 0)
+            {
+                bufferUploadVertexArray = rlLoadVertexArray();
+                if (bufferUploadVertexArray == 0)
+                    throw std::runtime_error("RLGL: failed to create the index upload VAO");
+            }
+            if (!rlEnableVertexArray(bufferUploadVertexArray))
+                throw std::runtime_error("RLGL: failed to bind the index upload VAO");
+        }
+
+        ~ElementBufferScope()
+        {
+            if (previousVertexArray_ == 0) rlDisableVertexArray();
+            else (void)rlEnableVertexArray(static_cast<unsigned int>(previousVertexArray_));
+        }
+
+        ElementBufferScope(const ElementBufferScope&) = delete;
+        ElementBufferScope& operator=(const ElementBufferScope&) = delete;
+
+    private:
+        GLint previousVertexArray_ = 0;
+    };
 
     class TextureBindingRestore final
     {
@@ -454,6 +484,11 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
 
     void Shutdown() noexcept
     {
+        if (bufferUploadVertexArray != 0)
+        {
+            rlUnloadVertexArray(bufferUploadVertexArray);
+            bufferUploadVertexArray = 0;
+        }
         bridgeInitialized = false;
         rlglClose();
     }
@@ -938,6 +973,142 @@ void main()
         rlDisableVertexBuffer();
         rlDisableShader();
         ThrowIfGlError("SpriteBatch draw");
+    }
+
+    unsigned int CreateVertexBuffer(const int byteCapacity)
+    {
+        RequireInitialized("vertex-buffer creation");
+        if (byteCapacity < 0)
+            throw std::invalid_argument("RLGL: vertex-buffer capacity must be non-negative");
+
+        GLint previous = 0;
+        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previous);
+        const unsigned int id = rlLoadVertexBuffer(nullptr, byteCapacity, true);
+        rlEnableVertexBuffer(static_cast<unsigned int>(previous));
+        ThrowIfGlError("vertex-buffer creation");
+        if (id == 0)
+            throw std::runtime_error("RLGL: vertex-buffer creation returned no buffer name");
+        return id;
+    }
+
+    unsigned int CreateIndexBuffer(const int byteCapacity)
+    {
+        RequireInitialized("index-buffer creation");
+        if (byteCapacity < 0)
+            throw std::invalid_argument("RLGL: index-buffer capacity must be non-negative");
+
+        const ElementBufferScope vertexArray;
+        GLint previous = 0;
+        glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &previous);
+        const unsigned int id = rlLoadVertexBufferElement(nullptr, byteCapacity, true);
+        rlEnableVertexBufferElement(static_cast<unsigned int>(previous));
+        ThrowIfGlError("index-buffer creation");
+        if (id == 0)
+            throw std::runtime_error("RLGL: index-buffer creation returned no buffer name");
+        return id;
+    }
+
+    void DestroyBuffer(const unsigned int id) noexcept
+    {
+        if (bridgeInitialized && id != 0) rlUnloadVertexBuffer(id);
+    }
+
+    void UpdateVertexBuffer(
+        const unsigned int id, const void* const data, const int byteCount)
+    {
+        RequireInitialized("vertex-buffer update");
+        if (id == 0 || data == nullptr || byteCount <= 0)
+            throw std::invalid_argument("RLGL: invalid vertex-buffer update");
+
+        GLint previous = 0;
+        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previous);
+        rlUpdateVertexBuffer(id, data, byteCount, 0);
+        rlEnableVertexBuffer(static_cast<unsigned int>(previous));
+        ThrowIfGlError("vertex-buffer update");
+    }
+
+    void UpdateIndexBuffer(
+        const unsigned int id, const void* const data, const int byteCount)
+    {
+        RequireInitialized("index-buffer update");
+        if (id == 0 || data == nullptr || byteCount <= 0)
+            throw std::invalid_argument("RLGL: invalid index-buffer update");
+
+        const ElementBufferScope vertexArray;
+        GLint previous = 0;
+        glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &previous);
+        rlUpdateVertexBufferElements(id, data, byteCount, 0);
+        rlEnableVertexBufferElement(static_cast<unsigned int>(previous));
+        ThrowIfGlError("index-buffer update");
+    }
+
+    void OrphanBuffer(
+        const unsigned int id, const bool indexBuffer, const int byteCapacity)
+    {
+        RequireInitialized("buffer orphan");
+        if (id == 0 || byteCapacity < 0)
+            throw std::invalid_argument("RLGL: invalid buffer orphan request");
+
+        if (indexBuffer)
+        {
+            const ElementBufferScope vertexArray;
+            GLint previous = 0;
+            glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &previous);
+            rlEnableVertexBufferElement(id);
+            // rlgl 6.0 exposes subrange updates but no storage-orphaning wrapper. Discard needs
+            // fresh driver storage while retaining the renderer resource's stable buffer name.
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, byteCapacity, nullptr, GL_DYNAMIC_DRAW);
+            rlEnableVertexBufferElement(static_cast<unsigned int>(previous));
+        }
+        else
+        {
+            GLint previous = 0;
+            glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previous);
+            rlEnableVertexBuffer(id);
+            glBufferData(GL_ARRAY_BUFFER, byteCapacity, nullptr, GL_DYNAMIC_DRAW);
+            rlEnableVertexBuffer(static_cast<unsigned int>(previous));
+        }
+        ThrowIfGlError("buffer orphan");
+    }
+
+    BufferSnapshot GetBufferSnapshotForTesting(
+        const unsigned int id, const bool indexBuffer)
+    {
+        RequireInitialized("buffer snapshot");
+        if (id == 0)
+            throw std::invalid_argument("RLGL: cannot snapshot buffer zero");
+
+        BufferSnapshot snapshot;
+        const auto capture = [&](const GLenum target)
+        {
+            glGetBufferParameteriv(target, GL_BUFFER_SIZE, &snapshot.byteSize);
+            glGetBufferParameteriv(target, GL_BUFFER_USAGE, &snapshot.usage);
+            if (snapshot.byteSize > 0)
+            {
+                snapshot.bytes.resize(static_cast<std::size_t>(snapshot.byteSize));
+                glGetBufferSubData(target, 0, snapshot.byteSize, snapshot.bytes.data());
+            }
+        };
+
+        if (indexBuffer)
+        {
+            const ElementBufferScope vertexArray;
+            GLint previous = 0;
+            glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &previous);
+            rlEnableVertexBufferElement(id);
+            capture(GL_ELEMENT_ARRAY_BUFFER);
+            rlEnableVertexBufferElement(static_cast<unsigned int>(previous));
+        }
+        else
+        {
+            GLint previous = 0;
+            glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previous);
+            rlEnableVertexBuffer(id);
+            capture(GL_ARRAY_BUFFER);
+            rlEnableVertexBuffer(static_cast<unsigned int>(previous));
+        }
+        ThrowIfGlError("buffer snapshot");
+        return snapshot;
     }
 
     std::uint8_t ReadStencilForTesting(

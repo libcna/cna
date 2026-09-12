@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace CNA::Internal::Renderers::Rlgl::Bridge
 {
@@ -78,6 +79,14 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int textureLocation = -1;
         int vertexCapacity = 0;
         int indexCapacity = 0;
+    };
+
+    /** @brief Native storage facts for one renderer-owned buffer. */
+    struct BufferSnapshot
+    {
+        int byteSize = 0;
+        int usage = 0;
+        std::vector<std::uint8_t> bytes;
     };
 
     enum ClearPlane : unsigned int
@@ -259,6 +268,59 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         const float* vertices, int vertexCount,
         const std::uint16_t* indices, int indexCount,
         const float* projectionColumnMajor);
+
+    /**
+     * @brief Allocates fixed-capacity vertex storage through rlgl.
+     * @param byteCapacity Storage size in bytes.
+     * @return Non-zero GL buffer name.
+     */
+    [[nodiscard]] unsigned int CreateVertexBuffer(int byteCapacity);
+
+    /**
+     * @brief Allocates fixed-capacity index storage through rlgl.
+     * @param byteCapacity Storage size in bytes.
+     * @return Non-zero GL buffer name.
+     */
+    [[nodiscard]] unsigned int CreateIndexBuffer(int byteCapacity);
+
+    /**
+     * @brief Releases a vertex or index buffer through rlgl.
+     * @param id Buffer name, or zero.
+     */
+    void DestroyBuffer(unsigned int id) noexcept;
+
+    /**
+     * @brief Updates a prefix of a vertex buffer through rlgl.
+     * @param id Buffer name.
+     * @param data Source bytes.
+     * @param byteCount Number of bytes to write.
+     */
+    void UpdateVertexBuffer(unsigned int id, const void* data, int byteCount);
+
+    /**
+     * @brief Updates a prefix of an index buffer through rlgl.
+     * @param id Buffer name.
+     * @param data Source bytes.
+     * @param byteCount Number of bytes to write.
+     */
+    void UpdateIndexBuffer(unsigned int id, const void* data, int byteCount);
+
+    /**
+     * @brief Replaces a buffer's storage without changing its name.
+     * @param id Buffer name.
+     * @param indexBuffer True for element-array storage.
+     * @param byteCapacity New fixed capacity in bytes.
+     */
+    void OrphanBuffer(unsigned int id, bool indexBuffer, int byteCapacity);
+
+    /**
+     * @brief Reads native buffer allocation facts for focused validation.
+     * @param id Buffer name.
+     * @param indexBuffer True for element-array storage.
+     * @return Size, usage, and exact native bytes.
+     */
+    [[nodiscard]] BufferSnapshot GetBufferSnapshotForTesting(
+        unsigned int id, bool indexBuffer);
 
     /**
      * @brief Reads one default-framebuffer stencil value for focused validation.
