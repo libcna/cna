@@ -1123,12 +1123,16 @@ void main()
         static constexpr const char* vertexShader = R"(#version 330 core
 layout(location = 0) in vec3 vertexPosition;
 layout(location = 1) in vec4 vertexColor;
+layout(location = 2) in vec2 vertexTexCoord;
 
 uniform mat4 worldViewProjection;
 uniform vec4 diffuseColor;
 uniform float vertexColorEnabled;
+uniform vec4 fogVector;
 
 out vec4 fragmentColor;
+out vec2 fragmentTexCoord;
+out float fragmentFogFactor;
 
 void main()
 {
@@ -1136,15 +1140,34 @@ void main()
     gl_PointSize = 1.0;
     fragmentColor = diffuseColor *
         ((vertexColorEnabled > 0.5) ? vertexColor : vec4(1.0));
+    fragmentTexCoord = vertexTexCoord;
+    fragmentFogFactor = 1.0 - clamp(
+        dot(vec4(vertexPosition, 1.0), fogVector), 0.0, 1.0);
 }
 )";
         static constexpr const char* fragmentShader = R"(#version 330 core
 in vec4 fragmentColor;
+in vec2 fragmentTexCoord;
+in float fragmentFogFactor;
+
+uniform sampler2D texture0;
+uniform float textureEnabled;
+uniform vec4 alphaTest;
+uniform vec3 fogColor;
+
 out vec4 finalColor;
 
 void main()
 {
-    finalColor = fragmentColor;
+    vec4 sampled = (textureEnabled > 0.5)
+        ? texture(texture0, fragmentTexCoord) : vec4(1.0);
+    finalColor = sampled * fragmentColor;
+    float comparison = (alphaTest.y > 0.0)
+        ? ((abs(finalColor.a - alphaTest.x) < alphaTest.y)
+            ? alphaTest.z : alphaTest.w)
+        : ((finalColor.a < alphaTest.x) ? alphaTest.z : alphaTest.w);
+    if (comparison < 0.0) discard;
+    finalColor.rgb = mix(fogColor, finalColor.rgb, fragmentFogFactor);
 }
 )";
 
@@ -1160,9 +1183,22 @@ void main()
                 rlGetLocationUniform(pipeline.program, "diffuseColor");
             pipeline.vertexColorEnabledLocation =
                 rlGetLocationUniform(pipeline.program, "vertexColorEnabled");
+            pipeline.textureLocation =
+                rlGetLocationUniform(pipeline.program, "texture0");
+            pipeline.textureEnabledLocation =
+                rlGetLocationUniform(pipeline.program, "textureEnabled");
+            pipeline.alphaTestLocation =
+                rlGetLocationUniform(pipeline.program, "alphaTest");
+            pipeline.fogVectorLocation =
+                rlGetLocationUniform(pipeline.program, "fogVector");
+            pipeline.fogColorLocation =
+                rlGetLocationUniform(pipeline.program, "fogColor");
             if (pipeline.worldViewProjectionLocation < 0 ||
                 pipeline.diffuseColorLocation < 0 ||
-                pipeline.vertexColorEnabledLocation < 0)
+                pipeline.vertexColorEnabledLocation < 0 ||
+                pipeline.textureLocation < 0 || pipeline.textureEnabledLocation < 0 ||
+                pipeline.alphaTestLocation < 0 || pipeline.fogVectorLocation < 0 ||
+                pipeline.fogColorLocation < 0)
             {
                 throw std::runtime_error("RLGL: primitive shader uniforms are incomplete");
             }
@@ -1197,6 +1233,9 @@ void main()
         const VertexAttributeBinding* const attributes, const int attributeCount,
         const float* const worldViewProjectionColumnMajor,
         const float* const diffuseColor, const bool vertexColorEnabled,
+        const unsigned int texture, const bool textureEnabled,
+        const float* const alphaTest, const float* const fogVector,
+        const float* const fogColor,
         const int primitiveType, const int elementCount,
         const int firstVertex, const int startIndex, const int baseVertex,
         const bool thirtyTwoBitIndices)
@@ -1205,6 +1244,7 @@ void main()
         if (pipeline.program == 0 || pipeline.vertexArray == 0 ||
             vertexBuffer == 0 || attributes == nullptr || attributeCount <= 0 ||
             worldViewProjectionColumnMajor == nullptr || diffuseColor == nullptr ||
+            alphaTest == nullptr || fogVector == nullptr || fogColor == nullptr ||
             elementCount <= 0 || firstVertex < 0 || startIndex < 0 || baseVertex < 0)
         {
             throw std::invalid_argument("RLGL: invalid primitive draw request");
@@ -1248,9 +1288,28 @@ void main()
         rlSetUniform(
             pipeline.vertexColorEnabledLocation, &vertexColorFlag,
             RL_SHADER_UNIFORM_FLOAT, 1);
+        constexpr int textureUnit = 0;
+        rlSetUniform(pipeline.textureLocation, &textureUnit, RL_SHADER_UNIFORM_INT, 1);
+        const float textureFlag = textureEnabled ? 1.0f : 0.0f;
+        rlSetUniform(
+            pipeline.textureEnabledLocation, &textureFlag,
+            RL_SHADER_UNIFORM_FLOAT, 1);
+        rlSetUniform(pipeline.alphaTestLocation, alphaTest, RL_SHADER_UNIFORM_VEC4, 1);
+        rlSetUniform(pipeline.fogVectorLocation, fogVector, RL_SHADER_UNIFORM_VEC4, 1);
+        rlSetUniform(pipeline.fogColorLocation, fogColor, RL_SHADER_UNIFORM_VEC3, 1);
+        if (textureEnabled)
+        {
+            rlActiveTextureSlot(textureUnit);
+            rlEnableTexture(texture != 0 ? texture : rlGetTextureIdDefault());
+        }
 
         if (!rlEnableVertexArray(pipeline.vertexArray))
         {
+            if (textureEnabled)
+            {
+                rlActiveTextureSlot(textureUnit);
+                rlDisableTexture();
+            }
             rlDisableShader();
             throw std::runtime_error("RLGL: primitive VAO became unavailable");
         }
@@ -1268,6 +1327,11 @@ void main()
             {
                 rlDisableVertexArray();
                 rlDisableVertexBuffer();
+                if (textureEnabled)
+                {
+                    rlActiveTextureSlot(textureUnit);
+                    rlDisableTexture();
+                }
                 rlDisableShader();
                 throw std::invalid_argument("RLGL: invalid vertex attribute binding");
             }
@@ -1284,6 +1348,8 @@ void main()
         snapshot.startIndex = startIndex;
         snapshot.baseVertex = baseVertex;
         snapshot.indexed = indexBuffer != 0;
+        snapshot.texture = texture;
+        snapshot.textureEnabled = textureEnabled;
         if (indexBuffer == 0)
         {
             if (mode == GL_TRIANGLES)
@@ -1326,6 +1392,11 @@ void main()
 
         rlDisableVertexArray();
         rlDisableVertexBuffer();
+        if (textureEnabled)
+        {
+            rlActiveTextureSlot(textureUnit);
+            rlDisableTexture();
+        }
         rlDisableShader();
         ThrowIfGlError("primitive draw");
         lastPrimitiveDraw = snapshot;

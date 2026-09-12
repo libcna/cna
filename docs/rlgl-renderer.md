@@ -54,7 +54,8 @@ success.
 | SpriteBatch/SpriteFont | 🟨 | Built-in texture/font drawing uses CNA-owned batching over rlgl shader/VAO/VBO/IBO/draw wrappers and passed transforms, origin/rotation, flips, all sort modes, sampler forwarding, blend, viewport/scissor, fractional coordinates, capacity flush, and glyph pixels. A custom `Effect` is rejected until `RLGL-012` |
 | Vertex/index buffer resources | ✅ | Static/dynamic vertex plus 16/32-bit index resources use fixed-capacity rlgl VBO/EBO storage. Exact native bytes/size/usage, all declaration records, `None`/`Discard`/`NoOverwrite`, and invalid inputs passed `RLGL-030` |
 | Primitive and user draw calls | ✅ | Every point/line/triangle list/strip topology passed indexed and non-indexed pixels, exact 16/32-bit index dispatch, declaration semantic/type mapping, offsets, WVP transforms, public user routes, and SpriteBatch-to-primitive rebinding in `RLGL-031` |
-| Stock/custom effects and normal 3D workloads | ❌ | The primitive baseline intentionally rejects texture, lighting, fog, alpha-test, skinning, custom effects, multi-stream input, and instancing until their shader/input tasks; `GraphicsCapability::ThreeD` remains false |
+| Unlit BasicEffect and AlphaTestEffect | ✅ | Texture/default-white sampling, Color0/UV0 semantics, diffuse/emissive/alpha/vertex color, all eight alpha comparisons, fog, WVP, stale-state reset, and the renderer-neutral XNA pixel-center contract passed `RLGL-033` |
+| Lit/dual/cube/skinned/custom effects and normal 3D workloads | ❌ | These shapes remain explicit failures owned by `RLGL-034`–`RLGL-038`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
 | Render targets, MRT, cube resources, instancing, queries | ❌ | Explicitly unavailable until their recorded tasks pass focused validation |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
@@ -92,7 +93,7 @@ cmake -S . -B cmake-build-rlgl -G Ninja \
 cmake --build cmake-build-rlgl --parallel 4 --target \
       cna_renderer_rlgl cna_test_rlgl_smoke cna_test_rlgl_texture cna_test_rlgl_sampler \
       cna_test_rlgl_state cna_test_rlgl_spritebatch cna_test_rlgl_buffer \
-      cna_test_rlgl_primitive
+      cna_test_rlgl_primitive cna_test_rlgl_effect cna_test_rlgl_xna_pixel_center
 ```
 
 The smoke target is deliberately available with `CNA_BUILD_TESTS=OFF`. On a Linux machine with
@@ -113,12 +114,16 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_buffer
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_primitive
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_effect
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_xna_pixel_center
 ```
 
 With `CNA_BUILD_TESTS=ON`, the executables are registered as `Rlgl_Smoke`, `Rlgl_Texture`,
-`Rlgl_Sampler`, `Rlgl_State`, `Rlgl_SpriteBatch`, `Rlgl_Buffer`, and `Rlgl_Primitive`, labelled
-`Rlgl` plus their focused graphics category, with the proven offscreen environment attached to
-each CTest entry.
+`Rlgl_Sampler`, `Rlgl_State`, `Rlgl_SpriteBatch`, `Rlgl_Buffer`, `Rlgl_Primitive`, `Rlgl_Effect`,
+and `Rlgl_XnaPixelCenter`, labelled `Rlgl` plus their focused graphics category, with the proven
+offscreen environment attached to each CTest entry.
 
 ## Dependency and offline builds
 
@@ -170,6 +175,6 @@ The dependency uses raylib's zlib/libpng license. Its required notice is preserv
 
 The dedicated `.github/workflows/rlgl-ci.yml` lane configures the Linux renderer against an
 independently checked-out copy of the exact upstream commit and compiles the renderer plus the
-  smoke, texture, sampler, state, SpriteBatch, buffer, and primitive executables. It intentionally
-  does not yet claim hosted runtime coverage; promotion to a CI runtime gate belongs to
-  `RLGL-021` after the runner's context path is proven.
+  smoke, texture, sampler, state, SpriteBatch, buffer, primitive, effect, and XNA pixel-center
+  executables. It intentionally does not yet claim hosted runtime coverage; promotion to a CI
+  runtime gate belongs to `RLGL-021` after the runner's context path is proven.

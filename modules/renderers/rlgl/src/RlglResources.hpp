@@ -94,6 +94,13 @@ namespace CNA::Internal::Renderers::Rlgl
         const IIndexBufferRenderer& resource);
 
     /**
+     * @brief Returns the native texture name of an RLGL Texture2D resource.
+     * @param resource RLGL texture resource.
+     * @return Non-zero native texture name.
+     */
+    [[nodiscard]] unsigned int GetNativeTextureId(const ITextureRenderer& resource);
+
+    /**
      * @brief Returns the native buffer name of an RLGL vertex resource.
      * @param resource RLGL vertex resource.
      * @return Non-zero native name once storage has been allocated.

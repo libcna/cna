@@ -244,6 +244,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 Bridge::BindTexture2D(id_, unit);
             }
 
+            [[nodiscard]] unsigned int NativeId() const noexcept { return id_; }
+
         private:
             void ValidateLevel(
                 const int level, const int levelWidth, const int levelHeight) const
@@ -274,5 +276,13 @@ namespace CNA::Internal::Renderers::Rlgl
         const CNA::Internal::Graphics::ImageData& data)
     {
         return std::make_unique<RlglTextureRenderer>(data);
+    }
+
+    unsigned int GetNativeTextureId(const ITextureRenderer& resource)
+    {
+        const auto* const texture = dynamic_cast<const RlglTextureRenderer*>(&resource);
+        if (texture == nullptr)
+            throw std::invalid_argument("RLGL: texture resource belongs to another renderer");
+        return texture->NativeId();
     }
 }

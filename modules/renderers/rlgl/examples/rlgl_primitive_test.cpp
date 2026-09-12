@@ -487,7 +487,7 @@ protected:
             rejectedUnsupportedEffect = true;
         }
         Check(rejectedUnsupportedEffect,
-              "textured stock effects are rejected until RLGL-012 instead of drawn incorrectly");
+              "a textured stock effect rejects a declaration without TextureCoordinate0");
     }
 
 private:

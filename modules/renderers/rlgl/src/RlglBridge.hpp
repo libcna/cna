@@ -94,7 +94,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         std::vector<std::uint8_t> bytes;
     };
 
-    /** @brief rlgl-owned shader and VAO used by the baseline primitive path. */
+    /** @brief rlgl-owned shader and VAO used by the unlit stock-effect path. */
     struct PrimitivePipeline
     {
         unsigned int program = 0;
@@ -102,6 +102,11 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int worldViewProjectionLocation = -1;
         int diffuseColorLocation = -1;
         int vertexColorEnabledLocation = -1;
+        int textureLocation = -1;
+        int textureEnabledLocation = -1;
+        int alphaTestLocation = -1;
+        int fogVectorLocation = -1;
+        int fogColorLocation = -1;
     };
 
     /** @brief Last native primitive submission, exposed only to focused validation. */
@@ -113,7 +118,9 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int startIndex = 0;
         int baseVertex = 0;
         int indexType = 0;
+        unsigned int texture = 0;
         bool indexed = false;
+        bool textureEnabled = false;
         bool usedRlglDrawWrapper = false;
     };
 
@@ -362,7 +369,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     [[nodiscard]] BufferSnapshot GetBufferSnapshotForTesting(
         unsigned int id, bool indexBuffer);
 
-    /** @brief Creates the baseline untextured, vertex-color-capable primitive pipeline. */
+    /** @brief Creates the unlit texture/color/alpha/fog stock-effect pipeline. */
     [[nodiscard]] PrimitivePipeline CreatePrimitivePipeline();
 
     /**
@@ -381,6 +388,11 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @param worldViewProjectionColumnMajor Transform matrix in GL upload order.
      * @param diffuseColor Four-component effect color.
      * @param vertexColorEnabled Whether shader location one contributes to output.
+     * @param texture Texture2D name, or zero for rlgl's default white texture.
+     * @param textureEnabled Whether shader location two and texture sampling are active.
+     * @param alphaTest Four-component XNA alpha comparison encoding.
+     * @param fogVector Object-space fog vector computed by the stock effect.
+     * @param fogColor Three-component fog color.
      * @param primitiveType Raw XNA PrimitiveType ordinal.
      * @param elementCount Vertex or index count.
      * @param firstVertex First vertex for non-indexed draws.
@@ -393,7 +405,9 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         unsigned int vertexBuffer, unsigned int indexBuffer,
         const VertexAttributeBinding* attributes, int attributeCount,
         const float* worldViewProjectionColumnMajor, const float* diffuseColor,
-        bool vertexColorEnabled, int primitiveType, int elementCount,
+        bool vertexColorEnabled, unsigned int texture, bool textureEnabled,
+        const float* alphaTest, const float* fogVector, const float* fogColor,
+        int primitiveType, int elementCount,
         int firstVertex, int startIndex, int baseVertex, bool thirtyTwoBitIndices);
 
     /**

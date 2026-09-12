@@ -460,7 +460,7 @@ namespace CNA::Internal::Renderers::Rlgl
             PrimitiveType primitive, int primitiveCount) override;
 
         /**
-         * @brief Draws the currently supported untextured stock-effect subset.
+         * @brief Draws the currently supported unlit stock-effect subset.
          * @param vb Vertex buffer.
          * @param world World transform.
          * @param view View transform.
@@ -475,7 +475,7 @@ namespace CNA::Internal::Renderers::Rlgl
             const GpuDrawParams& params) override;
 
         /**
-         * @brief Draws the currently supported indexed untextured stock-effect subset.
+         * @brief Draws the currently supported indexed unlit stock-effect subset.
          * @param vb Vertex buffer.
          * @param ib Index buffer.
          * @param world World transform.

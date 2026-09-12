@@ -67,8 +67,9 @@ namespace CNA::Internal::Renderers::Rlgl
             return found == declaration.end() ? nullptr : &*found;
         }
 
-        [[nodiscard]] std::vector<VertexAttributeBinding> BuildColoredAttributes(
-            const IVertexBufferRenderer& vertexBuffer, const bool vertexColorEnabled)
+        [[nodiscard]] std::vector<VertexAttributeBinding> BuildStockAttributes(
+            const IVertexBufferRenderer& vertexBuffer,
+            const bool vertexColorEnabled, const bool textureEnabled)
         {
             const std::size_t nativeStride = GetVertexStride(vertexBuffer);
             if (nativeStride == 0 || nativeStride >
@@ -82,12 +83,22 @@ namespace CNA::Internal::Renderers::Rlgl
                 0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0);
             VertexElement inferredColor(
                 12, VertexElementFormat::Color, VertexElementUsage::Color, 0);
+            VertexElement inferredTextureCoordinate(
+                vertexColorEnabled ? 16 : 12,
+                VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0);
             const VertexElement* position = FindElement(
                 declaration, VertexElementUsage::Position, 0);
             const VertexElement* color = FindElement(
                 declaration, VertexElementUsage::Color, 0);
+            const VertexElement* textureCoordinate = FindElement(
+                declaration, VertexElementUsage::TextureCoordinate, 0);
             if (declaration.empty() && stride >= 12) position = &inferredPosition;
             if (declaration.empty() && stride >= 16) color = &inferredColor;
+            if (declaration.empty() &&
+                stride >= inferredTextureCoordinate.getOffsetProperty() + 8)
+            {
+                textureCoordinate = &inferredTextureCoordinate;
+            }
             if (position == nullptr ||
                 position->getVertexElementFormatProperty() != VertexElementFormat::Vector3)
             {
@@ -103,12 +114,24 @@ namespace CNA::Internal::Renderers::Rlgl
                     "RLGL: vertex-color drawing requires Color0 as packed Color "
                     "(plans/plan_rlgl.md RLGL-012)");
             }
+            if (textureEnabled &&
+                (textureCoordinate == nullptr ||
+                 textureCoordinate->getVertexElementFormatProperty() !=
+                     VertexElementFormat::Vector2))
+            {
+                throw System::NotSupportedException(
+                    "RLGL: texture drawing requires TextureCoordinate0 as Vector2 "
+                    "(plans/plan_rlgl.md RLGL-033)");
+            }
 
             std::vector<VertexAttributeBinding> result;
-            result.reserve(vertexColorEnabled ? 2u : 1u);
+            result.reserve(
+                1u + (vertexColorEnabled ? 1u : 0u) + (textureEnabled ? 1u : 0u));
             result.push_back(DescribeVertexAttribute(*position, 0, stride));
             if (vertexColorEnabled)
                 result.push_back(DescribeVertexAttribute(*color, 1, stride));
+            if (textureEnabled)
+                result.push_back(DescribeVertexAttribute(*textureCoordinate, 2, stride));
             return result;
         }
 
@@ -119,9 +142,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 hasInstanceStream = hasInstanceStream ||
                     params.vertexStreams[stream].instanceFrequency != 0;
             if (params.customEffectRequested || params.customEffectRenderer != nullptr ||
-                params.compiledEffectRuntime != nullptr || params.textureEnabled ||
-                params.lightingEnabled || params.dualTexture || params.envMapping ||
-                params.skinned || params.pbr || params.alphaTestEffect || params.fogEnabled ||
+                params.compiledEffectRuntime != nullptr || params.lightingEnabled ||
+                params.dualTexture || params.envMapping || params.skinned || params.pbr ||
                 params.instanceCount != 1 || params.vertexStreamCount > 1 || hasInstanceStream)
             {
                 throw System::NotSupportedException(
@@ -137,7 +159,10 @@ namespace CNA::Internal::Renderers::Rlgl
             const Matrix& world, const Matrix& view, const Matrix& projection,
             const PrimitiveType primitive, const int primitiveCount,
             const int firstVertex, const int startIndex, const int baseVertex,
-            const float* const diffuseColor, const bool vertexColorEnabled)
+            const GpuDrawParams& params,
+            const bool applyXnaPixelCenter,
+            const int viewportWidth, const int viewportHeight,
+            const int multiSampleCount)
         {
             const int elementCount = PrimitiveElementCount(primitive, primitiveCount);
             if (firstVertex < 0 || startIndex < 0 || baseVertex < 0)
@@ -155,16 +180,28 @@ namespace CNA::Internal::Renderers::Rlgl
                     throw std::out_of_range("RLGL: indexed draw exceeds index capacity");
             }
 
-            const std::vector<VertexAttributeBinding> attributes =
-                BuildColoredAttributes(vertexBuffer, vertexColorEnabled);
-            const Matrix worldViewProjection = world * view * projection;
+            const std::vector<VertexAttributeBinding> attributes = BuildStockAttributes(
+                vertexBuffer, params.vertexColorEnabled, params.textureEnabled);
+            Matrix worldViewProjection = world * view * projection;
+            if (applyXnaPixelCenter && viewportWidth > 0 && viewportHeight > 0 &&
+                multiSampleCount <= 1)
+            {
+                constexpr float xnaPixelCenterScale = 63.0f / 64.0f;
+                worldViewProjection *= Matrix::CreateTranslation(
+                    xnaPixelCenterScale / static_cast<float>(viewportWidth),
+                    -xnaPixelCenterScale / static_cast<float>(viewportHeight), 0.0f);
+            }
             float columnMajor[16]{};
             worldViewProjection.ToColumnMajor(columnMajor);
+            const unsigned int texture = params.textureEnabled && params.texture0 != nullptr
+                ? GetNativeTextureId(*params.texture0) : 0u;
             Bridge::DrawPrimitiveGeometry(
                 pipeline, GetNativeBufferId(vertexBuffer),
                 indexBuffer == nullptr ? 0u : GetNativeBufferId(*indexBuffer),
                 attributes.data(), static_cast<int>(attributes.size()),
-                columnMajor, diffuseColor, vertexColorEnabled,
+                columnMajor, params.diffuseColor, params.vertexColorEnabled,
+                texture, params.textureEnabled,
+                params.alphaTest, params.fogVector, params.fogColor,
                 static_cast<int>(primitive), elementCount,
                 firstVertex, startIndex, baseVertex,
                 indexBuffer != nullptr && indexBuffer->IsThirtyTwoBit());
@@ -186,11 +223,13 @@ namespace CNA::Internal::Renderers::Rlgl
         const Matrix& world, const Matrix& view, const Matrix& projection,
         const PrimitiveType primitive, const int primitiveCount)
     {
-        static constexpr float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        GpuDrawParams params;
+        params.vertexColorEnabled = true;
         Submit(
             GetPrimitivePipeline(), vertexBuffer, nullptr,
             world, view, projection, primitive, primitiveCount,
-            0, 0, 0, white, true);
+            0, 0, 0, params, false,
+            currentViewportWidth_, currentViewportHeight_, multiSampleCount_);
     }
 
     void RlglRenderer::DrawIndexedColoredPrimitives(
@@ -199,11 +238,13 @@ namespace CNA::Internal::Renderers::Rlgl
         const Matrix& world, const Matrix& view, const Matrix& projection,
         const PrimitiveType primitive, const int primitiveCount)
     {
-        static constexpr float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        GpuDrawParams params;
+        params.vertexColorEnabled = true;
         Submit(
             GetPrimitivePipeline(), vertexBuffer, &indexBuffer,
             world, view, projection, primitive, primitiveCount,
-            0, 0, 0, white, true);
+            0, 0, 0, params, false,
+            currentViewportWidth_, currentViewportHeight_, multiSampleCount_);
     }
 
     void RlglRenderer::DrawPrimitivesEx(
@@ -216,7 +257,8 @@ namespace CNA::Internal::Renderers::Rlgl
         Submit(
             GetPrimitivePipeline(), vertexBuffer, nullptr,
             world, view, projection, primitive, primitiveCount,
-            params.vertexStart, 0, 0, params.diffuseColor, params.vertexColorEnabled);
+            params.vertexStart, 0, 0, params, true,
+            currentViewportWidth_, currentViewportHeight_, multiSampleCount_);
     }
 
     void RlglRenderer::DrawIndexedPrimitivesEx(
@@ -230,7 +272,7 @@ namespace CNA::Internal::Renderers::Rlgl
         Submit(
             GetPrimitivePipeline(), vertexBuffer, &indexBuffer,
             world, view, projection, primitive, primitiveCount,
-            0, params.startIndex, params.baseVertex,
-            params.diffuseColor, params.vertexColorEnabled);
+            0, params.startIndex, params.baseVertex, params, true,
+            currentViewportWidth_, currentViewportHeight_, multiSampleCount_);
     }
 }
