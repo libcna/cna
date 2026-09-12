@@ -1497,6 +1497,34 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticTypedControlSourceProbe::VertexInteger,
         CNA::TestSupport::SyntheticTypedControlSourceProbe::VertexBoolean));
 
+class EasyGLCompiledEffectSpecialControlSourceTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSpecialControlSourceProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectSpecialControlSourceTest, RejectsOrdinaryArithmeticRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.specialControlSourceProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OrdinarySpecialControlSource,
+    EasyGLCompiledEffectSpecialControlSourceTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSpecialControlSourceProbe::PixelPredicate,
+        CNA::TestSupport::SyntheticSpecialControlSourceProbe::PixelLabel,
+        CNA::TestSupport::SyntheticSpecialControlSourceProbe::PixelLoop,
+        CNA::TestSupport::SyntheticSpecialControlSourceProbe::VertexPredicate,
+        CNA::TestSupport::SyntheticSpecialControlSourceProbe::VertexLabel,
+        CNA::TestSupport::SyntheticSpecialControlSourceProbe::VertexLoop));
+
 class EasyGLCompiledEffectOutputRegisterRangeTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>
 {
