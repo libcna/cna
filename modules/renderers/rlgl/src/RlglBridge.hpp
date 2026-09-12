@@ -110,7 +110,9 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int diffuseColorLocation = -1;
         int vertexColorEnabledLocation = -1;
         int textureLocation = -1;
+        int texture1Location = -1;
         int textureEnabledLocation = -1;
+        int dualTextureLocation = -1;
         int alphaTestLocation = -1;
         int fogVectorLocation = -1;
         int fogColorLocation = -1;
@@ -136,8 +138,10 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int baseVertex = 0;
         int indexType = 0;
         unsigned int texture = 0;
+        unsigned int texture1 = 0;
         bool indexed = false;
         bool textureEnabled = false;
+        bool dualTexture = false;
         bool usedRlglDrawWrapper = false;
     };
 
@@ -404,6 +408,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @param attributeCount Number of attribute records.
      * @param worldViewProjectionColumnMajor Transform matrix in GL upload order.
      * @param texture Texture2D name, or zero for rlgl's default white texture.
+     * @param texture1 Second Texture2D name, or zero for rlgl's default white texture.
      * @param params Complete stock-effect draw parameters.
      * @param primitiveType Raw XNA PrimitiveType ordinal.
      * @param elementCount Vertex or index count.
@@ -416,7 +421,8 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         const PrimitivePipeline& pipeline,
         unsigned int vertexBuffer, unsigned int indexBuffer,
         const VertexAttributeBinding* attributes, int attributeCount,
-        const float* worldViewProjectionColumnMajor, unsigned int texture,
+        const float* worldViewProjectionColumnMajor,
+        unsigned int texture, unsigned int texture1,
         const CNA::Internal::Renderers::GpuDrawParams& params,
         int primitiveType, int elementCount,
         int firstVertex, int startIndex, int baseVertex, bool thirtyTwoBitIndices);

@@ -70,7 +70,7 @@ namespace CNA::Internal::Renderers::Rlgl
         [[nodiscard]] std::vector<VertexAttributeBinding> BuildStockAttributes(
             const IVertexBufferRenderer& vertexBuffer,
             const bool vertexColorEnabled, const bool textureEnabled,
-            const bool lightingEnabled)
+            const bool lightingEnabled, const bool dualTexture)
         {
             const std::size_t nativeStride = GetVertexStride(vertexBuffer);
             if (nativeStride == 0 || nativeStride >
@@ -93,6 +93,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 declaration, VertexElementUsage::Color, 0);
             const VertexElement* textureCoordinate = FindElement(
                 declaration, VertexElementUsage::TextureCoordinate, 0);
+            const VertexElement* textureCoordinate1 = FindElement(
+                declaration, VertexElementUsage::TextureCoordinate, 1);
             const VertexElement* normal = FindElement(
                 declaration, VertexElementUsage::Normal, 0);
             if (declaration.empty() && stride >= 12) position = &inferredPosition;
@@ -134,11 +136,20 @@ namespace CNA::Internal::Renderers::Rlgl
                     "RLGL: BasicEffect lighting requires Normal0 as Vector3 "
                     "(plans/plan_rlgl.md RLGL-034)");
             }
+            if (dualTexture &&
+                (textureCoordinate1 == nullptr ||
+                 textureCoordinate1->getVertexElementFormatProperty() !=
+                     VertexElementFormat::Vector2))
+            {
+                throw System::NotSupportedException(
+                    "RLGL: DualTextureEffect requires TextureCoordinate1 as Vector2 "
+                    "(plans/plan_rlgl.md RLGL-035)");
+            }
 
             std::vector<VertexAttributeBinding> result;
             result.reserve(
                 1u + (vertexColorEnabled ? 1u : 0u) + (textureEnabled ? 1u : 0u) +
-                (lightingEnabled ? 1u : 0u));
+                (lightingEnabled ? 1u : 0u) + (dualTexture ? 1u : 0u));
             result.push_back(DescribeVertexAttribute(*position, 0, stride));
             if (vertexColorEnabled)
                 result.push_back(DescribeVertexAttribute(*color, 1, stride));
@@ -146,6 +157,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 result.push_back(DescribeVertexAttribute(*textureCoordinate, 2, stride));
             if (lightingEnabled)
                 result.push_back(DescribeVertexAttribute(*normal, 3, stride));
+            if (dualTexture)
+                result.push_back(DescribeVertexAttribute(*textureCoordinate1, 4, stride));
             return result;
         }
 
@@ -156,8 +169,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 hasInstanceStream = hasInstanceStream ||
                     params.vertexStreams[stream].instanceFrequency != 0;
             if (params.customEffectRequested || params.customEffectRenderer != nullptr ||
-                params.compiledEffectRuntime != nullptr || params.dualTexture ||
-                params.envMapping || params.skinned || params.pbr ||
+                params.compiledEffectRuntime != nullptr || params.envMapping ||
+                params.skinned || params.pbr ||
                 params.instanceCount != 1 || params.vertexStreamCount > 1 || hasInstanceStream)
             {
                 throw System::NotSupportedException(
@@ -196,7 +209,7 @@ namespace CNA::Internal::Renderers::Rlgl
 
             const std::vector<VertexAttributeBinding> attributes = BuildStockAttributes(
                 vertexBuffer, params.vertexColorEnabled, params.textureEnabled,
-                params.lightingEnabled);
+                params.lightingEnabled, params.dualTexture);
             Matrix worldViewProjection = world * view * projection;
             if (applyXnaPixelCenter && viewportWidth > 0 && viewportHeight > 0 &&
                 multiSampleCount <= 1)
@@ -210,11 +223,13 @@ namespace CNA::Internal::Renderers::Rlgl
             worldViewProjection.ToColumnMajor(columnMajor);
             const unsigned int texture = params.textureEnabled && params.texture0 != nullptr
                 ? GetNativeTextureId(*params.texture0) : 0u;
+            const unsigned int texture1 = params.dualTexture && params.texture1 != nullptr
+                ? GetNativeTextureId(*params.texture1) : 0u;
             Bridge::DrawPrimitiveGeometry(
                 pipeline, GetNativeBufferId(vertexBuffer),
                 indexBuffer == nullptr ? 0u : GetNativeBufferId(*indexBuffer),
                 attributes.data(), static_cast<int>(attributes.size()),
-                columnMajor, texture, params,
+                columnMajor, texture, texture1, params,
                 static_cast<int>(primitive), elementCount,
                 firstVertex, startIndex, baseVertex,
                 indexBuffer != nullptr && indexBuffer->IsThirtyTwoBit());

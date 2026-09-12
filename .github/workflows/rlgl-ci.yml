@@ -111,7 +111,9 @@ jobs:
             cna_test_rlgl_basiceffect_vertex_color_clamp \
             cna_test_rlgl_basiceffect_world_scale_precision \
             cna_test_rlgl_basiceffect_normal_transform \
-            cna_test_rlgl_basiceffect_lighting
+            cna_test_rlgl_basiceffect_lighting \
+            cna_test_rlgl_dual_texture_effect \
+            cna_test_rlgl_dual_texture_independent_uv
 
       - name: Verify renderer registry consistency
         working-directory: cna

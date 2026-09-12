@@ -1125,6 +1125,7 @@ layout(location = 0) in vec3 vertexPosition;
 layout(location = 1) in vec4 vertexColor;
 layout(location = 2) in vec2 vertexTexCoord;
 layout(location = 3) in vec3 vertexNormal;
+layout(location = 4) in vec2 vertexTexCoord1;
 
 uniform mat4 worldViewProjection;
 uniform mat4 world;
@@ -1152,6 +1153,7 @@ uniform float specularPower;
 
 out vec4 fragmentVertexColor;
 out vec2 fragmentTexCoord;
+out vec2 fragmentTexCoord1;
 out float fragmentFogFactor;
 out vec3 fragmentWorldPosition;
 out vec3 fragmentNormal;
@@ -1189,6 +1191,7 @@ void main()
     gl_PointSize = 1.0;
     fragmentVertexColor = (vertexColorEnabled > 0.5) ? vertexColor : vec4(1.0);
     fragmentTexCoord = vertexTexCoord;
+    fragmentTexCoord1 = vertexTexCoord1;
     fragmentFogFactor = 1.0 - clamp(
         dot(vec4(vertexPosition, 1.0), fogVector), 0.0, 1.0);
     fragmentWorldPosition = (world * vec4(vertexPosition, 1.0)).xyz;
@@ -1212,6 +1215,7 @@ void main()
         static constexpr const char* fragmentShader = R"(#version 330 core
 in vec4 fragmentVertexColor;
 in vec2 fragmentTexCoord;
+in vec2 fragmentTexCoord1;
 in float fragmentFogFactor;
 in vec3 fragmentWorldPosition;
 in vec3 fragmentNormal;
@@ -1220,7 +1224,9 @@ in vec3 fragmentVertexSpecularRgb;
 in float fragmentVertexAlpha;
 
 uniform sampler2D texture0;
+uniform sampler2D texture1;
 uniform float textureEnabled;
+uniform float dualTexture;
 uniform vec4 alphaTest;
 uniform vec3 fogColor;
 uniform vec4 diffuseColor;
@@ -1271,6 +1277,11 @@ void main()
 {
     vec4 sampled = (textureEnabled > 0.5)
         ? texture(texture0, fragmentTexCoord) : vec4(1.0);
+    if (dualTexture > 0.5)
+    {
+        sampled.rgb *= 2.0;
+        sampled *= texture(texture1, fragmentTexCoord1);
+    }
     if (lightingEnabled > 0.5)
     {
         vec3 litRgb = fragmentVertexLitRgb;
@@ -1315,8 +1326,12 @@ void main()
                 rlGetLocationUniform(pipeline.program, "vertexColorEnabled");
             pipeline.textureLocation =
                 rlGetLocationUniform(pipeline.program, "texture0");
+            pipeline.texture1Location =
+                rlGetLocationUniform(pipeline.program, "texture1");
             pipeline.textureEnabledLocation =
                 rlGetLocationUniform(pipeline.program, "textureEnabled");
+            pipeline.dualTextureLocation =
+                rlGetLocationUniform(pipeline.program, "dualTexture");
             pipeline.alphaTestLocation =
                 rlGetLocationUniform(pipeline.program, "alphaTest");
             pipeline.fogVectorLocation =
@@ -1354,7 +1369,8 @@ void main()
                 pipeline.normalMatrixLocations[1] < 0 ||
                 pipeline.normalMatrixLocations[2] < 0 || pipeline.diffuseColorLocation < 0 ||
                 pipeline.vertexColorEnabledLocation < 0 ||
-                pipeline.textureLocation < 0 || pipeline.textureEnabledLocation < 0 ||
+                pipeline.textureLocation < 0 || pipeline.texture1Location < 0 ||
+                pipeline.textureEnabledLocation < 0 || pipeline.dualTextureLocation < 0 ||
                 pipeline.alphaTestLocation < 0 || pipeline.fogVectorLocation < 0 ||
                 pipeline.fogColorLocation < 0 || pipeline.lightingEnabledLocation < 0 ||
                 pipeline.preferPerPixelLightingLocation < 0 ||
@@ -1403,7 +1419,8 @@ void main()
         const unsigned int vertexBuffer, const unsigned int indexBuffer,
         const VertexAttributeBinding* const attributes, const int attributeCount,
         const float* const worldViewProjectionColumnMajor,
-        const unsigned int texture, const GpuDrawParams& params,
+        const unsigned int texture, const unsigned int texture1,
+        const GpuDrawParams& params,
         const int primitiveType, const int elementCount,
         const int firstVertex, const int startIndex, const int baseVertex,
         const bool thirtyTwoBitIndices)
@@ -1496,9 +1513,15 @@ void main()
             RL_SHADER_UNIFORM_FLOAT, 1);
         constexpr int textureUnit = 0;
         rlSetUniform(pipeline.textureLocation, &textureUnit, RL_SHADER_UNIFORM_INT, 1);
+        constexpr int textureUnit1 = 1;
+        rlSetUniform(pipeline.texture1Location, &textureUnit1, RL_SHADER_UNIFORM_INT, 1);
         const float textureFlag = params.textureEnabled ? 1.0f : 0.0f;
         rlSetUniform(
             pipeline.textureEnabledLocation, &textureFlag,
+            RL_SHADER_UNIFORM_FLOAT, 1);
+        const float dualTextureFlag = params.dualTexture ? 1.0f : 0.0f;
+        rlSetUniform(
+            pipeline.dualTextureLocation, &dualTextureFlag,
             RL_SHADER_UNIFORM_FLOAT, 1);
         rlSetUniform(
             pipeline.alphaTestLocation, params.alphaTest, RL_SHADER_UNIFORM_VEC4, 1);
@@ -1545,6 +1568,11 @@ void main()
         rlSetUniform(
             pipeline.specularPowerLocation, &params.specularPower,
             RL_SHADER_UNIFORM_FLOAT, 1);
+        if (params.dualTexture)
+        {
+            rlActiveTextureSlot(textureUnit1);
+            rlEnableTexture(texture1 != 0 ? texture1 : rlGetTextureIdDefault());
+        }
         if (params.textureEnabled)
         {
             rlActiveTextureSlot(textureUnit);
@@ -1557,6 +1585,12 @@ void main()
             {
                 rlActiveTextureSlot(textureUnit);
                 rlDisableTexture();
+            }
+            if (params.dualTexture)
+            {
+                rlActiveTextureSlot(textureUnit1);
+                rlDisableTexture();
+                rlActiveTextureSlot(textureUnit);
             }
             rlDisableShader();
             throw std::runtime_error("RLGL: primitive VAO became unavailable");
@@ -1580,6 +1614,12 @@ void main()
                     rlActiveTextureSlot(textureUnit);
                     rlDisableTexture();
                 }
+                if (params.dualTexture)
+                {
+                    rlActiveTextureSlot(textureUnit1);
+                    rlDisableTexture();
+                    rlActiveTextureSlot(textureUnit);
+                }
                 rlDisableShader();
                 throw std::invalid_argument("RLGL: invalid vertex attribute binding");
             }
@@ -1597,7 +1637,9 @@ void main()
         snapshot.baseVertex = baseVertex;
         snapshot.indexed = indexBuffer != 0;
         snapshot.texture = texture;
+        snapshot.texture1 = texture1;
         snapshot.textureEnabled = params.textureEnabled;
+        snapshot.dualTexture = params.dualTexture;
         if (indexBuffer == 0)
         {
             if (mode == GL_TRIANGLES)
@@ -1644,6 +1686,12 @@ void main()
         {
             rlActiveTextureSlot(textureUnit);
             rlDisableTexture();
+        }
+        if (params.dualTexture)
+        {
+            rlActiveTextureSlot(textureUnit1);
+            rlDisableTexture();
+            rlActiveTextureSlot(textureUnit);
         }
         rlDisableShader();
         ThrowIfGlError("primitive draw");
