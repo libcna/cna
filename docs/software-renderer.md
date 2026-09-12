@@ -316,6 +316,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   parser now requires a full-mask temporary destination, no saturation, and a texture or temporary
   coordinate register before Shader Model 3. A separately assembled Microsoft control proves that
   `_pp` remains legal; eight invalid operand probes and that positive form run through both paths.
+  SOFTWARE-447 then tests the apparent missing Shader Model floor on `TEXLDD` instead of assuming
+  it is a bug. The real Microsoft assembler accepts `ps_2_x TEXLDD`, while rejecting `ps_2_0
+  TEXLDD` and pixel/vertex Shader Model 2.x `TEXLDL` with `X2023`. Software and EasyGL already
+  match that counterintuitive boundary: six shared Effects accept the valid 2.x gradient form and
+  reject the five invalid lower-profile forms. No production change was required, and adding a
+  blanket Shader Model 3 guard would have introduced an XNA/D3D9 incompatibility.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

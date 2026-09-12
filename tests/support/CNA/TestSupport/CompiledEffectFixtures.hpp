@@ -1027,6 +1027,25 @@ namespace CNA::TestSupport
         SamplerSwizzle,
     };
 
+    /** @brief Texture instruction encoded at a Shader Model profile boundary. */
+    enum class SyntheticTextureInstructionProfileProbe
+    {
+        /** @brief Emit no dedicated texture instruction profile probe. */
+        None,
+        /** @brief Emit TEXLDD in a Pixel Shader Model 2.0 program. */
+        Pixel20Texldd,
+        /** @brief Emit the valid TEXLDD form in a Pixel Shader Model 2.x program. */
+        Pixel2xTexldd,
+        /** @brief Emit TEXLDL in a Pixel Shader Model 2.0 program. */
+        Pixel20Texldl,
+        /** @brief Emit TEXLDL in a Pixel Shader Model 2.x program. */
+        Pixel2xTexldl,
+        /** @brief Emit TEXLDL in a Vertex Shader Model 2.0 program. */
+        Vertex20Texldl,
+        /** @brief Emit TEXLDL in a Vertex Shader Model 2.x program. */
+        Vertex2xTexldl,
+    };
+
     /** @brief A typed flow-control constant used as an ordinary arithmetic source by a probe. */
     enum class SyntheticTypedControlSourceProbe
     {
@@ -1413,6 +1432,9 @@ namespace CNA::TestSupport
         /** @brief Selects an invalid Pixel Shader Model 2 TEXLD operand form. */
         SyntheticTexld20OperandProbe texld20OperandProbe =
             SyntheticTexld20OperandProbe::None;
+        /** @brief Selects a texture instruction encoded at a profile boundary. */
+        SyntheticTextureInstructionProfileProbe textureInstructionProfileProbe =
+            SyntheticTextureInstructionProfileProbe::None;
         /** @brief Selects a typed flow-control constant used as an ordinary source. */
         SyntheticTypedControlSourceProbe typedControlSourceProbe =
             SyntheticTypedControlSourceProbe::None;
@@ -1562,7 +1584,9 @@ namespace CNA::TestSupport
         SyntheticTextureSourceModifierProbe textureSourceModifierProbe =
             SyntheticTextureSourceModifierProbe::None,
         SyntheticTexld20OperandProbe texld20OperandProbe =
-            SyntheticTexld20OperandProbe::None)
+            SyntheticTexld20OperandProbe::None,
+        SyntheticTextureInstructionProfileProbe textureInstructionProfileProbe =
+            SyntheticTextureInstructionProfileProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1758,6 +1782,20 @@ namespace CNA::TestSupport
                 SyntheticTextureSourceModifierProbe::PixelTexlddGradient;
         const bool probesTexld20Operand =
             texld20OperandProbe != SyntheticTexld20OperandProbe::None;
+        const bool probesPixelTextureInstructionProfile =
+            textureInstructionProfileProbe ==
+                SyntheticTextureInstructionProfileProbe::Pixel20Texldd ||
+            textureInstructionProfileProbe ==
+                SyntheticTextureInstructionProfileProbe::Pixel2xTexldd ||
+            textureInstructionProfileProbe ==
+                SyntheticTextureInstructionProfileProbe::Pixel20Texldl ||
+            textureInstructionProfileProbe ==
+                SyntheticTextureInstructionProfileProbe::Pixel2xTexldl;
+        const bool probesPixel2xTextureInstructionProfile =
+            textureInstructionProfileProbe ==
+                SyntheticTextureInstructionProfileProbe::Pixel2xTexldd ||
+            textureInstructionProfileProbe ==
+                SyntheticTextureInstructionProfileProbe::Pixel2xTexldl;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesTextureGradients ||
             usesRasterInputs || usesPredication ||
@@ -1812,7 +1850,8 @@ namespace CNA::TestSupport
                                                      probesPixel20OutputSource ||
                                                      probesPixel20SamplerSource
                                                ? 0xFFFF0200u
-                                           : probesPixel2xTemporary || probesPixel2xCallGraph
+                                           : probesPixel2xTemporary || probesPixel2xCallGraph ||
+                                                     probesPixel2xTextureInstructionProfile
                                                ? 0xFFFF02FFu
                                            : usesShaderModel14
                                                ? 0xFFFF0104u
@@ -1898,7 +1937,7 @@ namespace CNA::TestSupport
                             ? "ps_1_2"
                       : probesPixel20Temporary || probesPixel20FloatControl
                             ? "ps_2_0"
-                      : probesPixel2xTemporary
+                      : probesPixel2xTemporary || probesPixel2xTextureInstructionProfile
                             ? "ps_2_x"
             : usesShaderModel14
                 ? "ps_1_4"
@@ -3927,19 +3966,27 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regInput, 0));
         }
         else if (samplesTexture || usesTextureGradients || probesPixelTextureSourceModifier ||
-                 probesTexld20Operand)
+                 probesTexld20Operand || probesPixelTextureInstructionProfile)
         {
             // plans/plan_fx.md FX-110: a cube or volume sampler reads three components, a 2D one reads
             // two, and the declaration has to say which -- both in the coordinate register's write
             // mask and in the sampler's own texture-type field.
             const bool threeComponent = samplerKind != SyntheticSamplerKind::Sampler2D;
             const bool textureUsesGradients =
-                usesTextureGradients || probesPixelTexlddSourceModifier;
+                usesTextureGradients || probesPixelTexlddSourceModifier ||
+                textureInstructionProfileProbe ==
+                    SyntheticTextureInstructionProfileProbe::Pixel20Texldd ||
+                textureInstructionProfileProbe ==
+                    SyntheticTextureInstructionProfileProbe::Pixel2xTexldd;
             const bool textureUsesExplicitLod =
                 textureSourceModifierProbe ==
                     SyntheticTextureSourceModifierProbe::PixelTexldlCoordinate ||
                 textureSourceModifierProbe ==
-                    SyntheticTextureSourceModifierProbe::PixelTexldlSampler;
+                    SyntheticTextureSourceModifierProbe::PixelTexldlSampler ||
+                textureInstructionProfileProbe ==
+                    SyntheticTextureInstructionProfileProbe::Pixel20Texldl ||
+                textureInstructionProfileProbe ==
+                    SyntheticTextureInstructionProfileProbe::Pixel2xTexldl;
             const std::uint32_t coordinateMask =
                 textureUsesGradients || textureUsesExplicitLod
                                                      ? 0xFu
@@ -4219,7 +4266,10 @@ namespace CNA::TestSupport
                                                                     SyntheticCallGraphProbe::None,
                                                                 SyntheticTextureSourceModifierProbe
                                                                     textureSourceModifierProbe =
-                                                                        SyntheticTextureSourceModifierProbe::None)
+                                                                        SyntheticTextureSourceModifierProbe::None,
+                                                                SyntheticTextureInstructionProfileProbe
+                                                                    textureInstructionProfileProbe =
+                                                                        SyntheticTextureInstructionProfileProbe::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -4364,6 +4414,14 @@ namespace CNA::TestSupport
                 SyntheticTextureSourceModifierProbe::VertexTexldlCoordinate ||
             textureSourceModifierProbe ==
                 SyntheticTextureSourceModifierProbe::VertexTexldlSampler;
+        const bool probesVertexTextureInstructionProfile =
+            textureInstructionProfileProbe ==
+                SyntheticTextureInstructionProfileProbe::Vertex20Texldl ||
+            textureInstructionProfileProbe ==
+                SyntheticTextureInstructionProfileProbe::Vertex2xTexldl;
+        const bool probesVertex2xTextureInstructionProfile =
+            textureInstructionProfileProbe ==
+            SyntheticTextureInstructionProfileProbe::Vertex2xTexldl;
         const bool probesVertex30CallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Vertex30Depth4 &&
             callGraphProbe <= SyntheticCallGraphProbe::Vertex30Label2047;
@@ -4395,7 +4453,8 @@ namespace CNA::TestSupport
                                            : probesVertex2xTemporary ||
                                                      probesVertex2xInstructionSlots ||
                                                      probesVertex2xFlowControl ||
-                                                     probesVertex2xCallGraph
+                                                     probesVertex2xCallGraph ||
+                                                     probesVertex2xTextureInstructionProfile
                                                ? 0xFFFE02FFu
                                            : usesShaderModel3
                                                ? 0xFFFE0300u
@@ -4403,7 +4462,7 @@ namespace CNA::TestSupport
         const std::uint32_t constantCount =
             1u + (readsSecondStream ? 1u : 0u) +
             (samplesTexture || probesVertexTextureSourceModifier ||
-                     probesVertex30SamplerSource
+                     probesVertex30SamplerSource || probesVertexTextureInstructionProfile
                  ? 1u
                  : 0u);
 
@@ -4471,7 +4530,8 @@ namespace CNA::TestSupport
         const std::uint32_t target = appendCtabString(
             usesShaderModel11 ? "vs_1_1"
                               : probesVertex2xTemporary || probesVertex2xInstructionSlots ||
-                                        probesVertex2xFlowControl
+                                        probesVertex2xFlowControl ||
+                                        probesVertex2xTextureInstructionProfile
                                     ? "vs_2_x"
                                     : usesShaderModel3
                                           ? "vs_3_0"
@@ -4495,7 +4555,7 @@ namespace CNA::TestSupport
             PatchUInt32(ctab, constantInfo + 32, streamMixType);
         }
         if (samplesTexture || probesVertexTextureSourceModifier ||
-            probesVertex30SamplerSource)
+            probesVertex30SamplerSource || probesVertexTextureInstructionProfile)
         {
             const std::uint32_t samplerInfo = constantInfo +
                 (readsSecondStream ? 40u : 20u);
@@ -4880,7 +4940,8 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x80000000u | 5u);        // D3DDECLUSAGE_TEXCOORD, index 0
             AppendUInt32(shader, destination(regInput, 1));
         }
-        if (samplesTexture || probesVertex30SamplerSource)
+        if (samplesTexture || probesVertex30SamplerSource ||
+            probesVertexTextureInstructionProfile)
         {
             const std::uint32_t samplerTextureType =
                 samplerKind == SyntheticSamplerKind::SamplerCube
@@ -5422,7 +5483,8 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regTexCoordOut, 0));
             AppendUInt32(shader, source(regInput, 0));
         }
-        else if (samplesTexture || probesVertexTextureSourceModifier)
+        else if (samplesTexture || probesVertexTextureSourceModifier ||
+                 probesVertexTextureInstructionProfile)
         {
             // texldl r0, v1, s#; mov o0, r0. The texture therefore owns the complete clip-space
             // position and makes the vertex-stage lookup directly observable in target coverage.
@@ -6223,7 +6285,11 @@ namespace CNA::TestSupport
 
         const std::vector<std::uint8_t> shader = BuildSyntheticPixelShader(
             options.samplerRegister, options.breakShaderSymbolBinding,
-            options.includeSampler && !options.vertexShaderSamplesTexture,
+            options.includeSampler && !options.vertexShaderSamplesTexture &&
+                options.textureInstructionProfileProbe !=
+                    SyntheticTextureInstructionProfileProbe::Vertex20Texldl &&
+                options.textureInstructionProfileProbe !=
+                    SyntheticTextureInstructionProfileProbe::Vertex2xTexldl,
             options.pixelShaderSamplesTexture, /*swizzleTint=*/false, options.samplerKind,
             options.pixelShaderWritesMrt, options.pixelShaderUsesLoop,
             options.pixelLoopCount, options.pixelLoopInitial, options.pixelLoopStep,
@@ -6290,7 +6356,8 @@ namespace CNA::TestSupport
             options.flowControlProbe,
             options.callGraphProbe,
             options.textureSourceModifierProbe,
-            options.texld20OperandProbe);
+            options.texld20OperandProbe,
+            options.textureInstructionProfileProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -6301,6 +6368,10 @@ namespace CNA::TestSupport
                 options.vertexShaderReadsSecondStream,
                 options.vertexShaderSamplesTexture || options.pixelShaderSamplesTexture ||
                     options.pixelShaderUsesTextureGradients ||
+                    options.textureInstructionProfileProbe ==
+                        SyntheticTextureInstructionProfileProbe::Vertex20Texldl ||
+                    options.textureInstructionProfileProbe ==
+                        SyntheticTextureInstructionProfileProbe::Vertex2xTexldl ||
                     (options.textureSourceModifierProbe >=
                          SyntheticTextureSourceModifierProbe::PixelTexlddCoordinate &&
                      options.textureSourceModifierProbe <=
@@ -6400,7 +6471,8 @@ namespace CNA::TestSupport
                 options.vertexShaderCompositeWriteMaskProbe,
                 options.flowControlProbe,
                 options.callGraphProbe,
-                options.textureSourceModifierProbe);
+                options.textureSourceModifierProbe,
+                options.textureInstructionProfileProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

@@ -1866,6 +1866,48 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticTexld20OperandProbe::ConstantCoordinate,
         CNA::TestSupport::SyntheticTexld20OperandProbe::SamplerSwizzle));
 
+class EasyGLCompiledEffectTextureInstructionProfileTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTextureInstructionProfileProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectTextureInstructionProfileTest, RejectsInstruction)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.textureInstructionProfileProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTextureInstructionProfile,
+    EasyGLCompiledEffectTextureInstructionProfileTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Pixel20Texldd,
+        CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Pixel20Texldl,
+        CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Pixel2xTexldl,
+        CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Vertex20Texldl,
+        CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Vertex2xTexldl));
+
+TEST(EasyGLCompiledEffectTextureInstructionProfileTests, AcceptsPixel2xTexldd)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.textureInstructionProfileProbe =
+        CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Pixel2xTexldd;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
 class EasyGLCompiledEffectTypedControlSourceTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticTypedControlSourceProbe>
 {

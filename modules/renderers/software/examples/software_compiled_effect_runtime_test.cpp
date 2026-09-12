@@ -3954,6 +3954,61 @@ namespace
                   acceptedInvalidProbes);
     }
 
+    void CheckCompiledTextureInstructionProfileValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticTextureInstructionProfileProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel20Texldd,
+            Probe::Pixel20Texldl,
+            Probe::Pixel2xTexldl,
+            Probe::Vertex20Texldl,
+            Probe::Vertex2xTexldl,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.textureInstructionProfileProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid-profile texture instructions: " +
+                  acceptedInvalidProbes);
+
+        CNA::TestSupport::SyntheticEffectOptions validOptions;
+        validOptions.includeDrawableProgram = true;
+        validOptions.includeSampler = true;
+        validOptions.textureInstructionProfileProbe = Probe::Pixel2xTexldd;
+        const auto validBytes = CNA::TestSupport::BuildSyntheticEffect(validOptions);
+        bool acceptedPixel2xTexldd = true;
+        try
+        {
+            static_cast<void>(renderer.CreateCompiledEffect(validBytes.data(), validBytes.size()));
+        }
+        catch (const std::runtime_error&)
+        {
+            acceptedPixel2xTexldd = false;
+        }
+        Check(acceptedPixel2xTexldd,
+              "compiled Effect parser rejected Microsoft-valid ps_2_x TEXLDD");
+    }
+
     void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
@@ -6539,6 +6594,7 @@ int main()
         CheckCompiledTextureGradientSamplerOperand(renderer);
         CheckCompiledTextureSourceModifierValidation(renderer);
         CheckCompiledTexld20OperandValidation(renderer);
+        CheckCompiledTextureInstructionProfileValidation(renderer);
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);
