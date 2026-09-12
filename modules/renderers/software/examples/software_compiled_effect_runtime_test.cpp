@@ -3534,6 +3534,60 @@ namespace
         }
     }
 
+    void CheckCompiledPixel1CoissueValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticPixel1CoissueProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel11Texture,
+            Probe::Pixel14Dp4,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixel1CoissueProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid ps_1_x co-issue probes: " +
+                  acceptedInvalidProbes);
+
+        for (const Probe probe : {Probe::Pixel11RgbThenAlpha, Probe::Pixel11AlphaThenRgb})
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixel1CoissueProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Effect parser rejected a valid ps_1_x co-issue order, probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -5332,6 +5386,7 @@ int main()
         CheckCompiledPixel20InstructionSlotValidation(renderer);
         CheckCompiledPixel1InstructionSlotValidation(renderer);
         CheckCompiledPixel1DestinationMaskValidation(renderer);
+        CheckCompiledPixel1CoissueValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();

@@ -644,6 +644,21 @@ namespace CNA::TestSupport
         Pixel14TexcrdArbitrary,
     };
 
+    /** @brief Pixel Shader Model 1.x co-issue opcode rule exercised by a program. */
+    enum class SyntheticPixel1CoissueProbe
+    {
+        /** @brief Emit no dedicated co-issue program. */
+        None,
+        /** @brief Emit a legal RGB instruction followed by a co-issued alpha instruction. */
+        Pixel11RgbThenAlpha,
+        /** @brief Emit a legal alpha instruction followed by a co-issued RGB instruction. */
+        Pixel11AlphaThenRgb,
+        /** @brief Co-issue a forbidden texture-address instruction. */
+        Pixel11Texture,
+        /** @brief Co-issue DP4 even though it occupies both arithmetic pipelines. */
+        Pixel14Dp4,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -874,6 +889,8 @@ namespace CNA::TestSupport
         /** @brief Selects a pixel Shader Model 1.x destination-mask program. */
         SyntheticPixel1DestinationMaskProbe pixel1DestinationMaskProbe =
             SyntheticPixel1DestinationMaskProbe::None;
+        /** @brief Selects a pixel Shader Model 1.x co-issue program. */
+        SyntheticPixel1CoissueProbe pixel1CoissueProbe = SyntheticPixel1CoissueProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -978,7 +995,8 @@ namespace CNA::TestSupport
         SyntheticPixel1InstructionSlotProbe pixel1InstructionSlotProbe =
             SyntheticPixel1InstructionSlotProbe::None,
         SyntheticPixel1DestinationMaskProbe pixel1DestinationMaskProbe =
-            SyntheticPixel1DestinationMaskProbe::None)
+            SyntheticPixel1DestinationMaskProbe::None,
+        SyntheticPixel1CoissueProbe pixel1CoissueProbe = SyntheticPixel1CoissueProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1059,6 +1077,11 @@ namespace CNA::TestSupport
         const bool probesPixel14DestinationMask =
             pixel1DestinationMaskProbe >=
                 SyntheticPixel1DestinationMaskProbe::Pixel14MovArbitrary;
+        const bool probesPixel11Coissue =
+            pixel1CoissueProbe >= SyntheticPixel1CoissueProbe::Pixel11RgbThenAlpha &&
+            pixel1CoissueProbe <= SyntheticPixel1CoissueProbe::Pixel11Texture;
+        const bool probesPixel14Coissue =
+            pixel1CoissueProbe == SyntheticPixel1CoissueProbe::Pixel14Dp4;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -1086,11 +1109,13 @@ namespace CNA::TestSupport
                                                    probesPixel11TextureInput ||
                                                    probesPixel11FloatControl ||
                                                    probesPixel11InstructionSlots ||
-                                                   probesPixel11DestinationMask
+                                                   probesPixel11DestinationMask ||
+                                                   probesPixel11Coissue
                                                ? 0xFFFF0101u
                                            : probesPixel14Temporary || probesPixel14TextureInput ||
                                                      probesPixel14InstructionSlots ||
-                                                     probesPixel14DestinationMask
+                                                     probesPixel14DestinationMask ||
+                                                     probesPixel14Coissue
                                                ? 0xFFFF0104u
                                            : probesPixel12InstructionSlots
                                                ? 0xFFFF0102u
@@ -1172,10 +1197,11 @@ namespace CNA::TestSupport
         const std::uint32_t target = appendCtabString(
             probesPixel11Temporary || probesPixel11ColorInput || probesPixel11TextureInput ||
                     probesPixel11FloatControl || probesPixel11InstructionSlots ||
-                    probesPixel11DestinationMask
+                    probesPixel11DestinationMask || probesPixel11Coissue
                 ? "ps_1_1"
                 : probesPixel14Temporary || probesPixel14TextureInput ||
-                          probesPixel14InstructionSlots || probesPixel14DestinationMask
+                          probesPixel14InstructionSlots || probesPixel14DestinationMask ||
+                          probesPixel14Coissue
                       ? "ps_1_4"
                       : probesPixel12InstructionSlots
                             ? "ps_1_2"
@@ -1657,7 +1683,40 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 1, 0xE4u, absoluteSecond ? 11u : 0u));
         }
 
-        if (pixel1DestinationMaskProbe != SyntheticPixel1DestinationMaskProbe::None)
+        if (pixel1CoissueProbe != SyntheticPixel1CoissueProbe::None)
+        {
+            const auto appendMov = [&](std::uint32_t writeMask, bool coissued) {
+                AppendUInt32(shader, 0x00000001u | (coissued ? 0x40000000u : 0u));
+                AppendUInt32(shader, destination(regTemp, 0, writeMask));
+                AppendUInt32(shader, source(regConst, 0));
+            };
+            if (pixel1CoissueProbe == SyntheticPixel1CoissueProbe::Pixel11RgbThenAlpha)
+            {
+                appendMov(0x7u, false);
+                appendMov(0x8u, true);
+            }
+            else if (pixel1CoissueProbe == SyntheticPixel1CoissueProbe::Pixel11AlphaThenRgb)
+            {
+                appendMov(0x8u, false);
+                appendMov(0x7u, true);
+            }
+            else if (pixel1CoissueProbe == SyntheticPixel1CoissueProbe::Pixel11Texture)
+            {
+                appendMov(0x7u, false);
+                AppendUInt32(shader, 0x40000040u); // +texcoord t0
+                AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+                appendMov(0xFu, false);
+            }
+            else
+            {
+                appendMov(0x7u, false);
+                AppendUInt32(shader, 0x40000009u); // +dp4 r0.a, c0, c0
+                AppendUInt32(shader, destination(regTemp, 0, 0x8u));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, source(regConst, 0));
+            }
+        }
+        else if (pixel1DestinationMaskProbe != SyntheticPixel1DestinationMaskProbe::None)
         {
             if (pixel1DestinationMaskProbe ==
                 SyntheticPixel1DestinationMaskProbe::Pixel11Dp3Alpha)
@@ -3968,7 +4027,8 @@ namespace CNA::TestSupport
             options.constantControlRegisterProbe,
             options.pixel20InstructionSlotProbe,
             options.pixel1InstructionSlotProbe,
-            options.pixel1DestinationMaskProbe);
+            options.pixel1DestinationMaskProbe,
+            options.pixel1CoissueProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

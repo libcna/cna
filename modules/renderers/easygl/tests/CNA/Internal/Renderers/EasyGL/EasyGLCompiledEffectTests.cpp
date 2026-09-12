@@ -1615,6 +1615,45 @@ TEST(EasyGLCompiledEffectTest, AcceptsValidPixel1DestinationMasks)
     }
 }
 
+class EasyGLCompiledEffectPixel1CoissueTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticPixel1CoissueProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPixel1CoissueTest, RejectsInvalidCoissueOpcode)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixel1CoissueProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidPixel1CoissueOpcodes,
+    EasyGLCompiledEffectPixel1CoissueTest,
+    ::testing::Values(CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11Texture,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel14Dp4));
+
+TEST(EasyGLCompiledEffectTest, AcceptsBothValidPixel1CoissueOrders)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticPixel1CoissueProbe;
+    for (const Probe probe : {Probe::Pixel11RgbThenAlpha, Probe::Pixel11AlphaThenRgb})
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixel1CoissueProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;
