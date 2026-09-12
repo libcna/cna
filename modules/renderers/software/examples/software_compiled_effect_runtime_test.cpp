@@ -4853,6 +4853,62 @@ namespace
                   rejectedValidProbes);
     }
 
+    void CheckCompiledSincosOperandValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticSincosOperandProbe;
+        constexpr std::array invalidProbes{
+            Probe::Scratch1Negate,
+            Probe::Scratch1Swizzle,
+            Probe::Scratch2Negate,
+            Probe::Scratch2Swizzle,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.sincosOperandProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted modified SINCOS scratch constants: " +
+                  acceptedInvalidProbes);
+
+        for (const Probe probe : {Probe::Valid, Probe::ValueNegate})
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.sincosOperandProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Effect parser rejected valid SINCOS operands, probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+    }
+
     void CheckCompiledTextureInstructionProfileValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTextureInstructionProfileProbe;
@@ -7922,6 +7978,7 @@ int main()
         CheckCompiledTextureSourceModifierValidation(renderer);
         CheckCompiledTexld20OperandValidation(renderer);
         CheckCompiledTexld20TemporaryInitialization(renderer);
+        CheckCompiledSincosOperandValidation(renderer);
         CheckCompiledTextureInstructionProfileValidation(renderer);
         CheckCompiledTexlddOperandValidation(renderer);
         CheckCompiledTexldlDestinationModifierValidation(renderer);

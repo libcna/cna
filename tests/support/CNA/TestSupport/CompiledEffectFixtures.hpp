@@ -952,6 +952,25 @@ namespace CNA::TestSupport
         Pixel14Source2WWritten,
     };
 
+    /** @brief Pixel Shader Model 2.0 `SINCOS` operand form exercised by a forged program. */
+    enum class SyntheticSincosOperandProbe
+    {
+        /** @brief Emit no dedicated `SINCOS` operand probe. */
+        None,
+        /** @brief Negate the first scratch constant. */
+        Scratch1Negate,
+        /** @brief Swizzle the first scratch constant. */
+        Scratch1Swizzle,
+        /** @brief Negate the second scratch constant. */
+        Scratch2Negate,
+        /** @brief Swizzle the second scratch constant. */
+        Scratch2Swizzle,
+        /** @brief Use identity scratch constants and an unmodified scalar value. */
+        Valid,
+        /** @brief Negate the scalar value while retaining identity scratch constants. */
+        ValueNegate,
+    };
+
     /** @brief Shader profile and input-register boundary exercised by a synthetic program. */
     enum class SyntheticInputRegisterProbe
     {
@@ -1987,6 +2006,9 @@ namespace CNA::TestSupport
         /** @brief Selects a Shader Model 3 semantic declaration/packing probe. */
         SyntheticSemanticDeclarationProbe semanticDeclarationProbe =
             SyntheticSemanticDeclarationProbe::None;
+        /** @brief Selects a Pixel Shader Model 2.0 `SINCOS` operand probe. */
+        SyntheticSincosOperandProbe sincosOperandProbe =
+            SyntheticSincosOperandProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -2157,7 +2179,9 @@ namespace CNA::TestSupport
         SyntheticSpecialVectorInitializationProbe specialVectorInitializationProbe =
             SyntheticSpecialVectorInitializationProbe::None,
         SyntheticCndInitializationProbe cndInitializationProbe =
-            SyntheticCndInitializationProbe::None)
+            SyntheticCndInitializationProbe::None,
+        SyntheticSincosOperandProbe sincosOperandProbe =
+            SyntheticSincosOperandProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -2180,6 +2204,8 @@ namespace CNA::TestSupport
             temporaryInitializationProbe == SyntheticTemporaryInitializationProbe::Pixel2x ||
             temporaryInitializationProbe ==
                 SyntheticTemporaryInitializationProbe::Pixel2xTexkill;
+        const bool probesSincosOperand =
+            sincosOperandProbe != SyntheticSincosOperandProbe::None;
         const bool probesPixel20MoveComponentInitialization =
             temporaryInitializationProbe ==
                 SyntheticTemporaryInitializationProbe::Pixel20MoveWrittenX ||
@@ -3016,6 +3042,24 @@ namespace CNA::TestSupport
         {
             AppendUInt32(shader, 0x00000041u | (1u << 24)); // texkill r0
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+        }
+        if (probesSincosOperand)
+        {
+            using Probe = SyntheticSincosOperandProbe;
+            const bool scratch1Swizzle = sincosOperandProbe == Probe::Scratch1Swizzle;
+            const bool scratch2Swizzle = sincosOperandProbe == Probe::Scratch2Swizzle;
+            const bool scratch1Negate = sincosOperandProbe == Probe::Scratch1Negate;
+            const bool scratch2Negate = sincosOperandProbe == Probe::Scratch2Negate;
+            const bool valueNegate = sincosOperandProbe == Probe::ValueNegate;
+            AppendUInt32(shader, 0x00000025u | (4u << 24)); // sincos r0.xy, c0.x, c1, c2
+            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+            AppendUInt32(shader, source(regConst, 0, 0x00u, valueNegate ? 1u : 0u));
+            AppendUInt32(shader, source(regConst, 1,
+                                        scratch1Swizzle ? 0x00u : swizzleIdentity,
+                                        scratch1Negate ? 1u : 0u));
+            AppendUInt32(shader, source(regConst, 2,
+                                        scratch2Swizzle ? 0x00u : swizzleIdentity,
+                                        scratch2Negate ? 1u : 0u));
         }
         if (probesPixel20MoveComponentInitialization)
         {
@@ -8162,7 +8206,8 @@ namespace CNA::TestSupport
             options.fixedVectorInitializationProbe,
             options.matrixInitializationProbe,
             options.specialVectorInitializationProbe,
-            options.cndInitializationProbe);
+            options.cndInitializationProbe,
+            options.sincosOperandProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

@@ -408,6 +408,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   the exact 2.0 rule for ordinary/projected/biased `TEXLD`: a temporary coordinate consumes XY for
   2D or XYZ for cube/volume sampling, plus W for projection or bias. Managed patch 94 derives that
   mask from the declared sampler type and the instruction control without requiring unused 2D Z.
+  SOFTWARE-470 then closes the Shader Model 2 `SINCOS` scratch-operand branch: managed patch 95
+  requires both constant scratch operands to use identity swizzles without source modifiers, as
+  measured from Microsoft's assembler, while retaining legal modifiers on the scalar value source.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is

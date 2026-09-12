@@ -2650,6 +2650,48 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticTexld20OperandProbe::ConstantCoordinate,
         CNA::TestSupport::SyntheticTexld20OperandProbe::SamplerSwizzle));
 
+class EasyGLCompiledEffectSincosOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSincosOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectSincosOperandTest, RejectsModifiedScratchConstant)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.sincosOperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidSincosScratchOperand,
+    EasyGLCompiledEffectSincosOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSincosOperandProbe::Scratch1Negate,
+        CNA::TestSupport::SyntheticSincosOperandProbe::Scratch1Swizzle,
+        CNA::TestSupport::SyntheticSincosOperandProbe::Scratch2Negate,
+        CNA::TestSupport::SyntheticSincosOperandProbe::Scratch2Swizzle));
+
+TEST(EasyGLCompiledEffectSincosOperandTest, AcceptsIdentityScratchAndModifiedValue)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticSincosOperandProbe;
+    for (const Probe probe : {Probe::Valid, Probe::ValueNegate})
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.sincosOperandProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 class EasyGLCompiledEffectTextureInstructionProfileTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticTextureInstructionProfileProbe>
 {
