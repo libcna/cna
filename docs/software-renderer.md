@@ -414,6 +414,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   SOFTWARE-471 completes the adjacent vertex `SGN` operand contract: patch 96 additionally requires
   its temporary scratch sources to be unmodified and identity-swizzled, and forbids either from
   aliasing the value source while preserving Microsoft's legal destination/scratch aliasing.
+  SOFTWARE-472 then completes the matrix register-overlap contract missed by the earlier operand
+  and liveness audits. Patch 97 rejects a destination that aliases any additional matrix row
+  implied by the explicit base token, while retaining Microsoft's legal destination/base and
+  vector/matrix-row overlaps.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is

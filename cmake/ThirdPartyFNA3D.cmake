@@ -139,7 +139,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-2x-temp-initialization.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-20-texld-temp-initialization.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sincos-scratch-operand-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sgn-scratch-operand-validation.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-sgn-scratch-operand-validation.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-matrix-implied-row-alias-validation.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

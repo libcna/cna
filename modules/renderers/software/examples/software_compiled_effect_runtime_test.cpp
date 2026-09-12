@@ -4034,6 +4034,53 @@ namespace
             }
             Check(rejected, "compiled Effect parser accepted invalid matrix operands");
         }
+
+        using Alias = CNA::TestSupport::SyntheticMatrixAliasProbe;
+        constexpr std::array invalidAliases{
+            Alias::DestinationAliasesSecondMatrixRow,
+            Alias::DestinationAliasesLastMatrixRow,
+        };
+        for (const Alias alias : invalidAliases)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderMatrixAliasProbe = alias;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected,
+                  "compiled Effect parser accepted a matrix destination aliasing an implicit row");
+        }
+
+        constexpr std::array validAliases{
+            Alias::DestinationAliasesMatrixBase,
+            Alias::VectorAliasesMatrixBase,
+            Alias::VectorAliasesImplicitMatrixRow,
+        };
+        for (const Alias alias : validAliases)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderMatrixAliasProbe = alias;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted, "compiled Effect parser rejected a legal matrix operand alias");
+        }
     }
 
     void CheckCompiledPreShaderModel3AbsoluteSourceValidation(SoftwareRenderer& renderer)

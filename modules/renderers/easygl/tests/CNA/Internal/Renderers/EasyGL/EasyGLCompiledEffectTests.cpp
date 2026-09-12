@@ -2015,6 +2015,50 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticInvalidMatrixOperands::SwizzledMatrixSource,
         CNA::TestSupport::SyntheticInvalidMatrixOperands::DestinationAliasesVectorSource));
 
+class EasyGLCompiledEffectMatrixImplicitAliasTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticMatrixAliasProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectMatrixImplicitAliasTest, RejectsDestinationAlias)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderMatrixAliasProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ImplicitRows,
+    EasyGLCompiledEffectMatrixImplicitAliasTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticMatrixAliasProbe::DestinationAliasesSecondMatrixRow,
+        CNA::TestSupport::SyntheticMatrixAliasProbe::DestinationAliasesLastMatrixRow));
+
+TEST(EasyGLCompiledEffectMatrixImplicitAliasTest, AcceptsLegalSourceAndDestinationAliases)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    constexpr std::array validAliases{
+        CNA::TestSupport::SyntheticMatrixAliasProbe::DestinationAliasesMatrixBase,
+        CNA::TestSupport::SyntheticMatrixAliasProbe::VectorAliasesMatrixBase,
+        CNA::TestSupport::SyntheticMatrixAliasProbe::VectorAliasesImplicitMatrixRow,
+    };
+    for (const auto alias : validAliases)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderMatrixAliasProbe = alias;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 class EasyGLCompiledEffectPreShaderModel3AbsoluteSourceTest :
     public ::testing::TestWithParam<
         CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource>

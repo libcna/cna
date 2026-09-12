@@ -562,6 +562,23 @@ namespace CNA::TestSupport
         DestinationAliasesVectorSource,
     };
 
+    /** @brief Source/destination alias relationship deliberately emitted for a matrix opcode. */
+    enum class SyntheticMatrixAliasProbe
+    {
+        /** @brief Emit no matrix alias probe. */
+        None,
+        /** @brief Use the second implicit matrix row as the destination. */
+        DestinationAliasesSecondMatrixRow,
+        /** @brief Use the last implicit matrix row as the destination. */
+        DestinationAliasesLastMatrixRow,
+        /** @brief Use the explicit matrix-base register as the destination. */
+        DestinationAliasesMatrixBase,
+        /** @brief Use the explicit matrix-base register as the input vector. */
+        VectorAliasesMatrixBase,
+        /** @brief Use an additional implicit matrix row as the input vector. */
+        VectorAliasesImplicitMatrixRow,
+    };
+
     /** @brief Shader-stage/profile combination using an absolute source modifier before SM3. */
     enum class SyntheticInvalidPreShaderModel3AbsoluteSource
     {
@@ -1933,6 +1950,9 @@ namespace CNA::TestSupport
         /** @brief Emits the selected invalid matrix operand combination in the pixel shader. */
         SyntheticInvalidMatrixOperands pixelShaderInvalidMatrixOperands =
             SyntheticInvalidMatrixOperands::None;
+        /** @brief Emits the selected matrix source/destination alias relationship. */
+        SyntheticMatrixAliasProbe pixelShaderMatrixAliasProbe =
+            SyntheticMatrixAliasProbe::None;
         /** @brief Emits an absolute source modifier in the selected pre-SM3 shader stage. */
         SyntheticInvalidPreShaderModel3AbsoluteSource invalidPreShaderModel3AbsoluteSource =
             SyntheticInvalidPreShaderModel3AbsoluteSource::None;
@@ -2131,6 +2151,7 @@ namespace CNA::TestSupport
         bool shaderModel2xUsesInvalidLoop = false,
         SyntheticInvalidMatrixOperands invalidMatrixOperands =
             SyntheticInvalidMatrixOperands::None,
+        SyntheticMatrixAliasProbe matrixAliasProbe = SyntheticMatrixAliasProbe::None,
         SyntheticInvalidPreShaderModel3AbsoluteSource invalidAbsoluteSource =
             SyntheticInvalidPreShaderModel3AbsoluteSource::None,
         SyntheticInvalidShaderModel3MixedConstantAbsolute invalidMixedConstantAbsolute =
@@ -3828,6 +3849,46 @@ namespace CNA::TestSupport
                                SyntheticInvalidMatrixOperands::NegatedMatrixSource
                            ? 1u
                            : 0u));
+        }
+
+        if (matrixAliasProbe != SyntheticMatrixAliasProbe::None)
+        {
+            for (std::uint32_t row = 1; row <= 3; ++row)
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r#, c0
+                AppendUInt32(shader, destination(regTemp, row, 0xFu));
+                AppendUInt32(shader, source(regConst, 0));
+            }
+
+            if (matrixAliasProbe == SyntheticMatrixAliasProbe::VectorAliasesMatrixBase ||
+                matrixAliasProbe == SyntheticMatrixAliasProbe::VectorAliasesImplicitMatrixRow)
+            {
+                AppendUInt32(shader, 0x00000018u | (3u << 24)); // m3x2 r0.xy, r#, r1
+                AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+                AppendUInt32(
+                    shader,
+                    source(regTemp,
+                           matrixAliasProbe ==
+                                   SyntheticMatrixAliasProbe::VectorAliasesMatrixBase
+                               ? 1u
+                               : 2u));
+                AppendUInt32(shader, source(regTemp, 1));
+            }
+            else
+            {
+                std::uint32_t destinationRegister = 1;
+                if (matrixAliasProbe ==
+                    SyntheticMatrixAliasProbe::DestinationAliasesSecondMatrixRow)
+                    destinationRegister = 2;
+                else if (matrixAliasProbe ==
+                         SyntheticMatrixAliasProbe::DestinationAliasesLastMatrixRow)
+                    destinationRegister = 3;
+
+                AppendUInt32(shader, 0x00000015u | (3u << 24)); // m4x3 r#.xyz, c0, r1
+                AppendUInt32(shader, destination(regTemp, destinationRegister, 0x7u));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, source(regTemp, 1));
+            }
         }
 
         if (invalidAbsoluteSource ==
@@ -8217,6 +8278,7 @@ namespace CNA::TestSupport
             options.shaderModel20InvalidDynamicFeature,
             options.pixelShaderModel2xUsesInvalidLoop,
             options.pixelShaderInvalidMatrixOperands,
+            options.pixelShaderMatrixAliasProbe,
             options.invalidPreShaderModel3AbsoluteSource,
             options.invalidShaderModel3MixedConstantAbsolute,
             options.temporaryRegisterProbe,
