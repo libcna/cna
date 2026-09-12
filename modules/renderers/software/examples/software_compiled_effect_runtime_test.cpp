@@ -2453,17 +2453,35 @@ namespace
               "a true predicate did not execute compiled TEXKILL");
     }
 
-    void CheckCompiledProjectiveSourceModifiers()
+    void CheckCompiledShaderModel14ProjectiveTextureLoads()
     {
+        namespace Fx = CNA::TestSupport::EffectFormat;
         GraphicsDevice device;
         CNA::TestSupport::SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
-        options.includeSampler = false;
-        options.pixelShaderUsesProjectiveModifiers = true;
-        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+        options.includeSampler = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        options.pixelShaderUsesShaderModel14TexldDz = true;
+        auto dzEffect = CNA::TestSupport::CompiledEffectTestAccess::Create(
             device, CNA::TestSupport::BuildSyntheticEffect(options));
-        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
-        effect->getParametersProperty()["Tint"]->SetValue(Vector4(0.0f, 0.0f, 0.25f, 1.0f));
+        options.pixelShaderUsesShaderModel14TexldDz = false;
+        options.pixelShaderUsesShaderModel14TexldDw = true;
+        auto dwEffect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        dzEffect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        dwEffect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        Texture2D texture(device, 4, 1);
+        const Color texels[4] = {Color::Red, Color::Green, Color::Blue, Color::White};
+        texture.SetData(texels, 4);
+        dzEffect->getParametersProperty()["FxTexture"]->SetValue(&texture);
+        dwEffect->getParametersProperty()["FxTexture"]->SetValue(&texture);
 
         struct Vertex { float x, y, z, u, v, q, w; };
         const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
@@ -2474,18 +2492,20 @@ namespace
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
-        const auto drawAndRead = [&](Effect& selectedEffect, float divisorZ, float divisorW)
+        const auto drawAndRead = [&](Effect& selectedEffect, float divisor, bool dividesByZ)
         {
+            const float q = dividesByZ ? divisor : 1.0f;
+            const float w = dividesByZ ? 1.0f : divisor;
             const Vertex quad[6] = {
-                {-1,  1, 0, .25f, .5f, divisorZ, divisorW},
-                {-1, -1, 0, .25f, .5f, divisorZ, divisorW},
-                { 1, -1, 0, .25f, .5f, divisorZ, divisorW},
-                {-1,  1, 0, .25f, .5f, divisorZ, divisorW},
-                { 1, -1, 0, .25f, .5f, divisorZ, divisorW},
-                { 1,  1, 0, .25f, .5f, divisorZ, divisorW},
+                {-1,  1, 0, .2f, .5f, q, w},
+                {-1, -1, 0, .2f, .5f, q, w},
+                { 1, -1, 0, .2f, .5f, q, w},
+                {-1,  1, 0, .2f, .5f, q, w},
+                { 1, -1, 0, .2f, .5f, q, w},
+                { 1,  1, 0, .2f, .5f, q, w},
             };
             device.SetRenderTarget(&target);
-            device.Clear(Color::Black);
+            device.Clear(Color::Magenta);
             selectedEffect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(quad), 0, 2, declaration);
@@ -2495,29 +2515,35 @@ namespace
             target.GetData(0, &centreRectangle, &centre, 0, 1);
             return centre;
         };
-        const Color projected = drawAndRead(*effect, 0.5f, 0.25f);
-        Check(std::abs(static_cast<int>(projected.getRProperty()) - 128) <= 1 &&
-                  projected.getGProperty() == 255 &&
-                  std::abs(static_cast<int>(projected.getBProperty()) - 64) <= 1 &&
-                  projected.getAProperty() == 255,
-              "compiled ps_1_4 _dz/_dw projection produced the wrong color");
-        const Color zeroDivisors = drawAndRead(*effect, 0.0f, 0.0f);
-        Check(zeroDivisors.getRProperty() == 255 && zeroDivisors.getGProperty() == 255 &&
-                  std::abs(static_cast<int>(zeroDivisors.getBProperty()) - 64) <= 1 &&
-                  zeroDivisors.getAProperty() == 255,
-              "compiled ps_1_4 projective zero divisors did not produce one");
+        Check(drawAndRead(*dzEffect, 0.5f, true) == Color::Green,
+              "compiled ps_1_4 TEXLD r#_dz.xyz selected the wrong texel");
+        Check(drawAndRead(*dzEffect, 0.0f, true) == Color::White,
+              "compiled ps_1_4 TEXLD r#_dz.xyz zero divisor did not select one");
+        Check(drawAndRead(*dwEffect, 0.5f, false) == Color::Green,
+              "compiled ps_1_4 TEXLD t#_dw.xyw selected the wrong texel");
+        Check(drawAndRead(*dwEffect, 0.0f, false) == Color::White,
+              "compiled ps_1_4 TEXLD t#_dw.xyw zero divisor did not select one");
 
-        options.pixelShaderUsesProjectiveModifiers = false;
-        options.pixelShaderUsesProjectiveSwizzleModifiers = true;
-        auto swizzled = CNA::TestSupport::CompiledEffectTestAccess::Create(
+        options.includeSampler = false;
+        options.pixelShaderUsesShaderModel14TexldDw = false;
+        options.pixelShaderUsesShaderModel14TexcrdDw = true;
+        auto texcrdEffect = CNA::TestSupport::CompiledEffectTestAccess::Create(
             device, CNA::TestSupport::BuildSyntheticEffect(options));
-        swizzled->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
-        const Color swizzledProjection = drawAndRead(*swizzled, 0.5f, 0.25f);
-        Check(swizzledProjection.getRProperty() == 255 &&
-                  std::abs(static_cast<int>(swizzledProjection.getGProperty()) - 128) <= 1 &&
-                  swizzledProjection.getBProperty() == 255 &&
-                  swizzledProjection.getAProperty() == 255,
-              "compiled ps_1_4 projection ran before the coordinate source swizzle");
+        texcrdEffect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        texcrdEffect->getParametersProperty()["Tint"]->SetValue(
+            Vector4(0.0f, 0.0f, 0.25f, 1.0f));
+        const Color projectedCoordinate = drawAndRead(*texcrdEffect, 0.5f, false);
+        Check(std::abs(static_cast<int>(projectedCoordinate.getRProperty()) - 102) <= 1 &&
+                  projectedCoordinate.getGProperty() == 255 &&
+                  std::abs(static_cast<int>(projectedCoordinate.getBProperty()) - 64) <= 1 &&
+                  projectedCoordinate.getAProperty() == 255,
+              "compiled ps_1_4 TEXCRD t#_dw.xyw produced the wrong coordinate");
+        const Color zeroCoordinate = drawAndRead(*texcrdEffect, 0.0f, false);
+        Check(zeroCoordinate.getRProperty() == 255 &&
+                  zeroCoordinate.getGProperty() == 255 &&
+                  std::abs(static_cast<int>(zeroCoordinate.getBProperty()) - 64) <= 1 &&
+                  zeroCoordinate.getAProperty() == 255,
+              "compiled ps_1_4 TEXCRD t#_dw.xyw zero divisor did not produce one");
     }
 
     void CheckCompiledSamplerResultSwizzle()
@@ -5153,6 +5179,7 @@ namespace
             Probe::Pixel11MovArbitrary,
             Probe::Pixel11Dp3Alpha,
             Probe::Pixel11TexturePartial,
+            Probe::Pixel14TexcrdArbitrary,
         };
         std::string acceptedInvalidProbes;
         for (const Probe probe : invalidProbes)
@@ -5185,7 +5212,6 @@ namespace
             Probe::Pixel11MovRgb,
             Probe::Pixel11MovAlpha,
             Probe::Pixel14MovArbitrary,
-            Probe::Pixel14TexcrdArbitrary,
         };
         for (const Probe probe : validProbes)
         {
@@ -5206,6 +5232,45 @@ namespace
                   "compiled Effect parser rejected a valid ps_1_x destination mask, probe " +
                       std::to_string(static_cast<int>(probe)));
         }
+    }
+
+    void CheckCompiledShaderModel14TextureOperandValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe;
+        constexpr std::array invalidProbes{
+            Probe::TexcrdDz,
+            Probe::TexcrdDwIdentity,
+            Probe::TexcrdDwWrongDestinationMask,
+            Probe::TexldTextureDz,
+            Probe::TexldTextureDwIdentity,
+            Probe::TexldTemporaryDw,
+            Probe::TexldTemporaryDzIdentity,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.shaderModel14TextureOperandProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid ps_1_4 projective texture operands: " +
+                  acceptedInvalidProbes);
     }
 
     void CheckCompiledPixel1CoissueValidation(SoftwareRenderer& renderer)
@@ -7097,7 +7162,7 @@ int main()
         CheckCompiledRasterInputs();
         CheckCompiledInstructionPredication();
         CheckCompiledPredicatedTexkill();
-        CheckCompiledProjectiveSourceModifiers();
+        CheckCompiledShaderModel14ProjectiveTextureLoads();
         CheckCompiledSamplerResultSwizzle();
         CheckCompiledShaderModel14TextureLoad();
         CheckCompiledShaderModel14Phase();
@@ -7158,6 +7223,7 @@ int main()
         CheckCompiledPixel20InstructionSlotValidation(renderer);
         CheckCompiledPixel1InstructionSlotValidation(renderer);
         CheckCompiledPixel1DestinationMaskValidation(renderer);
+        CheckCompiledShaderModel14TextureOperandValidation(renderer);
         CheckCompiledPixel1CoissueValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();

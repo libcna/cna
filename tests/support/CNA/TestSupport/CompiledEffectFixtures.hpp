@@ -577,6 +577,27 @@ namespace CNA::TestSupport
         Pixel30InputFull,
     };
 
+    /** @brief Invalid Shader Model 1.4 `TEXCRD`/`TEXLD` projective operand form. */
+    enum class SyntheticShaderModel14TextureOperandProbe
+    {
+        /** @brief Emit no dedicated Shader Model 1.4 projective operand probe. */
+        None,
+        /** @brief Invalidly apply `_dz.xyz` to a `TEXCRD` texture-register source. */
+        TexcrdDz,
+        /** @brief Pair a `TEXCRD` texture-register `_dw` modifier with identity swizzle. */
+        TexcrdDwIdentity,
+        /** @brief Pair canonical `TEXCRD` `_dw.xyw` with the forbidden XYZ destination mask. */
+        TexcrdDwWrongDestinationMask,
+        /** @brief Invalidly apply `_dz.xyz` to a `TEXLD` texture-register source. */
+        TexldTextureDz,
+        /** @brief Pair a `TEXLD` texture-register `_dw` modifier with identity swizzle. */
+        TexldTextureDwIdentity,
+        /** @brief Invalidly apply `_dw.xyw` to a `TEXLD` temporary-register source. */
+        TexldTemporaryDw,
+        /** @brief Pair a `TEXLD` temporary-register `_dz` modifier with identity swizzle. */
+        TexldTemporaryDzIdentity,
+    };
+
     /** @brief Shader profile exercised for a read from an uninitialized temporary register. */
     enum class SyntheticTemporaryInitializationProbe
     {
@@ -1384,10 +1405,15 @@ namespace CNA::TestSupport
         bool shadersUsePredication = false;
         /// Emits a Shader Model 3 pixel program that predicates `TEXKILL` through replicated `p0.x`.
         bool pixelShaderUsesPredicatedTexkill = false;
-        /// Emits a Shader Model 1.4 pixel program that applies `_dz` and `_dw` to `TEXCRD`.
-        bool pixelShaderUsesProjectiveModifiers = false;
-        /// Emits ps_1_4 projective modifiers after non-identity source swizzles.
-        bool pixelShaderUsesProjectiveSwizzleModifiers = false;
+        /// Emits a Shader Model 1.4 pixel program that samples `r#_dz.xyz` through `TEXLD`.
+        bool pixelShaderUsesShaderModel14TexldDz = false;
+        /// Emits a ps_1_4 TEXLD using the texture-register `_dw.xyw` operand form.
+        bool pixelShaderUsesShaderModel14TexldDw = false;
+        /// Emits a ps_1_4 TEXCRD using its canonical `_dw.xyw` source and XY destination.
+        bool pixelShaderUsesShaderModel14TexcrdDw = false;
+        /// Emits the selected invalid ps_1_4 projective texture-operand form.
+        SyntheticShaderModel14TextureOperandProbe shaderModel14TextureOperandProbe =
+            SyntheticShaderModel14TextureOperandProbe::None;
         /// Emits a Shader Model 1.4 pixel program whose destination selects the sampler stage.
         bool pixelShaderUsesShaderModel14TextureLoad = false;
         /// Emits a two-phase Shader Model 1.4 pixel program and carries temporary RGB across it.
@@ -1633,8 +1659,11 @@ namespace CNA::TestSupport
         bool usesRasterInputs = false,
         bool usesPredication = false,
         bool usesPredicatedTexkill = false,
-        bool usesProjectiveModifiers = false,
-        bool usesProjectiveSwizzleModifiers = false,
+        bool usesShaderModel14TexldDz = false,
+        bool usesShaderModel14TexldDw = false,
+        bool usesShaderModel14TexcrdDw = false,
+        SyntheticShaderModel14TextureOperandProbe shaderModel14TextureOperandProbe =
+            SyntheticShaderModel14TextureOperandProbe::None,
         bool usesShaderModel14TextureLoad = false,
         bool usesShaderModel14Phase = false,
         bool usesLegacyTextureMatrix = false,
@@ -1994,8 +2023,11 @@ namespace CNA::TestSupport
             probesVertexFloatRedefinition || probesPixelSamplerDuplicate ||
             probesPixelTextureSourceModifier || probesPixel30TexlddOperand ||
             probesPixelTexldlDestinationModifier || probesPixel30TexldDestinationModifier;
-        const bool usesShaderModel14 = usesProjectiveModifiers ||
-                                       usesProjectiveSwizzleModifiers ||
+        const bool usesShaderModel14 = usesShaderModel14TexldDz ||
+                                       usesShaderModel14TexldDw ||
+                                       usesShaderModel14TexcrdDw ||
+                                       shaderModel14TextureOperandProbe !=
+                                           SyntheticShaderModel14TextureOperandProbe::None ||
                                        usesShaderModel14TextureLoad ||
                                        usesShaderModel14Phase || duplicatesShaderModel14Phase ||
                                        shaderModel1InvalidOpcode !=
@@ -3351,8 +3383,8 @@ namespace CNA::TestSupport
         {
             // RGB temporary components persist across the ps_1_4 phase transition. Alpha does not,
             // so the valid phase-2 program initializes the output's z/w channels independently.
-            AppendUInt32(shader, 0x00000040u); // texcrd r1.xy, t0
-            AppendUInt32(shader, destination(regTemp, 1, 0x3u));
+            AppendUInt32(shader, 0x00000040u); // texcrd r1.xyz, t0
+            AppendUInt32(shader, destination(regTemp, 1, 0x7u));
             AppendUInt32(shader, source(regTexture, 0));
             AppendUInt32(shader, 0x0000FFFDu); // phase
             if (duplicatesShaderModel14Phase)
@@ -3364,50 +3396,92 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regTemp, 0, 0xCu));
             AppendUInt32(shader, source(regConst, 0));
         }
+        else if (usesShaderModel14TexcrdDw)
+        {
+            AppendUInt32(shader, 0x00000040u); // texcrd r0.xy, t0_dw.xyw
+            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+            AppendUInt32(shader, source(regTexture, 0, 0xF4u, 10u));
+            AppendUInt32(shader, 0x00000001u); // mov r0.zw, c0
+            AppendUInt32(shader, destination(regTemp, 0, 0xCu));
+            AppendUInt32(shader, source(regConst, 0));
+        }
+        else if (shaderModel14TextureOperandProbe !=
+                 SyntheticShaderModel14TextureOperandProbe::None)
+        {
+            using Probe = SyntheticShaderModel14TextureOperandProbe;
+            const bool temporarySource =
+                shaderModel14TextureOperandProbe == Probe::TexldTemporaryDw ||
+                shaderModel14TextureOperandProbe == Probe::TexldTemporaryDzIdentity;
+            if (temporarySource)
+            {
+                AppendUInt32(shader, 0x00000040u); // texcrd r1.xyz, t0
+                AppendUInt32(shader, destination(regTemp, 1, 0x7u));
+                AppendUInt32(shader, source(regTexture, 0));
+                AppendUInt32(shader, 0x0000FFFDu); // phase
+            }
+
+            if (shaderModel14TextureOperandProbe == Probe::TexcrdDz ||
+                shaderModel14TextureOperandProbe == Probe::TexcrdDwIdentity ||
+                shaderModel14TextureOperandProbe == Probe::TexcrdDwWrongDestinationMask)
+            {
+                const bool dz = shaderModel14TextureOperandProbe == Probe::TexcrdDz;
+                const bool identitySelector =
+                    shaderModel14TextureOperandProbe == Probe::TexcrdDwIdentity;
+                AppendUInt32(shader, 0x00000040u); // texcrd r0.mask, invalid projective t0
+                AppendUInt32(shader,
+                             destination(regTemp, 0, identitySelector ? 0x3u : 0x7u));
+                AppendUInt32(
+                    shader,
+                    source(regTexture, 0, identitySelector ? swizzleIdentity : dz ? 0xA4u : 0xF4u,
+                           dz ? 9u : 10u));
+                AppendUInt32(shader, 0x00000001u); // mov r0.w, c0.w
+                AppendUInt32(shader, destination(regTemp, 0, 0x8u));
+                AppendUInt32(shader, source(regConst, 0, 0xFFu));
+            }
+            else
+            {
+                const bool dz =
+                    shaderModel14TextureOperandProbe == Probe::TexldTextureDz ||
+                    shaderModel14TextureOperandProbe == Probe::TexldTemporaryDzIdentity;
+                const bool identitySelector =
+                    shaderModel14TextureOperandProbe == Probe::TexldTextureDwIdentity ||
+                    shaderModel14TextureOperandProbe == Probe::TexldTemporaryDzIdentity;
+                AppendUInt32(shader, 0x00000042u); // texld r0, invalid projective source
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader,
+                             source(temporarySource ? regTemp : regTexture,
+                                    temporarySource ? 1u : 0u,
+                                    identitySelector ? swizzleIdentity : dz ? 0xA4u : 0xF4u,
+                                    dz ? 9u : 10u));
+            }
+        }
         else if (usesShaderModel14TextureLoad)
         {
             // ps_1_4 selects the texture stage from the destination register number while the
-            // source independently selects the coordinate set: sample stage 1 at TEXCOORD0.
-            AppendUInt32(shader, 0x00000042u); // texld r<samplerRegister>, t0
+            // source independently selects the coordinate set. Microsoft requires the canonical
+            // _dw selector (.xyw), so sample stage 1 at TEXCOORD0 with that selector.
+            AppendUInt32(shader, 0x00000042u); // texld r<samplerRegister>, t0_dw.xyw
             AppendUInt32(shader, destination(regTemp, samplerRegister, 0xFu));
-            AppendUInt32(shader, source(regTexture, 0, swizzleIdentity, 10u));
+            AppendUInt32(shader, source(regTexture, 0, 0xF4u, 10u));
             AppendUInt32(shader, 0x00000001u); // mov r0, sampled value (ps_1_x output is r0)
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(regTemp, samplerRegister));
         }
-        else if (usesProjectiveSwizzleModifiers)
+        else if (usesShaderModel14TexldDw)
         {
-            constexpr std::uint32_t swizzleZxyw =
-                2u | (0u << 2) | (1u << 4) | (3u << 6);
-            constexpr std::uint32_t swizzleWxyz =
-                3u | (0u << 2) | (1u << 4) | (2u << 6);
-            constexpr std::uint32_t swizzleXyxy =
-                0u | (1u << 2) | (0u << 4) | (1u << 6);
-            AppendUInt32(shader, 0x00000040u); // texcrd r0.xy, t0.zxyw_dz
-            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
-            AppendUInt32(shader, source(regTexture, 0, swizzleZxyw, 9u));
-            AppendUInt32(shader, 0x00000040u); // texcrd r1.xy, t0.wxyz_dw
-            AppendUInt32(shader, destination(regTemp, 1, 0x3u));
-            AppendUInt32(shader, source(regTexture, 0, swizzleWxyz, 10u));
-            AppendUInt32(shader, 0x00000001u); // mov r0.zw, r1.xy
-            AppendUInt32(shader, destination(regTemp, 0, 0xCu));
-            AppendUInt32(shader, source(regTemp, 1, swizzleXyxy));
+            AppendUInt32(shader, 0x00000042u); // texld r0, t0_dw.xyw
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTexture, 0, 0xF4u, 10u));
         }
-        else if (usesProjectiveModifiers)
+        else if (usesShaderModel14TexldDz)
         {
-            // t0=(.25,.5,.5,.25): _dz contributes .5 to red and _dw contributes 1 to green.
-            AppendUInt32(shader, 0x00000040u); // texcrd r0.xy, t0_dz
-            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
-            AppendUInt32(shader, source(regTexture, 0, swizzleIdentity, 9u));
-            AppendUInt32(shader, 0x00000040u); // texcrd r1.xy, t0_dw
-            AppendUInt32(shader, destination(regTemp, 1, 0x3u));
-            AppendUInt32(shader, source(regTexture, 0, swizzleIdentity, 10u));
-            AppendUInt32(shader, 0x00000001u); // mov r0.y, r1.x
-            AppendUInt32(shader, destination(regTemp, 0, 0x2u));
-            AppendUInt32(shader, source(regTemp, 1, 0x00u));
-            AppendUInt32(shader, 0x00000001u); // mov r0.zw, c0.zw
-            AppendUInt32(shader, destination(regTemp, 0, 0xCu));
-            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x00000040u); // texcrd r1.xyz, t0
+            AppendUInt32(shader, destination(regTemp, 1, 0x7u));
+            AppendUInt32(shader, source(regTexture, 0));
+            AppendUInt32(shader, 0x0000FFFDu); // phase
+            AppendUInt32(shader, 0x00000042u); // texld r0, r1_dz.xyz
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTemp, 1, 0xA4u, 9u));
         }
         else if (usesPredicatedTexkill)
         {
@@ -6720,8 +6794,10 @@ namespace CNA::TestSupport
             options.pixelShaderUsesTextureGradients,
             options.pixelShaderUsesRasterInputs, options.shadersUsePredication,
             options.pixelShaderUsesPredicatedTexkill,
-            options.pixelShaderUsesProjectiveModifiers,
-            options.pixelShaderUsesProjectiveSwizzleModifiers,
+            options.pixelShaderUsesShaderModel14TexldDz,
+            options.pixelShaderUsesShaderModel14TexldDw,
+            options.pixelShaderUsesShaderModel14TexcrdDw,
+            options.shaderModel14TextureOperandProbe,
             options.pixelShaderUsesShaderModel14TextureLoad,
             options.pixelShaderUsesShaderModel14Phase,
             options.pixelShaderUsesLegacyTextureMatrix,
@@ -6817,8 +6893,9 @@ namespace CNA::TestSupport
                     options.pixelShaderUsesDerivatives ||
                     options.pixelShaderUsesRelativeTextureCoordinate ||
                     options.pixelShaderUsesDependentTemporaryTextureCoordinate ||
-                    options.pixelShaderUsesProjectiveModifiers ||
-                    options.pixelShaderUsesProjectiveSwizzleModifiers ||
+                    options.pixelShaderUsesShaderModel14TexldDz ||
+                    options.pixelShaderUsesShaderModel14TexldDw ||
+                    options.pixelShaderUsesShaderModel14TexcrdDw ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
                     options.pixelShaderUsesShaderModel14Phase ||
                     options.pixelShaderDuplicatesShaderModel14Phase ||
@@ -6865,8 +6942,9 @@ namespace CNA::TestSupport
                         SyntheticTexldDestinationModifierProbe::None ||
                     options.texldlDestinationModifierProbe !=
                         SyntheticTexldlDestinationModifierProbe::None ||
-                    options.pixelShaderUsesProjectiveModifiers ||
-                    options.pixelShaderUsesProjectiveSwizzleModifiers ||
+                    options.pixelShaderUsesShaderModel14TexldDz ||
+                    options.pixelShaderUsesShaderModel14TexldDw ||
+                    options.pixelShaderUsesShaderModel14TexcrdDw ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||
                     options.pixelShaderUsesShaderModel14Phase ||
                     options.pixelShaderDuplicatesShaderModel14Phase ||

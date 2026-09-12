@@ -218,14 +218,14 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   shared parsed Effect proves both stages in one exact RGBA draw. SOFTWARE-374 then covers the
   special non-writing `TEXKILL` case: the predicate's corresponding x/y/z component now gates each
   negative-value discard test in EasyGL, matching Software's independently proven mask.
-  SOFTWARE-375 closes the adjacent Shader Model 1.4 projective-coordinate case: the Software
-  interpreter accepts the two-operand `TEXCRD` form and applies `_dz`/`_dw`, while the managed
-  MojoShader patch both exposes read-only ps_1_4 texture registers as TEXCOORD inputs and emits
-  the required zero-safe division. A shared rendered Effect proves ordinary z/w divisors and the
-  specified x/y value of one when either divisor is zero. SOFTWARE-376 then executes stateful
-  ps_1_4 `TEXLD`: destination `r#` selects the sampler stage independently from the coordinate
-  source, the same projective modifiers apply before its selector, and the common translator emits
-  2D/cube/volume lookup forms from the Effect sampler map. SOFTWARE-377 executes the decoded
+  SOFTWARE-375/376 introduced zero-safe Shader Model 1.4 projective evaluation and destination-
+  selected `TEXLD`, but SOFTWARE-457 later proved their original hand-written operand fixtures
+  were not Microsoft-valid. The corrected contract is exact: ordinary `TEXCRD` writes `.xyz`;
+  `TEXCRD r#.xy, t#_dw.xyw` is its one projective form; `TEXLD` writes all components and permits
+  `_dz` only on `r#_dz.xyz` and `_dw` only on `t#_dw.xyw`. Managed parser validation rejects every
+  other modifier/register/selector/mask combination, while three rendered Effects prove all
+  canonical forms and their zero-divisor behavior on Software and EasyGL. The stage-1 projected
+  mip fixture now also carries the mandatory `.xyw` selector. SOFTWARE-377 executes the decoded
   ps_1_4 `PHASE` marker and proves temporary RGB survives into phase 2 while the program separately
   initializes alpha as the XNA contract requires. SOFTWARE-378 executes the legacy paired
   `TEXM3X3PAD`/`TEXM3X3` matrix form and corrects MojoShader's false sampler requirement for that
@@ -368,8 +368,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   SOFTWARE-456 adds the first exact component-consumption rule: in strict profiles, `MOV` validates
   only the source components selected by the destination mask and source swizzle. Pixel SM2 and
   vertex SM1.1 controls that initialize X then read Y now reject, while matching X reads remain
-  accepted. The dependency series now contains 81 patches; other opcodes' distinct component-use
-  rules remain part of SOFTWARE-164/165 rather than being approximated by the `MOV` rule.
+  accepted. SOFTWARE-457 then corrects the invalid Shader Model 1.4 projective fixtures behind
+  SOFTWARE-375/376/390 and enforces the measured `TEXCRD`/`TEXLD` register, selector, modifier and
+  destination-mask rules. The dependency series now contains 82 patches; other opcodes' distinct
+  component-use rules and ps_1_4 phase placement/lifetime remain part of SOFTWARE-164/165.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

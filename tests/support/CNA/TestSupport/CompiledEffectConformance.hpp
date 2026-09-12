@@ -1815,115 +1815,187 @@ namespace CNA::TestSupport
     }
 
     /**
-     * @brief Proves Shader Model 1.4 `TEXCRD` applies `_dz`/`_dw` projective modifiers.
+     * @brief Proves ps_1_4 `TEXCRD r#.xy, t#_dw.xyw` performs projective coordinate output.
      *
      * @param device Device whose renderer executes classic compiled Effects.
      */
-    inline void RunCompiledEffectProjectiveModifierContract(GraphicsDevice& device)
+    inline void RunCompiledEffectShaderModel14TexcrdDwContract(GraphicsDevice& device)
     {
         SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
-        options.includeSampler = false;
-        options.pixelShaderUsesProjectiveModifiers = true;
+        options.pixelShaderUsesShaderModel14TexcrdDw = true;
         Effect effect(device, BuildSyntheticEffect(options));
         effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
         effect.getParametersProperty()["Tint"]->SetValue(Vector4(0.0f, 0.0f, 0.25f, 1.0f));
 
-        struct Vertex
-        {
-            float x, y, z;
-            float u, v, q, w;
-        };
-        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
-            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
-            VertexElement(12, VertexElementFormat::Vector4, VertexElementUsage::TextureCoordinate, 0),
-        });
-        RenderTarget2D target(device, 4, 4);
-        device.setRasterizerStateProperty(RasterizerState::CullNone);
-        device.setDepthStencilStateProperty(DepthStencilState::None);
-        device.setBlendStateProperty(BlendState::Opaque);
-        const auto drawAndRead = [&](float divisorZ, float divisorW)
-        {
-            const Vertex quad[6] = {
-                {-1,  1, 0, .25f, .5f, divisorZ, divisorW},
-                {-1, -1, 0, .25f, .5f, divisorZ, divisorW},
-                { 1, -1, 0, .25f, .5f, divisorZ, divisorW},
-                {-1,  1, 0, .25f, .5f, divisorZ, divisorW},
-                { 1, -1, 0, .25f, .5f, divisorZ, divisorW},
-                { 1,  1, 0, .25f, .5f, divisorZ, divisorW},
-            };
-            device.SetRenderTarget(&target);
-            device.Clear(Color::Black);
-            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
-            device.DrawUserPrimitives(PrimitiveType::TriangleList,
-                                      static_cast<const void*>(quad), 0, 2, declaration);
-            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            Color centre;
-            const Rectangle centreRectangle(2, 2, 1, 1);
-            target.GetData(0, &centreRectangle, &centre, 0, 1);
-            return centre;
-        };
-
-        const Color projected = drawAndRead(0.5f, 0.25f);
-        EXPECT_NEAR(projected.getRProperty(), 128, 1);
-        EXPECT_EQ(projected.getGProperty(), 255);
-        EXPECT_NEAR(projected.getBProperty(), 64, 1);
-        EXPECT_EQ(projected.getAProperty(), 255);
-        const Color zeroDivisors = drawAndRead(0.0f, 0.0f);
-        EXPECT_EQ(zeroDivisors.getRProperty(), 255);
-        EXPECT_EQ(zeroDivisors.getGProperty(), 255);
-        EXPECT_NEAR(zeroDivisors.getBProperty(), 64, 1);
-        EXPECT_EQ(zeroDivisors.getAProperty(), 255);
-    }
-
-    /**
-     * @brief Proves ps_1_4 `_dz`/`_dw` divide the swizzled source by unswizzled z/w.
-     * @param device Device whose renderer executes classic compiled Effects.
-     */
-    inline void RunCompiledEffectProjectiveSwizzleModifierContract(GraphicsDevice& device)
-    {
-        SyntheticEffectOptions options;
-        options.includeDrawableProgram = true;
-        options.includeSampler = false;
-        options.pixelShaderUsesProjectiveSwizzleModifiers = true;
-        Effect effect(device, BuildSyntheticEffect(options));
-        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
-
-        struct Vertex
-        {
-            float x, y, z;
-            float u, v, q, w;
-        };
+        struct Vertex { float x, y, z, u, v, q, w; };
         const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
             VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
             VertexElement(12, VertexElementFormat::Vector4,
                           VertexElementUsage::TextureCoordinate, 0),
         });
-        const Vertex quad[6] = {
-            {-1,  1, 0, .25f, .5f, .5f, .25f},
-            {-1, -1, 0, .25f, .5f, .5f, .25f},
-            { 1, -1, 0, .25f, .5f, .5f, .25f},
-            {-1,  1, 0, .25f, .5f, .5f, .25f},
-            { 1, -1, 0, .25f, .5f, .5f, .25f},
-            { 1,  1, 0, .25f, .5f, .5f, .25f},
-        };
         RenderTarget2D target(device, 4, 4);
-        device.SetRenderTarget(&target);
-        device.Clear(Color::Black);
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
-        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
-        device.DrawUserPrimitives(PrimitiveType::TriangleList,
-                                  static_cast<const void*>(quad), 0, 2, declaration);
-        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-        Color centre;
-        const Rectangle probe(2, 2, 1, 1);
-        target.GetData(0, &probe, &centre, 0, 1);
-        EXPECT_NEAR(centre.getRProperty(), 255, 1);
-        EXPECT_NEAR(centre.getGProperty(), 128, 1);
-        EXPECT_NEAR(centre.getBProperty(), 255, 1);
-        EXPECT_NEAR(centre.getAProperty(), 255, 1);
+        const auto drawAndRead = [&](float divisor)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .2f, .5f, 1, divisor},
+                {-1, -1, 0, .2f, .5f, 1, divisor},
+                { 1, -1, 0, .2f, .5f, 1, divisor},
+                {-1,  1, 0, .2f, .5f, 1, divisor},
+                { 1, -1, 0, .2f, .5f, 1, divisor},
+                { 1,  1, 0, .2f, .5f, 1, divisor},
+            };
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle probe(2, 2, 1, 1);
+            target.GetData(0, &probe, &centre, 0, 1);
+            return centre;
+        };
+
+        const Color projected = drawAndRead(0.5f);
+        EXPECT_NEAR(projected.getRProperty(), 102, 1);
+        EXPECT_EQ(projected.getGProperty(), 255);
+        EXPECT_NEAR(projected.getBProperty(), 64, 1);
+        EXPECT_EQ(projected.getAProperty(), 255);
+        const Color zeroDivisor = drawAndRead(0.0f);
+        EXPECT_EQ(zeroDivisor.getRProperty(), 255);
+        EXPECT_EQ(zeroDivisor.getGProperty(), 255);
+        EXPECT_NEAR(zeroDivisor.getBProperty(), 64, 1);
+        EXPECT_EQ(zeroDivisor.getAProperty(), 255);
+    }
+
+    /**
+     * @brief Proves ps_1_4 `TEXLD r#, r#_dz.xyz` performs a projected texture lookup.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectShaderModel14TexldDzContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderUsesShaderModel14TexldDz = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        Texture2D texture(device, 4, 1);
+        const Color texels[4] = {Color::Red, Color::Green, Color::Blue, Color::White};
+        texture.SetData(texels, 4);
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v, q, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](float divisor)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .2f, .5f, divisor, 1},
+                {-1, -1, 0, .2f, .5f, divisor, 1},
+                { 1, -1, 0, .2f, .5f, divisor, 1},
+                {-1,  1, 0, .2f, .5f, divisor, 1},
+                { 1, -1, 0, .2f, .5f, divisor, 1},
+                { 1,  1, 0, .2f, .5f, divisor, 1},
+            };
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle probe(2, 2, 1, 1);
+            target.GetData(0, &probe, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(drawAndRead(0.5f), Color::Green);
+        EXPECT_EQ(drawAndRead(0.0f), Color::White);
+    }
+
+    /**
+     * @brief Proves ps_1_4 `TEXLD r#, t#_dw.xyw` performs a projected texture lookup.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectShaderModel14TexldDwContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderUsesShaderModel14TexldDw = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        Texture2D texture(device, 4, 1);
+        const Color texels[4] = {Color::Red, Color::Green, Color::Blue, Color::White};
+        texture.SetData(texels, 4);
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v, q, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](float divisor)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .2f, .5f, 1, divisor},
+                {-1, -1, 0, .2f, .5f, 1, divisor},
+                { 1, -1, 0, .2f, .5f, 1, divisor},
+                {-1,  1, 0, .2f, .5f, 1, divisor},
+                { 1, -1, 0, .2f, .5f, 1, divisor},
+                { 1,  1, 0, .2f, .5f, 1, divisor},
+            };
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle probe(2, 2, 1, 1);
+            target.GetData(0, &probe, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(drawAndRead(0.5f), Color::Green);
+        EXPECT_EQ(drawAndRead(0.0f), Color::White);
     }
 
     /**
@@ -5415,7 +5487,9 @@ namespace CNA::TestSupport
      * - `RunCompiledEffectSubroutineContract` -- forward, nested and conditional calls return
      * - `RunCompiledEffectPredicationContract` -- SM3 predicates mask vertex/pixel components
      * - `RunCompiledEffectPredicatedTexkillContract` -- a false predicate suppresses pixel kill
-     * - `RunCompiledEffectProjectiveModifierContract` -- ps_1_4 `_dz`/`_dw`, including zero
+     * - `RunCompiledEffectShaderModel14TexcrdDwContract` -- ps_1_4 `TEXCRD` `_dw.xyw`
+     * - `RunCompiledEffectShaderModel14TexldDzContract` -- ps_1_4 temporary `_dz.xyz`
+     * - `RunCompiledEffectShaderModel14TexldDwContract` -- ps_1_4 texture `_dw.xyw`
      * - `RunCompiledEffectShaderModel14TextureLoadContract` -- ps_1_4 destination-selected stage
      * - `RunCompiledEffectShaderModel14PhaseContract` -- ps_1_4 two-phase execution
      * - `RunCompiledEffectLegacyTextureMatrixContract` -- ps_1_2 stateful matrix operations

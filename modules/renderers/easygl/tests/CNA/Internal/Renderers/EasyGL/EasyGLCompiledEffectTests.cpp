@@ -719,20 +719,28 @@ TEST(EasyGLCompiledEffectDrawTest, D3D9PredicationGatesTexkill)
     CNA::TestSupport::RunCompiledEffectPredicatedTexkillContract(device);
 }
 
-TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14ProjectiveSourceModifiers)
+TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14TexcrdDwSelector)
 {
     GraphicsDevice device;
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
-    CNA::TestSupport::RunCompiledEffectProjectiveModifierContract(device);
+    CNA::TestSupport::RunCompiledEffectShaderModel14TexcrdDwContract(device);
 }
 
-TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14ProjectiveModifiersFollowSwizzles)
+TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14TexldDz)
 {
     GraphicsDevice device;
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
-    CNA::TestSupport::RunCompiledEffectProjectiveSwizzleModifierContract(device);
+    CNA::TestSupport::RunCompiledEffectShaderModel14TexldDzContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14TexldDwSelector)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectShaderModel14TexldDwContract(device);
 }
 
 TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14TextureLoad)
@@ -2898,7 +2906,8 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(
         CNA::TestSupport::SyntheticPixel1DestinationMaskProbe::Pixel11MovArbitrary,
         CNA::TestSupport::SyntheticPixel1DestinationMaskProbe::Pixel11Dp3Alpha,
-        CNA::TestSupport::SyntheticPixel1DestinationMaskProbe::Pixel11TexturePartial));
+        CNA::TestSupport::SyntheticPixel1DestinationMaskProbe::Pixel11TexturePartial,
+        CNA::TestSupport::SyntheticPixel1DestinationMaskProbe::Pixel14TexcrdArbitrary));
 
 TEST(EasyGLCompiledEffectTest, AcceptsValidPixel1DestinationMasks)
 {
@@ -2911,7 +2920,6 @@ TEST(EasyGLCompiledEffectTest, AcceptsValidPixel1DestinationMasks)
              Probe::Pixel11MovRgb,
              Probe::Pixel11MovAlpha,
              Probe::Pixel14MovArbitrary,
-             Probe::Pixel14TexcrdArbitrary,
          })
     {
         CNA::TestSupport::SyntheticEffectOptions options;
@@ -2921,6 +2929,37 @@ TEST(EasyGLCompiledEffectTest, AcceptsValidPixel1DestinationMasks)
         EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
     }
 }
+
+class EasyGLCompiledEffectShaderModel14TextureOperandTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectShaderModel14TextureOperandTest,
+       RejectsInvalidProjectiveOperand)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.shaderModel14TextureOperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidProjectiveOperands,
+    EasyGLCompiledEffectShaderModel14TextureOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexcrdDz,
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexcrdDwIdentity,
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexcrdDwWrongDestinationMask,
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexldTextureDz,
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexldTextureDwIdentity,
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexldTemporaryDw,
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexldTemporaryDzIdentity));
 
 class EasyGLCompiledEffectPixel1CoissueTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticPixel1CoissueProbe>
