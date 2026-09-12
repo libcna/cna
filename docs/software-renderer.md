@@ -398,7 +398,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   same width even though only its base register has an explicit bytecode token. SOFTWARE-466
   completes the adjacent special-vector group: `LIT` consumes XYW, `DST` consumes YZ/YW from its
   two sources, and `CRS` consumes XYZ from both sources, regardless of destination mask. The dependency
-  series now contains 91 patches; remaining opcode-specific source rules remain
+  series' 92nd patch then restores `CND`: pre-1.4 pixel shaders read their mandatory `r0.a`
+  condition plus the destination-selected alternative channels, while ps_1_4 applies destination
+  masks and source swizzles component-wise to all three inputs. Remaining opcode-specific source rules remain
   SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is

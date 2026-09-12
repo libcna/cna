@@ -917,6 +917,37 @@ namespace CNA::TestSupport
         Pixel20CrsSource1WrittenXyz,
     };
 
+    /** @brief Pixel Shader 1.x CND reads from partial temporary registers. */
+    enum class SyntheticCndInitializationProbe
+    {
+        /** @brief Emit no dedicated CND initialization probe. */
+        None,
+        /** @brief In ps_1_1, CND reads undefined r0 alpha as its condition. */
+        Pixel11ConditionAlphaUnwritten,
+        /** @brief In ps_1_1, CND source one reads undefined RGB. */
+        Pixel11Source1RgbUnwritten,
+        /** @brief In ps_1_1, CND source two reads undefined RGB. */
+        Pixel11Source2RgbUnwritten,
+        /** @brief In ps_1_1, CND reads initialized r0 alpha as its condition. */
+        Pixel11ConditionAlphaWritten,
+        /** @brief In ps_1_1, CND source one reads initialized RGB. */
+        Pixel11Source1RgbWritten,
+        /** @brief In ps_1_1, CND source two reads initialized RGB. */
+        Pixel11Source2RgbWritten,
+        /** @brief In ps_1_4, CND source zero reads undefined X. */
+        Pixel14ConditionXUnwritten,
+        /** @brief In ps_1_4, CND source one reads undefined X. */
+        Pixel14Source1XUnwritten,
+        /** @brief In ps_1_4, CND source two reads undefined X. */
+        Pixel14Source2XUnwritten,
+        /** @brief In ps_1_4, CND source zero selects an initialized Y. */
+        Pixel14ConditionYWritten,
+        /** @brief In ps_1_4, CND source one selects an initialized Z. */
+        Pixel14Source1ZWritten,
+        /** @brief In ps_1_4, CND source two selects an initialized W. */
+        Pixel14Source2WWritten,
+    };
+
     /** @brief Shader profile and input-register boundary exercised by a synthetic program. */
     enum class SyntheticInputRegisterProbe
     {
@@ -1799,6 +1830,9 @@ namespace CNA::TestSupport
         /// Emits a LIT, DST or CRS read from a partial temporary register.
         SyntheticSpecialVectorInitializationProbe specialVectorInitializationProbe =
             SyntheticSpecialVectorInitializationProbe::None;
+        /// Emits a ps_1_1 or ps_1_4 CND read from partial temporary registers.
+        SyntheticCndInitializationProbe cndInitializationProbe =
+            SyntheticCndInitializationProbe::None;
         /// Writes only r0.xy before TEXKILL reads XYZ. D3D9 shader validation must reject the
         /// undefined Z component in Shader Model 2.0.
         bool pixelShaderTexkillReadsPartialTemporary = false;
@@ -2105,7 +2139,9 @@ namespace CNA::TestSupport
         SyntheticMatrixInitializationProbe matrixInitializationProbe =
             SyntheticMatrixInitializationProbe::None,
         SyntheticSpecialVectorInitializationProbe specialVectorInitializationProbe =
-            SyntheticSpecialVectorInitializationProbe::None)
+            SyntheticSpecialVectorInitializationProbe::None,
+        SyntheticCndInitializationProbe cndInitializationProbe =
+            SyntheticCndInitializationProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -2134,6 +2170,16 @@ namespace CNA::TestSupport
                 SyntheticComponentwiseInitializationProbe::Pixel14AddUnwrittenY ||
             componentwiseInitializationProbe ==
                 SyntheticComponentwiseInitializationProbe::Pixel14AddWrittenX;
+        const bool probesPixelCndInitialization =
+            cndInitializationProbe != SyntheticCndInitializationProbe::None;
+        const bool probesPixel11CndInitialization =
+            cndInitializationProbe >=
+                SyntheticCndInitializationProbe::Pixel11ConditionAlphaUnwritten &&
+            cndInitializationProbe <=
+                SyntheticCndInitializationProbe::Pixel11Source2RgbWritten;
+        const bool probesPixel14CndInitialization =
+            cndInitializationProbe >=
+                SyntheticCndInitializationProbe::Pixel14ConditionXUnwritten;
         const bool probesPixel20ComponentwiseInitialization =
             componentwiseInitializationProbe >=
                 SyntheticComponentwiseInitializationProbe::Pixel20AddSource0UnwrittenY &&
@@ -2405,7 +2451,8 @@ namespace CNA::TestSupport
                                            SyntheticTextureCoordinateSelectorProbe::None ||
                                        temporaryTextureSelectorProbe !=
                                            SyntheticTemporaryTextureSelectorProbe::None ||
-                                       probesPixel14ComponentwiseInitialization;
+                                       probesPixel14ComponentwiseInitialization ||
+                                       probesPixel14CndInitialization;
         const bool usesShaderModel13 =
             legacyDepthOutput == SyntheticLegacyDepthOutput::TextureMatrix2;
         const std::uint32_t versionToken = probesPixel11Temporary || probesPixel11ColorInput ||
@@ -2415,13 +2462,15 @@ namespace CNA::TestSupport
                                                    probesPixel11InstructionSlots ||
                                                    probesPixel11DestinationMask ||
                                                    probesPixel11Coissue ||
-                                                   probesPixel11OutputLiveness
+                                                   probesPixel11OutputLiveness ||
+                                                   probesPixel11CndInitialization
                                                ? 0xFFFF0101u
                                            : probesPixel14Temporary || probesPixel14TextureInput ||
                                                      probesPixel14InstructionSlots ||
                                                      probesPixel14DestinationMask ||
                                                      probesPixel14Coissue ||
-                                                     probesPixel14OutputLiveness
+                                                     probesPixel14OutputLiveness ||
+                                                     probesPixel14CndInitialization
                                                ? 0xFFFF0104u
                                            : probesPixel12InstructionSlots
                                                ? 0xFFFF0102u
@@ -3179,6 +3228,82 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regTemp, 1, 0x7u));
             AppendUInt32(shader, source(sourceOne ? regConst : regTemp, 0));
             AppendUInt32(shader, source(sourceOne ? regTemp : regConst, 0));
+        }
+
+        if (probesPixelCndInitialization)
+        {
+            using Probe = SyntheticCndInitializationProbe;
+            if (probesPixel11CndInitialization)
+            {
+                const bool conditionProbe =
+                    cndInitializationProbe == Probe::Pixel11ConditionAlphaUnwritten ||
+                    cndInitializationProbe == Probe::Pixel11ConditionAlphaWritten;
+                const bool sourceTwo =
+                    cndInitializationProbe == Probe::Pixel11Source2RgbUnwritten ||
+                    cndInitializationProbe == Probe::Pixel11Source2RgbWritten;
+                const bool initialized =
+                    cndInitializationProbe >= Probe::Pixel11ConditionAlphaWritten;
+                const std::uint32_t r0Mask = conditionProbe && !initialized ? 0x7u : 0x8u;
+                AppendUInt32(shader, 0x00000001u); // mov r0.rgb/a, c0
+                AppendUInt32(shader, destination(regTemp, 0, r0Mask));
+                AppendUInt32(shader, source(regConst, 0));
+                if (!conditionProbe)
+                {
+                    AppendUInt32(shader, 0x00000001u); // mov r1.rgb/a, c0
+                    AppendUInt32(shader, destination(regTemp, 1, initialized ? 0x7u : 0x8u));
+                    AppendUInt32(shader, source(regConst, 0));
+                }
+                AppendUInt32(shader, 0x00000050u); // cnd r#, r0.a, ..., ...
+                AppendUInt32(shader, destination(regTemp, conditionProbe ? 1u : 0u, 0x7u));
+                AppendUInt32(shader, source(regTemp, 0, 0xFFu));
+                AppendUInt32(shader, source(!conditionProbe && !sourceTwo ? regTemp : regConst,
+                                            !conditionProbe && !sourceTwo ? 1u : 0u));
+                AppendUInt32(shader, source(!conditionProbe && sourceTwo ? regTemp : regConst,
+                                            !conditionProbe && sourceTwo ? 1u : 0u));
+                if (conditionProbe)
+                {
+                    AppendUInt32(shader, 0x00000001u); // complete r0 output
+                    AppendUInt32(shader, destination(regTemp, 0, initialized ? 0x7u : 0x8u));
+                    AppendUInt32(shader, source(regConst, 0));
+                }
+            }
+            else
+            {
+                const bool sourceZero =
+                    cndInitializationProbe == Probe::Pixel14ConditionXUnwritten ||
+                    cndInitializationProbe == Probe::Pixel14ConditionYWritten;
+                const bool sourceOne =
+                    cndInitializationProbe == Probe::Pixel14Source1XUnwritten ||
+                    cndInitializationProbe == Probe::Pixel14Source1ZWritten;
+                const bool sourceTwo = !sourceZero && !sourceOne;
+                const bool initialized =
+                    cndInitializationProbe >= Probe::Pixel14ConditionYWritten;
+                const std::uint32_t selectedMask = sourceZero && initialized ? 0x2u
+                    : sourceOne && initialized ? 0x4u
+                    : sourceTwo && initialized ? 0x8u
+                                                : 0x2u;
+                for (std::uint32_t reg = 1; reg <= 3; ++reg)
+                {
+                    const bool selected = (sourceZero && reg == 1u) ||
+                                          (sourceOne && reg == 2u) ||
+                                          (sourceTwo && reg == 3u);
+                    AppendUInt32(shader, 0x00000001u); // mov r#.component, c0
+                    AppendUInt32(shader,
+                                 destination(regTemp, reg, selected ? selectedMask : 0x1u));
+                    AppendUInt32(shader, source(regConst, 0));
+                }
+                const std::uint32_t sourceZeroSwizzle = sourceZero && initialized ? 0x55u : 0x00u;
+                const std::uint32_t sourceOneSwizzle = sourceOne && initialized ? 0xAAu : 0x00u;
+                const std::uint32_t sourceTwoSwizzle = sourceTwo && initialized ? 0xFFu : 0x00u;
+                AppendUInt32(shader, 0x00000050u); // cnd r4.x, r1, r2, r3
+                AppendUInt32(shader, destination(regTemp, 4, 0x1u));
+                AppendUInt32(shader, source(regTemp, 1, sourceZeroSwizzle));
+                AppendUInt32(shader, source(regTemp, 2, sourceOneSwizzle));
+                AppendUInt32(shader, source(regTemp, 3, sourceTwoSwizzle));
+                AppendUInt32(shader, 0x00000001u); // mov r0, c0
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, source(regConst, 0));
+            }
         }
 
         if (pixel1OutputLivenessProbe != SyntheticPixel1OutputLivenessProbe::None)
@@ -5468,6 +5593,10 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u); // mov r0.yzw, c0
             AppendUInt32(shader, destination(regTemp, 0, 0xEu));
             AppendUInt32(shader, source(regConst, 0));
+        }
+        else if (probesPixelCndInitialization)
+        {
+            // The dedicated CND program already completed the r0 output.
         }
         else if (writesMrt)
         {
@@ -7969,7 +8098,8 @@ namespace CNA::TestSupport
             options.scalarInitializationProbe,
             options.fixedVectorInitializationProbe,
             options.matrixInitializationProbe,
-            options.specialVectorInitializationProbe);
+            options.specialVectorInitializationProbe,
+            options.cndInitializationProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

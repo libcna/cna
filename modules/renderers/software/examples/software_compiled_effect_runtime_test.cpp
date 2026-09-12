@@ -3436,6 +3436,62 @@ namespace
                   "temporary components in probe " +
                       std::to_string(static_cast<int>(probe)));
         }
+
+        options.specialVectorInitializationProbe =
+            CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::None;
+        constexpr CNA::TestSupport::SyntheticCndInitializationProbe invalidCnd[] = {
+            CNA::TestSupport::SyntheticCndInitializationProbe::Pixel11ConditionAlphaUnwritten,
+            CNA::TestSupport::SyntheticCndInitializationProbe::Pixel11Source1RgbUnwritten,
+            CNA::TestSupport::SyntheticCndInitializationProbe::Pixel11Source2RgbUnwritten,
+            CNA::TestSupport::SyntheticCndInitializationProbe::Pixel14ConditionXUnwritten,
+            CNA::TestSupport::SyntheticCndInitializationProbe::Pixel14Source1XUnwritten,
+            CNA::TestSupport::SyntheticCndInitializationProbe::Pixel14Source2XUnwritten,
+        };
+        for (const auto probe : invalidCnd)
+        {
+            options.cndInitializationProbe = probe;
+            const auto cndBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool cndRejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(cndBytes.data(), cndBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                cndRejected = true;
+            }
+            Check(cndRejected,
+                  "compiled Effect parser accepted a CND read from uninitialized temporary "
+                  "components in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+
+        constexpr CNA::TestSupport::SyntheticCndInitializationProbe validCnd[] = {
+            CNA::TestSupport::SyntheticCndInitializationProbe::Pixel11ConditionAlphaWritten,
+            CNA::TestSupport::SyntheticCndInitializationProbe::Pixel11Source1RgbWritten,
+            CNA::TestSupport::SyntheticCndInitializationProbe::Pixel11Source2RgbWritten,
+            CNA::TestSupport::SyntheticCndInitializationProbe::Pixel14ConditionYWritten,
+            CNA::TestSupport::SyntheticCndInitializationProbe::Pixel14Source1ZWritten,
+            CNA::TestSupport::SyntheticCndInitializationProbe::Pixel14Source2WWritten,
+        };
+        for (const auto probe : validCnd)
+        {
+            options.cndInitializationProbe = probe;
+            const auto cndBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool cndAccepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(cndBytes.data(), cndBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                cndAccepted = false;
+            }
+            Check(cndAccepted,
+                  "compiled Effect parser rejected a CND read from initialized temporary "
+                  "components in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
     }
 
     void CheckCompiledTexkillTemporaryValidation(SoftwareRenderer& renderer)

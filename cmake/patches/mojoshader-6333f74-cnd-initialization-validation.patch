@@ -1,0 +1,12 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1273,6 +1273,7 @@ static int opcode_reads_sources_componentwise(const uint32 opcode)
+         case 35: // ABS
+         case 88: // CMP
+         case 91: // DSX
+         case 92: // DSY
++        case 80: // CND
+             return 1;
+         default:
+             return 0;
