@@ -265,7 +265,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   legal packing of distinct semantic outputs/inputs into disjoint masks of one physical register
   and rejects duplicate semantics, overlapping masks and forbidden partial declarations; EasyGL's
   GLSL path now explicitly packs and unpacks those components instead of keeping only the last
-  declaration. SOFTWARE-388 replaces the remaining SM3
+  declaration. SOFTWARE-432 closes the follow-up Software-only case in which the semantics arrive
+  from different vertex output registers: its pixel prologue retains each declaration mask and
+  copies only those components into the shared destination register. SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
   swizzles, source modifiers, projection and sample-dependent temporary chains. SOFTWARE-389

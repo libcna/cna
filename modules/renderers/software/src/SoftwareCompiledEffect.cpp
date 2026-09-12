@@ -315,6 +315,8 @@ namespace CNA::Internal::Renderers::Software
                         static_cast<std::uint8_t>((declarationToken >> 16u) & 0xFu);
                     semantic.registerNumber = registerNumber;
                     semantic.registerType = registerType;
+                    semantic.writeMask =
+                        static_cast<std::uint8_t>((registerToken >> 16u) & 0xFu);
                     if (registerType == 10u)
                     {
                         const auto samplerType = static_cast<SoftwareShaderSamplerTypeEXT>(

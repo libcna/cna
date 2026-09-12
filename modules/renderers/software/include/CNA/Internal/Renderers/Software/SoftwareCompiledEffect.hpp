@@ -66,6 +66,8 @@ namespace CNA::Internal::Renderers::Software
         std::uint16_t registerNumber = 0;
         /** @brief Encoded Direct3D register family after type-bit normalization. */
         std::uint8_t registerType = 1;
+        /** @brief Components of the physical register owned by this semantic declaration. */
+        std::uint8_t writeMask = 0xFu;
     };
 
     /** @brief One semantic float4 value entering or leaving the CPU shader. */

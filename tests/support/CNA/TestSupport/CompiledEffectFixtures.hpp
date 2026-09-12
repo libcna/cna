@@ -862,6 +862,8 @@ namespace CNA::TestSupport
         None,
         /** @brief Pack TEXCOORD0.xy and COLOR0.zw into the same register in both stages. */
         PackedDisjoint,
+        /** @brief Pack two separately stored vertex outputs into one pixel input register. */
+        PixelPackedFromSeparateOutputs,
         /** @brief Overlap two pixel-input semantic masks on one register component. */
         PixelOverlappingMasks,
         /** @brief Declare the same pixel-input semantic on two different registers. */
@@ -1383,6 +1385,8 @@ namespace CNA::TestSupport
             miscellaneousInputProbe != SyntheticMiscellaneousInputProbe::None;
         const bool probesPixelSemanticDeclarations =
             semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs ||
             semanticDeclarationProbe ==
                 SyntheticSemanticDeclarationProbe::PixelOverlappingMasks ||
             semanticDeclarationProbe ==
@@ -2737,7 +2741,9 @@ namespace CNA::TestSupport
                 SyntheticSemanticDeclarationProbe::PixelDuplicateSemantic;
             const bool overlap = semanticDeclarationProbe ==
                 SyntheticSemanticDeclarationProbe::PixelOverlappingMasks;
-            if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint)
+            if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint ||
+                semanticDeclarationProbe ==
+                    SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs)
             {
                 // Reverse the vertex declaration order deliberately. D3D linkage is semantic- and
                 // mask-driven, so declaration order cannot decide which half survives.
@@ -3698,14 +3704,27 @@ namespace CNA::TestSupport
             appendDef(4u, 3.25f, 0.0f, 0.0f, 0.0f);
             appendDef(5u, 9.0f, 0.5f, 10.0f, 2.0f);
         }
-        if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint)
+        if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs)
         {
-            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c240, .25, .5, .75, 1
+            const bool separate = semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs;
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c240
             AppendUInt32(shader, destination(regConst, 240u));
             AppendUInt32(shader, FloatBits(0.25f));
             AppendUInt32(shader, FloatBits(0.5f));
-            AppendUInt32(shader, FloatBits(0.75f));
-            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, FloatBits(separate ? 0.0625f : 0.75f));
+            AppendUInt32(shader, FloatBits(separate ? 0.125f : 1.0f));
+            if (separate)
+            {
+                AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c241
+                AppendUInt32(shader, destination(regConst, 241u));
+                AppendUInt32(shader, FloatBits(0.875f));
+                AppendUInt32(shader, FloatBits(0.625f));
+                AppendUInt32(shader, FloatBits(0.75f));
+                AppendUInt32(shader, FloatBits(1.0f));
+            }
         }
 
         // dcl_position v0
@@ -3744,6 +3763,8 @@ namespace CNA::TestSupport
                                 : 0xFu));
             if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint ||
                 semanticDeclarationProbe ==
+                    SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs ||
+                semanticDeclarationProbe ==
                     SyntheticSemanticDeclarationProbe::VertexOutputOverlappingMasks ||
                 semanticDeclarationProbe ==
                     SyntheticSemanticDeclarationProbe::VertexOutputDuplicateSemantic)
@@ -3752,13 +3773,15 @@ namespace CNA::TestSupport
                     SyntheticSemanticDeclarationProbe::VertexOutputDuplicateSemantic;
                 const bool overlap = semanticDeclarationProbe ==
                     SyntheticSemanticDeclarationProbe::VertexOutputOverlappingMasks;
+                const bool separate = semanticDeclarationProbe ==
+                    SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs;
                 AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_texcoord0 o1.xy
                 AppendUInt32(shader, 0x80000000u | 5u);
                 AppendUInt32(shader, destination(regTexCoordOut, 1, 0x3u));
                 AppendUInt32(shader, 0x0000001Fu | (2u << 24));
                 AppendUInt32(shader, 0x80000000u | (duplicate ? 5u : 10u));
                 AppendUInt32(shader,
-                             destination(regTexCoordOut, duplicate ? 2u : 1u,
+                             destination(regTexCoordOut, duplicate || separate ? 2u : 1u,
                                          overlap ? 0x6u : 0xCu));
             }
             if (semanticDeclarationProbe ==
@@ -4384,11 +4407,20 @@ namespace CNA::TestSupport
                            ? 11u
                            : 0u));
         }
-        if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint)
+        if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs)
         {
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov o1, c240
             AppendUInt32(shader, destination(regTexCoordOut, 1));
             AppendUInt32(shader, source(regConst, 240u));
+            if (semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs)
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov o2, c241
+                AppendUInt32(shader, destination(regTexCoordOut, 2));
+                AppendUInt32(shader, source(regConst, 241u));
+            }
         }
         if (usesPredication)
         {

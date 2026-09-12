@@ -241,12 +241,20 @@ public:
         if (declaration.registerNumber >= inputRegisters_.size())
           throw std::runtime_error(
               "Software pixel shader: input register exceeds the XNA limit.");
-        inputRegisters_[declaration.registerNumber] = match->value;
+        auto &destination = inputRegisters_[declaration.registerNumber];
+        for (std::size_t component = 0; component < destination.size(); ++component) {
+          if ((declaration.writeMask & (1u << component)) != 0u)
+            destination[component] = match->value[component];
+        }
       } else if (declaration.registerType == 3u) {
         if (declaration.registerNumber >= textureRegisters_.size())
           throw std::runtime_error(
               "Software pixel shader: texture register exceeds the XNA limit.");
-        textureRegisters_[declaration.registerNumber] = match->value;
+        auto &destination = textureRegisters_[declaration.registerNumber];
+        for (std::size_t component = 0; component < destination.size(); ++component) {
+          if ((declaration.writeMask & (1u << component)) != 0u)
+            destination[component] = match->value[component];
+        }
       }
     }
   }

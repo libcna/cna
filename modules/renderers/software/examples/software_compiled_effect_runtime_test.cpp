@@ -3702,44 +3702,51 @@ namespace
 
     void CheckCompiledSemanticPacking()
     {
-        GraphicsDevice device;
-        CNA::TestSupport::SyntheticEffectOptions options;
-        options.includeDrawableProgram = true;
-        options.semanticDeclarationProbe =
-            CNA::TestSupport::SyntheticSemanticDeclarationProbe::PackedDisjoint;
-        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
-            device, CNA::TestSupport::BuildSyntheticEffect(options));
-        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
-
-        struct Vertex { float x, y, z; };
-        const Vertex quad[6] = {
-            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
-            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
-        };
-        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
-            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
-        });
-        RenderTarget2D target(device, 4, 4);
-        device.SetRenderTarget(&target);
-        device.Clear(Color::Magenta);
-        device.setRasterizerStateProperty(RasterizerState::CullNone);
-        device.setDepthStencilStateProperty(DepthStencilState::None);
-        device.setBlendStateProperty(BlendState::Opaque);
-        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
-        device.DrawUserPrimitives(PrimitiveType::TriangleList,
-                                  static_cast<const void*>(quad), 0, 2, declaration);
-        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-
-        Color centre = Color::Transparent;
-        const Rectangle probe(2, 2, 1, 1);
-        target.GetData(0, &probe, &centre, 0, 1);
-        const auto near = [](int actual, int expected)
+        using Probe = CNA::TestSupport::SyntheticSemanticDeclarationProbe;
+        constexpr std::array probes{Probe::PackedDisjoint,
+                                    Probe::PixelPackedFromSeparateOutputs};
+        for (const Probe semanticProbe : probes)
         {
-            return std::abs(actual - expected) <= 2;
-        };
-        Check(near(centre.getRProperty(), 64) && near(centre.getGProperty(), 128) &&
-                  near(centre.getBProperty(), 191) && near(centre.getAProperty(), 255),
-              "compiled SM3 packed semantics did not preserve all four register components");
+            GraphicsDevice device;
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.semanticDeclarationProbe = semanticProbe;
+            auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+                device, CNA::TestSupport::BuildSyntheticEffect(options));
+            effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+            struct Vertex { float x, y, z; };
+            const Vertex quad[6] = {
+                {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+                {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+            };
+            const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+                VertexElement(0, VertexElementFormat::Vector3,
+                              VertexElementUsage::Position, 0),
+            });
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            Color centre = Color::Transparent;
+            const Rectangle rectangle(2, 2, 1, 1);
+            target.GetData(0, &rectangle, &centre, 0, 1);
+            const auto near = [](int actual, int expected)
+            {
+                return std::abs(actual - expected) <= 2;
+            };
+            Check(near(centre.getRProperty(), 64) && near(centre.getGProperty(), 128) &&
+                      near(centre.getBProperty(), 191) && near(centre.getAProperty(), 255),
+                  "compiled SM3 packed semantics did not preserve all four register components "
+                  "for probe " + std::to_string(static_cast<int>(semanticProbe)));
+        }
     }
 
     void CheckCompiledOutputRegisterRangeValidation(SoftwareRenderer& renderer)

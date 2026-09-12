@@ -1701,6 +1701,48 @@ TEST(EasyGLCompiledEffectDrawTest, ShaderModel3PacksDisjointSemanticsIntoOneRegi
     EXPECT_NEAR(centre.getAProperty(), 255, 2);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, ShaderModel3PacksSeparateSemanticOutputsIntoOnePixelInput)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.semanticDeclarationProbe =
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Transform"]->SetValue(
+        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+
+    struct Vertex { float x, y, z; };
+    const Vertex quad[6] = {
+        {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+        {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+    };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    RenderTarget2D target(device, 4, 4);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Magenta);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                              static_cast<const void*>(quad), 0, 2, declaration);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color centre = Color::Transparent;
+    const Rectangle probe(2, 2, 1, 1);
+    target.GetData(0, &probe, &centre, 0, 1);
+    EXPECT_NEAR(centre.getRProperty(), 64, 2);
+    EXPECT_NEAR(centre.getGProperty(), 128, 2);
+    EXPECT_NEAR(centre.getBProperty(), 191, 2);
+    EXPECT_NEAR(centre.getAProperty(), 255, 2);
+}
+
 class EasyGLCompiledEffectOutputRegisterRangeTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>
 {
