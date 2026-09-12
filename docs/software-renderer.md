@@ -306,6 +306,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   exact texel; the direct runtime and all 366 enabled EasyGL compiled-Effect tests pass. A genuinely
   fresh full Software relink separately exposed six stale-fixture failures reconciled by
   SOFTWARE-444; the rebuilt Software label then passes 160/160 without a production change.
+  SOFTWARE-445 follows the texture-opcode audit with seven Microsoft-compiler rejection probes:
+  neither `TEXLDD` coordinates, sampler or gradients nor pixel/vertex `TEXLDL` coordinates or
+  sampler accept source modifiers. Both compiled paths had accepted every negated form. The common
+  parser now rejects them while retaining the legal Shader Model 3 sampler-result swizzles and
+  unmodified explicit-gradient execution already proven by SOFTWARE-392/393/443.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

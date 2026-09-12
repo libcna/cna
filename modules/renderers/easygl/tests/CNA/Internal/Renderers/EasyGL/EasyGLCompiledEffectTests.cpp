@@ -1787,6 +1787,40 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticDuplicateDeclarationProbe::
             Vertex20SemanticSameDifferentRegister));
 
+class EasyGLCompiledEffectTextureSourceModifierTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTextureSourceModifierProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectTextureSourceModifierTest, RejectsModifier)
+{
+    using Probe = CNA::TestSupport::SyntheticTextureSourceModifierProbe;
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.vertexShaderSamplesTexture =
+        GetParam() == Probe::VertexTexldlCoordinate ||
+        GetParam() == Probe::VertexTexldlSampler;
+    options.textureSourceModifierProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTextureSourceModifier,
+    EasyGLCompiledEffectTextureSourceModifierTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::PixelTexlddCoordinate,
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::PixelTexlddSampler,
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::PixelTexlddGradient,
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::PixelTexldlCoordinate,
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::PixelTexldlSampler,
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::VertexTexldlCoordinate,
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::VertexTexldlSampler));
+
 class EasyGLCompiledEffectTypedControlSourceTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticTypedControlSourceProbe>
 {

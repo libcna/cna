@@ -3852,6 +3852,49 @@ namespace
               "parsed TEXLDD did not write the sampled colour");
     }
 
+    void CheckCompiledTextureSourceModifierValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticTextureSourceModifierProbe;
+        constexpr std::array invalidProbes{
+            Probe::PixelTexlddCoordinate,
+            Probe::PixelTexlddSampler,
+            Probe::PixelTexlddGradient,
+            Probe::PixelTexldlCoordinate,
+            Probe::PixelTexldlSampler,
+            Probe::VertexTexldlCoordinate,
+            Probe::VertexTexldlSampler,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.vertexShaderSamplesTexture =
+                probe == Probe::VertexTexldlCoordinate ||
+                probe == Probe::VertexTexldlSampler;
+            options.textureSourceModifierProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid TEXLDD/TEXLDL source modifiers: " +
+                  acceptedInvalidProbes);
+    }
+
     void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
@@ -6435,6 +6478,7 @@ int main()
         CheckCompiledVertexFloatConstantRedefinition();
         CheckCompiledDuplicateDeclarationValidation(renderer);
         CheckCompiledTextureGradientSamplerOperand(renderer);
+        CheckCompiledTextureSourceModifierValidation(renderer);
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);
