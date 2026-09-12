@@ -94,7 +94,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-one-coissue-opcode-validation.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-model-one-coissue-pair-validation.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-read-only-input-register-destination-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-restricted-destination-register-validation.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-restricted-destination-register-validation.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-write-only-output-register-source-validation.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

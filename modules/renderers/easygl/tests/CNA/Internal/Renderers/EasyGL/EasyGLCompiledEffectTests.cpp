@@ -1369,6 +1369,34 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex30Loop,
         CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex30Predicate));
 
+class EasyGLCompiledEffectOutputRegisterSourceTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterSourceProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectOutputRegisterSourceTest, RejectsWriteOnlyOutputSource)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.outputRegisterSourceProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    WriteOnlyOutputSource,
+    EasyGLCompiledEffectOutputRegisterSourceTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Pixel20Color,
+        CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Pixel30Depth,
+        CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Vertex20Raster,
+        CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Vertex20Color,
+        CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Vertex20TexCoord,
+        CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Vertex30Generic));
+
 class EasyGLCompiledEffectOutputRegisterRangeTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>
 {

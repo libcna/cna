@@ -3266,6 +3266,44 @@ namespace
                   acceptedInvalidProbes);
     }
 
+    void CheckCompiledOutputRegisterSourceValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticOutputRegisterSourceProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel20Color,
+            Probe::Pixel30Depth,
+            Probe::Vertex20Raster,
+            Probe::Vertex20Color,
+            Probe::Vertex20TexCoord,
+            Probe::Vertex30Generic,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.outputRegisterSourceProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted write-only output-register sources: " +
+                  acceptedInvalidProbes);
+    }
+
     void CheckCompiledOutputRegisterRangeValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticOutputRegisterProbe;
@@ -5472,6 +5510,7 @@ int main()
         CheckCompiledInputRegisterRangeValidation(renderer);
         CheckCompiledInputRegisterAccessValidation(renderer);
         CheckCompiledDestinationRegisterAccessValidation(renderer);
+        CheckCompiledOutputRegisterSourceValidation(renderer);
         CheckCompiledOutputRegisterRangeValidation(renderer);
         CheckCompiledConstantControlRegisterRangeValidation(renderer);
         CheckCompiledVertexInstructionSlotValidation(renderer);
