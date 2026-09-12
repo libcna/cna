@@ -354,7 +354,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   texture register has supplied `TEXBEM` or `TEXBEML`, while permitting the consumed register as
   another bump-environment source. Both CNA paths accepted the invalid form. Managed common
   validation now tracks that lifetime; two rejection probes and one chained-bump control pass in
-  Software and EasyGL. The dependency series now contains 78 patches.
+  Software and EasyGL. The dependency series then contained 78 patches. SOFTWARE-454 follows the
+  adjacent `TEXKILL` FIXME and corrects an overreach in SOFTWARE-399: Microsoft requires initialized
+  XYZ, not W, for `ps_1_4`/`ps_2_0` temporary operands; requires declared XYZ for `ps_2_0 t#`; and
+  in `ps_3_0` accepts an incompletely initialized temporary or a fully declared input `v#`. The
+  shared destination parser now recognizes `TEXKILL` as a read despite its destination-token
+  encoding, then applies the exact profile-specific register and component contract. The dependency
+  series now contains 79 patches.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

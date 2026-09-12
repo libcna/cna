@@ -1,0 +1,67 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -648,6 +648,7 @@ static void validate_input_register_destination(Context *ctx,
+                                                 const uint32 opcode)
+ {
+-    if (!ctx->have_dest_arg || (opcode == 31))  // DCL describes an input; it does not write it.
++    // DCL describes inputs and TEXKILL only reads its destination-coded operand.
++    if (!ctx->have_dest_arg || (opcode == 31) || (opcode == 65))
+         return;
+ 
+     const RegisterType regtype = ctx->dest_arg.regtype;
+@@ -2741,19 +2742,47 @@ static void state_TEXKILL(Context *ctx)
+     //  say it's a dest arg. That's annoying.
+     const DestArgInfo *info = &ctx->dest_arg;
+     const RegisterType regtype = info->regtype;
++    const int shader_model_three = shader_version_atleast(ctx, 3, 0);
+     if (!writemask_xyzw(info->writemask))
+         fail(ctx, "TEXKILL writemask must be .xyzw");
+-    else if ((regtype != REG_TYPE_TEMP) && (regtype != REG_TYPE_TEXTURE))
+-        fail(ctx, "TEXKILL must use a temp or texture register");
+-    else if ((regtype == REG_TYPE_TEMP) &&
+-             (ctx->dest_arg_prior_writemask != 0xF))
+-        fail(ctx, "TEXKILL temporary register components are uninitialized");
++    else if (!shader_version_atleast(ctx, 1, 4) &&
++             (regtype != REG_TYPE_TEXTURE))
++        fail(ctx, "TEXKILL before Shader Model 1.4 must use a texture register");
++    else if (shader_model_three &&
++             (regtype != REG_TYPE_TEMP) && (regtype != REG_TYPE_INPUT))
++        fail(ctx, "Shader Model 3 TEXKILL must use a temp or input register");
++    else if (!shader_model_three && shader_version_atleast(ctx, 1, 4) &&
++             (regtype != REG_TYPE_TEMP) && (regtype != REG_TYPE_TEXTURE))
++        fail(ctx, "TEXKILL must use a temp or texture register");
++    else if (!shader_model_three && (regtype == REG_TYPE_TEMP) &&
++             ((ctx->dest_arg_prior_writemask & 0x7) != 0x7))
++        fail(ctx, "TEXKILL temporary XYZ components are uninitialized");
++
++    if (shader_version_atleast(ctx, 2, 0) &&
++        ((regtype == REG_TYPE_TEXTURE) ||
++         (shader_model_three && (regtype == REG_TYPE_INPUT))))
++    {
++        int declared_writemask = 0;
++        RegisterList *attribute = ctx->attributes.next;
++        while (attribute != NULL)
++        {
++            if ((attribute->regtype == regtype) &&
++                (attribute->regnum == info->regnum))
++                declared_writemask |= attribute->writemask;
++            attribute = attribute->next;
++        } // while
++
++        const int required_writemask = shader_model_three ? 0xF : 0x7;
++        if ((declared_writemask & required_writemask) != required_writemask)
++        {
++            failf(ctx, "TEXKILL register components are undeclared (need mask 0x%X)",
++                  required_writemask);
++        } // if
++    } // if
+ 
+     RegisterList *reg =
+         reglist_find(&ctx->used_registers, info->regtype, info->regnum);
+     if (reg)
+         reg->written = ctx->dest_arg_prior_writemask;
+ 
+-    // !!! FIXME: "If a texture register is used, all components that are read must have been declared."
+-    // !!! FIXME: there are further limitations in ps_1_3 and earlier.
+ } // state_TEXKILL

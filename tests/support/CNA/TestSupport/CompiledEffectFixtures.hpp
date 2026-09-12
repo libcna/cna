@@ -556,6 +556,27 @@ namespace CNA::TestSupport
         Vertex30OutOfRange,
     };
 
+    /** @brief Pixel-shader profile and operand form exercised for `TEXKILL`. */
+    enum class SyntheticTexkillOperandProbe
+    {
+        /** @brief Emit no dedicated `TEXKILL` operand probe. */
+        None,
+        /** @brief Kill from a ps_1_4 temporary initialized in XYZ in the prior phase. */
+        Pixel14TemporaryXyz,
+        /** @brief Kill from a ps_2_0 texture input declaring only XY. */
+        Pixel20TextureXy,
+        /** @brief Kill from a ps_2_0 texture input declaring XYZ. */
+        Pixel20TextureXyz,
+        /** @brief Kill from a ps_3_0 temporary initialized only in XY. */
+        Pixel30TemporaryXy,
+        /** @brief Kill from a ps_3_0 interpolator declaring only XY. */
+        Pixel30InputXy,
+        /** @brief Kill from a ps_3_0 interpolator declaring XYZ. */
+        Pixel30InputXyz,
+        /** @brief Kill from a ps_3_0 interpolator declaring all four components. */
+        Pixel30InputFull,
+    };
+
     /** @brief Shader profile and input-register boundary exercised by a synthetic program. */
     enum class SyntheticInputRegisterProbe
     {
@@ -1401,12 +1422,15 @@ namespace CNA::TestSupport
         /// Prepends `mov r0, r0` before r0 has been initialized. D3D9 shader validation must
         /// reject the self-read even though the same instruction also names r0 as its destination.
         bool pixelShaderReadsUninitializedDestination = false;
-        /// Writes only r0.x before TEXKILL reads all four temporary components. D3D9 shader
-        /// validation must reject the three undefined components.
+        /// Writes only r0.xy before TEXKILL reads XYZ. D3D9 shader validation must reject the
+        /// undefined Z component in Shader Model 2.0.
         bool pixelShaderTexkillReadsPartialTemporary = false;
-        /// Defines r0.xy and r0.zw in separate instructions before TEXKILL. Validation must
-        /// accumulate the two write masks and accept the complete temporary.
+        /// Defines r0.xy and r0.z in separate instructions before TEXKILL. Validation must
+        /// accumulate the two write masks and must not require the unread W component.
         bool pixelShaderTexkillReadsSplitTemporary = false;
+        /// Emits the selected profile-specific `TEXKILL` operand/declaration form.
+        SyntheticTexkillOperandProbe pixelShaderTexkillOperandProbe =
+            SyntheticTexkillOperandProbe::None;
         /// Emits an otherwise well-formed pixel `SGN`; D3D9 exposes this opcode only to vertex
         /// shaders, so shared parser validation must reject it.
         bool pixelShaderUsesInvalidSgn = false;
@@ -1608,6 +1632,8 @@ namespace CNA::TestSupport
         bool readsUninitializedDestination = false,
         bool texkillReadsPartialTemporary = false,
         bool texkillReadsSplitTemporary = false,
+        SyntheticTexkillOperandProbe texkillOperandProbe =
+            SyntheticTexkillOperandProbe::None,
         bool usesInvalidSgn = false,
         bool usesInvalidExpp = false,
         bool usesInvalidLogp = false,
@@ -1695,6 +1721,8 @@ namespace CNA::TestSupport
         const bool probesPixel30Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel30Maximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel30OutOfRange;
+        const bool probesPixel30Texkill =
+            texkillOperandProbe >= SyntheticTexkillOperandProbe::Pixel30TemporaryXy;
         const bool probesPixel20ColorInput =
             inputRegisterProbe == SyntheticInputRegisterProbe::Pixel20ColorMaximum ||
             inputRegisterProbe == SyntheticInputRegisterProbe::Pixel20ColorOutOfRange;
@@ -1912,6 +1940,7 @@ namespace CNA::TestSupport
             usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
             usesDependentTemporaryTextureCoordinate || swizzlesSampleResult ||
+            probesPixel30Texkill ||
             invalidMixedConstantAbsolute ==
                 SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelPlainThenAbsolute ||
             invalidMixedConstantAbsolute ==
@@ -1936,6 +1965,8 @@ namespace CNA::TestSupport
                                        usesShaderModel14Phase || duplicatesShaderModel14Phase ||
                                        shaderModel1InvalidOpcode !=
                                            SyntheticInvalidPixelShaderModel1Opcode::None ||
+                                       texkillOperandProbe ==
+                                           SyntheticTexkillOperandProbe::Pixel14TemporaryXyz ||
                                        legacyDepthOutput == SyntheticLegacyDepthOutput::Register ||
                                        legacyBumpEnvironment ==
                                            SyntheticLegacyBumpEnvironment::Arithmetic;
@@ -2211,6 +2242,24 @@ namespace CNA::TestSupport
                     ? EffectFormat::SamplerTypeCube
                     : EffectFormat::SamplerType2D);
         }
+        if (texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel20TextureXy ||
+            texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel20TextureXyz ||
+            texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel30InputXy ||
+            texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel30InputXyz ||
+            texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel30InputFull)
+        {
+            const bool shaderModel3 = probesPixel30Texkill;
+            const bool xyz =
+                texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel20TextureXyz ||
+                texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel30InputXyz;
+            const bool full =
+                texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel30InputFull;
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+            AppendUInt32(shader, 0x80000000u | (shaderModel3 ? 5u : 0u));
+            AppendUInt32(shader,
+                         destination(shaderModel3 ? regInput : regTexture, 0,
+                                     full ? 0xFu : xyz ? 0x7u : 0x3u));
+        }
         if (probesPixel20DeclarationDuplicate)
         {
             const bool color = duplicateDeclarationProbe ==
@@ -2478,9 +2527,9 @@ namespace CNA::TestSupport
 
         if (texkillReadsPartialTemporary)
         {
-            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.x, c0.x
-            AppendUInt32(shader, destination(regTemp, 0, 0x1u));
-            AppendUInt32(shader, source(regConst, 0, 0x00u));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.xy, c0.xy
+            AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+            AppendUInt32(shader, source(regConst, 0));
             AppendUInt32(shader, 0x00000041u | (1u << 24)); // texkill r0
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
         }
@@ -2490,11 +2539,50 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.xy, c0.xy
             AppendUInt32(shader, destination(regTemp, 0, 0x3u));
             AppendUInt32(shader, source(regConst, 0));
-            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.zw, c0.zw
-            AppendUInt32(shader, destination(regTemp, 0, 0xCu));
-            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.z, c0.z
+            AppendUInt32(shader, destination(regTemp, 0, 0x4u));
+            AppendUInt32(shader, source(regConst, 0, 0xAAu));
             AppendUInt32(shader, 0x00000041u | (1u << 24)); // texkill r0
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+        }
+
+        if (texkillOperandProbe != SyntheticTexkillOperandProbe::None)
+        {
+            if (texkillOperandProbe ==
+                SyntheticTexkillOperandProbe::Pixel14TemporaryXyz)
+            {
+                AppendUInt32(shader, 0x00000040u); // texcrd r0.xyz, t0
+                AppendUInt32(shader, destination(regTemp, 0, 0x7u));
+                AppendUInt32(shader, source(regTexture, 0));
+                AppendUInt32(shader, 0x0000FFFDu); // phase
+                AppendUInt32(shader, 0x00000041u); // texkill r0
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, 0x00000001u); // mov r0.w, c0.w
+                AppendUInt32(shader, destination(regTemp, 0, 0x8u));
+                AppendUInt32(shader, source(regConst, 0, 0xFFu));
+            }
+            else
+            {
+                if (texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel30TemporaryXy)
+                {
+                    AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.xy, c0.xy
+                    AppendUInt32(shader, destination(regTemp, 0, 0x3u));
+                    AppendUInt32(shader, source(regConst, 0));
+                }
+                const bool shaderModel3Input =
+                    texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel30InputXy ||
+                    texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel30InputXyz ||
+                    texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel30InputFull;
+                const bool shaderModel20Texture =
+                    texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel20TextureXy ||
+                    texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel20TextureXyz;
+                AppendUInt32(shader, 0x00000041u | (1u << 24)); // texkill r0/v0/t0
+                AppendUInt32(shader,
+                             destination(shaderModel3Input ? regInput
+                                         : shaderModel20Texture ? regTexture
+                                                                : regTemp,
+                                         0, 0xFu));
+            }
         }
 
         if (usesInvalidSgn)
@@ -4351,6 +4439,11 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u); // mov r0, c0
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(regConst, 0));
+        }
+        else if (texkillOperandProbe ==
+                 SyntheticTexkillOperandProbe::Pixel14TemporaryXyz)
+        {
+            // The profile-specific probe already completed the r0 output.
         }
         else if (writesMrt)
         {
@@ -6558,6 +6651,7 @@ namespace CNA::TestSupport
             options.pixelShaderReadsUninitializedDestination,
             options.pixelShaderTexkillReadsPartialTemporary,
             options.pixelShaderTexkillReadsSplitTemporary,
+            options.pixelShaderTexkillOperandProbe,
             options.pixelShaderUsesInvalidSgn,
             options.pixelShaderUsesInvalidExpp,
             options.pixelShaderUsesInvalidLogp,

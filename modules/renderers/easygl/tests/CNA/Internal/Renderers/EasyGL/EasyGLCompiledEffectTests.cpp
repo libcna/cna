@@ -789,7 +789,7 @@ TEST(EasyGLCompiledEffectTest, RejectsTexkillWithUndefinedTemporaryComponents)
     EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
-TEST(EasyGLCompiledEffectTest, AcceptsTexkillAfterCompleteSplitTemporaryWrites)
+TEST(EasyGLCompiledEffectTest, AcceptsTexkillAfterSplitXyzTemporaryWrites)
 {
     GraphicsDevice device;
     EasyGLRenderer* renderer = RendererOf(device);
@@ -801,6 +801,59 @@ TEST(EasyGLCompiledEffectTest, AcceptsTexkillAfterCompleteSplitTemporaryWrites)
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
     EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
+
+class EasyGLCompiledEffectInvalidTexkillOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTexkillOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidTexkillOperandTest, RejectsUndeclaredInputComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = false;
+    options.pixelShaderTexkillOperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTexkillOperands,
+    EasyGLCompiledEffectInvalidTexkillOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel20TextureXy,
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel30InputXy,
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel30InputXyz));
+
+class EasyGLCompiledEffectValidTexkillOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTexkillOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidTexkillOperandTest, AcceptsProfileSpecificOperand)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = false;
+    options.pixelShaderTexkillOperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidTexkillOperands,
+    EasyGLCompiledEffectValidTexkillOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel14TemporaryXyz,
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel20TextureXyz,
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel30TemporaryXy,
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel30InputFull));
 
 TEST(EasyGLCompiledEffectTest, AcceptsVertexSgnWithUninitializedScratchRegisters)
 {

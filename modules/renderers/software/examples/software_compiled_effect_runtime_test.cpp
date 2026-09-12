@@ -2782,7 +2782,75 @@ namespace
             accepted = false;
         }
         Check(accepted,
-              "compiled Effect parser rejected TEXKILL after complete split temporary writes");
+              "compiled Effect parser rejected TEXKILL after split XYZ temporary writes");
+
+        using Probe = CNA::TestSupport::SyntheticTexkillOperandProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel20TextureXy,
+            Probe::Pixel30InputXy,
+            Probe::Pixel30InputXyz,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            options = {};
+            options.includeDrawableProgram = true;
+            options.includeSampler = false;
+            options.pixelShaderTexkillOperandProbe = probe;
+            const auto probeBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool probeRejected = false;
+            try
+            {
+                static_cast<void>(
+                    renderer.CreateCompiledEffect(probeBytes.data(), probeBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                probeRejected = true;
+            }
+            if (!probeRejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted an invalid TEXKILL input declaration: " +
+                  acceptedInvalidProbes);
+
+        constexpr std::array validProbes{
+            Probe::Pixel14TemporaryXyz,
+            Probe::Pixel20TextureXyz,
+            Probe::Pixel30TemporaryXy,
+            Probe::Pixel30InputFull,
+        };
+        std::string rejectedValidProbes;
+        for (const Probe probe : validProbes)
+        {
+            options = {};
+            options.includeDrawableProgram = true;
+            options.includeSampler = false;
+            options.pixelShaderTexkillOperandProbe = probe;
+            const auto probeBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool probeAccepted = true;
+            try
+            {
+                static_cast<void>(
+                    renderer.CreateCompiledEffect(probeBytes.data(), probeBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                probeAccepted = false;
+            }
+            if (!probeAccepted)
+            {
+                if (!rejectedValidProbes.empty()) rejectedValidProbes += ", ";
+                rejectedValidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(rejectedValidProbes.empty(),
+              "compiled Effect parser rejected a valid TEXKILL operand form: " +
+                  rejectedValidProbes);
     }
 
     void CheckCompiledSgnValidation(SoftwareRenderer& renderer)
