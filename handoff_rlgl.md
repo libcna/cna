@@ -12,8 +12,8 @@ It is a handoff, not the authoritative task ledger. Read `AGENTS.md`, `CHECKLIST
 - Repository: `/rv/data/development/github.com/libcna/cnarlgl`
 - Branch: `rlgl`, tracking `origin/rlgl`
 - Workstream starting commit: `1b3151f2f1b7b712cfd26637580bebbb2e3602e4`
-- Latest implementation commit: `7525abdb9b72d75e6c58f7fcfc0525285bbdee5b`
-  (`feat(RLGL-047): bootstrap compiled effect runtime`)
+- Latest implementation commit: `87a90ee3189da3df9fe1df1cf995d518dc60b9e4`
+  (`feat(RLGL-048): execute compiled effect draws`)
 - Remote: `origin`, repository `libcna/cna`
 - Date of this handoff: 2026-09-12
 
@@ -53,8 +53,9 @@ it.
 - Optional classic compiled effects use pinned FNA3D revision `3240147` only as the source container
   for MojoShader revision `6333f74` and CNA's existing patches. The RLGL target links the shared
   MojoShader effect translation, not FNA3D itself. Both dependencies use the zlib license.
-- `CNA_RLGL_COMPILED_EFFECTS` is intentionally OFF by default until the public compiled-effect draw
-  matrix is complete.
+- `CNA_RLGL_COMPILED_EFFECTS` remains OFF by default, matching CNA's other optional MojoShader
+  backends. When enabled, ordinary compiled-effect draws are implemented and advertised; the exact
+  remaining advanced routes are listed under RLGL-049 below.
 
 Do not create separate renderer identities per rlgl GL profile. A future ES or GL 4.3 profile should be
 a measured build configuration under the same identity only after it has real implementation and tests.
@@ -81,12 +82,14 @@ runtime-validated on Linux with SDL3 offscreen and Mesa llvmpipe:
 - all eleven classic FNA render-target formats for RenderTarget2D and RenderTargetCube, exact depth and
   stencil formats, MSAA resolve, mip generation, Preserve/Discard behavior, MRT, target switching,
   orientation, and readback;
-- the RLGL-047 optional compiled-effect runtime bootstrap described below.
+- the RLGL-047/048 optional compiled-effect runtime and ordinary draw path described below.
 
-Do not infer final parity from this list. `GraphicsCapability::ThreeD` and
-`GraphicsCapability::CompiledEffects` remain false while their remaining gates are open.
+Do not infer final parity from this list. `GraphicsCapability::ThreeD` remains false while its
+remaining gates are open. `GraphicsCapability::CompiledEffects` is true only when
+`CNA_RLGL_COMPILED_EFFECTS=ON`; this means the ordinary public user/buffer draw routes proven by
+RLGL-048, not the advanced routes still assigned to RLGL-049.
 
-## RLGL-047: latest completed task
+## RLGL-047/048: latest completed tasks
 
 Commit `7525abdb9` added the optional classic XNA Effect Framework bootstrap:
 
@@ -108,25 +111,38 @@ Commit `7525abdb9` added the optional classic XNA Effect Framework bootstrap:
   `cna_test_rlgl_compiled_effect_runtime`, using the committed
   `modules/renderers/fna3d/effects/CnaConformanceEffect.fxb` fixture.
 - CI independently checks out the exact FNA3D/MojoShader pin and compiles this opt-in target.
-- Parsing is deliberately not exposed as public support: capability advertisement remains false until
-  RLGL-048 proves actual public draw output.
+- RLGL-048 adds a dedicated rlgl-owned VAO and deterministic MojoShader program/attribute rebinding,
+  reflected uniform upload, exact Texture2D/TextureCube and sampler binding, same-format row-corrected
+  copies for rendered Texture2D sources, XNA-compatible depth-range mapping, and clean state recovery.
+- Every ordinary public route now has pixel evidence: indexed/non-indexed user data and bound buffers,
+  typed/raw declarations, 16/32-bit indices, and non-zero vertex/start/base offsets.
+- SpriteBatch composition, multi-stream input, instancing, vertex-stage samplers, and the rest of the
+  shared compiled-effect matrix remain explicit RLGL-049 work. Texture3D first needs the global RLGL
+  resource implementation; it is never substituted with a texture of another dimension.
+- Option-on builds now advertise `GraphicsCapability::CompiledEffects`; option-off builds remain inert.
 
-## Validation already completed for RLGL-047
+## Validation already completed through RLGL-048
 
-The normal option-on focused test passed 16 checks. It covered capability honesty, valid and invalid
+The normal option-on runtime test passed 16 checks. It covered capability truth, valid and invalid
 bytecode entry, reflection order, technique bounds, parameter bounds, blend/depth/raster translation,
 unassigned-state preservation, same-device texture assignment, independent cloning after source
 destruction, and clone application.
 
-The following additional validation passed:
+The ordinary public draw executable passed 11 pixel gates over all indexed/non-indexed user and bound
+routes. The RLGL GTest integration passed 13 tests reusing the shared runtime, draw, orientation,
+switching, sampler-pixel, pass-selection, stock-isolation, rendered-source, many-draw, and truncation
+contracts, plus renderer-specific cube sampling, named texture-dimension refusal/recovery, and depth
+convention/restoration tests.
 
-- full option-on repository build: 374 incremental steps, exit 0, `-j 3`;
+The following additional validation passed on SDL3 offscreen/Mesa llvmpipe:
+
+- full option-on repository build, exit 0, `-j 3`;
 - option-off `cna_renderer_rlgl` build, proving the guarded source is inert by default;
-- focused AddressSanitizer build and all 16 runtime checks;
-- option-on regressions: `cna_test_rlgl_effect` 15 checks,
-  `cna_test_rlgl_environment_map` 4 checks, and `cna_test_rlgl_skinned_effect` 6 checks;
+- focused AddressSanitizer builds and all 16 runtime plus 11 draw checks (`detect_leaks=0`);
+- unchanged state, sampler, primitive, SpriteBatch, RenderTarget2D, TextureCube, Basic/AlphaTest,
+  EnvironmentMapEffect, and SkinnedEffect regressions;
 - renderer identity, combination, target-discipline, runtime-discipline, descriptor, CNAEXT Doxygen,
-  YAML parsing, and whitespace gates.
+  workflow YAML, and whitespace gates.
 
 Representative normal commands are:
 
@@ -138,10 +154,22 @@ cmake -S . -B /tmp/cna-rlgl-build3 \
   -DCNA_BUILD_TESTS=OFF \
   -DFETCHCONTENT_SOURCE_DIR_RLGL=/tmp/cna-raylib-6.0-source \
   -DFETCHCONTENT_SOURCE_DIR_FNA3D=/tmp/cna-fna3d-audit.gFfGPT
-cmake --build /tmp/cna-rlgl-build3 --target cna_test_rlgl_compiled_effect_runtime -j 3
+cmake --build /tmp/cna-rlgl-build3 --target \
+  cna_test_rlgl_compiled_effect_runtime cna_test_rlgl_compiled_effect_draw -j 3
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   /tmp/cna-rlgl-build3/cna_test_rlgl_compiled_effect_runtime
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  /tmp/cna-rlgl-build3/cna_test_rlgl_compiled_effect_draw
 cmake --build /tmp/cna-rlgl-build3 -j 3
+```
+
+The tests-on build containing the shared conformance contracts can be resumed with:
+
+```bash
+CCACHE_DISABLE=1 cmake --build /tmp/cna-rlgl-tests --target CnaRendererTests -j 3
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  /tmp/cna-rlgl-tests/CnaRendererTests \
+  --gtest_filter='RlglCompiledEffectTest.*' --gtest_color=no --gtest_brief=1
 ```
 
 The `/tmp` source and build paths are convenient caches, not durable project state. Recreate or replace
@@ -151,53 +179,53 @@ For AddressSanitizer, the working build used `-fsanitize=address -fno-omit-frame
 
 ```bash
 CCACHE_DISABLE=1 cmake --build /tmp/cna-rlgl-asan \
-  --target cna_test_rlgl_compiled_effect_runtime -j 3
+  --target cna_test_rlgl_compiled_effect_runtime cna_test_rlgl_compiled_effect_draw -j 3
 ASAN_OPTIONS=detect_leaks=0 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   /tmp/cna-rlgl-asan/cna_test_rlgl_compiled_effect_runtime
+ASAN_OPTIONS=detect_leaks=0 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  /tmp/cna-rlgl-asan/cna_test_rlgl_compiled_effect_draw
 ```
 
 LeakSanitizer is disabled for these Mesa processes because the environment's ptrace restrictions make
 it unreliable. AddressSanitizer itself passed. The sandbox also cannot write the configured ccache
 directory `/rv/cnaccache`; set `CCACHE_DISABLE=1` when that error appears. The locally available SDL3
-build supports the offscreen GL driver but not the expected X11 path. A tests-on configure may also fail
-when the vendored GoogleTest source is unavailable, so the renderer's standalone test executables were
-built and run with `CNA_BUILD_TESTS=OFF`; CI still registers them when its test dependencies exist.
+build supports the offscreen GL driver but not the expected X11 path. The tracked
+`vendor/googletest` submodule was initialized at its committed revision `7e2c425d`, allowing the
+tests-on `/tmp/cna-rlgl-tests` build and the 13-test RLGL compiled-effect GTest suite to run. The
+standalone executables remain useful with `CNA_BUILD_TESTS=OFF`, and CI registers them when its test
+dependencies exist.
 
-## Next recommended task: RLGL-048
+## Next recommended task: RLGL-049
 
-RLGL-048 is the next unblocked classic-XNA task. Its goal is compiled-effect drawing for ordinary and
-indexed user/buffer routes, with honest capability activation only after public pixel evidence.
+RLGL-049 is the next unblocked classic-XNA task. Its goal is to complete the advanced compiled-effect
+draw routes and remaining shared conformance matrix without weakening the ordinary path proven by
+RLGL-048.
 
 Start by auditing these exact reference paths rather than designing a new shader system:
 
-- `modules/renderers/easygl/src/EasyGLCompiledEffect.cpp`, especially
-  `EasyGLRenderer::BindCompiledEffectForDrawEXT`;
-- the compiled-effect branches in `modules/renderers/easygl/src/EasyGLRenderer.cpp`;
-- `modules/renderers/easygl/include/CNA/Internal/Renderers/EasyGL/EasyGLCompiledEffect.hpp`;
-- `ICompiledEffectRuntime`, `EffectTranslation`, the current RLGL primitive pipeline, RLGL resource
-  wrappers, vertex declarations, samplers, render-target orientation code, and every shared compiled
-  effect fixture before modifying interfaces.
+- EasyGL's `BindCompiledEffectForDrawEXT`, SpriteBatch compiled-effect branches, stream/divisor setup,
+  and context-restoration behavior;
+- `RlglCompiledEffect.cpp`, `RlglPrimitiveRenderer.cpp`, and the dedicated resources in
+  `RlglBridge.cpp` before changing their state boundary;
+- every currently uncalled contract in `tests/support/CNA/TestSupport/CompiledEffectConformance.hpp`.
 
 The task should cover at least:
 
-1. Feed MojoShader's reflected vertex attributes from the existing RLGL VBO/EBO/VAO and vertex
-   declaration path. Preserve semantic index, element format, stride, offset, `vertexStart`,
-   `baseVertex`, and XNA integer/normalized rules. EasyGL's
-   `MOJOSHADER_glSetVertexAttribute` handling is the measured reference.
-2. Make the applied MojoShader program current, upload uniforms through
-   `MOJOSHADER_glProgramReady`, and supply the correct viewport/depth/clip conventions. Verify matrix
-   layout and XNA pixel-center behavior with tests, not shader-specific patches.
-3. Bind reflected 2D and cube samplers to retained RLGL resources with existing sampler state. Preserve
-   render-target orientation, independent slots, null behavior, and state assignments. Do not pretend
-   Texture3D works.
-4. Integrate non-indexed and indexed, user and bound-buffer draws through the existing low-level RLGL
-   primitive submission. Do not route them through rlgl's immediate batch.
-5. Add public `Effect(GraphicsDevice, bytecode)` golden-pixel tests covering parameters, textures,
-   state assignments, techniques and passes, plus invalid cases. Compare with unchanged EasyGL/shared
-   fixtures where possible.
-6. Turn on `GraphicsCapability::CompiledEffects` only when all public routes promised by RLGL-048 pass.
-   If capability activation causes `Effect` construction to reach incomplete draw paths, keep it false
-   and split the missing evidence into stable tasks.
+1. Run and implement `RunCompiledEffectSpriteBatchContract`, its multi-pass and texture-slot variants,
+   and its render-target-source contract. The SpriteBatch texture must win slot 0 exactly as it does in
+   EasyGL, while the effect owns its other parameters and pass sequence.
+2. Implement `RunCompiledEffectMultiStreamDrawContract` using every `GpuVertexStreamBinding`, preserving
+   per-stream stride/offset and semantic mapping on the dedicated VAO. Never collapse streams into a
+   guessed packed declaration.
+3. Implement `RunCompiledEffectInstancingDrawContract`, including divisor setup/reset, instance count,
+   base instance where the GL 3.3 profile permits it, and refusal text for a genuine profile limit.
+4. Audit vertex-stage sampler reflection/binding under `MOJOSHADER_XNA4_VERTEX_TEXTURES`; reuse the
+   renderer's texture/sampler objects and keep pixel-stage slots independent.
+5. Prove context and all GL/rlgl state restoration on success and exception paths. The named
+   Texture2D/samplerCube refusal test already proves the dedicated draw state can recover; extend this
+   to every advanced route.
+6. Run every remaining shared compiled-effect contract. Do not broaden `CompiledEffects` claims beyond
+   measured behavior, and append a concrete task for any independent Texture3D resource prerequisite.
 
 ### Critical state-synchronization warning
 
@@ -212,7 +240,7 @@ path is unsafe.
 Also verify context restoration around MojoShader calls. rlgl itself has one process-global state object,
 and the renderer currently permits only one live RLGL device.
 
-## Remaining ledger after RLGL-047
+## Remaining ledger after RLGL-048
 
 The exact state is in `plans/plan_rlgl.md`. The open or umbrella tasks at handoff are:
 
@@ -221,7 +249,6 @@ The exact state is in `plans/plan_rlgl.md`. The open or umbrella tasks at handof
 - RLGL-032: classic multi-stream vertex input.
 - RLGL-038: custom/compiled effect umbrella.
 - RLGL-043: distinct custom MRT shader outputs after custom effects exist.
-- RLGL-048: compiled-effect ordinary/indexed draw integration and initial capability gate.
 - RLGL-049: compiled-effect SpriteBatch, multi-stream, instancing, vertex samplers, restoration, and the
   remaining conformance matrix.
 - RLGL-050: existing CNAEXT source `ShaderEffect`, deliberately after classic compiled effects.
@@ -240,6 +267,7 @@ technical limitations in the plan.
 ## Recent milestone commits
 
 ```text
+87a90ee31 feat(RLGL-048): execute compiled effect draws
 7525abdb9 feat(RLGL-047): bootstrap compiled effect runtime
 dce1dfe35 feat(RLGL-036): implement EnvironmentMapEffect
 9dcb0a611 docs(RLGL-015): close cube resource umbrella
