@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_rlgl.md RLGL-048: public golden-pixel evidence for the ordinary compiled-Effect
-// user/buffer and indexed/non-indexed draw matrix.
+// plans/plan_rlgl.md RLGL-048/RLGL-051: public golden-pixel evidence for the ordinary
+// compiled-Effect draw matrix and SpriteBatch's embedded stock vertex-effect inheritance.
 
 #if !defined(CNA_RLGL_COMPILED_EFFECTS)
 #error "This fixture requires CNA_RLGL_COMPILED_EFFECTS"
@@ -18,6 +18,8 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -259,6 +261,35 @@ protected:
             checkTint(pixel, tint, "buffered 32-bit indexed compiled draw");
             device.setIndicesProperty(nullptr);
             device.SetVertexBuffer(nullptr);
+        }
+
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeSampler = true;
+            Effect spriteEffect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+            const Vector4 tint(0.25f, 0.5f, 0.75f, 1.0f);
+            spriteEffect.getParametersProperty()["Tint"]->SetValue(tint);
+
+            Texture2D sprite(device, 1, 1);
+            const Color white[1] = {Color::White};
+            sprite.SetData(white, 1);
+            RenderTarget2D target(device, 8, 8);
+            device.SetRenderTarget(&target);
+            device.Clear(background);
+            SpriteBatch batch(device);
+            batch.Begin(
+                SpriteSortMode::Deferred, BlendState::Opaque,
+                nullptr, nullptr, nullptr, &spriteEffect);
+            batch.Draw(sprite, Rectangle(0, 0, 8, 8), Color::White);
+            batch.End();
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            Color pixel(0, 0, 0, 0);
+            const Rectangle centre(4, 4, 1, 1);
+            target.GetData(0, &centre, &pixel, 0, 1);
+            checkTint(
+                pixel, tint,
+                "pixel-only SpriteBatch effect inherits the embedded stock vertex shader");
         }
     }
 

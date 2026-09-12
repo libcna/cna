@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "System/NotSupportedException.hpp"
@@ -432,7 +433,7 @@ namespace CNA::Internal::Renderers::Rlgl
             if (change.textureChanged)
             {
                 const ResolvedTexture resolved = ResolveTexture(change.texture);
-                if (!resolved.IsValid())
+                if (change.texture != nullptr && !resolved.IsValid())
                 {
                     throw std::runtime_error(
                         "RLGL compiled effect: applied texture no longer resolves to this device.");
@@ -484,7 +485,10 @@ namespace CNA::Internal::Renderers::Rlgl
         const IIndexBufferRenderer* const indexBuffer,
         const PrimitiveType primitive, const int elementCount,
         const int firstVertex, const int startIndex, const int baseVertex,
-        const GpuDrawParams& params)
+        const GpuDrawParams& params,
+        const ITextureRenderer* const spriteBatchSlotZeroTexture,
+        const Microsoft::Xna::Framework::Graphics::TextureCollection*
+            const spriteBatchTextures)
     {
         auto* const effect = dynamic_cast<RlglCompiledEffect*>(params.compiledEffectRuntime);
         if (effect == nullptr || &effect->renderer_ != this)
@@ -632,16 +636,39 @@ namespace CNA::Internal::Renderers::Rlgl
                 }
 
                 const std::size_t slot = static_cast<std::size_t>(shaderSampler.index);
-                const std::shared_ptr<ITextureRenderer>& texture2D =
-                    effect->boundTexture2DResources_[slot];
-                const std::shared_ptr<ITextureCubeRenderer>& textureCube =
-                    effect->boundTextureCubeResources_[slot];
+                Texture* selectedTexture = effect->boundTextures_[slot];
+                const ITextureRenderer* texture2D =
+                    effect->boundTexture2DResources_[slot].get();
+                const ITextureCubeRenderer* textureCube =
+                    effect->boundTextureCubeResources_[slot].get();
+                ResolvedTexture fallbackTexture;
+                if (shaderSampler.index == 0 && spriteBatchSlotZeroTexture != nullptr)
+                {
+                    selectedTexture = nullptr;
+                    texture2D = spriteBatchSlotZeroTexture;
+                    textureCube = nullptr;
+                }
+                else if (texture2D == nullptr && textureCube == nullptr &&
+                         spriteBatchTextures != nullptr)
+                {
+                    selectedTexture = (*spriteBatchTextures)[shaderSampler.index];
+                    fallbackTexture = ResolveTexture(selectedTexture);
+                    texture2D = fallbackTexture.texture2D.get();
+                    textureCube = fallbackTexture.textureCube.get();
+                }
                 const bool expects2D = shaderSampler.type == MOJOSHADER_SAMPLER_2D;
                 const bool expectsCube = shaderSampler.type == MOJOSHADER_SAMPLER_CUBE;
                 if (!expects2D && !expectsCube)
                 {
                     throw System::NotSupportedException(
                         "RLGL compiled effect: unsupported reflected sampler kind");
+                }
+                if (selectedTexture != nullptr && texture2D == nullptr && textureCube == nullptr)
+                {
+                    throw System::NotSupportedException(
+                        "RLGL compiled effect: the texture selected for pixel sampler slot " +
+                        std::to_string(shaderSampler.index) +
+                        " is not an implemented resource of this device");
                 }
                 if ((texture2D != nullptr && !expects2D) ||
                     (textureCube != nullptr && !expectsCube))
@@ -658,7 +685,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     if (SampledRowsAreBottomUp(*texture2D))
                     {
                         const auto* const target =
-                            dynamic_cast<const IRenderTargetRenderer*>(texture2D.get());
+                            dynamic_cast<const IRenderTargetRenderer*>(texture2D);
                         if (target == nullptr)
                         {
                             throw System::NotSupportedException(

@@ -70,7 +70,7 @@ protected:
         {
             customEffectRejected = true;
         }
-        ExpectTrue("custom SpriteBatch Effect is rejected at Begin until RLGL-012",
+        ExpectTrue("source SpriteBatch Effect is rejected at Begin until RLGL-050",
                    customEffectRejected);
 
         Texture2D pattern(device, 2, 2);

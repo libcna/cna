@@ -7,9 +7,19 @@
 #include <array>
 #include <memory>
 
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class TextureCollection;
+}
+
 namespace CNA::Internal::Renderers::Rlgl
 {
     class RlglCompiledEffect;
+
+    namespace Detail
+    {
+        class RlglSpriteBatchRenderer;
+    }
 
     namespace Bridge
     {
@@ -649,6 +659,7 @@ namespace CNA::Internal::Renderers::Rlgl
 
     private:
         friend class RlglCompiledEffect;
+        friend class Detail::RlglSpriteBatchRenderer;
 
         struct SamplerRecord
         {
@@ -688,7 +699,10 @@ namespace CNA::Internal::Renderers::Rlgl
             const IIndexBufferRenderer* indexBuffer,
             PrimitiveType primitive, int elementCount,
             int firstVertex, int startIndex, int baseVertex,
-            const GpuDrawParams& params);
+            const GpuDrawParams& params,
+            const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr,
+            const Microsoft::Xna::Framework::Graphics::TextureCollection*
+                spriteBatchTextures = nullptr);
         [[nodiscard]] void* GetMojoShaderContext();
         void MakeCompiledEffectContextCurrent();
         void DestroyCompiledEffectContext() noexcept;

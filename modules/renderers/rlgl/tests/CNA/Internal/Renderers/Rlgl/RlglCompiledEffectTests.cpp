@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_rlgl.md RLGL-047/RLGL-048: RLGL runs the same public compiled-Effect contracts as
-// the established renderers, with later draw families remaining assigned to RLGL-049.
+// plans/plan_rlgl.md RLGL-047/RLGL-048/RLGL-051: RLGL runs the same public compiled-Effect
+// runtime, ordinary draw, and SpriteBatch contracts as the established renderers. Multi-stream,
+// instancing, and later draw families remain assigned to RLGL-049.
 
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
 
@@ -67,6 +68,209 @@ namespace
         GraphicsDevice device;
         ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
         CNA::TestSupport::RunCompiledEffectRenderTargetSourceContract(device);
+    }
+
+    TEST(RlglCompiledEffectTest, SharedSpriteBatchContract)
+    {
+        GraphicsDevice device;
+        ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
+        CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device);
+    }
+
+    TEST(RlglCompiledEffectTest, SharedSpriteBatchMultiPassContract)
+    {
+        GraphicsDevice device;
+        ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
+        CNA::TestSupport::RunCompiledEffectSpriteBatchMultiPassContract(device);
+    }
+
+    TEST(RlglCompiledEffectTest, SharedSpriteBatchTextureSlotContract)
+    {
+        GraphicsDevice device;
+        ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
+        CNA::TestSupport::RunCompiledEffectSpriteBatchTextureSlotContract(device);
+    }
+
+    TEST(RlglCompiledEffectTest, SharedSpriteBatchRenderTargetSourceContract)
+    {
+        GraphicsDevice device;
+        ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
+        CNA::TestSupport::RunCompiledEffectSpriteBatchRenderTargetSourceContract(device);
+    }
+
+    TEST(RlglCompiledEffectTest, SpriteBatchUsesDeviceFallbackSlotsAndRestoresStockDraws)
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        using CNA::TestSupport::SyntheticSamplerState;
+        using Microsoft::Xna::Framework::Color;
+        using Microsoft::Xna::Framework::Matrix;
+        using Microsoft::Xna::Framework::Rectangle;
+        using Microsoft::Xna::Framework::Vector4;
+        using namespace Microsoft::Xna::Framework::Graphics;
+
+        GraphicsDevice device;
+        const std::vector<SyntheticSamplerState> pointClamp = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, CNA::TestSupport::BuildSyntheticSamplingEffect(
+            pointClamp, 1));
+        effect.getParametersProperty()["Tint"]->SetValue(
+            Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+        effect.getParametersProperty()["Transform"]->SetValue(
+            Matrix::CreateOrthographicOffCenter(
+                0.0f, 8.0f, 8.0f, 0.0f, -1.0f, 1.0f));
+
+        Texture2D sprite(device, 1, 1);
+        Texture2D fallback(device, 1, 1);
+        const Color white[1] = {Color::White};
+        const Color green[1] = {Color(0, 255, 0, 255)};
+        sprite.SetData(white, 1);
+        fallback.SetData(green, 1);
+        device.getTexturesProperty()(1, &fallback);
+        device.getSamplerStatesProperty()[1] = SamplerState::PointClamp;
+
+        RenderTarget2D compiledTarget(device, 8, 8);
+        device.SetRenderTarget(&compiledTarget);
+        device.Clear(Color(9, 19, 29, 255));
+        SpriteBatch compiledBatch(device);
+        compiledBatch.Begin(
+            SpriteSortMode::Deferred, BlendState::Opaque,
+            &SamplerState::PointClamp, nullptr, nullptr, &effect);
+        compiledBatch.Draw(sprite, Rectangle(0, 0, 8, 8), Color::White);
+        compiledBatch.End();
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color compiledPixel(0, 0, 0, 0);
+        const Rectangle centre(4, 4, 1, 1);
+        compiledTarget.GetData(0, &centre, &compiledPixel, 0, 1);
+        EXPECT_NEAR(compiledPixel.getRProperty(), 0, 3);
+        EXPECT_NEAR(compiledPixel.getGProperty(), 255, 3)
+            << "a null effect texture must fall back to GraphicsDevice.Textures[1]";
+        EXPECT_NEAR(compiledPixel.getBProperty(), 0, 3);
+
+        Texture2D blue(device, 1, 1);
+        const Color bluePixel[1] = {Color(0, 0, 255, 255)};
+        blue.SetData(bluePixel, 1);
+        RenderTarget2D stockTarget(device, 8, 8);
+        device.SetRenderTarget(&stockTarget);
+        device.Clear(Color(9, 19, 29, 255));
+        SpriteBatch stockBatch(device);
+        stockBatch.Begin(
+            SpriteSortMode::Deferred, BlendState::Opaque,
+            &SamplerState::PointClamp, nullptr, nullptr);
+        stockBatch.Draw(blue, Rectangle(0, 0, 8, 8), Color::White);
+        stockBatch.End();
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color stockPixel(0, 0, 0, 0);
+        stockTarget.GetData(0, &centre, &stockPixel, 0, 1);
+        EXPECT_NEAR(stockPixel.getRProperty(), 0, 3);
+        EXPECT_NEAR(stockPixel.getGProperty(), 0, 3);
+        EXPECT_NEAR(stockPixel.getBProperty(), 255, 3)
+            << "a stock SpriteBatch after a compiled one must restore its own VAO and program";
+    }
+
+    TEST(RlglCompiledEffectTest, SpriteBatchPixelOnlyPassInheritsStockVertexShader)
+    {
+        using CNA::TestSupport::SyntheticEffectOptions;
+        using Microsoft::Xna::Framework::Color;
+        using Microsoft::Xna::Framework::Rectangle;
+        using Microsoft::Xna::Framework::Vector4;
+        using namespace Microsoft::Xna::Framework::Graphics;
+
+        GraphicsDevice device;
+        SyntheticEffectOptions options;
+        options.includeSampler = true;
+        Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Tint"]->SetValue(
+            Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+
+        Texture2D sprite(device, 1, 1);
+        const Color white[1] = {Color::White};
+        sprite.SetData(white, 1);
+
+        RenderTarget2D target(device, 8, 8);
+        device.SetRenderTarget(&target);
+        device.Clear(Color(9, 19, 29, 255));
+        SpriteBatch batch(device);
+        batch.Begin(
+            SpriteSortMode::Deferred, BlendState::Opaque,
+            &SamplerState::PointClamp, nullptr, nullptr, &effect);
+        batch.Draw(sprite, Rectangle(0, 0, 8, 8), Color::White);
+        batch.End();
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color actual(0, 0, 0, 0);
+        const Rectangle centre(4, 4, 1, 1);
+        target.GetData(0, &centre, &actual, 0, 1);
+        EXPECT_NEAR(actual.getRProperty(), 64, 3);
+        EXPECT_NEAR(actual.getGProperty(), 128, 3);
+        EXPECT_NEAR(actual.getBProperty(), 191, 3)
+            << "a pixel-only pass must inherit CNA's embedded stock sprite vertex shader";
+    }
+
+    TEST(RlglCompiledEffectTest, SpriteBatchExceptionRestoresStockDrawState)
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        using CNA::TestSupport::SyntheticSamplerKind;
+        using CNA::TestSupport::SyntheticSamplerState;
+        using Microsoft::Xna::Framework::Color;
+        using Microsoft::Xna::Framework::Rectangle;
+        using Microsoft::Xna::Framework::Vector4;
+        using namespace Microsoft::Xna::Framework::Graphics;
+
+        GraphicsDevice device;
+        const std::vector<SyntheticSamplerState> pointClamp = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+            {Fx::SampAddressW, Fx::AddressClamp},
+        };
+        Effect effect(device, CNA::TestSupport::BuildSyntheticSamplingEffect(
+            pointClamp, 0, SyntheticSamplerKind::SamplerCube));
+        effect.getParametersProperty()["Tint"]->SetValue(
+            Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+
+        Texture2D flat(device, 1, 1);
+        const Color white[1] = {Color::White};
+        flat.SetData(white, 1);
+        RenderTarget2D failedTarget(device, 8, 8);
+        device.SetRenderTarget(&failedTarget);
+        SpriteBatch failedBatch(device);
+        failedBatch.Begin(
+            SpriteSortMode::Deferred, BlendState::Opaque,
+            &SamplerState::PointClamp, nullptr, nullptr, &effect);
+        failedBatch.Draw(flat, Rectangle(0, 0, 8, 8), Color::White);
+        EXPECT_THROW(failedBatch.End(), System::NotSupportedException);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Texture2D blue(device, 1, 1);
+        const Color bluePixel[1] = {Color(0, 0, 255, 255)};
+        blue.SetData(bluePixel, 1);
+        RenderTarget2D stockTarget(device, 8, 8);
+        device.SetRenderTarget(&stockTarget);
+        device.Clear(Color(9, 19, 29, 255));
+        SpriteBatch stockBatch(device);
+        stockBatch.Begin(
+            SpriteSortMode::Deferred, BlendState::Opaque,
+            &SamplerState::PointClamp, nullptr, nullptr);
+        stockBatch.Draw(blue, Rectangle(0, 0, 8, 8), Color::White);
+        stockBatch.End();
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color actual(0, 0, 0, 0);
+        const Rectangle centre(4, 4, 1, 1);
+        stockTarget.GetData(0, &centre, &actual, 0, 1);
+        EXPECT_NEAR(actual.getRProperty(), 0, 3);
+        EXPECT_NEAR(actual.getGProperty(), 0, 3);
+        EXPECT_NEAR(actual.getBProperty(), 255, 3)
+            << "a failed compiled sprite draw must restore the stock VAO and program";
     }
 
     TEST(RlglCompiledEffectTest, CubeSamplerDrawsTheSelectedFace)

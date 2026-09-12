@@ -8,9 +8,26 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include "RlglBridge.hpp"
+
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/Rlgl/RlglCompiledEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+
+#include "Fna3dStockEffectBlobs.hpp"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -20,7 +37,7 @@
 
 namespace CNA::Internal::Renderers::Rlgl
 {
-    namespace
+    namespace Detail
     {
         using Microsoft::Xna::Framework::Color;
         using Microsoft::Xna::Framework::Matrix;
@@ -42,9 +59,36 @@ namespace CNA::Internal::Renderers::Rlgl
                 , pipeline_(Bridge::CreateSpritePipeline(
                       kVertexCapacity, kIndexCapacity))
             {
-                vertices_.reserve(
-                    static_cast<std::size_t>(kVertexCapacity) * kFloatsPerVertex);
-                indices_.reserve(kIndexCapacity);
+                try
+                {
+                    vertices_.reserve(
+                        static_cast<std::size_t>(kVertexCapacity) * kFloatsPerVertex);
+                    indices_.reserve(kIndexCapacity);
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+                    const auto& bytes =
+                        CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
+                    spriteCompiledEffect_ = std::make_unique<RlglCompiledEffect>(
+                        renderer_, bytes, sizeof(bytes));
+                    const auto& parameters = spriteCompiledEffect_->GetDescription().parameters;
+                    const auto matrix = std::find_if(
+                        parameters.begin(), parameters.end(),
+                        [](const CompiledEffectParameterDescription& parameter)
+                        {
+                            return parameter.name == "MatrixTransform";
+                        });
+                    if (matrix == parameters.end())
+                    {
+                        throw std::runtime_error(
+                            "RLGL: embedded XNA SpriteEffect has no MatrixTransform parameter");
+                    }
+                    spriteMatrixParameterIndex_ = matrix->runtimeIndex;
+#endif
+                }
+                catch (...)
+                {
+                    Bridge::DestroySpritePipeline(pipeline_);
+                    throw;
+                }
             }
 
             ~RlglSpriteBatchRenderer() override
@@ -77,12 +121,24 @@ namespace CNA::Internal::Renderers::Rlgl
 
             void SetCustomEffect(Effect* effect) override
             {
+                if (customEffect_ == effect) return;
+                Flush();
                 if (effect != nullptr)
                 {
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+                    if (dynamic_cast<RlglCompiledEffect*>(effect->GetCompiledRuntimePtr()) == nullptr)
+                    {
+                        throw System::NotSupportedException(
+                            "RLGL: SpriteBatch source/custom effects are deferred to "
+                            "plans/plan_rlgl.md RLGL-050");
+                    }
+#else
                     throw System::NotSupportedException(
-                        "RLGL: custom SpriteBatch Effect is not implemented yet "
-                        "(plans/plan_rlgl.md RLGL-012)");
+                        "RLGL: compiled SpriteBatch effects require CNA_RLGL_COMPILED_EFFECTS=ON "
+                        "(plans/plan_rlgl.md RLGL-051)");
+#endif
                 }
+                customEffect_ = effect;
             }
 
             void SetSamplerState(
@@ -181,7 +237,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 {
                     std::swap(v1, v2);
                 }
-                if (SampledRowsAreBottomUp(texture))
+                if (SampledRowsAreBottomUp(texture) &&
+                    !BatchFlushesThroughCompiledEffect())
                 {
                     v1 = 1.0f - v1;
                     v2 = 1.0f - v2;
@@ -241,6 +298,23 @@ namespace CNA::Internal::Renderers::Rlgl
                 return static_cast<int>(vertices_.size() / kFloatsPerVertex);
             }
 
+            [[nodiscard]] bool BatchFlushesThroughCompiledEffect() const
+            {
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+                return customEffect_ != nullptr &&
+                    customEffect_->GetCompiledRuntimePtr() != nullptr;
+#else
+                return false;
+#endif
+            }
+
+            void ClearBatch() noexcept
+            {
+                vertices_.clear();
+                indices_.clear();
+                currentTexture_ = nullptr;
+            }
+
             void Flush()
             {
                 if (vertices_.empty()) return;
@@ -252,6 +326,14 @@ namespace CNA::Internal::Renderers::Rlgl
                 renderer_.GetSpriteBatchViewportSize(viewportWidth, viewportHeight);
                 if (viewportWidth <= 0 || viewportHeight <= 0)
                     throw std::runtime_error("RLGL: SpriteBatch viewport is empty");
+
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+                if (BatchFlushesThroughCompiledEffect())
+                {
+                    FlushBatchWithCompiledEffect(viewportWidth, viewportHeight);
+                    return;
+                }
+#endif
 
                 const Matrix orthographic = Matrix::CreateOrthographicOffCenter(
                     0.0f, static_cast<float>(viewportWidth),
@@ -272,10 +354,134 @@ namespace CNA::Internal::Renderers::Rlgl
                     pipeline_, vertices_.data(), VertexCount(),
                     indices_.data(), static_cast<int>(indices_.size()), projection);
 
-                vertices_.clear();
-                indices_.clear();
-                currentTexture_ = nullptr;
+                ClearBatch();
             }
+
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+            void ApplyCompiledSpriteVertexShader(
+                const int viewportWidth, const int viewportHeight)
+            {
+                if (spriteCompiledEffect_ == nullptr || customEffect_ == nullptr ||
+                    viewportWidth <= 0 || viewportHeight <= 0)
+                {
+                    throw std::runtime_error(
+                        "RLGL: the XNA SpriteBatch vertex effect is unavailable");
+                }
+
+                const Matrix projection = Matrix::CreateOrthographicOffCenter(
+                    0.0f, static_cast<float>(viewportWidth),
+                    static_cast<float>(viewportHeight), 0.0f, 0.0f, -1.0f);
+                const Matrix combined = transform_ * projection;
+                float values[16] = {};
+                combined.ToColumnMajor(values);
+                spriteCompiledEffect_->SetParameterValue(
+                    spriteMatrixParameterIndex_, values, sizeof(values));
+                spriteCompiledEffect_->SetTechnique(0);
+
+                auto& graphicsDevice = customEffect_->getGraphicsDeviceInternal();
+                CompiledEffectDeviceState deviceState;
+                deviceState.blend = &graphicsDevice.getBlendStateProperty();
+                deviceState.depthStencil = &graphicsDevice.getDepthStencilStateProperty();
+                deviceState.rasterizer = &graphicsDevice.getRasterizerStateProperty();
+                deviceState.samplerStates = &graphicsDevice.getSamplerStatesProperty();
+                deviceState.vertexSamplerStates =
+                    &graphicsDevice.getVertexSamplerStatesProperty();
+                CompiledEffectPassStateChanges ignoredChanges;
+                spriteCompiledEffect_->ApplyPass(0, deviceState, ignoredChanges);
+            }
+
+            void FlushBatchWithCompiledEffect(
+                const int viewportWidth, const int viewportHeight)
+            {
+                auto* const runtime = dynamic_cast<RlglCompiledEffect*>(
+                    customEffect_ != nullptr
+                        ? customEffect_->GetCompiledRuntimePtr() : nullptr);
+                if (runtime == nullptr || currentTexture_ == nullptr)
+                {
+                    ClearBatch();
+                    throw std::runtime_error(
+                        "RLGL: compiled SpriteBatch lost its effect or texture group");
+                }
+
+                using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+                using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+                using Microsoft::Xna::Framework::Graphics::VertexElement;
+                using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+                using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+                static const VertexDeclaration declaration(
+                    kFloatsPerVertex * static_cast<int>(sizeof(float)), {
+                        VertexElement(
+                            0, VertexElementFormat::Vector2,
+                            VertexElementUsage::Position, 0),
+                        VertexElement(
+                            2 * static_cast<int>(sizeof(float)),
+                            VertexElementFormat::Vector2,
+                            VertexElementUsage::TextureCoordinate, 0),
+                        VertexElement(
+                            4 * static_cast<int>(sizeof(float)),
+                            VertexElementFormat::Vector4,
+                            VertexElementUsage::Color, 0),
+                    });
+
+                try
+                {
+                    if (compiledSpriteVertexBuffer_ == nullptr)
+                    {
+                        compiledSpriteVertexBuffer_ =
+                            renderer_.CreateVertexBuffer(kVertexCapacity);
+                        compiledSpriteVertexBuffer_->SetVertexDeclaration(declaration);
+                    }
+                    if (compiledSpriteIndexBuffer_ == nullptr)
+                    {
+                        compiledSpriteIndexBuffer_ =
+                            renderer_.CreateIndexBuffer16(kIndexCapacity);
+                    }
+                    compiledSpriteVertexBuffer_->SetData(
+                        vertices_.data(), VertexCount(),
+                        kFloatsPerVertex * sizeof(float));
+                    compiledSpriteIndexBuffer_->SetData16(
+                        indices_.data(), static_cast<int>(indices_.size()));
+
+                    renderer_.ApplySamplerState(
+                        0, filter_, addressU_, addressV_, maxAnisotropy_);
+                    renderer_.ApplySamplerMipState(0, maxMipLevel_, lodBias_);
+                    renderer_.ApplySamplerAddressW(0, addressW_);
+
+                    auto* const technique =
+                        customEffect_->getCurrentTechniqueProperty();
+                    const int passCount = technique != nullptr
+                        ? technique->getPassesProperty().getCountProperty() : 0;
+                    if (passCount <= 0)
+                    {
+                        throw System::InvalidOperationException(
+                            "RLGL: a compiled Effect used with SpriteBatch must have a "
+                            "current technique with at least one pass");
+                    }
+
+                    ApplyCompiledSpriteVertexShader(viewportWidth, viewportHeight);
+                    const auto& deviceTextures =
+                        customEffect_->getGraphicsDeviceInternal().getTexturesProperty();
+                    GpuDrawParams params;
+                    params.compiledEffectRuntime = runtime;
+                    for (int pass = 0; pass < passCount; ++pass)
+                    {
+                        technique->getPassesProperty()[pass].Apply();
+                        renderer_.DrawCompiledEffectGeometry(
+                            *compiledSpriteVertexBuffer_,
+                            compiledSpriteIndexBuffer_.get(),
+                            PrimitiveType::TriangleList,
+                            static_cast<int>(indices_.size()),
+                            0, 0, 0, params, currentTexture_, &deviceTextures);
+                    }
+                }
+                catch (...)
+                {
+                    ClearBatch();
+                    throw;
+                }
+                ClearBatch();
+            }
+#endif
 
             RlglRenderer& renderer_;
             Bridge::SpritePipeline pipeline_{};
@@ -283,6 +489,13 @@ namespace CNA::Internal::Renderers::Rlgl
             std::vector<std::uint16_t> indices_;
             const ITextureRenderer* currentTexture_ = nullptr;
             Matrix transform_ = Matrix::getIdentityProperty();
+            Effect* customEffect_ = nullptr;
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+            std::unique_ptr<RlglCompiledEffect> spriteCompiledEffect_;
+            std::uint32_t spriteMatrixParameterIndex_ = 0;
+            std::unique_ptr<IVertexBufferRenderer> compiledSpriteVertexBuffer_;
+            std::unique_ptr<IIndexBufferRenderer> compiledSpriteIndexBuffer_;
+#endif
             int filter_ = 0;
             int addressU_ = 1;
             int addressV_ = 1;
@@ -298,6 +511,6 @@ namespace CNA::Internal::Renderers::Rlgl
     std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatchRenderer(
         RlglRenderer& renderer)
     {
-        return std::make_unique<RlglSpriteBatchRenderer>(renderer);
+        return std::make_unique<Detail::RlglSpriteBatchRenderer>(renderer);
     }
 }
