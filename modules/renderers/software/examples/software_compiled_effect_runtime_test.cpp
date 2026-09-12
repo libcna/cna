@@ -3780,6 +3780,47 @@ namespace
                   std::to_string(static_cast<int>(centre.getAProperty())) + ")");
     }
 
+    void CheckCompiledDuplicateDeclarationValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticDuplicateDeclarationProbe;
+        constexpr std::array invalidProbes{
+            Probe::PixelSamplerSame,
+            Probe::PixelSamplerConflict,
+            Probe::VertexSamplerSame,
+            Probe::VertexSamplerConflict,
+            Probe::Pixel20TextureInputSame,
+            Probe::Pixel20TextureInputDifferentMask,
+            Probe::Pixel20ColorInputSame,
+            Probe::Vertex20InputSameRegister,
+            Probe::Vertex20SemanticSameDifferentRegister,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.duplicateDeclarationProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted duplicate declarations: " +
+                  acceptedInvalidProbes);
+    }
+
     void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
@@ -6361,6 +6402,7 @@ int main()
         CheckCompiledSamplerDeclarationValidation(renderer);
         CheckCompiledImmediateConstantDefinitionValidation(renderer);
         CheckCompiledVertexFloatConstantRedefinition();
+        CheckCompiledDuplicateDeclarationValidation(renderer);
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);

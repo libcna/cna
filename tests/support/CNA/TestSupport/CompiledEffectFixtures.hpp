@@ -956,6 +956,31 @@ namespace CNA::TestSupport
         VertexIntegerReservedW,
     };
 
+    /** @brief Duplicate shader declaration exercised by a forged program. */
+    enum class SyntheticDuplicateDeclarationProbe
+    {
+        /** @brief Emit no duplicate declaration probe. */
+        None,
+        /** @brief Declare one pixel sampler twice with the same dimension. */
+        PixelSamplerSame,
+        /** @brief Declare one pixel sampler twice with conflicting dimensions. */
+        PixelSamplerConflict,
+        /** @brief Declare one vertex sampler twice with the same dimension. */
+        VertexSamplerSame,
+        /** @brief Declare one vertex sampler twice with conflicting dimensions. */
+        VertexSamplerConflict,
+        /** @brief Declare one Shader Model 2 pixel texture input twice. */
+        Pixel20TextureInputSame,
+        /** @brief Redeclare one Shader Model 2 pixel texture input with a different mask. */
+        Pixel20TextureInputDifferentMask,
+        /** @brief Declare one Shader Model 2 pixel color input twice. */
+        Pixel20ColorInputSame,
+        /** @brief Declare one Shader Model 2 vertex input register twice. */
+        Vertex20InputSameRegister,
+        /** @brief Assign one Shader Model 2 vertex semantic to two registers. */
+        Vertex20SemanticSameDifferentRegister,
+    };
+
     /** @brief A typed flow-control constant used as an ordinary arithmetic source by a probe. */
     enum class SyntheticTypedControlSourceProbe
     {
@@ -1331,6 +1356,9 @@ namespace CNA::TestSupport
         /** @brief Selects an immediate-constant definition validation probe. */
         SyntheticImmediateConstantDefinitionProbe immediateConstantDefinitionProbe =
             SyntheticImmediateConstantDefinitionProbe::None;
+        /** @brief Selects a duplicate shader declaration validation probe. */
+        SyntheticDuplicateDeclarationProbe duplicateDeclarationProbe =
+            SyntheticDuplicateDeclarationProbe::None;
         /** @brief Selects a typed flow-control constant used as an ordinary source. */
         SyntheticTypedControlSourceProbe typedControlSourceProbe =
             SyntheticTypedControlSourceProbe::None;
@@ -1462,6 +1490,8 @@ namespace CNA::TestSupport
             SyntheticMissingSamplerDeclarationProbe::None,
         SyntheticImmediateConstantDefinitionProbe immediateConstantDefinitionProbe =
             SyntheticImmediateConstantDefinitionProbe::None,
+        SyntheticDuplicateDeclarationProbe duplicateDeclarationProbe =
+            SyntheticDuplicateDeclarationProbe::None,
         SyntheticTypedControlSourceProbe typedControlSourceProbe =
             SyntheticTypedControlSourceProbe::None,
         SyntheticSpecialControlSourceProbe specialControlSourceProbe =
@@ -1604,6 +1634,15 @@ namespace CNA::TestSupport
         const bool probesVertexFloatRedefinition =
             immediateConstantDefinitionProbe ==
             SyntheticImmediateConstantDefinitionProbe::VertexFloatDuplicate;
+        const bool probesPixelSamplerDuplicate =
+            duplicateDeclarationProbe == SyntheticDuplicateDeclarationProbe::PixelSamplerSame ||
+            duplicateDeclarationProbe ==
+                SyntheticDuplicateDeclarationProbe::PixelSamplerConflict;
+        const bool probesPixel20DeclarationDuplicate =
+            duplicateDeclarationProbe >=
+                SyntheticDuplicateDeclarationProbe::Pixel20TextureInputSame &&
+            duplicateDeclarationProbe <=
+                SyntheticDuplicateDeclarationProbe::Pixel20ColorInputSame;
         const bool probesPixel30TypedControlSource =
             typedControlSourceProbe == SyntheticTypedControlSourceProbe::PixelInteger ||
             typedControlSourceProbe == SyntheticTypedControlSourceProbe::PixelBoolean;
@@ -1667,7 +1706,7 @@ namespace CNA::TestSupport
             probesPixel30ConstantControl || probesPixelFlowControl ||
             (probesPixelCallGraph && !probesPixel2xCallGraph) ||
             probesMissingPixel30SamplerDeclaration || probesPixelImmediateConstantDefinition ||
-            probesVertexFloatRedefinition;
+            probesVertexFloatRedefinition || probesPixelSamplerDuplicate;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -1930,6 +1969,37 @@ namespace CNA::TestSupport
                     break;
                 default: break;
             }
+        }
+
+        if (probesPixelSamplerDuplicate)
+        {
+            const auto appendSamplerDeclaration = [&](std::uint32_t textureType) {
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+                AppendUInt32(shader, 0x80000000u | (textureType << 27));
+                AppendUInt32(shader, destination(regSampler, 0, 0xFu));
+            };
+            appendSamplerDeclaration(EffectFormat::SamplerType2D);
+            appendSamplerDeclaration(
+                duplicateDeclarationProbe ==
+                        SyntheticDuplicateDeclarationProbe::PixelSamplerConflict
+                    ? EffectFormat::SamplerTypeCube
+                    : EffectFormat::SamplerType2D);
+        }
+        if (probesPixel20DeclarationDuplicate)
+        {
+            const bool color = duplicateDeclarationProbe ==
+                               SyntheticDuplicateDeclarationProbe::Pixel20ColorInputSame;
+            const auto appendInputDeclaration = [&](std::uint32_t mask) {
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+                AppendUInt32(shader, 0x80000000u);
+                AppendUInt32(shader, destination(color ? regInput : regTexture, 0, mask));
+            };
+            appendInputDeclaration(color ? 0xFu : 0x3u);
+            appendInputDeclaration(
+                duplicateDeclarationProbe ==
+                        SyntheticDuplicateDeclarationProbe::Pixel20TextureInputDifferentMask
+                    ? 0x7u
+                    : color ? 0xFu : 0x3u);
         }
 
         if (probesPixel11ColorInput || probesPixel11TextureInput ||
@@ -3965,6 +4035,9 @@ namespace CNA::TestSupport
                                                                 SyntheticImmediateConstantDefinitionProbe
                                                                     immediateConstantDefinitionProbe =
                                                                         SyntheticImmediateConstantDefinitionProbe::None,
+                                                                SyntheticDuplicateDeclarationProbe
+                                                                    duplicateDeclarationProbe =
+                                                                        SyntheticDuplicateDeclarationProbe::None,
                                                                 SyntheticTypedControlSourceProbe
                                                                     typedControlSourceProbe =
                                                                         SyntheticTypedControlSourceProbe::None,
@@ -4076,6 +4149,15 @@ namespace CNA::TestSupport
                 SyntheticImmediateConstantDefinitionProbe::VertexIntegerMaximum ||
             immediateConstantDefinitionProbe ==
                 SyntheticImmediateConstantDefinitionProbe::VertexIntegerReservedW;
+        const bool probesVertexSamplerDuplicate =
+            duplicateDeclarationProbe == SyntheticDuplicateDeclarationProbe::VertexSamplerSame ||
+            duplicateDeclarationProbe ==
+                SyntheticDuplicateDeclarationProbe::VertexSamplerConflict;
+        const bool probesVertex20DeclarationDuplicate =
+            duplicateDeclarationProbe ==
+                SyntheticDuplicateDeclarationProbe::Vertex20InputSameRegister ||
+            duplicateDeclarationProbe ==
+                SyntheticDuplicateDeclarationProbe::Vertex20SemanticSameDifferentRegister;
         const bool probesVertex30TypedControlSource =
             typedControlSourceProbe == SyntheticTypedControlSourceProbe::VertexInteger ||
             typedControlSourceProbe == SyntheticTypedControlSourceProbe::VertexBoolean;
@@ -4136,7 +4218,7 @@ namespace CNA::TestSupport
             probesVertex30TypedControlSource || probesVertex30SpecialControlSource ||
             probesVertexRelativeAddressing || probesVertexSemanticDeclarations ||
             probesVertex30CallGraph || probesMissingVertexSamplerDeclaration ||
-            probesVertexImmediateConstantDefinition;
+            probesVertexImmediateConstantDefinition || probesVertexSamplerDuplicate;
         const bool probesVertex2xTemporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xMaximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange;
@@ -4511,6 +4593,19 @@ namespace CNA::TestSupport
                                 ? 0x3u
                                 : 0xFu));
         }
+        if (probesVertex20DeclarationDuplicate)
+        {
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+            AppendUInt32(shader, 0x80000000u | 0u); // dcl_position0 v0/v1
+            AppendUInt32(
+                shader,
+                destination(
+                    regInput,
+                    duplicateDeclarationProbe ==
+                            SyntheticDuplicateDeclarationProbe::Vertex20InputSameRegister
+                        ? 0u
+                        : 1u));
+        }
         if (probesVertex20Input || probesVertex30Input)
         {
             const bool maximum =
@@ -4591,6 +4686,20 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, 0x80000000u | 10u);
                 AppendUInt32(shader, destination(regTexCoordOut, 1));
             }
+        }
+        if (probesVertexSamplerDuplicate)
+        {
+            const auto appendSamplerDeclaration = [&](std::uint32_t textureType) {
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+                AppendUInt32(shader, 0x80000000u | (textureType << 27));
+                AppendUInt32(shader, destination(regSampler, 0));
+            };
+            appendSamplerDeclaration(EffectFormat::SamplerType2D);
+            appendSamplerDeclaration(
+                duplicateDeclarationProbe ==
+                        SyntheticDuplicateDeclarationProbe::VertexSamplerConflict
+                    ? EffectFormat::SamplerTypeCube
+                    : EffectFormat::SamplerType2D);
         }
         // One declaration serves both consumers: the multi-stream fixture scales POSITION0 by it,
         // the sampling fixture forwards it, and a fixture that does both declares it once.
@@ -5994,6 +6103,7 @@ namespace CNA::TestSupport
             options.samplerRegisterSourceProbe,
             options.missingSamplerDeclarationProbe,
             options.immediateConstantDefinitionProbe,
+            options.duplicateDeclarationProbe,
             options.typedControlSourceProbe,
             options.specialControlSourceProbe,
             options.relativeAddressingProbe,
@@ -6090,6 +6200,7 @@ namespace CNA::TestSupport
                 options.samplerRegisterSourceProbe,
                 options.missingSamplerDeclarationProbe,
                 options.immediateConstantDefinitionProbe,
+                options.duplicateDeclarationProbe,
                 options.typedControlSourceProbe,
                 options.specialControlSourceProbe,
                 options.vertexInstructionSlotProbe,

@@ -296,7 +296,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   definitions may not repeat, integer tuples are bounded to `[0,255]`, `[0,255]`, `[-128,127]`,
   and reserved zero, while the permitted repeated vertex `DEF` retains its final value in both the
   CPU interpreter and generated GLSL. Five valid controls, thirteen invalid programs and an exact
-  rendered last-definition discriminator pass in both compiled paths. SOFTWARE-388 replaces the remaining SM3
+  rendered last-definition discriminator pass in both compiled paths. SOFTWARE-442 additionally
+  rejects duplicate pixel/vertex sampler declarations, duplicate Shader Model 2 pixel and vertex
+  input registers, and duplicate vertex semantics, matching nine independent failures measured
+  with Microsoft's compiler. The shared check retains SOFTWARE-431's legal Shader Model 3
+  disjoint-mask semantic packing. The direct Software runtime, all 160 Software CTests and all 365
+  enabled EasyGL compiled-Effect tests pass. SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
   swizzles, source modifiers, projection and sample-dependent temporary chains. SOFTWARE-389

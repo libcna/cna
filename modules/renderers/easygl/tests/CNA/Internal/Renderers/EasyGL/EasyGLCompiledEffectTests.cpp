@@ -1755,6 +1755,38 @@ TEST(EasyGLCompiledEffectDrawTest, VertexFloatRedefinitionUsesTheFinalConstant)
     EXPECT_EQ(centre, Color::Lime);
 }
 
+class EasyGLCompiledEffectDuplicateDeclarationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticDuplicateDeclarationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectDuplicateDeclarationTest, RejectsDeclaration)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.duplicateDeclarationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    DuplicateDeclaration,
+    EasyGLCompiledEffectDuplicateDeclarationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::PixelSamplerSame,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::PixelSamplerConflict,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::VertexSamplerSame,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::VertexSamplerConflict,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::Pixel20TextureInputSame,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::Pixel20TextureInputDifferentMask,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::Pixel20ColorInputSame,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::Vertex20InputSameRegister,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::
+            Vertex20SemanticSameDifferentRegister));
+
 class EasyGLCompiledEffectTypedControlSourceTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticTypedControlSourceProbe>
 {

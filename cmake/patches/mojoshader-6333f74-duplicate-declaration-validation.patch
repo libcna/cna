@@ -1,0 +1,46 @@
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2007,10 +2007,18 @@
+     // parse_args_DCL() does a lot of state checking before we get here.
+ 
+-    // !!! FIXME: apparently vs_3_0 can use sampler registers now.
+-    // !!! FIXME:  (but only s0 through s3, not all 16 of them.)
++    const int packed_semantic = shader_version_atleast(ctx, 3, 0) &&
++        (regtype != REG_TYPE_SAMPLER) &&
++        (((shader_is_vertex(ctx)) &&
++          ((regtype == REG_TYPE_INPUT) || (regtype == REG_TYPE_OUTPUT))) ||
++         ((shader_is_pixel(ctx)) && (regtype == REG_TYPE_INPUT)));
+ 
+     if (ctx->instruction_count != 0)
+         fail(ctx, "DCL token must come before any instructions");
++    else if (get_defined_register(ctx, regtype, regnum) && !packed_semantic)
++    {
++        fail(ctx, "shader register declared more than once");
++        return;
++    } // else if
+ 
+     else if (shader_is_vertex(ctx) || shader_is_pixel(ctx))
+     {
+@@ -2027,6 +2036,22 @@
+                 fail(ctx, "unknown DCL usage");
+                 return;
+             } // if
++            if (shader_is_vertex(ctx) && (regtype == REG_TYPE_INPUT) &&
++                !shader_version_atleast(ctx, 3, 0))
++            {
++                RegisterList *candidate = ctx->attributes.next;
++                while (candidate != NULL)
++                {
++                    if ((candidate->regtype == REG_TYPE_INPUT) &&
++                        (candidate->usage == usage) &&
++                        (candidate->index == index))
++                    {
++                        fail(ctx, "vertex input semantic declared more than once");
++                        return;
++                    } // if
++                    candidate = candidate->next;
++                } // while
++            } // if
+             add_attribute_register(ctx, regtype, regnum, usage, index, wmask, mods);
+         } // else
+     } // if
