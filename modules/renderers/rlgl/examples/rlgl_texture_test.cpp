@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_rlgl.md RLGL-023/RLGL-026/RLGL-027: focused native Texture2D storage evidence. Public
+// plans/plan_rlgl.md RLGL-023/RLGL-026/RLGL-027/RLGL-028: focused Texture2D storage evidence. Public
 // Texture2D construction and SetData feed rlgl or the documented bridge; direct renderer readback
 // prevents the public CPU shadow from hiding an upload defect. Exit 77 means no usable GL context.
 
@@ -125,6 +125,32 @@ namespace
         return native.GetData(
                    0, 0, 0, 3, 2, actual.data(), static_cast<int>(actual.size()))
             && std::memcmp(actual.data(), expected.data(), actual.size()) == 0;
+    }
+
+    void AppendDxtBlock(
+        std::vector<std::uint8_t>& bytes, const SurfaceFormat format,
+        const std::uint16_t color565)
+    {
+        if (format == SurfaceFormat::Dxt3)
+            bytes.insert(bytes.end(), 8u, 0xFFu);
+        else if (format == SurfaceFormat::Dxt5)
+        {
+            bytes.push_back(0xFFu);
+            bytes.push_back(0xFFu);
+            bytes.insert(bytes.end(), 6u, 0x00u);
+        }
+        bytes.push_back(static_cast<std::uint8_t>(color565));
+        bytes.push_back(static_cast<std::uint8_t>(color565 >> 8u));
+        bytes.insert(bytes.end(), 6u, 0x00u);
+    }
+
+    [[nodiscard]] std::vector<std::uint8_t> MakeDxtBlocks(
+        const SurfaceFormat format, const bool twoBlocks)
+    {
+        std::vector<std::uint8_t> result;
+        AppendDxtBlock(result, format, 0xF800u);
+        if (twoBlocks) AppendDxtBlock(result, format, 0x001Fu);
+        return result;
     }
 }
 
@@ -341,6 +367,9 @@ protected:
         const auto sample = [&](Texture2D& source) {
             device.Clear(Color(17, 29, 43, 255));
             source.GetRenderer().BindGL(0);
+            renderer.ApplySamplerState(0, 1, 1, 1, 1);
+            renderer.ApplySamplerMipState(0, 0, 0.0f);
+            renderer.ApplySamplerAddressW(0, 1);
             renderer.SetBlendEnabled(false);
             CNA::Internal::Renderers::Rlgl::Bridge::DrawBoundTextureSampleForTesting(
                 0.5f, 0.5f, 64, 48);
@@ -390,6 +419,103 @@ protected:
                   sampledNormalized2.getAProperty() == 255,
               "NormalizedByte2 sampling applies XNA's (R,G,1,1) channel expansion");
 
+        const auto dxtRoundTrips = [&](const SurfaceFormat format) {
+            Texture2D dxtTexture(device, 8, 4, false, format);
+            const std::vector<std::uint8_t> red = MakeDxtBlocks(format, false);
+            std::vector<std::uint8_t> initial = red;
+            initial.insert(initial.end(), red.begin(), red.end());
+            dxtTexture.SetData(initial.data(), static_cast<int>(initial.size()));
+            std::vector<std::uint8_t> actual(initial.size(), 0u);
+            dxtTexture.GetData(actual.data(), 0, static_cast<int>(actual.size()));
+            if (actual != initial) return false;
+
+            bool rejectedMisalignedRectangle = false;
+            try
+            {
+                const Rectangle misaligned(2, 0, 4, 4);
+                dxtTexture.SetData(
+                    0, &misaligned, initial.data(), 0, static_cast<int>(initial.size()));
+            }
+            catch (const std::out_of_range&)
+            {
+                rejectedMisalignedRectangle = true;
+            }
+            if (!rejectedMisalignedRectangle) return false;
+
+            bool rejectedShortReadback = false;
+            try
+            {
+                std::vector<std::uint8_t> tooSmall(initial.size() - 1u, 0u);
+                dxtTexture.GetData(
+                    tooSmall.data(), 0, static_cast<int>(tooSmall.size()));
+            }
+            catch (const std::out_of_range&)
+            {
+                rejectedShortReadback = true;
+            }
+            if (!rejectedShortReadback) return false;
+
+            const std::vector<std::uint8_t> expected = MakeDxtBlocks(format, true);
+            const std::vector<std::uint8_t> blue(
+                expected.begin() + static_cast<std::ptrdiff_t>(red.size()), expected.end());
+            const Rectangle rightBlock(4, 0, 4, 4);
+            dxtTexture.SetData(
+                0, &rightBlock, blue.data(), 0, static_cast<int>(blue.size()));
+            actual.assign(actual.size(), 0u);
+            dxtTexture.GetData(actual.data(), 0, static_cast<int>(actual.size()));
+            if (actual != expected) return false;
+
+            const Color left = [&] {
+                device.Clear(Color(0, 0, 0, 255));
+                dxtTexture.GetRenderer().BindGL(0);
+                renderer.ApplySamplerState(0, 1, 1, 1, 1);
+                renderer.ApplySamplerMipState(0, 0, 0.0f);
+                renderer.SetBlendEnabled(false);
+                CNA::Internal::Renderers::Rlgl::Bridge::DrawBoundTextureSampleForTesting(
+                    0.25f, 0.5f, 64, 48);
+                Color pixel;
+                const Rectangle center(32, 24, 1, 1);
+                device.GetBackBufferData(&center, &pixel, 0, 1);
+                return pixel;
+            }();
+            const Color right = [&] {
+                device.Clear(Color(0, 0, 0, 255));
+                dxtTexture.GetRenderer().BindGL(0);
+                CNA::Internal::Renderers::Rlgl::Bridge::DrawBoundTextureSampleForTesting(
+                    0.75f, 0.5f, 64, 48);
+                Color pixel;
+                const Rectangle center(32, 24, 1, 1);
+                device.GetBackBufferData(&center, &pixel, 0, 1);
+                CNA::Internal::Renderers::Rlgl::Bridge::BindTexture2D(0, 0);
+                return pixel;
+            }();
+            if (left.getRProperty() != 255 || left.getGProperty() != 0 ||
+                left.getBProperty() != 0 || right.getRProperty() != 0 ||
+                right.getGProperty() != 0 || right.getBProperty() != 255)
+            {
+                return false;
+            }
+
+            Texture2D mipmappedDxt(device, 8, 8, true, format);
+            mipmappedDxt.SetData(
+                1, nullptr, red.data(), 0, static_cast<int>(red.size()));
+            std::vector<std::uint8_t> mipReadback(red.size(), 0u);
+            mipmappedDxt.GetData(
+                1, nullptr, mipReadback.data(), 0, static_cast<int>(mipReadback.size()));
+            return mipReadback == red;
+        };
+        Check(dxtRoundTrips(SurfaceFormat::Dxt1),
+              "DXT1 exact blocks survive full/partial/mip transfers and sample correctly");
+        Check(dxtRoundTrips(SurfaceFormat::Dxt3),
+              "DXT3 exact blocks survive full/partial/mip transfers and sample correctly");
+        Check(dxtRoundTrips(SurfaceFormat::Dxt5),
+              "DXT5 exact blocks survive full/partial/mip transfers and sample correctly");
+        Check(renderer.IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt1)) &&
+                  renderer.IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt3)) &&
+                  renderer.IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt5)) &&
+                  renderer.LoadsCompressedContentNativelyEXT(),
+              "DXT block transfers stay intact until native storage or software decode");
+
         const std::array supportedFormats{
             SurfaceFormat::Color, SurfaceFormat::Bgr565, SurfaceFormat::Bgra5551,
             SurfaceFormat::Bgra4444, SurfaceFormat::NormalizedByte2,
@@ -397,7 +523,8 @@ protected:
             SurfaceFormat::Rg32, SurfaceFormat::Rgba64, SurfaceFormat::Alpha8,
             SurfaceFormat::Single, SurfaceFormat::Vector2, SurfaceFormat::Vector4,
             SurfaceFormat::HalfSingle, SurfaceFormat::HalfVector2,
-            SurfaceFormat::HalfVector4, SurfaceFormat::HdrBlendable};
+            SurfaceFormat::HalfVector4, SurfaceFormat::HdrBlendable,
+            SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5};
         bool classificationsExact = true;
         for (const SurfaceFormat format : supportedFormats)
         {
@@ -405,11 +532,8 @@ protected:
                 renderer.ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
                     CNA::Internal::Renderers::RendererFormatVerdict::Supported;
         }
-        classificationsExact = classificationsExact &&
-            renderer.ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Dxt1)) ==
-                CNA::Internal::Renderers::RendererFormatVerdict::Unsupported;
         Check(classificationsExact,
-              "Texture2D format classification claims only completed native layouts");
+              "Texture2D format classification claims exactly the completed classic layouts");
     }
 
 private:

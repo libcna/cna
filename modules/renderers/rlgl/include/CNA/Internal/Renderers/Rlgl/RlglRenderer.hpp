@@ -173,7 +173,7 @@ namespace CNA::Internal::Renderers::Rlgl
         [[nodiscard]] int GetMaxTextureDimension() const override { return maxTextureSize_; }
 
         /**
-         * @brief Classifies Texture2D formats whose native storage path has passed validation.
+         * @brief Classifies Texture2D formats whose complete storage path has passed validation.
          * @param surfaceFormat Raw `SurfaceFormat` ordinal.
          * @return Supported only for implemented exact layouts; Unsupported otherwise.
          */
@@ -187,6 +187,20 @@ namespace CNA::Internal::Renderers::Rlgl
          */
         [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(
             int surfaceFormat) const override;
+
+        /**
+         * @brief Reports DXT formats transferred as native compressed blocks.
+         * @param surfaceFormat Raw `SurfaceFormat` ordinal.
+         * @return True for DXT1/3/5; the resource selects native storage or software decode.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
+         * @brief Keeps supported DXT content compressed through CNA's loaders.
+         * @return True; loaders retain DXT blocks until the renderer chooses native or fallback storage.
+         */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override;
 
         /**
          * @brief Creates the renderer-owned SpriteBatch implementation.

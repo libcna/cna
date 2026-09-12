@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <vector>
 
@@ -47,6 +48,9 @@ namespace CNA::Internal::Renderers::Rlgl
             case SurfaceFormat::Bgra4444:
             case SurfaceFormat::NormalizedByte2:
             case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
             case SurfaceFormat::Rgba1010102:
             case SurfaceFormat::Rg32:
             case SurfaceFormat::Rgba64:
@@ -85,9 +89,17 @@ namespace CNA::Internal::Renderers::Rlgl
                         "RLGL: SurfaceFormat is not implemented (plans/plan_rlgl.md RLGL-024)");
                 }
 
-                bytesPerTexel_ = Texture::GetFormatSizeEXT(format);
-                const std::size_t expectedBytes =
-                    static_cast<std::size_t>(width_) * height_ * bytesPerTexel_;
+                compressed_ = format == SurfaceFormat::Dxt1 ||
+                    format == SurfaceFormat::Dxt3 || format == SurfaceFormat::Dxt5;
+                nativeCompressed_ = compressed_ &&
+                    Bridge::SupportsDxtTexture2D(surfaceFormat_);
+                const int formatBytes = Texture::GetFormatSizeEXT(format);
+                if (compressed_) blockBytes_ = formatBytes;
+                else bytesPerTexel_ = formatBytes;
+                const std::size_t expectedBytes = compressed_
+                    ? static_cast<std::size_t>((width_ + 3) / 4) *
+                        static_cast<std::size_t>((height_ + 3) / 4) * blockBytes_
+                    : static_cast<std::size_t>(width_) * height_ * bytesPerTexel_;
                 if (data.pixels.size() != expectedBytes)
                 {
                     throw std::invalid_argument(
@@ -96,6 +108,20 @@ namespace CNA::Internal::Renderers::Rlgl
 
                 id_ = Bridge::CreateTexture2D(
                     surfaceFormat_, width_, height_, mipLevels_, data.pixels.data());
+                if (compressed_)
+                {
+                    compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
+                    compressedLevels_[0] = data.pixels;
+                    for (int level = 1; level < mipLevels_; ++level)
+                    {
+                        const int levelWidth = MipDimension(width_, level);
+                        const int levelHeight = MipDimension(height_, level);
+                        compressedLevels_[static_cast<std::size_t>(level)].assign(
+                            static_cast<std::size_t>((levelWidth + 3) / 4) *
+                                static_cast<std::size_t>((levelHeight + 3) / 4) * blockBytes_,
+                            0u);
+                    }
+                }
                 definedLevels_[0] = true;
             }
 
@@ -117,6 +143,9 @@ namespace CNA::Internal::Renderers::Rlgl
 
             void UpdatePixels(const std::uint8_t* data, const int stride) override
             {
+                if (compressed_)
+                    throw std::invalid_argument(
+                        "RLGL: compressed Texture2D requires block transfer");
                 if (data == nullptr || stride != width_ * bytesPerTexel_)
                     throw std::invalid_argument("RLGL: invalid level-zero texture update");
                 Bridge::UpdateTexture2D(
@@ -133,6 +162,14 @@ namespace CNA::Internal::Renderers::Rlgl
                     throw std::invalid_argument("RLGL: Texture2D update data must not be null");
                 Bridge::UpdateTexture2D(
                     id_, surfaceFormat_, level, levelWidth, levelHeight, data);
+                if (compressed_)
+                {
+                    const std::size_t byteCount =
+                        static_cast<std::size_t>((levelWidth + 3) / 4) *
+                        static_cast<std::size_t>((levelHeight + 3) / 4) * blockBytes_;
+                    compressedLevels_[static_cast<std::size_t>(level)].assign(
+                        data, data + byteCount);
+                }
                 definedLevels_[static_cast<std::size_t>(level)] = true;
             }
 
@@ -157,14 +194,48 @@ namespace CNA::Internal::Renderers::Rlgl
                 {
                     throw std::out_of_range("RLGL: Texture2D readback rectangle is invalid");
                 }
-                const std::size_t required =
-                    static_cast<std::size_t>(width) * height * bytesPerTexel_;
+                if (compressed_ &&
+                    ((x % 4) != 0 || (y % 4) != 0 ||
+                     ((width % 4) != 0 && x + width != levelWidth) ||
+                     ((height % 4) != 0 && y + height != levelHeight)))
+                {
+                    throw std::out_of_range(
+                        "RLGL: compressed Texture2D readback rectangle is not block-aligned");
+                }
+                const std::size_t required = compressed_
+                    ? static_cast<std::size_t>((width + 3) / 4) *
+                        static_cast<std::size_t>((height + 3) / 4) * blockBytes_
+                    : static_cast<std::size_t>(width) * height * bytesPerTexel_;
                 if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
                     throw std::out_of_range("RLGL: Texture2D readback destination is too small");
 
-                Bridge::ReadTexture2D(
-                    id_, surfaceFormat_, level, levelWidth, levelHeight,
-                    x, y, width, height, static_cast<std::uint8_t*>(data));
+                if (compressed_ && !nativeCompressed_)
+                {
+                    const auto& levelBytes = compressedLevels_[static_cast<std::size_t>(level)];
+                    const int levelBlockColumns = (levelWidth + 3) / 4;
+                    const int rectangleBlockColumns = (width + 3) / 4;
+                    const int rectangleBlockRows = (height + 3) / 4;
+                    const std::size_t sourceRowBytes =
+                        static_cast<std::size_t>(levelBlockColumns) * blockBytes_;
+                    const std::size_t destinationRowBytes =
+                        static_cast<std::size_t>(rectangleBlockColumns) * blockBytes_;
+                    auto* destination = static_cast<std::uint8_t*>(data);
+                    for (int row = 0; row < rectangleBlockRows; ++row)
+                    {
+                        const std::uint8_t* source = levelBytes.data()
+                            + static_cast<std::size_t>(y / 4 + row) * sourceRowBytes
+                            + static_cast<std::size_t>(x / 4) * blockBytes_;
+                        std::memcpy(
+                            destination + static_cast<std::size_t>(row) * destinationRowBytes,
+                            source, destinationRowBytes);
+                    }
+                }
+                else
+                {
+                    Bridge::ReadTexture2D(
+                        id_, surfaceFormat_, level, levelWidth, levelHeight,
+                        x, y, width, height, static_cast<std::uint8_t*>(data));
+                }
                 return true;
             }
 
@@ -191,7 +262,11 @@ namespace CNA::Internal::Renderers::Rlgl
             int mipLevels_ = 1;
             int surfaceFormat_ = 0;
             int bytesPerTexel_ = 4;
+            int blockBytes_ = 0;
+            bool compressed_ = false;
+            bool nativeCompressed_ = false;
             std::vector<bool> definedLevels_;
+            std::vector<std::vector<std::uint8_t>> compressedLevels_;
         };
     }
 

@@ -47,9 +47,9 @@ success.
 | Drawable resize and presentation rectangle refresh | ✅ | A `GraphicsDeviceManager` resize is followed by dimension and post-resize pixel checks |
 | Viewport/scissor coordinate application | 🟨 | Top-left CNA rectangles are mapped to bottom-left GL coordinates; transition/pixel coverage remains in `RLGL-013` |
 | Backbuffer MSAA | 🟨 | Context samples are requested with a non-MSAA retry and the achieved count is reported; resolve/output coverage remains in `RLGL-014` |
-| All 17 uncompressed classic-XNA `Texture2D` formats | ✅ | Exact full/partial native round-trips passed for 8/16-bit UNORM, packed 16/32/64-bit, signed-normalized, binary16, binary32, alpha-only, and HDR storage; one-/two-channel sampling expansion and non-zero mips also have focused evidence |
+| All 20 classic-XNA `Texture2D` formats | ✅ | Exact full/partial format-native round-trips passed for 8/16-bit UNORM, packed 16/32/64-bit, signed-normalized, binary16, binary32, alpha-only, HDR, and DXT1/3/5 storage; sampling expansion and non-zero mips also have focused evidence |
 | XNA `SamplerState` | ✅ | Independent GL sampler objects passed all filter/address ordinals, mip/bias, anisotropy, transition, slot-isolation, and sampled-pixel checks |
-| DXT1/DXT3/DXT5 `Texture2D` | ❌ | Tracked by `RLGL-028`; the formats remain explicitly refused until capability-gated compressed upload/readback validation passes |
+| DXT1/DXT3/DXT5 `Texture2D` | ✅ | Native S3TC storage is selected from rlgl's live extension probe; contexts without S3TC decode blocks into RGBA8 renderer storage while retaining exact block-transfer/readback semantics. Both modes passed block-aligned partial updates, nonzero mips, exact bytes, invalid-transfer checks, and sampled red/blue pixels |
 | SpriteBatch/SpriteFont | ❌ | Factory throws a diagnostic naming `RLGL-010` |
 | Vertex/index buffers and draw calls | ❌ | Factories/draw hooks throw diagnostics naming `RLGL-011` |
 | Stock/custom effects and normal 3D workloads | ❌ | Await the buffer, texture, and shader tasks; `GraphicsCapability::ThreeD` remains false |
@@ -149,10 +149,14 @@ The dependency uses raylib's zlib/libpng license. Its required notice is preserv
   during initialization/readback, or a second live device produces an explicit exception.
 - For a deterministic Linux software-driver reproduction, set
   `SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1` and run `cna_test_rlgl_smoke` directly.
+- Set `CNA_RLGL_FORCE_DXT_FALLBACK=1` when running `cna_test_rlgl_texture` to validate the
+  no-S3TC software-decode path even on a driver that advertises native DXT storage. This is a
+  renderer debug/test override, not a public graphics option.
 - An unsupported resource path names its owning `RLGL-*` plan task. Do not replace these failures
   with no-ops while bringing up new functionality.
 
 The dedicated `.github/workflows/rlgl-ci.yml` lane configures the Linux renderer against an
-independently checked-out copy of the exact upstream commit and compiles the renderer plus smoke
-executable. It intentionally does not yet claim hosted runtime coverage; promotion to a CI runtime
-gate belongs to `RLGL-021` after the runner's context path is proven.
+independently checked-out copy of the exact upstream commit and compiles the renderer plus the
+smoke, texture, and sampler executables. It intentionally does not yet claim hosted runtime
+coverage; promotion to a CI runtime gate belongs to `RLGL-021` after the runner's context path is
+proven.

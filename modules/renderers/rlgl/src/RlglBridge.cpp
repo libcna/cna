@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Logger.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
 #include <cstdarg>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -174,6 +176,8 @@ namespace
         int rlglFormat = 0;
         int uploadRotateLeft = 0;
         Swizzle swizzle = Swizzle::Identity;
+        bool compressed = false;
+        int blockBytes = 0;
     };
 
     [[nodiscard]] TextureFormatInfo TextureFormat(
@@ -199,6 +203,18 @@ namespace
                     TextureFormatInfo::Swizzle::TwoChannel};
         case SurfaceFormat::NormalizedByte4:
             return {GL_RGBA8_SNORM, GL_RGBA, GL_BYTE, 4, 0, 0};
+        case SurfaceFormat::Dxt1:
+            return {GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, 0, 0, 0,
+                    RL_PIXELFORMAT_COMPRESSED_DXT1_RGBA, 0,
+                    TextureFormatInfo::Swizzle::Identity, true, 8};
+        case SurfaceFormat::Dxt3:
+            return {GL_COMPRESSED_RGBA_S3TC_DXT3_EXT, 0, 0, 0,
+                    RL_PIXELFORMAT_COMPRESSED_DXT3_RGBA, 0,
+                    TextureFormatInfo::Swizzle::Identity, true, 16};
+        case SurfaceFormat::Dxt5:
+            return {GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, 0, 0, 0,
+                    RL_PIXELFORMAT_COMPRESSED_DXT5_RGBA, 0,
+                    TextureFormatInfo::Swizzle::Identity, true, 16};
         case SurfaceFormat::Rgba1010102:
             return {GL_RGB10_A2, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, 4, 0, 0};
         case SurfaceFormat::Rg32:
@@ -298,6 +314,32 @@ namespace
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, green);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, blue);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, alpha);
+    }
+
+    [[nodiscard]] std::size_t CompressedLevelBytes(
+        const TextureFormatInfo& format, const int width, const int height)
+    {
+        return static_cast<std::size_t>((width + 3) / 4) *
+            static_cast<std::size_t>((height + 3) / 4) * format.blockBytes;
+    }
+
+    [[nodiscard]] std::vector<std::uint8_t> DecodeDxt(
+        const int surfaceFormat, const std::uint8_t* blocks,
+        const std::size_t byteCount, const int width, const int height)
+    {
+        using CNA::Internal::Graphics::DxtUtil;
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+        case SurfaceFormat::Dxt1:
+            return DxtUtil::DecompressDxt1(blocks, byteCount, width, height);
+        case SurfaceFormat::Dxt3:
+            return DxtUtil::DecompressDxt3(blocks, byteCount, width, height);
+        case SurfaceFormat::Dxt5:
+            return DxtUtil::DecompressDxt5(blocks, byteCount, width, height);
+        default:
+            throw std::invalid_argument("RLGL: requested DXT decode for a non-DXT format");
+        }
     }
 }
 
@@ -465,6 +507,29 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         return value;
     }
 
+    bool SupportsDxtTexture2D(const int surfaceFormat) noexcept
+    {
+        if (!bridgeInitialized) return false;
+        const char* forceFallback = std::getenv("CNA_RLGL_FORCE_DXT_FALLBACK");
+        if (forceFallback != nullptr && forceFallback[0] != '\0' && forceFallback[0] != '0')
+            return false;
+        try
+        {
+            const TextureFormatInfo format = TextureFormat(surfaceFormat);
+            if (!format.compressed) return false;
+            unsigned int internalFormat = 0;
+            unsigned int transferFormat = 0;
+            unsigned int transferType = 0;
+            rlGetGlTextureFormats(
+                format.rlglFormat, &internalFormat, &transferFormat, &transferType);
+            return internalFormat == static_cast<unsigned int>(format.internalFormat);
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
     unsigned int CreateTexture2D(
         const int surfaceFormat, const int width, const int height,
         const int mipLevels, const std::uint8_t* pixels)
@@ -480,10 +545,24 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         std::vector<std::uint8_t> converted;
         const std::uint8_t* upload = ConvertPackedUpload(
             format, pixels, static_cast<std::size_t>(width) * height, converted);
+        const bool nativeCompressed =
+            !format.compressed || SupportsDxtTexture2D(surfaceFormat);
+        if (format.compressed && !nativeCompressed)
+        {
+            converted = DecodeDxt(
+                surfaceFormat, pixels, CompressedLevelBytes(format, width, height),
+                width, height);
+            upload = converted.data();
+        }
         unsigned int id = 0;
-        if (format.rlglFormat != 0)
+        if (format.rlglFormat != 0 && nativeCompressed)
         {
             id = rlLoadTexture(upload, width, height, format.rlglFormat, 1);
+        }
+        else if (format.compressed)
+        {
+            id = rlLoadTexture(
+                upload, width, height, RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
         }
         else
         {
@@ -510,10 +589,25 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
             {
                 levelWidth = levelWidth > 1 ? levelWidth / 2 : 1;
                 levelHeight = levelHeight > 1 ? levelHeight / 2 : 1;
-                glTexImage2D(
-                    GL_TEXTURE_2D, level, static_cast<GLint>(format.internalFormat),
-                    levelWidth, levelHeight, 0,
-                    format.transferFormat, format.transferType, nullptr);
+                if (format.compressed && nativeCompressed)
+                {
+                    const std::vector<std::uint8_t> empty(
+                        CompressedLevelBytes(format, levelWidth, levelHeight), 0u);
+                    glCompressedTexImage2D(
+                        GL_TEXTURE_2D, level, format.internalFormat,
+                        levelWidth, levelHeight, 0,
+                        static_cast<GLsizei>(empty.size()), empty.data());
+                }
+                else
+                {
+                    glTexImage2D(
+                        GL_TEXTURE_2D, level,
+                        static_cast<GLint>(format.compressed ? GL_RGBA8
+                                                            : format.internalFormat),
+                        levelWidth, levelHeight, 0,
+                        format.compressed ? GL_RGBA : format.transferFormat,
+                        format.compressed ? GL_UNSIGNED_BYTE : format.transferType, nullptr);
+                }
             }
             // rlgl has no general texture-max-level parameter. Clamp even a one-level texture so
             // XNA's mip-carrying sampler defaults never make the object incomplete.
@@ -550,7 +644,38 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         std::vector<std::uint8_t> converted;
         const std::uint8_t* upload = ConvertPackedUpload(
             format, pixels, static_cast<std::size_t>(width) * height, converted);
-        if (level == 0 && format.rlglFormat != 0)
+        const bool nativeCompressed =
+            !format.compressed || SupportsDxtTexture2D(surfaceFormat);
+        if (format.compressed && !nativeCompressed)
+        {
+            converted = DecodeDxt(
+                surfaceFormat, pixels, CompressedLevelBytes(format, width, height),
+                width, height);
+            upload = converted.data();
+        }
+        if (format.compressed && nativeCompressed)
+        {
+            glBindTexture(GL_TEXTURE_2D, id);
+            const std::size_t byteCount = CompressedLevelBytes(format, width, height);
+            glCompressedTexSubImage2D(
+                GL_TEXTURE_2D, level, 0, 0, width, height,
+                format.internalFormat, static_cast<GLsizei>(byteCount), upload);
+        }
+        else if (format.compressed && level == 0)
+        {
+            rlUpdateTexture(
+                id, 0, 0, width, height,
+                RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, upload);
+        }
+        else if (format.compressed)
+        {
+            glBindTexture(GL_TEXTURE_2D, id);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexSubImage2D(
+                GL_TEXTURE_2D, level, 0, 0, width, height,
+                GL_RGBA, GL_UNSIGNED_BYTE, upload);
+        }
+        else if (level == 0 && format.rlglFormat != 0)
         {
             // The public wrapper provides the exact level-zero subimage path.
             rlUpdateTexture(
@@ -586,6 +711,38 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         const TextureFormatInfo format = TextureFormat(surfaceFormat);
         const TextureBindingRestore restore;
         glBindTexture(GL_TEXTURE_2D, id);
+        if (format.compressed)
+        {
+            if ((x % 4) != 0 || (y % 4) != 0 ||
+                ((width % 4) != 0 && x + width != levelWidth) ||
+                ((height % 4) != 0 && y + height != levelHeight))
+            {
+                throw std::invalid_argument(
+                    "RLGL: compressed Texture2D readback rectangle is not block-aligned");
+            }
+            std::vector<std::uint8_t> levelBytes(
+                CompressedLevelBytes(format, levelWidth, levelHeight));
+            glGetCompressedTexImage(GL_TEXTURE_2D, level, levelBytes.data());
+            ThrowIfGlError("compressed Texture2D readback");
+
+            const int levelBlockColumns = (levelWidth + 3) / 4;
+            const int rectangleBlockColumns = (width + 3) / 4;
+            const int rectangleBlockRows = (height + 3) / 4;
+            const std::size_t sourceRowBytes =
+                static_cast<std::size_t>(levelBlockColumns) * format.blockBytes;
+            const std::size_t destinationRowBytes =
+                static_cast<std::size_t>(rectangleBlockColumns) * format.blockBytes;
+            for (int row = 0; row < rectangleBlockRows; ++row)
+            {
+                const std::uint8_t* source = levelBytes.data()
+                    + static_cast<std::size_t>(y / 4 + row) * sourceRowBytes
+                    + static_cast<std::size_t>(x / 4) * format.blockBytes;
+                std::memcpy(
+                    pixels + static_cast<std::size_t>(row) * destinationRowBytes,
+                    source, destinationRowBytes);
+            }
+            return;
+        }
         GLint previousPackAlignment = 4;
         glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
         glPixelStorei(GL_PACK_ALIGNMENT, 1);

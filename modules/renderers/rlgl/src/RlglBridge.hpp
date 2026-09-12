@@ -124,6 +124,14 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     [[nodiscard]] int GetMaxTextureSize();
 
     /**
+     * @brief Reports whether rlgl's live extension probe exposes exact DXT storage.
+     * @param surfaceFormat Raw DXT `SurfaceFormat` ordinal.
+     * @return True only when the requested DXT format maps to a native GL internal format and the
+     * deterministic fallback test override is not active.
+     */
+    [[nodiscard]] bool SupportsDxtTexture2D(int surfaceFormat) noexcept;
+
+    /**
      * @brief Creates a supported Texture2D and allocates its declared mip chain.
      * @param surfaceFormat Raw `SurfaceFormat` ordinal.
      * @param width Level-zero width.

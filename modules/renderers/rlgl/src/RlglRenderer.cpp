@@ -358,6 +358,10 @@ namespace CNA::Internal::Renderers::Rlgl
         case SurfaceFormat::HalfVector4:
         case SurfaceFormat::HdrBlendable:
             return RendererFormatVerdict::Supported;
+        case SurfaceFormat::Dxt1:
+        case SurfaceFormat::Dxt3:
+        case SurfaceFormat::Dxt5:
+            return RendererFormatVerdict::Supported;
         default:
             return RendererFormatVerdict::Unsupported;
         }
@@ -374,6 +378,19 @@ namespace CNA::Internal::Renderers::Rlgl
             return RendererFormatVerdict::Unsupported;
         }
         return RendererFormatVerdict::Defer;
+    }
+
+    bool RlglRenderer::IsCompressedTransferFormatEXT(const int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const auto format = static_cast<SurfaceFormat>(surfaceFormat);
+        return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5;
+    }
+
+    bool RlglRenderer::LoadsCompressedContentNativelyEXT() const
+    {
+        return true;
     }
 
     std::unique_ptr<ISpriteBatchRenderer> RlglRenderer::CreateSpriteBatch()
