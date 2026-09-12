@@ -227,7 +227,7 @@ protected:
             lightingRejected = true;
         }
         Check(lightingRejected,
-              "lit BasicEffect remains an explicit RLGL-034 failure");
+              "lit BasicEffect rejects a vertex declaration without Normal0");
     }
 
 private:

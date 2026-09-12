@@ -101,7 +101,17 @@ jobs:
             cna_test_rlgl_buffer \
             cna_test_rlgl_primitive \
             cna_test_rlgl_effect \
-            cna_test_rlgl_xna_pixel_center
+            cna_test_rlgl_xna_pixel_center \
+            cna_test_rlgl_basiceffect_one_light \
+            cna_test_rlgl_basiceffect_multilight_emissive \
+            cna_test_rlgl_basiceffect_specular \
+            cna_test_rlgl_basiceffect_preferperpixellighting \
+            cna_test_rlgl_basiceffect_lit_vertex_color \
+            cna_test_rlgl_basiceffect_lit_vertex_color_perpixel \
+            cna_test_rlgl_basiceffect_vertex_color_clamp \
+            cna_test_rlgl_basiceffect_world_scale_precision \
+            cna_test_rlgl_basiceffect_normal_transform \
+            cna_test_rlgl_basiceffect_lighting
 
       - name: Verify renderer registry consistency
         working-directory: cna

@@ -69,7 +69,8 @@ namespace CNA::Internal::Renderers::Rlgl
 
         [[nodiscard]] std::vector<VertexAttributeBinding> BuildStockAttributes(
             const IVertexBufferRenderer& vertexBuffer,
-            const bool vertexColorEnabled, const bool textureEnabled)
+            const bool vertexColorEnabled, const bool textureEnabled,
+            const bool lightingEnabled)
         {
             const std::size_t nativeStride = GetVertexStride(vertexBuffer);
             if (nativeStride == 0 || nativeStride >
@@ -92,6 +93,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 declaration, VertexElementUsage::Color, 0);
             const VertexElement* textureCoordinate = FindElement(
                 declaration, VertexElementUsage::TextureCoordinate, 0);
+            const VertexElement* normal = FindElement(
+                declaration, VertexElementUsage::Normal, 0);
             if (declaration.empty() && stride >= 12) position = &inferredPosition;
             if (declaration.empty() && stride >= 16) color = &inferredColor;
             if (declaration.empty() &&
@@ -123,15 +126,26 @@ namespace CNA::Internal::Renderers::Rlgl
                     "RLGL: texture drawing requires TextureCoordinate0 as Vector2 "
                     "(plans/plan_rlgl.md RLGL-033)");
             }
+            if (lightingEnabled &&
+                (normal == nullptr ||
+                 normal->getVertexElementFormatProperty() != VertexElementFormat::Vector3))
+            {
+                throw System::NotSupportedException(
+                    "RLGL: BasicEffect lighting requires Normal0 as Vector3 "
+                    "(plans/plan_rlgl.md RLGL-034)");
+            }
 
             std::vector<VertexAttributeBinding> result;
             result.reserve(
-                1u + (vertexColorEnabled ? 1u : 0u) + (textureEnabled ? 1u : 0u));
+                1u + (vertexColorEnabled ? 1u : 0u) + (textureEnabled ? 1u : 0u) +
+                (lightingEnabled ? 1u : 0u));
             result.push_back(DescribeVertexAttribute(*position, 0, stride));
             if (vertexColorEnabled)
                 result.push_back(DescribeVertexAttribute(*color, 1, stride));
             if (textureEnabled)
                 result.push_back(DescribeVertexAttribute(*textureCoordinate, 2, stride));
+            if (lightingEnabled)
+                result.push_back(DescribeVertexAttribute(*normal, 3, stride));
             return result;
         }
 
@@ -142,8 +156,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 hasInstanceStream = hasInstanceStream ||
                     params.vertexStreams[stream].instanceFrequency != 0;
             if (params.customEffectRequested || params.customEffectRenderer != nullptr ||
-                params.compiledEffectRuntime != nullptr || params.lightingEnabled ||
-                params.dualTexture || params.envMapping || params.skinned || params.pbr ||
+                params.compiledEffectRuntime != nullptr || params.dualTexture ||
+                params.envMapping || params.skinned || params.pbr ||
                 params.instanceCount != 1 || params.vertexStreamCount > 1 || hasInstanceStream)
             {
                 throw System::NotSupportedException(
@@ -181,7 +195,8 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
             const std::vector<VertexAttributeBinding> attributes = BuildStockAttributes(
-                vertexBuffer, params.vertexColorEnabled, params.textureEnabled);
+                vertexBuffer, params.vertexColorEnabled, params.textureEnabled,
+                params.lightingEnabled);
             Matrix worldViewProjection = world * view * projection;
             if (applyXnaPixelCenter && viewportWidth > 0 && viewportHeight > 0 &&
                 multiSampleCount <= 1)
@@ -199,9 +214,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 pipeline, GetNativeBufferId(vertexBuffer),
                 indexBuffer == nullptr ? 0u : GetNativeBufferId(*indexBuffer),
                 attributes.data(), static_cast<int>(attributes.size()),
-                columnMajor, params.diffuseColor, params.vertexColorEnabled,
-                texture, params.textureEnabled,
-                params.alphaTest, params.fogVector, params.fogColor,
+                columnMajor, texture, params,
                 static_cast<int>(primitive), elementCount,
                 firstVertex, startIndex, baseVertex,
                 indexBuffer != nullptr && indexBuffer->IsThirtyTwoBit());

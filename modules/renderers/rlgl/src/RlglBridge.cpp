@@ -1124,44 +1124,169 @@ void main()
 layout(location = 0) in vec3 vertexPosition;
 layout(location = 1) in vec4 vertexColor;
 layout(location = 2) in vec2 vertexTexCoord;
+layout(location = 3) in vec3 vertexNormal;
 
 uniform mat4 worldViewProjection;
+uniform mat4 world;
+uniform vec3 normalMatrix0;
+uniform vec3 normalMatrix1;
+uniform vec3 normalMatrix2;
 uniform vec4 diffuseColor;
 uniform float vertexColorEnabled;
 uniform vec4 fogVector;
+uniform float lightingEnabled;
+uniform vec3 ambientColor;
+uniform vec3 emissiveColor;
+uniform vec3 eyePosition;
+uniform vec3 light0Direction;
+uniform vec3 light1Direction;
+uniform vec3 light2Direction;
+uniform vec3 light0Diffuse;
+uniform vec3 light1Diffuse;
+uniform vec3 light2Diffuse;
+uniform vec3 light0Specular;
+uniform vec3 light1Specular;
+uniform vec3 light2Specular;
+uniform vec3 specularColor;
+uniform float specularPower;
 
-out vec4 fragmentColor;
+out vec4 fragmentVertexColor;
 out vec2 fragmentTexCoord;
 out float fragmentFogFactor;
+out vec3 fragmentWorldPosition;
+out vec3 fragmentNormal;
+out vec3 fragmentVertexLitRgb;
+out vec3 fragmentVertexSpecularRgb;
+out float fragmentVertexAlpha;
+
+void computeLights(vec3 worldPosition, vec3 normal, out vec3 litRgb, out vec3 specularRgb)
+{
+    vec3 eye = normalize(eyePosition - worldPosition);
+    float dotL0 = dot(normal, -light0Direction);
+    float dotL1 = dot(normal, -light1Direction);
+    float dotL2 = dot(normal, -light2Direction);
+    float zeroL0 = step(0.0, dotL0);
+    float zeroL1 = step(0.0, dotL1);
+    float zeroL2 = step(0.0, dotL2);
+    vec3 lightSum = ambientColor +
+        light0Diffuse * max(dotL0, 0.0) +
+        light1Diffuse * max(dotL1, 0.0) +
+        light2Diffuse * max(dotL2, 0.0);
+    litRgb = lightSum * diffuseColor.rgb + emissiveColor;
+    vec3 half0 = normalize(eye - light0Direction);
+    vec3 half1 = normalize(eye - light1Direction);
+    vec3 half2 = normalize(eye - light2Direction);
+    float spec0 = pow(max(dot(half0, normal), 0.0) * zeroL0, specularPower);
+    float spec1 = pow(max(dot(half1, normal), 0.0) * zeroL1, specularPower);
+    float spec2 = pow(max(dot(half2, normal), 0.0) * zeroL2, specularPower);
+    specularRgb = (spec0 * light0Specular + spec1 * light1Specular +
+        spec2 * light2Specular) * specularColor;
+}
 
 void main()
 {
     gl_Position = worldViewProjection * vec4(vertexPosition, 1.0);
     gl_PointSize = 1.0;
-    fragmentColor = diffuseColor *
-        ((vertexColorEnabled > 0.5) ? vertexColor : vec4(1.0));
+    fragmentVertexColor = (vertexColorEnabled > 0.5) ? vertexColor : vec4(1.0);
     fragmentTexCoord = vertexTexCoord;
     fragmentFogFactor = 1.0 - clamp(
         dot(vec4(vertexPosition, 1.0), fogVector), 0.0, 1.0);
+    fragmentWorldPosition = (world * vec4(vertexPosition, 1.0)).xyz;
+    mat3 normalMatrix = mat3(normalMatrix0, normalMatrix1, normalMatrix2);
+    fragmentNormal = normalMatrix * vertexNormal;
+    fragmentVertexLitRgb = vec3(0.0);
+    fragmentVertexSpecularRgb = vec3(0.0);
+    fragmentVertexAlpha = diffuseColor.a * fragmentVertexColor.a;
+    if (lightingEnabled > 0.5)
+    {
+        vec3 litRgb;
+        vec3 specularRgb;
+        computeLights(fragmentWorldPosition, normalize(fragmentNormal), litRgb, specularRgb);
+        // D3D9's oD0/oD1 colour outputs saturate before interpolation. XNA depends on that
+        // ordering when multiple light/material terms exceed one at only some vertices.
+        fragmentVertexLitRgb = clamp(litRgb * fragmentVertexColor.rgb, 0.0, 1.0);
+        fragmentVertexSpecularRgb = clamp(specularRgb, 0.0, 1.0);
+    }
 }
 )";
         static constexpr const char* fragmentShader = R"(#version 330 core
-in vec4 fragmentColor;
+in vec4 fragmentVertexColor;
 in vec2 fragmentTexCoord;
 in float fragmentFogFactor;
+in vec3 fragmentWorldPosition;
+in vec3 fragmentNormal;
+in vec3 fragmentVertexLitRgb;
+in vec3 fragmentVertexSpecularRgb;
+in float fragmentVertexAlpha;
 
 uniform sampler2D texture0;
 uniform float textureEnabled;
 uniform vec4 alphaTest;
 uniform vec3 fogColor;
+uniform vec4 diffuseColor;
+uniform float lightingEnabled;
+uniform float preferPerPixelLighting;
+uniform vec3 ambientColor;
+uniform vec3 emissiveColor;
+uniform vec3 eyePosition;
+uniform vec3 light0Direction;
+uniform vec3 light1Direction;
+uniform vec3 light2Direction;
+uniform vec3 light0Diffuse;
+uniform vec3 light1Diffuse;
+uniform vec3 light2Diffuse;
+uniform vec3 light0Specular;
+uniform vec3 light1Specular;
+uniform vec3 light2Specular;
+uniform vec3 specularColor;
+uniform float specularPower;
 
 out vec4 finalColor;
+
+void computeLights(vec3 worldPosition, vec3 normal, out vec3 litRgb, out vec3 specularRgb)
+{
+    vec3 eye = normalize(eyePosition - worldPosition);
+    float dotL0 = dot(normal, -light0Direction);
+    float dotL1 = dot(normal, -light1Direction);
+    float dotL2 = dot(normal, -light2Direction);
+    float zeroL0 = step(0.0, dotL0);
+    float zeroL1 = step(0.0, dotL1);
+    float zeroL2 = step(0.0, dotL2);
+    vec3 lightSum = ambientColor +
+        light0Diffuse * max(dotL0, 0.0) +
+        light1Diffuse * max(dotL1, 0.0) +
+        light2Diffuse * max(dotL2, 0.0);
+    litRgb = lightSum * diffuseColor.rgb + emissiveColor;
+    vec3 half0 = normalize(eye - light0Direction);
+    vec3 half1 = normalize(eye - light1Direction);
+    vec3 half2 = normalize(eye - light2Direction);
+    float spec0 = pow(max(dot(half0, normal), 0.0) * zeroL0, specularPower);
+    float spec1 = pow(max(dot(half1, normal), 0.0) * zeroL1, specularPower);
+    float spec2 = pow(max(dot(half2, normal), 0.0) * zeroL2, specularPower);
+    specularRgb = (spec0 * light0Specular + spec1 * light1Specular +
+        spec2 * light2Specular) * specularColor;
+}
 
 void main()
 {
     vec4 sampled = (textureEnabled > 0.5)
         ? texture(texture0, fragmentTexCoord) : vec4(1.0);
-    finalColor = sampled * fragmentColor;
+    if (lightingEnabled > 0.5)
+    {
+        vec3 litRgb = fragmentVertexLitRgb;
+        vec3 specularRgb = fragmentVertexSpecularRgb;
+        if (preferPerPixelLighting > 0.5)
+        {
+            computeLights(fragmentWorldPosition, normalize(fragmentNormal), litRgb, specularRgb);
+            litRgb *= fragmentVertexColor.rgb;
+        }
+        finalColor = sampled * vec4(litRgb, fragmentVertexAlpha);
+        finalColor.rgb += specularRgb * finalColor.a;
+    }
+    else
+    {
+        finalColor = sampled * diffuseColor * fragmentVertexColor;
+    }
     float comparison = (alphaTest.y > 0.0)
         ? ((abs(finalColor.a - alphaTest.x) < alphaTest.y)
             ? alphaTest.z : alphaTest.w)
@@ -1179,6 +1304,11 @@ void main()
                 throw std::runtime_error("RLGL: primitive shader creation failed");
             pipeline.worldViewProjectionLocation =
                 rlGetLocationUniform(pipeline.program, "worldViewProjection");
+            pipeline.worldLocation = rlGetLocationUniform(pipeline.program, "world");
+            pipeline.normalMatrixLocations = {
+                rlGetLocationUniform(pipeline.program, "normalMatrix0"),
+                rlGetLocationUniform(pipeline.program, "normalMatrix1"),
+                rlGetLocationUniform(pipeline.program, "normalMatrix2")};
             pipeline.diffuseColorLocation =
                 rlGetLocationUniform(pipeline.program, "diffuseColor");
             pipeline.vertexColorEnabledLocation =
@@ -1193,12 +1323,53 @@ void main()
                 rlGetLocationUniform(pipeline.program, "fogVector");
             pipeline.fogColorLocation =
                 rlGetLocationUniform(pipeline.program, "fogColor");
+            pipeline.lightingEnabledLocation =
+                rlGetLocationUniform(pipeline.program, "lightingEnabled");
+            pipeline.preferPerPixelLightingLocation =
+                rlGetLocationUniform(pipeline.program, "preferPerPixelLighting");
+            pipeline.ambientColorLocation =
+                rlGetLocationUniform(pipeline.program, "ambientColor");
+            pipeline.emissiveColorLocation =
+                rlGetLocationUniform(pipeline.program, "emissiveColor");
+            pipeline.eyePositionLocation =
+                rlGetLocationUniform(pipeline.program, "eyePosition");
+            pipeline.lightDirectionLocations = {
+                rlGetLocationUniform(pipeline.program, "light0Direction"),
+                rlGetLocationUniform(pipeline.program, "light1Direction"),
+                rlGetLocationUniform(pipeline.program, "light2Direction")};
+            pipeline.lightDiffuseLocations = {
+                rlGetLocationUniform(pipeline.program, "light0Diffuse"),
+                rlGetLocationUniform(pipeline.program, "light1Diffuse"),
+                rlGetLocationUniform(pipeline.program, "light2Diffuse")};
+            pipeline.lightSpecularLocations = {
+                rlGetLocationUniform(pipeline.program, "light0Specular"),
+                rlGetLocationUniform(pipeline.program, "light1Specular"),
+                rlGetLocationUniform(pipeline.program, "light2Specular")};
+            pipeline.specularColorLocation =
+                rlGetLocationUniform(pipeline.program, "specularColor");
+            pipeline.specularPowerLocation =
+                rlGetLocationUniform(pipeline.program, "specularPower");
             if (pipeline.worldViewProjectionLocation < 0 ||
-                pipeline.diffuseColorLocation < 0 ||
+                pipeline.worldLocation < 0 || pipeline.normalMatrixLocations[0] < 0 ||
+                pipeline.normalMatrixLocations[1] < 0 ||
+                pipeline.normalMatrixLocations[2] < 0 || pipeline.diffuseColorLocation < 0 ||
                 pipeline.vertexColorEnabledLocation < 0 ||
                 pipeline.textureLocation < 0 || pipeline.textureEnabledLocation < 0 ||
                 pipeline.alphaTestLocation < 0 || pipeline.fogVectorLocation < 0 ||
-                pipeline.fogColorLocation < 0)
+                pipeline.fogColorLocation < 0 || pipeline.lightingEnabledLocation < 0 ||
+                pipeline.preferPerPixelLightingLocation < 0 ||
+                pipeline.ambientColorLocation < 0 || pipeline.emissiveColorLocation < 0 ||
+                pipeline.eyePositionLocation < 0 ||
+                pipeline.lightDirectionLocations[0] < 0 ||
+                pipeline.lightDirectionLocations[1] < 0 ||
+                pipeline.lightDirectionLocations[2] < 0 ||
+                pipeline.lightDiffuseLocations[0] < 0 ||
+                pipeline.lightDiffuseLocations[1] < 0 ||
+                pipeline.lightDiffuseLocations[2] < 0 ||
+                pipeline.lightSpecularLocations[0] < 0 ||
+                pipeline.lightSpecularLocations[1] < 0 ||
+                pipeline.lightSpecularLocations[2] < 0 ||
+                pipeline.specularColorLocation < 0 || pipeline.specularPowerLocation < 0)
             {
                 throw std::runtime_error("RLGL: primitive shader uniforms are incomplete");
             }
@@ -1232,10 +1403,7 @@ void main()
         const unsigned int vertexBuffer, const unsigned int indexBuffer,
         const VertexAttributeBinding* const attributes, const int attributeCount,
         const float* const worldViewProjectionColumnMajor,
-        const float* const diffuseColor, const bool vertexColorEnabled,
-        const unsigned int texture, const bool textureEnabled,
-        const float* const alphaTest, const float* const fogVector,
-        const float* const fogColor,
+        const unsigned int texture, const GpuDrawParams& params,
         const int primitiveType, const int elementCount,
         const int firstVertex, const int startIndex, const int baseVertex,
         const bool thirtyTwoBitIndices)
@@ -1243,9 +1411,8 @@ void main()
         RequireInitialized("primitive draw");
         if (pipeline.program == 0 || pipeline.vertexArray == 0 ||
             vertexBuffer == 0 || attributes == nullptr || attributeCount <= 0 ||
-            worldViewProjectionColumnMajor == nullptr || diffuseColor == nullptr ||
-            alphaTest == nullptr || fogVector == nullptr || fogColor == nullptr ||
-            elementCount <= 0 || firstVertex < 0 || startIndex < 0 || baseVertex < 0)
+            worldViewProjectionColumnMajor == nullptr || elementCount <= 0 ||
+            firstVertex < 0 || startIndex < 0 || baseVertex < 0)
         {
             throw std::invalid_argument("RLGL: invalid primitive draw request");
         }
@@ -1282,22 +1449,103 @@ void main()
         matrix.m14 = worldViewProjectionColumnMajor[14];
         matrix.m15 = worldViewProjectionColumnMajor[15];
         rlSetUniformMatrix(pipeline.worldViewProjectionLocation, matrix);
+
+        ::Matrix worldMatrix{};
+        worldMatrix.m0 = params.worldColMajor[0];
+        worldMatrix.m1 = params.worldColMajor[1];
+        worldMatrix.m2 = params.worldColMajor[2];
+        worldMatrix.m3 = params.worldColMajor[3];
+        worldMatrix.m4 = params.worldColMajor[4];
+        worldMatrix.m5 = params.worldColMajor[5];
+        worldMatrix.m6 = params.worldColMajor[6];
+        worldMatrix.m7 = params.worldColMajor[7];
+        worldMatrix.m8 = params.worldColMajor[8];
+        worldMatrix.m9 = params.worldColMajor[9];
+        worldMatrix.m10 = params.worldColMajor[10];
+        worldMatrix.m11 = params.worldColMajor[11];
+        worldMatrix.m12 = params.worldColMajor[12];
+        worldMatrix.m13 = params.worldColMajor[13];
+        worldMatrix.m14 = params.worldColMajor[14];
+        worldMatrix.m15 = params.worldColMajor[15];
+        rlSetUniformMatrix(pipeline.worldLocation, worldMatrix);
+
+        const float* const w = params.worldColMajor;
+        const float a=w[0], d=w[1], g=w[2];
+        const float b=w[4], e=w[5], h=w[6];
+        const float c=w[8], f=w[9], i=w[10];
+        const float determinant = a*(e*i-f*h) - b*(d*i-f*g) + c*(d*h-e*g);
+        const float inverseDeterminant = determinant != 0.0f ? 1.0f/determinant : 0.0f;
+        const float normalMatrix[3][3] = {
+            {(e*i-f*h)*inverseDeterminant, -(b*i-c*h)*inverseDeterminant,
+             (b*f-c*e)*inverseDeterminant},
+            {-(d*i-f*g)*inverseDeterminant, (a*i-c*g)*inverseDeterminant,
+             -(a*f-c*d)*inverseDeterminant},
+            {(d*h-e*g)*inverseDeterminant, -(a*h-b*g)*inverseDeterminant,
+             (a*e-b*d)*inverseDeterminant}};
+        for (int column = 0; column < 3; ++column)
+        {
+            rlSetUniform(
+                pipeline.normalMatrixLocations[static_cast<std::size_t>(column)],
+                normalMatrix[column], RL_SHADER_UNIFORM_VEC3, 1);
+        }
         rlSetUniform(
-            pipeline.diffuseColorLocation, diffuseColor, RL_SHADER_UNIFORM_VEC4, 1);
-        const float vertexColorFlag = vertexColorEnabled ? 1.0f : 0.0f;
+            pipeline.diffuseColorLocation, params.diffuseColor, RL_SHADER_UNIFORM_VEC4, 1);
+        const float vertexColorFlag = params.vertexColorEnabled ? 1.0f : 0.0f;
         rlSetUniform(
             pipeline.vertexColorEnabledLocation, &vertexColorFlag,
             RL_SHADER_UNIFORM_FLOAT, 1);
         constexpr int textureUnit = 0;
         rlSetUniform(pipeline.textureLocation, &textureUnit, RL_SHADER_UNIFORM_INT, 1);
-        const float textureFlag = textureEnabled ? 1.0f : 0.0f;
+        const float textureFlag = params.textureEnabled ? 1.0f : 0.0f;
         rlSetUniform(
             pipeline.textureEnabledLocation, &textureFlag,
             RL_SHADER_UNIFORM_FLOAT, 1);
-        rlSetUniform(pipeline.alphaTestLocation, alphaTest, RL_SHADER_UNIFORM_VEC4, 1);
-        rlSetUniform(pipeline.fogVectorLocation, fogVector, RL_SHADER_UNIFORM_VEC4, 1);
-        rlSetUniform(pipeline.fogColorLocation, fogColor, RL_SHADER_UNIFORM_VEC3, 1);
-        if (textureEnabled)
+        rlSetUniform(
+            pipeline.alphaTestLocation, params.alphaTest, RL_SHADER_UNIFORM_VEC4, 1);
+        rlSetUniform(
+            pipeline.fogVectorLocation, params.fogVector, RL_SHADER_UNIFORM_VEC4, 1);
+        rlSetUniform(
+            pipeline.fogColorLocation, params.fogColor, RL_SHADER_UNIFORM_VEC3, 1);
+        const float lightingFlag = params.lightingEnabled ? 1.0f : 0.0f;
+        const float perPixelFlag = params.preferPerPixelLighting ? 1.0f : 0.0f;
+        rlSetUniform(
+            pipeline.lightingEnabledLocation, &lightingFlag, RL_SHADER_UNIFORM_FLOAT, 1);
+        rlSetUniform(
+            pipeline.preferPerPixelLightingLocation, &perPixelFlag,
+            RL_SHADER_UNIFORM_FLOAT, 1);
+        rlSetUniform(
+            pipeline.ambientColorLocation, params.ambientColor, RL_SHADER_UNIFORM_VEC3, 1);
+        rlSetUniform(
+            pipeline.emissiveColorLocation, params.emissiveColor, RL_SHADER_UNIFORM_VEC3, 1);
+        rlSetUniform(
+            pipeline.eyePositionLocation, params.eyePositionWorld,
+            RL_SHADER_UNIFORM_VEC3, 1);
+        const float* const lightDirections[3] = {
+            params.light0Dir, params.light1Dir, params.light2Dir};
+        const float* const lightDiffuse[3] = {
+            params.light0Diffuse, params.light1Diffuse, params.light2Diffuse};
+        const float* const lightSpecular[3] = {
+            params.light0Specular, params.light1Specular, params.light2Specular};
+        for (int light = 0; light < 3; ++light)
+        {
+            const std::size_t index = static_cast<std::size_t>(light);
+            rlSetUniform(
+                pipeline.lightDirectionLocations[index], lightDirections[light],
+                RL_SHADER_UNIFORM_VEC3, 1);
+            rlSetUniform(
+                pipeline.lightDiffuseLocations[index], lightDiffuse[light],
+                RL_SHADER_UNIFORM_VEC3, 1);
+            rlSetUniform(
+                pipeline.lightSpecularLocations[index], lightSpecular[light],
+                RL_SHADER_UNIFORM_VEC3, 1);
+        }
+        rlSetUniform(
+            pipeline.specularColorLocation, params.specularColor,
+            RL_SHADER_UNIFORM_VEC3, 1);
+        rlSetUniform(
+            pipeline.specularPowerLocation, &params.specularPower,
+            RL_SHADER_UNIFORM_FLOAT, 1);
+        if (params.textureEnabled)
         {
             rlActiveTextureSlot(textureUnit);
             rlEnableTexture(texture != 0 ? texture : rlGetTextureIdDefault());
@@ -1305,7 +1553,7 @@ void main()
 
         if (!rlEnableVertexArray(pipeline.vertexArray))
         {
-            if (textureEnabled)
+            if (params.textureEnabled)
             {
                 rlActiveTextureSlot(textureUnit);
                 rlDisableTexture();
@@ -1327,7 +1575,7 @@ void main()
             {
                 rlDisableVertexArray();
                 rlDisableVertexBuffer();
-                if (textureEnabled)
+                if (params.textureEnabled)
                 {
                     rlActiveTextureSlot(textureUnit);
                     rlDisableTexture();
@@ -1349,7 +1597,7 @@ void main()
         snapshot.baseVertex = baseVertex;
         snapshot.indexed = indexBuffer != 0;
         snapshot.texture = texture;
-        snapshot.textureEnabled = textureEnabled;
+        snapshot.textureEnabled = params.textureEnabled;
         if (indexBuffer == 0)
         {
             if (mode == GL_TRIANGLES)
@@ -1392,7 +1640,7 @@ void main()
 
         rlDisableVertexArray();
         rlDisableVertexBuffer();
-        if (textureEnabled)
+        if (params.textureEnabled)
         {
             rlActiveTextureSlot(textureUnit);
             rlDisableTexture();

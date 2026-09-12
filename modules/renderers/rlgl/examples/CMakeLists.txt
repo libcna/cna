@@ -66,6 +66,48 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_xna_pixel_center PRIVATE SDL3::SDL3main)
     endif()
 
+    set(RLGL_BASIC_EFFECT_TESTS
+        one_light
+        multilight_emissive
+        specular
+        preferperpixellighting
+        lit_vertex_color
+        vertex_color_clamp
+        world_scale_precision)
+    foreach(test_name IN LISTS RLGL_BASIC_EFFECT_TESTS)
+        add_executable(cna_test_rlgl_basiceffect_${test_name}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_basiceffect_${test_name}_test.cpp")
+        target_link_libraries(cna_test_rlgl_basiceffect_${test_name}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_basiceffect_${test_name} PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+
+    add_executable(cna_test_rlgl_basiceffect_lit_vertex_color_perpixel
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/basiceffect_lit_vertex_color_perpixel_test.cpp")
+    target_link_libraries(cna_test_rlgl_basiceffect_lit_vertex_color_perpixel
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_basiceffect_lit_vertex_color_perpixel
+            PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_basiceffect_normal_transform
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../bgfx/examples/bgfx_basiceffect_normaltransform_test.cpp")
+    target_link_libraries(cna_test_rlgl_basiceffect_normal_transform
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_basiceffect_normal_transform PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_basiceffect_lighting rlgl_basic_effect_lighting_test.cpp)
+    target_link_libraries(cna_test_rlgl_basiceffect_lighting
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_basiceffect_lighting PRIVATE SDL3::SDL3main)
+    endif()
+
     if(CNA_BUILD_TESTS)
         enable_testing()
         cna_register_renderer_test(NAME Rlgl_Smoke COMMAND cna_test_rlgl_smoke
@@ -94,6 +136,28 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_XnaPixelCenter COMMAND cna_test_rlgl_xna_pixel_center
             TIMEOUT 60 LABELS "Graphics3D;GraphicsContract;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        foreach(test_name IN LISTS RLGL_BASIC_EFFECT_TESTS)
+            cna_register_renderer_test(
+                NAME Rlgl_BasicEffect_${test_name}
+                COMMAND cna_test_rlgl_basiceffect_${test_name}
+                TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
+        cna_register_renderer_test(
+            NAME Rlgl_BasicEffect_lit_vertex_color_perpixel
+            COMMAND cna_test_rlgl_basiceffect_lit_vertex_color_perpixel
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_BasicEffect_normal_transform
+            COMMAND cna_test_rlgl_basiceffect_normal_transform
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_BasicEffect_lighting
+            COMMAND cna_test_rlgl_basiceffect_lighting
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
     endif()
 endif()
