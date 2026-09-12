@@ -300,6 +300,16 @@ namespace CNA::Internal::Renderers::Rlgl
         return false;
     }
 
+    void RlglRenderer::ReadBackbuffer(
+        const int x, const int y, const int w, const int h, uint8_t* pixels)
+    {
+        int framebufferWidth = 0;
+        int framebufferHeight = 0;
+        GetPhysicalSize(framebufferWidth, framebufferHeight);
+        (void)framebufferWidth;
+        Bridge::ReadBackbuffer(x, y, w, h, framebufferHeight, pixels);
+    }
+
     std::unique_ptr<ITextureRenderer> RlglRenderer::CreateTexture(const ImageData& data)
     {
         (void)data;

@@ -4,8 +4,10 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -173,6 +175,32 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     void SetScissor(const int x, const int y, const int width, const int height)
     {
         rlScissor(x, y, width, height);
+    }
+
+    void ReadBackbuffer(
+        const int x, const int y, const int width, const int height,
+        const int framebufferHeight, unsigned char* pixels)
+    {
+        GLint previousPackAlignment = 4;
+        glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(
+            x, framebufferHeight - y - height, width, height,
+            GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+        ThrowIfGlError("backbuffer readback");
+
+        const std::size_t rowBytes = static_cast<std::size_t>(width) * 4u;
+        std::vector<unsigned char> temporary(rowBytes);
+        for (int row = 0; row < height / 2; ++row)
+        {
+            unsigned char* top = pixels + static_cast<std::size_t>(row) * rowBytes;
+            unsigned char* bottom =
+                pixels + static_cast<std::size_t>(height - row - 1) * rowBytes;
+            std::memcpy(temporary.data(), top, rowBytes);
+            std::memcpy(top, bottom, rowBytes);
+            std::memcpy(bottom, temporary.data(), rowBytes);
+        }
     }
 
     void BindDefaultFramebuffer()

@@ -88,6 +88,18 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      */
     void SetScissor(int x, int y, int width, int height);
 
+    /**
+     * @brief Reads an RGBA8 backbuffer rectangle and normalizes it to top-left row order.
+     * @param x Left edge in top-left-origin coordinates.
+     * @param y Top edge in top-left-origin coordinates.
+     * @param width Width in pixels.
+     * @param height Height in pixels.
+     * @param framebufferHeight Current physical framebuffer height.
+     * @param pixels Destination holding at least width * height * 4 bytes.
+     */
+    void ReadBackbuffer(
+        int x, int y, int width, int height, int framebufferHeight, unsigned char* pixels);
+
     /** @brief Restores the platform default framebuffer as the active draw target. */
     void BindDefaultFramebuffer();
 }

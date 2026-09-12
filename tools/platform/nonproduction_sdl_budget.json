@@ -753,6 +753,10 @@
       "category": "renderer-integration-executable",
       "max_references": 5
     },
+    "modules/renderers/rlgl/examples/rlgl_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 4
+    },
     "modules/renderers/sdl-gpu/examples/sdlgpu_constructor_exception_safety_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 39

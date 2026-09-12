@@ -146,6 +146,17 @@ namespace CNA::Internal::Renderers::Rlgl
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
         /**
+         * @brief Reads an RGBA8 region of the current back buffer in top-left row order.
+         *
+         * @param x Left edge in game/backbuffer coordinates.
+         * @param y Top edge in game/backbuffer coordinates.
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param pixels Destination holding at least w * h * 4 bytes.
+         */
+        void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
+
+        /**
          * @brief Creates a sampled two-dimensional texture.
          *
          * @param data Texture dimensions and initial pixels.

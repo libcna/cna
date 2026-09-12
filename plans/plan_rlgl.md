@@ -1,6 +1,6 @@
 # RLGL Renderer Plan
 
-**Status:** Active — device vertical slice implemented and building; runtime smoke next
+**Status:** Active — device vertical slice runtime-validated; documentation/CI and resources next
 **Target identity:** `RLGL`  
 **Primary parity reference:** EasyGL  
 **Initial profile:** OpenGL 3.3 core  
@@ -19,12 +19,12 @@ Only ✅ items count as complete. Compiling code alone is not sufficient evidenc
 
 - Repository architecture, EasyGL responsibilities, platform GL ownership, renderer selection, resource interfaces, effect flow, test infrastructure, and upstream rlgl 6.0 have been audited.
 - `RLGL` is a registered compile-time/runtime renderer identity backed by a SHA-256-verified standalone-rlgl dependency target. Its factory now constructs a real CNA-owned OpenGL 3.3 core context and standalone rlgl device.
-- The first vertical slice is implemented: selection → CNA-created GL context → rlgl loader/init → `GraphicsDevice` → clear → present → shutdown. Runtime pixel evidence is the next task, RLGL-007.
+- The first vertical slice is runtime-validated: selection → CNA-created GL context → rlgl loader/init → `GraphicsDevice` → selective clear → readback → present → resize → shutdown, including two sequential device lifecycles.
 - Classic XNA 4.0 parity is the priority. Existing CNA extensions are tracked separately and do not gate the classic parity declaration.
 
 ## Current limitations
 
-1. `RLGL` configures and fully builds with a real factory and device implementation. Runtime context/clear/present/readback validation still belongs to RLGL-007 and is not inferred from compilation.
+1. `RLGL` configures, fully builds, and passes its renderer-local smoke test with Mesa llvmpipe 25.0.7 through SDL's `offscreen` GL driver (OpenGL 4.5 core granted for the 3.3-core request). This proves the current Linux vertical slice, not untested Windows/macOS behavior.
 2. Device lifecycle, physical/logical presentation tracking, exact selective clears, viewport/scissor coordinates, swap interval, default-framebuffer restoration, and basic depth/blend/write toggles are implemented. Texture, SpriteBatch, buffer, draw, effect, render-target, reset, and query resources remain unavailable and throw stable diagnostics where a required factory exists.
 3. Upstream rlgl keeps one process-global `RLGL` state object. The initial backend will therefore enforce one live RLGL device and will not claim concurrent multi-context support.
 4. Several GL 3.3 operations required for XNA fidelity have no rlgl 6.0 public wrapper: arbitrary primitive modes and 32-bit index draws, depth comparison, stencil configuration, depth bias, indexed color masks, and some multisample attachment operations. Renderer-private bridge calls through the GL dispatch loaded by rlgl are permitted only for such measured gaps; they do not create CNA public API.
@@ -124,12 +124,12 @@ This matrix records measured implementation shape, not promises. “Direct GL br
 
 | Area | Capability | EasyGL | Upstream rlgl 6.0 / GL 3.3 | RLGL status | Classification / next evidence |
 |---|---|---|---|---|---|
-| Device | Initialization | Implemented | `rlLoadExtensions`, `rlglInit` | 🟨 | Implemented with GL 3.3/granted-profile validation and a one-live-device guard; runtime smoke is RLGL-007 |
-| Device | Resize | Implemented | Viewport/matrix APIs; CNA owns drawable size | 🟨 | Drawable and rlgl framebuffer bookkeeping update implemented; resize pixel test is RLGL-007 |
+| Device | Initialization | Implemented | `rlLoadExtensions`, `rlglInit` | ✅ | Two sequential real GraphicsDevice/context/rlgl lifecycles passed under Mesa llvmpipe; single-live guard release proven |
+| Device | Resize | Implemented | Viewport/matrix APIs; CNA owns drawable size | ✅ | GraphicsDeviceManager resize, synchronized surface refresh, logical/physical rectangle checks, and post-resize pixel readback passed |
 | Device | Fullscreen | Implemented through CNA platform | No window API needed | ⬜ | Straightforward integration; platform smoke |
 | Device | Vsync | Implemented through platform context | No rlgl ownership | 🟨 | Platform swap-interval forwarding and requested-value reporting implemented; runtime verification is RLGL-007 |
-| Device | Clear | Color/depth/stencil and selective planes | Public helper clears color+depth and omits stencil; exact selective clear needs bridge | 🟨 | Exact plane selection and write-mask restoration implemented in the private bridge; pixel/state tests remain RLGL-007/RLGL-013 |
-| Device | Present | Implemented | CNA context swap; no rlgl batch is used | 🟨 | Platform swap implemented; visible/offscreen smoke is RLGL-007 |
+| Device | Clear | Color/depth/stencil and selective planes | Public helper clears color+depth and omits stencil; exact selective clear needs bridge | ✅ | Distinct color and combined color/depth/stencil clears passed exact pixel readback; exhaustive write-mask transitions remain RLGL-013 |
+| Device | Present | Implemented | CNA context swap; no rlgl batch is used | ✅ | Explicit GraphicsDevice.Present passed in both runtime lifecycle cycles |
 | Device | Viewport | Implemented | `rlViewport` | 🟨 | Top-left CNA to bottom-left GL mapping plus depth range implemented; pixel parity test remains |
 | Device | Scissor | Implemented | `rlScissor`; enable belongs to rasterizer state | 🟨 | Rectangle mapping implemented; clipping/state enable tests remain RLGL-013 |
 | Device | Backbuffer formats | Negotiated/reported | GL framebuffer plus CNA context attributes | ⬜ | Requires architectural work; achieved-format reporting |
@@ -234,7 +234,7 @@ Every state-family task must test both isolated application and transitions A �
 | RLGL-004 | ✅ | RLGL-001, RLGL-002 | Establish the measured EasyGL/rlgl/RLGL capability matrix and seed the concrete implementation DAG. Matrix reviewed against the public/common renderer contracts. |
 | RLGL-005 | ✅ | RLGL-003 | Added `RLGL`/`Rlgl` throughout CMake, the generated registry, dense C++ enum/classifications/tests, append-only C ABI value 51 (ABI 0.27.0), physical-module and GL-combination inventories, and an honest throwing factory pending RLGL-006. `cmake/ThirdPartyRlgl.cmake` fetches the official immutable raylib 6.0 commit archive with SHA-256 `81b06c…e126`, exposes only `src/`, defines GL 3.3, and never configures raylib. Validated 2026-09-12: RLGL configure succeeded with `FETCHCONTENT_SOURCE_DIR_RLGL=/tmp/cna-raylib-6.0-source`; `cmake --build /tmp/cna-rlgl-build3 --target cna_renderer_rlgl -j 4` built the target; C and C++ ABI header probes compiled; identity, runtime-discipline, combination, platform-SDL and whitespace gates passed. |
 | RLGL-006 | ✅ | RLGL-005 | Implemented a real factory and minimal renderer using CNA's `PlatformGlContextOwner`: requested/verified GL 3.3 core (with optional context-MSAA fallback and achieved attributes), one-live-device guard for rlgl's global state, CNA proc loader → `rlLoadExtensions`, transactional `rlglInit`, drawable bookkeeping, physical/logical viewport computation, selective color/depth/stencil clears with write-mask restoration, viewport/scissor mapping, swap interval/present, explicit pending-resource failures, registry lifetime, and context-current `rlglClose`. Standalone rlgl is isolated in one implementation TU; no raylib framework API is linked or called. Validated 2026-09-12: renderer target and full `/tmp/cna-rlgl-build3` configuration built successfully; renderer-target discipline, runtime-renderer discipline, CNAEXT Doxygen, and whitespace gates passed. Runtime GL evidence is deliberately separate in RLGL-007. |
-| RLGL-007 | ⬜ | RLGL-006 | Add automated or runnable context smoke coverage for device creation, clear/present, framebuffer readback where the environment permits, resize, and clean destruction. Record headless/Xvfb requirements. |
+| RLGL-007 | ✅ | RLGL-006 | Added exact RGBA8 backbuffer subrectangle readback through the rlgl-owned GL dispatch, including pack-alignment preservation and GL-to-XNA row normalization. Added `cna_test_rlgl_smoke`, always buildable for an RLGL configuration and registered with CTest when tests are enabled. It runs two sequential `Game`/`GraphicsDevice` lifecycles and checks requested logical size, truthful 3D capability, forwarded swap interval, pre-present color readback, combined color/depth/stencil clear, explicit Present, GraphicsDeviceManager resize + surface refresh, resized presentation rectangle/readback, and clean global rlgl release/reinit. Validated 2026-09-12 with `SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 /tmp/cna-rlgl-build3/cna_test_rlgl_smoke`: all 21 per-cycle/terminal checks passed on Mesa llvmpipe 25.0.7, OpenGL 4.5 core. Xvfb+x11 was attempted but this environment's SDL3 has no x11 driver; the registered smoke uses the proven offscreen path and exits 77 when no video device exists. |
 | RLGL-008 | ⬜ | RLGL-006 | Document enablement, dependency/offline override, supported initial platforms/profile, debugging, licensing, and current limitations; add configure/compile CI coverage without overstating runtime coverage. |
 | RLGL-009 | ⬜ | RLGL-006 | Implement Texture2D formats, upload/sub-update/readback/mipmaps and SamplerState with truthful capability reporting and format/sampling tests. |
 | RLGL-010 | ⬜ | RLGL-009 | Implement a CNA-owned low-level SpriteBatch path, then validate texture drawing, transforms, origin/effects, sorting, blending, clipping, and SpriteFont with existing tests/samples. |
