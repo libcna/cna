@@ -211,6 +211,13 @@ namespace CNA::Internal::Renderers::Rlgl
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
 
         /**
+         * @brief Returns the logical extent used by the current SpriteBatch viewport.
+         * @param width Receives the viewport-local logical width.
+         * @param height Receives the viewport-local logical height.
+         */
+        void GetSpriteBatchViewportSize(int& width, int& height);
+
+        /**
          * @brief Applies XNA filter, U/V addressing, and anisotropy to a texture slot.
          * @param slot Texture unit index.
          * @param filter Raw `TextureFilter` ordinal.
@@ -519,6 +526,9 @@ namespace CNA::Internal::Renderers::Rlgl
         float maxSamplerAnisotropy_ = 1.0f;
         std::array<SamplerRecord, 16> samplers_{};
         StencilRecord stencil_{};
+        int currentViewportWidth_ = 0;
+        int currentViewportHeight_ = 0;
+        bool viewportIsDefault_ = true;
         bool lifecycleClaimed_ = false;
         bool rlglInitialized_ = false;
         bool registered_ = false;

@@ -767,6 +767,179 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         return snapshot;
     }
 
+    SpritePipeline CreateSpritePipeline(
+        const int vertexCapacity, const int indexCapacity)
+    {
+        RequireInitialized("SpriteBatch pipeline creation");
+        if (vertexCapacity <= 0 || indexCapacity <= 0)
+            throw std::invalid_argument("RLGL: SpriteBatch capacities must be positive");
+
+        static constexpr const char* vertexShader = R"(#version 330 core
+layout(location = 0) in vec2 vertexPosition;
+layout(location = 1) in vec2 vertexTexCoord;
+layout(location = 2) in vec4 vertexColor;
+
+uniform mat4 projection;
+
+out vec2 fragmentTexCoord;
+out vec4 fragmentColor;
+
+void main()
+{
+    gl_Position = projection * vec4(vertexPosition, 0.0, 1.0);
+    fragmentTexCoord = vertexTexCoord;
+    fragmentColor = vertexColor;
+}
+)";
+        static constexpr const char* fragmentShader = R"(#version 330 core
+in vec2 fragmentTexCoord;
+in vec4 fragmentColor;
+
+uniform sampler2D texture0;
+
+out vec4 finalColor;
+
+void main()
+{
+    finalColor = texture(texture0, fragmentTexCoord) * fragmentColor;
+}
+)";
+
+        SpritePipeline pipeline;
+        pipeline.vertexCapacity = vertexCapacity;
+        pipeline.indexCapacity = indexCapacity;
+        try
+        {
+            pipeline.program = rlLoadShaderProgram(vertexShader, fragmentShader);
+            if (pipeline.program == 0 || pipeline.program == rlGetShaderIdDefault())
+                throw std::runtime_error("RLGL: SpriteBatch shader creation failed");
+
+            pipeline.projectionLocation =
+                rlGetLocationUniform(pipeline.program, "projection");
+            pipeline.textureLocation =
+                rlGetLocationUniform(pipeline.program, "texture0");
+            if (pipeline.projectionLocation < 0 || pipeline.textureLocation < 0)
+                throw std::runtime_error("RLGL: SpriteBatch shader uniforms are incomplete");
+
+            pipeline.vertexArray = rlLoadVertexArray();
+            if (pipeline.vertexArray == 0 || !rlEnableVertexArray(pipeline.vertexArray))
+                throw std::runtime_error("RLGL: SpriteBatch requires a vertex array object");
+
+            constexpr int vertexStride = 8 * static_cast<int>(sizeof(float));
+            pipeline.vertexBuffer = rlLoadVertexBuffer(
+                nullptr, vertexCapacity * vertexStride, true);
+            pipeline.indexBuffer = rlLoadVertexBufferElement(
+                nullptr, indexCapacity * static_cast<int>(sizeof(std::uint16_t)), true);
+            if (pipeline.vertexBuffer == 0 || pipeline.indexBuffer == 0)
+                throw std::runtime_error("RLGL: SpriteBatch buffer creation failed");
+
+            rlEnableVertexBuffer(pipeline.vertexBuffer);
+            rlEnableVertexAttribute(0);
+            rlSetVertexAttribute(0, 2, RL_FLOAT, false, vertexStride, 0);
+            rlEnableVertexAttribute(1);
+            rlSetVertexAttribute(
+                1, 2, RL_FLOAT, false, vertexStride,
+                2 * static_cast<int>(sizeof(float)));
+            rlEnableVertexAttribute(2);
+            rlSetVertexAttribute(
+                2, 4, RL_FLOAT, false, vertexStride,
+                4 * static_cast<int>(sizeof(float)));
+            rlEnableVertexBufferElement(pipeline.indexBuffer);
+            rlDisableVertexArray();
+            rlDisableVertexBuffer();
+            rlDisableVertexBufferElement();
+            ThrowIfGlError("SpriteBatch pipeline creation");
+            return pipeline;
+        }
+        catch (...)
+        {
+            rlDisableVertexArray();
+            DestroySpritePipeline(pipeline);
+            throw;
+        }
+    }
+
+    void DestroySpritePipeline(SpritePipeline& pipeline) noexcept
+    {
+        if (bridgeInitialized)
+        {
+            if (pipeline.indexBuffer != 0) rlUnloadVertexBuffer(pipeline.indexBuffer);
+            if (pipeline.vertexBuffer != 0) rlUnloadVertexBuffer(pipeline.vertexBuffer);
+            if (pipeline.vertexArray != 0) rlUnloadVertexArray(pipeline.vertexArray);
+            if (pipeline.program != 0 && pipeline.program != rlGetShaderIdDefault())
+                rlUnloadShaderProgram(pipeline.program);
+        }
+        pipeline = {};
+    }
+
+    void FlushImmediateBatch()
+    {
+        RequireInitialized("immediate-batch flush");
+        rlDrawRenderBatchActive();
+        ThrowIfGlError("immediate-batch flush");
+    }
+
+    void DrawSpriteGeometry(
+        const SpritePipeline& pipeline,
+        const float* vertices, const int vertexCount,
+        const std::uint16_t* indices, const int indexCount,
+        const float* projectionColumnMajor)
+    {
+        RequireInitialized("SpriteBatch draw");
+        if (pipeline.program == 0 || pipeline.vertexArray == 0 ||
+            pipeline.vertexBuffer == 0 || pipeline.indexBuffer == 0)
+        {
+            throw std::runtime_error("RLGL: SpriteBatch pipeline is not complete");
+        }
+        if (vertices == nullptr || indices == nullptr || projectionColumnMajor == nullptr ||
+            vertexCount <= 0 || vertexCount > pipeline.vertexCapacity ||
+            indexCount <= 0 || indexCount > pipeline.indexCapacity)
+        {
+            throw std::out_of_range("RLGL: SpriteBatch upload exceeds its pipeline capacity");
+        }
+
+        rlEnableShader(pipeline.program);
+
+        ::Matrix projection{};
+        projection.m0 = projectionColumnMajor[0];
+        projection.m1 = projectionColumnMajor[1];
+        projection.m2 = projectionColumnMajor[2];
+        projection.m3 = projectionColumnMajor[3];
+        projection.m4 = projectionColumnMajor[4];
+        projection.m5 = projectionColumnMajor[5];
+        projection.m6 = projectionColumnMajor[6];
+        projection.m7 = projectionColumnMajor[7];
+        projection.m8 = projectionColumnMajor[8];
+        projection.m9 = projectionColumnMajor[9];
+        projection.m10 = projectionColumnMajor[10];
+        projection.m11 = projectionColumnMajor[11];
+        projection.m12 = projectionColumnMajor[12];
+        projection.m13 = projectionColumnMajor[13];
+        projection.m14 = projectionColumnMajor[14];
+        projection.m15 = projectionColumnMajor[15];
+        rlSetUniformMatrix(pipeline.projectionLocation, projection);
+        constexpr int textureUnit = 0;
+        rlSetUniform(
+            pipeline.textureLocation, &textureUnit, RL_SHADER_UNIFORM_INT, 1);
+
+        if (!rlEnableVertexArray(pipeline.vertexArray))
+        {
+            rlDisableShader();
+            throw std::runtime_error("RLGL: SpriteBatch vertex array became unavailable");
+        }
+        rlUpdateVertexBuffer(
+            pipeline.vertexBuffer, vertices,
+            vertexCount * 8 * static_cast<int>(sizeof(float)), 0);
+        rlUpdateVertexBufferElements(
+            pipeline.indexBuffer, indices,
+            indexCount * static_cast<int>(sizeof(std::uint16_t)), 0);
+        rlDrawVertexArrayElements(0, indexCount, nullptr);
+        rlDisableVertexArray();
+        rlDisableVertexBuffer();
+        rlDisableShader();
+        ThrowIfGlError("SpriteBatch draw");
+    }
+
     std::uint8_t ReadStencilForTesting(
         const int x, const int y, const int framebufferHeight)
     {

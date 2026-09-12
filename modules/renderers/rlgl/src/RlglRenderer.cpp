@@ -395,7 +395,42 @@ namespace CNA::Internal::Renderers::Rlgl
 
     std::unique_ptr<ISpriteBatchRenderer> RlglRenderer::CreateSpriteBatch()
     {
-        Unsupported("SpriteBatch", "RLGL-010");
+        return CreateSpriteBatchRenderer(*this);
+    }
+
+    void RlglRenderer::GetSpriteBatchViewportSize(int& width, int& height)
+    {
+        int logicalWidth = 0;
+        int logicalHeight = 0;
+        GetLogicalSize(logicalWidth, logicalHeight);
+        if (viewportIsDefault_)
+        {
+            width = logicalWidth;
+            height = logicalHeight;
+            return;
+        }
+
+        int defaultX = 0;
+        int defaultY = 0;
+        int defaultWidth = 0;
+        int defaultHeight = 0;
+        GetDefaultViewportRect(
+            defaultX, defaultY, defaultWidth, defaultHeight);
+        (void)defaultX;
+        (void)defaultY;
+        if (logicalWidth > 0 && logicalHeight > 0 &&
+            defaultWidth > 0 && defaultHeight > 0)
+        {
+            width = static_cast<int>(std::lround(
+                static_cast<double>(currentViewportWidth_) * logicalWidth / defaultWidth));
+            height = static_cast<int>(std::lround(
+                static_cast<double>(currentViewportHeight_) * logicalHeight / defaultHeight));
+        }
+        else
+        {
+            width = currentViewportWidth_;
+            height = currentViewportHeight_;
+        }
     }
 
     RlglRenderer::SamplerRecord& RlglRenderer::GetSamplerRecord(const int slot)
@@ -626,6 +661,16 @@ namespace CNA::Internal::Renderers::Rlgl
         int framebufferHeight = 0;
         GetPhysicalSize(framebufferWidth, framebufferHeight);
         (void)framebufferWidth;
+        currentViewportWidth_ = w;
+        currentViewportHeight_ = h;
+        int defaultX = 0;
+        int defaultY = 0;
+        int defaultWidth = 0;
+        int defaultHeight = 0;
+        GetDefaultViewportRect(
+            defaultX, defaultY, defaultWidth, defaultHeight);
+        viewportIsDefault_ = x == defaultX && y == defaultY &&
+            w == defaultWidth && h == defaultHeight;
         Bridge::SetViewport(x, framebufferHeight - y - h, w, h, minDepth, maxDepth);
     }
 

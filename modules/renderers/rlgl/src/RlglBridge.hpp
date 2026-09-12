@@ -67,6 +67,19 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         float polygonOffsetUnits = 0.0f;
     };
 
+    /** @brief rlgl-owned low-level resources for the production sprite scheduler. */
+    struct SpritePipeline
+    {
+        unsigned int program = 0;
+        unsigned int vertexArray = 0;
+        unsigned int vertexBuffer = 0;
+        unsigned int indexBuffer = 0;
+        int projectionLocation = -1;
+        int textureLocation = -1;
+        int vertexCapacity = 0;
+        int indexCapacity = 0;
+    };
+
     enum ClearPlane : unsigned int
     {
         /** @brief Selects the active framebuffer's color planes. */
@@ -213,6 +226,39 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @return Current GL pipeline state.
      */
     [[nodiscard]] PipelineSnapshot GetPipelineSnapshotForTesting();
+
+    /**
+     * @brief Creates the fixed-layout shader and dynamic buffers used by SpriteBatch.
+     * @param vertexCapacity Maximum vertices accepted by one upload.
+     * @param indexCapacity Maximum 16-bit indices accepted by one upload.
+     * @return Complete rlgl-owned sprite pipeline.
+     */
+    [[nodiscard]] SpritePipeline CreateSpritePipeline(
+        int vertexCapacity, int indexCapacity);
+
+    /** @brief Drains rlgl's global immediate batch before a CNA-owned low-level draw. */
+    void FlushImmediateBatch();
+
+    /**
+     * @brief Releases a complete sprite pipeline while the rlgl context is current.
+     * @param pipeline Pipeline to release and clear.
+     */
+    void DestroySpritePipeline(SpritePipeline& pipeline) noexcept;
+
+    /**
+     * @brief Uploads and draws one triangle-list sprite texture group.
+     * @param pipeline Live sprite pipeline.
+     * @param vertices Interleaved position, UV, and color float data.
+     * @param vertexCount Number of eight-float vertices.
+     * @param indices Triangle-list 16-bit indices.
+     * @param indexCount Number of indices.
+     * @param projectionColumnMajor XNA matrix flattened for a GL column-major upload.
+     */
+    void DrawSpriteGeometry(
+        const SpritePipeline& pipeline,
+        const float* vertices, int vertexCount,
+        const std::uint16_t* indices, int indexCount,
+        const float* projectionColumnMajor);
 
     /**
      * @brief Reads one default-framebuffer stencil value for focused validation.
