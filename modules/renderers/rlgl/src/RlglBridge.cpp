@@ -2,6 +2,7 @@
 
 #include "CNA/Logger.hpp"
 
+#include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -104,6 +105,56 @@ namespace
     private:
         GLint alignment_ = 4;
     };
+
+    [[nodiscard]] GLint SamplerMinFilter(const int filter)
+    {
+        switch (filter)
+        {
+        case 0: return GL_LINEAR_MIPMAP_LINEAR;
+        case 1: return GL_NEAREST_MIPMAP_NEAREST;
+        case 2: return GL_LINEAR_MIPMAP_LINEAR;
+        case 3: return GL_LINEAR_MIPMAP_NEAREST;
+        case 4: return GL_NEAREST_MIPMAP_LINEAR;
+        case 5: return GL_LINEAR_MIPMAP_LINEAR;
+        case 6: return GL_LINEAR_MIPMAP_NEAREST;
+        case 7: return GL_NEAREST_MIPMAP_LINEAR;
+        case 8: return GL_NEAREST_MIPMAP_NEAREST;
+        default:
+            throw std::invalid_argument("RLGL: invalid TextureFilter ordinal");
+        }
+    }
+
+    [[nodiscard]] GLint SamplerMagFilter(const int filter)
+    {
+        switch (filter)
+        {
+        case 0:
+        case 2:
+        case 3:
+        case 7:
+        case 8:
+            return GL_LINEAR;
+        case 1:
+        case 4:
+        case 5:
+        case 6:
+            return GL_NEAREST;
+        default:
+            throw std::invalid_argument("RLGL: invalid TextureFilter ordinal");
+        }
+    }
+
+    [[nodiscard]] GLint SamplerWrap(const int addressMode)
+    {
+        switch (addressMode)
+        {
+        case 0: return GL_REPEAT;
+        case 1: return GL_CLAMP_TO_EDGE;
+        case 2: return GL_MIRRORED_REPEAT;
+        default:
+            throw std::invalid_argument("RLGL: invalid TextureAddressMode ordinal");
+        }
+    }
 }
 
 namespace CNA::Internal::Renderers::Rlgl::Bridge
@@ -407,6 +458,164 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         glActiveTexture(static_cast<GLenum>(previousActiveTexture));
         ThrowIfGlError("Texture2D binding query");
         return static_cast<unsigned int>(texture);
+    }
+
+    int GetMaxSamplerSlots()
+    {
+        RequireInitialized("sampler-slot query");
+        GLint value = 0;
+        glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &value);
+        ThrowIfGlError("GL_MAX_TEXTURE_IMAGE_UNITS query");
+        if (value <= 0)
+            throw std::runtime_error("RLGL: driver reported no fragment texture units");
+        return value;
+    }
+
+    float GetMaxSamplerAnisotropy()
+    {
+        RequireInitialized("sampler-anisotropy query");
+        if (!RLGL.ExtSupported.texAnisoFilter) return 1.0f;
+        return std::max(1.0f, RLGL.ExtSupported.maxAnisotropyLevel);
+    }
+
+    unsigned int CreateSampler()
+    {
+        RequireInitialized("sampler creation");
+        GLuint sampler = 0;
+        glGenSamplers(1, &sampler);
+        ThrowIfGlError("sampler creation");
+        if (sampler == 0)
+            throw std::runtime_error("RLGL: OpenGL returned a zero sampler name");
+        return sampler;
+    }
+
+    void DestroySamplers(const unsigned int* samplers, const std::size_t count) noexcept
+    {
+        if (!bridgeInitialized || samplers == nullptr || count == 0) return;
+        glDeleteSamplers(static_cast<GLsizei>(count), samplers);
+    }
+
+    void ApplySampler(
+        const unsigned int sampler, const int slot, const int filter,
+        const int addressU, const int addressV, const int addressW,
+        const int maxAnisotropy, const int maxMipLevel, const float lodBias)
+    {
+        RequireInitialized("sampler application");
+        if (sampler == 0 || slot < 0 || slot >= GetMaxSamplerSlots())
+            throw std::out_of_range("RLGL: sampler or texture slot is invalid");
+
+        glSamplerParameteri(sampler, GL_TEXTURE_MIN_FILTER, SamplerMinFilter(filter));
+        glSamplerParameteri(sampler, GL_TEXTURE_MAG_FILTER, SamplerMagFilter(filter));
+        glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, SamplerWrap(addressU));
+        glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, SamplerWrap(addressV));
+        glSamplerParameteri(sampler, GL_TEXTURE_WRAP_R, SamplerWrap(addressW));
+        glSamplerParameterf(
+            sampler, GL_TEXTURE_MIN_LOD, static_cast<float>(std::max(maxMipLevel, 0)));
+        glSamplerParameterf(sampler, GL_TEXTURE_MAX_LOD, 1000.0f);
+        glSamplerParameterf(sampler, GL_TEXTURE_LOD_BIAS, lodBias);
+        glSamplerParameteri(sampler, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+
+        if (RLGL.ExtSupported.texAnisoFilter)
+        {
+            const float requested = filter == 2
+                ? static_cast<float>(std::max(maxAnisotropy, 1))
+                : 1.0f;
+            glSamplerParameterf(
+                sampler, GL_TEXTURE_MAX_ANISOTROPY_EXT,
+                std::min(requested, GetMaxSamplerAnisotropy()));
+        }
+
+        glBindSampler(static_cast<GLuint>(slot), sampler);
+        ThrowIfGlError("sampler application");
+    }
+
+    SamplerSnapshot GetSamplerSnapshotForTesting(const unsigned int sampler)
+    {
+        RequireInitialized("sampler state query");
+        if (sampler == 0)
+            throw std::invalid_argument("RLGL: cannot query sampler zero");
+
+        SamplerSnapshot snapshot;
+        glGetSamplerParameteriv(sampler, GL_TEXTURE_MIN_FILTER, &snapshot.minFilter);
+        glGetSamplerParameteriv(sampler, GL_TEXTURE_MAG_FILTER, &snapshot.magFilter);
+        glGetSamplerParameteriv(sampler, GL_TEXTURE_WRAP_S, &snapshot.wrapS);
+        glGetSamplerParameteriv(sampler, GL_TEXTURE_WRAP_T, &snapshot.wrapT);
+        glGetSamplerParameteriv(sampler, GL_TEXTURE_WRAP_R, &snapshot.wrapR);
+        glGetSamplerParameteriv(sampler, GL_TEXTURE_COMPARE_MODE, &snapshot.compareMode);
+        glGetSamplerParameterfv(sampler, GL_TEXTURE_MIN_LOD, &snapshot.minLod);
+        glGetSamplerParameterfv(sampler, GL_TEXTURE_MAX_LOD, &snapshot.maxLod);
+        glGetSamplerParameterfv(sampler, GL_TEXTURE_LOD_BIAS, &snapshot.lodBias);
+        if (RLGL.ExtSupported.texAnisoFilter)
+        {
+            glGetSamplerParameterfv(
+                sampler, GL_TEXTURE_MAX_ANISOTROPY_EXT, &snapshot.anisotropy);
+        }
+        ThrowIfGlError("sampler state query");
+        return snapshot;
+    }
+
+    unsigned int GetBoundSamplerForTesting(const int slot)
+    {
+        RequireInitialized("sampler binding query");
+        if (slot < 0 || slot >= GetMaxSamplerSlots())
+            throw std::out_of_range("RLGL: sampler slot is invalid");
+        GLint sampler = 0;
+        glGetIntegeri_v(GL_SAMPLER_BINDING, static_cast<GLuint>(slot), &sampler);
+        ThrowIfGlError("sampler binding query");
+        return static_cast<unsigned int>(sampler);
+    }
+
+    void DrawBoundTextureSampleForTesting(
+        const float u, const float v, const int width, const int height)
+    {
+        RequireInitialized("focused sampler draw");
+        if (width <= 0 || height <= 0)
+            throw std::invalid_argument("RLGL: sampler test draw extent must be positive");
+
+        GLint previousActiveTexture = GL_TEXTURE0;
+        GLint texture = 0;
+        GLint previousViewport[4] = {};
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+        glActiveTexture(GL_TEXTURE0);
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture);
+        glActiveTexture(static_cast<GLenum>(previousActiveTexture));
+        glGetIntegerv(GL_VIEWPORT, previousViewport);
+        if (texture == 0)
+            throw std::runtime_error("RLGL: sampler test requires a texture on unit zero");
+
+        const GLboolean cullingWasEnabled = glIsEnabled(GL_CULL_FACE);
+        rlDrawRenderBatchActive();
+        rlViewport(0, 0, width, height);
+        rlDisableBackfaceCulling();
+
+        rlMatrixMode(RL_PROJECTION);
+        rlPushMatrix();
+        rlLoadIdentity();
+        rlOrtho(0.0, static_cast<double>(width), static_cast<double>(height), 0.0, -1.0, 1.0);
+        rlMatrixMode(RL_MODELVIEW);
+        rlPushMatrix();
+        rlLoadIdentity();
+
+        rlSetTexture(static_cast<unsigned int>(texture));
+        rlBegin(RL_QUADS);
+        rlColor4ub(255, 255, 255, 255);
+        rlTexCoord2f(u, v); rlVertex2f(0.0f, 0.0f);
+        rlTexCoord2f(u, v); rlVertex2f(0.0f, static_cast<float>(height));
+        rlTexCoord2f(u, v); rlVertex2f(static_cast<float>(width), static_cast<float>(height));
+        rlTexCoord2f(u, v); rlVertex2f(static_cast<float>(width), 0.0f);
+        rlEnd();
+        rlDrawRenderBatchActive();
+        rlSetTexture(0);
+
+        rlPopMatrix();
+        rlMatrixMode(RL_PROJECTION);
+        rlPopMatrix();
+        rlMatrixMode(RL_MODELVIEW);
+        if (cullingWasEnabled) rlEnableBackfaceCulling();
+        glViewport(
+            previousViewport[0], previousViewport[1],
+            previousViewport[2], previousViewport[3]);
+        ThrowIfGlError("focused sampler draw");
     }
 
     void BindDefaultFramebuffer()

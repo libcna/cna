@@ -48,7 +48,8 @@ success.
 | Viewport/scissor coordinate application | 🟨 | Top-left CNA rectangles are mapped to bottom-left GL coordinates; transition/pixel coverage remains in `RLGL-013` |
 | Backbuffer MSAA | 🟨 | Context samples are requested with a non-MSAA retry and the achieved count is reported; resolve/output coverage remains in `RLGL-014` |
 | `Texture2D` (`SurfaceFormat::Color`) | ✅ | rlgl-created RGBA8 storage passed exact full/partial upload, native whole/subrect readback, row-order, binding, and non-zero mip-level checks |
-| Other Texture2D formats and sampler state | ❌ | Explicitly tracked by `RLGL-024` and `RLGL-025`; unsupported formats fail instead of changing their byte interpretation |
+| XNA `SamplerState` | ✅ | Independent GL sampler objects passed all filter/address ordinals, mip/bias, anisotropy, transition, slot-isolation, and sampled-pixel checks |
+| Other Texture2D formats | ❌ | Explicitly tracked by `RLGL-024`; unsupported formats fail instead of changing their byte interpretation |
 | SpriteBatch/SpriteFont | ❌ | Factory throws a diagnostic naming `RLGL-010` |
 | Vertex/index buffers and draw calls | ❌ | Factories/draw hooks throw diagnostics naming `RLGL-011` |
 | Stock/custom effects and normal 3D workloads | ❌ | Await the buffer, texture, and shader tasks; `GraphicsCapability::ThreeD` remains false |
@@ -56,9 +57,10 @@ success.
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
 
-Every `SupportsCapability()` result is currently false. Native GL support alone is not treated as a
-CNA implementation promise. The renderer opts into a capability only after its complete public path
-and observable behavior are tested.
+`SupportsCapability(AnisotropicFiltering)` follows rlgl's live extension probe and measured ceiling;
+all other capability results remain false. Native GL support alone is not treated as a CNA
+implementation promise. The renderer opts in only after its complete path and observable behavior
+are tested.
 
 ## Profile and platforms
 
@@ -86,7 +88,7 @@ cmake -S . -B cmake-build-rlgl -G Ninja \
       -DCNA_GRAPHICS_RENDERER=RLGL \
       -DCNA_BUILD_TESTS=OFF
 cmake --build cmake-build-rlgl --parallel 4 --target \
-      cna_renderer_rlgl cna_test_rlgl_smoke cna_test_rlgl_texture
+      cna_renderer_rlgl cna_test_rlgl_smoke cna_test_rlgl_texture cna_test_rlgl_sampler
 ```
 
 The smoke target is deliberately available with `CNA_BUILD_TESTS=OFF`. On a Linux machine with
@@ -97,11 +99,13 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_smoke
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_texture
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_sampler
 ```
 
-With `CNA_BUILD_TESTS=ON`, the executables are registered as `Rlgl_Smoke` and `Rlgl_Texture`,
-labelled `Rlgl` plus their focused graphics category, with the proven offscreen environment
-attached to each CTest entry.
+With `CNA_BUILD_TESTS=ON`, the executables are registered as `Rlgl_Smoke`, `Rlgl_Texture`, and
+`Rlgl_Sampler`, labelled `Rlgl` plus their focused graphics category, with the proven offscreen
+environment attached to each CTest entry.
 
 ## Dependency and offline builds
 

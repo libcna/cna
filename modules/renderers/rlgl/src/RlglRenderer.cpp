@@ -90,6 +90,13 @@ namespace CNA::Internal::Renderers::Rlgl
                 platformContext_->GetLoader(), width, height);
             rlglInitialized_ = true;
             maxTextureSize_ = Bridge::GetMaxTextureSize();
+            maxSamplerSlots_ = Bridge::GetMaxSamplerSlots();
+            maxSamplerAnisotropy_ = Bridge::GetMaxSamplerAnisotropy();
+            if (maxSamplerSlots_ < static_cast<int>(samplers_.size()))
+            {
+                throw std::runtime_error(
+                    "RLGL: the OpenGL context exposes fewer than 16 fragment texture units");
+            }
 
             platformContext_->SetSwapInterval(swapInterval_);
             IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
@@ -126,6 +133,10 @@ namespace CNA::Internal::Renderers::Rlgl
             try
             {
                 platformContext_->MakeCurrent();
+                std::array<unsigned int, 16> samplerIds{};
+                for (std::size_t index = 0; index < samplers_.size(); ++index)
+                    samplerIds[index] = samplers_[index].id;
+                Bridge::DestroySamplers(samplerIds.data(), samplerIds.size());
                 Bridge::Shutdown();
             }
             catch (const std::exception& error)
@@ -296,10 +307,15 @@ namespace CNA::Internal::Renderers::Rlgl
 
     bool RlglRenderer::SupportsCapability(const CNA::GraphicsCapability capability) const
     {
-        (void)capability;
         // Native GL availability is not a CNA implementation promise. Each row opts in only after
         // its resource/state/draw path and observable behavior have dedicated validation.
-        return false;
+        switch (capability)
+        {
+        case CNA::GraphicsCapability::AnisotropicFiltering:
+            return maxSamplerAnisotropy_ > 1.0f;
+        default:
+            return false;
+        }
     }
 
     void RlglRenderer::ReadBackbuffer(
@@ -320,6 +336,54 @@ namespace CNA::Internal::Renderers::Rlgl
     std::unique_ptr<ISpriteBatchRenderer> RlglRenderer::CreateSpriteBatch()
     {
         Unsupported("SpriteBatch", "RLGL-010");
+    }
+
+    RlglRenderer::SamplerRecord& RlglRenderer::GetSamplerRecord(const int slot)
+    {
+        if (slot < 0 || slot >= static_cast<int>(samplers_.size()) || slot >= maxSamplerSlots_)
+            throw std::out_of_range("RLGL: sampler slot is outside the XNA range");
+        SamplerRecord& sampler = samplers_[static_cast<std::size_t>(slot)];
+        if (sampler.id == 0) sampler.id = Bridge::CreateSampler();
+        return sampler;
+    }
+
+    void RlglRenderer::ApplySamplerRecord(const int slot, SamplerRecord& sampler)
+    {
+        Bridge::ApplySampler(
+            sampler.id, slot, sampler.filter,
+            sampler.addressU, sampler.addressV, sampler.addressW,
+            sampler.maxAnisotropy, sampler.maxMipLevel, sampler.lodBias);
+    }
+
+    void RlglRenderer::ApplySamplerState(
+        const int slot, const int filter, const int addressU, const int addressV,
+        const int maxAnisotropy)
+    {
+        SamplerRecord& sampler = GetSamplerRecord(slot);
+        sampler.filter = filter;
+        sampler.addressU = addressU;
+        sampler.addressV = addressV;
+        sampler.addressW = addressU;
+        sampler.maxAnisotropy = maxAnisotropy;
+        sampler.maxMipLevel = 0;
+        sampler.lodBias = 0.0f;
+        ApplySamplerRecord(slot, sampler);
+    }
+
+    void RlglRenderer::ApplySamplerMipState(
+        const int slot, const int maxMipLevel, const float lodBias)
+    {
+        SamplerRecord& sampler = GetSamplerRecord(slot);
+        sampler.maxMipLevel = maxMipLevel;
+        sampler.lodBias = lodBias;
+        ApplySamplerRecord(slot, sampler);
+    }
+
+    void RlglRenderer::ApplySamplerAddressW(const int slot, const int addressW)
+    {
+        SamplerRecord& sampler = GetSamplerRecord(slot);
+        sampler.addressW = addressW;
+        ApplySamplerRecord(slot, sampler);
     }
 
     void RlglRenderer::SetRenderTargets(

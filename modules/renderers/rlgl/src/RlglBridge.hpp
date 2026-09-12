@@ -3,11 +3,27 @@
 
 #include "CNA/Platform/IPlatformGlContext.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
 namespace CNA::Internal::Renderers::Rlgl::Bridge
 {
+    /** @brief Native GL sampler values exposed only to focused renderer validation. */
+    struct SamplerSnapshot
+    {
+        int minFilter = 0;
+        int magFilter = 0;
+        int wrapS = 0;
+        int wrapT = 0;
+        int wrapR = 0;
+        int compareMode = 0;
+        float minLod = 0.0f;
+        float maxLod = 0.0f;
+        float lodBias = 0.0f;
+        float anisotropy = 1.0f;
+    };
+
     enum ClearPlane : unsigned int
     {
         /** @brief Selects the active framebuffer's color planes. */
@@ -164,6 +180,71 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @return The current GL texture name.
      */
     [[nodiscard]] unsigned int GetBoundTexture2DForTesting(int unit);
+
+    /**
+     * @brief Returns the number of fragment texture units available to XNA samplers.
+     * @return The live `GL_MAX_TEXTURE_IMAGE_UNITS` value.
+     */
+    [[nodiscard]] int GetMaxSamplerSlots();
+
+    /**
+     * @brief Returns the driver anisotropy ceiling found by rlgl's extension probe.
+     * @return Maximum supported anisotropy, or one when the extension is unavailable.
+     */
+    [[nodiscard]] float GetMaxSamplerAnisotropy();
+
+    /**
+     * @brief Creates one GL 3.3 sampler object for a CNA texture slot.
+     * @return A non-zero sampler name.
+     */
+    [[nodiscard]] unsigned int CreateSampler();
+
+    /**
+     * @brief Releases sampler objects while the rlgl device is live.
+     * @param samplers Contiguous sampler names.
+     * @param count Number of names in the array.
+     */
+    void DestroySamplers(const unsigned int* samplers, std::size_t count) noexcept;
+
+    /**
+     * @brief Applies one complete XNA sampler description and binds it to a texture unit.
+     * @param sampler Sampler name.
+     * @param slot Texture unit.
+     * @param filter Raw `TextureFilter` ordinal.
+     * @param addressU Raw U `TextureAddressMode` ordinal.
+     * @param addressV Raw V `TextureAddressMode` ordinal.
+     * @param addressW Raw W `TextureAddressMode` ordinal.
+     * @param maxAnisotropy Requested anisotropy.
+     * @param maxMipLevel Most detailed mip level the sampler may select.
+     * @param lodBias Mipmap level-of-detail bias.
+     */
+    void ApplySampler(
+        unsigned int sampler, int slot, int filter,
+        int addressU, int addressV, int addressW,
+        int maxAnisotropy, int maxMipLevel, float lodBias);
+
+    /**
+     * @brief Reads a sampler object's native state for focused validation.
+     * @param sampler Sampler name.
+     * @return Complete state snapshot.
+     */
+    [[nodiscard]] SamplerSnapshot GetSamplerSnapshotForTesting(unsigned int sampler);
+
+    /**
+     * @brief Returns the sampler object bound to a texture unit for focused validation.
+     * @param slot Texture unit.
+     * @return Bound sampler name, or zero.
+     */
+    [[nodiscard]] unsigned int GetBoundSamplerForTesting(int slot);
+
+    /**
+     * @brief Draws the unit-zero texture with a constant coordinate through rlgl's test batch.
+     * @param u Horizontal texture coordinate.
+     * @param v Vertical texture coordinate.
+     * @param width Backbuffer width.
+     * @param height Backbuffer height.
+     */
+    void DrawBoundTextureSampleForTesting(float u, float v, int width, int height);
 
     /** @brief Restores the platform default framebuffer as the active draw target. */
     void BindDefaultFramebuffer();

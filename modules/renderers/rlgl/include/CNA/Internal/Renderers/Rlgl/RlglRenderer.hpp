@@ -4,6 +4,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 
+#include <array>
 #include <memory>
 
 namespace CNA::Internal::Renderers::Rlgl
@@ -141,7 +142,7 @@ namespace CNA::Internal::Renderers::Rlgl
          * @brief Answers implemented renderer capabilities without inferring them from GL support.
          *
          * @param capability Capability to query.
-         * @return False until the corresponding complete CNA path is implemented and tested.
+         * @return True only for a corresponding complete CNA path with focused validation.
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
@@ -178,6 +179,32 @@ namespace CNA::Internal::Renderers::Rlgl
          * @throws System::NotSupportedException Until RLGL-010 is complete.
          */
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
+
+        /**
+         * @brief Applies XNA filter, U/V addressing, and anisotropy to a texture slot.
+         * @param slot Texture unit index.
+         * @param filter Raw `TextureFilter` ordinal.
+         * @param addressU Raw U `TextureAddressMode` ordinal.
+         * @param addressV Raw V `TextureAddressMode` ordinal.
+         * @param maxAnisotropy Requested maximum anisotropy.
+         */
+        void ApplySamplerState(
+            int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+
+        /**
+         * @brief Applies XNA mip-level selection and bias to a texture slot.
+         * @param slot Texture unit index.
+         * @param maxMipLevel Most detailed selectable mip level.
+         * @param lodBias Level-of-detail bias.
+         */
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+
+        /**
+         * @brief Applies XNA W addressing to a texture slot.
+         * @param slot Texture unit index.
+         * @param addressW Raw W `TextureAddressMode` ordinal.
+         */
+        void ApplySamplerAddressW(int slot, int addressW) override;
 
         /**
          * @brief Restores the default framebuffer or rejects an unsupported render target set.
@@ -349,9 +376,23 @@ namespace CNA::Internal::Renderers::Rlgl
         void SetScissorRect(int x, int y, int w, int h) override;
 
     private:
+        struct SamplerRecord
+        {
+            unsigned int id = 0;
+            int filter = 0;
+            int addressU = 0;
+            int addressV = 0;
+            int addressW = 0;
+            int maxAnisotropy = 4;
+            int maxMipLevel = 0;
+            float lodBias = 0.0f;
+        };
+
         void CreateContext(int requestedMultiSampleCount);
         void GetPhysicalSize(int& width, int& height) const;
         void GetLogicalSize(int& width, int& height) const;
+        SamplerRecord& GetSamplerRecord(int slot);
+        void ApplySamplerRecord(int slot, SamplerRecord& sampler);
 
         PlatformGlSurfaceState surface_;
         CNA::Platform::IPlatformGlContext* platformGlService_ = nullptr;
@@ -364,6 +405,9 @@ namespace CNA::Internal::Renderers::Rlgl
         int depthBits_ = 0;
         int stencilBits_ = 0;
         int maxTextureSize_ = 0;
+        int maxSamplerSlots_ = 0;
+        float maxSamplerAnisotropy_ = 1.0f;
+        std::array<SamplerRecord, 16> samplers_{};
         bool lifecycleClaimed_ = false;
         bool rlglInitialized_ = false;
         bool registered_ = false;
