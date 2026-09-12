@@ -830,6 +830,12 @@ namespace CNA::TestSupport
         TexdepthBeforePhase,
         /** @brief Read r5 after `TEXDEPTH` consumed it. */
         TexdepthReadAfter,
+        /** @brief Invalidly apply saturation to `TEXDEPTH`. */
+        TexdepthSaturate,
+        /** @brief Invalidly shift the `TEXDEPTH` result. */
+        TexdepthShift,
+        /** @brief Invalidly use a partial `TEXDEPTH` destination mask. */
+        TexdepthPartialDestination,
         /** @brief Read a temporary alpha component invalidated by `PHASE`. */
         AlphaReadAfterPhase,
         /** @brief Leave r0 alpha unwritten after `PHASE` invalidated its old value. */
@@ -3653,6 +3659,23 @@ namespace CNA::TestSupport
                     AppendUInt32(shader, 0x00000057u); // texdepth r5
                     AppendUInt32(shader, destination(regTemp, 5, 0xFu));
                     appendMov(0, 0xFu, 5, swizzleIdentity, regTemp);
+                    break;
+                case Probe::TexdepthSaturate:
+                case Probe::TexdepthShift:
+                case Probe::TexdepthPartialDestination:
+                    appendMov(5, 0x3u, 0);
+                    appendPhase();
+                    AppendUInt32(shader, 0x00000057u); // texdepth r5
+                    AppendUInt32(shader,
+                                 destination(regTemp, 5,
+                                             shaderModel14PhaseProbe ==
+                                                     Probe::TexdepthPartialDestination
+                                                 ? 0x3u : 0xFu,
+                                             shaderModel14PhaseProbe == Probe::TexdepthSaturate
+                                                 ? 1u : 0u,
+                                             shaderModel14PhaseProbe == Probe::TexdepthShift
+                                                 ? 1u : 0u));
+                    appendMov(0, 0xFu, 0);
                     break;
                 case Probe::AlphaReadAfterPhase:
                     appendMov(1, 0x8u, 0, 0xFFu);

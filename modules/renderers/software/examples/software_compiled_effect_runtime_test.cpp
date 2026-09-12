@@ -2784,6 +2784,9 @@ namespace
             Probe::TextureDestinationReuse,
             Probe::TexdepthBeforePhase,
             Probe::TexdepthReadAfter,
+            Probe::TexdepthSaturate,
+            Probe::TexdepthShift,
+            Probe::TexdepthPartialDestination,
             Probe::AlphaReadAfterPhase,
             Probe::OutputAlphaLostAtPhase,
         };

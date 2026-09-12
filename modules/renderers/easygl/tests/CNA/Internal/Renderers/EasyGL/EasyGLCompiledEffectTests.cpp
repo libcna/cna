@@ -786,6 +786,9 @@ TEST(EasyGLCompiledEffectTest, RejectsInvalidD3D9ShaderModel14PhaseState)
              Probe::TextureDestinationReuse,
              Probe::TexdepthBeforePhase,
              Probe::TexdepthReadAfter,
+             Probe::TexdepthSaturate,
+             Probe::TexdepthShift,
+             Probe::TexdepthPartialDestination,
              Probe::AlphaReadAfterPhase,
              Probe::OutputAlphaLostAtPhase,
          })
