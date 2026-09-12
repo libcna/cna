@@ -771,6 +771,31 @@ namespace CNA::TestSupport
         Vertex11AddWrittenX,
     };
 
+    /** @brief Scalar arithmetic reads from partially initialized temporaries. */
+    enum class SyntheticScalarInitializationProbe
+    {
+        /** @brief Emit no dedicated scalar initialization probe. */
+        None,
+        /** @brief In ps_2_0, select undefined Y for RCP. */
+        Pixel20RcpUnwrittenY,
+        /** @brief In ps_2_0, select undefined Y for POW source zero. */
+        Pixel20PowSource0UnwrittenY,
+        /** @brief In ps_2_0, select undefined Y for POW source one. */
+        Pixel20PowSource1UnwrittenY,
+        /** @brief In ps_2_0, select initialized X for RCP. */
+        Pixel20RcpWrittenX,
+        /** @brief In ps_2_0, select initialized X for POW source zero. */
+        Pixel20PowSource0WrittenX,
+        /** @brief In ps_2_0, select initialized X for POW source one. */
+        Pixel20PowSource1WrittenX,
+        /** @brief In vs_1_1, select undefined Y for RCP. */
+        Vertex11RcpUnwrittenY,
+        /** @brief In vs_1_1, select undefined Y for EXPP. */
+        Vertex11ExppUnwrittenY,
+        /** @brief In vs_1_1, select initialized X for RCP. */
+        Vertex11RcpWrittenX,
+    };
+
     /** @brief Shader profile and input-register boundary exercised by a synthetic program. */
     enum class SyntheticInputRegisterProbe
     {
@@ -1641,6 +1666,9 @@ namespace CNA::TestSupport
         /// Emits an arithmetic read from a selected component of a partially initialized r#.
         SyntheticComponentwiseInitializationProbe componentwiseInitializationProbe =
             SyntheticComponentwiseInitializationProbe::None;
+        /// Emits a scalar arithmetic read from one component of a partially initialized r#.
+        SyntheticScalarInitializationProbe scalarInitializationProbe =
+            SyntheticScalarInitializationProbe::None;
         /// Writes only r0.xy before TEXKILL reads XYZ. D3D9 shader validation must reject the
         /// undefined Z component in Shader Model 2.0.
         bool pixelShaderTexkillReadsPartialTemporary = false;
@@ -1939,7 +1967,9 @@ namespace CNA::TestSupport
         SyntheticTexldlDestinationModifierProbe texldlDestinationModifierProbe =
             SyntheticTexldlDestinationModifierProbe::None,
         SyntheticComponentwiseInitializationProbe componentwiseInitializationProbe =
-            SyntheticComponentwiseInitializationProbe::None)
+            SyntheticComponentwiseInitializationProbe::None,
+        SyntheticScalarInitializationProbe scalarInitializationProbe =
+            SyntheticScalarInitializationProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -2837,6 +2867,35 @@ namespace CNA::TestSupport
                                     ? 0x00u
                                     : 0x55u));
             AppendUInt32(shader, source(regConst, 0, 0x00u));
+        }
+        if (scalarInitializationProbe >=
+                SyntheticScalarInitializationProbe::Pixel20RcpUnwrittenY &&
+            scalarInitializationProbe <=
+                SyntheticScalarInitializationProbe::Pixel20PowSource1WrittenX)
+        {
+            using Probe = SyntheticScalarInitializationProbe;
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.x, c0.x
+            AppendUInt32(shader, destination(regTemp, 0, 0x1u));
+            AppendUInt32(shader, source(regConst, 0, 0x00u));
+            const bool pow = scalarInitializationProbe == Probe::Pixel20PowSource0UnwrittenY ||
+                             scalarInitializationProbe == Probe::Pixel20PowSource1UnwrittenY ||
+                             scalarInitializationProbe == Probe::Pixel20PowSource0WrittenX ||
+                             scalarInitializationProbe == Probe::Pixel20PowSource1WrittenX;
+            const bool sourceOne =
+                scalarInitializationProbe == Probe::Pixel20PowSource1UnwrittenY ||
+                scalarInitializationProbe == Probe::Pixel20PowSource1WrittenX;
+            const bool readsX = scalarInitializationProbe == Probe::Pixel20RcpWrittenX ||
+                                scalarInitializationProbe == Probe::Pixel20PowSource0WrittenX ||
+                                scalarInitializationProbe == Probe::Pixel20PowSource1WrittenX;
+            AppendUInt32(shader,
+                         (pow ? 0x00000020u : 0x00000006u) |
+                             ((pow ? 3u : 2u) << 24)); // pow/rcp r1.x, ...
+            AppendUInt32(shader, destination(regTemp, 1, 0x1u));
+            const std::uint32_t partialSource =
+                source(regTemp, 0, readsX ? 0x00u : 0x55u);
+            if (sourceOne) AppendUInt32(shader, source(regConst, 0, 0x00u));
+            AppendUInt32(shader, partialSource);
+            if (pow && !sourceOne) AppendUInt32(shader, source(regConst, 0, 0x00u));
         }
 
         if (pixel1OutputLivenessProbe != SyntheticPixel1OutputLivenessProbe::None)
@@ -5277,7 +5336,10 @@ namespace CNA::TestSupport
                                                                         SyntheticTexldlDestinationModifierProbe::None,
                                                                 SyntheticComponentwiseInitializationProbe
                                                                     componentwiseInitializationProbe =
-                                                                        SyntheticComponentwiseInitializationProbe::None)
+                                                                        SyntheticComponentwiseInitializationProbe::None,
+                                                                SyntheticScalarInitializationProbe
+                                                                    scalarInitializationProbe =
+                                                                        SyntheticScalarInitializationProbe::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -5293,6 +5355,14 @@ namespace CNA::TestSupport
                                        componentwiseInitializationProbe ==
                                            SyntheticComponentwiseInitializationProbe::
                                                Vertex11AddWrittenX ||
+                                       scalarInitializationProbe ==
+                                           SyntheticScalarInitializationProbe::
+                                               Vertex11RcpUnwrittenY ||
+                                       scalarInitializationProbe ==
+                                           SyntheticScalarInitializationProbe::
+                                               Vertex11ExppUnwrittenY ||
+                                       scalarInitializationProbe ==
+                                           SyntheticScalarInitializationProbe::Vertex11RcpWrittenX ||
                                        shaderModel1InvalidOpcode !=
                                            SyntheticInvalidVertexShaderModel1Opcode::None ||
                                        temporaryRegisterProbe ==
@@ -6519,6 +6589,27 @@ namespace CNA::TestSupport
                            : 0x55u));
             AppendUInt32(shader, source(regConst, 0, 0x00u));
         }
+        if (scalarInitializationProbe ==
+                SyntheticScalarInitializationProbe::Vertex11RcpUnwrittenY ||
+            scalarInitializationProbe ==
+                SyntheticScalarInitializationProbe::Vertex11ExppUnwrittenY ||
+            scalarInitializationProbe == SyntheticScalarInitializationProbe::Vertex11RcpWrittenX)
+        {
+            AppendUInt32(shader, 0x00000001u); // mov r0.x, c0.x
+            AppendUInt32(shader, destination(regTemp, 0, 0x1u));
+            AppendUInt32(shader, source(regConst, 0, 0x00u));
+            const bool expp = scalarInitializationProbe ==
+                SyntheticScalarInitializationProbe::Vertex11ExppUnwrittenY;
+            AppendUInt32(shader, expp ? 0x0000004Eu : 0x00000006u); // expp/rcp r1.x, r0.x/y
+            AppendUInt32(shader, destination(regTemp, 1, 0x1u));
+            AppendUInt32(
+                shader,
+                source(regTemp, 0,
+                       scalarInitializationProbe ==
+                               SyntheticScalarInitializationProbe::Vertex11RcpWrittenX
+                           ? 0x00u
+                           : 0x55u));
+        }
         if (readsSecondStream)
         {
             // mad r0, v1, c4, v0
@@ -7451,7 +7542,8 @@ namespace CNA::TestSupport
             options.textureInstructionProfileProbe,
             options.texlddOperandProbe,
             options.texldlDestinationModifierProbe,
-            options.componentwiseInitializationProbe);
+            options.componentwiseInitializationProbe,
+            options.scalarInitializationProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -7596,7 +7688,8 @@ namespace CNA::TestSupport
                 options.textureSourceModifierProbe,
                 options.textureInstructionProfileProbe,
                 options.texldlDestinationModifierProbe,
-                options.componentwiseInitializationProbe);
+                options.componentwiseInitializationProbe,
+                options.scalarInitializationProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

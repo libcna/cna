@@ -3169,6 +3169,61 @@ namespace
                   "temporary components in probe " +
                       std::to_string(static_cast<int>(probe)));
         }
+
+        options.componentwiseInitializationProbe =
+            CNA::TestSupport::SyntheticComponentwiseInitializationProbe::None;
+        constexpr CNA::TestSupport::SyntheticScalarInitializationProbe invalidScalar[] = {
+            CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20RcpUnwrittenY,
+            CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource0UnwrittenY,
+            CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource1UnwrittenY,
+            CNA::TestSupport::SyntheticScalarInitializationProbe::Vertex11RcpUnwrittenY,
+            CNA::TestSupport::SyntheticScalarInitializationProbe::Vertex11ExppUnwrittenY,
+        };
+        for (const auto probe : invalidScalar)
+        {
+            options.scalarInitializationProbe = probe;
+            const auto componentBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool componentRejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(componentBytes.data(),
+                                                                componentBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                componentRejected = true;
+            }
+            Check(componentRejected,
+                  "compiled Effect parser accepted scalar arithmetic from an uninitialized "
+                  "temporary component in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+
+        constexpr CNA::TestSupport::SyntheticScalarInitializationProbe validScalar[] = {
+            CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20RcpWrittenX,
+            CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource0WrittenX,
+            CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource1WrittenX,
+            CNA::TestSupport::SyntheticScalarInitializationProbe::Vertex11RcpWrittenX,
+        };
+        for (const auto probe : validScalar)
+        {
+            options.scalarInitializationProbe = probe;
+            const auto componentBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool componentAccepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(componentBytes.data(),
+                                                                componentBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                componentAccepted = false;
+            }
+            Check(componentAccepted,
+                  "compiled Effect parser rejected scalar arithmetic from an initialized "
+                  "temporary component in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
     }
 
     void CheckCompiledTexkillTemporaryValidation(SoftwareRenderer& renderer)

@@ -1130,6 +1130,61 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticComponentwiseInitializationProbe::Pixel14AddWrittenX,
         CNA::TestSupport::SyntheticComponentwiseInitializationProbe::Vertex11AddWrittenX));
 
+class EasyGLCompiledEffectInvalidScalarInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticScalarInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidScalarInitializationTest,
+       RejectsUninitializedSelectedComponent)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.scalarInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidScalarInitialization,
+    EasyGLCompiledEffectInvalidScalarInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20RcpUnwrittenY,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource0UnwrittenY,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource1UnwrittenY,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Vertex11RcpUnwrittenY,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Vertex11ExppUnwrittenY));
+
+class EasyGLCompiledEffectValidScalarInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticScalarInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidScalarInitializationTest,
+       AcceptsInitializedSelectedComponent)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.scalarInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidScalarInitialization,
+    EasyGLCompiledEffectValidScalarInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20RcpWrittenX,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource0WrittenX,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource1WrittenX,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Vertex11RcpWrittenX));
+
 TEST(EasyGLCompiledEffectTest, RejectsTexkillWithUndefinedTemporaryComponents)
 {
     GraphicsDevice device;
