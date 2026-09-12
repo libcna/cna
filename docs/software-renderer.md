@@ -267,7 +267,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   GLSL path now explicitly packs and unpacks those components instead of keeping only the last
   declaration. SOFTWARE-432 closes the follow-up Software-only case in which the semantics arrive
   from different vertex output registers: its pixel prologue retains each declaration mask and
-  copies only those components into the shared destination register. SOFTWARE-388 replaces the remaining SM3
+  copies only those components into the shared destination register. SOFTWARE-433 then restores
+  explicit `_centroid` interpolation and D3D9's automatic centroid behavior for pixel `COLOR`
+  semantics at partially covered MSAA pixels. Software substitutes a covered sample's
+  perspective-correct interpolation only when the center lies outside the primitive; EasyGL's
+  managed MojoShader translation specializes a matching vertex-output varying at program link
+  time instead of permanently doubling every shader varying. SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
   swizzles, source modifiers, projection and sample-dependent temporary chains. SOFTWARE-389

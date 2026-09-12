@@ -2012,6 +2012,20 @@ namespace CNA::Internal::Renderers::Software
                 });
         }
 
+        bool CompiledSemanticUsesCentroid(
+            const SoftwareShaderProgramEXT& program,
+            MOJOSHADER_usage usage, std::uint8_t usageIndex)
+        {
+            const auto declaration = std::find_if(
+                program.inputSemantics.begin(), program.inputSemantics.end(),
+                [usage, usageIndex](const SoftwareShaderSemanticEXT& candidate)
+                {
+                    return candidate.usage == usage &&
+                           candidate.usageIndex == usageIndex;
+                });
+            return declaration != program.inputSemantics.end() && declaration->centroid;
+        }
+
         bool CompiledVaryingValue(const RasterVertex& vertex,
                                   MOJOSHADER_usage usage, std::uint8_t usageIndex,
                                   std::array<float, 4>& value)
@@ -3340,24 +3354,50 @@ namespace CNA::Internal::Renderers::Software
                     "SoftwareRenderer: compiled line has no selected pixel program.");
             const bool usesQuadEvaluation = CompiledProgramNeedsQuadExecution(*pixelProgram);
 
-            const auto interpolateInputs = [&](float t)
+            const auto interpolateInputs = [&](float t, const float* centroidT = nullptr)
             {
                 std::array<SoftwareShaderSemanticValueEXT, 16> inputs{};
-                const float invW = a.invW + t * (b.invW - a.invW);
                 for (std::size_t varying = 0; varying < a.compiledVaryingCount; ++varying)
                 {
                     const auto& first = a.compiledVaryings[varying];
                     const auto& second = b.compiledVaryings[varying];
+                    const float interpolationT =
+                        centroidT != nullptr && CompiledSemanticUsesCentroid(
+                            *pixelProgram, first.usage, first.usageIndex)
+                            ? *centroidT : t;
+                    const float invW = a.invW +
+                        interpolationT * (b.invW - a.invW);
                     inputs[varying].usage = first.usage;
                     inputs[varying].usageIndex = first.usageIndex;
                     for (std::size_t component = 0; component < 4; ++component)
                     {
                         inputs[varying].value[component] =
                             (first.value[component] +
-                             t * (second.value[component] - first.value[component])) / invW;
+                             interpolationT *
+                                 (second.value[component] - first.value[component])) / invW;
                     }
                 }
                 return inputs;
+            };
+            const auto centroidT = [&](int x, int y, float centerT,
+                                       unsigned int coverageMask,
+                                       const std::array<float, 4>* sampleTs)
+                -> const float*
+            {
+                if (sampleTs == nullptr || coverageMask == 0u)
+                    return nullptr;
+                const float nearestX = a.x + centerT * (b.x - a.x);
+                const float nearestY = a.y + centerT * (b.y - a.y);
+                const float distanceX = static_cast<float>(x) + 0.5f - nearestX;
+                const float distanceY = static_cast<float>(y) + 0.5f - nearestY;
+                if (distanceX * distanceX + distanceY * distanceY <= 0.25f)
+                    return nullptr;
+                for (int sample = 0; sample < 4; ++sample)
+                {
+                    if ((coverageMask & (1u << sample)) != 0u)
+                        return &(*sampleTs)[static_cast<std::size_t>(sample)];
+                }
+                return nullptr;
             };
             const auto writeResult = [&](int x, int y, float t,
                                          unsigned int coverageMask,
@@ -3397,7 +3437,9 @@ namespace CNA::Internal::Renderers::Software
                                [&](int x, int y, float t, unsigned int coverageMask,
                                    const std::array<float, 4>* sampleTs)
                 {
-                    const auto inputs = interpolateInputs(t);
+                    const float* centroidInterpolationT =
+                        centroidT(x, y, t, coverageMask, sampleTs);
+                    const auto inputs = interpolateInputs(t, centroidInterpolationT);
                     const SoftwarePixelShaderBuiltinsEXT builtins{
                         {static_cast<float>(x), static_cast<float>(y), 0.0f, 1.0f}, face};
                     writeResult(
@@ -3458,6 +3500,19 @@ namespace CNA::Internal::Renderers::Software
                         ((sampleX - static_cast<double>(a.x)) * dx +
                          (sampleY - static_cast<double>(a.y)) * dy) / lengthSquared);
                     laneInputs[lane] = interpolateInputs(t);
+                    const auto found = fragments.find({x, y});
+                    if (found != fragments.end())
+                    {
+                        const LineFragment& fragment = found->second;
+                        const float* centroidInterpolationT = centroidT(
+                            x, y, fragment.t, fragment.coverageMask,
+                            fragment.hasSampleTs ? &fragment.sampleTs : nullptr);
+                        if (centroidInterpolationT != nullptr)
+                        {
+                            laneInputs[lane] = interpolateInputs(
+                                t, centroidInterpolationT);
+                        }
+                    }
                     inputSpans[lane] = std::span(
                         laneInputs[lane].data(), a.compiledVaryingCount);
                     laneBuiltins[lane].position = {
@@ -3564,6 +3619,9 @@ namespace CNA::Internal::Renderers::Software
                     unsigned int coverageMask = 0u;
                     std::array<float, 4> sampleDepths{};
                     std::array<SoftwareShaderSemanticValueEXT, 16> inputs{};
+                    bool centerCovered = false;
+                    float centroidLambda0 = 0.0f;
+                    float centroidLambda1 = 0.0f;
                 };
                 const int quadMinX = minX & ~1;
                 const int quadMinY = minY & ~1;
@@ -3591,6 +3649,8 @@ namespace CNA::Internal::Renderers::Software
                                 v2.x, v2.y, v0.x, v0.y, px, py);
                             const float w2 = EdgeFunction(
                                 v0.x, v0.y, v1.x, v1.y, px, py);
+                            lane.centerCovered = TriangleContainsSample(
+                                v0, v1, v2, area, w0, w1, w2);
                             const float lambda0 = w0 / area;
                             const float lambda1 = w1 / area;
                             lane.depth = BarycentricInterpolate(
@@ -3621,12 +3681,11 @@ namespace CNA::Internal::Renderers::Software
                                 continue;
                             if (!primary.HasMultiSampleColor())
                             {
-                                lane.coverageMask = TriangleContainsSample(
-                                    v0, v1, v2, area, w0, w1, w2) ? 1u : 0u;
+                                lane.coverageMask = lane.centerCovered ? 1u : 0u;
                             }
                             else if (!multiSampleAntiAlias)
                             {
-                                if (TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
+                                if (lane.centerCovered)
                                 {
                                     lane.coverageMask = 0xFu;
                                     lane.sampleDepths.fill(lane.depth);
@@ -3652,6 +3711,11 @@ namespace CNA::Internal::Renderers::Software
                                     if (!TriangleContainsSample(v0, v1, v2, area,
                                                                 sampleW0, sampleW1, sampleW2))
                                         continue;
+                                    if (lane.coverageMask == 0u)
+                                    {
+                                        lane.centroidLambda0 = sampleW0 / area;
+                                        lane.centroidLambda1 = sampleW1 / area;
+                                    }
                                     lane.coverageMask |= 1u << sample;
                                     float sampleDepth =
                                         (sampleW0 * v0.depth + sampleW1 * v1.depth +
@@ -3661,6 +3725,34 @@ namespace CNA::Internal::Renderers::Software
                                             sampleDepth + biasOffset, 0.0f, 1.0f);
                                     lane.sampleDepths[static_cast<std::size_t>(sample)] =
                                         sampleDepth;
+                                }
+                                if (!lane.centerCovered && lane.coverageMask != 0u)
+                                {
+                                    const float centroidInvW = BarycentricInterpolate(
+                                        v0.invW, v1.invW, v2.invW,
+                                        lane.centroidLambda0, lane.centroidLambda1);
+                                    for (std::size_t varying = 0;
+                                         varying < v0.compiledVaryingCount; ++varying)
+                                    {
+                                        const auto& first = v0.compiledVaryings[varying];
+                                        if (!CompiledSemanticUsesCentroid(
+                                                *pixelProgram, first.usage,
+                                                first.usageIndex))
+                                            continue;
+                                        const auto& second = v1.compiledVaryings[varying];
+                                        const auto& third = v2.compiledVaryings[varying];
+                                        for (std::size_t component = 0; component < 4;
+                                             ++component)
+                                        {
+                                            lane.inputs[varying].value[component] =
+                                                BarycentricInterpolate(
+                                                    first.value[component],
+                                                    second.value[component],
+                                                    third.value[component],
+                                                    lane.centroidLambda0,
+                                                    lane.centroidLambda1) / centroidInvW;
+                                        }
+                                    }
                                 }
                             }
                             anyCoverage = anyCoverage || lane.coverageMask != 0u;
@@ -3701,17 +3793,21 @@ namespace CNA::Internal::Renderers::Software
                     const float w0 = EdgeFunction(v1.x, v1.y, v2.x, v2.y, px, py);
                     const float w1 = EdgeFunction(v2.x, v2.y, v0.x, v0.y, px, py);
                     const float w2 = EdgeFunction(v0.x, v0.y, v1.x, v1.y, px, py);
+                    const bool centerCovered = TriangleContainsSample(
+                        v0, v1, v2, area, w0, w1, w2);
 
                     unsigned int coverageMask = 1u;
                     std::array<float, 4> sampleDepths{};
+                    float centroidLambda0 = 0.0f;
+                    float centroidLambda1 = 0.0f;
                     if (!primary.HasMultiSampleColor())
                     {
-                        if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
+                        if (!centerCovered)
                             continue;
                     }
                     else if (!multiSampleAntiAlias)
                     {
-                        if (!TriangleContainsSample(v0, v1, v2, area, w0, w1, w2))
+                        if (!centerCovered)
                             continue;
                         coverageMask = 0xFu;
                     }
@@ -3733,6 +3829,11 @@ namespace CNA::Internal::Renderers::Software
                             if (!TriangleContainsSample(v0, v1, v2, area,
                                                         sampleW0, sampleW1, sampleW2))
                                 continue;
+                            if (coverageMask == 0u)
+                            {
+                                centroidLambda0 = sampleW0 / area;
+                                centroidLambda1 = sampleW1 / area;
+                            }
                             coverageMask |= 1u << sample;
                             float sampleDepth = (sampleW0 * v0.depth + sampleW1 * v1.depth +
                                                  sampleW2 * v2.depth) / area;
@@ -3754,6 +3855,14 @@ namespace CNA::Internal::Renderers::Software
                         sampleDepths.fill(depth);
                     const float invW = BarycentricInterpolate(
                         v0.invW, v1.invW, v2.invW, lambda0, lambda1);
+                    const bool useCentroid =
+                        primary.HasMultiSampleColor() && multiSampleAntiAlias &&
+                        !centerCovered && coverageMask != 0u;
+                    const float centroidInvW = useCentroid
+                        ? BarycentricInterpolate(
+                              v0.invW, v1.invW, v2.invW,
+                              centroidLambda0, centroidLambda1)
+                        : invW;
 
                     std::array<SoftwareShaderSemanticValueEXT, 16> inputs{};
                     for (std::size_t varying = 0; varying < v0.compiledVaryingCount; ++varying)
@@ -3761,13 +3870,23 @@ namespace CNA::Internal::Renderers::Software
                         const auto& first = v0.compiledVaryings[varying];
                         const auto& second = v1.compiledVaryings[varying];
                         const auto& third = v2.compiledVaryings[varying];
+                        const bool varyingUsesCentroid = useCentroid &&
+                            CompiledSemanticUsesCentroid(
+                                *pixelProgram, first.usage, first.usageIndex);
+                        const float varyingLambda0 = varyingUsesCentroid
+                            ? centroidLambda0 : lambda0;
+                        const float varyingLambda1 = varyingUsesCentroid
+                            ? centroidLambda1 : lambda1;
+                        const float varyingInvW = varyingUsesCentroid
+                            ? centroidInvW : invW;
                         inputs[varying].usage = first.usage;
                         inputs[varying].usageIndex = first.usageIndex;
                         for (std::size_t component = 0; component < 4; ++component)
                         {
                             inputs[varying].value[component] = BarycentricInterpolate(
                                 first.value[component], second.value[component],
-                                third.value[component], lambda0, lambda1) / invW;
+                                third.value[component], varyingLambda0,
+                                varyingLambda1) / varyingInvW;
                         }
                     }
                     WriteCompiledFragment(

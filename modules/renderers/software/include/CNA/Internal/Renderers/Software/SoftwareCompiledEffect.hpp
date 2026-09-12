@@ -68,6 +68,8 @@ namespace CNA::Internal::Renderers::Software
         std::uint8_t registerType = 1;
         /** @brief Components of the physical register owned by this semantic declaration. */
         std::uint8_t writeMask = 0xFu;
+        /** @brief Whether the pixel input uses centroid interpolation under multisampling. */
+        bool centroid = false;
     };
 
     /** @brief One semantic float4 value entering or leaving the CPU shader. */

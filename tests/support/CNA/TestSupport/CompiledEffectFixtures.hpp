@@ -864,6 +864,18 @@ namespace CNA::TestSupport
         PackedDisjoint,
         /** @brief Pack two separately stored vertex outputs into one pixel input register. */
         PixelPackedFromSeparateOutputs,
+        /** @brief Interpolate TEXCOORD0 at the ordinary pixel centre in a multisampled target. */
+        PixelCentroidControl,
+        /** @brief Apply the explicit centroid modifier to a TEXCOORD0 pixel input. */
+        PixelCentroidExplicit,
+        /** @brief Exercise the implicit centroid rule for a COLOR0 pixel input. */
+        PixelCentroidImplicitColor,
+        /** @brief Interpolate Shader Model 2 TEXCOORD0 at the ordinary pixel centre. */
+        Pixel20CentroidControl,
+        /** @brief Apply the explicit centroid modifier to a Shader Model 2 TEXCOORD0 input. */
+        Pixel20CentroidExplicit,
+        /** @brief Exercise Shader Model 2's implicit centroid rule for a COLOR0 input. */
+        Pixel20CentroidImplicitColor,
         /** @brief Overlap two pixel-input semantic masks on one register component. */
         PixelOverlappingMasks,
         /** @brief Declare the same pixel-input semantic on two different registers. */
@@ -1383,10 +1395,23 @@ namespace CNA::TestSupport
                 SyntheticRelativeAddressingProbe::PixelInputSubroutineInsideLoop;
         const bool probesPixelMiscellaneousInput =
             miscellaneousInputProbe != SyntheticMiscellaneousInputProbe::None;
+        const bool probesPixel20Centroid =
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::Pixel20CentroidControl ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::Pixel20CentroidExplicit ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::Pixel20CentroidImplicitColor;
         const bool probesPixelSemanticDeclarations =
             semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint ||
             semanticDeclarationProbe ==
                 SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelCentroidControl ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelCentroidExplicit ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelCentroidImplicitColor ||
             semanticDeclarationProbe ==
                 SyntheticSemanticDeclarationProbe::PixelOverlappingMasks ||
             semanticDeclarationProbe ==
@@ -2735,13 +2760,73 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, source(regMiscellaneous, face ? 1u : 0u));
             }
         }
+        else if (probesPixel20Centroid)
+        {
+            const bool centroidExplicit = semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::Pixel20CentroidExplicit;
+            const bool centroidColor = semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::Pixel20CentroidImplicitColor;
+            const std::uint32_t inputRegister = centroidColor ? regInput : regTexture;
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+            AppendUInt32(shader, 0x80000000u);
+            AppendUInt32(shader, destination(inputRegister, 0, 0xFu) |
+                                     (centroidExplicit ? 0x00400000u : 0u));
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c1, green
+            AppendUInt32(shader, destination(regConst, 1, 0xFu));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c2, red
+            AppendUInt32(shader, destination(regConst, 2, 0xFu));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(0.0f));
+            AppendUInt32(shader, FloatBits(1.0f));
+            AppendUInt32(shader, 0x00000058u | (4u << 24));
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(inputRegister, 0, 0x00u));
+            AppendUInt32(shader, source(regConst, 1));
+            AppendUInt32(shader, source(regConst, 2));
+        }
         else if (probesPixelSemanticDeclarations)
         {
+            const bool centroidControl = semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelCentroidControl;
+            const bool centroidExplicit = semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelCentroidExplicit;
+            const bool centroidColor = semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelCentroidImplicitColor;
             const bool duplicate = semanticDeclarationProbe ==
                 SyntheticSemanticDeclarationProbe::PixelDuplicateSemantic;
             const bool overlap = semanticDeclarationProbe ==
                 SyntheticSemanticDeclarationProbe::PixelOverlappingMasks;
-            if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint ||
+            if (centroidControl || centroidExplicit || centroidColor)
+            {
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+                AppendUInt32(shader, 0x80000000u | (centroidColor ? 10u : 5u));
+                AppendUInt32(shader, destination(regInput, 0, 0xFu) |
+                                         (centroidExplicit ? 0x00400000u : 0u));
+                AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c1, green
+                AppendUInt32(shader, destination(regConst, 1, 0xFu));
+                AppendUInt32(shader, FloatBits(0.0f));
+                AppendUInt32(shader, FloatBits(1.0f));
+                AppendUInt32(shader, FloatBits(0.0f));
+                AppendUInt32(shader, FloatBits(1.0f));
+                AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c2, red
+                AppendUInt32(shader, destination(regConst, 2, 0xFu));
+                AppendUInt32(shader, FloatBits(1.0f));
+                AppendUInt32(shader, FloatBits(0.0f));
+                AppendUInt32(shader, FloatBits(0.0f));
+                AppendUInt32(shader, FloatBits(1.0f));
+                AppendUInt32(shader, 0x00000058u | (4u << 24)); // cmp oC0, v0.x, c1, c2
+                AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+                AppendUInt32(shader, source(regInput, 0, 0x00u));
+                AppendUInt32(shader, source(regConst, 1));
+                AppendUInt32(shader, source(regConst, 2));
+            }
+            else if (semanticDeclarationProbe ==
+                         SyntheticSemanticDeclarationProbe::PackedDisjoint ||
                 semanticDeclarationProbe ==
                     SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs)
             {
@@ -2765,9 +2850,12 @@ namespace CNA::TestSupport
                              destination(regInput, duplicate ? 1u : 0u,
                                          overlap ? 0x6u : 0xCu));
             }
-            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, v0
-            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
-            AppendUInt32(shader, source(regInput, 0));
+            if (!centroidControl && !centroidExplicit && !centroidColor)
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, v0
+                AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+                AppendUInt32(shader, source(regInput, 0));
+            }
         }
         else if (usesRasterInputs)
         {
@@ -3208,6 +3296,10 @@ namespace CNA::TestSupport
         {
             // The dedicated input-range instruction already writes oC0.
         }
+        else if (probesPixel20Centroid)
+        {
+            // The centroid discriminator already writes oC0.
+        }
         else if (probesPixelOutput)
         {
             // The dedicated output-range instruction already writes its selected output.
@@ -3428,8 +3520,23 @@ namespace CNA::TestSupport
                 SyntheticRelativeAddressingProbe::VertexConstantOutsideLoop &&
             relativeAddressingProbe <=
                 SyntheticRelativeAddressingProbe::VertexInputInsideLoop;
+        const bool probesCentroid20 =
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::Pixel20CentroidControl ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::Pixel20CentroidExplicit ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::Pixel20CentroidImplicitColor;
         const bool probesVertexSemanticDeclarations =
-            semanticDeclarationProbe != SyntheticSemanticDeclarationProbe::None;
+            semanticDeclarationProbe != SyntheticSemanticDeclarationProbe::None &&
+            !probesCentroid20;
+        const bool probesCentroid =
+            semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PixelCentroidControl ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelCentroidExplicit ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelCentroidImplicitColor ||
+            probesCentroid20;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture ||
             invalidMixedConstantAbsolute ==
@@ -3784,6 +3891,14 @@ namespace CNA::TestSupport
                              destination(regTexCoordOut, duplicate || separate ? 2u : 1u,
                                          overlap ? 0x6u : 0xCu));
             }
+            if (probesCentroid && !probesCentroid20)
+            {
+                const bool color = semanticDeclarationProbe ==
+                    SyntheticSemanticDeclarationProbe::PixelCentroidImplicitColor;
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+                AppendUInt32(shader, 0x80000000u | (color ? 10u : 5u));
+                AppendUInt32(shader, destination(regTexCoordOut, 1));
+            }
             if (semanticDeclarationProbe ==
                 SyntheticSemanticDeclarationProbe::VertexPointSizePartialMask)
             {
@@ -3808,7 +3923,7 @@ namespace CNA::TestSupport
         }
         // One declaration serves both consumers: the multi-stream fixture scales POSITION0 by it,
         // the sampling fixture forwards it, and a fixture that does both declares it once.
-        if (readsSecondStream || forwardsTexCoord ||
+        if (readsSecondStream || forwardsTexCoord || probesCentroid ||
             relativeAddressingProbe == SyntheticRelativeAddressingProbe::VertexInputInsideLoop)
         {
             // dcl_texcoord v1
@@ -4421,6 +4536,18 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, destination(regTexCoordOut, 2));
                 AppendUInt32(shader, source(regConst, 241u));
             }
+        }
+        if (probesCentroid)
+        {
+            const bool color = semanticDeclarationProbe ==
+                    SyntheticSemanticDeclarationProbe::PixelCentroidImplicitColor ||
+                semanticDeclarationProbe ==
+                    SyntheticSemanticDeclarationProbe::Pixel20CentroidImplicitColor;
+            AppendUInt32(shader, 0x00000001u | (2u << 24));
+            AppendUInt32(shader, destination(
+                probesCentroid20 && color ? regAttrOut : regTexCoordOut,
+                probesCentroid20 ? 0u : 1u));
+            AppendUInt32(shader, source(regInput, 1));
         }
         if (usesPredication)
         {

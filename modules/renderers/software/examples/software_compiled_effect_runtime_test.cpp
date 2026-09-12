@@ -79,6 +79,7 @@ using Microsoft::Xna::Framework::Graphics::RasterizerState;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
+using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SamplerState;
 using Microsoft::Xna::Framework::Graphics::SpriteBatch;
 using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
@@ -3749,6 +3750,82 @@ namespace
         }
     }
 
+    void CheckCompiledCentroidInterpolation()
+    {
+        using Probe = CNA::TestSupport::SyntheticSemanticDeclarationProbe;
+        constexpr std::array probes{Probe::PixelCentroidControl,
+                                    Probe::PixelCentroidImplicitColor,
+                                    Probe::PixelCentroidExplicit,
+                                    Probe::Pixel20CentroidControl,
+                                    Probe::Pixel20CentroidImplicitColor,
+                                    Probe::Pixel20CentroidExplicit};
+        for (const Probe semanticProbe : probes)
+        {
+            GraphicsDevice device;
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.semanticDeclarationProbe = semanticProbe;
+            auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+                device, CNA::TestSupport::BuildSyntheticEffect(options));
+            effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+            struct Vertex { float x, y, z, u, v; };
+            const Vertex triangle[3] = {
+                {-0.2f,  1.0f, 0.0f, 0.0f, 0.0f},
+                {-0.2f, -1.0f, 0.0f, 0.0f, 0.0f},
+                { 0.9f,  0.0f, 0.0f, 1.0f, 0.0f},
+            };
+            const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+                VertexElement(0, VertexElementFormat::Vector3,
+                              VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector2,
+                              VertexElementUsage::TextureCoordinate, 0),
+            });
+            RenderTarget2D target(device, 4, 4, false, SurfaceFormat::Color,
+                                  DepthFormat::None, 4,
+                                  RenderTargetUsage::PreserveContents);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(triangle), 0, 1, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            Color edge = Color::Transparent;
+            const Rectangle rectangle(1, 1, 1, 1);
+            target.GetData(0, &rectangle, &edge, 0, 1);
+            std::array<Color, 16> pixels{};
+            target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+            std::string footprint;
+            for (std::size_t index = 0; index < pixels.size(); ++index)
+            {
+                if (pixels[index].getRProperty() == 0 && pixels[index].getGProperty() == 0 &&
+                    pixels[index].getBProperty() == 0)
+                    continue;
+                footprint += " " + std::to_string(index % 4u) + "," +
+                             std::to_string(index / 4u) + "=" +
+                             std::to_string(pixels[index].getRProperty()) + "/" +
+                             std::to_string(pixels[index].getGProperty()) + "/" +
+                             std::to_string(pixels[index].getBProperty());
+            }
+            const bool expectsCentroid =
+                semanticProbe != Probe::PixelCentroidControl &&
+                semanticProbe != Probe::Pixel20CentroidControl;
+            Check(expectsCentroid ? edge.getGProperty() > edge.getRProperty()
+                                  : edge.getRProperty() > edge.getGProperty(),
+                  "compiled D3D9 centroid interpolation selected the wrong side of the edge for "
+                  "probe " + std::to_string(static_cast<int>(semanticProbe)) + " (r=" +
+                      std::to_string(edge.getRProperty()) + ", g=" +
+                      std::to_string(edge.getGProperty()) + "; footprint" + footprint + ")");
+            Check((expectsCentroid ? edge.getGProperty() : edge.getRProperty()) > 32,
+                  "compiled D3D9 centroid interpolation produced no covered output for probe " +
+                      std::to_string(static_cast<int>(semanticProbe)));
+        }
+    }
+
     void CheckCompiledOutputRegisterRangeValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticOutputRegisterProbe;
@@ -5964,6 +6041,7 @@ int main()
         CheckCompiledMiscellaneousInputValidation(renderer);
         CheckCompiledSemanticDeclarationValidation(renderer);
         CheckCompiledSemanticPacking();
+        CheckCompiledCentroidInterpolation();
         CheckCompiledOutputRegisterRangeValidation(renderer);
         CheckCompiledConstantControlRegisterRangeValidation(renderer);
         CheckCompiledVertexInstructionSlotValidation(renderer);

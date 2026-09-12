@@ -1743,6 +1743,74 @@ TEST(EasyGLCompiledEffectDrawTest, ShaderModel3PacksSeparateSemanticOutputsIntoO
     EXPECT_NEAR(centre.getAProperty(), 255, 2);
 }
 
+class EasyGLCompiledEffectCentroidTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSemanticDeclarationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectCentroidTest, InterpolatesInsideAPartiallyCoveredPixel)
+{
+    using Probe = CNA::TestSupport::SyntheticSemanticDeclarationProbe;
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.semanticDeclarationProbe = GetParam();
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Transform"]->SetValue(
+        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+
+    struct Vertex { float x, y, z, u, v; };
+    const Vertex triangle[3] = {
+        {-0.2f,  1.0f, 0.0f, 0.0f, 0.0f},
+        {-0.2f, -1.0f, 0.0f, 0.0f, 0.0f},
+        { 0.9f,  0.0f, 0.0f, 1.0f, 0.0f},
+    };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    RenderTarget2D target(device, 4, 4, false, SurfaceFormat::Color,
+                          DepthFormat::None, 4, RenderTargetUsage::PreserveContents);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                              static_cast<const void*>(triangle), 0, 1, declaration);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color edge = Color::Transparent;
+    const Rectangle probe(1, 1, 1, 1);
+    target.GetData(0, &probe, &edge, 0, 1);
+    if (GetParam() == Probe::PixelCentroidControl ||
+        GetParam() == Probe::Pixel20CentroidControl)
+    {
+        EXPECT_GT(edge.getRProperty(), edge.getGProperty());
+        EXPECT_GT(edge.getRProperty(), 32);
+    }
+    else
+    {
+        EXPECT_GT(edge.getGProperty(), edge.getRProperty());
+        EXPECT_GT(edge.getGProperty(), 32);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectCentroidTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::PixelCentroidControl,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::PixelCentroidExplicit,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::PixelCentroidImplicitColor,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::Pixel20CentroidControl,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::Pixel20CentroidExplicit,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::Pixel20CentroidImplicitColor));
+
 class EasyGLCompiledEffectOutputRegisterRangeTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>
 {

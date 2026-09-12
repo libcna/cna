@@ -317,6 +317,10 @@ namespace CNA::Internal::Renderers::Software
                     semantic.registerType = registerType;
                     semantic.writeMask =
                         static_cast<std::uint8_t>((registerToken >> 16u) & 0xFu);
+                    semantic.centroid =
+                        result.stage == SoftwareShaderStageEXT::Pixel &&
+                        ((registerToken & 0x00400000u) != 0u ||
+                         semantic.usage == MOJOSHADER_USAGE_COLOR);
                     if (registerType == 10u)
                     {
                         const auto samplerType = static_cast<SoftwareShaderSamplerTypeEXT>(
@@ -345,6 +349,7 @@ namespace CNA::Internal::Renderers::Software
                         {
                             semantic.usage = MOJOSHADER_USAGE_COLOR;
                             semantic.usageIndex = static_cast<std::uint8_t>(registerNumber);
+                            semantic.centroid = true;
                         }
                         result.inputSemantics.push_back(semantic);
                     }
