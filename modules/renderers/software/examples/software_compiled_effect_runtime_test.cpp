@@ -3363,6 +3363,51 @@ namespace
         }
     }
 
+    void CheckCompiledPixel20InstructionSlotValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticPixel20InstructionSlotProbe;
+        for (const Probe probe : {Probe::ArithmeticOutOfRange, Probe::TextureOutOfRange})
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeSampler = probe == Probe::TextureOutOfRange;
+            options.includeDrawableProgram = true;
+            options.pixel20InstructionSlotProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected,
+                  "compiled Effect parser accepted an over-limit ps_2_0 program, probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+        for (const Probe probe : {Probe::ArithmeticMaximum, Probe::TextureMaximum})
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeSampler = probe == Probe::TextureMaximum;
+            options.includeDrawableProgram = true;
+            options.pixel20InstructionSlotProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Effect parser rejected a ps_2_0 program at its instruction-slot limit, probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -5158,6 +5203,7 @@ int main()
         CheckCompiledOutputRegisterRangeValidation(renderer);
         CheckCompiledConstantControlRegisterRangeValidation(renderer);
         CheckCompiledVertexInstructionSlotValidation(renderer);
+        CheckCompiledPixel20InstructionSlotValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();

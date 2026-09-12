@@ -1463,6 +1463,51 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumVertexInstructionSlots)
     }
 }
 
+class EasyGLCompiledEffectPixel20InstructionSlotTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticPixel20InstructionSlotProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPixel20InstructionSlotTest,
+       RejectsFirstInstructionSlotBeyondProfileLimit)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeSampler = GetParam() ==
+                             CNA::TestSupport::SyntheticPixel20InstructionSlotProbe::
+                                 TextureOutOfRange;
+    options.includeDrawableProgram = true;
+    options.pixel20InstructionSlotProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangePixel20InstructionSlots,
+    EasyGLCompiledEffectPixel20InstructionSlotTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticPixel20InstructionSlotProbe::ArithmeticOutOfRange,
+        CNA::TestSupport::SyntheticPixel20InstructionSlotProbe::TextureOutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumPixel20InstructionSlots)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticPixel20InstructionSlotProbe;
+    for (const Probe probe : {Probe::ArithmeticMaximum, Probe::TextureMaximum})
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeSampler = probe == Probe::TextureMaximum;
+        options.includeDrawableProgram = true;
+        options.pixel20InstructionSlotProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;

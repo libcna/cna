@@ -1,0 +1,57 @@
+diff --git a/mojoshader.c b/mojoshader.c
+index 91d2969..d6b10bf 100644
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -347,5 +347,30 @@ static void validate_vertex_instruction_slot_count(Context *ctx)
+ } // validate_vertex_instruction_slot_count
+ 
++static void validate_pixel_shader_model_two_zero_instruction_slot_count(
++    Context *ctx, const uint32 opcode, const int slots)
++{
++    if (!shader_is_pixel(ctx) || !shader_version_exactly(ctx, 2, 0))
++        return;
++
++    if ((opcode == 65) || (opcode == 66))  // TEXKILL or TEXLD.
++    {
++        // Both instructions occupy one texture slot in ps_2_0. The generic
++        // instruction table's TEXKILL cost includes an implementation detail
++        // which is not part of the D3D9 profile budget.
++        ctx->pixel_texture_instruction_count++;
++        if (ctx->pixel_texture_instruction_count > 32)
++            failf(ctx, "pixel shader texture instruction count %d exceeds the ps_2_0 limit of 32 slots",
++                  ctx->pixel_texture_instruction_count);
++    } // if
++    else
++    {
++        ctx->pixel_arithmetic_instruction_count += slots;
++        if (ctx->pixel_arithmetic_instruction_count > 64)
++            failf(ctx, "pixel shader arithmetic instruction count %d exceeds the ps_2_0 limit of 64 slots",
++                  ctx->pixel_arithmetic_instruction_count);
++    } // else
++} // validate_pixel_shader_model_two_zero_instruction_slot_count
++
+ static int temporary_register_count(const Context *ctx)
+ {
+     if (shader_is_vertex(ctx))
+@@ -2680,6 +2705,8 @@ static int parse_instruction_token(Context *ctx)
+ 
+     ctx->instruction_count += instruction->slots;
+     validate_vertex_instruction_slot_count(ctx);
++    validate_pixel_shader_model_two_zero_instruction_slot_count(
++        ctx, opcode, instruction->slots);
+ 
+     if (!isfail(ctx))
+         emitter(ctx);  // call the profile's emitter.
+diff --git a/profiles/mojoshader_profile.h b/profiles/mojoshader_profile.h
+index 99009ae..21d339a 100644
+--- a/profiles/mojoshader_profile.h
++++ b/profiles/mojoshader_profile.h
+@@ -132,6 +132,8 @@ struct Context
+     uint32 dwords[4];
+     uint32 version_token;
+     int instruction_count;
++    int pixel_arithmetic_instruction_count;
++    int pixel_texture_instruction_count;
+     uint32 instruction_controls;
+     uint32 previous_opcode;
+     int phase_count;

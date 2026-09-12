@@ -565,6 +565,21 @@ namespace CNA::TestSupport
         Vertex2xOutOfRange,
     };
 
+    /** @brief Fixed pixel Shader Model 2.0 instruction-slot boundary exercised by a program. */
+    enum class SyntheticPixel20InstructionSlotProbe
+    {
+        /** @brief Emit no dedicated instruction-slot boundary program. */
+        None,
+        /** @brief Emit exactly the 64 arithmetic slots allowed by ps_2_0. */
+        ArithmeticMaximum,
+        /** @brief Emit 65 arithmetic slots in ps_2_0. */
+        ArithmeticOutOfRange,
+        /** @brief Emit exactly the 32 texture slots allowed by ps_2_0. */
+        TextureMaximum,
+        /** @brief Emit 33 texture slots in ps_2_0. */
+        TextureOutOfRange,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -786,6 +801,9 @@ namespace CNA::TestSupport
         /** @brief Selects a fixed vertex-profile instruction-slot boundary program. */
         SyntheticVertexInstructionSlotProbe vertexInstructionSlotProbe =
             SyntheticVertexInstructionSlotProbe::None;
+        /** @brief Selects a fixed ps_2_0 instruction-slot boundary program. */
+        SyntheticPixel20InstructionSlotProbe pixel20InstructionSlotProbe =
+            SyntheticPixel20InstructionSlotProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -884,7 +902,9 @@ namespace CNA::TestSupport
         SyntheticOutputRegisterProbe outputRegisterProbe =
             SyntheticOutputRegisterProbe::None,
         SyntheticConstantControlRegisterProbe constantControlRegisterProbe =
-            SyntheticConstantControlRegisterProbe::None)
+            SyntheticConstantControlRegisterProbe::None,
+        SyntheticPixel20InstructionSlotProbe instructionSlotProbe =
+            SyntheticPixel20InstructionSlotProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1527,7 +1547,50 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 1, 0xE4u, absoluteSecond ? 11u : 0u));
         }
 
-        if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic)
+        if (instructionSlotProbe != SyntheticPixel20InstructionSlotProbe::None)
+        {
+            const bool texture =
+                instructionSlotProbe == SyntheticPixel20InstructionSlotProbe::TextureMaximum ||
+                instructionSlotProbe == SyntheticPixel20InstructionSlotProbe::TextureOutOfRange;
+            const bool maximum =
+                instructionSlotProbe == SyntheticPixel20InstructionSlotProbe::ArithmeticMaximum ||
+                instructionSlotProbe == SyntheticPixel20InstructionSlotProbe::TextureMaximum;
+            if (texture)
+            {
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl t0
+                AppendUInt32(shader, 0x80000000u);
+                AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_2d s0
+                AppendUInt32(shader, 0x80000000u | (2u << 27));
+                AppendUInt32(shader, destination(regSampler, 0, 0xFu));
+                const std::uint32_t textureSlots = maximum ? 32u : 33u;
+                for (std::uint32_t slot = 0; slot < textureSlots; ++slot)
+                {
+                    AppendUInt32(shader, 0x00000042u | (3u << 24)); // texld r0, t0, s0
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regTexture, 0));
+                    AppendUInt32(shader, source(regSampler, 0));
+                }
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
+                AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+                AppendUInt32(shader, source(regTemp, 0));
+            }
+            else
+            {
+                // The final output MOV is itself the 64th/65th arithmetic slot.
+                const std::uint32_t temporaryMoves = maximum ? 63u : 64u;
+                for (std::uint32_t slot = 0; slot < temporaryMoves; ++slot)
+                {
+                    AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0, c0
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regConst, 0));
+                }
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
+                AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+                AppendUInt32(shader, source(regTemp, 0));
+            }
+        }
+        else if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic)
         {
             AppendUInt32(shader, 0x00000051u); // def c1, .1, .2, .3, .4
             AppendUInt32(shader, destination(regConst, 1, 0xFu));
@@ -3633,7 +3696,8 @@ namespace CNA::TestSupport
             options.temporaryRegisterProbe,
             options.inputRegisterProbe,
             options.outputRegisterProbe,
-            options.constantControlRegisterProbe);
+            options.constantControlRegisterProbe,
+            options.pixel20InstructionSlotProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
