@@ -4082,6 +4082,58 @@ namespace
                   rejectedValidProbes);
     }
 
+    void CheckCompiledTexldlDestinationModifierValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticTexldlDestinationModifierProbe;
+        constexpr std::array invalidProbes{
+            Probe::PixelSaturate,
+            Probe::VertexSaturate,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.texldlDestinationModifierProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted saturated TEXLDL destinations: " +
+                  acceptedInvalidProbes);
+
+        CNA::TestSupport::SyntheticEffectOptions validOptions;
+        validOptions.includeDrawableProgram = true;
+        validOptions.includeSampler = true;
+        validOptions.texldlDestinationModifierProbe = Probe::PixelPartialPrecision;
+        const auto validBytes = CNA::TestSupport::BuildSyntheticEffect(validOptions);
+        bool acceptedPartialPrecision = true;
+        try
+        {
+            static_cast<void>(renderer.CreateCompiledEffect(validBytes.data(), validBytes.size()));
+        }
+        catch (const std::runtime_error&)
+        {
+            acceptedPartialPrecision = false;
+        }
+        Check(acceptedPartialPrecision,
+              "compiled Effect parser rejected Microsoft-valid pixel TEXLDL _pp");
+    }
+
     void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
@@ -6669,6 +6721,7 @@ int main()
         CheckCompiledTexld20OperandValidation(renderer);
         CheckCompiledTextureInstructionProfileValidation(renderer);
         CheckCompiledTexlddOperandValidation(renderer);
+        CheckCompiledTexldlDestinationModifierValidation(renderer);
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);

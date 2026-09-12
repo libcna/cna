@@ -329,6 +329,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   texture/temporary coordinate and identity swizzles on all four sources. Controls retain 2.x
   `_pp`, temporary coordinates and constant gradients, plus Shader Model 3 output/partial results,
   constant coordinates and source swizzles. Sixteen paired Software/EasyGL probes cover the rule.
+  SOFTWARE-449 closes the neighboring `TEXLDL` destination-modifier hole. Real Microsoft assembly
+  rejects `_sat` for both pixel and vertex Shader Model 3 while accepting pixel `_pp` and the
+  otherwise permissive Shader Model 3 destination, coordinate and swizzle forms. Both compiled
+  paths had accepted the two invalid saturated programs. Managed common validation now rejects
+  saturation only; two rejection probes, the `_pp` control, the direct Software runtime and all
+  407 isolated EasyGL compiled-Effect tests pass. The dependency series now contains 75 patches.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

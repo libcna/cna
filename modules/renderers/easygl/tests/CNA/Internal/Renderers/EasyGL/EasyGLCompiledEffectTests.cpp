@@ -1970,6 +1970,46 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel30ConstantCoordinate,
         CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel30SourceSwizzles));
 
+class EasyGLCompiledEffectInvalidTexldlDestinationModifierTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticTexldlDestinationModifierProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidTexldlDestinationModifierTest, RejectsModifier)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texldlDestinationModifierProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTexldlDestinationModifier,
+    EasyGLCompiledEffectInvalidTexldlDestinationModifierTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexldlDestinationModifierProbe::PixelSaturate,
+        CNA::TestSupport::SyntheticTexldlDestinationModifierProbe::VertexSaturate));
+
+TEST(EasyGLCompiledEffectTexldlDestinationModifierTests, AcceptsPixelPartialPrecision)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texldlDestinationModifierProbe =
+        CNA::TestSupport::SyntheticTexldlDestinationModifierProbe::PixelPartialPrecision;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
 class EasyGLCompiledEffectTypedControlSourceTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticTypedControlSourceProbe>
 {
