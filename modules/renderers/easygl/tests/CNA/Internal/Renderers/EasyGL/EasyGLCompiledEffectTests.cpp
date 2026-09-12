@@ -1251,6 +1251,61 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedTemporaryRegisters)
     }
 }
 
+class EasyGLCompiledEffectInputRegisterRangeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInputRegisterProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInputRegisterRangeTest, RejectsFirstOutOfRangeRegister)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.inputRegisterProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangeInput,
+    EasyGLCompiledEffectInputRegisterRangeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel11ColorOutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel11TextureOutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel14TextureOutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel20ColorOutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel20TexCoordOutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel30OutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Vertex20OutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Vertex30OutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedInputRegisters)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticInputRegisterProbe;
+    for (const Probe probe : {
+             Probe::Pixel11ColorMaximum,
+             Probe::Pixel11TextureMaximum,
+             Probe::Pixel14TextureMaximum,
+             Probe::Pixel20ColorMaximum,
+             Probe::Pixel20TexCoordMaximum,
+             Probe::Pixel30Maximum,
+             Probe::Vertex20Maximum,
+             Probe::Vertex30Maximum,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.inputRegisterProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;

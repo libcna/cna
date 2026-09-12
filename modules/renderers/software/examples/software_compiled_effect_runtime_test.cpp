@@ -3119,6 +3119,70 @@ namespace
         }
     }
 
+    void CheckCompiledInputRegisterRangeValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticInputRegisterProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel11ColorOutOfRange,
+            Probe::Pixel11TextureOutOfRange,
+            Probe::Pixel14TextureOutOfRange,
+            Probe::Pixel20ColorOutOfRange,
+            Probe::Pixel20TexCoordOutOfRange,
+            Probe::Pixel30OutOfRange,
+            Probe::Vertex20OutOfRange,
+            Probe::Vertex30OutOfRange,
+        };
+        std::size_t rejectedCount = 0;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.inputRegisterProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (rejected) ++rejectedCount;
+        }
+        Check(rejectedCount == invalidProbes.size(),
+              "compiled Effect parser accepted " +
+                  std::to_string(invalidProbes.size() - rejectedCount) +
+                  " out-of-range input registers");
+        constexpr std::array validProbes{
+            Probe::Pixel11ColorMaximum,
+            Probe::Pixel11TextureMaximum,
+            Probe::Pixel14TextureMaximum,
+            Probe::Pixel20ColorMaximum,
+            Probe::Pixel20TexCoordMaximum,
+            Probe::Pixel30Maximum,
+            Probe::Vertex20Maximum,
+            Probe::Vertex30Maximum,
+        };
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.inputRegisterProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted, "compiled Effect parser rejected maximum valid input register");
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -4910,6 +4974,7 @@ int main()
         CheckCompiledShaderModel3MixedConstantAbsoluteValidation(renderer);
         CheckCompiledSamplerRegisterRangeValidation(renderer);
         CheckCompiledTemporaryRegisterRangeValidation(renderer);
+        CheckCompiledInputRegisterRangeValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();

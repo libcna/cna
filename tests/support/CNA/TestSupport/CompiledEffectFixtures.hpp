@@ -425,6 +425,45 @@ namespace CNA::TestSupport
         Vertex30OutOfRange,
     };
 
+    /** @brief Shader profile and input-register boundary exercised by a synthetic program. */
+    enum class SyntheticInputRegisterProbe
+    {
+        /** @brief Emit no dedicated input-register boundary instruction. */
+        None,
+        /** @brief Read the last valid ps_1_1 color input, v1. */
+        Pixel11ColorMaximum,
+        /** @brief Read the first invalid ps_1_1 color input, v2. */
+        Pixel11ColorOutOfRange,
+        /** @brief Read the last valid ps_1_1 texture input, t3. */
+        Pixel11TextureMaximum,
+        /** @brief Read the first invalid ps_1_1 texture input, t4. */
+        Pixel11TextureOutOfRange,
+        /** @brief Read the last valid ps_1_4 texture input, t5. */
+        Pixel14TextureMaximum,
+        /** @brief Read the first invalid ps_1_4 texture input, t6. */
+        Pixel14TextureOutOfRange,
+        /** @brief Read the last valid ps_2_0 color input, v1. */
+        Pixel20ColorMaximum,
+        /** @brief Read the first invalid ps_2_0 color input, v2. */
+        Pixel20ColorOutOfRange,
+        /** @brief Read the last valid ps_2_0 texture-coordinate input, t7. */
+        Pixel20TexCoordMaximum,
+        /** @brief Read the first invalid ps_2_0 texture-coordinate input, t8. */
+        Pixel20TexCoordOutOfRange,
+        /** @brief Read the last valid ps_3_0 interpolated input, v9. */
+        Pixel30Maximum,
+        /** @brief Read the first invalid ps_3_0 interpolated input, v10. */
+        Pixel30OutOfRange,
+        /** @brief Read the last valid vs_2_0 vertex input, v15. */
+        Vertex20Maximum,
+        /** @brief Read the first invalid vs_2_0 vertex input, v16. */
+        Vertex20OutOfRange,
+        /** @brief Read the last valid vs_3_0 vertex input, v15. */
+        Vertex30Maximum,
+        /** @brief Read the first invalid vs_3_0 vertex input, v16. */
+        Vertex30OutOfRange,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -634,6 +673,9 @@ namespace CNA::TestSupport
         /** @brief Selects a fixed-profile temporary-register boundary probe. */
         SyntheticTemporaryRegisterProbe temporaryRegisterProbe =
             SyntheticTemporaryRegisterProbe::None;
+        /** @brief Selects a fixed-profile input-register boundary probe. */
+        SyntheticInputRegisterProbe inputRegisterProbe =
+            SyntheticInputRegisterProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -726,7 +768,9 @@ namespace CNA::TestSupport
         SyntheticInvalidShaderModel3MixedConstantAbsolute invalidMixedConstantAbsolute =
             SyntheticInvalidShaderModel3MixedConstantAbsolute::None,
         SyntheticTemporaryRegisterProbe temporaryRegisterProbe =
-            SyntheticTemporaryRegisterProbe::None)
+            SyntheticTemporaryRegisterProbe::None,
+        SyntheticInputRegisterProbe inputRegisterProbe =
+            SyntheticInputRegisterProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -743,6 +787,24 @@ namespace CNA::TestSupport
         const bool probesPixel30Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel30Maximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel30OutOfRange;
+        const bool probesPixel20ColorInput =
+            inputRegisterProbe == SyntheticInputRegisterProbe::Pixel20ColorMaximum ||
+            inputRegisterProbe == SyntheticInputRegisterProbe::Pixel20ColorOutOfRange;
+        const bool probesPixel20TexCoordInput =
+            inputRegisterProbe == SyntheticInputRegisterProbe::Pixel20TexCoordMaximum ||
+            inputRegisterProbe == SyntheticInputRegisterProbe::Pixel20TexCoordOutOfRange;
+        const bool probesPixel30Input =
+            inputRegisterProbe == SyntheticInputRegisterProbe::Pixel30Maximum ||
+            inputRegisterProbe == SyntheticInputRegisterProbe::Pixel30OutOfRange;
+        const bool probesPixel11ColorInput =
+            inputRegisterProbe == SyntheticInputRegisterProbe::Pixel11ColorMaximum ||
+            inputRegisterProbe == SyntheticInputRegisterProbe::Pixel11ColorOutOfRange;
+        const bool probesPixel11TextureInput =
+            inputRegisterProbe == SyntheticInputRegisterProbe::Pixel11TextureMaximum ||
+            inputRegisterProbe == SyntheticInputRegisterProbe::Pixel11TextureOutOfRange;
+        const bool probesPixel14TextureInput =
+            inputRegisterProbe == SyntheticInputRegisterProbe::Pixel14TextureMaximum ||
+            inputRegisterProbe == SyntheticInputRegisterProbe::Pixel14TextureOutOfRange;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -753,7 +815,7 @@ namespace CNA::TestSupport
                 SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelAbsoluteThenPlain ||
             invalidMixedConstantAbsolute ==
                 SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelAllAbsolute ||
-            probesPixel30Temporary;
+            probesPixel30Temporary || probesPixel30Input;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -765,9 +827,10 @@ namespace CNA::TestSupport
                                            SyntheticLegacyBumpEnvironment::Arithmetic;
         const bool usesShaderModel13 =
             legacyDepthOutput == SyntheticLegacyDepthOutput::TextureMatrix2;
-        const std::uint32_t versionToken = probesPixel11Temporary
+        const std::uint32_t versionToken = probesPixel11Temporary || probesPixel11ColorInput ||
+                                                   probesPixel11TextureInput
                                                ? 0xFFFF0101u
-                                           : probesPixel14Temporary
+                                           : probesPixel14Temporary || probesPixel14TextureInput
                                                ? 0xFFFF0104u
                                            : probesPixel20Temporary
                                                ? 0xFFFF0200u
@@ -845,9 +908,9 @@ namespace CNA::TestSupport
             appendCtabString(breakSymbolBinding ? "NoSuchParameter" : "Tint");
         const std::uint32_t samplerName = appendCtabString("FxSampler");
         const std::uint32_t target = appendCtabString(
-            probesPixel11Temporary
+            probesPixel11Temporary || probesPixel11ColorInput || probesPixel11TextureInput
                 ? "ps_1_1"
-                : probesPixel14Temporary
+                : probesPixel14Temporary || probesPixel14TextureInput
                       ? "ps_1_4"
                       : probesPixel20Temporary
                             ? "ps_2_0"
@@ -924,6 +987,45 @@ namespace CNA::TestSupport
             return 0x80000000u | registerBits(type) | number | (swizzle << 16) |
                    (modifier << 24);
         };
+
+        if (probesPixel11ColorInput || probesPixel11TextureInput ||
+            probesPixel14TextureInput)
+        {
+            const bool maximum =
+                inputRegisterProbe == SyntheticInputRegisterProbe::Pixel11ColorMaximum ||
+                inputRegisterProbe == SyntheticInputRegisterProbe::Pixel11TextureMaximum ||
+                inputRegisterProbe == SyntheticInputRegisterProbe::Pixel14TextureMaximum;
+            const std::uint32_t registerType = probesPixel11ColorInput ? regInput : regTexture;
+            const std::uint32_t registerNumber = probesPixel11ColorInput
+                                                     ? (maximum ? 1u : 2u)
+                                                 : probesPixel11TextureInput
+                                                     ? (maximum ? 3u : 4u)
+                                                     : (maximum ? 5u : 6u);
+            AppendUInt32(shader, 0x00000001u); // mov r0, input
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(registerType, registerNumber));
+        }
+
+        if (probesPixel20ColorInput || probesPixel20TexCoordInput || probesPixel30Input)
+        {
+            const bool maximum =
+                inputRegisterProbe == SyntheticInputRegisterProbe::Pixel20ColorMaximum ||
+                inputRegisterProbe == SyntheticInputRegisterProbe::Pixel20TexCoordMaximum ||
+                inputRegisterProbe == SyntheticInputRegisterProbe::Pixel30Maximum;
+            const std::uint32_t registerNumber = probesPixel20ColorInput
+                                                     ? (maximum ? 1u : 2u)
+                                                 : probesPixel20TexCoordInput
+                                                     ? (maximum ? 7u : 8u)
+                                                     : (maximum ? 9u : 10u);
+            const std::uint32_t registerType =
+                probesPixel20TexCoordInput ? regTexture : regInput;
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl input
+            AppendUInt32(shader, probesPixel30Input ? 0x80000005u : 0x80000000u);
+            AppendUInt32(shader, destination(registerType, registerNumber, 0xFu));
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, input
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(registerType, registerNumber));
+        }
 
         if (readsUninitializedDestination)
         {
@@ -1902,6 +2004,12 @@ namespace CNA::TestSupport
         {
             // The deliberately invalid instruction already writes ps_1_x's r0 colour output.
         }
+        else if (probesPixel11ColorInput || probesPixel11TextureInput ||
+                 probesPixel14TextureInput || probesPixel20ColorInput ||
+                 probesPixel20TexCoordInput || probesPixel30Input)
+        {
+            // The dedicated input-range instruction already writes oC0.
+        }
         else if (probesPixel11Temporary || probesPixel14Temporary)
         {
             AppendUInt32(shader, 0x00000001u); // mov r0, c0
@@ -1993,7 +2101,9 @@ namespace CNA::TestSupport
                                                                     invalidMixedConstantAbsolute =
                                                                         SyntheticInvalidShaderModel3MixedConstantAbsolute::None,
                                                                 SyntheticTemporaryRegisterProbe temporaryRegisterProbe =
-                                                                    SyntheticTemporaryRegisterProbe::None)
+                                                                    SyntheticTemporaryRegisterProbe::None,
+                                                                SyntheticInputRegisterProbe inputRegisterProbe =
+                                                                    SyntheticInputRegisterProbe::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -2003,6 +2113,12 @@ namespace CNA::TestSupport
                                            SyntheticTemporaryRegisterProbe::Vertex11Maximum ||
                                        temporaryRegisterProbe ==
                                            SyntheticTemporaryRegisterProbe::Vertex11OutOfRange;
+        const bool probesVertex30Input =
+            inputRegisterProbe == SyntheticInputRegisterProbe::Vertex30Maximum ||
+            inputRegisterProbe == SyntheticInputRegisterProbe::Vertex30OutOfRange;
+        const bool probesVertex20Input =
+            inputRegisterProbe == SyntheticInputRegisterProbe::Vertex20Maximum ||
+            inputRegisterProbe == SyntheticInputRegisterProbe::Vertex20OutOfRange;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture ||
             invalidMixedConstantAbsolute ==
@@ -2012,7 +2128,8 @@ namespace CNA::TestSupport
             invalidMixedConstantAbsolute ==
                 SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAllAbsolute ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex30Maximum ||
-            temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex30OutOfRange;
+            temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex30OutOfRange ||
+            probesVertex30Input;
         const bool probesVertex2xTemporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xMaximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange;
@@ -2020,7 +2137,9 @@ namespace CNA::TestSupport
                                                ? 0xFFFE0101u
                                            : probesVertex2xTemporary
                                                ? 0xFFFE02FFu
-                                           : usesShaderModel3 ? 0xFFFE0300u : 0xFFFE0200u;
+                                           : usesShaderModel3
+                                               ? 0xFFFE0300u
+                                               : 0xFFFE0200u;
         const std::uint32_t constantCount =
             1u + (readsSecondStream ? 1u : 0u) + (samplesTexture ? 1u : 0u);
 
@@ -2089,7 +2208,9 @@ namespace CNA::TestSupport
             usesShaderModel11 ? "vs_1_1"
                               : probesVertex2xTemporary
                                     ? "vs_2_x"
-                                    : usesShaderModel3 ? "vs_3_0" : "vs_2_0");
+                                    : usesShaderModel3
+                                          ? "vs_3_0"
+                                          : "vs_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
         while ((ctab.size() & 3u) != 0) ctab.push_back(0);
 
@@ -2270,6 +2391,15 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x80000000u | 0u);        // D3DDECLUSAGE_POSITION, index 0
             AppendUInt32(shader, destination(regInput, 0));
         }
+        if (probesVertex20Input || probesVertex30Input)
+        {
+            const bool maximum =
+                inputRegisterProbe == SyntheticInputRegisterProbe::Vertex20Maximum ||
+                inputRegisterProbe == SyntheticInputRegisterProbe::Vertex30Maximum;
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_texcoord7 v#
+            AppendUInt32(shader, 0x80070005u);
+            AppendUInt32(shader, destination(regInput, maximum ? 15u : 16u));
+        }
         if (usesShaderModel3)
         {
             // Shader Model 3 uses generic o# outputs, each with an explicit semantic declaration.
@@ -2303,6 +2433,15 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_<kind> s#
             AppendUInt32(shader, 0x80000000u | (samplerTextureType << 27));
             AppendUInt32(shader, destination(regSampler, samplerRegister));
+        }
+        if (probesVertex20Input || probesVertex30Input)
+        {
+            const bool maximum =
+                inputRegisterProbe == SyntheticInputRegisterProbe::Vertex20Maximum ||
+                inputRegisterProbe == SyntheticInputRegisterProbe::Vertex30Maximum;
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, v#
+            AppendUInt32(shader, destination(regTemp, 1));
+            AppendUInt32(shader, source(regInput, maximum ? 15u : 16u));
         }
         if (sgnScratchOperands != SyntheticSgnScratchOperands::None)
         {
@@ -3113,7 +3252,8 @@ namespace CNA::TestSupport
             options.pixelShaderInvalidMatrixOperands,
             options.invalidPreShaderModel3AbsoluteSource,
             options.invalidShaderModel3MixedConstantAbsolute,
-            options.temporaryRegisterProbe);
+            options.temporaryRegisterProbe,
+            options.inputRegisterProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -3193,7 +3333,8 @@ namespace CNA::TestSupport
                 options.shaderModel20InvalidDynamicFeature,
                 options.invalidPreShaderModel3AbsoluteSource,
                 options.invalidShaderModel3MixedConstantAbsolute,
-                options.temporaryRegisterProbe);
+                options.temporaryRegisterProbe,
+                options.inputRegisterProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());
