@@ -181,6 +181,11 @@ namespace CNA::Internal::Renderers::Rlgl
                 {
                     std::swap(v1, v2);
                 }
+                if (SampledRowsAreBottomUp(texture))
+                {
+                    v1 = 1.0f - v1;
+                    v2 = 1.0f - v2;
+                }
 
                 const float sourceWidth = static_cast<float>(sourceRectangle.Width);
                 const float sourceHeight = static_cast<float>(sourceRectangle.Height);

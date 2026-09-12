@@ -14,6 +14,20 @@ namespace CNA::Internal::Renderers::Rlgl
 {
     class RlglRenderer;
 
+    /** @brief Common native-texture identity shared by sampled RLGL resources. */
+    class IRlglTextureResource
+    {
+    public:
+        /** @brief Releases the renderer-local texture identity interface. */
+        virtual ~IRlglTextureResource() = default;
+
+        /** @brief Returns the rlgl-owned OpenGL texture name. */
+        [[nodiscard]] virtual unsigned int NativeTextureId() const noexcept = 0;
+
+        /** @brief Returns true when rasterization stored the texture rows bottom-up. */
+        [[nodiscard]] virtual bool SampledRowsAreBottomUp() const noexcept = 0;
+    };
+
     /**
      * @brief Creates the current RLGL two-dimensional texture implementation.
      * @param data Dimensions, format, mip count, and level-zero bytes.
@@ -21,6 +35,43 @@ namespace CNA::Internal::Renderers::Rlgl
      */
     [[nodiscard]] std::unique_ptr<ITextureRenderer> CreateTextureRenderer(
         const CNA::Internal::Graphics::ImageData& data);
+
+    /** @brief Complete renderer/native RenderTarget2D facts exposed to focused validation. */
+    struct RenderTargetResourceSnapshot
+    {
+        unsigned int framebuffer = 0;
+        unsigned int colorTexture = 0;
+        unsigned int depthStencilRenderbuffer = 0;
+        int width = 0;
+        int height = 0;
+        int depthFormat = 0;
+        int levelCount = 1;
+        int multiSampleCount = 0;
+        bool preserveContents = false;
+    };
+
+    /**
+     * @brief Creates a single-sample Color RenderTarget2D resource.
+     * @param width Width in pixels.
+     * @param height Height in pixels.
+     * @param depthFormat Raw XNA DepthFormat ordinal.
+     * @param preserveContents Whether target contents must survive target switches.
+     * @param mipMap Whether to allocate and regenerate a full mip chain.
+     * @param multiSampleCount Requested sample count; non-zero is rejected until RLGL-041.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal; Color is the current baseline.
+     * @return Renderer-owned framebuffer resource.
+     */
+    [[nodiscard]] std::unique_ptr<IRenderTargetRenderer> CreateRenderTargetRenderer(
+        int width, int height, int depthFormat, bool preserveContents,
+        bool mipMap, int multiSampleCount, int surfaceFormat);
+
+    /**
+     * @brief Captures RenderTarget2D resource state for focused validation.
+     * @param resource RLGL render-target resource.
+     * @return Native identities and applied creation parameters.
+     */
+    [[nodiscard]] RenderTargetResourceSnapshot GetRenderTargetResourceSnapshotForTesting(
+        const IRenderTargetRenderer& resource);
 
     /**
      * @brief Creates the production low-level SpriteBatch implementation.
@@ -99,6 +150,13 @@ namespace CNA::Internal::Renderers::Rlgl
      * @return Non-zero native texture name.
      */
     [[nodiscard]] unsigned int GetNativeTextureId(const ITextureRenderer& resource);
+
+    /**
+     * @brief Reports whether a sampled resource was populated by GL rasterization.
+     * @param resource RLGL texture or RenderTarget2D resource.
+     * @return True for render targets and false for CPU-uploaded Texture2D resources.
+     */
+    [[nodiscard]] bool SampledRowsAreBottomUp(const ITextureRenderer& resource);
 
     /**
      * @brief Returns the native buffer name of an RLGL vertex resource.

@@ -141,6 +141,40 @@ namespace
         GLint alignment_ = 4;
     };
 
+    class FramebufferBindingRestore final
+    {
+    public:
+        FramebufferBindingRestore()
+        {
+            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFramebuffer_);
+            glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFramebuffer_);
+        }
+
+        ~FramebufferBindingRestore()
+        {
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(drawFramebuffer_));
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(readFramebuffer_));
+        }
+
+        FramebufferBindingRestore(const FramebufferBindingRestore&) = delete;
+        FramebufferBindingRestore& operator=(const FramebufferBindingRestore&) = delete;
+
+        [[nodiscard]] unsigned int DrawFramebuffer() const noexcept
+        {
+            return static_cast<unsigned int>(drawFramebuffer_);
+        }
+
+        void ForgetDeletedFramebuffer(const unsigned int framebuffer) noexcept
+        {
+            if (drawFramebuffer_ == static_cast<GLint>(framebuffer)) drawFramebuffer_ = 0;
+            if (readFramebuffer_ == static_cast<GLint>(framebuffer)) readFramebuffer_ = 0;
+        }
+
+    private:
+        GLint drawFramebuffer_ = 0;
+        GLint readFramebuffer_ = 0;
+    };
+
     [[nodiscard]] GLint SamplerMinFilter(const int filter)
     {
         switch (filter)
@@ -1289,6 +1323,7 @@ in float fragmentVertexAlpha;
 
 uniform sampler2D texture0;
 uniform sampler2D texture1;
+uniform vec2 textureFlipV;
 uniform float textureEnabled;
 uniform float dualTexture;
 uniform vec4 alphaTest;
@@ -1339,12 +1374,18 @@ void computeLights(vec3 worldPosition, vec3 normal, out vec3 litRgb, out vec3 sp
 
 void main()
 {
+    vec2 textureCoordinate0 = vec2(
+        fragmentTexCoord.x,
+        mix(fragmentTexCoord.y, 1.0 - fragmentTexCoord.y, textureFlipV.x));
+    vec2 textureCoordinate1 = vec2(
+        fragmentTexCoord1.x,
+        mix(fragmentTexCoord1.y, 1.0 - fragmentTexCoord1.y, textureFlipV.y));
     vec4 sampled = (textureEnabled > 0.5)
-        ? texture(texture0, fragmentTexCoord) : vec4(1.0);
+        ? texture(texture0, textureCoordinate0) : vec4(1.0);
     if (dualTexture > 0.5)
     {
         sampled.rgb *= 2.0;
-        sampled *= texture(texture1, fragmentTexCoord1);
+        sampled *= texture(texture1, textureCoordinate1);
     }
     if (lightingEnabled > 0.5)
     {
@@ -1401,6 +1442,8 @@ void main()
                 rlGetLocationUniform(pipeline.program, "texture0");
             pipeline.texture1Location =
                 rlGetLocationUniform(pipeline.program, "texture1");
+            pipeline.textureFlipVLocation =
+                rlGetLocationUniform(pipeline.program, "textureFlipV");
             pipeline.textureEnabledLocation =
                 rlGetLocationUniform(pipeline.program, "textureEnabled");
             pipeline.dualTextureLocation =
@@ -1449,6 +1492,7 @@ void main()
                 pipeline.normalMatrixLocations[2] < 0 || pipeline.diffuseColorLocation < 0 ||
                 pipeline.vertexColorEnabledLocation < 0 ||
                 pipeline.textureLocation < 0 || pipeline.texture1Location < 0 ||
+                pipeline.textureFlipVLocation < 0 ||
                 pipeline.textureEnabledLocation < 0 || pipeline.dualTextureLocation < 0 ||
                 pipeline.alphaTestLocation < 0 || pipeline.fogVectorLocation < 0 ||
                 pipeline.fogColorLocation < 0 || pipeline.lightingEnabledLocation < 0 ||
@@ -1596,6 +1640,15 @@ void main()
         rlSetUniform(pipeline.textureLocation, &textureUnit, RL_SHADER_UNIFORM_INT, 1);
         constexpr int textureUnit1 = 1;
         rlSetUniform(pipeline.texture1Location, &textureUnit1, RL_SHADER_UNIFORM_INT, 1);
+        const float textureFlipV[2] = {
+            params.textureEnabled && params.texture0 != nullptr &&
+                    SampledRowsAreBottomUp(*params.texture0)
+                ? 1.0f : 0.0f,
+            params.dualTexture && params.texture1 != nullptr &&
+                    SampledRowsAreBottomUp(*params.texture1)
+                ? 1.0f : 0.0f};
+        rlSetUniform(
+            pipeline.textureFlipVLocation, textureFlipV, RL_SHADER_UNIFORM_VEC2, 1);
         const float textureFlag = params.textureEnabled ? 1.0f : 0.0f;
         rlSetUniform(
             pipeline.textureEnabledLocation, &textureFlag,
@@ -1974,16 +2027,22 @@ void main()
         const int mipLevels, const std::uint8_t* pixels)
     {
         RequireInitialized("Texture2D creation");
-        if (width <= 0 || height <= 0 || mipLevels <= 0 || pixels == nullptr)
+        if (width <= 0 || height <= 0 || mipLevels <= 0)
             throw std::invalid_argument("RLGL: invalid Texture2D creation request");
 
         const TextureFormatInfo format = TextureFormat(surfaceFormat);
+        if (format.compressed && pixels == nullptr)
+            throw std::invalid_argument("RLGL: compressed Texture2D creation requires blocks");
         const TextureBindingRestore bindingRestore;
         const UnpackAlignmentRestore unpackRestore;
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         std::vector<std::uint8_t> converted;
-        const std::uint8_t* upload = ConvertPackedUpload(
-            format, pixels, static_cast<std::size_t>(width) * height, converted);
+        const std::uint8_t* upload = pixels;
+        if (pixels != nullptr)
+        {
+            upload = ConvertPackedUpload(
+                format, pixels, static_cast<std::size_t>(width) * height, converted);
+        }
         const bool nativeCompressed =
             !format.compressed || SupportsDxtTexture2D(surfaceFormat);
         if (format.compressed && !nativeCompressed)
@@ -2207,6 +2266,198 @@ void main()
             std::memcpy(
                 pixels + static_cast<std::size_t>(row) * destinationRowBytes,
                 source, destinationRowBytes);
+        }
+    }
+
+    RenderTargetStorage CreateRenderTarget2D(
+        const int width, const int height, const int levelCount, const int depthFormat)
+    {
+        RequireInitialized("RenderTarget2D creation");
+        if (width <= 0 || height <= 0 || levelCount <= 0 ||
+            depthFormat < 0 || depthFormat > 3)
+        {
+            throw std::invalid_argument("RLGL: invalid RenderTarget2D creation request");
+        }
+        const std::uint64_t texelCount =
+            static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height);
+        if (texelCount > static_cast<std::uint64_t>(SIZE_MAX / 4u))
+            throw std::overflow_error("RLGL: RenderTarget2D allocation size overflow");
+
+        const FramebufferBindingRestore framebufferRestore;
+        RenderTargetStorage storage;
+        storage.colorTexture = CreateTexture2D(
+            0, width, height, levelCount, nullptr);
+        try
+        {
+            storage.framebuffer = rlLoadFramebuffer();
+            if (storage.framebuffer == 0)
+                throw std::runtime_error("RLGL: framebuffer allocation returned a zero name");
+            rlFramebufferAttach(
+                storage.framebuffer, storage.colorTexture,
+                RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+
+            if (depthFormat != 0)
+            {
+                GLenum internalFormat = GL_DEPTH_COMPONENT16;
+                if (depthFormat == 2) internalFormat = GL_DEPTH_COMPONENT24;
+                else if (depthFormat == 3) internalFormat = GL_DEPTH24_STENCIL8;
+
+                // rlLoadTextureDepth deliberately chooses an implementation-defined precision
+                // and has no packed-stencil parameter. XNA exposes the applied DepthFormat, so
+                // this one missing rlgl resource wrapper uses its already-loaded GL dispatch.
+                glGenRenderbuffers(1, &storage.depthStencilRenderbuffer);
+                glBindRenderbuffer(GL_RENDERBUFFER, storage.depthStencilRenderbuffer);
+                glRenderbufferStorage(GL_RENDERBUFFER, internalFormat, width, height);
+                glBindRenderbuffer(GL_RENDERBUFFER, 0);
+                if (storage.depthStencilRenderbuffer == 0)
+                    throw std::runtime_error(
+                        "RLGL: depth/stencil renderbuffer allocation returned a zero name");
+                rlFramebufferAttach(
+                    storage.framebuffer, storage.depthStencilRenderbuffer,
+                    RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
+                if (depthFormat == 3)
+                {
+                    rlFramebufferAttach(
+                        storage.framebuffer, storage.depthStencilRenderbuffer,
+                        RL_ATTACHMENT_STENCIL, RL_ATTACHMENT_RENDERBUFFER, 0);
+                }
+            }
+
+            if (!rlFramebufferComplete(storage.framebuffer))
+            {
+                throw std::runtime_error(
+                    "RLGL: RenderTarget2D framebuffer is incomplete for " +
+                    std::to_string(width) + "x" + std::to_string(height) +
+                    ", DepthFormat ordinal " + std::to_string(depthFormat));
+            }
+            ThrowIfGlError("RenderTarget2D allocation");
+        }
+        catch (...)
+        {
+            if (storage.framebuffer != 0)
+            {
+                rlUnloadFramebuffer(storage.framebuffer);
+                storage.framebuffer = 0;
+                storage.depthStencilRenderbuffer = 0;
+            }
+            else if (storage.depthStencilRenderbuffer != 0)
+            {
+                glDeleteRenderbuffers(1, &storage.depthStencilRenderbuffer);
+                storage.depthStencilRenderbuffer = 0;
+            }
+            if (storage.colorTexture != 0)
+            {
+                rlUnloadTexture(storage.colorTexture);
+                storage.colorTexture = 0;
+            }
+            throw;
+        }
+        return storage;
+    }
+
+    void DestroyRenderTarget2D(RenderTargetStorage& storage) noexcept
+    {
+        if (!bridgeInitialized)
+        {
+            storage = {};
+            return;
+        }
+        FramebufferBindingRestore restore;
+        restore.ForgetDeletedFramebuffer(storage.framebuffer);
+        if (storage.framebuffer != 0) rlUnloadFramebuffer(storage.framebuffer);
+        if (storage.colorTexture != 0) rlUnloadTexture(storage.colorTexture);
+        storage = {};
+    }
+
+    void BindFramebuffer(const unsigned int framebuffer)
+    {
+        RequireInitialized("framebuffer binding");
+        if (framebuffer == 0)
+            throw std::invalid_argument("RLGL: cannot bind a zero render-target framebuffer");
+        rlEnableFramebuffer(framebuffer);
+    }
+
+    void GenerateRenderTargetMipmaps(
+        const unsigned int texture, const int width, const int height,
+        const int expectedLevelCount)
+    {
+        RequireInitialized("RenderTarget2D mip generation");
+        if (texture == 0 || width <= 0 || height <= 0 || expectedLevelCount <= 1)
+            throw std::invalid_argument("RLGL: invalid RenderTarget2D mip generation request");
+        const TextureBindingRestore textureRestore;
+        int generatedLevels = 1;
+        rlGenTextureMipmaps(
+            texture, width, height, RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
+            &generatedLevels);
+        ThrowIfGlError("RenderTarget2D mip generation");
+        if (generatedLevels != expectedLevelCount)
+        {
+            throw std::runtime_error(
+                "RLGL: generated RenderTarget2D mip count did not match its allocation");
+        }
+    }
+
+    void ReadRenderTarget2D(
+        const unsigned int framebuffer, const unsigned int texture, const int level,
+        const int levelWidth, const int levelHeight, const int x, const int y,
+        const int width, const int height, std::uint8_t* const pixels)
+    {
+        RequireInitialized("RenderTarget2D readback");
+        if (framebuffer == 0 || texture == 0 || level < 0 ||
+            levelWidth <= 0 || levelHeight <= 0 || x < 0 || y < 0 ||
+            width <= 0 || height <= 0 || x > levelWidth - width ||
+            y > levelHeight - height || pixels == nullptr)
+        {
+            throw std::invalid_argument("RLGL: invalid RenderTarget2D readback request");
+        }
+
+        const FramebufferBindingRestore framebufferRestore;
+        unsigned int readFramebuffer = framebuffer;
+        if (level > 0)
+        {
+            readFramebuffer = rlLoadFramebuffer();
+            if (readFramebuffer == 0)
+                throw std::runtime_error("RLGL: mip readback framebuffer allocation failed");
+            rlFramebufferAttach(
+                readFramebuffer, texture,
+                RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, level);
+            if (!rlFramebufferComplete(readFramebuffer))
+            {
+                rlUnloadFramebuffer(readFramebuffer);
+                throw std::runtime_error("RLGL: mip readback framebuffer is incomplete");
+            }
+        }
+
+        rlBindFramebuffer(GL_READ_FRAMEBUFFER, readFramebuffer);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        GLint previousPackAlignment = 4;
+        glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(
+            x, levelHeight - y - height, width, height,
+            GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+        const GLenum readError = glGetError();
+
+        if (level > 0) rlUnloadFramebuffer(readFramebuffer);
+
+        const std::size_t rowBytes = static_cast<std::size_t>(width) * 4u;
+        std::vector<std::uint8_t> temporary(rowBytes);
+        for (int row = 0; row < height / 2; ++row)
+        {
+            std::uint8_t* const top = pixels + static_cast<std::size_t>(row) * rowBytes;
+            std::uint8_t* const bottom =
+                pixels + static_cast<std::size_t>(height - row - 1) * rowBytes;
+            std::memcpy(temporary.data(), top, rowBytes);
+            std::memcpy(top, bottom, rowBytes);
+            std::memcpy(bottom, temporary.data(), rowBytes);
+        }
+        if (readError != GL_NO_ERROR)
+        {
+            char value[16] = {};
+            std::snprintf(value, sizeof(value), "0x%04X", static_cast<unsigned int>(readError));
+            throw std::runtime_error(
+                std::string("RLGL: OpenGL error after RenderTarget2D readback: ") + value);
         }
     }
 

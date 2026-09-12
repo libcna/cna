@@ -57,8 +57,9 @@ success.
 | BasicEffect and AlphaTestEffect | ✅ | Texture/default-white sampling, Position0/Normal0/Color0/UV0 semantics, diffuse/emissive/alpha/vertex color, all eight alpha comparisons, fog, WVP, pixel-center correction, three-light diffuse/specular BasicEffect lighting, per-vertex/per-pixel selection, inverse-transpose normals, and state transitions passed `RLGL-033`/`RLGL-034` |
 | DualTextureEffect | ✅ | Independent UV0/UV1 semantics and texture/sampler slots, doubled first-texture combine, null/default-white inputs, vertex color, diffuse/alpha, fog, missing-semantic diagnostics, and stock-effect state transitions passed `RLGL-035` |
 | SkinnedEffect | ✅ | 1/2/4 weighted influences, all 72 bones, Byte4/Vector4 indices, joint/world normal transforms, textures/materials, three-light/specular shading, vertex color, per-vertex/per-pixel selection, post-skin fog, malformed declarations, and state transitions passed `RLGL-037` |
+| `RenderTarget2D` (`SurfaceFormat::Color`, single sample) | ✅ | rlgl texture/FBO ownership; exact None/Depth16/Depth24/Depth24Stencil8 attachments; switching; target-local viewport/scissor and depth bias; mip regeneration; CPU upload; top-left level/subrect readback; Preserve/Discard; upright SpriteBatch and stock-effect sampling passed `RLGL-039` |
 | Cube/custom effects and general 3D workloads | ❌ | These shapes remain explicit failures owned by `RLGL-036`/`RLGL-038`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
-| Render targets, MRT, cube resources, instancing, queries | ❌ | Explicitly unavailable until their recorded tasks pass focused validation |
+| MRT, render-target MSAA, non-Color target formats, cube resources, instancing, queries | ❌ | Explicitly unavailable until `RLGL-040`/`041`/`042` and their other recorded tasks pass focused validation |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
 
@@ -101,7 +102,8 @@ cmake --build cmake-build-rlgl --parallel 3 --target \
       cna_test_rlgl_primitive cna_test_rlgl_effect cna_test_rlgl_xna_pixel_center \
       cna_test_rlgl_basiceffect_lighting cna_test_rlgl_dual_texture_effect \
       cna_test_rlgl_dual_texture_independent_uv cna_test_rlgl_skinned_effect \
-      cna_test_rlgl_skinned_terms
+      cna_test_rlgl_skinned_terms cna_test_rlgl_render_target \
+      cna_test_rlgl_render_target_orientation
 ```
 
 The smoke target is deliberately available with `CNA_BUILD_TESTS=OFF`. On a Linux machine with
@@ -136,13 +138,19 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_skinned_effect
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_skinned_terms
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_render_target
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_render_target_orientation
 ```
 
 With `CNA_BUILD_TESTS=ON`, the executables are registered as `Rlgl_Smoke`, `Rlgl_Texture`,
 `Rlgl_Sampler`, `Rlgl_State`, `Rlgl_SpriteBatch`, `Rlgl_Buffer`, `Rlgl_Primitive`, `Rlgl_Effect`,
 `Rlgl_XnaPixelCenter`, ten focused BasicEffect-lighting fixtures, and two DualTextureEffect
 fixtures, plus fourteen SkinnedEffect fixtures. They are labelled `Rlgl` plus their focused
-graphics category, with the proven offscreen environment attached to each CTest entry.
+graphics category, with the proven offscreen environment attached to each CTest entry. The two
+RenderTarget2D fixtures cover focused resource/state behavior and the unchanged EasyGL quadrant
+orientation oracle.
 
 ## Dependency and offline builds
 

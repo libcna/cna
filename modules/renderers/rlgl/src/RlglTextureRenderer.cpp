@@ -68,7 +68,7 @@ namespace CNA::Internal::Renderers::Rlgl
             }
         }
 
-        class RlglTextureRenderer final : public ITextureRenderer
+        class RlglTextureRenderer final : public ITextureRenderer, public IRlglTextureResource
         {
         public:
             explicit RlglTextureRenderer(const CNA::Internal::Graphics::ImageData& data)
@@ -244,7 +244,15 @@ namespace CNA::Internal::Renderers::Rlgl
                 Bridge::BindTexture2D(id_, unit);
             }
 
-            [[nodiscard]] unsigned int NativeId() const noexcept { return id_; }
+            [[nodiscard]] unsigned int NativeTextureId() const noexcept override
+            {
+                return id_;
+            }
+
+            [[nodiscard]] bool SampledRowsAreBottomUp() const noexcept override
+            {
+                return false;
+            }
 
         private:
             void ValidateLevel(
@@ -280,9 +288,17 @@ namespace CNA::Internal::Renderers::Rlgl
 
     unsigned int GetNativeTextureId(const ITextureRenderer& resource)
     {
-        const auto* const texture = dynamic_cast<const RlglTextureRenderer*>(&resource);
+        const auto* const texture = dynamic_cast<const IRlglTextureResource*>(&resource);
         if (texture == nullptr)
             throw std::invalid_argument("RLGL: texture resource belongs to another renderer");
-        return texture->NativeId();
+        return texture->NativeTextureId();
+    }
+
+    bool SampledRowsAreBottomUp(const ITextureRenderer& resource)
+    {
+        const auto* const texture = dynamic_cast<const IRlglTextureResource*>(&resource);
+        if (texture == nullptr)
+            throw std::invalid_argument("RLGL: texture resource belongs to another renderer");
+        return texture->SampledRowsAreBottomUp();
     }
 }

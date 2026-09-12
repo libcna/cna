@@ -99,6 +99,14 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         std::vector<std::uint8_t> bytes;
     };
 
+    /** @brief rlgl-owned names forming one single-sample RenderTarget2D. */
+    struct RenderTargetStorage
+    {
+        unsigned int framebuffer = 0;
+        unsigned int colorTexture = 0;
+        unsigned int depthStencilRenderbuffer = 0;
+    };
+
     /** @brief rlgl-owned shader and VAO used by the BasicEffect/AlphaTestEffect path. */
     struct PrimitivePipeline
     {
@@ -111,6 +119,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int vertexColorEnabledLocation = -1;
         int textureLocation = -1;
         int texture1Location = -1;
+        int textureFlipVLocation = -1;
         int textureEnabledLocation = -1;
         int dualTextureLocation = -1;
         int alphaTestLocation = -1;
@@ -556,6 +565,57 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     void ReadTexture2D(
         unsigned int id, int surfaceFormat, int level, int levelWidth, int levelHeight,
         int x, int y, int width, int height, std::uint8_t* pixels);
+
+    /**
+     * @brief Creates a framebuffer with a Color texture and exact XNA depth/stencil storage.
+     * @param width Width in pixels.
+     * @param height Height in pixels.
+     * @param levelCount Number of allocated color-texture mip levels.
+     * @param depthFormat Raw XNA DepthFormat ordinal.
+     * @return Complete framebuffer storage whose color texture is rlgl-owned.
+     */
+    [[nodiscard]] RenderTargetStorage CreateRenderTarget2D(
+        int width, int height, int levelCount, int depthFormat);
+
+    /**
+     * @brief Releases a RenderTarget2D while preserving an unrelated active framebuffer.
+     * @param storage Live or empty target storage.
+     */
+    void DestroyRenderTarget2D(RenderTargetStorage& storage) noexcept;
+
+    /**
+     * @brief Binds one renderer-owned framebuffer for drawing.
+     * @param framebuffer Non-zero framebuffer name.
+     */
+    void BindFramebuffer(unsigned int framebuffer);
+
+    /**
+     * @brief Regenerates a Color render target's full mip chain through rlgl.
+     * @param texture rlgl-owned Color texture name.
+     * @param width Base-level width.
+     * @param height Base-level height.
+     * @param expectedLevelCount Required resulting mip count.
+     */
+    void GenerateRenderTargetMipmaps(
+        unsigned int texture, int width, int height, int expectedLevelCount);
+
+    /**
+     * @brief Reads an RGBA8 target rectangle in XNA top-row-first order.
+     * @param framebuffer Level-zero framebuffer name.
+     * @param texture Color texture name used for non-zero levels.
+     * @param level Mip level.
+     * @param levelWidth Complete mip width.
+     * @param levelHeight Complete mip height.
+     * @param x Rectangle left edge.
+     * @param y Rectangle top edge.
+     * @param width Rectangle width.
+     * @param height Rectangle height.
+     * @param pixels Destination holding width * height * 4 bytes.
+     */
+    void ReadRenderTarget2D(
+        unsigned int framebuffer, unsigned int texture, int level,
+        int levelWidth, int levelHeight, int x, int y, int width, int height,
+        std::uint8_t* pixels);
 
     /**
      * @brief Binds a two-dimensional texture through rlgl.

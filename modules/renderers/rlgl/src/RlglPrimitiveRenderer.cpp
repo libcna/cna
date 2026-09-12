@@ -306,7 +306,9 @@ namespace CNA::Internal::Renderers::Rlgl
             GetPrimitivePipeline(), vertexBuffer, nullptr,
             world, view, projection, primitive, primitiveCount,
             0, 0, 0, params, false,
-            currentViewportWidth_, currentViewportHeight_, multiSampleCount_);
+            currentViewportWidth_, currentViewportHeight_,
+            currentRenderTarget_ != nullptr
+                ? currentRenderTarget_->GetMultiSampleCount() : multiSampleCount_);
     }
 
     void RlglRenderer::DrawIndexedColoredPrimitives(
@@ -321,7 +323,9 @@ namespace CNA::Internal::Renderers::Rlgl
             GetPrimitivePipeline(), vertexBuffer, &indexBuffer,
             world, view, projection, primitive, primitiveCount,
             0, 0, 0, params, false,
-            currentViewportWidth_, currentViewportHeight_, multiSampleCount_);
+            currentViewportWidth_, currentViewportHeight_,
+            currentRenderTarget_ != nullptr
+                ? currentRenderTarget_->GetMultiSampleCount() : multiSampleCount_);
     }
 
     void RlglRenderer::DrawPrimitivesEx(
@@ -335,7 +339,9 @@ namespace CNA::Internal::Renderers::Rlgl
             GetPrimitivePipeline(), vertexBuffer, nullptr,
             world, view, projection, primitive, primitiveCount,
             params.vertexStart, 0, 0, params, true,
-            currentViewportWidth_, currentViewportHeight_, multiSampleCount_);
+            currentViewportWidth_, currentViewportHeight_,
+            currentRenderTarget_ != nullptr
+                ? currentRenderTarget_->GetMultiSampleCount() : multiSampleCount_);
     }
 
     void RlglRenderer::DrawIndexedPrimitivesEx(
@@ -350,6 +356,8 @@ namespace CNA::Internal::Renderers::Rlgl
             GetPrimitivePipeline(), vertexBuffer, &indexBuffer,
             world, view, projection, primitive, primitiveCount,
             0, params.startIndex, params.baseVertex, params, true,
-            currentViewportWidth_, currentViewportHeight_, multiSampleCount_);
+            currentViewportWidth_, currentViewportHeight_,
+            currentRenderTarget_ != nullptr
+                ? currentRenderTarget_->GetMultiSampleCount() : multiSampleCount_);
     }
 }

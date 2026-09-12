@@ -186,6 +186,14 @@ namespace CNA::Internal::Renderers::Rlgl
             int surfaceFormat) const override;
 
         /**
+         * @brief Classifies the currently renderable two-dimensional target format.
+         * @param surfaceFormat Raw `SurfaceFormat` ordinal.
+         * @return Supported for Color and Unsupported for pending target formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
          * @brief Prevents Color transfers from reinterpreting signed-normalized formats.
          * @param surfaceFormat Raw `SurfaceFormat` ordinal.
          * @return Unsupported for signed-normalized layouts and Defer otherwise.
@@ -213,6 +221,43 @@ namespace CNA::Internal::Renderers::Rlgl
          * @return A CNA-scheduled low-level rlgl SpriteBatch renderer.
          */
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
+
+        /**
+         * @brief Creates a single-sample framebuffer-backed RenderTarget2D.
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param depthFormat Raw XNA DepthFormat ordinal.
+         * @param preserveContents Whether contents survive target switches.
+         * @param mipMap Whether to allocate and regenerate a full mip chain.
+         * @param multiSampleCount Requested sample count; non-zero remains RLGL-041.
+         * @return Renderer-owned target resource.
+         */
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2D(
+            int w, int h, int depthFormat, bool preserveContents = false,
+            bool mipMap = false, int multiSampleCount = 0) override;
+
+        /**
+         * @brief Creates a format-explicit framebuffer-backed RenderTarget2D.
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param depthFormat Raw XNA DepthFormat ordinal.
+         * @param preserveContents Whether contents survive target switches.
+         * @param mipMap Whether to allocate and regenerate a full mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+         * @return Renderer-owned target resource.
+         */
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
+
+        /**
+         * @brief Applies the current task's single-target profile ceiling.
+         * @param graphicsProfile Raw XNA GraphicsProfile ordinal.
+         * @return One until RLGL-040 validates multiple render targets.
+         */
+        [[nodiscard]] int GetMaxRenderTargetsForProfileEXT(
+            int graphicsProfile) const override;
 
         /**
          * @brief Returns the logical extent used by the current SpriteBatch viewport.
@@ -248,11 +293,11 @@ namespace CNA::Internal::Renderers::Rlgl
         void ApplySamplerAddressW(int slot, int addressW) override;
 
         /**
-         * @brief Restores the default framebuffer or rejects an unsupported render target set.
+         * @brief Selects one RenderTarget2D or restores the default framebuffer.
          *
          * @param renderTargets Ordered target bindings, or nullptr for the back buffer.
          * @param count Number of bindings; zero restores the back buffer.
-         * @throws System::NotSupportedException When count is greater than zero.
+         * @throws System::NotSupportedException For cube faces or multiple targets.
          */
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
@@ -542,6 +587,7 @@ namespace CNA::Internal::Renderers::Rlgl
         SamplerRecord& GetSamplerRecord(int slot);
         void ApplySamplerRecord(int slot, SamplerRecord& sampler);
         Bridge::PrimitivePipeline& GetPrimitivePipeline();
+        void ApplyCurrentRasterizerState();
 
         PlatformGlSurfaceState surface_;
         CNA::Platform::IPlatformGlContext* platformGlService_ = nullptr;
@@ -561,6 +607,15 @@ namespace CNA::Internal::Renderers::Rlgl
         int currentViewportWidth_ = 0;
         int currentViewportHeight_ = 0;
         bool viewportIsDefault_ = true;
+        IRenderTargetRenderer* currentRenderTarget_ = nullptr;
+        int currentRenderTargetWidth_ = 0;
+        int currentRenderTargetHeight_ = 0;
+        int currentTargetDepthBits_ = 0;
+        int rasterizerCullMode_ = 2;
+        int rasterizerFillMode_ = 0;
+        bool rasterizerScissorTestEnabled_ = false;
+        float rasterizerDepthBias_ = 0.0f;
+        float rasterizerSlopeScaleDepthBias_ = 0.0f;
         bool lifecycleClaimed_ = false;
         bool rlglInitialized_ = false;
         bool registered_ = false;

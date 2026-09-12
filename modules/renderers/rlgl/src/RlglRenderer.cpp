@@ -339,6 +339,40 @@ namespace CNA::Internal::Renderers::Rlgl
         return CreateTextureRenderer(data);
     }
 
+    std::unique_ptr<IRenderTargetRenderer> RlglRenderer::CreateRenderTarget2D(
+        const int width, const int height, const int depthFormat,
+        const bool preserveContents, const bool mipMap,
+        const int multiSampleCount)
+    {
+        return CreateRenderTargetRenderer(
+            width, height, depthFormat, preserveContents,
+            mipMap, multiSampleCount,
+            static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+    }
+
+    std::unique_ptr<IRenderTargetRenderer> RlglRenderer::CreateRenderTarget2DEXT(
+        const int width, const int height, const int depthFormat,
+        const bool preserveContents, const bool mipMap,
+        const int multiSampleCount, const int surfaceFormat)
+    {
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) !=
+            RendererFormatVerdict::Supported)
+        {
+            throw System::NotSupportedException(
+                "RLGL: requested RenderTarget2D SurfaceFormat is not implemented yet "
+                "(plans/plan_rlgl.md RLGL-042)");
+        }
+        return CreateRenderTargetRenderer(
+            width, height, depthFormat, preserveContents,
+            mipMap, multiSampleCount, surfaceFormat);
+    }
+
+    int RlglRenderer::GetMaxRenderTargetsForProfileEXT(const int graphicsProfile) const
+    {
+        (void)graphicsProfile;
+        return 1;
+    }
+
     RendererFormatVerdict RlglRenderer::ClassifySurfaceFormatEXT(
         const int surfaceFormat) const
     {
@@ -370,6 +404,15 @@ namespace CNA::Internal::Renderers::Rlgl
         default:
             return RendererFormatVerdict::Unsupported;
         }
+    }
+
+    RendererFormatVerdict RlglRenderer::ClassifyRenderTargetFormatEXT(
+        const int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        return static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Color
+            ? RendererFormatVerdict::Supported
+            : RendererFormatVerdict::Unsupported;
     }
 
     RendererFormatVerdict RlglRenderer::ClassifyColorTransferFormatEXT(
@@ -405,6 +448,12 @@ namespace CNA::Internal::Renderers::Rlgl
 
     void RlglRenderer::GetSpriteBatchViewportSize(int& width, int& height)
     {
+        if (currentRenderTarget_ != nullptr)
+        {
+            width = currentRenderTargetWidth_;
+            height = currentRenderTargetHeight_;
+            return;
+        }
         int logicalWidth = 0;
         int logicalHeight = 0;
         GetLogicalSize(logicalWidth, logicalHeight);
@@ -489,9 +538,41 @@ namespace CNA::Internal::Renderers::Rlgl
     void RlglRenderer::SetRenderTargets(
         const RenderTargetBindingDescriptor* renderTargets, const int count)
     {
-        (void)renderTargets;
-        if (count != 0) Unsupported("render targets", "RLGL-014");
-        Bridge::BindDefaultFramebuffer();
+        if (count < 0)
+            throw std::invalid_argument("RLGL: render-target count cannot be negative");
+        if (count == 0)
+        {
+            if (currentRenderTarget_ != nullptr)
+                currentRenderTarget_->UnbindAsRenderTarget();
+            else
+                Bridge::BindDefaultFramebuffer();
+            currentRenderTarget_ = nullptr;
+            currentRenderTargetWidth_ = 0;
+            currentRenderTargetHeight_ = 0;
+            currentTargetDepthBits_ = depthBits_;
+            ApplyCurrentRasterizerState();
+            return;
+        }
+        if (renderTargets == nullptr)
+            throw std::invalid_argument(
+                "RLGL: nonzero render-target count requires a binding array");
+        if (count > 1) Unsupported("multiple render targets", "RLGL-040");
+        if (!renderTargets[0].IsRenderTarget2D())
+            Unsupported("cube render-target faces", "RLGL-015");
+
+        IRenderTargetRenderer* const target = renderTargets[0].GetRenderTarget2D();
+        if (target == nullptr)
+            throw std::invalid_argument("RLGL: null RenderTarget2D binding");
+        (void)GetRenderTargetResourceSnapshotForTesting(*target);
+        if (currentRenderTarget_ != nullptr && currentRenderTarget_ != target)
+            currentRenderTarget_->UnbindAsRenderTarget();
+        target->BindAsRenderTarget();
+        currentRenderTarget_ = target;
+        currentRenderTargetWidth_ = target->GetWidth();
+        currentRenderTargetHeight_ = target->GetHeight();
+        currentTargetDepthBits_ = target->HasRealDepthBuffer(true)
+            ? target->DepthBufferBitsEXT() : 0;
+        ApplyCurrentRasterizerState();
     }
 
     void RlglRenderer::ClearColorAndDepth(
@@ -601,12 +682,24 @@ namespace CNA::Internal::Renderers::Rlgl
         const int cullMode, const int fillMode, const bool scissorTestEnable,
         const float depthBias, const float slopeScaleDepthBias)
     {
-        const float depthScale = depthBits_ > 0
-            ? std::ldexp(1.0f, depthBits_) - 1.0f
+        rasterizerCullMode_ = cullMode;
+        rasterizerFillMode_ = fillMode;
+        rasterizerScissorTestEnabled_ = scissorTestEnable;
+        rasterizerDepthBias_ = depthBias;
+        rasterizerSlopeScaleDepthBias_ = slopeScaleDepthBias;
+        ApplyCurrentRasterizerState();
+    }
+
+    void RlglRenderer::ApplyCurrentRasterizerState()
+    {
+        const int appliedDepthBits = currentRenderTarget_ != nullptr
+            ? currentTargetDepthBits_ : depthBits_;
+        const float depthScale = appliedDepthBits > 0
+            ? std::ldexp(1.0f, appliedDepthBits) - 1.0f
             : 0.0f;
         Bridge::ApplyRasterizerState(
-            cullMode, fillMode, scissorTestEnable,
-            depthBias * depthScale, slopeScaleDepthBias);
+            rasterizerCullMode_, rasterizerFillMode_, rasterizerScissorTestEnabled_,
+            rasterizerDepthBias_ * depthScale, rasterizerSlopeScaleDepthBias_);
     }
 
     std::unique_ptr<IVertexBufferRenderer> RlglRenderer::CreateVertexBuffer(
@@ -631,10 +724,14 @@ namespace CNA::Internal::Renderers::Rlgl
         const int x, const int y, const int w, const int h,
         const float minDepth, const float maxDepth)
     {
-        int framebufferWidth = 0;
-        int framebufferHeight = 0;
-        GetPhysicalSize(framebufferWidth, framebufferHeight);
-        (void)framebufferWidth;
+        int framebufferHeight = currentRenderTarget_ != nullptr
+            ? currentRenderTargetHeight_ : 0;
+        if (currentRenderTarget_ == nullptr)
+        {
+            int framebufferWidth = 0;
+            GetPhysicalSize(framebufferWidth, framebufferHeight);
+            (void)framebufferWidth;
+        }
         currentViewportWidth_ = w;
         currentViewportHeight_ = h;
         int defaultX = 0;
@@ -651,10 +748,14 @@ namespace CNA::Internal::Renderers::Rlgl
     void RlglRenderer::SetScissorRect(
         const int x, const int y, const int w, const int h)
     {
-        int framebufferWidth = 0;
-        int framebufferHeight = 0;
-        GetPhysicalSize(framebufferWidth, framebufferHeight);
-        (void)framebufferWidth;
+        int framebufferHeight = currentRenderTarget_ != nullptr
+            ? currentRenderTargetHeight_ : 0;
+        if (currentRenderTarget_ == nullptr)
+        {
+            int framebufferWidth = 0;
+            GetPhysicalSize(framebufferWidth, framebufferHeight);
+            (void)framebufferWidth;
+        }
         Bridge::SetScissor(x, framebufferHeight - y - h, w, h);
     }
 }
