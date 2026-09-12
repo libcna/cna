@@ -385,8 +385,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   ps_1_4 texture-coordinate selector contract: only XYZ/XYW are accepted, omission means XYZ, and
   one `t#` must retain that selection across `TEXCRD`, `TEXLD` and both phases. SOFTWARE-461 closes
   the separate dependent-temporary branch: ordinary `TEXLD` reads from previous-phase `r#` accept
-  only implicit/explicit XYZ. The dependency series now contains 86 patches; other opcodes'
-  distinct operand and component-use rules remain SOFTWARE-164/165 work.
+  only implicit/explicit XYZ. SOFTWARE-462 then extends exact strict-profile temporary-component
+  validation from `MOV` to the component-wise arithmetic family. Its destination mask and each
+  source swizzle determine the actual components consumed, including unary, binary and ternary
+  operands in `ps_1_4`, `ps_2_0` and `vs_1_1`. The dependency series now contains 87 patches;
+  scalar, dot, matrix and other fixed-component opcode rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

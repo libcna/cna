@@ -3103,6 +3103,72 @@ namespace
                   "compiled Effect parser rejected MOV from an initialized temporary component in probe " +
                       std::to_string(static_cast<int>(probe)));
         }
+
+        options.temporaryInitializationProbe =
+            CNA::TestSupport::SyntheticTemporaryInitializationProbe::None;
+        constexpr CNA::TestSupport::SyntheticComponentwiseInitializationProbe
+            invalidComponentwise[] = {
+                CNA::TestSupport::SyntheticComponentwiseInitializationProbe::
+                    Pixel20AddSource0UnwrittenY,
+                CNA::TestSupport::SyntheticComponentwiseInitializationProbe::
+                    Pixel20AddSource1UnwrittenY,
+                CNA::TestSupport::SyntheticComponentwiseInitializationProbe::
+                    Pixel20MadSource2UnwrittenY,
+                CNA::TestSupport::SyntheticComponentwiseInitializationProbe::
+                    Pixel20FrcUnwrittenY,
+                CNA::TestSupport::SyntheticComponentwiseInitializationProbe::
+                    Pixel14AddUnwrittenY,
+                CNA::TestSupport::SyntheticComponentwiseInitializationProbe::
+                    Vertex11AddUnwrittenY,
+            };
+        for (const auto probe : invalidComponentwise)
+        {
+            options.componentwiseInitializationProbe = probe;
+            const auto componentBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool componentRejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(componentBytes.data(),
+                                                                componentBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                componentRejected = true;
+            }
+            Check(componentRejected,
+                  "compiled Effect parser accepted component-wise arithmetic from an "
+                  "uninitialized temporary component in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+
+        constexpr CNA::TestSupport::SyntheticComponentwiseInitializationProbe
+            validComponentwise[] = {
+                CNA::TestSupport::SyntheticComponentwiseInitializationProbe::
+                    Pixel20AddSource0WrittenX,
+                CNA::TestSupport::SyntheticComponentwiseInitializationProbe::
+                    Pixel20AddFullFromWrittenX,
+                CNA::TestSupport::SyntheticComponentwiseInitializationProbe::Pixel14AddWrittenX,
+                CNA::TestSupport::SyntheticComponentwiseInitializationProbe::Vertex11AddWrittenX,
+            };
+        for (const auto probe : validComponentwise)
+        {
+            options.componentwiseInitializationProbe = probe;
+            const auto componentBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool componentAccepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(componentBytes.data(),
+                                                                componentBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                componentAccepted = false;
+            }
+            Check(componentAccepted,
+                  "compiled Effect parser rejected component-wise arithmetic from initialized "
+                  "temporary components in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
     }
 
     void CheckCompiledTexkillTemporaryValidation(SoftwareRenderer& renderer)
