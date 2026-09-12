@@ -86,7 +86,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 skinned ? 52 : 12,
                 VertexElementFormat::Color, VertexElementUsage::Color, 0);
             VertexElement inferredTextureCoordinate(
-                skinned ? 24 : (vertexColorEnabled ? 16 : 12),
+                (skinned || lightingEnabled) ? 24 : (vertexColorEnabled ? 16 : 12),
                 VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0);
             VertexElement inferredNormal(
                 12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0);
@@ -123,7 +123,10 @@ namespace CNA::Internal::Renderers::Rlgl
             }
             else if (declaration.empty())
             {
-                if (stride >= 16) color = &inferredColor;
+                if (lightingEnabled && stride == 32)
+                    normal = &inferredNormal;
+                else if (stride >= 16)
+                    color = &inferredColor;
                 if (stride >= inferredTextureCoordinate.getOffsetProperty() + 8)
                     textureCoordinate = &inferredTextureCoordinate;
             }
@@ -156,8 +159,8 @@ namespace CNA::Internal::Renderers::Rlgl
                  normal->getVertexElementFormatProperty() != VertexElementFormat::Vector3))
             {
                 throw System::NotSupportedException(
-                    "RLGL: BasicEffect lighting requires Normal0 as Vector3 "
-                    "(plans/plan_rlgl.md RLGL-034)");
+                    "RLGL: lit stock effects require Normal0 as Vector3 "
+                    "(plans/plan_rlgl.md RLGL-034/RLGL-036)");
             }
             if (dualTexture &&
                 (textureCoordinate1 == nullptr ||
@@ -218,13 +221,17 @@ namespace CNA::Internal::Renderers::Rlgl
                 hasInstanceStream = hasInstanceStream ||
                     params.vertexStreams[stream].instanceFrequency != 0;
             if (params.customEffectRequested || params.customEffectRenderer != nullptr ||
-                params.compiledEffectRuntime != nullptr || params.envMapping ||
-                params.pbr ||
+                params.compiledEffectRuntime != nullptr || params.pbr ||
                 params.instanceCount != 1 || params.vertexStreamCount > 1 || hasInstanceStream)
             {
                 throw System::NotSupportedException(
                     "RLGL: this effect or vertex-stream shape requires the stock/custom shader "
                     "campaign (plans/plan_rlgl.md RLGL-012)");
+            }
+            if (params.envMapping && params.envMap == nullptr)
+            {
+                throw std::invalid_argument(
+                    "RLGL: EnvironmentMapEffect requires a non-null TextureCube");
             }
         }
 

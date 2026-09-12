@@ -167,9 +167,15 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int vertexColorEnabledLocation = -1;
         int textureLocation = -1;
         int texture1Location = -1;
+        int environmentMapLocation = -1;
         int textureFlipVLocation = -1;
         int textureEnabledLocation = -1;
         int dualTextureLocation = -1;
+        int environmentMappingLocation = -1;
+        int environmentMapAmountLocation = -1;
+        int environmentMapSpecularLocation = -1;
+        int fresnelEnabledLocation = -1;
+        int fresnelFactorLocation = -1;
         int alphaTestLocation = -1;
         int fogVectorLocation = -1;
         int fogColorLocation = -1;
@@ -202,6 +208,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         bool indexed = false;
         bool textureEnabled = false;
         bool dualTexture = false;
+        bool environmentMapping = false;
         bool skinned = false;
         bool usedRlglDrawWrapper = false;
     };

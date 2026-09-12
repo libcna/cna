@@ -56,12 +56,13 @@ success.
 | Primitive and user draw calls | ✅ | Every point/line/triangle list/strip topology passed indexed and non-indexed pixels, exact 16/32-bit index dispatch, declaration semantic/type mapping, offsets, WVP transforms, public user routes, and SpriteBatch-to-primitive rebinding in `RLGL-031` |
 | BasicEffect and AlphaTestEffect | ✅ | Texture/default-white sampling, Position0/Normal0/Color0/UV0 semantics, diffuse/emissive/alpha/vertex color, all eight alpha comparisons, fog, WVP, pixel-center correction, three-light diffuse/specular BasicEffect lighting, per-vertex/per-pixel selection, inverse-transpose normals, and state transitions passed `RLGL-033`/`RLGL-034` |
 | DualTextureEffect | ✅ | Independent UV0/UV1 semantics and texture/sampler slots, doubled first-texture combine, null/default-white inputs, vertex color, diffuse/alpha, fog, missing-semantic diagnostics, and stock-effect state transitions passed `RLGL-035` |
+| EnvironmentMapEffect | ✅ | Base Texture2D plus TextureCube sampling, all six reflection faces, inverse-transpose world normals, derived eye position, three-light diffuse and emissive/ambient terms, amount saturation, D3D9-style per-vertex Fresnel, alpha-scaled lerp/specular terms, fog, slot-0/slot-1 sampler isolation, plain/mipmapped/render-target cubes, every public primitive route, and state/lifetime transitions passed 178 gates in `RLGL-036` |
 | SkinnedEffect | ✅ | 1/2/4 weighted influences, all 72 bones, Byte4/Vector4 indices, joint/world normal transforms, textures/materials, three-light/specular shading, vertex color, per-vertex/per-pixel selection, post-skin fog, malformed declarations, and state transitions passed `RLGL-037` |
 | Plain `TextureCube` | ✅ | `Color` and DXT1/DXT3/DXT5 cover every transfer shape exposed by CNA's current cube API. Exact faces/mips/regions, native-or-decoded DXT storage, content loading, cube-unit binding, state restoration, and Color readback passed `RLGL-044`/`RLGL-045`; the other 16 classic labels are refused because CNA exposes no format-native transfer route for them |
 | `RenderTarget2D` (all eleven classic FNA target formats) | ✅ | Color, Rgba1010102, Rg32, Rgba64, Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, and HdrBlendable have exact single/MSAA storage, resolve, format-native CPU transfer/readback, mips, depth/stencil, switching, Preserve/Discard, and upright sampling evidence from `RLGL-039`/`041`/`042` |
 | `RenderTargetCube` (all eleven classic FNA target formats) | ✅ | Exact six-face/mip storage, per-face binding/readback, six independent MSAA color buffers, Depth16/Depth24/Depth24Stencil8, resolve/mips, Preserve/Discard, switching, and Color upload passed `RLGL-046`; public non-Color transfer is refused because CNA's current cube interface cannot express its format-native bytes |
 | Multiple render targets | ✅ | HiDef supports ordered sets of two through four RenderTarget2D objects, cube faces, or compatible mixtures through transactional rlgl-created FBOs and `rlActiveDrawBuffers`; indexed masks/Clear, slot-zero depth, mixed formats, MSAA resolve/mips, usage, transitions, and refusal safety passed `RLGL-040`/`046`. Reach correctly remains limited to one target |
-| Environment/custom effects and general 3D workloads | ❌ | These shapes remain explicit failures owned by `RLGL-036`/`RLGL-038`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
+| Custom effects and general 3D workloads | ❌ | Custom/compiled effects remain explicit failures owned by `RLGL-038`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
 | Instancing and queries | ❌ | Explicitly unavailable; their implementation and validation are tracked by `RLGL-016` |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
@@ -106,7 +107,10 @@ cmake --build cmake-build-rlgl --parallel 3 --target \
       cna_test_rlgl_state cna_test_rlgl_spritebatch cna_test_rlgl_buffer \
       cna_test_rlgl_primitive cna_test_rlgl_effect cna_test_rlgl_xna_pixel_center \
       cna_test_rlgl_basiceffect_lighting cna_test_rlgl_dual_texture_effect \
-      cna_test_rlgl_dual_texture_independent_uv cna_test_rlgl_skinned_effect \
+      cna_test_rlgl_dual_texture_independent_uv cna_test_rlgl_environment_map \
+      cna_test_rlgl_environment_map_terms cna_test_rlgl_environment_map_sampler_contract \
+      cna_test_rlgl_environment_map_sampler_state \
+      cna_test_rlgl_environment_map_render_target_cube cna_test_rlgl_skinned_effect \
       cna_test_rlgl_skinned_terms cna_test_rlgl_render_target \
       cna_test_rlgl_render_target_formats cna_test_rlgl_mrt \
       cna_test_rlgl_render_target_cube \
@@ -147,6 +151,12 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_dual_texture_independent_uv
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_environment_map
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_environment_map_terms
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_environment_map_sampler_contract
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_skinned_effect
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_skinned_terms
@@ -178,14 +188,18 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
 
 With `CNA_BUILD_TESTS=ON`, the executables are registered as `Rlgl_Smoke`, `Rlgl_Texture`,
 `Rlgl_Sampler`, `Rlgl_State`, `Rlgl_SpriteBatch`, `Rlgl_Buffer`, `Rlgl_Primitive`, `Rlgl_Effect`,
-`Rlgl_XnaPixelCenter`, ten focused BasicEffect-lighting fixtures, and two DualTextureEffect
-fixtures, plus fourteen SkinnedEffect fixtures. They are labelled `Rlgl` plus their focused
-graphics category, with the proven offscreen environment attached to each CTest entry. The
+`Rlgl_XnaPixelCenter`, ten focused BasicEffect-lighting fixtures, two DualTextureEffect fixtures,
+eighteen EnvironmentMapEffect fixtures, and fourteen SkinnedEffect fixtures. They are labelled
+`Rlgl` plus their focused graphics category, with the proven offscreen environment attached to
+each CTest entry. The
 RenderTarget2D fixtures cover focused resource/state behavior, all eleven exact classic formats,
 ordered two-through-four-target MRT behavior, the unchanged EasyGL quadrant and OpenGL4 full-target
 oracles, and shared first-read/mipmap MSAA regression matrices. RenderTargetCube fixtures cover all
 eleven exact renderable formats, six faces and mip chains, depth/stencil, per-face MSAA resolve,
 usage transitions, Color transfer/readback, and singular/plural cube/2D binding behavior.
+EnvironmentMapEffect fixtures reuse EasyGL and shared cross-renderer oracles for the complete
+lighting/reflection formula, per-vertex Fresnel, amount saturation, fog, sampler-slot independence,
+all primitive routes, and both plain and rendered cube sources.
 
 ## Dependency and offline builds
 

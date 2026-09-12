@@ -1224,6 +1224,10 @@ uniform vec3 light1Specular;
 uniform vec3 light2Specular;
 uniform vec3 specularColor;
 uniform float specularPower;
+uniform float environmentMapping;
+uniform float environmentMapAmount;
+uniform float fresnelEnabled;
+uniform float fresnelFactor;
 uniform float skinned;
 uniform vec4 boneRows[216];
 uniform int weightsPerVertex;
@@ -1237,6 +1241,8 @@ out vec3 fragmentNormal;
 out vec3 fragmentVertexLitRgb;
 out vec3 fragmentVertexSpecularRgb;
 out float fragmentVertexAlpha;
+out vec3 fragmentEyeDirection;
+out float fragmentEnvironmentBlend;
 
 void addBoneRows(int boneIndex, float weight,
                  inout vec4 row0, inout vec4 row1, inout vec4 row2)
@@ -1332,6 +1338,11 @@ void main()
     fragmentWorldPosition = (world * vec4(effectPosition, 1.0)).xyz;
     mat3 normalMatrix = mat3(normalMatrix0, normalMatrix1, normalMatrix2);
     fragmentNormal = normalMatrix * effectNormal;
+    fragmentEyeDirection = normalize(eyePosition - fragmentWorldPosition);
+    float viewAngle = dot(fragmentEyeDirection, normalize(fragmentNormal));
+    fragmentEnvironmentBlend = clamp((fresnelEnabled > 0.5)
+        ? pow(max(1.0 - abs(viewAngle), 0.0), fresnelFactor) * environmentMapAmount
+        : environmentMapAmount, 0.0, 1.0);
     fragmentVertexLitRgb = vec3(0.0);
     fragmentVertexSpecularRgb = vec3(0.0);
     fragmentVertexAlpha = diffuseColor.a * fragmentVertexColor.a;
@@ -1357,12 +1368,16 @@ in vec3 fragmentNormal;
 in vec3 fragmentVertexLitRgb;
 in vec3 fragmentVertexSpecularRgb;
 in float fragmentVertexAlpha;
+in vec3 fragmentEyeDirection;
+in float fragmentEnvironmentBlend;
 
 uniform sampler2D texture0;
 uniform sampler2D texture1;
+uniform samplerCube environmentMap;
 uniform vec2 textureFlipV;
 uniform float textureEnabled;
 uniform float dualTexture;
+uniform float environmentMapping;
 uniform vec4 alphaTest;
 uniform vec3 fogColor;
 uniform vec4 diffuseColor;
@@ -1382,6 +1397,7 @@ uniform vec3 light1Specular;
 uniform vec3 light2Specular;
 uniform vec3 specularColor;
 uniform float specularPower;
+uniform vec3 environmentMapSpecular;
 
 out vec4 finalColor;
 
@@ -1424,7 +1440,23 @@ void main()
         sampled.rgb *= 2.0;
         sampled *= texture(texture1, textureCoordinate1);
     }
-    if (lightingEnabled > 0.5)
+    if (environmentMapping > 0.5)
+    {
+        vec3 normal = normalize(fragmentNormal);
+        vec3 eye = normalize(fragmentEyeDirection);
+        vec3 litRgb;
+        vec3 unusedSpecular;
+        computeLights(fragmentWorldPosition, normal, litRgb, unusedSpecular);
+        vec4 environmentSample = texture(environmentMap, reflect(-eye, normal));
+        float combinedAlpha = diffuseColor.a * sampled.a;
+        finalColor = vec4(
+            mix(litRgb * sampled.rgb,
+                environmentSample.rgb * combinedAlpha,
+                fragmentEnvironmentBlend) +
+                environmentMapSpecular * environmentSample.a * combinedAlpha,
+            combinedAlpha);
+    }
+    else if (lightingEnabled > 0.5)
     {
         vec3 litRgb = fragmentVertexLitRgb;
         vec3 specularRgb = fragmentVertexSpecularRgb;
@@ -1479,12 +1511,24 @@ void main()
                 rlGetLocationUniform(pipeline.program, "texture0");
             pipeline.texture1Location =
                 rlGetLocationUniform(pipeline.program, "texture1");
+            pipeline.environmentMapLocation =
+                rlGetLocationUniform(pipeline.program, "environmentMap");
             pipeline.textureFlipVLocation =
                 rlGetLocationUniform(pipeline.program, "textureFlipV");
             pipeline.textureEnabledLocation =
                 rlGetLocationUniform(pipeline.program, "textureEnabled");
             pipeline.dualTextureLocation =
                 rlGetLocationUniform(pipeline.program, "dualTexture");
+            pipeline.environmentMappingLocation =
+                rlGetLocationUniform(pipeline.program, "environmentMapping");
+            pipeline.environmentMapAmountLocation =
+                rlGetLocationUniform(pipeline.program, "environmentMapAmount");
+            pipeline.environmentMapSpecularLocation =
+                rlGetLocationUniform(pipeline.program, "environmentMapSpecular");
+            pipeline.fresnelEnabledLocation =
+                rlGetLocationUniform(pipeline.program, "fresnelEnabled");
+            pipeline.fresnelFactorLocation =
+                rlGetLocationUniform(pipeline.program, "fresnelFactor");
             pipeline.alphaTestLocation =
                 rlGetLocationUniform(pipeline.program, "alphaTest");
             pipeline.fogVectorLocation =
@@ -1529,8 +1573,14 @@ void main()
                 pipeline.normalMatrixLocations[2] < 0 || pipeline.diffuseColorLocation < 0 ||
                 pipeline.vertexColorEnabledLocation < 0 ||
                 pipeline.textureLocation < 0 || pipeline.texture1Location < 0 ||
+                pipeline.environmentMapLocation < 0 ||
                 pipeline.textureFlipVLocation < 0 ||
                 pipeline.textureEnabledLocation < 0 || pipeline.dualTextureLocation < 0 ||
+                pipeline.environmentMappingLocation < 0 ||
+                pipeline.environmentMapAmountLocation < 0 ||
+                pipeline.environmentMapSpecularLocation < 0 ||
+                pipeline.fresnelEnabledLocation < 0 ||
+                pipeline.fresnelFactorLocation < 0 ||
                 pipeline.alphaTestLocation < 0 || pipeline.fogVectorLocation < 0 ||
                 pipeline.fogColorLocation < 0 || pipeline.lightingEnabledLocation < 0 ||
                 pipeline.preferPerPixelLightingLocation < 0 ||
@@ -1677,6 +1727,13 @@ void main()
         rlSetUniform(pipeline.textureLocation, &textureUnit, RL_SHADER_UNIFORM_INT, 1);
         constexpr int textureUnit1 = 1;
         rlSetUniform(pipeline.texture1Location, &textureUnit1, RL_SHADER_UNIFORM_INT, 1);
+        // The unified program has active sampler2D and samplerCube uniforms. OpenGL rejects a
+        // draw if differently typed active samplers name one physical unit, so the cube uses unit
+        // 2 while inheriting XNA's logical SamplerStates[1] object below.
+        constexpr int environmentTextureUnit = 2;
+        rlSetUniform(
+            pipeline.environmentMapLocation, &environmentTextureUnit,
+            RL_SHADER_UNIFORM_INT, 1);
         const float textureFlipV[2] = {
             params.textureEnabled && params.texture0 != nullptr &&
                     SampledRowsAreBottomUp(*params.texture0)
@@ -1693,6 +1750,23 @@ void main()
         const float dualTextureFlag = params.dualTexture ? 1.0f : 0.0f;
         rlSetUniform(
             pipeline.dualTextureLocation, &dualTextureFlag,
+            RL_SHADER_UNIFORM_FLOAT, 1);
+        const float environmentMappingFlag = params.envMapping ? 1.0f : 0.0f;
+        const float fresnelEnabledFlag = params.fresnelEnabled ? 1.0f : 0.0f;
+        rlSetUniform(
+            pipeline.environmentMappingLocation, &environmentMappingFlag,
+            RL_SHADER_UNIFORM_FLOAT, 1);
+        rlSetUniform(
+            pipeline.environmentMapAmountLocation, &params.envMapAmount,
+            RL_SHADER_UNIFORM_FLOAT, 1);
+        rlSetUniform(
+            pipeline.environmentMapSpecularLocation, params.envMapSpecular,
+            RL_SHADER_UNIFORM_VEC3, 1);
+        rlSetUniform(
+            pipeline.fresnelEnabledLocation, &fresnelEnabledFlag,
+            RL_SHADER_UNIFORM_FLOAT, 1);
+        rlSetUniform(
+            pipeline.fresnelFactorLocation, &params.fresnelFactor,
             RL_SHADER_UNIFORM_FLOAT, 1);
         rlSetUniform(
             pipeline.alphaTestLocation, params.alphaTest, RL_SHADER_UNIFORM_VEC4, 1);
@@ -1776,6 +1850,22 @@ void main()
         rlSetUniform(
             pipeline.specularPowerLocation, &params.specularPower,
             RL_SHADER_UNIFORM_FLOAT, 1);
+        GLint previousEnvironmentSampler = 0;
+        if (params.envMapping)
+        {
+            GLint logicalEnvironmentSampler = 0;
+            glGetIntegeri_v(
+                GL_SAMPLER_BINDING, static_cast<GLuint>(textureUnit1),
+                &logicalEnvironmentSampler);
+            glGetIntegeri_v(
+                GL_SAMPLER_BINDING, static_cast<GLuint>(environmentTextureUnit),
+                &previousEnvironmentSampler);
+            glBindSampler(
+                static_cast<GLuint>(environmentTextureUnit),
+                static_cast<GLuint>(logicalEnvironmentSampler));
+            params.envMap->BindGL(environmentTextureUnit);
+            rlActiveTextureSlot(textureUnit);
+        }
         if (params.dualTexture)
         {
             rlActiveTextureSlot(textureUnit1);
@@ -1787,7 +1877,7 @@ void main()
             rlEnableTexture(texture != 0 ? texture : rlGetTextureIdDefault());
         }
 
-        if (!rlEnableVertexArray(pipeline.vertexArray))
+        const auto releaseTextures = [&]
         {
             if (params.textureEnabled)
             {
@@ -1798,8 +1888,21 @@ void main()
             {
                 rlActiveTextureSlot(textureUnit1);
                 rlDisableTexture();
-                rlActiveTextureSlot(textureUnit);
             }
+            if (params.envMapping)
+            {
+                rlActiveTextureSlot(environmentTextureUnit);
+                rlDisableTextureCubemap();
+                glBindSampler(
+                    static_cast<GLuint>(environmentTextureUnit),
+                    static_cast<GLuint>(previousEnvironmentSampler));
+            }
+            rlActiveTextureSlot(textureUnit);
+        };
+
+        if (!rlEnableVertexArray(pipeline.vertexArray))
+        {
+            releaseTextures();
             rlDisableShader();
             throw std::runtime_error("RLGL: primitive VAO became unavailable");
         }
@@ -1817,17 +1920,7 @@ void main()
             {
                 rlDisableVertexArray();
                 rlDisableVertexBuffer();
-                if (params.textureEnabled)
-                {
-                    rlActiveTextureSlot(textureUnit);
-                    rlDisableTexture();
-                }
-                if (params.dualTexture)
-                {
-                    rlActiveTextureSlot(textureUnit1);
-                    rlDisableTexture();
-                    rlActiveTextureSlot(textureUnit);
-                }
+                releaseTextures();
                 rlDisableShader();
                 throw std::invalid_argument("RLGL: invalid vertex attribute binding");
             }
@@ -1848,6 +1941,7 @@ void main()
         snapshot.texture1 = texture1;
         snapshot.textureEnabled = params.textureEnabled;
         snapshot.dualTexture = params.dualTexture;
+        snapshot.environmentMapping = params.envMapping;
         snapshot.skinned = params.skinned;
         if (indexBuffer == 0)
         {
@@ -1891,17 +1985,7 @@ void main()
 
         rlDisableVertexArray();
         rlDisableVertexBuffer();
-        if (params.textureEnabled)
-        {
-            rlActiveTextureSlot(textureUnit);
-            rlDisableTexture();
-        }
-        if (params.dualTexture)
-        {
-            rlActiveTextureSlot(textureUnit1);
-            rlDisableTexture();
-            rlActiveTextureSlot(textureUnit);
-        }
+        releaseTextures();
         rlDisableShader();
         ThrowIfGlError("primitive draw");
         lastPrimitiveDraw = snapshot;

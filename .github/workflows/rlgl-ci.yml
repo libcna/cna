@@ -128,6 +128,24 @@ jobs:
             cna_test_rlgl_basiceffect_lighting \
             cna_test_rlgl_dual_texture_effect \
             cna_test_rlgl_dual_texture_independent_uv \
+            cna_test_rlgl_environment_map \
+            cna_test_rlgl_environment_map_terms \
+            cna_test_rlgl_environment_map_alpha_scaled_lerp \
+            cna_test_rlgl_environment_map_fog \
+            cna_test_rlgl_environment_map_amount_clamp \
+            cna_test_rlgl_environment_map_sampler_contract \
+            cna_test_rlgl_environment_map_sampler_state \
+            cna_test_rlgl_environment_map_render_target_cube \
+            cna_test_rlgl_environmentmapeffect_golden \
+            cna_test_rlgl_environmentmapeffect_amount_zero \
+            cna_test_rlgl_environmentmapeffect_amount_one \
+            cna_test_rlgl_environmentmapeffect_specular \
+            cna_test_rlgl_environmentmapeffect_fresnel \
+            cna_test_rlgl_environmentmapeffect_fresnel_gradient \
+            cna_test_rlgl_environmentmapeffect_eyeposition \
+            cna_test_rlgl_environmentmapeffect_worldtransform \
+            cna_test_rlgl_environmentmapeffect_combined \
+            cna_test_rlgl_environmentmapeffect_multilight \
             cna_test_rlgl_skinned_effect \
             cna_test_rlgl_skinned_terms \
             cna_test_rlgl_skinnedeffect_identity_bones \

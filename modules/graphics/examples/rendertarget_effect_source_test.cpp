@@ -195,6 +195,8 @@ namespace
     constexpr const char* kRendererName = "DIRECTX12";
 #elif defined(CNA_RENDERER_LLGL)
     constexpr const char* kRendererName = "LLGL";
+#elif defined(CNA_RENDERER_RLGL)
+    constexpr const char* kRendererName = "RLGL";
 #else
 #error "REMED-GFX-152: this renderer has no declared render-target effect-source contract."
 #endif
