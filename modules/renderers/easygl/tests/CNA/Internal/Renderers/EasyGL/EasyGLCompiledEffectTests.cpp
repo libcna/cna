@@ -1253,6 +1253,76 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Vertex11Dp3ReplicatedX,
         CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Vertex11Dp4ReplicatedX));
 
+class EasyGLCompiledEffectInvalidMatrixInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticMatrixInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidMatrixInitializationTest,
+       RejectsUninitializedMatrixComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.matrixInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidMatrixInitialization,
+    EasyGLCompiledEffectInvalidMatrixInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M4x4VectorUnwrittenW,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M4x3VectorUnwrittenW,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x4VectorUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x3VectorUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x2VectorUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x2MatrixRowUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M4x4VectorUnwrittenW,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M4x3VectorUnwrittenW,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x4VectorUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x3VectorUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x2VectorUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x2MatrixRowUnwrittenZ));
+
+class EasyGLCompiledEffectValidMatrixInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticMatrixInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidMatrixInitializationTest,
+       AcceptsInitializedMatrixComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.matrixInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidMatrixInitialization,
+    EasyGLCompiledEffectValidMatrixInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M4x4VectorWritten,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M4x3VectorWritten,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x4VectorWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x3VectorWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x2VectorWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x2MatrixRowsWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M4x4VectorWritten,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M4x3VectorWritten,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x4VectorWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x3VectorWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x2VectorWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x2MatrixRowsWrittenXyz));
+
 TEST(EasyGLCompiledEffectTest, RejectsTexkillWithUndefinedTemporaryComponents)
 {
     GraphicsDevice device;

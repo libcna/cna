@@ -3298,6 +3298,80 @@ namespace
                   "temporary components in probe " +
                       std::to_string(static_cast<int>(probe)));
         }
+
+        options.fixedVectorInitializationProbe =
+            CNA::TestSupport::SyntheticFixedVectorInitializationProbe::None;
+        constexpr CNA::TestSupport::SyntheticMatrixInitializationProbe invalidMatrix[] = {
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M4x4VectorUnwrittenW,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M4x3VectorUnwrittenW,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x4VectorUnwrittenZ,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x3VectorUnwrittenZ,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x2VectorUnwrittenZ,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::
+                Pixel20M3x2MatrixRowUnwrittenZ,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M4x4VectorUnwrittenW,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M4x3VectorUnwrittenW,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x4VectorUnwrittenZ,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x3VectorUnwrittenZ,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x2VectorUnwrittenZ,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::
+                Vertex11M3x2MatrixRowUnwrittenZ,
+        };
+        for (const auto probe : invalidMatrix)
+        {
+            options.matrixInitializationProbe = probe;
+            const auto matrixBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool matrixRejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(matrixBytes.data(),
+                                                                matrixBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                matrixRejected = true;
+            }
+            Check(matrixRejected,
+                  "compiled Effect parser accepted a matrix read from uninitialized temporary "
+                  "components in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+
+        constexpr CNA::TestSupport::SyntheticMatrixInitializationProbe validMatrix[] = {
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M4x4VectorWritten,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M4x3VectorWritten,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x4VectorWrittenXyz,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x3VectorWrittenXyz,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x2VectorWrittenXyz,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::
+                Pixel20M3x2MatrixRowsWrittenXyz,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M4x4VectorWritten,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M4x3VectorWritten,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x4VectorWrittenXyz,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x3VectorWrittenXyz,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x2VectorWrittenXyz,
+            CNA::TestSupport::SyntheticMatrixInitializationProbe::
+                Vertex11M3x2MatrixRowsWrittenXyz,
+        };
+        for (const auto probe : validMatrix)
+        {
+            options.matrixInitializationProbe = probe;
+            const auto matrixBytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool matrixAccepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(matrixBytes.data(),
+                                                                matrixBytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                matrixAccepted = false;
+            }
+            Check(matrixAccepted,
+                  "compiled Effect parser rejected a matrix read from initialized temporary "
+                  "components in probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
     }
 
     void CheckCompiledTexkillTemporaryValidation(SoftwareRenderer& renderer)

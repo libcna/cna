@@ -1,0 +1,107 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2363,7 +2363,7 @@
+ //  only use the one legitimate argument, but this saves other profiles
+ //  from having to build this.
+ static void srcarg_matrix_replicate(Context *ctx, const int idx,
+-                                       const int rows)
++                                    const int rows, const int columns)
+ {
+     const SourceArgInfo *vector = &ctx->source_args[0];
+     const SourceArgInfo *matrix = &ctx->source_args[idx];
+@@ -2384,6 +2384,49 @@
+         dst->regnum += (i + 1);
+         set_used_register(ctx, dst->regtype, dst->regnum, 0);
+     } // for
++
++    const int validates_uninitialized_temporaries =
++        (shader_is_pixel(ctx) && !shader_version_atleast(ctx, 3, 0)) ||
++        (shader_is_vertex(ctx) && !shader_version_atleast(ctx, 2, 0));
++    if (!validates_uninitialized_temporaries ||
++        ctx->ignore_temp_read_validation)
++        return;
++
++    if (vector->regtype == REG_TYPE_TEMP)
++    {
++        const RegisterList *reg =
++            reglist_find(&ctx->used_registers, REG_TYPE_TEMP, vector->regnum);
++        int required_writemask = 1 << vector->swizzle_x;
++        if (columns >= 2) required_writemask |= 1 << vector->swizzle_y;
++        if (columns >= 3) required_writemask |= 1 << vector->swizzle_z;
++        if (columns >= 4) required_writemask |= 1 << vector->swizzle_w;
++        const int same_destination =
++            (dest->regtype == REG_TYPE_TEMP) &&
++            (dest->regnum == vector->regnum);
++        const int prior_writemask = same_destination
++            ? ctx->dest_arg_prior_writemask : (reg == NULL ? 0 : reg->written);
++        if ((prior_writemask & required_writemask) != required_writemask)
++            failf(ctx, "Matrix instruction reads uninitialized vector component(s) of r%d",
++                  vector->regnum);
++    } // if
++
++    if (matrix->regtype == REG_TYPE_TEMP)
++    {
++        const int required_writemask = (1 << columns) - 1;
++        for (i = 0; i < rows; i++)
++        {
++            const int regnum = matrix->regnum + i;
++            const RegisterList *reg =
++                reglist_find(&ctx->used_registers, REG_TYPE_TEMP, regnum);
++            const int same_destination =
++                (dest->regtype == REG_TYPE_TEMP) && (dest->regnum == regnum);
++            const int prior_writemask = same_destination
++                ? ctx->dest_arg_prior_writemask : (reg == NULL ? 0 : reg->written);
++            if ((prior_writemask & required_writemask) != required_writemask)
++                failf(ctx, "Matrix instruction reads uninitialized matrix component(s) of r%d",
++                      regnum);
++        } // for
++    } // if
+ } // srcarg_matrix_replicate
+ 
+ static void state_M4X4(Context *ctx)
+@@ -2396,7 +2439,7 @@
+ //The xyzw (default) mask is required for the destination register. Negate and swizzle modifiers are allowed for src0, but not for src1.
+ //Swizzle and negate modifiers are invalid for the src0 register. The dest and src0 registers cannot be the same.
+ 
+-    srcarg_matrix_replicate(ctx, 1, 4);
++    srcarg_matrix_replicate(ctx, 1, 4, 4);
+ } // state_M4X4
+ 
+ static void state_M4X3(Context *ctx)
+@@ -2407,7 +2450,7 @@
+ 
+ // !!! FIXME: MSDN stuff
+ 
+-    srcarg_matrix_replicate(ctx, 1, 3);
++    srcarg_matrix_replicate(ctx, 1, 3, 4);
+ } // state_M4X3
+ 
+ static void state_M3X4(Context *ctx)
+@@ -2418,7 +2461,7 @@
+ 
+ // !!! FIXME: MSDN stuff
+ 
+-    srcarg_matrix_replicate(ctx, 1, 4);
++    srcarg_matrix_replicate(ctx, 1, 4, 3);
+ } // state_M3X4
+ 
+ static void state_M3X3(Context *ctx)
+@@ -2429,7 +2472,7 @@
+ 
+ // !!! FIXME: MSDN stuff
+ 
+-    srcarg_matrix_replicate(ctx, 1, 3);
++    srcarg_matrix_replicate(ctx, 1, 3, 3);
+ } // state_M3X3
+ 
+ static void state_M3X2(Context *ctx)
+@@ -2440,7 +2483,7 @@
+ 
+ // !!! FIXME: MSDN stuff
+ 
+-    srcarg_matrix_replicate(ctx, 1, 2);
++    srcarg_matrix_replicate(ctx, 1, 2, 3);
+ } // state_M3X2
+ 
+ static void state_RET(Context *ctx)

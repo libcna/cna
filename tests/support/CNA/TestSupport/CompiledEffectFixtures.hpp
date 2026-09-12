@@ -835,6 +835,61 @@ namespace CNA::TestSupport
         Vertex11Dp4ReplicatedX,
     };
 
+    /** @brief Matrix-vector and implicit matrix-row reads from partial temporaries. */
+    enum class SyntheticMatrixInitializationProbe
+    {
+        /** @brief Emit no dedicated matrix initialization probe. */
+        None,
+        /** @brief In ps_2_0, M4X4 reads undefined W from its vector. */
+        Pixel20M4x4VectorUnwrittenW,
+        /** @brief In ps_2_0, M4X3 reads undefined W from its vector. */
+        Pixel20M4x3VectorUnwrittenW,
+        /** @brief In ps_2_0, M3X4 reads undefined Z from its vector. */
+        Pixel20M3x4VectorUnwrittenZ,
+        /** @brief In ps_2_0, M3X3 reads undefined Z from its vector. */
+        Pixel20M3x3VectorUnwrittenZ,
+        /** @brief In ps_2_0, M3X2 reads undefined Z from its vector. */
+        Pixel20M3x2VectorUnwrittenZ,
+        /** @brief In ps_2_0, M3X2 reads undefined Z from its second temporary matrix row. */
+        Pixel20M3x2MatrixRowUnwrittenZ,
+        /** @brief In ps_2_0, M4X4 reads a fully initialized vector. */
+        Pixel20M4x4VectorWritten,
+        /** @brief In ps_2_0, M4X3 reads a fully initialized vector. */
+        Pixel20M4x3VectorWritten,
+        /** @brief In ps_2_0, M3X4 reads initialized XYZ from its vector. */
+        Pixel20M3x4VectorWrittenXyz,
+        /** @brief In ps_2_0, M3X3 reads initialized XYZ from its vector. */
+        Pixel20M3x3VectorWrittenXyz,
+        /** @brief In ps_2_0, M3X2 reads initialized XYZ from its vector. */
+        Pixel20M3x2VectorWrittenXyz,
+        /** @brief In ps_2_0, M3X2 reads initialized XYZ from both temporary matrix rows. */
+        Pixel20M3x2MatrixRowsWrittenXyz,
+        /** @brief In vs_1_1, M4X4 reads undefined W from its vector. */
+        Vertex11M4x4VectorUnwrittenW,
+        /** @brief In vs_1_1, M4X3 reads undefined W from its vector. */
+        Vertex11M4x3VectorUnwrittenW,
+        /** @brief In vs_1_1, M3X4 reads undefined Z from its vector. */
+        Vertex11M3x4VectorUnwrittenZ,
+        /** @brief In vs_1_1, M3X3 reads undefined Z from its vector. */
+        Vertex11M3x3VectorUnwrittenZ,
+        /** @brief In vs_1_1, M3X2 reads undefined Z from its vector. */
+        Vertex11M3x2VectorUnwrittenZ,
+        /** @brief In vs_1_1, M3X2 reads undefined Z from its second temporary matrix row. */
+        Vertex11M3x2MatrixRowUnwrittenZ,
+        /** @brief In vs_1_1, M4X4 reads a fully initialized vector. */
+        Vertex11M4x4VectorWritten,
+        /** @brief In vs_1_1, M4X3 reads a fully initialized vector. */
+        Vertex11M4x3VectorWritten,
+        /** @brief In vs_1_1, M3X4 reads initialized XYZ from its vector. */
+        Vertex11M3x4VectorWrittenXyz,
+        /** @brief In vs_1_1, M3X3 reads initialized XYZ from its vector. */
+        Vertex11M3x3VectorWrittenXyz,
+        /** @brief In vs_1_1, M3X2 reads initialized XYZ from its vector. */
+        Vertex11M3x2VectorWrittenXyz,
+        /** @brief In vs_1_1, M3X2 reads initialized XYZ from both temporary matrix rows. */
+        Vertex11M3x2MatrixRowsWrittenXyz,
+    };
+
     /** @brief Shader profile and input-register boundary exercised by a synthetic program. */
     enum class SyntheticInputRegisterProbe
     {
@@ -1711,6 +1766,9 @@ namespace CNA::TestSupport
         /// Emits a fixed-vector arithmetic read from selected components of a partial r#.
         SyntheticFixedVectorInitializationProbe fixedVectorInitializationProbe =
             SyntheticFixedVectorInitializationProbe::None;
+        /// Emits a matrix read from selected components of partial temporary registers.
+        SyntheticMatrixInitializationProbe matrixInitializationProbe =
+            SyntheticMatrixInitializationProbe::None;
         /// Writes only r0.xy before TEXKILL reads XYZ. D3D9 shader validation must reject the
         /// undefined Z component in Shader Model 2.0.
         bool pixelShaderTexkillReadsPartialTemporary = false;
@@ -2013,7 +2071,9 @@ namespace CNA::TestSupport
         SyntheticScalarInitializationProbe scalarInitializationProbe =
             SyntheticScalarInitializationProbe::None,
         SyntheticFixedVectorInitializationProbe fixedVectorInitializationProbe =
-            SyntheticFixedVectorInitializationProbe::None)
+            SyntheticFixedVectorInitializationProbe::None,
+        SyntheticMatrixInitializationProbe matrixInitializationProbe =
+            SyntheticMatrixInitializationProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -2992,6 +3052,74 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, partialSource);
                 if (!nrm) AppendUInt32(shader, source(regConst, 0));
                 if (dp2add) AppendUInt32(shader, source(regConst, 0, 0x00u));
+            }
+        }
+        if (matrixInitializationProbe >=
+                SyntheticMatrixInitializationProbe::Pixel20M4x4VectorUnwrittenW &&
+            matrixInitializationProbe <=
+                SyntheticMatrixInitializationProbe::Pixel20M3x2MatrixRowsWrittenXyz)
+        {
+            using Probe = SyntheticMatrixInitializationProbe;
+            const bool matrixRows =
+                matrixInitializationProbe == Probe::Pixel20M3x2MatrixRowUnwrittenZ ||
+                matrixInitializationProbe == Probe::Pixel20M3x2MatrixRowsWrittenXyz;
+            const bool initialized =
+                matrixInitializationProbe >= Probe::Pixel20M4x4VectorWritten;
+            if (matrixRows)
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.xyz, c0
+                AppendUInt32(shader, destination(regTemp, 0, 0x7u));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1.xy[z], c0
+                AppendUInt32(shader, destination(regTemp, 1, initialized ? 0x7u : 0x3u));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, 0x00000018u | (3u << 24)); // m3x2 r4.xy, c0, r0
+                AppendUInt32(shader, destination(regTemp, 4, 0x3u));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, source(regTemp, 0));
+            }
+            else
+            {
+                std::uint32_t opcode = 0x00000014u;
+                std::uint32_t destinationMask = 0xFu;
+                bool vectorHasFourComponents = true;
+                switch (matrixInitializationProbe)
+                {
+                    case Probe::Pixel20M4x3VectorUnwrittenW:
+                    case Probe::Pixel20M4x3VectorWritten:
+                        opcode = 0x00000015u;
+                        destinationMask = 0x7u;
+                        break;
+                    case Probe::Pixel20M3x4VectorUnwrittenZ:
+                    case Probe::Pixel20M3x4VectorWrittenXyz:
+                        opcode = 0x00000016u;
+                        vectorHasFourComponents = false;
+                        break;
+                    case Probe::Pixel20M3x3VectorUnwrittenZ:
+                    case Probe::Pixel20M3x3VectorWrittenXyz:
+                        opcode = 0x00000017u;
+                        destinationMask = 0x7u;
+                        vectorHasFourComponents = false;
+                        break;
+                    case Probe::Pixel20M3x2VectorUnwrittenZ:
+                    case Probe::Pixel20M3x2VectorWrittenXyz:
+                        opcode = 0x00000018u;
+                        destinationMask = 0x3u;
+                        vectorHasFourComponents = false;
+                        break;
+                    default:
+                        break;
+                }
+                const std::uint32_t vectorMask = initialized
+                    ? (vectorHasFourComponents ? 0xFu : 0x7u)
+                    : (vectorHasFourComponents ? 0x7u : 0x3u);
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r0.mask, c0
+                AppendUInt32(shader, destination(regTemp, 0, vectorMask));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, opcode | (3u << 24));
+                AppendUInt32(shader, destination(regTemp, 4, destinationMask));
+                AppendUInt32(shader, source(regTemp, 0));
+                AppendUInt32(shader, source(regConst, 4));
             }
         }
 
@@ -5439,7 +5567,10 @@ namespace CNA::TestSupport
                                                                         SyntheticScalarInitializationProbe::None,
                                                                 SyntheticFixedVectorInitializationProbe
                                                                     fixedVectorInitializationProbe =
-                                                                        SyntheticFixedVectorInitializationProbe::None)
+                                                                        SyntheticFixedVectorInitializationProbe::None,
+                                                                SyntheticMatrixInitializationProbe
+                                                                    matrixInitializationProbe =
+                                                                        SyntheticMatrixInitializationProbe::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -5466,6 +5597,9 @@ namespace CNA::TestSupport
                                        fixedVectorInitializationProbe >=
                                            SyntheticFixedVectorInitializationProbe::
                                                Vertex11Dp3UnwrittenYz ||
+                                       matrixInitializationProbe >=
+                                           SyntheticMatrixInitializationProbe::
+                                               Vertex11M4x4VectorUnwrittenW ||
                                        shaderModel1InvalidOpcode !=
                                            SyntheticInvalidVertexShaderModel1Opcode::None ||
                                        temporaryRegisterProbe ==
@@ -6732,6 +6866,72 @@ namespace CNA::TestSupport
                          source(regTemp, 0, initialized ? 0x00u : 0xE4u));
             AppendUInt32(shader, source(regConst, 0));
         }
+        if (matrixInitializationProbe >=
+            SyntheticMatrixInitializationProbe::Vertex11M4x4VectorUnwrittenW)
+        {
+            using Probe = SyntheticMatrixInitializationProbe;
+            const bool matrixRows =
+                matrixInitializationProbe == Probe::Vertex11M3x2MatrixRowUnwrittenZ ||
+                matrixInitializationProbe == Probe::Vertex11M3x2MatrixRowsWrittenXyz;
+            const bool initialized =
+                matrixInitializationProbe >= Probe::Vertex11M4x4VectorWritten;
+            if (matrixRows)
+            {
+                AppendUInt32(shader, 0x00000001u); // mov r0.xyz, c0
+                AppendUInt32(shader, destination(regTemp, 0, 0x7u));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, 0x00000001u); // mov r1.xy[z], c0
+                AppendUInt32(shader, destination(regTemp, 1, initialized ? 0x7u : 0x3u));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, 0x00000018u); // m3x2 r4.xy, c0, r0
+                AppendUInt32(shader, destination(regTemp, 4, 0x3u));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, source(regTemp, 0));
+            }
+            else
+            {
+                std::uint32_t opcode = 0x00000014u;
+                std::uint32_t destinationMask = 0xFu;
+                bool vectorHasFourComponents = true;
+                switch (matrixInitializationProbe)
+                {
+                    case Probe::Vertex11M4x3VectorUnwrittenW:
+                    case Probe::Vertex11M4x3VectorWritten:
+                        opcode = 0x00000015u;
+                        destinationMask = 0x7u;
+                        break;
+                    case Probe::Vertex11M3x4VectorUnwrittenZ:
+                    case Probe::Vertex11M3x4VectorWrittenXyz:
+                        opcode = 0x00000016u;
+                        vectorHasFourComponents = false;
+                        break;
+                    case Probe::Vertex11M3x3VectorUnwrittenZ:
+                    case Probe::Vertex11M3x3VectorWrittenXyz:
+                        opcode = 0x00000017u;
+                        destinationMask = 0x7u;
+                        vectorHasFourComponents = false;
+                        break;
+                    case Probe::Vertex11M3x2VectorUnwrittenZ:
+                    case Probe::Vertex11M3x2VectorWrittenXyz:
+                        opcode = 0x00000018u;
+                        destinationMask = 0x3u;
+                        vectorHasFourComponents = false;
+                        break;
+                    default:
+                        break;
+                }
+                const std::uint32_t vectorMask = initialized
+                    ? (vectorHasFourComponents ? 0xFu : 0x7u)
+                    : (vectorHasFourComponents ? 0x7u : 0x3u);
+                AppendUInt32(shader, 0x00000001u); // mov r0.mask, c0
+                AppendUInt32(shader, destination(regTemp, 0, vectorMask));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, opcode);
+                AppendUInt32(shader, destination(regTemp, 4, destinationMask));
+                AppendUInt32(shader, source(regTemp, 0));
+                AppendUInt32(shader, source(regConst, 4));
+            }
+        }
         if (readsSecondStream)
         {
             // mad r0, v1, c4, v0
@@ -7666,7 +7866,8 @@ namespace CNA::TestSupport
             options.texldlDestinationModifierProbe,
             options.componentwiseInitializationProbe,
             options.scalarInitializationProbe,
-            options.fixedVectorInitializationProbe);
+            options.fixedVectorInitializationProbe,
+            options.matrixInitializationProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -7813,7 +8014,8 @@ namespace CNA::TestSupport
                 options.texldlDestinationModifierProbe,
                 options.componentwiseInitializationProbe,
                 options.scalarInitializationProbe,
-                options.fixedVectorInitializationProbe);
+                options.fixedVectorInitializationProbe,
+                options.matrixInitializationProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());
