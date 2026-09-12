@@ -160,10 +160,16 @@ namespace CNA::Internal::Renderers::Rlgl
          * @brief Creates a sampled two-dimensional texture.
          *
          * @param data Texture dimensions and initial pixels.
-         * @return Never returns until RLGL-009 implements the resource.
-         * @throws System::NotSupportedException Until RLGL-009 is complete.
+         * @return Renderer-owned texture record.
+         * @throws std::runtime_error When the requested format has not passed its RLGL gate.
          */
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
+
+        /**
+         * @brief Returns the current OpenGL context's maximum two-dimensional texture edge.
+         * @return The `GL_MAX_TEXTURE_SIZE` value measured after rlgl initialization.
+         */
+        [[nodiscard]] int GetMaxTextureDimension() const override { return maxTextureSize_; }
 
         /**
          * @brief Creates the renderer-owned SpriteBatch implementation.
@@ -357,6 +363,7 @@ namespace CNA::Internal::Renderers::Rlgl
         int multiSampleCount_ = 0;
         int depthBits_ = 0;
         int stencilBits_ = 0;
+        int maxTextureSize_ = 0;
         bool lifecycleClaimed_ = false;
         bool rlglInitialized_ = false;
         bool registered_ = false;

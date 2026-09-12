@@ -47,7 +47,9 @@ success.
 | Drawable resize and presentation rectangle refresh | ✅ | A `GraphicsDeviceManager` resize is followed by dimension and post-resize pixel checks |
 | Viewport/scissor coordinate application | 🟨 | Top-left CNA rectangles are mapped to bottom-left GL coordinates; transition/pixel coverage remains in `RLGL-013` |
 | Backbuffer MSAA | 🟨 | Context samples are requested with a non-MSAA retry and the achieved count is reported; resolve/output coverage remains in `RLGL-014` |
-| `Texture2D`, samplers, SpriteBatch/SpriteFont | ❌ | Factories throw diagnostics naming `RLGL-009`/`RLGL-010` |
+| `Texture2D` (`SurfaceFormat::Color`) | ✅ | rlgl-created RGBA8 storage passed exact full/partial upload, native whole/subrect readback, row-order, binding, and non-zero mip-level checks |
+| Other Texture2D formats and sampler state | ❌ | Explicitly tracked by `RLGL-024` and `RLGL-025`; unsupported formats fail instead of changing their byte interpretation |
+| SpriteBatch/SpriteFont | ❌ | Factory throws a diagnostic naming `RLGL-010` |
 | Vertex/index buffers and draw calls | ❌ | Factories/draw hooks throw diagnostics naming `RLGL-011` |
 | Stock/custom effects and normal 3D workloads | ❌ | Await the buffer, texture, and shader tasks; `GraphicsCapability::ThreeD` remains false |
 | Render targets, MRT, cube resources, instancing, queries | ❌ | Explicitly unavailable until their recorded tasks pass focused validation |
@@ -84,7 +86,7 @@ cmake -S . -B cmake-build-rlgl -G Ninja \
       -DCNA_GRAPHICS_RENDERER=RLGL \
       -DCNA_BUILD_TESTS=OFF
 cmake --build cmake-build-rlgl --parallel 4 --target \
-      cna_renderer_rlgl cna_test_rlgl_smoke
+      cna_renderer_rlgl cna_test_rlgl_smoke cna_test_rlgl_texture
 ```
 
 The smoke target is deliberately available with `CNA_BUILD_TESTS=OFF`. On a Linux machine with
@@ -93,10 +95,13 @@ SDL3's offscreen driver and Mesa software rendering it can be run without a disp
 ```bash
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_smoke
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_texture
 ```
 
-With `CNA_BUILD_TESTS=ON`, the same executable is registered as `Rlgl_Smoke`, labelled `Rlgl` and
-`GraphicsSmoke`, with the proven offscreen environment attached to the CTest entry.
+With `CNA_BUILD_TESTS=ON`, the executables are registered as `Rlgl_Smoke` and `Rlgl_Texture`,
+labelled `Rlgl` plus their focused graphics category, with the proven offscreen environment
+attached to each CTest entry.
 
 ## Dependency and offline builds
 

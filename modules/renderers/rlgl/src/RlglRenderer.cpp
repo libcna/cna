@@ -6,6 +6,7 @@
 #include "System/NotSupportedException.hpp"
 
 #include "RlglBridge.hpp"
+#include "RlglResources.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -88,6 +89,7 @@ namespace CNA::Internal::Renderers::Rlgl
             const std::string version = Bridge::Initialize(
                 platformContext_->GetLoader(), width, height);
             rlglInitialized_ = true;
+            maxTextureSize_ = Bridge::GetMaxTextureSize();
 
             platformContext_->SetSwapInterval(swapInterval_);
             IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
@@ -312,8 +314,7 @@ namespace CNA::Internal::Renderers::Rlgl
 
     std::unique_ptr<ITextureRenderer> RlglRenderer::CreateTexture(const ImageData& data)
     {
-        (void)data;
-        Unsupported("Texture2D", "RLGL-009");
+        return CreateTextureRenderer(data);
     }
 
     std::unique_ptr<ISpriteBatchRenderer> RlglRenderer::CreateSpriteBatch()

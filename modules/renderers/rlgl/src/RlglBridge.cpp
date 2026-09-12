@@ -11,6 +11,8 @@
 
 namespace
 {
+    bool bridgeInitialized = false;
+
     void RlglTraceLog(int level, const char* format, ...);
 }
 
@@ -50,6 +52,58 @@ namespace
         throw std::runtime_error(
             std::string("RLGL: OpenGL error after ") + operation + ": " + value);
     }
+
+    void RequireInitialized(const char* operation)
+    {
+        if (!bridgeInitialized)
+        {
+            throw std::runtime_error(
+                std::string("RLGL: ") + operation + " requires a live rlgl device");
+        }
+    }
+
+    class TextureBindingRestore final
+    {
+    public:
+        TextureBindingRestore()
+        {
+            glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture_);
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture2D_);
+        }
+
+        ~TextureBindingRestore()
+        {
+            glActiveTexture(static_cast<GLenum>(activeTexture_));
+            glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture2D_));
+        }
+
+        TextureBindingRestore(const TextureBindingRestore&) = delete;
+        TextureBindingRestore& operator=(const TextureBindingRestore&) = delete;
+
+    private:
+        GLint activeTexture_ = GL_TEXTURE0;
+        GLint texture2D_ = 0;
+    };
+
+    class UnpackAlignmentRestore final
+    {
+    public:
+        UnpackAlignmentRestore()
+        {
+            glGetIntegerv(GL_UNPACK_ALIGNMENT, &alignment_);
+        }
+
+        ~UnpackAlignmentRestore()
+        {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, alignment_);
+        }
+
+        UnpackAlignmentRestore(const UnpackAlignmentRestore&) = delete;
+        UnpackAlignmentRestore& operator=(const UnpackAlignmentRestore&) = delete;
+
+    private:
+        GLint alignment_ = 4;
+    };
 }
 
 namespace CNA::Internal::Renderers::Rlgl::Bridge
@@ -80,6 +134,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
             if (rlGetTextureIdDefault() == 0 || rlGetShaderIdDefault() == 0)
                 throw std::runtime_error("RLGL: default texture or shader initialization failed");
             ThrowIfGlError("rlglInit");
+            bridgeInitialized = true;
         }
         catch (...)
         {
@@ -92,6 +147,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
 
     void Shutdown() noexcept
     {
+        bridgeInitialized = false;
         rlglClose();
     }
 
@@ -201,6 +257,156 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
             std::memcpy(top, bottom, rowBytes);
             std::memcpy(bottom, temporary.data(), rowBytes);
         }
+    }
+
+    int GetMaxTextureSize()
+    {
+        RequireInitialized("texture-limit query");
+        GLint value = 0;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &value);
+        ThrowIfGlError("GL_MAX_TEXTURE_SIZE query");
+        if (value <= 0)
+            throw std::runtime_error("RLGL: driver reported an invalid maximum texture size");
+        return value;
+    }
+
+    unsigned int CreateTexture2DRgba8(
+        const int width, const int height, const int mipLevels, const std::uint8_t* pixels)
+    {
+        RequireInitialized("Texture2D creation");
+        if (width <= 0 || height <= 0 || mipLevels <= 0 || pixels == nullptr)
+            throw std::invalid_argument("RLGL: invalid RGBA8 Texture2D creation request");
+
+        const TextureBindingRestore bindingRestore;
+        const UnpackAlignmentRestore unpackRestore;
+        const unsigned int id = rlLoadTexture(
+            pixels, width, height, RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
+        if (id == 0)
+            throw std::runtime_error("RLGL: rlLoadTexture failed for an RGBA8 Texture2D");
+
+        try
+        {
+            glBindTexture(GL_TEXTURE_2D, id);
+            int levelWidth = width;
+            int levelHeight = height;
+            for (int level = 1; level < mipLevels; ++level)
+            {
+                levelWidth = levelWidth > 1 ? levelWidth / 2 : 1;
+                levelHeight = levelHeight > 1 ? levelHeight / 2 : 1;
+                glTexImage2D(
+                    GL_TEXTURE_2D, level, GL_RGBA8, levelWidth, levelHeight, 0,
+                    GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            }
+            // rlgl has no general texture-max-level parameter. Clamp even a one-level texture so
+            // XNA's mip-carrying sampler defaults never make the object incomplete.
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipLevels - 1);
+            ThrowIfGlError("RGBA8 Texture2D allocation");
+        }
+        catch (...)
+        {
+            rlUnloadTexture(id);
+            throw;
+        }
+        return id;
+    }
+
+    void DestroyTexture2D(const unsigned int id) noexcept
+    {
+        if (bridgeInitialized && id != 0) rlUnloadTexture(id);
+    }
+
+    void UpdateTexture2DRgba8(
+        const unsigned int id, const int level, const int width, const int height,
+        const std::uint8_t* pixels)
+    {
+        RequireInitialized("Texture2D update");
+        if (id == 0 || level < 0 || width <= 0 || height <= 0 || pixels == nullptr)
+            throw std::invalid_argument("RLGL: invalid RGBA8 Texture2D update request");
+
+        const TextureBindingRestore bindingRestore;
+        const UnpackAlignmentRestore unpackRestore;
+        if (level == 0)
+        {
+            // The public wrapper provides the exact level-zero subimage path.
+            rlUpdateTexture(
+                id, 0, 0, width, height,
+                RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, pixels);
+        }
+        else
+        {
+            // rlUpdateTexture hardcodes mip level zero. Higher declared levels use the dispatch
+            // table rlgl loaded, retaining rlgl as owner of the texture name and normal bind path.
+            glBindTexture(GL_TEXTURE_2D, id);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexSubImage2D(
+                GL_TEXTURE_2D, level, 0, 0, width, height,
+                GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        }
+        ThrowIfGlError("RGBA8 Texture2D update");
+    }
+
+    void ReadTexture2DRgba8(
+        const unsigned int id, const int level, const int levelWidth, const int levelHeight,
+        const int x, const int y, const int width, const int height, std::uint8_t* pixels)
+    {
+        RequireInitialized("Texture2D readback");
+        if (id == 0 || level < 0 || levelWidth <= 0 || levelHeight <= 0 ||
+            x < 0 || y < 0 || width <= 0 || height <= 0 ||
+            x > levelWidth - width || y > levelHeight - height || pixels == nullptr)
+        {
+            throw std::invalid_argument("RLGL: invalid RGBA8 Texture2D readback request");
+        }
+
+        const TextureBindingRestore restore;
+        glBindTexture(GL_TEXTURE_2D, id);
+        GLint previousPackAlignment = 4;
+        glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+
+        std::vector<std::uint8_t> levelPixels(
+            static_cast<std::size_t>(levelWidth) * levelHeight * 4u);
+        glGetTexImage(GL_TEXTURE_2D, level, GL_RGBA, GL_UNSIGNED_BYTE, levelPixels.data());
+        glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+        ThrowIfGlError("RGBA8 Texture2D readback");
+
+        const std::size_t sourceRowBytes = static_cast<std::size_t>(levelWidth) * 4u;
+        const std::size_t destinationRowBytes = static_cast<std::size_t>(width) * 4u;
+        for (int row = 0; row < height; ++row)
+        {
+            const std::uint8_t* source = levelPixels.data()
+                + static_cast<std::size_t>(y + row) * sourceRowBytes
+                + static_cast<std::size_t>(x) * 4u;
+            std::memcpy(
+                pixels + static_cast<std::size_t>(row) * destinationRowBytes,
+                source, destinationRowBytes);
+        }
+    }
+
+    void BindTexture2D(const unsigned int id, const int unit)
+    {
+        RequireInitialized("Texture2D binding");
+        if (unit < 0)
+            throw std::out_of_range("RLGL: texture unit must be non-negative");
+        rlActiveTextureSlot(unit);
+        if (id == 0) rlDisableTexture();
+        else rlEnableTexture(id);
+    }
+
+    unsigned int GetBoundTexture2DForTesting(const int unit)
+    {
+        RequireInitialized("Texture2D binding query");
+        if (unit < 0)
+            throw std::out_of_range("RLGL: texture unit must be non-negative");
+
+        GLint previousActiveTexture = GL_TEXTURE0;
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+        glActiveTexture(static_cast<GLenum>(GL_TEXTURE0 + unit));
+        GLint texture = 0;
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture);
+        glActiveTexture(static_cast<GLenum>(previousActiveTexture));
+        ThrowIfGlError("Texture2D binding query");
+        return static_cast<unsigned int>(texture);
     }
 
     void BindDefaultFramebuffer()

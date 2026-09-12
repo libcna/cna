@@ -93,7 +93,8 @@ jobs:
         run: |
           cmake --build build-rlgl --parallel 2 --target \
             cna_renderer_rlgl \
-            cna_test_rlgl_smoke
+            cna_test_rlgl_smoke \
+            cna_test_rlgl_texture
 
       - name: Verify renderer registry consistency
         working-directory: cna

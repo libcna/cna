@@ -3,6 +3,7 @@
 
 #include "CNA/Platform/IPlatformGlContext.hpp"
 
+#include <cstdint>
 #include <string>
 
 namespace CNA::Internal::Renderers::Rlgl::Bridge
@@ -99,6 +100,70 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      */
     void ReadBackbuffer(
         int x, int y, int width, int height, int framebufferHeight, unsigned char* pixels);
+
+    /**
+     * @brief Returns the current context's maximum two-dimensional texture edge.
+     * @return The value reported by `GL_MAX_TEXTURE_SIZE`.
+     */
+    [[nodiscard]] int GetMaxTextureSize();
+
+    /**
+     * @brief Creates an RGBA8 texture through rlgl and allocates its declared mip chain.
+     * @param width Level-zero width.
+     * @param height Level-zero height.
+     * @param mipLevels Number of mip levels to allocate.
+     * @param pixels Tightly packed level-zero RGBA8 bytes.
+     * @return The non-zero GL texture name owned by rlgl.
+     */
+    [[nodiscard]] unsigned int CreateTexture2DRgba8(
+        int width, int height, int mipLevels, const std::uint8_t* pixels);
+
+    /**
+     * @brief Releases a texture through rlgl while the device is live.
+     * @param id Texture name, or zero.
+     */
+    void DestroyTexture2D(unsigned int id) noexcept;
+
+    /**
+     * @brief Replaces one complete RGBA8 mip level.
+     * @param id Texture name.
+     * @param level Mip level.
+     * @param width Level width.
+     * @param height Level height.
+     * @param pixels Tightly packed RGBA8 bytes.
+     */
+    void UpdateTexture2DRgba8(
+        unsigned int id, int level, int width, int height, const std::uint8_t* pixels);
+
+    /**
+     * @brief Reads an RGBA8 rectangle from one texture mip level.
+     * @param id Texture name.
+     * @param level Mip level.
+     * @param levelWidth Complete level width.
+     * @param levelHeight Complete level height.
+     * @param x Rectangle left edge.
+     * @param y Rectangle top edge in upload-memory order.
+     * @param width Rectangle width.
+     * @param height Rectangle height.
+     * @param pixels Destination holding width * height * 4 bytes.
+     */
+    void ReadTexture2DRgba8(
+        unsigned int id, int level, int levelWidth, int levelHeight,
+        int x, int y, int width, int height, std::uint8_t* pixels);
+
+    /**
+     * @brief Binds a two-dimensional texture through rlgl.
+     * @param id Texture name, or zero to unbind.
+     * @param unit Texture unit.
+     */
+    void BindTexture2D(unsigned int id, int unit);
+
+    /**
+     * @brief Returns the two-dimensional texture bound to a unit for focused validation.
+     * @param unit Texture unit.
+     * @return The current GL texture name.
+     */
+    [[nodiscard]] unsigned int GetBoundTexture2DForTesting(int unit);
 
     /** @brief Restores the platform default framebuffer as the active draw target. */
     void BindDefaultFramebuffer();
