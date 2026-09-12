@@ -1,0 +1,37 @@
+diff --git a/mojoshader.c b/mojoshader.c
+index e754c4a..ba1ce4d 100644
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -576,6 +576,24 @@ static void validate_input_register(Context *ctx, const RegisterType regtype,
+     } // else
+ } // validate_input_register
+ 
++static void validate_input_register_destination(Context *ctx,
++                                                const uint32 opcode)
++{
++    if (!ctx->have_dest_arg || (opcode == 31))  // DCL describes an input; it does not write it.
++        return;
++
++    const RegisterType regtype = ctx->dest_arg.regtype;
++    if (regtype == REG_TYPE_INPUT)
++    {
++        fail(ctx, "input registers are read-only instruction operands");
++    } // if
++    else if (shader_is_pixel(ctx) && (ctx->major_ver >= 2) &&
++             (regtype == REG_TYPE_TEXTURE))
++    {
++        fail(ctx, "pixel texture-coordinate input registers are read-only");
++    } // else if
++} // validate_input_register_destination
++
+ static void validate_output_register(Context *ctx, const RegisterType regtype,
+                                      const int regnum)
+ {
+@@ -2842,6 +2860,7 @@ static int parse_instruction_token(Context *ctx)
+     if (instruction->state != NULL)
+         instruction->state(ctx);
+     validate_pixel_shader_model_one_destination_mask(ctx, opcode);
++    validate_input_register_destination(ctx, opcode);
+     validate_pixel_shader_model_one_coissue_opcode(ctx, opcode);
+     validate_pixel_shader_model_one_coissue_pair(ctx, opcode);
+ 

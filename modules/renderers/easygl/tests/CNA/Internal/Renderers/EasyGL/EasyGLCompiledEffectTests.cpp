@@ -1306,6 +1306,34 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedInputRegisters)
     }
 }
 
+class EasyGLCompiledEffectInputRegisterAccessTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInputRegisterProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInputRegisterAccessTest, RejectsReadOnlyInputDestination)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.inputRegisterProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ReadOnlyInputDestination,
+    EasyGLCompiledEffectInputRegisterAccessTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel11ColorDestination,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel20ColorDestination,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel20TexCoordDestination,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel30Destination,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Vertex20Destination,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Vertex30Destination));
+
 class EasyGLCompiledEffectOutputRegisterRangeTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>
 {
