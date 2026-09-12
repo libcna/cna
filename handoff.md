@@ -1,6 +1,6 @@
 # CNA Software Renderer Adversarial Parity Handoff
 
-Updated: 2026-09-12, continued through SOFTWARE-475
+Updated: 2026-09-12, continued through SOFTWARE-477
 
 This document is the restart point for the hostile Software-versus-EasyGL classic XNA 4.0/Core
 parity review. Do not interpret the large completed task count or green regression suites as proof
@@ -35,22 +35,23 @@ infallible oracle.
 - Repository: `/rv/data/development/github.com/openeggbert/cnasoftware`
 - Branch: `software`, tracking `origin/software`
 - Adversarial challenge start: `92ed418b3dfcd4a2e03ea8c0d092a0b4caca9e9f`
-- Last technical commit before this handoff update: `3417e6477` —
-  `fix(SOFTWARE-475): validate legacy texture stage order`
-- Campaign delta at that commit: 318 commits, 689 changed files, 64,992 insertions and 6,594
+- Last technical commit before this handoff update: `0f878352a` —
+  `fix(SOFTWARE-477): validate TEXDEPTH result modifiers`
+- Campaign delta at that commit: 321 commits, 691 changed files, 65,096 insertions and 6,594
   deletions relative to the challenge start. Recompute rather than copying these numbers into
   a future final report because this handoff commit and subsequent work change them.
 - `origin/software` was still at `d3a38f0f7` when this update was written. Before this handoff
-  commit, the local branch was eight commits ahead: `2ba060087` (SOFTWARE-471), `f59140696`
+  commit, the local branch was eleven commits ahead: `2ba060087` (SOFTWARE-471), `f59140696`
   (SOFTWARE-472), `19f7cabe2` (a handoff snapshot), `9c7413c3d` (SOFTWARE-473),
-  `8e01919c1` (a handoff snapshot), `c9b7884ce` (SOFTWARE-474), `d718ac4ee` (the preceding
-  handoff snapshot), and `3417e6477` (SOFTWARE-475).
+  `8e01919c1` (a handoff snapshot), `c9b7884ce` (SOFTWARE-474), `d718ac4ee` (a handoff
+  snapshot), `3417e6477` (SOFTWARE-475), `65d7b986c` (a handoff snapshot), `01d2b156c`
+  (SOFTWARE-476), and `0f878352a` (SOFTWARE-477).
   The owner explicitly requested pushes, but the execution environment rejected the attempted
-  `git push origin software` to `git@github-libcna:libcna/cna` because the six-commit payload and
+  `git push origin software` to `git@github-libcna:libcna/cna` because the accumulated payload and
   destination lacked separately trusted approval in its remote-safety review; no workaround was
   attempted. Re-establish the live branch/remote state and obtain explicit approval for that exact
   remote and the current `d3a38f0f7..HEAD` payload before pushing the commits. This handoff commit
-  will make the local branch nine commits ahead.
+  will make the local branch twelve commits ahead.
 - The only expected worktree entry after the handoff commit is the user's untracked `.junie/`.
   Preserve it. Do not stage it.
 
@@ -102,7 +103,7 @@ the exact evidence and task mapping are in the `Final adversarial parity challen
 executes classic Effect Framework data through MojoShader/FNA3D-compatible structures. It is a real
 classic-XNA parity requirement, not a CNAEXT deferral.
 
-## Latest completed work: SOFTWARE-470 through SOFTWARE-475
+## Latest completed work: SOFTWARE-470 through SOFTWARE-477
 
 `SOFTWARE-470` audited the Shader Model 2 `SINCOS` scratch operands.
 
@@ -182,6 +183,24 @@ that SOFTWARE-418's four-slot ps_1_1 positive control repeated `TEXKILL t0` four
 Microsoft-invalid, so it now uses legal stages `t0..t3`. The Software renderer label passes
 160/160 and the complete isolated EasyGL compiled family passes 590/590.
 
+`SOFTWARE-476` challenged the destination-register class left unchecked by that generic branch.
+Real `d3dcompiler_47.dll` rejects `texcoord r0` under `ps_1_1`, `ps_1_2` and `ps_1_3` with X5040
+while accepting `texcoord t0`; companion probes confirm the texture-register-only destination for
+`TEX` and `TEXKILL`. Software and EasyGL accepted the malformed temporary destination before
+managed patch 101 added the missing pre-1.4 `state_TEXCRD` guard. The shared negative fixture now
+passes in both paths while Shader Model 1.4's distinct temporary-destination form remains legal.
+The Software renderer label passes 160/160 and the complete isolated EasyGL compiled family passes
+591/591.
+
+`SOFTWARE-477` audited the unchecked result fields of Shader Model 1.4 `TEXDEPTH`. Microsoft accepts
+plain full-mask `texdepth r5` after `r5.xy` initialization and `PHASE`, but rejects partial masks
+with X5127, saturation with X5128, and result shifts with X5129. The shared generic mask validator
+already rejected partial destinations; both Software and EasyGL nevertheless accepted saturation
+and shift before managed patch 102 added the exact guards to `state_TEXDEPTH`. Three negative
+fixtures cover the repaired modifier and shift plus the existing partial-mask control, and the
+valid post-phase form prevents blanket rejection. The focused EasyGL pair passes 2/2, the complete
+isolated EasyGL compiled family passes 591/591, and all 160 display-free Software CTests pass.
+
 ## Recent compiled-Effect validation commits
 
 These commits form one evidence chain. Preserve their distinctions when debugging regressions:
@@ -204,6 +223,8 @@ These commits form one evidence chain. Preserve their distinctions when debuggin
   `TEXM3X3SPEC` eye-constant rules.
 - `3417e6477` — SOFTWARE-475, enforce pre-1.4 texture result modifiers and one-use ascending
   destination-stage ordering across the generic texture family.
+- `01d2b156c` — SOFTWARE-476, require texture-register destinations for pre-1.4 `TEXCOORD`.
+- `0f878352a` — SOFTWARE-477, reject Shader Model 1.4 `TEXDEPTH` result modifiers and shifts.
 
 The lesson from SOFTWARE-468 is important: never generalize an exact `ps_2_0` assembler result to
 `ps_2_x`, `ps_3_0`, or a vertex profile without measuring it. The Microsoft profile boundaries can
@@ -225,8 +246,8 @@ The following are the only non-complete rows in `plans/plan_software.md` at this
 | `SOFTWARE-86` | Historical optional performance work. Explicitly not a goal without a real impractical test. |
 
 All rows through `SOFTWARE-163`, the completed later ranges stated in the plan, and
-`SOFTWARE-315..475` are closed except for the rows above. Assign the next demonstrated issue as
-`SOFTWARE-476`; never add a task merely to keep numbering moving.
+`SOFTWARE-315..477` are closed except for the rows above. Assign the next demonstrated issue as
+`SOFTWARE-478`; never add a task merely to keep numbering moving.
 
 ## Recommended next audit direction
 
@@ -274,7 +295,7 @@ the flag incrementally.
 - Durable audit evidence: `plans/plan_software.md` and
   `docs/software-easygl-parity-ledger.md`
 
-The patch series contains 100 ordered patches at this handoff. New patches must be appended in
+The patch series contains 102 ordered patches at this handoff. New patches must be appended in
 dependency order and must apply to pinned MojoShader commit
 `6333f74dbd5644789a63e903816441b16c1e8b60` through FNA3D pin `3240147`.
 
@@ -333,7 +354,7 @@ The active local dependency checkout is `/tmp/cna-fna3d-soft474.XKYa5y/FNA3D`. I
 SOFTWARE-474 after another concurrent session repeatedly rewrote the former shared checkout and
 left its source/stamp inconsistent. Both active build trees now point to this isolated checkout;
 keep it while continuing with those builds. It is pinned to FNA3D `32401479a3ab5bd6b2e7f786e87bf4166aa03b0f`
-and MojoShader `6333f74dbd5644789a63e903816441b16c1e8b60`, with all 100 managed patches applied.
+and MojoShader `6333f74dbd5644789a63e903816441b16c1e8b60`, with all 102 managed patches applied.
 
 Its FNA3D Git object alternate points to `/tmp/fx126-current/fna3d-src/.git/objects`, and its
 MojoShader object alternate points to
@@ -351,7 +372,7 @@ skip required patches. Before trusting a configure, inspect a marker from the ap
 example:
 
 ```text
-rg -n 'pixel1_texture_stages|TEXM3X3SPEC final arg must be unmodified|MOJOSHADER_RS_BUMPENVMAT00' /tmp/cna-fna3d-soft474.XKYa5y/FNA3D/MojoShader/mojoshader.c /tmp/cna-fna3d-soft474.XKYa5y/FNA3D/MojoShader/mojoshader.h
+rg -n 'pixel1_texture_stages|TEXM3X3SPEC final arg must be unmodified|TEXDEPTH destination must not use result modifiers|MOJOSHADER_RS_BUMPENVMAT00' /tmp/cna-fna3d-soft474.XKYa5y/FNA3D/MojoShader/mojoshader.c /tmp/cna-fna3d-soft474.XKYa5y/FNA3D/MojoShader/mojoshader.h
 ```
 
 If source and stamp disagree, remove only that stamp through the repository's approved editing
@@ -388,6 +409,8 @@ Useful temporary probe sources at handoff included:
 - `/tmp/cna_d3dassemble_texld_probe.cpp`
 - `/tmp/cna_d3dassemble_call_probe.cpp`
 - `/tmp/cna_d3dassemble_tex11_probe.cpp`
+- `/tmp/cna_d3dassemble_texcoord_probe.cpp`
+- `/tmp/cna_d3dassemble_texdepth_probe.cpp`
 
 These files are not committed and may disappear after reboot. Preserve every material measurement
 in the task row and ledger rather than treating `/tmp` output as durable evidence. Always include a
@@ -398,14 +421,14 @@ nearby Microsoft-positive control so an apparent rejection is not merely bad ass
 The last broad results relevant to the latest technical commit are:
 
 - Software renderer CTest label: 160/160 pass, display-free.
-- EasyGL compiled-Effect family: 590/590 pass on isolated Mesa/Xvfb.
+- EasyGL compiled-Effect family: 591/591 pass on isolated Mesa/Xvfb.
 - Focused SOFTWARE-470 EasyGL cases: 5/5 pass; focused SOFTWARE-471 cases: 7/7 pass;
   focused SOFTWARE-472 cases: 3/3 pass; focused SOFTWARE-473 cases: 9/9 pass; focused
   SOFTWARE-474 cases: 20/20 pass; focused SOFTWARE-475 plus the adjacent slot regression:
-  22/22 pass.
+  22/22 pass; focused SOFTWARE-477 phase-state pair: 2/2 pass.
 - The last full Software `CnaGraphicsTests` checkpoint documented in the ledger is
   2,625/2,688 with 63 classified skips. It was not rerun for
-  SOFTWARE-470/471/472/473/474/475 because those tasks changed only compiled-Effect test/validation
+  SOFTWARE-470/471/472/473/474/475/476/477 because those tasks changed only compiled-Effect test/validation
   inputs covered by the focused runtime, full Software label, and complete EasyGL compiled family.
 
 The exact 63-skip classification is in
@@ -438,8 +461,8 @@ include start/end SHAs, branch, commit and LOC counts, new/completed/remaining t
 new findings, compiled-Effect verdict, exact skips, all test families run, and the reason for the
 classification. At this handoff the correct classification is C.
 
-The owner requested that work stop after SOFTWARE-475 and this handoff were committed. Do not open
-SOFTWARE-476 until the owner explicitly resumes the campaign in the active conversation. The
+The owner requested that work stop after SOFTWARE-477 and this handoff were committed. Do not open
+SOFTWARE-478 until the owner explicitly resumes the campaign in the active conversation. The
 requested pushes remain blocked until the current execution environment receives explicit approval
 for the exact `git@github-libcna:libcna/cna` destination and current `d3a38f0f7..HEAD` payload
 described in the repository snapshot above.
