@@ -621,6 +621,29 @@ namespace CNA::TestSupport
         Pixel11ZeroSlotNopControl,
     };
 
+    /** @brief Pixel Shader Model 1.x destination-mask rule exercised by a program. */
+    enum class SyntheticPixel1DestinationMaskProbe
+    {
+        /** @brief Emit no dedicated destination-mask program. */
+        None,
+        /** @brief Emit a ps_1_1 MOV with the permitted full destination mask. */
+        Pixel11MovFull,
+        /** @brief Emit a ps_1_1 MOV with the permitted RGB destination mask. */
+        Pixel11MovRgb,
+        /** @brief Emit a ps_1_1 MOV with the permitted alpha destination mask. */
+        Pixel11MovAlpha,
+        /** @brief Emit a ps_1_1 MOV with a forbidden single-color destination mask. */
+        Pixel11MovArbitrary,
+        /** @brief Emit a ps_1_1 DP3 with its forbidden alpha-only destination mask. */
+        Pixel11Dp3Alpha,
+        /** @brief Emit a ps_1_1 texture instruction with a forbidden partial mask. */
+        Pixel11TexturePartial,
+        /** @brief Emit a ps_1_4 MOV with an arbitrary destination mask. */
+        Pixel14MovArbitrary,
+        /** @brief Emit a ps_1_4 TEXCRD with an arbitrary destination mask. */
+        Pixel14TexcrdArbitrary,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -848,6 +871,9 @@ namespace CNA::TestSupport
         /** @brief Selects a fixed ps_1_x instruction-slot boundary program. */
         SyntheticPixel1InstructionSlotProbe pixel1InstructionSlotProbe =
             SyntheticPixel1InstructionSlotProbe::None;
+        /** @brief Selects a pixel Shader Model 1.x destination-mask program. */
+        SyntheticPixel1DestinationMaskProbe pixel1DestinationMaskProbe =
+            SyntheticPixel1DestinationMaskProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -950,7 +976,9 @@ namespace CNA::TestSupport
         SyntheticPixel20InstructionSlotProbe instructionSlotProbe =
             SyntheticPixel20InstructionSlotProbe::None,
         SyntheticPixel1InstructionSlotProbe pixel1InstructionSlotProbe =
-            SyntheticPixel1InstructionSlotProbe::None)
+            SyntheticPixel1InstructionSlotProbe::None,
+        SyntheticPixel1DestinationMaskProbe pixel1DestinationMaskProbe =
+            SyntheticPixel1DestinationMaskProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1024,6 +1052,13 @@ namespace CNA::TestSupport
                 SyntheticPixel1InstructionSlotProbe::Pixel14ArithmeticMaximum &&
             pixel1InstructionSlotProbe <=
                 SyntheticPixel1InstructionSlotProbe::Pixel14SecondPhaseArithmeticOutOfRange;
+        const bool probesPixel11DestinationMask =
+            pixel1DestinationMaskProbe >= SyntheticPixel1DestinationMaskProbe::Pixel11MovFull &&
+            pixel1DestinationMaskProbe <=
+                SyntheticPixel1DestinationMaskProbe::Pixel11TexturePartial;
+        const bool probesPixel14DestinationMask =
+            pixel1DestinationMaskProbe >=
+                SyntheticPixel1DestinationMaskProbe::Pixel14MovArbitrary;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -1050,10 +1085,12 @@ namespace CNA::TestSupport
         const std::uint32_t versionToken = probesPixel11Temporary || probesPixel11ColorInput ||
                                                    probesPixel11TextureInput ||
                                                    probesPixel11FloatControl ||
-                                                   probesPixel11InstructionSlots
+                                                   probesPixel11InstructionSlots ||
+                                                   probesPixel11DestinationMask
                                                ? 0xFFFF0101u
                                            : probesPixel14Temporary || probesPixel14TextureInput ||
-                                                     probesPixel14InstructionSlots
+                                                     probesPixel14InstructionSlots ||
+                                                     probesPixel14DestinationMask
                                                ? 0xFFFF0104u
                                            : probesPixel12InstructionSlots
                                                ? 0xFFFF0102u
@@ -1134,10 +1171,11 @@ namespace CNA::TestSupport
         const std::uint32_t samplerName = appendCtabString("FxSampler");
         const std::uint32_t target = appendCtabString(
             probesPixel11Temporary || probesPixel11ColorInput || probesPixel11TextureInput ||
-                    probesPixel11FloatControl || probesPixel11InstructionSlots
+                    probesPixel11FloatControl || probesPixel11InstructionSlots ||
+                    probesPixel11DestinationMask
                 ? "ps_1_1"
                 : probesPixel14Temporary || probesPixel14TextureInput ||
-                          probesPixel14InstructionSlots
+                          probesPixel14InstructionSlots || probesPixel14DestinationMask
                       ? "ps_1_4"
                       : probesPixel12InstructionSlots
                             ? "ps_1_2"
@@ -1619,7 +1657,58 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 1, 0xE4u, absoluteSecond ? 11u : 0u));
         }
 
-        if (pixel1InstructionSlotProbe != SyntheticPixel1InstructionSlotProbe::None)
+        if (pixel1DestinationMaskProbe != SyntheticPixel1DestinationMaskProbe::None)
+        {
+            if (pixel1DestinationMaskProbe ==
+                SyntheticPixel1DestinationMaskProbe::Pixel11Dp3Alpha)
+            {
+                AppendUInt32(shader, 0x00000008u); // dp3 r0.a, c0, c0
+                AppendUInt32(shader, destination(regTemp, 0, 0x8u));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, source(regConst, 0));
+            }
+            else if (pixel1DestinationMaskProbe ==
+                     SyntheticPixel1DestinationMaskProbe::Pixel11TexturePartial)
+            {
+                AppendUInt32(shader, 0x00000040u); // texcoord t0.rgb
+                AppendUInt32(shader, destination(regTexture, 0, 0x7u));
+                AppendUInt32(shader, 0x00000001u); // mov r0, t0
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, source(regTexture, 0));
+            }
+            else if (pixel1DestinationMaskProbe ==
+                     SyntheticPixel1DestinationMaskProbe::Pixel14TexcrdArbitrary)
+            {
+                AppendUInt32(shader, 0x00000040u); // texcrd r0.rb, t0
+                AppendUInt32(shader, destination(regTemp, 0, 0x5u));
+                AppendUInt32(shader, source(regTexture, 0));
+            }
+            else
+            {
+                std::uint32_t writeMask = 0xFu;
+                if (pixel1DestinationMaskProbe ==
+                    SyntheticPixel1DestinationMaskProbe::Pixel11MovRgb)
+                {
+                    writeMask = 0x7u;
+                }
+                else if (pixel1DestinationMaskProbe ==
+                         SyntheticPixel1DestinationMaskProbe::Pixel11MovAlpha)
+                {
+                    writeMask = 0x8u;
+                }
+                else if (pixel1DestinationMaskProbe ==
+                             SyntheticPixel1DestinationMaskProbe::Pixel11MovArbitrary ||
+                         pixel1DestinationMaskProbe ==
+                             SyntheticPixel1DestinationMaskProbe::Pixel14MovArbitrary)
+                {
+                    writeMask = 0x5u;
+                }
+                AppendUInt32(shader, 0x00000001u); // mov r0.mask, c0
+                AppendUInt32(shader, destination(regTemp, 0, writeMask));
+                AppendUInt32(shader, source(regConst, 0));
+            }
+        }
+        else if (pixel1InstructionSlotProbe != SyntheticPixel1InstructionSlotProbe::None)
         {
             const bool outOfRange =
                 pixel1InstructionSlotProbe ==
@@ -3878,7 +3967,8 @@ namespace CNA::TestSupport
             options.outputRegisterProbe,
             options.constantControlRegisterProbe,
             options.pixel20InstructionSlotProbe,
-            options.pixel1InstructionSlotProbe);
+            options.pixel1InstructionSlotProbe,
+            options.pixel1DestinationMaskProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

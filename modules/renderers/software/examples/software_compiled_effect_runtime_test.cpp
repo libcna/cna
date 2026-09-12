@@ -3472,6 +3472,68 @@ namespace
         }
     }
 
+    void CheckCompiledPixel1DestinationMaskValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticPixel1DestinationMaskProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel11MovArbitrary,
+            Probe::Pixel11Dp3Alpha,
+            Probe::Pixel11TexturePartial,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixel1DestinationMaskProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid ps_1_x destination-mask probes: " +
+                  acceptedInvalidProbes);
+
+        constexpr std::array validProbes{
+            Probe::Pixel11MovFull,
+            Probe::Pixel11MovRgb,
+            Probe::Pixel11MovAlpha,
+            Probe::Pixel14MovArbitrary,
+            Probe::Pixel14TexcrdArbitrary,
+        };
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixel1DestinationMaskProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Effect parser rejected a valid ps_1_x destination mask, probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+    }
+
     void CheckCompiledLegacyTextureMatrix()
     {
         GraphicsDevice device;
@@ -5269,6 +5331,7 @@ int main()
         CheckCompiledVertexInstructionSlotValidation(renderer);
         CheckCompiledPixel20InstructionSlotValidation(renderer);
         CheckCompiledPixel1InstructionSlotValidation(renderer);
+        CheckCompiledPixel1DestinationMaskValidation(renderer);
         CheckCompiledLegacyTextureMatrix();
         CheckCompiledLegacyTextureMatrix2();
         CheckCompiledLegacyTextureMatrix3Sample();

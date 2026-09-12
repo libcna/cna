@@ -1,0 +1,53 @@
+diff --git a/mojoshader.c b/mojoshader.c
+index 09ee728..b919c04 100644
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -417,6 +417,40 @@ static void validate_pixel_shader_model_one_instruction_slot_count(
+               ctx->pixel_arithmetic_instruction_count, ctx->minor_ver);
+ } // validate_pixel_shader_model_one_instruction_slot_count
+ 
++static void validate_pixel_shader_model_one_destination_mask(
++    Context *ctx, const uint32 opcode)
++{
++    if (!shader_is_pixel(ctx) || (ctx->major_ver != 1) ||
++        !ctx->have_dest_arg)
++    {
++        return;
++    } // if
++
++    const int mask = ctx->dest_arg.orig_writemask;
++    if (ctx->minor_ver < 4)
++    {
++        if (opcode == 8)  // DP3 cannot use the scalar-only mask before 1.4.
++        {
++            if ((mask != 0x7) && (mask != 0xF))
++                fail(ctx, "ps_1_1 through ps_1_3 DP3 destination mask must be .rgb or .rgba");
++        } // if
++        else if (pixel_shader_model_one_texture_opcode(opcode))
++        {
++            if (mask != 0xF)
++                fail(ctx, "ps_1_1 through ps_1_3 texture destination mask must be .rgba");
++        } // else if
++        else if ((mask != 0x7) && (mask != 0x8) && (mask != 0xF))
++        {
++            fail(ctx, "ps_1_1 through ps_1_3 destination mask must be .rgb, .a, or .rgba");
++        } // else if
++    } // if
++    else if (pixel_shader_model_one_texture_opcode(opcode) &&
++             (opcode != 64) && (opcode != 66) && (mask != 0xF))
++    {
++        fail(ctx, "ps_1_4 texture destination mask is only supported by TEXCRD and TEXLD");
++    } // else if
++} // validate_pixel_shader_model_one_destination_mask
++
+ static int temporary_register_count(const Context *ctx)
+ {
+     if (shader_is_vertex(ctx))
+@@ -2745,6 +2778,7 @@ static int parse_instruction_token(Context *ctx)
+ 
+     if (instruction->state != NULL)
+         instruction->state(ctx);
++    validate_pixel_shader_model_one_destination_mask(ctx, opcode);
+ 
+     ctx->instruction_count += instruction->slots;
+     validate_vertex_instruction_slot_count(ctx);

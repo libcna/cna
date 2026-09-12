@@ -1568,6 +1568,53 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumPixel1InstructionSlots)
     }
 }
 
+class EasyGLCompiledEffectPixel1DestinationMaskTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticPixel1DestinationMaskProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPixel1DestinationMaskTest, RejectsInvalidDestinationMask)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixel1DestinationMaskProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidPixel1DestinationMasks,
+    EasyGLCompiledEffectPixel1DestinationMaskTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticPixel1DestinationMaskProbe::Pixel11MovArbitrary,
+        CNA::TestSupport::SyntheticPixel1DestinationMaskProbe::Pixel11Dp3Alpha,
+        CNA::TestSupport::SyntheticPixel1DestinationMaskProbe::Pixel11TexturePartial));
+
+TEST(EasyGLCompiledEffectTest, AcceptsValidPixel1DestinationMasks)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticPixel1DestinationMaskProbe;
+    for (const Probe probe : {
+             Probe::Pixel11MovFull,
+             Probe::Pixel11MovRgb,
+             Probe::Pixel11MovAlpha,
+             Probe::Pixel14MovArbitrary,
+             Probe::Pixel14TexcrdArbitrary,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixel1DestinationMaskProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;
