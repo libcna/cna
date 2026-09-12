@@ -314,6 +314,53 @@ namespace CNA::TestSupport
         Matrix3IncompleteTwoPads,
     };
 
+    /** @brief Legacy texture-address operand form emitted by the synthetic pixel shader. */
+    enum class SyntheticLegacyTextureOperandProbe
+    {
+        /** @brief Emit no dedicated legacy texture-address operand probe. */
+        None,
+        /** @brief Apply the legal signed-scale modifier to both `TEXM3X2` sources. */
+        TextureMatrixSignedScale,
+        /** @brief Apply signed scaling only to the `TEXM3X2PAD` source. */
+        TextureMatrixMixedSignedScale,
+        /** @brief Invalidly apply the bias modifier to `TEXM3X2TEX`. */
+        TextureMatrixBias,
+        /** @brief Invalidly negate the `TEXM3X2TEX` source. */
+        TextureMatrixNegate,
+        /** @brief Invalidly negate a signed-scale `TEXM3X2TEX` source. */
+        TextureMatrixSignedScaleNegate,
+        /** @brief Invalidly swizzle the `TEXM3X2TEX` source. */
+        TextureMatrixSwizzle,
+        /** @brief Invalidly saturate the `TEXM3X2TEX` destination. */
+        TextureMatrixDestinationSaturate,
+        /** @brief Invalidly scale the `TEXM3X2TEX` destination result. */
+        TextureMatrixDestinationShift,
+        /** @brief Invalidly apply signed scaling to a `TEXBEM` source. */
+        TextureBumpSignedScale,
+        /** @brief Invalidly apply bias to a `TEXBEM` source. */
+        TextureBumpBias,
+        /** @brief Invalidly negate a `TEXBEM` source. */
+        TextureBumpNegate,
+        /** @brief Invalidly swizzle a `TEXBEM` source. */
+        TextureBumpSwizzle,
+        /** @brief Legally apply signed scaling to a `TEXDP3` source. */
+        TextureDotSignedScale,
+        /** @brief Invalidly apply bias to a `TEXDP3` source. */
+        TextureDotBias,
+        /** @brief Invalidly negate a `TEXDP3` source. */
+        TextureDotNegate,
+        /** @brief Invalidly negate a signed-scale `TEXDP3` source. */
+        TextureDotSignedScaleNegate,
+        /** @brief Invalidly swizzle a `TEXDP3` source. */
+        TextureDotSwizzle,
+        /** @brief Invalidly negate the `TEXM3X3SPEC` eye-ray constant. */
+        TextureMatrixSpecularEyeNegate,
+        /** @brief Invalidly bias the `TEXM3X3SPEC` eye-ray constant. */
+        TextureMatrixSpecularEyeBias,
+        /** @brief Invalidly swizzle the `TEXM3X3SPEC` eye-ray constant. */
+        TextureMatrixSpecularEyeSwizzle,
+    };
+
     /** @brief Scratch-operand form emitted for the synthetic vertex `SGN` instruction. */
     enum class SyntheticSgnScratchOperands
     {
@@ -1853,6 +1900,9 @@ namespace CNA::TestSupport
         /** @brief Emits the selected invalid legacy texture-matrix sequence. */
         SyntheticLegacyTextureMatrixSequenceProbe pixelShaderLegacyTextureMatrixSequenceProbe =
             SyntheticLegacyTextureMatrixSequenceProbe::None;
+        /** @brief Emits the selected legacy texture-address operand form. */
+        SyntheticLegacyTextureOperandProbe pixelShaderLegacyTextureOperandProbe =
+            SyntheticLegacyTextureOperandProbe::None;
         /// Emits sampled Shader Model 1.2 `TEXM3X3SPEC` with a constant eye ray.
         bool pixelShaderUsesLegacyTextureMatrix3Specular = false;
         /// Emits sampled Shader Model 1.2 `TEXM3X3VSPEC` with a varying eye ray.
@@ -2137,6 +2187,8 @@ namespace CNA::TestSupport
         bool usesLegacyTextureMatrix3Sample = false,
         SyntheticLegacyTextureMatrixSequenceProbe legacyTextureMatrixSequenceProbe =
             SyntheticLegacyTextureMatrixSequenceProbe::None,
+        SyntheticLegacyTextureOperandProbe legacyTextureOperandProbe =
+            SyntheticLegacyTextureOperandProbe::None,
         bool usesLegacyTextureMatrix3Specular = false,
         bool usesLegacyTextureMatrix3VertexSpecular = false,
         SyntheticLegacyDepthOutput legacyDepthOutput = SyntheticLegacyDepthOutput::None,
@@ -2609,6 +2661,8 @@ namespace CNA::TestSupport
                                                          usesLegacyTextureMatrix3Sample ||
                                                          legacyTextureMatrixSequenceProbe !=
                                                              SyntheticLegacyTextureMatrixSequenceProbe::None ||
+                                                         legacyTextureOperandProbe !=
+                                                             SyntheticLegacyTextureOperandProbe::None ||
                                                          usesLegacyTextureMatrix3Specular ||
                                                          usesLegacyTextureMatrix3VertexSpecular ||
                                                          legacyTextureRemap !=
@@ -2699,6 +2753,8 @@ namespace CNA::TestSupport
                           usesLegacyTextureMatrix3Sample ||
                           legacyTextureMatrixSequenceProbe !=
                               SyntheticLegacyTextureMatrixSequenceProbe::None ||
+                          legacyTextureOperandProbe !=
+                              SyntheticLegacyTextureOperandProbe::None ||
                           usesLegacyTextureMatrix3Specular ||
                           usesLegacyTextureMatrix3VertexSpecular ||
                           legacyTextureRemap != SyntheticLegacyTextureRemap::None ||
@@ -2756,8 +2812,11 @@ namespace CNA::TestSupport
             return ((type & 0x7u) << 28) | ((type >> 3) << 11);
         };
         const auto destination = [&registerBits](std::uint32_t type, std::uint32_t number,
-                                                 std::uint32_t writeMask) {
-            return 0x80000000u | registerBits(type) | number | (writeMask << 16);
+                                                 std::uint32_t writeMask,
+                                                 std::uint32_t resultModifier = 0u,
+                                                 std::uint32_t resultShift = 0u) {
+            return 0x80000000u | registerBits(type) | number | (writeMask << 16) |
+                   (resultModifier << 20) | (resultShift << 24);
         };
         const auto source = [&registerBits](std::uint32_t type, std::uint32_t number,
                                             std::uint32_t swizzle = 0xE4u,
@@ -4397,17 +4456,17 @@ namespace CNA::TestSupport
                 legacyBumpEnvironment ==
                     SyntheticLegacyBumpEnvironment::TextureReadSourceByBumpLater;
             AppendUInt32(shader,
-                         usesTexbem ? 0x00000043u : 0x00000044u); // texbem/l t1, t0_bx2
+                         usesTexbem ? 0x00000043u : 0x00000044u); // texbem/l t1, t0
             AppendUInt32(shader, destination(regTexture, samplerRegister, 0xFu));
-            AppendUInt32(shader, source(regTexture, 0, swizzleIdentity, 4u));
+            AppendUInt32(shader, source(regTexture, 0));
             const bool readsSourceByBump =
                 legacyBumpEnvironment ==
                     SyntheticLegacyBumpEnvironment::TextureReadSourceByBumpLater;
             if (readsSourceByBump)
             {
-                AppendUInt32(shader, 0x00000044u); // texbeml t2, t0_bx2
+                AppendUInt32(shader, 0x00000044u); // texbeml t2, t0
                 AppendUInt32(shader, destination(regTexture, 2, 0xFu));
-                AppendUInt32(shader, source(regTexture, 0, swizzleIdentity, 4u));
+                AppendUInt32(shader, source(regTexture, 0));
             }
             const bool readsConsumedSource =
                 legacyBumpEnvironment ==
@@ -4551,6 +4610,123 @@ namespace CNA::TestSupport
                     AppendUInt32(shader, destination(regTemp, 0, 0xFu));
                     AppendUInt32(shader, source(regTexture, 3));
                 }
+            }
+        }
+        else if (legacyTextureOperandProbe != SyntheticLegacyTextureOperandProbe::None)
+        {
+            using Probe = SyntheticLegacyTextureOperandProbe;
+            const bool textureMatrix =
+                legacyTextureOperandProbe >= Probe::TextureMatrixSignedScale &&
+                legacyTextureOperandProbe <= Probe::TextureMatrixDestinationShift;
+            const bool textureBump =
+                legacyTextureOperandProbe >= Probe::TextureBumpSignedScale &&
+                legacyTextureOperandProbe <= Probe::TextureBumpSwizzle;
+            const bool textureDot =
+                legacyTextureOperandProbe >= Probe::TextureDotSignedScale &&
+                legacyTextureOperandProbe <= Probe::TextureDotSwizzle;
+
+            if (textureMatrix)
+            {
+                const bool signedPad =
+                    legacyTextureOperandProbe == Probe::TextureMatrixSignedScale ||
+                    legacyTextureOperandProbe == Probe::TextureMatrixMixedSignedScale;
+                const std::uint32_t finalModifier =
+                    legacyTextureOperandProbe == Probe::TextureMatrixSignedScale ? 4u
+                    : legacyTextureOperandProbe == Probe::TextureMatrixBias ? 2u
+                    : legacyTextureOperandProbe == Probe::TextureMatrixNegate ? 1u
+                    : legacyTextureOperandProbe == Probe::TextureMatrixSignedScaleNegate ? 5u
+                                                                                         : 0u;
+                const std::uint32_t finalSwizzle =
+                    legacyTextureOperandProbe == Probe::TextureMatrixSwizzle
+                        ? swizzleYzxw
+                        : swizzleIdentity;
+                const std::uint32_t resultModifier =
+                    legacyTextureOperandProbe == Probe::TextureMatrixDestinationSaturate ? 1u : 0u;
+                const std::uint32_t resultShift =
+                    legacyTextureOperandProbe == Probe::TextureMatrixDestinationShift ? 1u : 0u;
+                AppendUInt32(shader, 0x00000040u); // texcrd t0
+                AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+                AppendUInt32(shader, 0x00000047u); // texm3x2pad t1, t0[_bx2]
+                AppendUInt32(shader, destination(regTexture, 1, 0xFu));
+                AppendUInt32(shader,
+                             source(regTexture, 0, swizzleIdentity, signedPad ? 4u : 0u));
+                AppendUInt32(shader, 0x00000048u); // texm3x2tex t2, modified t0
+                AppendUInt32(
+                    shader,
+                    destination(regTexture, 2, 0xFu, resultModifier, resultShift));
+                AppendUInt32(shader, source(regTexture, 0, finalSwizzle, finalModifier));
+                AppendUInt32(shader, 0x00000001u); // mov r0, t2
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, source(regTexture, 2));
+            }
+            else if (textureBump)
+            {
+                const std::uint32_t modifier =
+                    legacyTextureOperandProbe == Probe::TextureBumpSignedScale ? 4u
+                    : legacyTextureOperandProbe == Probe::TextureBumpBias   ? 2u
+                    : legacyTextureOperandProbe == Probe::TextureBumpNegate ? 1u
+                                                                            : 0u;
+                const std::uint32_t swizzle =
+                    legacyTextureOperandProbe == Probe::TextureBumpSwizzle
+                        ? swizzleYzxw
+                        : swizzleIdentity;
+                AppendUInt32(shader, 0x00000043u); // texbem t1, modified t0
+                AppendUInt32(shader, destination(regTexture, 1, 0xFu));
+                AppendUInt32(shader, source(regTexture, 0, swizzle, modifier));
+                AppendUInt32(shader, 0x00000001u); // mov r0, t1
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, source(regTexture, 1));
+            }
+            else if (textureDot)
+            {
+                const std::uint32_t modifier =
+                    legacyTextureOperandProbe == Probe::TextureDotSignedScale ? 4u
+                    : legacyTextureOperandProbe == Probe::TextureDotBias ? 2u
+                    : legacyTextureOperandProbe == Probe::TextureDotNegate ? 1u
+                    : legacyTextureOperandProbe == Probe::TextureDotSignedScaleNegate ? 5u
+                                                                                       : 0u;
+                const std::uint32_t swizzle =
+                    legacyTextureOperandProbe == Probe::TextureDotSwizzle
+                        ? swizzleYzxw
+                        : swizzleIdentity;
+                AppendUInt32(shader, 0x00000055u); // texdp3 t1, modified t0
+                AppendUInt32(shader, destination(regTexture, 1, 0xFu));
+                AppendUInt32(shader, source(regTexture, 0, swizzle, modifier));
+                AppendUInt32(shader, 0x00000001u); // mov r0, t1
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, source(regTexture, 1));
+            }
+            else
+            {
+                const std::uint32_t modifier =
+                    legacyTextureOperandProbe == Probe::TextureMatrixSpecularEyeNegate ? 1u
+                    : legacyTextureOperandProbe == Probe::TextureMatrixSpecularEyeBias ? 2u
+                                                                                         : 0u;
+                const std::uint32_t swizzle =
+                    legacyTextureOperandProbe == Probe::TextureMatrixSpecularEyeSwizzle
+                        ? swizzleYzxw
+                        : swizzleIdentity;
+                AppendUInt32(shader, 0x00000051u); // def c1, 1, .2, .1, 0
+                AppendUInt32(shader, destination(regConst, 1, 0xFu));
+                AppendUInt32(shader, FloatBits(1.0f));
+                AppendUInt32(shader, FloatBits(0.2f));
+                AppendUInt32(shader, FloatBits(0.1f));
+                AppendUInt32(shader, FloatBits(0.0f));
+                AppendUInt32(shader, 0x00000040u); // texcrd t0
+                AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+                for (std::uint32_t stage = 1; stage <= 2; ++stage)
+                {
+                    AppendUInt32(shader, 0x00000049u); // texm3x3pad t#, t0
+                    AppendUInt32(shader, destination(regTexture, stage, 0xFu));
+                    AppendUInt32(shader, source(regTexture, 0));
+                }
+                AppendUInt32(shader, 0x0000004Cu); // texm3x3spec t3, t0, modified c1
+                AppendUInt32(shader, destination(regTexture, 3, 0xFu));
+                AppendUInt32(shader, source(regTexture, 0));
+                AppendUInt32(shader, source(regConst, 1, swizzle, modifier));
+                AppendUInt32(shader, 0x00000001u); // mov r0, t3
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, source(regTexture, 3));
             }
         }
         else if (usesLegacyTextureMatrix3Specular)
@@ -8361,6 +8537,7 @@ namespace CNA::TestSupport
             options.pixelShaderUsesLegacyTextureMatrix2,
             options.pixelShaderUsesLegacyTextureMatrix3Sample,
             options.pixelShaderLegacyTextureMatrixSequenceProbe,
+            options.pixelShaderLegacyTextureOperandProbe,
             options.pixelShaderUsesLegacyTextureMatrix3Specular,
             options.pixelShaderUsesLegacyTextureMatrix3VertexSpecular,
             options.pixelShaderLegacyDepthOutput,

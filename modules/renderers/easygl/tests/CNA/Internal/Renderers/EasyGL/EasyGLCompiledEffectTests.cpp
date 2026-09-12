@@ -2119,6 +2119,78 @@ TEST(EasyGLCompiledEffectLegacyTextureMatrixSequenceTest, AcceptsConsecutiveSequ
     EXPECT_NO_THROW(renderer->CreateCompiledEffect(matrix3Bytes.data(), matrix3Bytes.size()));
 }
 
+class EasyGLCompiledEffectLegacyTextureOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticLegacyTextureOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectLegacyTextureOperandTest, RejectsInvalidOperand)
+{
+    using Probe = CNA::TestSupport::SyntheticLegacyTextureOperandProbe;
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderLegacyTextureOperandProbe = GetParam();
+    if (GetParam() >= Probe::TextureMatrixSignedScale &&
+        GetParam() <= Probe::TextureMatrixDestinationShift)
+        options.samplerRegister = 2;
+    else if (GetParam() >= Probe::TextureMatrixSpecularEyeNegate)
+    {
+        options.samplerRegister = 3;
+        options.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+    }
+    else
+        options.samplerRegister = 1;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidOperands,
+    EasyGLCompiledEffectLegacyTextureOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixBias,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixNegate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixSignedScaleNegate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixSwizzle,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixDestinationSaturate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixDestinationShift,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureBumpSignedScale,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureBumpBias,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureBumpNegate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureBumpSwizzle,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureDotBias,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureDotNegate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureDotSignedScaleNegate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureDotSwizzle,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixSpecularEyeNegate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixSpecularEyeBias,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixSpecularEyeSwizzle));
+
+TEST(EasyGLCompiledEffectLegacyTextureOperandTest, AcceptsSignedScaleWhereMicrosoftAllowsIt)
+{
+    using Probe = CNA::TestSupport::SyntheticLegacyTextureOperandProbe;
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    constexpr std::array validProbes{
+        Probe::TextureMatrixSignedScale,
+        Probe::TextureMatrixMixedSignedScale,
+        Probe::TextureDotSignedScale,
+    };
+    for (const Probe probe : validProbes)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.samplerRegister = probe == Probe::TextureDotSignedScale ? 1u : 2u;
+        options.pixelShaderLegacyTextureOperandProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 class EasyGLCompiledEffectPreShaderModel3AbsoluteSourceTest :
     public ::testing::TestWithParam<
         CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource>

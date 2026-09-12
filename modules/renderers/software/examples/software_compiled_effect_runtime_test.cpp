@@ -4157,6 +4157,85 @@ namespace
         Check(acceptedMatrix3, "compiled Effect parser rejected a valid legacy TEXM3X3 sequence");
     }
 
+    void CheckCompiledLegacyTextureOperandValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticLegacyTextureOperandProbe;
+        constexpr std::array invalidOperands{
+            Probe::TextureMatrixBias,
+            Probe::TextureMatrixNegate,
+            Probe::TextureMatrixSignedScaleNegate,
+            Probe::TextureMatrixSwizzle,
+            Probe::TextureMatrixDestinationSaturate,
+            Probe::TextureMatrixDestinationShift,
+            Probe::TextureBumpSignedScale,
+            Probe::TextureBumpBias,
+            Probe::TextureBumpNegate,
+            Probe::TextureBumpSwizzle,
+            Probe::TextureDotBias,
+            Probe::TextureDotNegate,
+            Probe::TextureDotSignedScaleNegate,
+            Probe::TextureDotSwizzle,
+            Probe::TextureMatrixSpecularEyeNegate,
+            Probe::TextureMatrixSpecularEyeBias,
+            Probe::TextureMatrixSpecularEyeSwizzle,
+        };
+        for (const Probe probe : invalidOperands)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderLegacyTextureOperandProbe = probe;
+            if (probe >= Probe::TextureMatrixSignedScale &&
+                probe <= Probe::TextureMatrixDestinationShift)
+                options.samplerRegister = 2;
+            else if (probe >= Probe::TextureMatrixSpecularEyeNegate)
+            {
+                options.samplerRegister = 3;
+                options.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+            }
+            else
+                options.samplerRegister = 1;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected,
+                  "compiled Effect parser accepted invalid legacy texture operand " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+
+        constexpr std::array validOperands{
+            Probe::TextureMatrixSignedScale,
+            Probe::TextureMatrixMixedSignedScale,
+            Probe::TextureDotSignedScale,
+        };
+        for (const Probe probe : validOperands)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.samplerRegister = probe == Probe::TextureDotSignedScale ? 1u : 2u;
+            options.pixelShaderLegacyTextureOperandProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Effect parser rejected a legal signed-scale legacy texture operand " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+    }
+
     void CheckCompiledPreShaderModel3AbsoluteSourceValidation(SoftwareRenderer& renderer)
     {
         using Source = CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource;
@@ -6916,11 +6995,11 @@ namespace
 
         Check(render(Operation::Texture, textureStates(1, 0, 0, 0)) == Color::Green,
               "compiled TEXBEM ignored BUMPENVMAT00");
-        Check(render(Operation::Texture, textureStates(0, 0, -1, 0)) == Color::Green,
+        Check(render(Operation::Texture, textureStates(0, 0, 1, 0)) == Color::Green,
               "compiled TEXBEM ignored BUMPENVMAT10");
         Check(render(Operation::Texture, textureStates(0, 1, 0, 0)) == Color::Blue,
               "compiled TEXBEM ignored BUMPENVMAT01");
-        Check(render(Operation::Texture, textureStates(0, 0, 0, -1)) == Color::Blue,
+        Check(render(Operation::Texture, textureStates(0, 0, 0, 2)) == Color::Blue,
               "compiled TEXBEM ignored BUMPENVMAT11");
         Check(render(Operation::Texture, textureStates(0, 0, 0, 0), 8.75f) == Color::Red,
               "compiled TEXBEM LOD used source derivatives removed by a zero matrix");
@@ -6931,7 +7010,7 @@ namespace
 
         auto luminanceStates = textureStates(0, 0, 0, 0);
         luminanceStates.push_back(
-            {Fx::RsBumpEnvLScale, CNA::TestSupport::FloatBits(.5f), true, 1});
+            {Fx::RsBumpEnvLScale, CNA::TestSupport::FloatBits(1.0f / 3.0f), true, 1});
         luminanceStates.push_back(
             {Fx::RsBumpEnvLOffset, CNA::TestSupport::FloatBits(.25f), true, 1});
         const Color luminance = render(Operation::TextureLuminance, luminanceStates);
@@ -8121,6 +8200,7 @@ int main()
         CheckCompiledCallGraphValidation(renderer);
         CheckCompiledMatrixOperandValidation(renderer);
         CheckCompiledLegacyTextureMatrixSequenceValidation(renderer);
+        CheckCompiledLegacyTextureOperandValidation(renderer);
         CheckCompiledPreShaderModel3AbsoluteSourceValidation(renderer);
         CheckCompiledShaderModel3MixedConstantAbsoluteValidation(renderer);
         CheckCompiledSamplerRegisterRangeValidation(renderer);

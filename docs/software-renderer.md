@@ -422,6 +422,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   changed source register, nonconsecutive destination stages, surplus pads, mixed active matrix
   families and an unfinished `TEXM3X2`/`TEXM3X3` sequence at shader end, while retaining the
   sampled two-row and three-row positive paths.
+  SOFTWARE-474 completes the adjacent legacy texture-address operand audit. Patch 99 rejects source
+  swizzles and destination result modifiers/shifts across the family, preserves `_bx2` only for
+  `TEXM*` and ps_1_2/1_3 dependent texture operations, rejects every modifier on `TEXBEM`/`TEXBEML`,
+  and requires the `TEXM3X3SPEC` eye constant to remain plain. The older bump-environment fixture's
+  Microsoft-invalid `_bx2` was removed and its output discriminators were recalibrated around the
+  legal unmodified source.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is

@@ -2809,13 +2809,13 @@ namespace CNA::TestSupport
             };
         };
         EXPECT_EQ(render(Operation::Texture, textureStates(1, 0, 0, 0)), Color::Green)
-            << "TEXBEM must apply BUMPENVMAT00 to signed source red";
-        EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, -1, 0)), Color::Green)
-            << "TEXBEM must apply BUMPENVMAT10 to signed source green";
+            << "TEXBEM must apply BUMPENVMAT00 to source red";
+        EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 1, 0)), Color::Green)
+            << "TEXBEM must apply BUMPENVMAT10 to source green";
         EXPECT_EQ(render(Operation::Texture, textureStates(0, 1, 0, 0)), Color::Blue)
-            << "TEXBEM must apply BUMPENVMAT01 to signed source red";
-        EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 0, -1)), Color::Blue)
-            << "TEXBEM must apply BUMPENVMAT11 to signed source green";
+            << "TEXBEM must apply BUMPENVMAT01 to source red";
+        EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 0, 2)), Color::Blue)
+            << "TEXBEM must apply BUMPENVMAT11 to source green";
         EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 0, 0), 8.75f), Color::Red)
             << "TEXBEM implicit LOD must ignore source derivatives removed by a zero matrix";
         EXPECT_EQ(render(Operation::Texture, textureStates(1, 0, 0, 0), 8.75f), Color::Blue)
@@ -2824,7 +2824,7 @@ namespace CNA::TestSupport
             << "an unassigned pass must retain device texture-stage bump state";
 
         auto luminanceStates = textureStates(0, 0, 0, 0);
-        luminanceStates.push_back({Fx::RsBumpEnvLScale, FloatBits(.5f), true, 1});
+        luminanceStates.push_back({Fx::RsBumpEnvLScale, FloatBits(1.0f / 3.0f), true, 1});
         luminanceStates.push_back({Fx::RsBumpEnvLOffset, FloatBits(.25f), true, 1});
         const Color luminance = render(Operation::TextureLuminance, luminanceStates);
         EXPECT_NEAR(luminance.getRProperty(), 128, 1);
