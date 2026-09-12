@@ -428,6 +428,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   and requires the `TEXM3X3SPEC` eye constant to remain plain. The older bump-environment fixture's
   Microsoft-invalid `_bx2` was removed and its output discriminators were recalibrated around the
   legal unmodified source.
+  SOFTWARE-475 closes the generic pre-1.4 texture-instruction branch left outside that source
+  operand audit. Managed patch 100 rejects all result modifiers and shifts on `TEX`, `TEXCOORD`,
+  `TEXKILL` and their peers, and enforces one-use monotonically increasing destination stages
+  across mixed texture sequences. The older Shader Model 1.1 maximum fixture now uses the legal
+  `t0..t3` sequence instead of four Microsoft-invalid writes to `t0`.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is

@@ -361,6 +361,45 @@ namespace CNA::TestSupport
         TextureMatrixSpecularEyeSwizzle,
     };
 
+    /** @brief Pixel Shader 1.1 `TEX` destination and stage-order form. */
+    enum class SyntheticLegacyTexInstructionProbe
+    {
+        /** @brief Emit no dedicated legacy `TEX` instruction probe. */
+        None,
+        /** @brief Invalidly write only RGB from `TEX`. */
+        PartialDestination,
+        /** @brief Invalidly apply saturation to the `TEX` destination. */
+        SaturateDestination,
+        /** @brief Invalidly scale the `TEX` destination result by two. */
+        ShiftDestination,
+        /** @brief Invalidly apply saturation to the `TEXCOORD` destination. */
+        TextureCoordinateSaturateDestination,
+        /** @brief Invalidly scale the `TEXCOORD` destination result by two. */
+        TextureCoordinateShiftDestination,
+        /** @brief Invalidly apply saturation to the `TEXKILL` destination token. */
+        TextureKillSaturateDestination,
+        /** @brief Invalidly scale the `TEXKILL` destination token by two. */
+        TextureKillShiftDestination,
+        /** @brief Invalidly sample the same stage twice with `TEX`. */
+        DuplicateTextureStage,
+        /** @brief Invalidly define one stage through both `TEXCOORD` and `TEX`. */
+        MixedDuplicateStage,
+        /** @brief Invalidly sample a lower `TEX` stage after a higher stage. */
+        DescendingTextureStages,
+        /** @brief Invalidly use `TEXCOORD` on a lower stage after `TEX`. */
+        MixedDescendingStages,
+        /** @brief Invalidly use `TEX` on a lower stage after `TEXKILL`. */
+        TextureKillThenLowerStage,
+        /** @brief Invalidly use `TEXKILL` on a lower stage after `TEX`. */
+        HigherStageThenTextureKill,
+        /** @brief Legally sample stage one without first sampling stage zero. */
+        StageOneOnly,
+        /** @brief Legally sample stages zero and one in ascending order. */
+        AscendingStages,
+        /** @brief Legally use `TEXCOORD t0` before `TEX t2`, skipping stage one. */
+        MixedAscendingGap,
+    };
+
     /** @brief Scratch-operand form emitted for the synthetic vertex `SGN` instruction. */
     enum class SyntheticSgnScratchOperands
     {
@@ -1903,6 +1942,9 @@ namespace CNA::TestSupport
         /** @brief Emits the selected legacy texture-address operand form. */
         SyntheticLegacyTextureOperandProbe pixelShaderLegacyTextureOperandProbe =
             SyntheticLegacyTextureOperandProbe::None;
+        /** @brief Emits the selected Pixel Shader 1.1 `TEX` instruction form. */
+        SyntheticLegacyTexInstructionProbe pixelShaderLegacyTexInstructionProbe =
+            SyntheticLegacyTexInstructionProbe::None;
         /// Emits sampled Shader Model 1.2 `TEXM3X3SPEC` with a constant eye ray.
         bool pixelShaderUsesLegacyTextureMatrix3Specular = false;
         /// Emits sampled Shader Model 1.2 `TEXM3X3VSPEC` with a varying eye ray.
@@ -2300,7 +2342,9 @@ namespace CNA::TestSupport
         SyntheticCndInitializationProbe cndInitializationProbe =
             SyntheticCndInitializationProbe::None,
         SyntheticSincosOperandProbe sincosOperandProbe =
-            SyntheticSincosOperandProbe::None)
+            SyntheticSincosOperandProbe::None,
+        SyntheticLegacyTexInstructionProbe legacyTexInstructionProbe =
+            SyntheticLegacyTexInstructionProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -2325,6 +2369,8 @@ namespace CNA::TestSupport
                 SyntheticTemporaryInitializationProbe::Pixel2xTexkill;
         const bool probesSincosOperand =
             sincosOperandProbe != SyntheticSincosOperandProbe::None;
+        const bool probesLegacyTexInstruction =
+            legacyTexInstructionProbe != SyntheticLegacyTexInstructionProbe::None;
         const bool probesPixel20MoveComponentInitialization =
             temporaryInitializationProbe ==
                 SyntheticTemporaryInitializationProbe::Pixel20MoveWrittenX ||
@@ -2631,7 +2677,8 @@ namespace CNA::TestSupport
                                                    probesPixel11DestinationMask ||
                                                    probesPixel11Coissue ||
                                                    probesPixel11OutputLiveness ||
-                                                   probesPixel11CndInitialization
+                                                   probesPixel11CndInitialization ||
+                                                   probesLegacyTexInstruction
                                                ? 0xFFFF0101u
                                            : probesPixel14Temporary || probesPixel14TextureInput ||
                                                      probesPixel14InstructionSlots ||
@@ -2732,7 +2779,7 @@ namespace CNA::TestSupport
             probesPixel11Temporary || probesPixel11ColorInput || probesPixel11TextureInput ||
                     probesPixel11FloatControl || probesPixel11InstructionSlots ||
                     probesPixel11DestinationMask || probesPixel11Coissue ||
-                    probesPixel11OutputLiveness
+                    probesPixel11OutputLiveness || probesLegacyTexInstruction
                 ? "ps_1_1"
                 : probesPixel14Temporary || probesPixel14TextureInput ||
                           probesPixel14InstructionSlots || probesPixel14DestinationMask ||
@@ -4023,7 +4070,97 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regConst, 1, 0xE4u, absoluteSecond ? 11u : 0u));
         }
 
-        if (pixel1CoissueProbe != SyntheticPixel1CoissueProbe::None)
+        if (probesLegacyTexInstruction)
+        {
+            using Probe = SyntheticLegacyTexInstructionProbe;
+            const auto appendTex = [&](std::uint32_t stage, std::uint32_t writeMask = 0xFu,
+                                       std::uint32_t resultModifier = 0u,
+                                       std::uint32_t resultShift = 0u) {
+                AppendUInt32(shader, 0x00000042u); // tex t#
+                AppendUInt32(shader,
+                             destination(regTexture, stage, writeMask,
+                                         resultModifier, resultShift));
+            };
+            const auto appendTextureDestinationInstruction =
+                [&](std::uint32_t opcode, std::uint32_t stage,
+                    std::uint32_t resultModifier = 0u,
+                    std::uint32_t resultShift = 0u) {
+                    AppendUInt32(shader, opcode);
+                    AppendUInt32(shader,
+                                 destination(regTexture, stage, 0xFu,
+                                             resultModifier, resultShift));
+                };
+            if (legacyTexInstructionProbe == Probe::PartialDestination)
+                appendTex(0, 0x7u);
+            else if (legacyTexInstructionProbe == Probe::SaturateDestination)
+                appendTex(0, 0xFu, 1u);
+            else if (legacyTexInstructionProbe == Probe::ShiftDestination)
+                appendTex(0, 0xFu, 0u, 1u);
+            else if (legacyTexInstructionProbe ==
+                     Probe::TextureCoordinateSaturateDestination)
+                appendTextureDestinationInstruction(0x00000040u, 0, 1u);
+            else if (legacyTexInstructionProbe ==
+                     Probe::TextureCoordinateShiftDestination)
+                appendTextureDestinationInstruction(0x00000040u, 0, 0u, 1u);
+            else if (legacyTexInstructionProbe == Probe::TextureKillSaturateDestination)
+                appendTextureDestinationInstruction(0x00000041u, 0, 1u);
+            else if (legacyTexInstructionProbe == Probe::TextureKillShiftDestination)
+                appendTextureDestinationInstruction(0x00000041u, 0, 0u, 1u);
+            else if (legacyTexInstructionProbe == Probe::DuplicateTextureStage)
+            {
+                appendTex(0);
+                appendTex(0);
+            }
+            else if (legacyTexInstructionProbe == Probe::MixedDuplicateStage)
+            {
+                appendTextureDestinationInstruction(0x00000040u, 0);
+                appendTex(0);
+            }
+            else if (legacyTexInstructionProbe == Probe::DescendingTextureStages)
+            {
+                appendTex(1);
+                appendTex(0);
+            }
+            else if (legacyTexInstructionProbe == Probe::MixedDescendingStages)
+            {
+                appendTex(1);
+                appendTextureDestinationInstruction(0x00000040u, 0);
+            }
+            else if (legacyTexInstructionProbe == Probe::TextureKillThenLowerStage)
+            {
+                appendTextureDestinationInstruction(0x00000041u, 1);
+                appendTex(0);
+            }
+            else if (legacyTexInstructionProbe == Probe::HigherStageThenTextureKill)
+            {
+                appendTex(1);
+                appendTextureDestinationInstruction(0x00000041u, 0);
+            }
+            else if (legacyTexInstructionProbe == Probe::StageOneOnly)
+                appendTex(1);
+            else if (legacyTexInstructionProbe == Probe::AscendingStages)
+            {
+                appendTex(0);
+                appendTex(1);
+            }
+            else
+            {
+                appendTextureDestinationInstruction(0x00000040u, 0);
+                appendTex(2);
+            }
+
+            const std::uint32_t outputStage =
+                legacyTexInstructionProbe == Probe::StageOneOnly ||
+                        legacyTexInstructionProbe == Probe::AscendingStages
+                    ? 1u
+                    : legacyTexInstructionProbe == Probe::MixedAscendingGap
+                          ? 2u
+                    : 0u;
+            AppendUInt32(shader, 0x00000001u); // mov r0, t#
+            AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            AppendUInt32(shader, source(regTexture, outputStage));
+        }
+        else if (pixel1CoissueProbe != SyntheticPixel1CoissueProbe::None)
         {
             const auto appendMov = [&](std::uint32_t writeMask, bool coissued) {
                 AppendUInt32(shader, 0x00000001u | (coissued ? 0x40000000u : 0u));
@@ -4201,8 +4338,8 @@ namespace CNA::TestSupport
                 const std::uint32_t textureSlots = outOfRange ? 5u : 4u;
                 for (std::uint32_t slot = 0; slot < textureSlots; ++slot)
                 {
-                    AppendUInt32(shader, 0x00000041u); // texkill t0
-                    AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+                    AppendUInt32(shader, 0x00000041u); // texkill t#
+                    AppendUInt32(shader, destination(regTexture, slot, 0xFu));
                 }
                 appendMov();
             }
@@ -8606,7 +8743,8 @@ namespace CNA::TestSupport
             options.matrixInitializationProbe,
             options.specialVectorInitializationProbe,
             options.cndInitializationProbe,
-            options.sincosOperandProbe);
+            options.sincosOperandProbe,
+            options.pixelShaderLegacyTexInstructionProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

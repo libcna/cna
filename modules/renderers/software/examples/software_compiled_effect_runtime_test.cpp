@@ -4236,6 +4236,70 @@ namespace
         }
     }
 
+    void CheckCompiledLegacyTexInstructionValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticLegacyTexInstructionProbe;
+        constexpr std::array invalidForms{
+            Probe::PartialDestination,
+            Probe::SaturateDestination,
+            Probe::ShiftDestination,
+            Probe::TextureCoordinateSaturateDestination,
+            Probe::TextureCoordinateShiftDestination,
+            Probe::TextureKillSaturateDestination,
+            Probe::TextureKillShiftDestination,
+            Probe::DuplicateTextureStage,
+            Probe::MixedDuplicateStage,
+            Probe::DescendingTextureStages,
+            Probe::MixedDescendingStages,
+            Probe::TextureKillThenLowerStage,
+            Probe::HigherStageThenTextureKill,
+        };
+        for (const Probe probe : invalidForms)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderLegacyTexInstructionProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected,
+                  "compiled Effect parser accepted invalid ps_1_1 TEX form " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+
+        constexpr std::array validForms{
+            Probe::StageOneOnly,
+            Probe::AscendingStages,
+            Probe::MixedAscendingGap,
+        };
+        for (const Probe probe : validForms)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderLegacyTexInstructionProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted,
+                  "compiled Effect parser rejected legal ps_1_1 TEX stage ordering " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+    }
+
     void CheckCompiledPreShaderModel3AbsoluteSourceValidation(SoftwareRenderer& renderer)
     {
         using Source = CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource;
@@ -8201,6 +8265,7 @@ int main()
         CheckCompiledMatrixOperandValidation(renderer);
         CheckCompiledLegacyTextureMatrixSequenceValidation(renderer);
         CheckCompiledLegacyTextureOperandValidation(renderer);
+        CheckCompiledLegacyTexInstructionValidation(renderer);
         CheckCompiledPreShaderModel3AbsoluteSourceValidation(renderer);
         CheckCompiledShaderModel3MixedConstantAbsoluteValidation(renderer);
         CheckCompiledSamplerRegisterRangeValidation(renderer);

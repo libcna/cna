@@ -2191,6 +2191,64 @@ TEST(EasyGLCompiledEffectLegacyTextureOperandTest, AcceptsSignedScaleWhereMicros
     }
 }
 
+class EasyGLCompiledEffectLegacyTexInstructionTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticLegacyTexInstructionProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectLegacyTexInstructionTest, RejectsInvalidForm)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderLegacyTexInstructionProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidForms,
+    EasyGLCompiledEffectLegacyTexInstructionTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::PartialDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::SaturateDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::ShiftDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::
+            TextureCoordinateSaturateDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::
+            TextureCoordinateShiftDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::TextureKillSaturateDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::TextureKillShiftDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::DuplicateTextureStage,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::MixedDuplicateStage,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::DescendingTextureStages,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::MixedDescendingStages,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::TextureKillThenLowerStage,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::HigherStageThenTextureKill));
+
+TEST(EasyGLCompiledEffectLegacyTexInstructionTest, AcceptsLegalStageOrdering)
+{
+    using Probe = CNA::TestSupport::SyntheticLegacyTexInstructionProbe;
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    constexpr std::array validProbes{
+        Probe::StageOneOnly,
+        Probe::AscendingStages,
+        Probe::MixedAscendingGap,
+    };
+    for (const Probe probe : validProbes)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderLegacyTexInstructionProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 class EasyGLCompiledEffectPreShaderModel3AbsoluteSourceTest :
     public ::testing::TestWithParam<
         CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource>
