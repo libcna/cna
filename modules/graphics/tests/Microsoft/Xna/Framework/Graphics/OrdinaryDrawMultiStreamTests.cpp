@@ -137,8 +137,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryMultiStream()
 {
-    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, 
-                            DirectX12, Software, SdlGpu);
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11,
+                            DirectX12, Software, SdlGpu, Rlgl);
 }
 
 namespace
@@ -553,13 +553,15 @@ namespace
         // calls that follow it, which only run once SetUp() has already let the test proceed.
         void SetUp() override
         {
-            if (!device.SupportsCapability(GraphicsCapability::ThreeD))
+            if (!device.SupportsCapability(GraphicsCapability::ThreeD) &&
+                !device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))
                 GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
         }
 
         void RequireOrdinaryRendering()
         {
-            if (!device.SupportsCapability(GraphicsCapability::ThreeD))
+            if (!device.SupportsCapability(GraphicsCapability::ThreeD) &&
+                !device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))
                 GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
@@ -1612,7 +1614,8 @@ TEST_F(OrdinaryDrawMultiStreamTest, DestroyingAndRecreatingStream1RebindsTheNewB
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, UnsupportedRendererRejectsMultiStreamDeterministically)
 {
-    if (!device.SupportsCapability(GraphicsCapability::ThreeD))
+    if (!device.SupportsCapability(GraphicsCapability::ThreeD) &&
+        !device.SupportsCapability(GraphicsCapability::MultiStreamVertexInput))
         GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
 
     const GridLayout layout = GridLayout{kTargetSize, kTargetSize};

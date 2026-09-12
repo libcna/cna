@@ -218,7 +218,11 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     /** @brief Last native primitive submission, exposed only to focused validation. */
     struct PrimitiveDrawSnapshot
     {
+        std::array<unsigned int, 16> attributeBuffers{};
+        std::array<int, 16> attributeStrides{};
+        std::array<int, 16> attributeOffsets{};
         int primitiveMode = 0;
+        int attributeCount = 0;
         int elementCount = 0;
         int firstVertex = 0;
         int startIndex = 0;

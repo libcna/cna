@@ -332,6 +332,8 @@ namespace CNA::Internal::Renderers::Rlgl
             return maxSamplerAnisotropy_ > 1.0f;
         case CNA::GraphicsCapability::MultipleRenderTargets:
             return maxRenderTargets_ >= 2;
+        case CNA::GraphicsCapability::MultiStreamVertexInput:
+            return true;
         default:
             return false;
         }

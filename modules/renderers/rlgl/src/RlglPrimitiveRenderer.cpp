@@ -11,11 +11,13 @@
 #include "RlglResources.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace CNA::Internal::Renderers::Rlgl
@@ -89,7 +91,7 @@ namespace CNA::Internal::Renderers::Rlgl
             return found == declaration.end() ? nullptr : &*found;
         }
 
-        [[nodiscard]] std::vector<VertexAttributeBinding> BuildStockAttributes(
+        [[nodiscard]] std::vector<VertexAttributeBinding> BuildSingleStreamStockAttributes(
             const IVertexBufferRenderer& vertexBuffer,
             const bool vertexColorEnabled, const bool textureEnabled,
             const bool lightingEnabled, const bool dualTexture, const bool skinned)
@@ -236,6 +238,242 @@ namespace CNA::Internal::Renderers::Rlgl
             return result;
         }
 
+        struct LocatedVertexElement
+        {
+            const VertexElement* element = nullptr;
+            int streamIndex = -1;
+            int combinedByteOffset = 0;
+        };
+
+        void ValidateMultiStreamShape(
+            const IVertexBufferRenderer& primaryVertexBuffer,
+            const GpuDrawParams& params)
+        {
+            if (params.vertexStreamCount < 2 ||
+                params.vertexStreamCount > static_cast<int>(params.vertexStreams.size()))
+            {
+                throw std::invalid_argument("RLGL: invalid multi-stream binding count");
+            }
+            if (params.vertexStreams[0].buffer != &primaryVertexBuffer)
+                throw std::invalid_argument("RLGL: stream zero does not match the primary buffer");
+
+            int expectedCombinedByteBase = 0;
+            std::array<bool, kMaxVertexStreams> occupiedSlots{};
+            std::vector<std::pair<VertexElementUsage, int>> declaredSemantics;
+            for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
+            {
+                const GpuVertexStreamBinding& stream = params.vertexStreams[streamIndex];
+                if (stream.buffer == nullptr || stream.instanceFrequency != 0 ||
+                    stream.slot < 0 || stream.slot >= kMaxVertexStreams ||
+                    occupiedSlots[static_cast<std::size_t>(stream.slot)] ||
+                    stream.strideInBytes <= 0 || stream.vertexOffset < 0 ||
+                    stream.combinedByteBase != expectedCombinedByteBase ||
+                    stream.vertexCount < 0 ||
+                    stream.vertexCount > GetBufferCapacity(*stream.buffer) ||
+                    GetNativeBufferId(*stream.buffer) == 0)
+                {
+                    throw std::invalid_argument("RLGL: invalid per-vertex stream binding");
+                }
+                occupiedSlots[static_cast<std::size_t>(stream.slot)] = true;
+
+                const std::size_t nativeStride = GetVertexStride(*stream.buffer);
+                const auto& declaration = GetVertexDeclaration(*stream.buffer);
+                if (declaration.empty() ||
+                    nativeStride != static_cast<std::size_t>(stream.strideInBytes))
+                {
+                    throw System::NotSupportedException(
+                        "RLGL: every multi-stream binding requires its own non-empty, matching "
+                        "VertexDeclaration (plans/plan_rlgl.md RLGL-032)");
+                }
+
+                for (const VertexElement& element : declaration)
+                {
+                    const auto semantic = std::pair{
+                        element.getVertexElementUsageProperty(),
+                        element.getUsageIndexProperty()};
+                    if (std::find(
+                            declaredSemantics.begin(), declaredSemantics.end(), semantic) !=
+                        declaredSemantics.end())
+                    {
+                        throw System::NotSupportedException(
+                            "RLGL: a multi-stream declaration set cannot bind the same "
+                            "vertex semantic more than once (plans/plan_rlgl.md RLGL-032)");
+                    }
+                    declaredSemantics.push_back(semantic);
+                }
+
+                if (stream.strideInBytes >
+                    std::numeric_limits<int>::max() - expectedCombinedByteBase)
+                {
+                    throw std::overflow_error("RLGL: combined vertex stride exceeds Int32");
+                }
+                expectedCombinedByteBase += stream.strideInBytes;
+            }
+            if (params.combinedVertexStride != expectedCombinedByteBase)
+                throw std::invalid_argument("RLGL: invalid combined multi-stream stride");
+        }
+
+        [[nodiscard]] LocatedVertexElement FindMultiStreamElement(
+            const GpuDrawParams& params,
+            const VertexElementUsage usage, const int usageIndex)
+        {
+            for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
+            {
+                const GpuVertexStreamBinding& stream = params.vertexStreams[streamIndex];
+                const VertexElement* const element = FindElement(
+                    GetVertexDeclaration(*stream.buffer), usage, usageIndex);
+                if (element == nullptr)
+                    continue;
+                return LocatedVertexElement{
+                    element,
+                    streamIndex,
+                    stream.combinedByteBase + element->getOffsetProperty()};
+            }
+            return {};
+        }
+
+        [[nodiscard]] std::vector<VertexAttributeBinding> BuildStockAttributes(
+            const IVertexBufferRenderer& vertexBuffer, const GpuDrawParams& params)
+        {
+            if (params.vertexStreamCount < 2)
+            {
+                std::vector<VertexAttributeBinding> result =
+                    BuildSingleStreamStockAttributes(
+                        vertexBuffer, params.vertexColorEnabled, params.textureEnabled,
+                        params.lightingEnabled, params.dualTexture, params.skinned);
+                if (params.vertexStreamCount == 1)
+                {
+                    const GpuVertexStreamBinding& stream = params.vertexStreams[0];
+                    if (stream.buffer != &vertexBuffer || stream.instanceFrequency != 0 ||
+                        stream.vertexOffset != 0)
+                    {
+                        throw std::invalid_argument("RLGL: invalid single-stream binding");
+                    }
+                    const unsigned int nativeBuffer = GetNativeBufferId(*stream.buffer);
+                    for (VertexAttributeBinding& attribute : result)
+                        attribute.vertexBuffer = nativeBuffer;
+                }
+                return result;
+            }
+
+            ValidateMultiStreamShape(vertexBuffer, params);
+            const LocatedVertexElement position = FindMultiStreamElement(
+                params, VertexElementUsage::Position, 0);
+            const LocatedVertexElement color = FindMultiStreamElement(
+                params, VertexElementUsage::Color, 0);
+            const LocatedVertexElement textureCoordinate = FindMultiStreamElement(
+                params, VertexElementUsage::TextureCoordinate, 0);
+            const LocatedVertexElement textureCoordinate1 = FindMultiStreamElement(
+                params, VertexElementUsage::TextureCoordinate, 1);
+            const LocatedVertexElement normal = FindMultiStreamElement(
+                params, VertexElementUsage::Normal, 0);
+            const LocatedVertexElement blendWeight = FindMultiStreamElement(
+                params, VertexElementUsage::BlendWeight, 0);
+            const LocatedVertexElement blendIndices = FindMultiStreamElement(
+                params, VertexElementUsage::BlendIndices, 0);
+
+            if (position.element == nullptr ||
+                position.element->getVertexElementFormatProperty() !=
+                    VertexElementFormat::Vector3)
+            {
+                throw System::NotSupportedException(
+                    "RLGL: the baseline primitive shader requires Position0 as Vector3 "
+                    "(plans/plan_rlgl.md RLGL-032)");
+            }
+            if (params.vertexColorEnabled &&
+                (color.element == nullptr ||
+                 color.element->getVertexElementFormatProperty() != VertexElementFormat::Color))
+            {
+                throw System::NotSupportedException(
+                    "RLGL: vertex-color drawing requires Color0 as packed Color "
+                    "(plans/plan_rlgl.md RLGL-032)");
+            }
+            if (params.textureEnabled &&
+                (textureCoordinate.element == nullptr ||
+                 textureCoordinate.element->getVertexElementFormatProperty() !=
+                     VertexElementFormat::Vector2))
+            {
+                throw System::NotSupportedException(
+                    "RLGL: texture drawing requires TextureCoordinate0 as Vector2 "
+                    "(plans/plan_rlgl.md RLGL-032)");
+            }
+            if (params.lightingEnabled &&
+                (normal.element == nullptr ||
+                 normal.element->getVertexElementFormatProperty() !=
+                     VertexElementFormat::Vector3))
+            {
+                throw System::NotSupportedException(
+                    "RLGL: lit stock effects require Normal0 as Vector3 "
+                    "(plans/plan_rlgl.md RLGL-032)");
+            }
+            if (params.dualTexture &&
+                (textureCoordinate1.element == nullptr ||
+                 textureCoordinate1.element->getVertexElementFormatProperty() !=
+                     VertexElementFormat::Vector2))
+            {
+                throw System::NotSupportedException(
+                    "RLGL: DualTextureEffect requires TextureCoordinate1 as Vector2 "
+                    "(plans/plan_rlgl.md RLGL-032)");
+            }
+            if (params.skinned &&
+                (blendWeight.element == nullptr ||
+                 blendWeight.element->getVertexElementFormatProperty() !=
+                     VertexElementFormat::Vector4))
+            {
+                throw System::NotSupportedException(
+                    "RLGL: SkinnedEffect requires BlendWeight0 as Vector4 "
+                    "(plans/plan_rlgl.md RLGL-032)");
+            }
+            if (params.skinned &&
+                (blendIndices.element == nullptr ||
+                 (blendIndices.element->getVertexElementFormatProperty() !=
+                      VertexElementFormat::Byte4 &&
+                  blendIndices.element->getVertexElementFormatProperty() !=
+                      VertexElementFormat::Vector4)))
+            {
+                throw System::NotSupportedException(
+                    "RLGL: SkinnedEffect requires BlendIndices0 as Byte4 or Vector4 "
+                    "(plans/plan_rlgl.md RLGL-032)");
+            }
+
+            std::vector<VertexAttributeBinding> result;
+            result.reserve(7);
+            const auto append = [&params, &result](
+                const LocatedVertexElement& located, const unsigned int location)
+            {
+                const GpuVertexStreamSlot slot = MapCombinedOffsetToStream(
+                    params, located.combinedByteOffset);
+                if (slot.streamIndex != located.streamIndex ||
+                    slot.byteOffsetInStream != located.element->getOffsetProperty())
+                {
+                    throw std::invalid_argument("RLGL: inconsistent combined vertex layout");
+                }
+                const GpuVertexStreamBinding& stream = params.vertexStreams[slot.streamIndex];
+                if (stream.vertexOffset >
+                    std::numeric_limits<int>::max() / stream.strideInBytes)
+                {
+                    throw std::overflow_error("RLGL: vertex stream byte offset exceeds Int32");
+                }
+                VertexAttributeBinding binding = DescribeVertexAttribute(
+                    *located.element, location, stream.strideInBytes,
+                    stream.vertexOffset * stream.strideInBytes);
+                binding.vertexBuffer = GetNativeBufferId(*stream.buffer);
+                result.push_back(binding);
+            };
+
+            append(position, 0);
+            if (params.vertexColorEnabled) append(color, 1);
+            if (params.textureEnabled) append(textureCoordinate, 2);
+            if (params.lightingEnabled) append(normal, 3);
+            if (params.dualTexture) append(textureCoordinate1, 4);
+            if (params.skinned)
+            {
+                append(blendWeight, 5);
+                append(blendIndices, 6);
+            }
+            return result;
+        }
+
         void RequireBaselineEffect(const GpuDrawParams& params)
         {
             bool hasInstanceStream = false;
@@ -244,7 +482,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     params.vertexStreams[stream].instanceFrequency != 0;
             if (params.customEffectRequested || params.customEffectRenderer != nullptr ||
                 params.compiledEffectRuntime != nullptr || params.pbr ||
-                params.instanceCount != 1 || params.vertexStreamCount > 1 || hasInstanceStream)
+                params.instanceCount != 1 || hasInstanceStream)
             {
                 throw System::NotSupportedException(
                     "RLGL: this effect or vertex-stream shape requires the stock/custom shader "
@@ -274,9 +512,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 vertexBuffer, indexBuffer, elementCount,
                 firstVertex, startIndex, baseVertex);
 
-            const std::vector<VertexAttributeBinding> attributes = BuildStockAttributes(
-                vertexBuffer, params.vertexColorEnabled, params.textureEnabled,
-                params.lightingEnabled, params.dualTexture, params.skinned);
+            const std::vector<VertexAttributeBinding> attributes =
+                BuildStockAttributes(vertexBuffer, params);
             Matrix worldViewProjection = world * view * projection;
             if (applyXnaPixelCenter && viewportWidth > 0 && viewportHeight > 0 &&
                 multiSampleCount <= 1)

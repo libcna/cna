@@ -2125,7 +2125,6 @@ void main()
             rlDisableVertexAttribute(location);
             rlSetVertexAttributeDivisor(location, 0);
         }
-        rlEnableVertexBuffer(vertexBuffer);
         for (int index = 0; index < attributeCount; ++index)
         {
             const VertexAttributeBinding& attribute = attributes[index];
@@ -2138,6 +2137,9 @@ void main()
                 rlDisableShader();
                 throw std::invalid_argument("RLGL: invalid vertex attribute binding");
             }
+            const unsigned int attributeBuffer = attribute.vertexBuffer != 0
+                ? attribute.vertexBuffer : vertexBuffer;
+            rlEnableVertexBuffer(attributeBuffer);
             rlEnableVertexAttribute(attribute.location);
             rlSetVertexAttribute(
                 attribute.location, attribute.componentCount, attribute.scalarType,
@@ -2145,6 +2147,16 @@ void main()
         }
 
         PrimitiveDrawSnapshot snapshot;
+        snapshot.attributeCount = attributeCount;
+        for (int index = 0; index < attributeCount; ++index)
+        {
+            const VertexAttributeBinding& attribute = attributes[index];
+            const std::size_t location = static_cast<std::size_t>(attribute.location);
+            snapshot.attributeBuffers[location] = attribute.vertexBuffer != 0
+                ? attribute.vertexBuffer : vertexBuffer;
+            snapshot.attributeStrides[location] = attribute.stride;
+            snapshot.attributeOffsets[location] = attribute.offset;
+        }
         snapshot.primitiveMode = static_cast<int>(mode);
         snapshot.elementCount = elementCount;
         snapshot.firstVertex = firstVertex;

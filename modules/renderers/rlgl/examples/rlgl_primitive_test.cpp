@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
@@ -488,6 +489,91 @@ protected:
         }
         Check(rejectedUnsupportedEffect,
               "a textured stock effect rejects a declaration without TextureCoordinate0");
+
+        struct ColorOnly
+        {
+            std::uint8_t r, g, b, a;
+        };
+        static_assert(sizeof(ColorOnly) == 4);
+        const VertexDeclaration colorOnlyDeclaration(
+            4, {{0, VertexElementFormat::Color, VertexElementUsage::Color, 0}});
+        const std::array<ColorOnly, 3> orangeColors{{
+            {255, 128, 0, 255}, {255, 128, 0, 255}, {255, 128, 0, 255}}};
+        VertexBuffer publicPosition(
+            device, positionDeclaration, 3, BufferUsage::None);
+        publicPosition.SetDataRaw(positionTriangle.data(), 3, sizeof(PositionOnly));
+        VertexBuffer duplicatePosition(
+            device, positionDeclaration, 3, BufferUsage::None);
+        duplicatePosition.SetDataRaw(positionTriangle.data(), 3, sizeof(PositionOnly));
+        VertexBuffer publicColor(
+            device, colorOnlyDeclaration, 3, BufferUsage::None);
+        publicColor.SetDataRaw(orangeColors.data(), 3, sizeof(ColorOnly));
+
+        effect.setTextureEnabledProperty(false);
+        effect.setVertexColorEnabledProperty(true);
+        effect.Apply();
+        device.SetVertexBuffers({
+            VertexBufferBinding(&publicPosition, 0, 0),
+            VertexBufferBinding(&duplicatePosition, 0, 0),
+            VertexBufferBinding(&publicColor, 0, 0)});
+        bool fullyDuplicateStreamAccepted = true;
+        try
+        {
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+        }
+        catch (...)
+        {
+            fullyDuplicateStreamAccepted = false;
+        }
+        Check(fullyDuplicateStreamAccepted,
+              "a fully duplicate semantic stream is ignored by CNA's XNA composition rule");
+
+        struct PositionTexture
+        {
+            float x, y, z, u, v;
+        };
+        const VertexDeclaration partiallyDuplicateDeclaration(
+            20, {{0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0},
+                 {12, VertexElementFormat::Vector2,
+                  VertexElementUsage::TextureCoordinate, 0}});
+        const std::array<PositionTexture, 3> partiallyDuplicateData{};
+        VertexBuffer partiallyDuplicate(
+            device, partiallyDuplicateDeclaration, 3, BufferUsage::None);
+        partiallyDuplicate.SetDataRaw(
+            partiallyDuplicateData.data(), 3, sizeof(PositionTexture));
+        device.SetVertexBuffers({
+            VertexBufferBinding(&publicPosition, 0, 0),
+            VertexBufferBinding(&partiallyDuplicate, 0, 0),
+            VertexBufferBinding(&publicColor, 0, 0)});
+        bool partialSemanticCollisionRejected = false;
+        try
+        {
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+        }
+        catch (const System::NotSupportedException&)
+        {
+            partialSemanticCollisionRejected = true;
+        }
+        Check(partialSemanticCollisionRejected,
+              "a partially duplicate semantic stream is rejected before native submission");
+
+        device.SetVertexBuffers({
+            VertexBufferBinding(&publicPosition, 0, 0),
+            VertexBufferBinding(&publicColor, 0, 0)});
+        clear();
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+        const auto multiStreamCall = Bridge::GetPrimitiveDrawSnapshotForTesting();
+        Check(IsColor(read(kWidth / 2, kHeight / 2), Color(255, 128, 0, 255)) &&
+                  multiStreamCall.attributeCount == 2 &&
+                  multiStreamCall.attributeBuffers[0] ==
+                      Rlgl::GetNativeBufferId(publicPosition.GetRenderer()) &&
+                  multiStreamCall.attributeBuffers[1] ==
+                      Rlgl::GetNativeBufferId(publicColor.GetRenderer()) &&
+                  multiStreamCall.attributeStrides[0] == 12 &&
+                  multiStreamCall.attributeStrides[1] == 4 &&
+                  multiStreamCall.attributeOffsets[0] == 0 &&
+                  multiStreamCall.attributeOffsets[1] == 0,
+              "a rejected partial collision leaves exact per-stream VBO state recoverable");
     }
 
 private:

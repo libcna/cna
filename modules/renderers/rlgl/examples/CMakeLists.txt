@@ -150,6 +150,13 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_primitive PRIVATE SDL3::SDL3main)
     endif()
 
+    add_executable(cna_test_rlgl_multi_stream
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_multi_stream_split.cpp")
+    target_link_libraries(cna_test_rlgl_multi_stream PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_multi_stream PRIVATE SDL3::SDL3main)
+    endif()
+
     add_executable(cna_test_rlgl_effect rlgl_effect_test.cpp)
     target_link_libraries(cna_test_rlgl_effect PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
     if(TARGET SDL3::SDL3main)
@@ -457,6 +464,9 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_Primitive COMMAND cna_test_rlgl_primitive
             TIMEOUT 60 LABELS "Graphics3D;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(NAME Rlgl_MultiStream COMMAND cna_test_rlgl_multi_stream
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsParity;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_Effect COMMAND cna_test_rlgl_effect
             TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"

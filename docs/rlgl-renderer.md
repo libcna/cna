@@ -54,6 +54,7 @@ success.
 | SpriteBatch/SpriteFont | 🟨 | Built-in texture/font drawing uses CNA-owned batching over rlgl shader/VAO/VBO/IBO/draw wrappers and passed transforms, origin/rotation, flips, all sort modes, sampler forwarding, blend, viewport/scissor, fractional coordinates, capacity flush, and glyph pixels. With compiled effects enabled, classic bytecode also passes stock vertex inheritance, pass-major execution, texture-slot precedence/fallback, rendered-source orientation, and state recovery (`RLGL-051`); CNAEXT source `ShaderEffect` remains `RLGL-050` |
 | Vertex/index buffer resources | ✅ | Static/dynamic vertex plus 16/32-bit index resources use fixed-capacity rlgl VBO/EBO storage. Exact native bytes/size/usage, all declaration records, `None`/`Discard`/`NoOverwrite`, and invalid inputs passed `RLGL-030` |
 | Primitive and user draw calls | ✅ | Every point/line/triangle list/strip topology passed indexed and non-indexed pixels, exact 16/32-bit index dispatch, declaration semantic/type mapping, offsets, WVP transforms, public user routes, and SpriteBatch-to-primitive rebinding in `RLGL-031` |
+| Ordinary multi-stream vertex input | ✅ | Up to sixteen per-vertex streams retain independent VBOs, declarations, strides, public slots, and element offsets. Non-indexed and 16/32-bit indexed routes, vertex/start/base offsets, semantic composition/collisions, dynamic replacement, resource recreation, and single/multi state transitions passed the complete shared suite plus a focused split-stream pixel oracle in `RLGL-032`. Per-instance streams remain `RLGL-016` |
 | BasicEffect and AlphaTestEffect | ✅ | Texture/default-white sampling, Position0/Normal0/Color0/UV0 semantics, diffuse/emissive/alpha/vertex color, all eight alpha comparisons, fog, WVP, pixel-center correction, three-light diffuse/specular BasicEffect lighting, per-vertex/per-pixel selection, inverse-transpose normals, and state transitions passed `RLGL-033`/`RLGL-034` |
 | DualTextureEffect | ✅ | Independent UV0/UV1 semantics and texture/sampler slots, doubled first-texture combine, null/default-white inputs, vertex color, diffuse/alpha, fog, missing-semantic diagnostics, and stock-effect state transitions passed `RLGL-035` |
 | EnvironmentMapEffect | ✅ | Base Texture2D plus TextureCube sampling, all six reflection faces, inverse-transpose world normals, derived eye position, three-light diffuse and emissive/ambient terms, amount saturation, D3D9-style per-vertex Fresnel, alpha-scaled lerp/specular terms, fog, slot-0/slot-1 sampler isolation, plain/mipmapped/render-target cubes, every public primitive route, and state/lifetime transitions passed 178 gates in `RLGL-036` |
@@ -62,17 +63,18 @@ success.
 | `RenderTarget2D` (all eleven classic FNA target formats) | ✅ | Color, Rgba1010102, Rg32, Rgba64, Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, and HdrBlendable have exact single/MSAA storage, resolve, format-native CPU transfer/readback, mips, depth/stencil, switching, Preserve/Discard, and upright sampling evidence from `RLGL-039`/`041`/`042` |
 | `RenderTargetCube` (all eleven classic FNA target formats) | ✅ | Exact six-face/mip storage, per-face binding/readback, six independent MSAA color buffers, Depth16/Depth24/Depth24Stencil8, resolve/mips, Preserve/Discard, switching, and Color upload passed `RLGL-046`; public non-Color transfer is refused because CNA's current cube interface cannot express its format-native bytes |
 | Multiple render targets | ✅ | HiDef supports ordered sets of two through four RenderTarget2D objects, cube faces, or compatible mixtures through transactional rlgl-created FBOs and `rlActiveDrawBuffers`; indexed masks/Clear, slot-zero depth, mixed formats, MSAA resolve/mips, usage, transitions, and refusal safety passed `RLGL-040`/`046`. Reach correctly remains limited to one target |
-| Compiled XNA effects | 🟨 | With `CNA_RLGL_COMPILED_EFFECTS=ON`, the pinned MojoShader path parses and compiles bytecode and executes ordinary indexed/non-indexed user and bound-buffer draws plus SpriteBatch with reflected attributes/uniforms, 2D/cube samplers, pass states, render-target orientation, and stock-compatible depth (`RLGL-047`/`048`/`051`). `GraphicsCapability::CompiledEffects` is true in this build; multi-stream, instancing, and vertex samplers remain `RLGL-049`. |
-| CNAEXT source `ShaderEffect` and general 3D workloads | ❌ | Source shaders remain an explicit failure owned separately by `RLGL-050`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
+| Compiled XNA effects | 🟨 | With `CNA_RLGL_COMPILED_EFFECTS=ON`, the pinned MojoShader path parses and compiles bytecode and executes ordinary indexed/non-indexed user and bound-buffer draws plus SpriteBatch with reflected attributes/uniforms, 2D/cube samplers, pass states, render-target orientation, and stock-compatible depth (`RLGL-047`/`048`/`051`). `GraphicsCapability::CompiledEffects` is true in this build; compiled-effect multi-stream, instancing, and vertex samplers remain `RLGL-049`. |
+| CNAEXT source `ShaderEffect` and general 3D workloads | ❌ | Source shaders remain an explicit failure owned separately by `RLGL-050`; instancing and the representative-workload audit remain separate gates, so the umbrella `GraphicsCapability::ThreeD` stays false despite validated stock ordinary multi-stream draws |
 | Instancing and queries | ❌ | Explicitly unavailable; their implementation and validation are tracked by `RLGL-016` |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
 
 `SupportsCapability(AnisotropicFiltering)` follows rlgl's live extension probe and measured ceiling.
 `MultipleRenderTargets` additionally requires the current device profile's ceiling to exceed one,
-so it is false for Reach and true for a validated HiDef device with sufficient GL limits. Other
-capability results remain false. Native GL support alone is not treated as a CNA implementation
-promise; the renderer opts in only after its complete path and observable behavior are tested.
+so it is false for Reach and true for a validated HiDef device with sufficient GL limits.
+`MultiStreamVertexInput` is true for the validated ordinary stock-effect path. Unlisted capability
+results remain false. Native GL support alone is not treated as a CNA implementation promise; the
+renderer opts in only after its complete path and observable behavior are tested.
 
 `SkinnedEffect::VertexColorEnabled` is existing CNAEXT surface, not classic XNA 4.0. It works as a
 natural part of the same validated stock vertex path; no RLGL-specific public API was added.
@@ -126,7 +128,8 @@ cmake --build cmake-build-rlgl --parallel 3 --target \
 Classic XNA Effect Framework bytecode has an optional path through CNA's existing pinned MojoShader
 dependency. Enable it with `-DCNA_RLGL_COMPILED_EFFECTS=ON`; this adds the runtime, ordinary
 user/buffer indexed/non-indexed draws, and compiled SpriteBatch composition, and advertises
-`CompiledEffects`. Multi-stream, instanced, and vertex-sampler routes remain tracked by `RLGL-049`:
+`CompiledEffects`. Compiled-effect multi-stream, instanced, and vertex-sampler routes remain tracked
+by `RLGL-049`:
 
 ```bash
 cmake -S . -B cmake-build-rlgl-fx -G Ninja \

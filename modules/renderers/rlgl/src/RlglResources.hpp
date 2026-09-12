@@ -183,6 +183,7 @@ namespace CNA::Internal::Renderers::Rlgl
     /** @brief One GL-compatible attribute binding derived from an XNA vertex element. */
     struct VertexAttributeBinding
     {
+        unsigned int vertexBuffer = 0;
         unsigned int location = 0;
         int componentCount = 0;
         int scalarType = 0;
