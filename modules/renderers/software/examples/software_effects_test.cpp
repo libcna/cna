@@ -236,9 +236,11 @@ protected:
                         blendedResult.getRProperty(), blendedResult.getGProperty(),
                         blendedResult.getBProperty(), blendedResult.getAProperty());
             // AlphaBlend is One/InverseSourceAlpha for both colour and alpha. The source colour is
-            // therefore premultiplied exactly once before submission, and the byte result is exact.
+            // therefore premultiplied exactly once before submission. SOFTWARE-345's XNA/D3D
+            // round-to-nearest UNORM conversion makes the exact blue result 127, not the former
+            // truncation artifact 126.
             Check(blendedResult.getRProperty() == 128 && blendedResult.getGProperty() == 0 &&
-                  blendedResult.getBProperty() == 126 && blendedResult.getAProperty() == 255,
+                  blendedResult.getBProperty() == 127 && blendedResult.getAProperty() == 255,
                   "BlendState::AlphaBlend applies premultiplied source + inverse-alpha destination exactly");
             dev.setBlendStateProperty(BlendState::Opaque);
         }

@@ -122,6 +122,7 @@
 #include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <array>
@@ -537,8 +538,7 @@ class RenderTargetDepthStencilUsageTest : public Game
     /// Cycle 1: clear, then lay colour A at kNear across all three bands.
     void DepthCycle1(GraphicsDevice& dev)
     {
-        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-                  BgColour(), 1.0f, 0);
+        dev.Clear(BgColour());
         PrepareDraw(dev, DepthTesting());
         DrawBand(dev, 0, kNear, AColour());
         DrawBand(dev, 1, kNear, AColour());
@@ -556,8 +556,7 @@ class RenderTargetDepthStencilUsageTest : public Game
     /// Cycle 1 of the stencil sequence: stamp ReferenceStencil=1 over bands 0 and 1.
     void StencilCycle1(GraphicsDevice& dev)
     {
-        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-                  BgColour(), 1.0f, 0);
+        dev.Clear(BgColour());
         PrepareDraw(dev, StencilStamp());
         DrawBand(dev, 0, 0.5f, StampColour());
         DrawBand(dev, 1, 0.5f, StampColour());
@@ -797,8 +796,7 @@ class RenderTargetDepthStencilUsageTest : public Game
             auto rt = MakeRT(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24Stencil8);
             dev.SetRenderTarget(rt.get());  DepthCycle1(dev);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-                      Color(20, 20, 20, 255), 1.0f, 0);
+            dev.Clear(Color(20, 20, 20, 255));
             dev.SetRenderTarget(rt.get());  DepthCycle2(dev);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             if (kContract.readback != Support::Exact || !kContract.depthInRT)
@@ -1183,38 +1181,37 @@ class RenderTargetDepthStencilUsageTest : public Game
 
     void RunBoundaries(GraphicsDevice& dev)
     {
-        // X1: a stencil clear on a target whose format carries no stencil is a legal no-op, not an
-        // exception -- ClearOptions is a request, and GFX-018 already masks what is absent.
+        // X1: Microsoft XNA rejects an explicit stencil request when the target has no stencil.
         {
-            bool threw = false; std::string what;
+            auto rt = MakeRT(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24);
+            dev.SetRenderTarget(rt.get());
+            bool rejected = false;
             try
             {
-                auto rt = MakeRT(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24);
-                dev.SetRenderTarget(rt.get());
                 dev.Clear(ClearOptions::Stencil, BgColour(), 1.0f, 7);
-                dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             }
-            catch (const std::exception& e) { threw = true; what = e.what(); }
-            catch (...) { threw = true; what = "non-std exception"; }
-            check(!threw, "X1 ClearOptions::Stencil on a Depth24 (no-stencil) target is a legal "
-                          "no-op" + (threw ? (" [threw: " + what + "]") : std::string()));
+            catch (const System::InvalidOperationException&) { rejected = true; }
+            catch (...) {}
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            check(rejected,
+                  "X1 ClearOptions::Stencil on a Depth24 target rejects the missing attachment");
         }
 
-        // X2: and a depth clear on a DepthFormat::None target likewise.
+        // X2: the same contract applies to depth and stencil on a target with neither plane.
         {
-            bool threw = false; std::string what;
+            auto rt = MakeRT(dev, RenderTargetUsage::PreserveContents, DepthFormat::None);
+            dev.SetRenderTarget(rt.get());
+            bool rejected = false;
             try
             {
-                auto rt = MakeRT(dev, RenderTargetUsage::PreserveContents, DepthFormat::None);
-                dev.SetRenderTarget(rt.get());
                 dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
                           BgColour(), 1.0f, 0);
-                dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             }
-            catch (const std::exception& e) { threw = true; what = e.what(); }
-            catch (...) { threw = true; what = "non-std exception"; }
-            check(!threw, "X2 a depth/stencil Clear on a DepthFormat::None target is a legal "
-                          "no-op" + (threw ? (" [threw: " + what + "]") : std::string()));
+            catch (const System::InvalidOperationException&) { rejected = true; }
+            catch (...) {}
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            check(rejected,
+                  "X2 a depth/stencil Clear on a DepthFormat::None target rejects missing planes");
         }
 
         // X3: a stencil-tested draw into a depth-only target must not raise either. Whether the
@@ -1291,8 +1288,7 @@ protected:
         if (!warmedUp_)
         {
             warmedUp_ = true;
-            dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-                      BgColour(), 1.0f, 0);
+            dev.Clear(BgColour());
             PrepareDraw(dev, DepthTesting());
             DrawBand(dev, -1, 0.5f, AColour());
             return;

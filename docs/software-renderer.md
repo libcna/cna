@@ -304,7 +304,8 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   validation: Microsoft-valid `TEXLDD` places `s#` at source 1, not source 3. A direct Software
   execution proves both explicit gradients and the sampled result, and an EasyGL draw proves the
   exact texel; the direct runtime and all 366 enabled EasyGL compiled-Effect tests pass. A genuinely
-  fresh full Software relink separately exposed six baseline failures now tracked by SOFTWARE-444.
+  fresh full Software relink separately exposed six stale-fixture failures reconciled by
+  SOFTWARE-444; the rebuilt Software label then passes 160/160 without a production change.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

@@ -253,7 +253,7 @@ protected:
         RenderTarget2D multisampled(device, kSize, kSize, false, SurfaceFormat::Color,
                                     DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
         device.SetRenderTarget(&multisampled);
-        device.Clear(Color::Black, 1.0f);
+        device.Clear(Color::Black);
         DrawPair(device, false, false);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         std::vector<Color> msaaPixels(static_cast<std::size_t>(kSize * kSize));

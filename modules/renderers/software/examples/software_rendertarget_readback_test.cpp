@@ -978,17 +978,20 @@ protected:
 
         // ---- I: depth/stencil isolation ---------------------------------------------------------
         {
-            // Software's framebuffer always carries a depth buffer and never any stencil storage, so
-            // the interesting question is only whether depth work can corrupt or leak into colour.
+            // The interesting question is whether depth work or a rejected missing-stencil clear
+            // can corrupt or leak into colour.
             RenderTarget2D depth(dev, 16, 8, false, SurfaceFormat::Color, DepthFormat::Depth24, 0,
                                  RenderTargetUsage::PreserveContents);
             dev.SetRenderTarget(&depth);
             ResetState(dev);
             dev.setDepthStencilStateProperty(DepthStencilState::Default);
-            dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+            dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
                       Color(90, 160, 220, 255), 1.0f, 0);
             dev.Clear(ClearOptions::DepthBuffer, Color(255, 0, 255, 255), 0.25f, 0);
-            dev.Clear(ClearOptions::Stencil, Color(255, 0, 255, 255), 1.0f, 7);
+            check(Throws<System::InvalidOperationException>([&] {
+                      dev.Clear(ClearOptions::Stencil, Color(255, 0, 255, 255), 1.0f, 7);
+                  }),
+                  "I1 a stencil-only clear rejects a Depth24 target without changing colour");
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             ResetState(dev);
             std::string detail;

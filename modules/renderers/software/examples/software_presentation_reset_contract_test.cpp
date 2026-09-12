@@ -20,6 +20,7 @@
 #include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -80,7 +81,19 @@ class SoftwarePresentationResetContractTest final : public Game
         graphics_->setPreferredDepthStencilFormatProperty(DepthFormat::None);
         graphics_->ApplyChanges();
         device.setDepthStencilStateProperty(DepthStencilState::Default);
-        device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, Color::Black, 1.0f, 0);
+        bool rejectedMissingDepth = false;
+        try
+        {
+            device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                         Color::Black, 1.0f, 0);
+        }
+        catch (const System::InvalidOperationException&)
+        {
+            rejectedMissingDepth = true;
+        }
+        Check(rejectedMissingDepth,
+              "DepthFormat::None rejects an explicit clear of its missing depth attachment");
+        device.Clear(Color::Black);
         DrawFullScreen(device, Color::Red, 0.2f);
         DrawFullScreen(device, Color::Green, 0.8f);
         Check(ReadCenter(device).getGProperty() == 128,
@@ -109,7 +122,19 @@ class SoftwarePresentationResetContractTest final : public Game
         graphics_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24);
         graphics_->ApplyChanges();
         device.setDepthStencilStateProperty(requireOne);
-        device.Clear(ClearOptions::Target | ClearOptions::Stencil, Color::Black, 1.0f, 0);
+        bool rejectedMissingStencil = false;
+        try
+        {
+            device.Clear(ClearOptions::Target | ClearOptions::Stencil,
+                         Color::Black, 1.0f, 0);
+        }
+        catch (const System::InvalidOperationException&)
+        {
+            rejectedMissingStencil = true;
+        }
+        Check(rejectedMissingStencil,
+              "Depth24 rejects an explicit clear of its missing stencil attachment");
+        device.Clear(Color::Black);
         DrawFullScreen(device, Color::Green, 0.5f);
         Check(ReadCenter(device).getGProperty() == 128,
               "Depth24 has no stencil attachment, so stencil testing is inactive");
