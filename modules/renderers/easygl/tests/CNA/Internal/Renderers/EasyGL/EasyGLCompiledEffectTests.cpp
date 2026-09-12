@@ -897,6 +897,51 @@ TEST(EasyGLCompiledEffectTest, AcceptsValidD3D9BemOperands)
     }
 }
 
+TEST(EasyGLCompiledEffectTest, RejectsInvalidD3D9ShaderModel14TextureSelectors)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticTextureCoordinateSelectorProbe;
+    for (const Probe probe : {
+             Probe::TexcrdInvalidSelector,
+             Probe::TexldInvalidSelector,
+             Probe::MixedSameRegister,
+             Probe::IdentityThenXyw,
+             Probe::XyzThenDw,
+         })
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderTextureCoordinateSelectorProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectTest, AcceptsValidD3D9ShaderModel14TextureSelectors)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticTextureCoordinateSelectorProbe;
+    for (const Probe probe : {
+             Probe::IdentityThenXyz,
+             Probe::RepeatXyw,
+             Probe::DifferentRegisters,
+             Probe::XywThenDw,
+         })
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderTextureCoordinateSelectorProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 TEST(EasyGLCompiledEffectTest, RejectsReadOfUninitializedTemporaryDestination)
 {
     GraphicsDevice device;

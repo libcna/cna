@@ -381,8 +381,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   source 1 is temporary, and only the swizzle-selected XY components must already be initialized.
   Managed patch 84 applies that contract to both compiled paths and corrects SOFTWARE-385's invalid
   constant/constant fixture without changing its exact rendered result. A valid marker-free program
-  proves that `BEM` does not itself require an explicit `PHASE`. The dependency series now contains
-  84 patches; other opcodes' distinct operand and component-use rules remain SOFTWARE-164/165 work.
+  proves that `BEM` does not itself require an explicit `PHASE`. SOFTWARE-460 then enforces the
+  ps_1_4 texture-coordinate selector contract: only XYZ/XYW are accepted, omission means XYZ, and
+  one `t#` must retain that selection across `TEXCRD`, `TEXLD` and both phases. The dependency series
+  now contains 85 patches; other opcodes' distinct operand and component-use rules remain
+  SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

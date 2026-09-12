@@ -2910,6 +2910,58 @@ namespace
         }
     }
 
+    void CheckCompiledTextureCoordinateSelectorValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticTextureCoordinateSelectorProbe;
+        const auto accepts = [&](Probe probe) {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderTextureCoordinateSelectorProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+                return true;
+            }
+            catch (const std::runtime_error&)
+            {
+                return false;
+            }
+        };
+
+        constexpr std::array invalidProbes{
+            Probe::TexcrdInvalidSelector,
+            Probe::TexldInvalidSelector,
+            Probe::MixedSameRegister,
+            Probe::IdentityThenXyw,
+            Probe::XyzThenDw,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            if (accepts(probe))
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid ps_1_4 texture selectors: " +
+                  acceptedInvalidProbes);
+
+        for (const Probe probe : {
+                 Probe::IdentityThenXyz,
+                 Probe::RepeatXyw,
+                 Probe::DifferentRegisters,
+                 Probe::XywThenDw,
+             })
+        {
+            Check(accepts(probe),
+                  "compiled Effect parser rejected valid ps_1_4 texture selector probe " +
+                      std::to_string(static_cast<int>(probe)));
+        }
+    }
+
     void CheckCompiledUninitializedTemporaryValidation(SoftwareRenderer& renderer)
     {
         CNA::TestSupport::SyntheticEffectOptions options;
@@ -7324,6 +7376,7 @@ int main()
         CheckCompiledShaderModel14PhaseStateValidation(renderer);
         CheckCompiledPixel1OutputLiveness(renderer);
         CheckCompiledBemOperandValidation(renderer);
+        CheckCompiledTextureCoordinateSelectorValidation(renderer);
         CheckCompiledUninitializedTemporaryValidation(renderer);
         CheckCompiledTexkillTemporaryValidation(renderer);
         CheckCompiledSgnValidation(renderer);

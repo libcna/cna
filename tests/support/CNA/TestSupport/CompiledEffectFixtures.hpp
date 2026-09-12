@@ -240,6 +240,31 @@ namespace CNA::TestSupport
         TemporarySourceModifiers,
     };
 
+    /** @brief Shader Model 1.4 texture-coordinate selector contract probe. */
+    enum class SyntheticTextureCoordinateSelectorProbe
+    {
+        /** @brief Emit no dedicated texture-coordinate selector probe. */
+        None,
+        /** @brief Invalidly use a selector other than XYZ or XYW for `TEXCRD`. */
+        TexcrdInvalidSelector,
+        /** @brief Invalidly use a selector other than XYZ or XYW for `TEXLD`. */
+        TexldInvalidSelector,
+        /** @brief Invalidly mix XYZ and XYW reads of the same texture coordinate. */
+        MixedSameRegister,
+        /** @brief Invalidly mix omitted/XYZ and XYW reads of the same texture coordinate. */
+        IdentityThenXyw,
+        /** @brief Invalidly mix XYZ with a later XYW projective read. */
+        XyzThenDw,
+        /** @brief Validly mix omitted and explicit XYZ reads. */
+        IdentityThenXyz,
+        /** @brief Validly repeat XYW reads. */
+        RepeatXyw,
+        /** @brief Validly use different selectors on different texture coordinates. */
+        DifferentRegisters,
+        /** @brief Validly mix ordinary and projective reads that both select XYW. */
+        XywThenDw,
+    };
+
     /** @brief Legacy pixel-depth instruction emitted by the synthetic pixel shader. */
     enum class SyntheticLegacyDepthOutput
     {
@@ -1533,6 +1558,9 @@ namespace CNA::TestSupport
             SyntheticLegacyBumpEnvironment::None;
         /// Emits the selected Shader Model 1.4 `BEM` operand/component probe.
         SyntheticBemOperandProbe pixelShaderBemOperandProbe = SyntheticBemOperandProbe::None;
+        /// Emits the selected Shader Model 1.4 texture-coordinate selector probe.
+        SyntheticTextureCoordinateSelectorProbe pixelShaderTextureCoordinateSelectorProbe =
+            SyntheticTextureCoordinateSelectorProbe::None;
         /// Emits a second ps_1_4 PHASE marker so parser validation can reject it.
         bool pixelShaderDuplicatesShaderModel14Phase = false;
         /// Emits an SM3 texture load whose coordinates are `v0[aL]` inside a one-iteration loop.
@@ -1774,6 +1802,8 @@ namespace CNA::TestSupport
         SyntheticLegacyBumpEnvironment legacyBumpEnvironment =
             SyntheticLegacyBumpEnvironment::None,
         SyntheticBemOperandProbe bemOperandProbe = SyntheticBemOperandProbe::None,
+        SyntheticTextureCoordinateSelectorProbe textureCoordinateSelectorProbe =
+            SyntheticTextureCoordinateSelectorProbe::None,
         bool duplicatesShaderModel14Phase = false,
         bool usesRelativeTextureCoordinate = false,
         bool usesDependentTemporaryTextureCoordinate = false,
@@ -2142,7 +2172,9 @@ namespace CNA::TestSupport
                                        legacyDepthOutput == SyntheticLegacyDepthOutput::Register ||
                                        legacyBumpEnvironment ==
                                            SyntheticLegacyBumpEnvironment::Arithmetic ||
-                                       bemOperandProbe != SyntheticBemOperandProbe::None;
+                                       bemOperandProbe != SyntheticBemOperandProbe::None ||
+                                       textureCoordinateSelectorProbe !=
+                                           SyntheticTextureCoordinateSelectorProbe::None;
         const bool usesShaderModel13 =
             legacyDepthOutput == SyntheticLegacyDepthOutput::TextureMatrix2;
         const std::uint32_t versionToken = probesPixel11Temporary || probesPixel11ColorInput ||
@@ -3452,6 +3484,57 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, r0
                 AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
                 AppendUInt32(shader, source(regTemp, 0));
+            }
+        }
+        else if (textureCoordinateSelectorProbe !=
+                 SyntheticTextureCoordinateSelectorProbe::None)
+        {
+            using Probe = SyntheticTextureCoordinateSelectorProbe;
+            const bool invalidTexcrd =
+                textureCoordinateSelectorProbe == Probe::TexcrdInvalidSelector;
+            const bool invalidTexld =
+                textureCoordinateSelectorProbe == Probe::TexldInvalidSelector;
+            const bool identityFirst =
+                textureCoordinateSelectorProbe == Probe::IdentityThenXyw ||
+                textureCoordinateSelectorProbe == Probe::IdentityThenXyz;
+            const bool xywFirst =
+                textureCoordinateSelectorProbe == Probe::RepeatXyw ||
+                textureCoordinateSelectorProbe == Probe::XywThenDw;
+
+            if (invalidTexld)
+            {
+                AppendUInt32(shader, 0x00000042u); // texld r0, t0.zxy
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, source(regTexture, 0, 0x52u));
+            }
+            else
+            {
+                AppendUInt32(shader, 0x00000040u); // texcrd r1.xyz, t0.selector
+                AppendUInt32(shader, destination(regTemp, 1, 0x7u));
+                AppendUInt32(shader, source(
+                    regTexture, 0,
+                    invalidTexcrd ? 0x52u
+                                  : identityFirst ? swizzleIdentity : xywFirst ? 0xF4u : 0xA4u));
+
+                if (!invalidTexcrd)
+                {
+                    const bool differentRegisters =
+                        textureCoordinateSelectorProbe == Probe::DifferentRegisters;
+                    const bool projective =
+                        textureCoordinateSelectorProbe == Probe::XyzThenDw ||
+                        textureCoordinateSelectorProbe == Probe::XywThenDw;
+                    const bool secondXyw =
+                        textureCoordinateSelectorProbe != Probe::IdentityThenXyz;
+                    AppendUInt32(shader, 0x00000040u); // texcrd r2.xyz/xy, t#.selector
+                    AppendUInt32(shader, destination(regTemp, 2, projective ? 0x3u : 0x7u));
+                    AppendUInt32(shader, source(
+                        regTexture, differentRegisters ? 1u : 0u,
+                        secondXyw ? 0xF4u : 0xA4u, projective ? 10u : 0u));
+                }
+
+                AppendUInt32(shader, 0x00000001u); // mov r0, c0
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, source(regConst, 0));
             }
         }
         else if (legacyBumpEnvironment == SyntheticLegacyBumpEnvironment::Arithmetic ||
@@ -7140,6 +7223,7 @@ namespace CNA::TestSupport
             options.pixelShaderLegacyDependentTexture,
             options.pixelShaderLegacyBumpEnvironment,
             options.pixelShaderBemOperandProbe,
+            options.pixelShaderTextureCoordinateSelectorProbe,
             options.pixelShaderDuplicatesShaderModel14Phase,
             options.pixelShaderUsesRelativeTextureCoordinate,
             options.pixelShaderUsesDependentTemporaryTextureCoordinate,
@@ -7239,6 +7323,8 @@ namespace CNA::TestSupport
                      options.pixelShaderLegacyBumpEnvironment !=
                          SyntheticLegacyBumpEnvironment::Arithmetic) ||
                     options.pixelShaderBemOperandProbe != SyntheticBemOperandProbe::None ||
+                    options.pixelShaderTextureCoordinateSelectorProbe !=
+                        SyntheticTextureCoordinateSelectorProbe::None ||
                     options.pixelShaderUsesLegacyTextureMatrix2 ||
                     options.pixelShaderUsesLegacyTextureMatrix3Sample ||
                     options.pixelShaderUsesLegacyTextureMatrix3Specular ||
