@@ -1,6 +1,6 @@
 # CNA Software Renderer Adversarial Parity Handoff
 
-Updated: 2026-09-12, continued through SOFTWARE-472
+Updated: 2026-09-12, continued through SOFTWARE-473
 
 This document is the restart point for the hostile Software-versus-EasyGL classic XNA 4.0/Core
 parity review. Do not interpret the large completed task count or green regression suites as proof
@@ -35,16 +35,18 @@ infallible oracle.
 - Repository: `/rv/data/development/github.com/openeggbert/cnasoftware`
 - Branch: `software`, tracking `origin/software`
 - Adversarial challenge start: `92ed418b3dfcd4a2e03ea8c0d092a0b4caca9e9f`
-- Last technical commit before this handoff update: `f59140696` —
-  `fix(SOFTWARE-472): reject matrix implied-row aliases`
-- Technical campaign delta at that commit: 312 commits, 686 changed files, 63,803 insertions and
-  6,592 deletions relative to the challenge start. Recompute rather than copying these numbers into
+- Last technical commit before this handoff update: `9c7413c3d` —
+  `fix(SOFTWARE-473): validate legacy TEXM sequences`
+- Campaign delta at that commit: 314 commits, 687 changed files, 64,164 insertions and 6,592
+  deletions relative to the challenge start. Recompute rather than copying these numbers into
   a future final report because this handoff commit and subsequent work change them.
-- `origin/software` was still at `d3a38f0f7` when this update was written. The local branch held
-  unpushed `2ba060087` (SOFTWARE-471), `f59140696` (SOFTWARE-472), and this immediately following
-  handoff update. A requested `git push origin software` was rejected by the execution environment's
-  remote-safety review; no workaround was attempted. Re-establish the live branch/remote state and
-  obtain whatever explicit approval the current environment requires before pushing.
+- `origin/software` was still at `d3a38f0f7` when this update was written. Before this handoff
+  commit, the local branch was four commits ahead: `2ba060087` (SOFTWARE-471), `f59140696`
+  (SOFTWARE-472), `19f7cabe2` (the preceding handoff snapshot), and `9c7413c3d` (SOFTWARE-473).
+  The owner explicitly requested pushes, but the execution environment rejected the attempted
+  `git push origin software` in remote-safety review; no workaround was attempted. Re-establish
+  the live branch/remote state and obtain whatever explicit approval the current environment
+  requires before pushing these commits.
 - The only expected worktree entry after the handoff commit is the user's untracked `.junie/`.
   Preserve it. Do not stage it.
 
@@ -96,7 +98,7 @@ the exact evidence and task mapping are in the `Final adversarial parity challen
 executes classic Effect Framework data through MojoShader/FNA3D-compatible structures. It is a real
 classic-XNA parity requirement, not a CNAEXT deferral.
 
-## Latest completed work: SOFTWARE-470 through SOFTWARE-472
+## Latest completed work: SOFTWARE-470 through SOFTWARE-473
 
 `SOFTWARE-470` audited the Shader Model 2 `SINCOS` scratch operands.
 
@@ -137,6 +139,18 @@ patch rejects only `base+1..base+rows-1`, retaining all three Microsoft-positive
 negative and three positive shared fixtures now pass in both paths; Software remains 160/160 and
 the EasyGL compiled family is 549/549.
 
+`SOFTWARE-473` followed the remaining legacy `TEXM*PAD` sequence FIXME. Microsoft documentation
+requires one source texture register and consecutive destination stages across the complete
+`TEXM3X2` or `TEXM3X3` group. Real `d3dcompiler_47.dll` additionally rejects an extra pad and any
+group left incomplete at shader end with X5056/X5057/X5058. Software and EasyGL both accepted the
+four directly executed destination-gap, extra-2x-pad, changed-2x-source and second-3x-pad-gap
+programs; source inspection also proved that the parser had no end-of-shader check for one or two
+outstanding pads. Managed patch 98 now admits only one active family, checks shared sources and
+consecutive destinations, rejects surplus pads, and rejects unfinished sequences. Eight negative
+fixtures plus the existing valid sampled two-row and three-row controls pass in Software; focused
+EasyGL is 9/9, the Software renderer label is 160/160, and the complete EasyGL compiled family is
+558/558.
+
 ## Recent compiled-Effect validation commits
 
 These commits form one evidence chain. Preserve their distinctions when debugging regressions:
@@ -153,6 +167,8 @@ These commits form one evidence chain. Preserve their distinctions when debuggin
 - `2ba060087` — SOFTWARE-471, complete vertex SGN scratch modifier/swizzle and alias rules.
 - `f59140696` — SOFTWARE-472, reject matrix destination aliases with implied source rows while
   retaining the Microsoft-valid base and vector overlaps.
+- `9c7413c3d` — SOFTWARE-473, enforce legacy texture-matrix source, destination, pad-count and
+  completion sequencing.
 
 The lesson from SOFTWARE-468 is important: never generalize an exact `ps_2_0` assembler result to
 `ps_2_x`, `ps_3_0`, or a vertex profile without measuring it. The Microsoft profile boundaries can
@@ -174,8 +190,8 @@ The following are the only non-complete rows in `plans/plan_software.md` at this
 | `SOFTWARE-86` | Historical optional performance work. Explicitly not a goal without a real impractical test. |
 
 All rows through `SOFTWARE-163`, the completed later ranges stated in the plan, and
-`SOFTWARE-315..472` are closed except for the rows above. Assign the next demonstrated issue as
-`SOFTWARE-473`; never add a task merely to keep numbering moving.
+`SOFTWARE-315..473` are closed except for the rows above. Assign the next demonstrated issue as
+`SOFTWARE-474`; never add a task merely to keep numbering moving.
 
 ## Recommended next audit direction
 
@@ -223,7 +239,7 @@ the flag incrementally.
 - Durable audit evidence: `plans/plan_software.md` and
   `docs/software-easygl-parity-ledger.md`
 
-The patch series contains 97 ordered patches at this handoff. New patches must be appended in
+The patch series contains 98 ordered patches at this handoff. New patches must be appended in
 dependency order and must apply to pinned MojoShader commit
 `6333f74dbd5644789a63e903816441b16c1e8b60` through FNA3D pin `3240147`.
 
@@ -341,11 +357,11 @@ nearby Microsoft-positive control so an apparent rejection is not merely bad ass
 The last broad results relevant to the latest technical commit are:
 
 - Software renderer CTest label: 160/160 pass, display-free.
-- EasyGL compiled-Effect family: 549/549 pass on isolated Mesa/Xvfb.
+- EasyGL compiled-Effect family: 558/558 pass on isolated Mesa/Xvfb.
 - Focused SOFTWARE-470 EasyGL cases: 5/5 pass; focused SOFTWARE-471 cases: 7/7 pass;
-  focused SOFTWARE-472 cases: 3/3 pass.
+  focused SOFTWARE-472 cases: 3/3 pass; focused SOFTWARE-473 cases: 9/9 pass.
 - The last full Software `CnaGraphicsTests` checkpoint documented in the ledger is
-  2,625/2,688 with 63 classified skips. It was not rerun for SOFTWARE-470/471/472 because those
+  2,625/2,688 with 63 classified skips. It was not rerun for SOFTWARE-470/471/472/473 because those
   tasks changed only compiled-Effect test/validation inputs covered by the focused runtime, full
   Software label, and complete EasyGL compiled family.
 
@@ -379,5 +395,5 @@ include start/end SHAs, branch, commit and LOC counts, new/completed/remaining t
 new findings, compiled-Effect verdict, exact skips, all test families run, and the reason for the
 classification. At this handoff the correct classification is C.
 
-The owner requested that work stop after SOFTWARE-472 and this handoff were committed. Do not open
-SOFTWARE-473 until the owner explicitly resumes the campaign in the active conversation.
+The owner requested that work stop after SOFTWARE-473 and this handoff were committed. Do not open
+SOFTWARE-474 until the owner explicitly resumes the campaign in the active conversation.
