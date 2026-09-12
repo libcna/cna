@@ -161,6 +161,13 @@ namespace CNA::Internal::Renderers::Rlgl
     [[nodiscard]] std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatchRenderer(
         RlglRenderer& renderer);
 
+    /**
+     * @brief Creates a precise desktop OpenGL occlusion-query resource.
+     * @return Renderer-owned query object using `GL_SAMPLES_PASSED`.
+     */
+    [[nodiscard]] std::unique_ptr<IOcclusionQueryRenderer>
+    CreateOcclusionQueryRenderer();
+
     /** @brief Complete renderer/native buffer facts exposed to focused validation. */
     struct BufferResourceSnapshot
     {

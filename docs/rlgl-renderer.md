@@ -66,7 +66,7 @@ success.
 | Compiled XNA effects | 🟨 | With `CNA_RLGL_COMPILED_EFFECTS=ON`, the pinned MojoShader path parses and compiles bytecode and executes ordinary indexed/non-indexed user and bound-buffer draws plus SpriteBatch with reflected attributes/uniforms, 2D/cube samplers, pass states, render-target orientation, and stock-compatible depth (`RLGL-047`/`048`/`051`). `GraphicsCapability::CompiledEffects` is true in this build; compiled-effect multi-stream, instancing, and vertex samplers remain `RLGL-049`. |
 | CNAEXT source `ShaderEffect` and general 3D workloads | ❌ | Source shaders remain an explicit failure owned separately by `RLGL-050`; the representative-workload audit remains a separate gate, so the umbrella `GraphicsCapability::ThreeD` stays false despite validated stock 3D and instanced draws |
 | Classic stock-effect instancing | ✅ | Hardware indexed instancing preserves per-stream offsets/divisors, every topology, both index widths, start/base ranges, effect-World composition, dynamic updates, and state recovery. The shared suites passed 70/72 tests (two named EasyGL/D3D skips), the parity sample passed 6/6 pixels, the native-state fixture passed 28/28 gates, and both focused executables passed AddressSanitizer in `RLGL-016` |
-| Occlusion queries | ❌ | rlgl 6.0 has no public query-object wrapper. A renderer-private GL 3.3 bridge plus public lifetime/result validation remains `RLGL-052` |
+| Occlusion queries | ✅ | A renderer-private GL 3.3 bridge uses exact `GL_SAMPLES_PASSED`; visible/additive/zero/occluded counts, asynchronous completion, permissive Begin/End sequencing, state recovery, and resource/device lifetime passed `RLGL-052` |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
 
@@ -111,6 +111,8 @@ cmake --build cmake-build-rlgl --parallel 3 --target \
       cna_test_rlgl_texture_cube cna_test_rlgl_texture_cube_oracle \
       cna_test_rlgl_state cna_test_rlgl_spritebatch cna_test_rlgl_buffer \
       cna_test_rlgl_primitive cna_test_rlgl_instanced_parity \
+      cna_test_rlgl_occlusion_query cna_test_rlgl_occlusion_query_visible \
+      cna_test_rlgl_occlusion_query_occluded cna_test_rlgl_occlusion_query_lifetime \
       cna_test_rlgl_effect cna_test_rlgl_xna_pixel_center \
       cna_test_rlgl_basiceffect_lighting cna_test_rlgl_dual_texture_effect \
       cna_test_rlgl_dual_texture_independent_uv cna_test_rlgl_environment_map \

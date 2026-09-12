@@ -295,6 +295,12 @@ namespace CNA::Internal::Renderers::Rlgl
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
 
         /**
+         * @brief Creates a precise OpenGL sample-count query.
+         * @return Renderer-owned classic XNA occlusion query.
+         */
+        std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
+
+        /**
          * @brief Creates a framebuffer-backed RenderTarget2D with optional multisampling.
          * @param w Width in pixels.
          * @param h Height in pixels.

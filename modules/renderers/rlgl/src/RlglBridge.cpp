@@ -18,6 +18,7 @@ namespace
 {
     bool bridgeInitialized = false;
     unsigned int bufferUploadVertexArray = 0;
+    unsigned int activeOcclusionQuery = 0;
 
     void RlglTraceLog(int level, const char* format, ...);
 }
@@ -552,6 +553,12 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
 
     void Shutdown() noexcept
     {
+        if (activeOcclusionQuery != 0)
+        {
+            rlDrawRenderBatchActive();
+            glEndQuery(GL_SAMPLES_PASSED);
+            activeOcclusionQuery = 0;
+        }
         if (bufferUploadVertexArray != 0)
         {
             rlUnloadVertexArray(bufferUploadVertexArray);
@@ -990,6 +997,99 @@ void main()
         RequireInitialized("immediate-batch flush");
         rlDrawRenderBatchActive();
         ThrowIfGlError("immediate-batch flush");
+    }
+
+    unsigned int CreateOcclusionQuery()
+    {
+        RequireInitialized("occlusion-query creation");
+        GLuint query = 0;
+        glGenQueries(1, &query);
+        ThrowIfGlError("occlusion-query creation");
+        if (query == 0)
+            throw std::runtime_error("RLGL: OpenGL returned no occlusion-query name");
+        return query;
+    }
+
+    void DestroyOcclusionQuery(unsigned int& query) noexcept
+    {
+        if (query == 0) return;
+        if (bridgeInitialized)
+        {
+            if (activeOcclusionQuery == query)
+            {
+                rlDrawRenderBatchActive();
+                glEndQuery(GL_SAMPLES_PASSED);
+                activeOcclusionQuery = 0;
+            }
+            const GLuint nativeQuery = query;
+            glDeleteQueries(1, &nativeQuery);
+            const GLenum error = glGetError();
+            if (error != GL_NO_ERROR)
+            {
+                char value[16] = {};
+                std::snprintf(
+                    value, sizeof(value), "0x%04X", static_cast<unsigned int>(error));
+                CNA::Logger::Error(
+                    std::string("RLGL: OpenGL error during occlusion-query destruction: ") +
+                        value,
+                    CNA::LogCategory::RENDER);
+            }
+        }
+        query = 0;
+    }
+
+    bool BeginOcclusionQuery(const unsigned int query)
+    {
+        RequireInitialized("occlusion-query begin");
+        if (query == 0)
+            throw std::invalid_argument("RLGL: invalid occlusion-query name");
+        FlushImmediateBatch();
+        if (activeOcclusionQuery != 0)
+            return false;
+        glBeginQuery(GL_SAMPLES_PASSED, query);
+        ThrowIfGlError("occlusion-query begin");
+        activeOcclusionQuery = query;
+        return true;
+    }
+
+    void EndOcclusionQuery()
+    {
+        RequireInitialized("occlusion-query end");
+        FlushImmediateBatch();
+        if (activeOcclusionQuery == 0)
+            return;
+        glEndQuery(GL_SAMPLES_PASSED);
+        ThrowIfGlError("occlusion-query end");
+        activeOcclusionQuery = 0;
+    }
+
+    bool IsOcclusionQueryActive(const unsigned int query) noexcept
+    {
+        return bridgeInitialized && query != 0 && activeOcclusionQuery == query;
+    }
+
+    bool IsOcclusionQueryComplete(const unsigned int query)
+    {
+        RequireInitialized("occlusion-query completion check");
+        if (query == 0)
+            throw std::invalid_argument("RLGL: invalid occlusion-query name");
+        if (activeOcclusionQuery == query)
+            return false;
+        GLuint available = 0;
+        glGetQueryObjectuiv(query, GL_QUERY_RESULT_AVAILABLE, &available);
+        ThrowIfGlError("occlusion-query completion check");
+        return available != 0;
+    }
+
+    int GetOcclusionQueryPixelCount(const unsigned int query)
+    {
+        RequireInitialized("occlusion-query result read");
+        if (query == 0)
+            throw std::invalid_argument("RLGL: invalid occlusion-query name");
+        GLuint count = 0;
+        glGetQueryObjectuiv(query, GL_QUERY_RESULT, &count);
+        ThrowIfGlError("occlusion-query result read");
+        return static_cast<int>(count);
     }
 
     void DrawSpriteGeometry(

@@ -414,6 +414,49 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     void FlushImmediateBatch();
 
     /**
+     * @brief Allocates a desktop `GL_SAMPLES_PASSED` query name.
+     * @return Non-zero OpenGL query identity.
+     */
+    [[nodiscard]] unsigned int CreateOcclusionQuery();
+
+    /**
+     * @brief Ends this query if active and releases its OpenGL identity.
+     * @param query Query identity, cleared even when the bridge is already shut down.
+     */
+    void DestroyOcclusionQuery(unsigned int& query) noexcept;
+
+    /**
+     * @brief Begins exact sample counting when no query target is already active.
+     * @param query Query identity.
+     * @return True when this call began the query; false for FNA-compatible nested Begin calls.
+     */
+    [[nodiscard]] bool BeginOcclusionQuery(unsigned int query);
+
+    /** @brief Ends the currently active sample query, or does nothing when none is active. */
+    void EndOcclusionQuery();
+
+    /**
+     * @brief Tests whether the supplied query currently owns the global query target.
+     * @param query Query identity.
+     * @return True only while that query is active.
+     */
+    [[nodiscard]] bool IsOcclusionQueryActive(unsigned int query) noexcept;
+
+    /**
+     * @brief Polls a completed query without waiting for its result.
+     * @param query Query identity that has previously been begun.
+     * @return True when `GL_QUERY_RESULT` can be read without blocking.
+     */
+    [[nodiscard]] bool IsOcclusionQueryComplete(unsigned int query);
+
+    /**
+     * @brief Reads the exact number of samples that passed depth/stencil testing.
+     * @param query Complete query identity.
+     * @return OpenGL's unsigned result converted using the established XNA integer contract.
+     */
+    [[nodiscard]] int GetOcclusionQueryPixelCount(unsigned int query);
+
+    /**
      * @brief Releases a complete sprite pipeline while the rlgl context is current.
      * @param pipeline Pipeline to release and clear.
      */

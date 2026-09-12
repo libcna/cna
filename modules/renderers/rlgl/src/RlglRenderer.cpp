@@ -332,6 +332,7 @@ namespace CNA::Internal::Renderers::Rlgl
             return maxSamplerAnisotropy_ > 1.0f;
         case CNA::GraphicsCapability::MultipleRenderTargets:
             return maxRenderTargets_ >= 2;
+        case CNA::GraphicsCapability::OcclusionQuery:
         case CNA::GraphicsCapability::MultiStreamVertexInput:
         case CNA::GraphicsCapability::Instancing:
             return true;
@@ -527,6 +528,11 @@ namespace CNA::Internal::Renderers::Rlgl
     std::unique_ptr<ISpriteBatchRenderer> RlglRenderer::CreateSpriteBatch()
     {
         return CreateSpriteBatchRenderer(*this);
+    }
+
+    std::unique_ptr<IOcclusionQueryRenderer> RlglRenderer::CreateOcclusionQuery()
+    {
+        return CreateOcclusionQueryRenderer();
     }
 
     void RlglRenderer::GetSpriteBatchViewportSize(int& width, int& height)

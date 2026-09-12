@@ -164,6 +164,37 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_instanced_parity PRIVATE SDL3::SDL3main)
     endif()
 
+    add_executable(cna_test_rlgl_occlusion_query
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/occlusion_query_test.cpp")
+    target_link_libraries(cna_test_rlgl_occlusion_query PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_occlusion_query PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_occlusion_query_visible
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_occlusion_query_visible_quad_test.cpp")
+    target_link_libraries(cna_test_rlgl_occlusion_query_visible
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_occlusion_query_visible PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_occlusion_query_occluded
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_occlusion_query_occluded_quad_test.cpp")
+    target_link_libraries(cna_test_rlgl_occlusion_query_occluded
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_occlusion_query_occluded PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_occlusion_query_lifetime
+        rlgl_occlusion_query_lifetime_test.cpp)
+    target_link_libraries(cna_test_rlgl_occlusion_query_lifetime
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_occlusion_query_lifetime PRIVATE SDL3::SDL3main)
+    endif()
+
     add_executable(cna_test_rlgl_effect rlgl_effect_test.cpp)
     target_link_libraries(cna_test_rlgl_effect PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
     if(TARGET SDL3::SDL3main)
@@ -479,6 +510,26 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             NAME Rlgl_InstancedParity
             COMMAND cna_test_rlgl_instanced_parity
             TIMEOUT 60 LABELS "Graphics3D;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_OcclusionQuery_Cycle
+            COMMAND cna_test_rlgl_occlusion_query
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsQuery;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_OcclusionQuery_Visible
+            COMMAND cna_test_rlgl_occlusion_query_visible
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsQuery;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_OcclusionQuery_Occluded
+            COMMAND cna_test_rlgl_occlusion_query_occluded
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsQuery;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_OcclusionQuery_Lifetime
+            COMMAND cna_test_rlgl_occlusion_query_lifetime
+            TIMEOUT 60 LABELS "Graphics3D;GraphicsQuery;GraphicsLifetime;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_Effect COMMAND cna_test_rlgl_effect
             TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"

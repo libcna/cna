@@ -49,8 +49,6 @@ namespace
 
         void SetUp() override
         {
-            if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-                GTEST_SKIP() << "Renderer explicitly does not support 3D draws";
             if (!device.SupportsCapability(GraphicsCapability::OcclusionQuery))
                 GTEST_SKIP() << "Renderer explicitly does not support occlusion queries";
         }

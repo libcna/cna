@@ -210,11 +210,12 @@ struct CapabilityExpectation
         case GraphicsRendererType::Igl:
             return {true, false, true};
 
-        // plans/plan_rlgl.md RLGL-040: the default GraphicsDevice uses Reach, whose XNA profile
-        // ceiling is one target. The renderer-local HiDef test separately proves all four native
-        // slots; queries and binding must agree for this default-profile fixture.
+        // plans/plan_rlgl.md RLGL-040/RLGL-052: the default GraphicsDevice uses Reach, whose XNA
+        // profile ceiling is one target. The renderer-local HiDef test separately proves all four
+        // native MRT slots. RLGL-052 supplies an exact desktop GL sample-count query; source
+        // ShaderEffect remains deliberately unavailable.
         case GraphicsRendererType::Rlgl:
-            return {false, false, false};
+            return {false, true, false};
 
         default:
             return {true, true, true};
