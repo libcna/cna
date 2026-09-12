@@ -111,6 +111,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         }
         Canonical::EffectCompileRequest request;
         request.source = source;
+        const std::filesystem::path identitySource =
+            input->getIdentityProperty().getSourceFilenameProperty();
+        if (identitySource.has_parent_path() && !identitySource.parent_path().empty())
+        {
+            // EffectProcessor compiles the in-memory EffectContent, but XNA resolves quoted
+            // includes beside that content's source identity. Keep the temporary source while
+            // giving the external compiler the original include root.
+            request.includeDirectories.push_back(identitySource.parent_path());
+        }
         request.defines = ParseDefines(getDefinesProperty());
         request.profile = context.getTargetProfileProperty() ==
                                   Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef

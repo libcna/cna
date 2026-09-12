@@ -1058,7 +1058,7 @@ TEST(XnaEffectProcessor, CompilesThroughTheCanonicalCompiler)
     auto effect = std::make_shared<Graphics::EffectContent>();
     effect->setEffectCodeProperty("technique T { }");
     effect->setIdentityProperty(
-        Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity("shader.fx"));
+        Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity("effects/shader.fx"));
     RecordingContext context;
     const std::shared_ptr<Processors::CompiledEffectContent> compiled = processor.Process(effect, context);
     ASSERT_NE(compiled, nullptr);
@@ -1066,6 +1066,8 @@ TEST(XnaEffectProcessor, CompilesThroughTheCanonicalCompiler)
     EXPECT_EQ(compiler->request.defines.at("TINT"), "float4(0,1,0,1)");
     EXPECT_EQ(compiler->request.defines.at("FLAG"), "");
     EXPECT_EQ(compiler->request.source.filename().string(), "shader.fx");
+    ASSERT_EQ(compiler->request.includeDirectories.size(), 1u);
+    EXPECT_EQ(compiler->request.includeDirectories.front(), std::filesystem::path("effects"));
     // The context says HiDef and Debug, so the compile follows both.
     EXPECT_EQ(compiler->request.profile, CNA::Content::Pipeline::EffectSourceProfile::HiDef);
     EXPECT_TRUE(compiler->request.debugInformation);
@@ -2661,6 +2663,18 @@ TEST(XnaEffectProcessor, TheContainerHeaderDescribesTheEffectsSamplersNotTheShad
          "float4 PS(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(S, uv); }\n"
          "technique T { pass P { ZEnable = true; PixelShader = compile ps_2_0 PS(); } }\n",
          {{2u, 1u}}},
+        {"a dynamically selected stock-effect shader array contributes every possible binding",
+         "texture T0;\n"
+         "sampler S : register(s0) = sampler_state { Texture = <T0>; };\n"
+         "float4 Plain(float2 uv : TEXCOORD0) : COLOR0 { return float4(uv, 0, 1); }\n"
+         "float4 Textured(float2 uv : TEXCOORD0) : COLOR0 { return tex2D(S, uv); }\n"
+         "PixelShader Shaders[2] = {\n"
+         "  compile ps_2_0 Plain(),\n"
+         "  compile ps_2_0 Textured()\n"
+         "};\n"
+         "int ShaderIndex = 0;\n"
+         "technique T { pass P { PixelShader = (Shaders[ShaderIndex]); } }\n",
+         {{0u, 1u}}},
     };
 
     const auto readWord = [](const std::vector<SharpRuntime::bytecs>& code, const std::size_t at)

@@ -177,6 +177,13 @@ namespace CNA::Content::Pipeline
             bool assignsOtherState = false;
         };
 
+        /** @brief The object-table entries owned by one vertex- or pixel-shader array parameter. */
+        struct EffectShaderArrayParameter
+        {
+            /** @brief Indices into the Effect Framework object table, in array order. */
+            std::vector<std::uint32_t> objectIndices;
+        };
+
         /** @brief The container's state number for a sampler's `Texture` assignment. */
         constexpr std::uint32_t kEffectSamplerTextureState = 164u;
 
@@ -414,6 +421,7 @@ namespace CNA::Content::Pipeline
             };
 
             std::map<std::string, EffectSamplerParameter> samplers;
+            std::map<std::string, EffectShaderArrayParameter> shaderArrays;
             for (std::uint32_t index = 0u; index < parameterCount; ++index)
             {
                 const std::uint32_t typeOffset = read();
@@ -430,10 +438,12 @@ namespace CNA::Content::Pipeline
                 const std::uint32_t nameOffset = at32(base + typeOffset + 8u);
                 const std::uint32_t elementCount = at32(base + typeOffset + 16u);
                 if (failed) { return unreadable; }
-                if (parameterType < 10u || parameterType > 14u) { continue; }
+                const bool isSampler = parameterType >= 10u && parameterType <= 14u;
+                const bool isShader = parameterType == 15u || parameterType == 16u;
+                if (!isSampler && !isShader) { continue; }
                 // A sampler array's value is one state list per element, and nothing measured has
                 // one; refusing it keeps the zero header rather than describing it wrongly.
-                if (elementCount != 0u) { return unreadable; }
+                if (isSampler && elementCount != 0u) { return unreadable; }
 
                 const std::uint32_t nameLength = at32(base + nameOffset);
                 if (failed || nameLength == 0u || nameLength > 1024u ||
@@ -449,6 +459,28 @@ namespace CNA::Content::Pipeline
                     name.push_back(static_cast<char>(byte));
                 }
                 if (name.empty()) { return unreadable; }
+
+                if (isShader)
+                {
+                    const std::uint32_t objectCount = elementCount == 0u ? 1u : elementCount;
+                    if (objectCount > kMaximumItems ||
+                        static_cast<std::size_t>(objectCount) * 4u >
+                            bytes.size() - std::min(base + static_cast<std::size_t>(valueOffset),
+                                                    bytes.size()))
+                    {
+                        return unreadable;
+                    }
+                    EffectShaderArrayParameter shaderArray;
+                    shaderArray.objectIndices.reserve(objectCount);
+                    for (std::uint32_t object = 0u; object < objectCount; ++object)
+                    {
+                        shaderArray.objectIndices.push_back(
+                            at32(base + valueOffset + 4u * static_cast<std::size_t>(object)));
+                    }
+                    if (failed) { return unreadable; }
+                    shaderArrays[name] = std::move(shaderArray);
+                    continue;
+                }
 
                 EffectSamplerParameter sampler;
                 const std::uint32_t stateCount = at32(base + valueOffset);
@@ -512,20 +544,11 @@ namespace CNA::Content::Pipeline
             {
                 return unreadable;
             }
+            std::map<std::uint32_t, std::vector<std::pair<std::string, std::uint32_t>>>
+                smallShaderBindings;
             for (std::uint32_t index = 0u; index < smallObjects; ++index)
             {
-                static_cast<void>(read());
-                const std::uint32_t length = read();
-                if (failed) { return unreadable; }
-                skip((static_cast<std::size_t>(length) + 3u) & ~static_cast<std::size_t>(3u));
-            }
-            for (std::uint32_t index = 0u; index < largeObjects; ++index)
-            {
-                const std::uint32_t technique = read();
-                const std::uint32_t pass = read();
-                static_cast<void>(read());
-                static_cast<void>(read());
-                static_cast<void>(read());
+                const std::uint32_t objectIndex = read();
                 const std::uint32_t length = read();
                 if (failed) { return unreadable; }
                 const std::size_t blob = cursor;
@@ -539,12 +562,74 @@ namespace CNA::Content::Pipeline
                     (static_cast<std::uint32_t>(bytes[blob + 3u]) << 24);
                 const std::uint32_t kind = head & 0xFFFF0000u;
                 if (kind != 0xFFFE0000u && kind != 0xFFFF0000u) { continue; }
-                const auto found = located.find({technique, pass});
-                if (found == located.end()) { continue; }
-                std::vector<std::pair<std::string, std::uint32_t>> bindings;
+                auto& bindings = smallShaderBindings[objectIndex];
                 if (!SamplerBindingsOf(bytes, blob, blob + length, bindings))
                 {
                     return unreadable;
+                }
+            }
+            for (std::uint32_t index = 0u; index < largeObjects; ++index)
+            {
+                const std::uint32_t technique = read();
+                const std::uint32_t pass = read();
+                static_cast<void>(read());
+                static_cast<void>(read());
+                const std::uint32_t type = read();
+                const std::uint32_t length = read();
+                if (failed) { return unreadable; }
+                const std::size_t blob = cursor;
+                skip((static_cast<std::size_t>(length) + 3u) & ~static_cast<std::size_t>(3u));
+                if (failed) { return unreadable; }
+                if (length < 4u) { continue; }
+                const auto found = located.find({technique, pass});
+                if (found == located.end()) { continue; }
+
+                std::vector<std::pair<std::string, std::uint32_t>> bindings;
+                if (type == 2u)
+                {
+                    // A pass may select a shader dynamically from a global shader-array
+                    // parameter. The large object then carries a length-prefixed parameter name
+                    // followed by the selector preshader; the compiled shaders themselves are
+                    // small objects. This is how all six XNA stock effects select permutations.
+                    const std::uint32_t nameLength =
+                        static_cast<std::uint32_t>(bytes[blob]) |
+                        (static_cast<std::uint32_t>(bytes[blob + 1u]) << 8) |
+                        (static_cast<std::uint32_t>(bytes[blob + 2u]) << 16) |
+                        (static_cast<std::uint32_t>(bytes[blob + 3u]) << 24);
+                    if (nameLength == 0u || nameLength > 1024u ||
+                        4u + static_cast<std::size_t>(nameLength) > length)
+                    {
+                        return unreadable;
+                    }
+                    std::string arrayName;
+                    for (std::uint32_t character = 0u; character < nameLength; ++character)
+                    {
+                        const std::uint8_t byte = bytes[blob + 4u + character];
+                        if (byte == 0u) { break; }
+                        arrayName.push_back(static_cast<char>(byte));
+                    }
+                    const auto array = shaderArrays.find(arrayName);
+                    if (arrayName.empty() || array == shaderArrays.end()) { return unreadable; }
+                    for (const std::uint32_t objectIndex : array->second.objectIndices)
+                    {
+                        const auto shader = smallShaderBindings.find(objectIndex);
+                        if (shader == smallShaderBindings.end()) { return unreadable; }
+                        bindings.insert(bindings.end(), shader->second.begin(), shader->second.end());
+                    }
+                }
+                else
+                {
+                    const std::uint32_t head =
+                        static_cast<std::uint32_t>(bytes[blob]) |
+                        (static_cast<std::uint32_t>(bytes[blob + 1u]) << 8) |
+                        (static_cast<std::uint32_t>(bytes[blob + 2u]) << 16) |
+                        (static_cast<std::uint32_t>(bytes[blob + 3u]) << 24);
+                    const std::uint32_t kind = head & 0xFFFF0000u;
+                    if (kind != 0xFFFE0000u && kind != 0xFFFF0000u) { continue; }
+                    if (!SamplerBindingsOf(bytes, blob, blob + length, bindings))
+                    {
+                        return unreadable;
+                    }
                 }
                 for (const auto& binding : bindings)
                 {
