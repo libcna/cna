@@ -53,6 +53,28 @@ namespace CNA::Internal::Renderers::Rlgl
             return static_cast<int>(count);
         }
 
+        void ValidateDrawRange(
+            const IVertexBufferRenderer& vertexBuffer,
+            const IIndexBufferRenderer* const indexBuffer,
+            const int elementCount, const int firstVertex,
+            const int startIndex, const int baseVertex)
+        {
+            if (firstVertex < 0 || startIndex < 0 || baseVertex < 0)
+                throw std::out_of_range("RLGL: primitive offsets must be non-negative");
+            if (indexBuffer == nullptr)
+            {
+                const int capacity = GetBufferCapacity(vertexBuffer);
+                if (firstVertex > capacity || elementCount > capacity - firstVertex)
+                    throw std::out_of_range("RLGL: primitive draw exceeds vertex capacity");
+            }
+            else
+            {
+                const int capacity = GetBufferCapacity(*indexBuffer);
+                if (startIndex > capacity || elementCount > capacity - startIndex)
+                    throw std::out_of_range("RLGL: indexed draw exceeds index capacity");
+            }
+        }
+
         [[nodiscard]] const VertexElement* FindElement(
             const std::vector<VertexElement>& declaration,
             const VertexElementUsage usage, const int usageIndex)
@@ -248,20 +270,9 @@ namespace CNA::Internal::Renderers::Rlgl
             const int multiSampleCount)
         {
             const int elementCount = PrimitiveElementCount(primitive, primitiveCount);
-            if (firstVertex < 0 || startIndex < 0 || baseVertex < 0)
-                throw std::out_of_range("RLGL: primitive offsets must be non-negative");
-            if (indexBuffer == nullptr)
-            {
-                const int capacity = GetBufferCapacity(vertexBuffer);
-                if (firstVertex > capacity || elementCount > capacity - firstVertex)
-                    throw std::out_of_range("RLGL: primitive draw exceeds vertex capacity");
-            }
-            else
-            {
-                const int capacity = GetBufferCapacity(*indexBuffer);
-                if (startIndex > capacity || elementCount > capacity - startIndex)
-                    throw std::out_of_range("RLGL: indexed draw exceeds index capacity");
-            }
+            ValidateDrawRange(
+                vertexBuffer, indexBuffer, elementCount,
+                firstVertex, startIndex, baseVertex);
 
             const std::vector<VertexAttributeBinding> attributes = BuildStockAttributes(
                 vertexBuffer, params.vertexColorEnabled, params.textureEnabled,
@@ -339,6 +350,19 @@ namespace CNA::Internal::Renderers::Rlgl
         const PrimitiveType primitive, const int primitiveCount,
         const GpuDrawParams& params)
     {
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            const int elementCount = PrimitiveElementCount(primitive, primitiveCount);
+            ValidateDrawRange(
+                vertexBuffer, nullptr, elementCount,
+                params.vertexStart, 0, 0);
+            DrawCompiledEffectGeometry(
+                vertexBuffer, nullptr, primitive, elementCount,
+                params.vertexStart, 0, 0, params);
+            return;
+        }
+#endif
         RequireBaselineEffect(params);
         Submit(
             GetPrimitivePipeline(), vertexBuffer, nullptr,
@@ -355,6 +379,19 @@ namespace CNA::Internal::Renderers::Rlgl
         const PrimitiveType primitive, const int primitiveCount,
         const GpuDrawParams& params)
     {
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            const int elementCount = PrimitiveElementCount(primitive, primitiveCount);
+            ValidateDrawRange(
+                vertexBuffer, &indexBuffer, elementCount,
+                0, params.startIndex, params.baseVertex);
+            DrawCompiledEffectGeometry(
+                vertexBuffer, &indexBuffer, primitive, elementCount,
+                0, params.startIndex, params.baseVertex, params);
+            return;
+        }
+#endif
         RequireBaselineEffect(params);
         Submit(
             GetPrimitivePipeline(), vertexBuffer, &indexBuffer,

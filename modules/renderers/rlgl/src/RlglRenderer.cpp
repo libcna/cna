@@ -141,6 +141,12 @@ namespace CNA::Internal::Renderers::Rlgl
                     primitivePipeline_.reset();
                 }
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
+                if (compiledEffectDrawResources_)
+                {
+                    Bridge::DestroyCompiledEffectDrawResources(
+                        *compiledEffectDrawResources_);
+                    compiledEffectDrawResources_.reset();
+                }
                 DestroyCompiledEffectContext();
 #endif
                 Bridge::DestroyMrtFramebuffer(mrtFramebuffer_);

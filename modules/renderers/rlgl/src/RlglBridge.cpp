@@ -1626,6 +1626,220 @@ void main()
         pipeline = {};
     }
 
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+    CompiledEffectDrawResources CreateCompiledEffectDrawResources()
+    {
+        RequireInitialized("compiled-effect resource creation");
+        CompiledEffectDrawResources resources;
+        resources.vertexArray = rlLoadVertexArray();
+        if (resources.vertexArray == 0)
+            throw std::runtime_error("RLGL compiled effect: VAO creation failed");
+        try
+        {
+            ThrowIfGlError("compiled-effect resource creation");
+        }
+        catch (...)
+        {
+            rlUnloadVertexArray(resources.vertexArray);
+            throw;
+        }
+        return resources;
+    }
+
+    void EndCompiledEffectDraw(CompiledEffectDrawResources& resources) noexcept
+    {
+        if (!resources.drawActive) return;
+        rlDisableVertexBufferElement();
+        rlDisableVertexBuffer();
+        rlDisableVertexArray();
+        rlActiveTextureSlot(0);
+        rlDisableShader();
+        glDepthRange(resources.savedDepthRange[0], resources.savedDepthRange[1]);
+        resources.drawActive = false;
+    }
+
+    void DestroyCompiledEffectDrawResources(CompiledEffectDrawResources& resources) noexcept
+    {
+        EndCompiledEffectDraw(resources);
+        for (CompiledEffectFlippedTexture& copy : resources.flippedTextures)
+            DestroyRenderTarget2D(copy.storage);
+        if (bridgeInitialized && resources.vertexArray != 0)
+            rlUnloadVertexArray(resources.vertexArray);
+        resources = {};
+    }
+
+    void BeginCompiledEffectDraw(CompiledEffectDrawResources& resources)
+    {
+        RequireInitialized("compiled-effect draw setup");
+        if (resources.vertexArray == 0 || resources.drawActive)
+            throw std::logic_error("RLGL compiled effect: invalid draw-resource state");
+
+        FlushImmediateBatch();
+        glGetDoublev(GL_DEPTH_RANGE, resources.savedDepthRange.data());
+        glDepthRange(
+            (resources.savedDepthRange[0] + resources.savedDepthRange[1]) * 0.5,
+            resources.savedDepthRange[1]);
+        if (!rlEnableVertexArray(resources.vertexArray))
+        {
+            glDepthRange(resources.savedDepthRange[0], resources.savedDepthRange[1]);
+            throw std::runtime_error("RLGL compiled effect: dedicated VAO became unavailable");
+        }
+        resources.drawActive = true;
+        try
+        {
+            for (unsigned int location = 0; location < 16u; ++location)
+            {
+                rlDisableVertexAttribute(location);
+                rlSetVertexAttributeDivisor(location, 0);
+            }
+            ThrowIfGlError("compiled-effect draw setup");
+        }
+        catch (...)
+        {
+            EndCompiledEffectDraw(resources);
+            throw;
+        }
+    }
+
+    void BindCompiledEffectVertexBuffer(const unsigned int vertexBuffer)
+    {
+        RequireInitialized("compiled-effect vertex-buffer binding");
+        if (vertexBuffer == 0)
+            throw std::invalid_argument("RLGL compiled effect: vertex buffer is empty");
+        rlEnableVertexBuffer(vertexBuffer);
+    }
+
+    unsigned int PrepareCompiledEffectFlippedTexture(
+        CompiledEffectDrawResources& resources, const int slot,
+        const unsigned int sourceFramebuffer, const unsigned int sourceTexture,
+        const int width, const int height, const int surfaceFormat)
+    {
+        RequireInitialized("compiled-effect render-target sampling");
+        if (slot < 0 || slot >= static_cast<int>(resources.flippedTextures.size()) ||
+            sourceFramebuffer == 0 || sourceTexture == 0 || width <= 0 || height <= 0)
+        {
+            throw std::invalid_argument(
+                "RLGL compiled effect: invalid rendered-texture sampling request");
+        }
+
+        CompiledEffectFlippedTexture& copy =
+            resources.flippedTextures[static_cast<std::size_t>(slot)];
+        if (copy.storage.colorTexture == 0 || copy.width != width || copy.height != height ||
+            copy.surfaceFormat != surfaceFormat)
+        {
+            DestroyRenderTarget2D(copy.storage);
+            copy = {};
+            copy.storage = CreateRenderTarget2D(
+                width, height, 1, 0, 0, surfaceFormat);
+            copy.width = width;
+            copy.height = height;
+            copy.surfaceFormat = surfaceFormat;
+        }
+        copy.sourceTexture = sourceTexture;
+
+        const FramebufferBindingRestore framebufferRestore;
+        rlBindFramebuffer(RL_READ_FRAMEBUFFER, sourceFramebuffer);
+        rlBindFramebuffer(RL_DRAW_FRAMEBUFFER, copy.storage.framebuffer);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glDrawBuffer(GL_COLOR_ATTACHMENT0);
+        rlBlitFramebuffer(
+            0, 0, width, height,
+            0, height, width, 0,
+            GL_COLOR_BUFFER_BIT);
+        ThrowIfGlError("compiled-effect rendered-texture row correction");
+        return copy.storage.colorTexture;
+    }
+
+    void UnbindCompiledEffectTexture(const int slot, const int samplerKind)
+    {
+        RequireInitialized("compiled-effect texture unbinding");
+        if (slot < 0)
+            throw std::out_of_range("RLGL compiled effect: texture slot is negative");
+        rlActiveTextureSlot(slot);
+        if (samplerKind == 0) rlDisableTexture();
+        else if (samplerKind == 1) rlDisableTextureCubemap();
+        else
+        {
+            throw std::invalid_argument(
+                "RLGL compiled effect: unsupported sampler dimension");
+        }
+    }
+
+    void DrawCompiledEffectGeometry(
+        CompiledEffectDrawResources& resources, const unsigned int indexBuffer,
+        const int primitiveType, const int elementCount,
+        const int firstVertex, const int startIndex, const int baseVertex,
+        const bool thirtyTwoBitIndices)
+    {
+        RequireInitialized("compiled-effect primitive draw");
+        if (!resources.drawActive || elementCount <= 0 ||
+            firstVertex < 0 || startIndex < 0 || baseVertex < 0)
+        {
+            throw std::invalid_argument("RLGL compiled effect: invalid primitive draw request");
+        }
+
+        GLenum mode = GL_TRIANGLES;
+        switch (primitiveType)
+        {
+        case 0: mode = GL_TRIANGLES; break;
+        case 1: mode = GL_TRIANGLE_STRIP; break;
+        case 2: mode = GL_LINES; break;
+        case 3: mode = GL_LINE_STRIP; break;
+        case 4: mode = GL_POINTS; break;
+        default:
+            throw std::invalid_argument("RLGL compiled effect: invalid PrimitiveType ordinal");
+        }
+
+        PrimitiveDrawSnapshot snapshot;
+        snapshot.primitiveMode = static_cast<int>(mode);
+        snapshot.elementCount = elementCount;
+        snapshot.firstVertex = firstVertex;
+        snapshot.startIndex = startIndex;
+        snapshot.baseVertex = baseVertex;
+        snapshot.indexed = indexBuffer != 0;
+        if (indexBuffer == 0)
+        {
+            if (mode == GL_TRIANGLES)
+            {
+                rlDrawVertexArray(firstVertex, elementCount);
+                snapshot.usedRlglDrawWrapper = true;
+            }
+            else
+            {
+                glDrawArrays(mode, firstVertex, elementCount);
+            }
+        }
+        else
+        {
+            rlEnableVertexBufferElement(indexBuffer);
+            const GLenum indexType = thirtyTwoBitIndices
+                ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+            snapshot.indexType = static_cast<int>(indexType);
+            const std::uintptr_t byteOffset =
+                static_cast<std::uintptr_t>(startIndex) *
+                (thirtyTwoBitIndices ? sizeof(std::uint32_t) : sizeof(std::uint16_t));
+            const void* const indices = reinterpret_cast<const void*>(byteOffset);
+            if (mode == GL_TRIANGLES && !thirtyTwoBitIndices &&
+                startIndex == 0 && baseVertex == 0)
+            {
+                rlDrawVertexArrayElements(0, elementCount, nullptr);
+                snapshot.usedRlglDrawWrapper = true;
+            }
+            else if (baseVertex == 0)
+            {
+                glDrawElements(mode, elementCount, indexType, indices);
+            }
+            else
+            {
+                glDrawElementsBaseVertex(
+                    mode, elementCount, indexType, indices, baseVertex);
+            }
+        }
+        ThrowIfGlError("compiled-effect primitive draw");
+        lastPrimitiveDraw = snapshot;
+    }
+#endif
+
     void DrawPrimitiveGeometry(
         const PrimitivePipeline& pipeline,
         const unsigned int vertexBuffer, const unsigned int indexBuffer,

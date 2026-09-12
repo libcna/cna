@@ -172,7 +172,8 @@ jobs:
             cna_test_rlgl_skinnedeffect_fog \
             cna_test_rlgl_skinnedeffect_world_normal \
             cna_test_rlgl_skinnedeffect_combined \
-            cna_test_rlgl_compiled_effect_runtime
+            cna_test_rlgl_compiled_effect_runtime \
+            cna_test_rlgl_compiled_effect_draw
 
       - name: Verify renderer registry consistency
         working-directory: cna

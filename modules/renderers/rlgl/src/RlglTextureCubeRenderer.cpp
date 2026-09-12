@@ -40,7 +40,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 format == SurfaceFormat::Dxt3 || format == SurfaceFormat::Dxt5;
         }
 
-        class RlglTextureCubeRenderer final : public ITextureCubeRenderer
+        class RlglTextureCubeRenderer final
+            : public ITextureCubeRenderer, public IRlglTextureResource
         {
         public:
             RlglTextureCubeRenderer(
@@ -147,6 +148,16 @@ namespace CNA::Internal::Renderers::Rlgl
             [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override
             {
                 return surfaceFormat_;
+            }
+
+            [[nodiscard]] unsigned int NativeTextureId() const noexcept override
+            {
+                return id_;
+            }
+
+            [[nodiscard]] bool SampledRowsAreBottomUp() const noexcept override
+            {
+                return false;
             }
 
             [[nodiscard]] TextureCubeResourceSnapshot Snapshot() const noexcept

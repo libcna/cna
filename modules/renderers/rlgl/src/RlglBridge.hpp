@@ -194,6 +194,27 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int specularPowerLocation = -1;
     };
 
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+    /** @brief One same-format top-row sampling copy for a rendered Texture2D sampler slot. */
+    struct CompiledEffectFlippedTexture
+    {
+        RenderTargetStorage storage{};
+        unsigned int sourceTexture = 0;
+        int width = 0;
+        int height = 0;
+        int surfaceFormat = 0;
+    };
+
+    /** @brief rlgl-owned VAO, orientation copies, and transient depth state for compiled draws. */
+    struct CompiledEffectDrawResources
+    {
+        unsigned int vertexArray = 0;
+        std::array<CompiledEffectFlippedTexture, 16> flippedTextures{};
+        std::array<double, 2> savedDepthRange{{0.0, 1.0}};
+        bool drawActive = false;
+    };
+#endif
+
     /** @brief Last native primitive submission, exposed only to focused validation. */
     struct PrimitiveDrawSnapshot
     {
@@ -494,6 +515,77 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         const CNA::Internal::Renderers::GpuDrawParams& params,
         int primitiveType, int elementCount,
         int firstVertex, int startIndex, int baseVertex, bool thirtyTwoBitIndices);
+
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+    /**
+     * @brief Creates the dedicated rlgl VAO used by every MojoShader draw.
+     * @return Empty compiled-effect resource set with a live VAO.
+     */
+    [[nodiscard]] CompiledEffectDrawResources CreateCompiledEffectDrawResources();
+
+    /**
+     * @brief Releases the compiled-effect VAO and all render-target orientation copies.
+     * @param resources Live or empty resource set.
+     */
+    void DestroyCompiledEffectDrawResources(CompiledEffectDrawResources& resources) noexcept;
+
+    /**
+     * @brief Starts one compiled draw, binding its VAO and narrowing the depth range.
+     * @param resources Live resource set that is not already drawing.
+     */
+    void BeginCompiledEffectDraw(CompiledEffectDrawResources& resources);
+
+    /**
+     * @brief Binds the array buffer captured by the next MojoShader attribute pointer.
+     * @param vertexBuffer Non-zero rlgl-owned buffer name.
+     */
+    void BindCompiledEffectVertexBuffer(unsigned int vertexBuffer);
+
+    /**
+     * @brief Copies a rendered two-dimensional source with vertically reversed destination rows.
+     * @param resources Live compiled-effect resource set.
+     * @param slot Pixel sampler slot whose private copy owns the result.
+     * @param sourceFramebuffer Resolved framebuffer containing @p sourceTexture.
+     * @param sourceTexture Render-target color texture identity.
+     * @param width Texture width.
+     * @param height Texture height.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+     * @return rlgl-owned same-format texture ready for ordinary top-row texture coordinates.
+     */
+    [[nodiscard]] unsigned int PrepareCompiledEffectFlippedTexture(
+        CompiledEffectDrawResources& resources, int slot,
+        unsigned int sourceFramebuffer, unsigned int sourceTexture,
+        int width, int height, int surfaceFormat);
+
+    /**
+     * @brief Explicitly unbinds the texture target declared by one MojoShader sampler.
+     * @param slot Texture unit.
+     * @param samplerKind Raw MOJOSHADER_samplerType ordinal: 0=2D, 1=cube, 2=volume.
+     */
+    void UnbindCompiledEffectTexture(int slot, int samplerKind);
+
+    /**
+     * @brief Issues one compiled-effect primitive call against the currently bound VAO/program.
+     * @param resources Active compiled-effect resource set.
+     * @param indexBuffer Index buffer name, or zero for a non-indexed draw.
+     * @param primitiveType Raw XNA PrimitiveType ordinal.
+     * @param elementCount Vertex or index count.
+     * @param firstVertex First vertex for a non-indexed draw.
+     * @param startIndex First element for an indexed draw.
+     * @param baseVertex Value added to decoded indices.
+     * @param thirtyTwoBitIndices Whether indexed data uses unsigned 32-bit elements.
+     */
+    void DrawCompiledEffectGeometry(
+        CompiledEffectDrawResources& resources, unsigned int indexBuffer,
+        int primitiveType, int elementCount,
+        int firstVertex, int startIndex, int baseVertex, bool thirtyTwoBitIndices);
+
+    /**
+     * @brief Ends or aborts a compiled draw and restores the caller's depth convention.
+     * @param resources Active or already-idle resource set.
+     */
+    void EndCompiledEffectDraw(CompiledEffectDrawResources& resources) noexcept;
+#endif
 
     /**
      * @brief Returns the last primitive-call parameters for focused validation.

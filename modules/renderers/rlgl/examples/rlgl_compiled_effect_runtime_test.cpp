@@ -59,8 +59,8 @@ protected:
     {
         GraphicsDevice& device = getGraphicsDeviceProperty();
         auto& renderer = static_cast<RlglRenderer&>(device.GetRenderer());
-        Check(!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects),
-              "parse-only milestone does not advertise compiled-effect execution");
+        Check(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects),
+              "ordinary compiled-effect execution is advertised after RLGL-048");
 
         const std::vector<std::uint8_t> bytes = LoadConformanceEffect();
         Check(!bytes.empty(), "committed XNA Effect Framework fixture is readable");

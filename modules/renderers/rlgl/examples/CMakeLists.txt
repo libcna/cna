@@ -362,6 +362,16 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         if(TARGET SDL3::SDL3main)
             target_link_libraries(cna_test_rlgl_compiled_effect_runtime PRIVATE SDL3::SDL3main)
         endif()
+
+        add_executable(cna_test_rlgl_compiled_effect_draw
+            rlgl_compiled_effect_draw_test.cpp)
+        target_include_directories(cna_test_rlgl_compiled_effect_draw
+            PRIVATE "${CNA_SOURCE_DIR}/tests/support")
+        target_link_libraries(cna_test_rlgl_compiled_effect_draw
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_compiled_effect_draw PRIVATE SDL3::SDL3main)
+        endif()
     endif()
 
     if(CNA_BUILD_TESTS)
@@ -554,6 +564,11 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             cna_register_renderer_test(
                 NAME Rlgl_CompiledEffect_runtime
                 COMMAND cna_test_rlgl_compiled_effect_runtime
+                TIMEOUT 120 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+            cna_register_renderer_test(
+                NAME Rlgl_CompiledEffect_draw
+                COMMAND cna_test_rlgl_compiled_effect_draw
                 TIMEOUT 120 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
                 ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         endif()

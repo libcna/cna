@@ -13,6 +13,7 @@ namespace CNA::Internal::Renderers::Rlgl
 
     namespace Bridge
     {
+        struct CompiledEffectDrawResources;
         struct PrimitivePipeline;
     }
 
@@ -136,11 +137,16 @@ namespace CNA::Internal::Renderers::Rlgl
          * @brief Creates the renderer-local runtime for classic XNA Effect Framework bytecode.
          * @param effectCode Effect Framework bytes.
          * @param effectCodeBytes Number of bytes at @p effectCode.
-         * @return Parsed and GL-compiled runtime. Capability advertisement remains disabled until
-         *         the complete draw path is validated by RLGL-048.
+         * @return Parsed and GL-compiled device runtime.
          */
         std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
             const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /**
+         * @brief Reports that the option-on renderer executes ordinary compiled-effect draws.
+         * @return True in a `CNA_RLGL_COMPILED_EFFECTS=ON` build.
+         */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
 #endif
 
         /**
@@ -676,6 +682,13 @@ namespace CNA::Internal::Renderers::Rlgl
         void ApplyCurrentRasterizerState();
         void FinalizeCurrentRenderTargets();
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
+        Bridge::CompiledEffectDrawResources& GetCompiledEffectDrawResources();
+        void DrawCompiledEffectGeometry(
+            const IVertexBufferRenderer& vertexBuffer,
+            const IIndexBufferRenderer* indexBuffer,
+            PrimitiveType primitive, int elementCount,
+            int firstVertex, int startIndex, int baseVertex,
+            const GpuDrawParams& params);
         [[nodiscard]] void* GetMojoShaderContext();
         void MakeCompiledEffectContextCurrent();
         void DestroyCompiledEffectContext() noexcept;
@@ -718,6 +731,7 @@ namespace CNA::Internal::Renderers::Rlgl
         bool registered_ = false;
         std::unique_ptr<Bridge::PrimitivePipeline> primitivePipeline_;
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
+        std::unique_ptr<Bridge::CompiledEffectDrawResources> compiledEffectDrawResources_;
         void* mojoShaderContext_ = nullptr;
 #endif
     };
