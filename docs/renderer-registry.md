@@ -2,9 +2,9 @@
 
 CNA exposes exactly **50 public renderer identities** over 46 implementation families. The newest,
 `RLGL`, is the standalone `rlgl.h` low-level OpenGL renderer tracked in `plans/plan_rlgl.md`; it is
-registered while its first runnable device slice is under development. It does not build or use
-the raylib application framework. EasyGL is an internal implementation shared by five public GL
-profiles and does not add a public identity. Internal renderer/API choices made by bgfx, Sokol,
+registered with a runtime-validated device/clear/readback/present/resize slice. It does not build
+or use the raylib application framework. EasyGL is an internal implementation shared by five
+public GL profiles and does not add a public identity. Internal renderer/API choices made by bgfx, Sokol,
 Diligent, LLGL, IGL, or another abstraction likewise do not add CNA identities.
 
 The dense C++ enum has 50 entries. The “C ABI value” column below is intentionally not dense:

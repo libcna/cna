@@ -295,7 +295,10 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 - `TINYGL` (CPU fixed-function OpenGL 1.x subset via `C-Chads/tinygl`; 1-bit colour-key transparency, no stencil/scissor/render targets/shaders -- see [`docs/tinygl-renderer.md`](docs/tinygl-renderer.md))
 - `IGL` (facebook/igl "Intermediate Graphics Library"; drives IGL's own OpenGL/GLX or Vulkan backend, selected per process with `CNA_IGL_BACKEND` -- see [`docs/igl-renderer.md`](docs/igl-renderer.md))
 - `NANOVG` (NanoVG's compiled GL2 vector renderer; 2D-only -- see [`docs/nanovg-renderer.md`](docs/nanovg-renderer.md))
-- `RLGL` (standalone raylib `rlgl.h` low-level wrappers on a CNA-owned OpenGL 3.3 core context; under active development -- see [`plans/plan_rlgl.md`](plans/plan_rlgl.md))
+- `RLGL` (standalone raylib `rlgl.h` low-level wrappers on a CNA-owned OpenGL 3.3 core context; the
+  device/clear/readback/present/resize slice is runtime-validated while resources and draws remain
+  under active development -- see [`docs/rlgl-renderer.md`](docs/rlgl-renderer.md) and
+  [`plans/plan_rlgl.md`](plans/plan_rlgl.md))
 
 ### Tradeoffs
 

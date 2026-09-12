@@ -1,0 +1,100 @@
+# plans/plan_rlgl.md RLGL-008: initial CI coverage is compile-focused. The renderer's runtime
+# vertical slice is locally proven with SDL3 offscreen + Mesa llvmpipe, but that exact context path
+# has not yet been established on a hosted runner. RLGL-021 owns promotion to a runtime CI gate.
+name: RLGL CI
+
+on:
+  push:
+    branches: [next, develop, main]
+    paths:
+      - '.github/workflows/rlgl-ci.yml'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - 'modules/**'
+      - 'scripts/check_renderer_identities.py'
+  pull_request:
+    branches: [next, develop, main]
+    paths:
+      - '.github/workflows/rlgl-ci.yml'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - 'modules/**'
+      - 'scripts/check_renderer_identities.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rlgl-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-build:
+    name: GCC (Linux x86_64, compile gate)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CMAKE_GENERATOR: Ninja
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          path: cna
+          submodules: true
+
+      - name: Checkout pinned sharp-runtime sibling
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          ref: f23ded28c7b94a745cf82f8804b5b7104ca5780e
+          path: sharp-runtime
+
+      # This duplicates the CMake pin deliberately: configure performs no dependency network
+      # access, and a CI result cannot change because upstream moves.
+      - name: Checkout pinned raylib source
+        uses: actions/checkout@v4
+        with:
+          repository: raysan5/raylib
+          ref: dbc56a87da87d973a9c5baa4e7438a9d20121d28
+          path: raylib
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build pkg-config \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+            libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
+            wayland-protocols libxkbcommon-dev libgl1-mesa-dev
+
+      - name: Configure RLGL
+        working-directory: cna
+        run: |
+          cmake -S . -B build-rlgl -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_GRAPHICS_RENDERER=RLGL \
+            -DCNA_BUILD_TESTS=OFF \
+            -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_ENABLE_VIDEO=OFF \
+            -DCNA_ENABLE_NET=OFF \
+            -DCNA_ENABLE_DRACO=OFF \
+            -DCNA_USE_CCACHE=OFF \
+            -DCNA_MAX_VENDORED_BUILD_JOBS=2 \
+            -DFETCHCONTENT_SOURCE_DIR_RLGL="${GITHUB_WORKSPACE}/raylib"
+
+      - name: Build renderer and focused smoke executable
+        working-directory: cna
+        run: |
+          cmake --build build-rlgl --parallel 2 --target \
+            cna_renderer_rlgl \
+            cna_test_rlgl_smoke
+
+      - name: Verify renderer registry consistency
+        working-directory: cna
+        run: python3 scripts/check_renderer_identities.py
