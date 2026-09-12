@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Logger.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
 #include <cstdarg>
@@ -153,6 +154,76 @@ namespace
         case 2: return GL_MIRRORED_REPEAT;
         default:
             throw std::invalid_argument("RLGL: invalid TextureAddressMode ordinal");
+        }
+    }
+
+    struct TextureFormatInfo
+    {
+        GLenum internalFormat = 0;
+        GLenum transferFormat = 0;
+        GLenum transferType = 0;
+        int bytesPerTexel = 0;
+        int rlglFormat = 0;
+        int uploadRotateLeft = 0;
+    };
+
+    [[nodiscard]] TextureFormatInfo TextureFormat(
+        const int surfaceFormat)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+        case SurfaceFormat::Color:
+            return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4,
+                    RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 0};
+        case SurfaceFormat::Bgr565:
+            return {GL_RGB565, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 2,
+                    RL_PIXELFORMAT_UNCOMPRESSED_R5G6B5, 0};
+        case SurfaceFormat::Bgra5551:
+            return {GL_RGB5_A1, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1, 2,
+                    RL_PIXELFORMAT_UNCOMPRESSED_R5G5B5A1, 1};
+        case SurfaceFormat::Bgra4444:
+            return {GL_RGBA4, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, 2,
+                    RL_PIXELFORMAT_UNCOMPRESSED_R4G4B4A4, 4};
+        case SurfaceFormat::NormalizedByte2:
+            return {GL_RG8_SNORM, GL_RG, GL_BYTE, 2, 0, 0};
+        case SurfaceFormat::NormalizedByte4:
+            return {GL_RGBA8_SNORM, GL_RGBA, GL_BYTE, 4, 0, 0};
+        default:
+            throw std::runtime_error(
+                "RLGL: SurfaceFormat has not passed its Texture2D implementation gate");
+        }
+    }
+
+    [[nodiscard]] const std::uint8_t* ConvertPackedUpload(
+        const TextureFormatInfo& format, const std::uint8_t* pixels,
+        const std::size_t texelCount, std::vector<std::uint8_t>& converted)
+    {
+        if (format.uploadRotateLeft == 0 || pixels == nullptr) return pixels;
+
+        converted.resize(texelCount * 2u);
+        for (std::size_t index = 0; index < texelCount; ++index)
+        {
+            std::uint16_t value = 0;
+            std::memcpy(&value, pixels + index * 2u, sizeof(value));
+            const int shift = format.uploadRotateLeft;
+            value = static_cast<std::uint16_t>((value << shift) | (value >> (16 - shift)));
+            std::memcpy(converted.data() + index * 2u, &value, sizeof(value));
+        }
+        return converted.data();
+    }
+
+    void RestorePackedReadback(
+        const TextureFormatInfo& format, std::vector<std::uint8_t>& pixels)
+    {
+        if (format.uploadRotateLeft == 0) return;
+        const int shift = format.uploadRotateLeft;
+        for (std::size_t offset = 0; offset < pixels.size(); offset += 2u)
+        {
+            std::uint16_t value = 0;
+            std::memcpy(&value, pixels.data() + offset, sizeof(value));
+            value = static_cast<std::uint16_t>((value >> shift) | (value << (16 - shift)));
+            std::memcpy(pixels.data() + offset, &value, sizeof(value));
         }
     }
 }
@@ -321,19 +392,41 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         return value;
     }
 
-    unsigned int CreateTexture2DRgba8(
-        const int width, const int height, const int mipLevels, const std::uint8_t* pixels)
+    unsigned int CreateTexture2D(
+        const int surfaceFormat, const int width, const int height,
+        const int mipLevels, const std::uint8_t* pixels)
     {
         RequireInitialized("Texture2D creation");
         if (width <= 0 || height <= 0 || mipLevels <= 0 || pixels == nullptr)
-            throw std::invalid_argument("RLGL: invalid RGBA8 Texture2D creation request");
+            throw std::invalid_argument("RLGL: invalid Texture2D creation request");
 
+        const TextureFormatInfo format = TextureFormat(surfaceFormat);
         const TextureBindingRestore bindingRestore;
         const UnpackAlignmentRestore unpackRestore;
-        const unsigned int id = rlLoadTexture(
-            pixels, width, height, RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        std::vector<std::uint8_t> converted;
+        const std::uint8_t* upload = ConvertPackedUpload(
+            format, pixels, static_cast<std::size_t>(width) * height, converted);
+        unsigned int id = 0;
+        if (format.rlglFormat != 0)
+        {
+            id = rlLoadTexture(upload, width, height, format.rlglFormat, 1);
+        }
+        else
+        {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glGenTextures(1, &id);
+            glBindTexture(GL_TEXTURE_2D, id);
+            glTexImage2D(
+                GL_TEXTURE_2D, 0, static_cast<GLint>(format.internalFormat), width, height, 0,
+                format.transferFormat, format.transferType, upload);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        }
         if (id == 0)
-            throw std::runtime_error("RLGL: rlLoadTexture failed for an RGBA8 Texture2D");
+            throw std::runtime_error("RLGL: Texture2D allocation returned a zero texture name");
 
         try
         {
@@ -345,14 +438,15 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
                 levelWidth = levelWidth > 1 ? levelWidth / 2 : 1;
                 levelHeight = levelHeight > 1 ? levelHeight / 2 : 1;
                 glTexImage2D(
-                    GL_TEXTURE_2D, level, GL_RGBA8, levelWidth, levelHeight, 0,
-                    GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                    GL_TEXTURE_2D, level, static_cast<GLint>(format.internalFormat),
+                    levelWidth, levelHeight, 0,
+                    format.transferFormat, format.transferType, nullptr);
             }
             // rlgl has no general texture-max-level parameter. Clamp even a one-level texture so
             // XNA's mip-carrying sampler defaults never make the object incomplete.
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipLevels - 1);
-            ThrowIfGlError("RGBA8 Texture2D allocation");
+            ThrowIfGlError("Texture2D allocation");
         }
         catch (...)
         {
@@ -367,22 +461,27 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         if (bridgeInitialized && id != 0) rlUnloadTexture(id);
     }
 
-    void UpdateTexture2DRgba8(
-        const unsigned int id, const int level, const int width, const int height,
-        const std::uint8_t* pixels)
+    void UpdateTexture2D(
+        const unsigned int id, const int surfaceFormat, const int level,
+        const int width, const int height, const std::uint8_t* pixels)
     {
         RequireInitialized("Texture2D update");
         if (id == 0 || level < 0 || width <= 0 || height <= 0 || pixels == nullptr)
-            throw std::invalid_argument("RLGL: invalid RGBA8 Texture2D update request");
+            throw std::invalid_argument("RLGL: invalid Texture2D update request");
 
+        const TextureFormatInfo format = TextureFormat(surfaceFormat);
         const TextureBindingRestore bindingRestore;
         const UnpackAlignmentRestore unpackRestore;
-        if (level == 0)
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        std::vector<std::uint8_t> converted;
+        const std::uint8_t* upload = ConvertPackedUpload(
+            format, pixels, static_cast<std::size_t>(width) * height, converted);
+        if (level == 0 && format.rlglFormat != 0)
         {
             // The public wrapper provides the exact level-zero subimage path.
             rlUpdateTexture(
                 id, 0, 0, width, height,
-                RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, pixels);
+                format.rlglFormat, upload);
         }
         else
         {
@@ -392,23 +491,25 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
             glTexSubImage2D(
                 GL_TEXTURE_2D, level, 0, 0, width, height,
-                GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+                format.transferFormat, format.transferType, upload);
         }
-        ThrowIfGlError("RGBA8 Texture2D update");
+        ThrowIfGlError("Texture2D update");
     }
 
-    void ReadTexture2DRgba8(
-        const unsigned int id, const int level, const int levelWidth, const int levelHeight,
-        const int x, const int y, const int width, const int height, std::uint8_t* pixels)
+    void ReadTexture2D(
+        const unsigned int id, const int surfaceFormat, const int level,
+        const int levelWidth, const int levelHeight, const int x, const int y,
+        const int width, const int height, std::uint8_t* pixels)
     {
         RequireInitialized("Texture2D readback");
         if (id == 0 || level < 0 || levelWidth <= 0 || levelHeight <= 0 ||
             x < 0 || y < 0 || width <= 0 || height <= 0 ||
             x > levelWidth - width || y > levelHeight - height || pixels == nullptr)
         {
-            throw std::invalid_argument("RLGL: invalid RGBA8 Texture2D readback request");
+            throw std::invalid_argument("RLGL: invalid Texture2D readback request");
         }
 
+        const TextureFormatInfo format = TextureFormat(surfaceFormat);
         const TextureBindingRestore restore;
         glBindTexture(GL_TEXTURE_2D, id);
         GLint previousPackAlignment = 4;
@@ -416,18 +517,23 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
 
         std::vector<std::uint8_t> levelPixels(
-            static_cast<std::size_t>(levelWidth) * levelHeight * 4u);
-        glGetTexImage(GL_TEXTURE_2D, level, GL_RGBA, GL_UNSIGNED_BYTE, levelPixels.data());
+            static_cast<std::size_t>(levelWidth) * levelHeight * format.bytesPerTexel);
+        glGetTexImage(
+            GL_TEXTURE_2D, level, format.transferFormat, format.transferType,
+            levelPixels.data());
         glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
-        ThrowIfGlError("RGBA8 Texture2D readback");
+        ThrowIfGlError("Texture2D readback");
+        RestorePackedReadback(format, levelPixels);
 
-        const std::size_t sourceRowBytes = static_cast<std::size_t>(levelWidth) * 4u;
-        const std::size_t destinationRowBytes = static_cast<std::size_t>(width) * 4u;
+        const std::size_t sourceRowBytes =
+            static_cast<std::size_t>(levelWidth) * format.bytesPerTexel;
+        const std::size_t destinationRowBytes =
+            static_cast<std::size_t>(width) * format.bytesPerTexel;
         for (int row = 0; row < height; ++row)
         {
             const std::uint8_t* source = levelPixels.data()
                 + static_cast<std::size_t>(y + row) * sourceRowBytes
-                + static_cast<std::size_t>(x) * 4u;
+                + static_cast<std::size_t>(x) * format.bytesPerTexel;
             std::memcpy(
                 pixels + static_cast<std::size_t>(row) * destinationRowBytes,
                 source, destinationRowBytes);

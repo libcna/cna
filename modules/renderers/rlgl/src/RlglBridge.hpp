@@ -124,15 +124,17 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     [[nodiscard]] int GetMaxTextureSize();
 
     /**
-     * @brief Creates an RGBA8 texture through rlgl and allocates its declared mip chain.
+     * @brief Creates a supported Texture2D and allocates its declared mip chain.
+     * @param surfaceFormat Raw `SurfaceFormat` ordinal.
      * @param width Level-zero width.
      * @param height Level-zero height.
      * @param mipLevels Number of mip levels to allocate.
-     * @param pixels Tightly packed level-zero RGBA8 bytes.
+     * @param pixels Tightly packed level-zero format-native bytes.
      * @return The non-zero GL texture name owned by rlgl.
      */
-    [[nodiscard]] unsigned int CreateTexture2DRgba8(
-        int width, int height, int mipLevels, const std::uint8_t* pixels);
+    [[nodiscard]] unsigned int CreateTexture2D(
+        int surfaceFormat, int width, int height, int mipLevels,
+        const std::uint8_t* pixels);
 
     /**
      * @brief Releases a texture through rlgl while the device is live.
@@ -141,19 +143,22 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     void DestroyTexture2D(unsigned int id) noexcept;
 
     /**
-     * @brief Replaces one complete RGBA8 mip level.
+     * @brief Replaces one complete supported Texture2D mip level.
      * @param id Texture name.
+     * @param surfaceFormat Raw `SurfaceFormat` ordinal.
      * @param level Mip level.
      * @param width Level width.
      * @param height Level height.
-     * @param pixels Tightly packed RGBA8 bytes.
+     * @param pixels Tightly packed format-native bytes.
      */
-    void UpdateTexture2DRgba8(
-        unsigned int id, int level, int width, int height, const std::uint8_t* pixels);
+    void UpdateTexture2D(
+        unsigned int id, int surfaceFormat, int level,
+        int width, int height, const std::uint8_t* pixels);
 
     /**
-     * @brief Reads an RGBA8 rectangle from one texture mip level.
+     * @brief Reads a format-native rectangle from one texture mip level.
      * @param id Texture name.
+     * @param surfaceFormat Raw `SurfaceFormat` ordinal.
      * @param level Mip level.
      * @param levelWidth Complete level width.
      * @param levelHeight Complete level height.
@@ -161,10 +166,10 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @param y Rectangle top edge in upload-memory order.
      * @param width Rectangle width.
      * @param height Rectangle height.
-     * @param pixels Destination holding width * height * 4 bytes.
+     * @param pixels Destination holding the format-native rectangle bytes.
      */
-    void ReadTexture2DRgba8(
-        unsigned int id, int level, int levelWidth, int levelHeight,
+    void ReadTexture2D(
+        unsigned int id, int surfaceFormat, int level, int levelWidth, int levelHeight,
         int x, int y, int width, int height, std::uint8_t* pixels);
 
     /**

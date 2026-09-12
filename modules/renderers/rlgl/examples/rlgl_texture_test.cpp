@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_rlgl.md RLGL-023: focused native RGBA8 Texture2D storage evidence. Public Texture2D
-// construction and SetData feed rlgl's resource wrappers; direct renderer readback prevents the
-// public CPU shadow from hiding an upload defect. Exit 77 means no usable GL context.
+// plans/plan_rlgl.md RLGL-023/RLGL-026: focused native Texture2D storage evidence. Public Texture2D
+// construction and SetData feed rlgl or the documented bridge; direct renderer readback prevents
+// the public CPU shadow from hiding an upload defect. Exit 77 means no usable GL context.
 
 #include "CNA/Internal/Renderers/Rlgl/RlglRenderer.hpp"
 
@@ -9,6 +9,11 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
@@ -40,6 +45,51 @@ namespace
             bytes[index * 4u + 3u] = colors[index].getAProperty();
         }
         return bytes;
+    }
+
+    template <typename Packed, typename Word>
+    [[nodiscard]] bool PackedFormatRoundTrips(
+        GraphicsDevice& device, const SurfaceFormat format,
+        std::array<Word, 6> words, const Word patch)
+    {
+        std::array<Packed, 6> values{};
+        for (std::size_t index = 0; index < values.size(); ++index)
+            values[index].setPackedValueProperty(words[index]);
+
+        Texture2D texture(device, 3, 2, false, format);
+        texture.SetData(values.data(), static_cast<int>(values.size()));
+        auto& native = texture.GetRenderer();
+        std::array<std::uint8_t, sizeof(Word) * 6u> actual{};
+        if (native.GetSurfaceFormatEXT() != static_cast<int>(format) ||
+            !native.GetData(
+                0, 0, 0, 3, 2, actual.data(), static_cast<int>(actual.size())))
+        {
+            return false;
+        }
+
+        const auto encoded = [](const std::array<Word, 6>& source) {
+            std::array<std::uint8_t, sizeof(Word) * 6u> result{};
+            for (std::size_t index = 0; index < source.size(); ++index)
+            {
+                for (std::size_t byte = 0; byte < sizeof(Word); ++byte)
+                {
+                    result[index * sizeof(Word) + byte] = static_cast<std::uint8_t>(
+                        source[index] >> (byte * 8u));
+                }
+            }
+            return result;
+        };
+        if (actual != encoded(words)) return false;
+
+        Packed patchValue;
+        patchValue.setPackedValueProperty(patch);
+        const Rectangle patchRectangle(1, 0, 1, 1);
+        texture.SetData(0, &patchRectangle, &patchValue, 0, 1);
+        words[1] = patch;
+        actual.fill(0);
+        return native.GetData(
+                   0, 0, 0, 3, 2, actual.data(), static_cast<int>(actual.size()))
+            && actual == encoded(words);
     }
 }
 
@@ -149,6 +199,46 @@ protected:
             rejectedInvalidLevel = true;
         }
         Check(rejectedInvalidLevel, "native readback rejects an out-of-range mip level");
+
+        namespace Packed = Microsoft::Xna::Framework::Graphics::PackedVector;
+        Check(PackedFormatRoundTrips<Packed::Bgr565, std::uint16_t>(
+                  device, SurfaceFormat::Bgr565,
+                  {0xF800u, 0x07E0u, 0x001Fu, 0xFFFFu, 0x39E7u, 0xA55Au}, 0x5AA5u),
+              "Bgr565 exact odd-row packed storage survives full and partial public updates");
+        Check(PackedFormatRoundTrips<Packed::Bgra5551, std::uint16_t>(
+                  device, SurfaceFormat::Bgra5551,
+                  {0xFC00u, 0x83E0u, 0x801Fu, 0xFFFFu, 0x4211u, 0xDEE5u}, 0xA55Au),
+              "Bgra5551 XNA-to-GL bit rotation reverses exactly on native readback");
+        Check(PackedFormatRoundTrips<Packed::Bgra4444, std::uint16_t>(
+                  device, SurfaceFormat::Bgra4444,
+                  {0xFF00u, 0xF0F0u, 0xF00Fu, 0xFFFFu, 0x1357u, 0xECA8u}, 0xA5C3u),
+              "Bgra4444 XNA-to-GL nibble rotation reverses exactly on native readback");
+        Check(PackedFormatRoundTrips<Packed::NormalizedByte2, std::uint16_t>(
+                  device, SurfaceFormat::NormalizedByte2,
+                  {0x817Fu, 0x0040u, 0xC020u, 0x7F01u, 0x1030u, 0xE151u}, 0x21DFu),
+              "NormalizedByte2 uses exact signed RG8 storage for native transfer");
+        Check(PackedFormatRoundTrips<Packed::NormalizedByte4, std::uint32_t>(
+                  device, SurfaceFormat::NormalizedByte4,
+                  {0x7F0181FFu, 0x2040607Fu, 0x81C0E001u, 0x10203040u,
+                   0x11223344u, 0xE1D1C1B1u}, 0x7F41DF01u),
+              "NormalizedByte4 uses exact signed RGBA8 storage for native transfer");
+
+        const std::array supportedFormats{
+            SurfaceFormat::Color, SurfaceFormat::Bgr565, SurfaceFormat::Bgra5551,
+            SurfaceFormat::Bgra4444, SurfaceFormat::NormalizedByte2,
+            SurfaceFormat::NormalizedByte4};
+        bool classificationsExact = true;
+        for (const SurfaceFormat format : supportedFormats)
+        {
+            classificationsExact = classificationsExact &&
+                renderer.ClassifySurfaceFormatEXT(static_cast<int>(format)) ==
+                    CNA::Internal::Renderers::RendererFormatVerdict::Supported;
+        }
+        classificationsExact = classificationsExact &&
+            renderer.ClassifySurfaceFormatEXT(static_cast<int>(SurfaceFormat::Rgba1010102)) ==
+                CNA::Internal::Renderers::RendererFormatVerdict::Unsupported;
+        Check(classificationsExact,
+              "Texture2D format classification claims only completed native layouts");
     }
 
 private:

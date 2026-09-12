@@ -47,9 +47,9 @@ success.
 | Drawable resize and presentation rectangle refresh | ✅ | A `GraphicsDeviceManager` resize is followed by dimension and post-resize pixel checks |
 | Viewport/scissor coordinate application | 🟨 | Top-left CNA rectangles are mapped to bottom-left GL coordinates; transition/pixel coverage remains in `RLGL-013` |
 | Backbuffer MSAA | 🟨 | Context samples are requested with a non-MSAA retry and the achieved count is reported; resolve/output coverage remains in `RLGL-014` |
-| `Texture2D` (`SurfaceFormat::Color`) | ✅ | rlgl-created RGBA8 storage passed exact full/partial upload, native whole/subrect readback, row-order, binding, and non-zero mip-level checks |
+| `Texture2D` (`Color`, `Bgr565`, `Bgra5551`, `Bgra4444`, `NormalizedByte2/4`) | ✅ | Exact full/partial format-native uploads and native readback passed, including packed XNA/GL bit-layout translation, signed-normalized storage, odd-row alignment, row order, binding, and non-zero RGBA8 mips |
 | XNA `SamplerState` | ✅ | Independent GL sampler objects passed all filter/address ordinals, mip/bias, anisotropy, transition, slot-isolation, and sampled-pixel checks |
-| Other Texture2D formats | ❌ | Explicitly tracked by `RLGL-024`; unsupported formats fail instead of changing their byte interpretation |
+| Other Texture2D formats | ❌ | High-precision/float formats and DXT1/3/5 are tracked by `RLGL-027`/`RLGL-028`; unsupported formats fail instead of changing their byte interpretation |
 | SpriteBatch/SpriteFont | ❌ | Factory throws a diagnostic naming `RLGL-010` |
 | Vertex/index buffers and draw calls | ❌ | Factories/draw hooks throw diagnostics naming `RLGL-011` |
 | Stock/custom effects and normal 3D workloads | ❌ | Await the buffer, texture, and shader tasks; `GraphicsCapability::ThreeD` remains false |

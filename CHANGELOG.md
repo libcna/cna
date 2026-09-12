@@ -13,10 +13,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 - The `RLGL` renderer identity and standalone raylib 6.0 `rlgl.h` dependency baseline, pinned to
   an immutable commit without building or initializing the raylib application framework. The
-  GraphicsDevice clear/readback/present/resize slice, RGBA8 Texture2D storage/update/readback/mips,
-  and independent XNA sampler objects are runtime-validated on Linux; remaining resources and
-  drawing are under active development in `plans/plan_rlgl.md`. The append-only C renderer identity
-  advances the experimental C ABI to 0.27.0.
+  GraphicsDevice clear/readback/present/resize slice, six classic uncompressed Texture2D formats
+  (including exact packed and signed-normalized storage), and independent XNA sampler objects are
+  runtime-validated on Linux; remaining resources and drawing are under active development in
+  `plans/plan_rlgl.md`. The append-only C renderer identity advances the experimental C ABI to
+  0.27.0.
 - Capability-gated CNAEXT base-instance drawing through
   `GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT`, with the append-only
   `RendererFeature::BaseInstanceDrawing` / C ABI 0.26.0 feature identity and a Vulkan

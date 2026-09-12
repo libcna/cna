@@ -173,6 +173,22 @@ namespace CNA::Internal::Renderers::Rlgl
         [[nodiscard]] int GetMaxTextureDimension() const override { return maxTextureSize_; }
 
         /**
+         * @brief Classifies Texture2D formats whose native storage path has passed validation.
+         * @param surfaceFormat Raw `SurfaceFormat` ordinal.
+         * @return Supported only for implemented exact layouts; Unsupported otherwise.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
+         * @brief Prevents Color transfers from reinterpreting signed-normalized formats.
+         * @param surfaceFormat Raw `SurfaceFormat` ordinal.
+         * @return Unsupported for signed-normalized layouts and Defer otherwise.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
          * @brief Creates the renderer-owned SpriteBatch implementation.
          *
          * @return Never returns until RLGL-010 implements the batcher.

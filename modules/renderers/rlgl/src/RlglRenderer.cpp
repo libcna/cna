@@ -3,6 +3,7 @@
 #include "CNA/Internal/Renderers/Rlgl/RlglRenderer.hpp"
 
 #include "CNA/Logger.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include "RlglBridge.hpp"
@@ -331,6 +332,37 @@ namespace CNA::Internal::Renderers::Rlgl
     std::unique_ptr<ITextureRenderer> RlglRenderer::CreateTexture(const ImageData& data)
     {
         return CreateTextureRenderer(data);
+    }
+
+    RendererFormatVerdict RlglRenderer::ClassifySurfaceFormatEXT(
+        const int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+        case SurfaceFormat::Color:
+        case SurfaceFormat::Bgr565:
+        case SurfaceFormat::Bgra5551:
+        case SurfaceFormat::Bgra4444:
+        case SurfaceFormat::NormalizedByte2:
+        case SurfaceFormat::NormalizedByte4:
+            return RendererFormatVerdict::Supported;
+        default:
+            return RendererFormatVerdict::Unsupported;
+        }
+    }
+
+    RendererFormatVerdict RlglRenderer::ClassifyColorTransferFormatEXT(
+        const int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const auto format = static_cast<SurfaceFormat>(surfaceFormat);
+        if (format == SurfaceFormat::NormalizedByte2 ||
+            format == SurfaceFormat::NormalizedByte4)
+        {
+            return RendererFormatVerdict::Unsupported;
+        }
+        return RendererFormatVerdict::Defer;
     }
 
     std::unique_ptr<ISpriteBatchRenderer> RlglRenderer::CreateSpriteBatch()
