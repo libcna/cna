@@ -261,7 +261,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   arrays. It also keeps the EasyGL vertex coordinate/depth epilogue inside `main` instead of
   emitting it after a subroutine `RET`. SOFTWARE-430 then enforces the documented `.x`, `.y` or
   `.xy` declaration mask for `vPos` and limits `vFace` to comparison-condition operands, while
-  retaining the existing rendered raster-input proof. SOFTWARE-388 replaces the remaining SM3
+  retaining the existing rendered raster-input proof. SOFTWARE-431 preserves Shader Model 3's
+  legal packing of distinct semantic outputs/inputs into disjoint masks of one physical register
+  and rejects duplicate semantics, overlapping masks and forbidden partial declarations; EasyGL's
+  GLSL path now explicitly packs and unpacks those components instead of keeping only the last
+  declaration. SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
   swizzles, source modifiers, projection and sample-dependent temporary chains. SOFTWARE-389

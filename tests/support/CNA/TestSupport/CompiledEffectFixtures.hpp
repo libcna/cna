@@ -855,6 +855,29 @@ namespace CNA::TestSupport
         FaceConditionalCompare,
     };
 
+    /** @brief Shader Model 3 semantic-declaration rule exercised by a program pair. */
+    enum class SyntheticSemanticDeclarationProbe
+    {
+        /** @brief Emit no dedicated semantic-declaration program. */
+        None,
+        /** @brief Pack TEXCOORD0.xy and COLOR0.zw into the same register in both stages. */
+        PackedDisjoint,
+        /** @brief Overlap two pixel-input semantic masks on one register component. */
+        PixelOverlappingMasks,
+        /** @brief Declare the same pixel-input semantic on two different registers. */
+        PixelDuplicateSemantic,
+        /** @brief Overlap two vertex-output semantic masks on one register component. */
+        VertexOutputOverlappingMasks,
+        /** @brief Declare the same vertex-output semantic on two different registers. */
+        VertexOutputDuplicateSemantic,
+        /** @brief Apply a partial write mask to a vertex input declaration. */
+        VertexInputPartialMask,
+        /** @brief Apply a partial write mask to the required POSITION0 vertex output. */
+        VertexPositionPartialMask,
+        /** @brief Apply a partial write mask to a POINTSIZE0 vertex output declaration. */
+        VertexPointSizePartialMask,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -1111,6 +1134,9 @@ namespace CNA::TestSupport
         /** @brief Selects a D3D9 pixel miscellaneous-input validation probe. */
         SyntheticMiscellaneousInputProbe miscellaneousInputProbe =
             SyntheticMiscellaneousInputProbe::None;
+        /** @brief Selects a Shader Model 3 semantic declaration/packing probe. */
+        SyntheticSemanticDeclarationProbe semanticDeclarationProbe =
+            SyntheticSemanticDeclarationProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -1230,7 +1256,9 @@ namespace CNA::TestSupport
         SyntheticRelativeAddressingProbe relativeAddressingProbe =
             SyntheticRelativeAddressingProbe::None,
         SyntheticMiscellaneousInputProbe miscellaneousInputProbe =
-            SyntheticMiscellaneousInputProbe::None)
+            SyntheticMiscellaneousInputProbe::None,
+        SyntheticSemanticDeclarationProbe semanticDeclarationProbe =
+            SyntheticSemanticDeclarationProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1353,6 +1381,12 @@ namespace CNA::TestSupport
                 SyntheticRelativeAddressingProbe::PixelInputSubroutineInsideLoop;
         const bool probesPixelMiscellaneousInput =
             miscellaneousInputProbe != SyntheticMiscellaneousInputProbe::None;
+        const bool probesPixelSemanticDeclarations =
+            semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelOverlappingMasks ||
+            semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelDuplicateSemantic;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -1368,6 +1402,7 @@ namespace CNA::TestSupport
             probesPixel30SamplerSource || probesPixel30TypedControlSource ||
             probesPixel30SpecialControlSource || probesPixelRelativeAddressing ||
             probesPixelMiscellaneousInput ||
+            probesPixelSemanticDeclarations ||
             probesPixel30ConstantControl;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
@@ -2696,6 +2731,38 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, source(regMiscellaneous, face ? 1u : 0u));
             }
         }
+        else if (probesPixelSemanticDeclarations)
+        {
+            const bool duplicate = semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelDuplicateSemantic;
+            const bool overlap = semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::PixelOverlappingMasks;
+            if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint)
+            {
+                // Reverse the vertex declaration order deliberately. D3D linkage is semantic- and
+                // mask-driven, so declaration order cannot decide which half survives.
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_color0 v0.zw
+                AppendUInt32(shader, 0x80000000u | 10u);
+                AppendUInt32(shader, destination(regInput, 0, 0xCu));
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_texcoord0 v0.xy
+                AppendUInt32(shader, 0x80000000u | 5u);
+                AppendUInt32(shader, destination(regInput, 0, 0x3u));
+            }
+            else
+            {
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_texcoord0 v0.xy
+                AppendUInt32(shader, 0x80000000u | 5u);
+                AppendUInt32(shader, destination(regInput, 0, 0x3u));
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+                AppendUInt32(shader, 0x80000000u | (duplicate ? 5u : 10u));
+                AppendUInt32(shader,
+                             destination(regInput, duplicate ? 1u : 0u,
+                                         overlap ? 0x6u : 0xCu));
+            }
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, v0
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regInput, 0));
+        }
         else if (usesRasterInputs)
         {
             // D3D9 vPos has integer-centred top-down pixel coordinates. Scale a 4x4 target into
@@ -3266,7 +3333,10 @@ namespace CNA::TestSupport
                                                                         SyntheticVertexInstructionSlotProbe::None,
                                                                 SyntheticRelativeAddressingProbe
                                                                     relativeAddressingProbe =
-                                                                        SyntheticRelativeAddressingProbe::None)
+                                                                        SyntheticRelativeAddressingProbe::None,
+                                                                SyntheticSemanticDeclarationProbe
+                                                                    semanticDeclarationProbe =
+                                                                        SyntheticSemanticDeclarationProbe::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -3352,6 +3422,8 @@ namespace CNA::TestSupport
                 SyntheticRelativeAddressingProbe::VertexConstantOutsideLoop &&
             relativeAddressingProbe <=
                 SyntheticRelativeAddressingProbe::VertexInputInsideLoop;
+        const bool probesVertexSemanticDeclarations =
+            semanticDeclarationProbe != SyntheticSemanticDeclarationProbe::None;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture ||
             invalidMixedConstantAbsolute ==
@@ -3366,7 +3438,7 @@ namespace CNA::TestSupport
             probesVertex30ConstantControl || probesVertex30DestinationAccess ||
             probesVertex30OutputSource || probesVertex30Address || probesVertex30SamplerSource ||
             probesVertex30TypedControlSource || probesVertex30SpecialControlSource ||
-            probesVertexRelativeAddressing;
+            probesVertexRelativeAddressing || probesVertexSemanticDeclarations;
         const bool probesVertex2xTemporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xMaximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange;
@@ -3626,13 +3698,28 @@ namespace CNA::TestSupport
             appendDef(4u, 3.25f, 0.0f, 0.0f, 0.0f);
             appendDef(5u, 9.0f, 0.5f, 10.0f, 2.0f);
         }
+        if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint)
+        {
+            AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c240, .25, .5, .75, 1
+            AppendUInt32(shader, destination(regConst, 240u));
+            AppendUInt32(shader, FloatBits(0.25f));
+            AppendUInt32(shader, FloatBits(0.5f));
+            AppendUInt32(shader, FloatBits(0.75f));
+            AppendUInt32(shader, FloatBits(1.0f));
+        }
 
         // dcl_position v0
         if (!usesShaderModel11)
         {
             AppendUInt32(shader, 0x0000001Fu | (2u << 24));
             AppendUInt32(shader, 0x80000000u | 0u);        // D3DDECLUSAGE_POSITION, index 0
-            AppendUInt32(shader, destination(regInput, 0));
+            AppendUInt32(
+                shader,
+                destination(regInput, 0,
+                            semanticDeclarationProbe ==
+                                    SyntheticSemanticDeclarationProbe::VertexInputPartialMask
+                                ? 0x3u
+                                : 0xFu));
         }
         if (probesVertex20Input || probesVertex30Input)
         {
@@ -3648,7 +3735,39 @@ namespace CNA::TestSupport
             // Shader Model 3 uses generic o# outputs, each with an explicit semantic declaration.
             AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_position0 o0
             AppendUInt32(shader, 0x80000000u | 0u);
-            AppendUInt32(shader, destination(regTexCoordOut, 0));
+            AppendUInt32(
+                shader,
+                destination(regTexCoordOut, 0,
+                            semanticDeclarationProbe ==
+                                    SyntheticSemanticDeclarationProbe::VertexPositionPartialMask
+                                ? 0x3u
+                                : 0xFu));
+            if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint ||
+                semanticDeclarationProbe ==
+                    SyntheticSemanticDeclarationProbe::VertexOutputOverlappingMasks ||
+                semanticDeclarationProbe ==
+                    SyntheticSemanticDeclarationProbe::VertexOutputDuplicateSemantic)
+            {
+                const bool duplicate = semanticDeclarationProbe ==
+                    SyntheticSemanticDeclarationProbe::VertexOutputDuplicateSemantic;
+                const bool overlap = semanticDeclarationProbe ==
+                    SyntheticSemanticDeclarationProbe::VertexOutputOverlappingMasks;
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_texcoord0 o1.xy
+                AppendUInt32(shader, 0x80000000u | 5u);
+                AppendUInt32(shader, destination(regTexCoordOut, 1, 0x3u));
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+                AppendUInt32(shader, 0x80000000u | (duplicate ? 5u : 10u));
+                AppendUInt32(shader,
+                             destination(regTexCoordOut, duplicate ? 2u : 1u,
+                                         overlap ? 0x6u : 0xCu));
+            }
+            if (semanticDeclarationProbe ==
+                SyntheticSemanticDeclarationProbe::VertexPointSizePartialMask)
+            {
+                AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_psize0 o1.x
+                AppendUInt32(shader, 0x80000000u | 4u);
+                AppendUInt32(shader, destination(regTexCoordOut, 1, 0x1u));
+            }
             if (probesVertex30Output)
             {
                 const bool maximum =
@@ -4265,6 +4384,12 @@ namespace CNA::TestSupport
                            ? 11u
                            : 0u));
         }
+        if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint)
+        {
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov o1, c240
+            AppendUInt32(shader, destination(regTexCoordOut, 1));
+            AppendUInt32(shader, source(regConst, 240u));
+        }
         if (usesPredication)
         {
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov o1, c242
@@ -4799,7 +4924,8 @@ namespace CNA::TestSupport
             options.typedControlSourceProbe,
             options.specialControlSourceProbe,
             options.relativeAddressingProbe,
-            options.miscellaneousInputProbe);
+            options.miscellaneousInputProbe,
+            options.semanticDeclarationProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -4890,7 +5016,8 @@ namespace CNA::TestSupport
                 options.typedControlSourceProbe,
                 options.specialControlSourceProbe,
                 options.vertexInstructionSlotProbe,
-                options.relativeAddressingProbe);
+                options.relativeAddressingProbe,
+                options.semanticDeclarationProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

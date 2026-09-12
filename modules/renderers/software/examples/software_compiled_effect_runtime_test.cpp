@@ -3661,6 +3661,87 @@ namespace
                   rejectedProbes);
     }
 
+    void CheckCompiledSemanticDeclarationValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticSemanticDeclarationProbe;
+        constexpr std::array invalidProbes{
+            Probe::PixelOverlappingMasks,
+            Probe::PixelDuplicateSemantic,
+            Probe::VertexOutputOverlappingMasks,
+            Probe::VertexOutputDuplicateSemantic,
+            Probe::VertexInputPartialMask,
+            Probe::VertexPositionPartialMask,
+            Probe::VertexPointSizePartialMask,
+        };
+        std::string acceptedProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.semanticDeclarationProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                (void) renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+            }
+            catch (const std::exception&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedProbes.empty()) acceptedProbes += ", ";
+                acceptedProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedProbes.empty(),
+              "compiled Effect parser accepted invalid semantic declarations: " +
+                  acceptedProbes);
+    }
+
+    void CheckCompiledSemanticPacking()
+    {
+        GraphicsDevice device;
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.semanticDeclarationProbe =
+            CNA::TestSupport::SyntheticSemanticDeclarationProbe::PackedDisjoint;
+        auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+            device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        struct Vertex { float x, y, z; };
+        const Vertex quad[6] = {
+            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre = Color::Transparent;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        const auto near = [](int actual, int expected)
+        {
+            return std::abs(actual - expected) <= 2;
+        };
+        Check(near(centre.getRProperty(), 64) && near(centre.getGProperty(), 128) &&
+                  near(centre.getBProperty(), 191) && near(centre.getAProperty(), 255),
+              "compiled SM3 packed semantics did not preserve all four register components");
+    }
+
     void CheckCompiledOutputRegisterRangeValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticOutputRegisterProbe;
@@ -5874,6 +5955,8 @@ int main()
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);
         CheckCompiledMiscellaneousInputValidation(renderer);
+        CheckCompiledSemanticDeclarationValidation(renderer);
+        CheckCompiledSemanticPacking();
         CheckCompiledOutputRegisterRangeValidation(renderer);
         CheckCompiledConstantControlRegisterRangeValidation(renderer);
         CheckCompiledVertexInstructionSlotValidation(renderer);
