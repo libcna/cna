@@ -2219,6 +2219,8 @@ INSTANTIATE_TEST_SUITE_P(
             TextureCoordinateSaturateDestination,
         CNA::TestSupport::SyntheticLegacyTexInstructionProbe::
             TextureCoordinateShiftDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::
+            TextureCoordinateTemporaryDestination,
         CNA::TestSupport::SyntheticLegacyTexInstructionProbe::TextureKillSaturateDestination,
         CNA::TestSupport::SyntheticLegacyTexInstructionProbe::TextureKillShiftDestination,
         CNA::TestSupport::SyntheticLegacyTexInstructionProbe::DuplicateTextureStage,

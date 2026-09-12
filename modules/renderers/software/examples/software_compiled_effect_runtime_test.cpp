@@ -4245,6 +4245,7 @@ namespace
             Probe::ShiftDestination,
             Probe::TextureCoordinateSaturateDestination,
             Probe::TextureCoordinateShiftDestination,
+            Probe::TextureCoordinateTemporaryDestination,
             Probe::TextureKillSaturateDestination,
             Probe::TextureKillShiftDestination,
             Probe::DuplicateTextureStage,

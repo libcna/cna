@@ -376,6 +376,8 @@ namespace CNA::TestSupport
         TextureCoordinateSaturateDestination,
         /** @brief Invalidly scale the `TEXCOORD` destination result by two. */
         TextureCoordinateShiftDestination,
+        /** @brief Invalidly target a temporary register with `TEXCOORD`. */
+        TextureCoordinateTemporaryDestination,
         /** @brief Invalidly apply saturation to the `TEXKILL` destination token. */
         TextureKillSaturateDestination,
         /** @brief Invalidly scale the `TEXKILL` destination token by two. */
@@ -4102,6 +4104,12 @@ namespace CNA::TestSupport
             else if (legacyTexInstructionProbe ==
                      Probe::TextureCoordinateShiftDestination)
                 appendTextureDestinationInstruction(0x00000040u, 0, 0u, 1u);
+            else if (legacyTexInstructionProbe ==
+                     Probe::TextureCoordinateTemporaryDestination)
+            {
+                AppendUInt32(shader, 0x00000040u); // texcoord r0
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+            }
             else if (legacyTexInstructionProbe == Probe::TextureKillSaturateDestination)
                 appendTextureDestinationInstruction(0x00000041u, 0, 1u);
             else if (legacyTexInstructionProbe == Probe::TextureKillShiftDestination)

@@ -433,6 +433,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   `TEXKILL` and their peers, and enforces one-use monotonically increasing destination stages
   across mixed texture sequences. The older Shader Model 1.1 maximum fixture now uses the legal
   `t0..t3` sequence instead of four Microsoft-invalid writes to `t0`.
+  SOFTWARE-476 completes that destination audit: managed patch 101 rejects pre-1.4 `TEXCOORD`
+  bytecode targeting a temporary register, matching Microsoft X5040 while preserving the legal
+  Shader Model 1.4 temporary-destination form.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is

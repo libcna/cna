@@ -1,0 +1,14 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2413,6 +2413,10 @@ static void state_TEXCRD(Context *ctx)
+         if (src->regtype == REG_TYPE_TEXTURE)
+             validate_pixel14_texture_coordinate_selector(ctx, src);
+     } // else if
++    else if (ctx->dest_arg.regtype != REG_TYPE_TEXTURE)
++    {
++        fail(ctx, "ps_1_1 through ps_1_3 TEXCOORD destination must be a texture register");
++    } // else if
+ } // state_TEXCRD
+ 
+ static void state_FRC(Context *ctx)
