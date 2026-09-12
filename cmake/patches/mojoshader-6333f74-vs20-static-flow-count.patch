@@ -1,0 +1,93 @@
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2176,6 +2176,12 @@
+         ctx->source_args[0].regnum + 1;
+ } // state_LABEL
+ 
++static void count_static_flow_control(Context *ctx)
++{
++    if (shader_is_vertex(ctx) && (ctx->major_ver == 2))
++        ctx->static_flow_count++;
++} // count_static_flow_control
++
+ static void check_call_loop_wrappage(Context *ctx, const int regnum)
+ {
+     // msdn says subroutines inherit aL register if you're in a loop when
+@@ -2203,6 +2209,8 @@
+ {
+     check_label_register(ctx, 0, "CALL");
+     check_call_loop_wrappage(ctx, ctx->source_args[0].regnum);
++    if (!isfail(ctx))
++        count_static_flow_control(ctx);
+ } // state_CALL
+ 
+ static void state_CALLNZ(Context *ctx)
+@@ -2215,6 +2223,8 @@
+         fail(ctx, "CALLNZ predicate argument requires Shader Model 2.x or later");
+     check_label_register(ctx, 0, "CALLNZ");
+     check_call_loop_wrappage(ctx, ctx->source_args[0].regnum);
++    if (!isfail(ctx) && (regtype == REG_TYPE_CONSTBOOL))
++        count_static_flow_control(ctx);
+ } // state_CALLNZ
+ 
+ static void state_MOVA(Context *ctx)
+@@ -2270,6 +2280,8 @@
+         const int limit = ((ctx->major_ver == 2) && (ctx->minor_ver == 0)) ? 1 : 4;
+         if (ctx->loop_rep_depth > limit)
+             fail(ctx, "LOOP/REP nesting exceeds the shader-model limit");
++        if (!isfail(ctx))
++            count_static_flow_control(ctx);
+     } // else if
+ } // state_LOOP
+ 
+@@ -2334,6 +2346,8 @@
+     const int limit = ((ctx->major_ver == 2) && (ctx->minor_ver == 0)) ? 1 : 4;
+     if (ctx->loop_rep_depth > limit)
+         fail(ctx, "LOOP/REP nesting exceeds the shader-model limit");
++    if (!isfail(ctx))
++        count_static_flow_control(ctx);
+ } // state_REP
+ 
+ static void state_ENDREP(Context *ctx)
+@@ -2494,6 +2508,8 @@
+     (*depth)++;
+     if (*depth > 24)
+         fail(ctx, "IF nesting exceeds the shader-model limit");
++    if (!isfail(ctx) && !dynamic)
++        count_static_flow_control(ctx);
+ } // state_IF
+ 
+ static void state_IFC(Context *ctx)
+@@ -2532,7 +2548,10 @@
+              (*block == FLOW_CONTROL_BLOCK_IF_DYNAMIC_ELSE))
+         fail(ctx, "Multiple ELSE instructions for one IF");
+     else if (*block == FLOW_CONTROL_BLOCK_IF_STATIC)
++    {
+         *block = FLOW_CONTROL_BLOCK_IF_STATIC_ELSE;
++        count_static_flow_control(ctx);
++    } // else if
+     else
+         *block = FLOW_CONTROL_BLOCK_IF_DYNAMIC_ELSE;
+ } // state_ELSE
+@@ -5121,6 +5140,11 @@
+ 
+     if (ctx->flow_control_stack_index > 0)
+         fail(ctx, "Unterminated flow-control block");
++    if (shader_is_vertex(ctx) && (ctx->major_ver == 2) &&
++        (ctx->static_flow_count > 16))
++    {
++        fail(ctx, "Static flow-control count exceeds the Shader Model 2 limit");
++    } // if
+ 
+     // for ps_1_*, the output color is written to r0...throw an
+     //  error if this register was never written. This isn't
+--- a/profiles/mojoshader_profile.h
++++ b/profiles/mojoshader_profile.h
+@@ -162,6 +162,7 @@
+     int loop_rep_depth;
+     int static_if_depth;
+     int dynamic_if_depth;
++    int static_flow_count;
+     int flow_control_stack_index;
+     FlowControlBlock flow_control_stack[MAX_FLOW_CONTROL_BLOCKS];
+     int current_label_register_plus_one;

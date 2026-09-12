@@ -3032,6 +3032,13 @@ namespace
             Probe::DynamicIfDepth25,
             Probe::LoopRepDepth5,
             Probe::Vertex20LoopRepDepth2,
+            Probe::Vertex20StaticFlowCount17If,
+            Probe::Vertex20StaticFlowCount17Else,
+            Probe::Vertex20StaticFlowCount17Loop,
+            Probe::Vertex20StaticFlowCount17Rep,
+            Probe::Vertex20StaticFlowCount17Call,
+            Probe::Vertex20StaticFlowCount17CallNz,
+            Probe::Vertex2xStaticFlowCount17,
         };
         for (const Probe probe : invalidProbes)
         {
@@ -3058,6 +3065,8 @@ namespace
             Probe::DynamicIfDepth24,
             Probe::LoopRepDepth4,
             Probe::Vertex20LoopRepDepth1,
+            Probe::Vertex20StaticFlowCount16,
+            Probe::Vertex2xStaticFlowCount16,
         };
         for (const Probe probe : validProbes)
         {

@@ -385,6 +385,24 @@ namespace CNA::TestSupport
         Vertex20LoopRepDepth1,
         /** @brief Emit two loop/repeat levels in an exact vertex Shader Model 2.0 program. */
         Vertex20LoopRepDepth2,
+        /** @brief Emit exactly 16 mixed static-flow operations in a vertex Shader Model 2.0 program. */
+        Vertex20StaticFlowCount16,
+        /** @brief Emit a seventeenth static-flow operation through `IF`. */
+        Vertex20StaticFlowCount17If,
+        /** @brief Emit a seventeenth static-flow operation through `ELSE`. */
+        Vertex20StaticFlowCount17Else,
+        /** @brief Emit a seventeenth static-flow operation through `LOOP`. */
+        Vertex20StaticFlowCount17Loop,
+        /** @brief Emit a seventeenth static-flow operation through `REP`. */
+        Vertex20StaticFlowCount17Rep,
+        /** @brief Emit a seventeenth static-flow operation through `CALL`. */
+        Vertex20StaticFlowCount17Call,
+        /** @brief Emit a seventeenth static-flow operation through Boolean `CALLNZ`. */
+        Vertex20StaticFlowCount17CallNz,
+        /** @brief Emit exactly 16 mixed static-flow operations in a vertex Shader Model 2.x program. */
+        Vertex2xStaticFlowCount16,
+        /** @brief Emit 17 mixed static-flow operations in a vertex Shader Model 2.x program. */
+        Vertex2xStaticFlowCount17,
     };
 
     /** @brief Invalid source/destination relationship deliberately emitted for a matrix opcode. */
@@ -3730,8 +3748,11 @@ namespace CNA::TestSupport
                 SyntheticSemanticDeclarationProbe::PixelCentroidImplicitColor ||
             probesCentroid20;
         const bool probesVertex20FlowControl =
-            flowControlProbe == SyntheticFlowControlProbe::Vertex20LoopRepDepth1 ||
-            flowControlProbe == SyntheticFlowControlProbe::Vertex20LoopRepDepth2;
+            flowControlProbe >= SyntheticFlowControlProbe::Vertex20LoopRepDepth1 &&
+            flowControlProbe <= SyntheticFlowControlProbe::Vertex2xStaticFlowCount17;
+        const bool probesVertex2xFlowControl =
+            flowControlProbe == SyntheticFlowControlProbe::Vertex2xStaticFlowCount16 ||
+            flowControlProbe == SyntheticFlowControlProbe::Vertex2xStaticFlowCount17;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture ||
             invalidMixedConstantAbsolute ==
@@ -3755,7 +3776,9 @@ namespace CNA::TestSupport
             instructionSlotProbe == SyntheticVertexInstructionSlotProbe::Vertex2xOutOfRange;
         const std::uint32_t versionToken = usesShaderModel11
                                                ? 0xFFFE0101u
-                                           : probesVertex2xTemporary || probesVertex2xInstructionSlots
+                                           : probesVertex2xTemporary ||
+                                                     probesVertex2xInstructionSlots ||
+                                                     probesVertex2xFlowControl
                                                ? 0xFFFE02FFu
                                            : usesShaderModel3
                                                ? 0xFFFE0300u
@@ -3827,7 +3850,8 @@ namespace CNA::TestSupport
         const std::uint32_t samplerName = appendCtabString("FxSampler");
         const std::uint32_t target = appendCtabString(
             usesShaderModel11 ? "vs_1_1"
-                              : probesVertex2xTemporary || probesVertex2xInstructionSlots
+                              : probesVertex2xTemporary || probesVertex2xInstructionSlots ||
+                                        probesVertex2xFlowControl
                                     ? "vs_2_x"
                                     : usesShaderModel3
                                           ? "vs_3_0"
@@ -4744,20 +4768,107 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0u);
             AppendUInt32(shader, 1u);
             AppendUInt32(shader, 0u);
-            AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
-            AppendUInt32(shader, source(regLoop, 0, 0x00u));
-            AppendUInt32(shader, source(regConstInt, 0));
-            if (flowControlProbe == SyntheticFlowControlProbe::Vertex20LoopRepDepth2)
+            AppendUInt32(shader, 0x0000002Fu | (2u << 24)); // defb b0, true
+            AppendUInt32(shader, destination(regConstBool, 0, 0x1u));
+            AppendUInt32(shader, 1u);
+            if (flowControlProbe == SyntheticFlowControlProbe::Vertex20LoopRepDepth1 ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex20LoopRepDepth2)
             {
-                AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
-                AppendUInt32(shader, source(regConstInt, 0, 0x00u));
-                AppendUInt32(shader, 0x00000027u); // endrep
+                AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
+                AppendUInt32(shader, source(regLoop, 0, 0x00u));
+                AppendUInt32(shader, source(regConstInt, 0));
+                if (flowControlProbe == SyntheticFlowControlProbe::Vertex20LoopRepDepth2)
+                {
+                    AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
+                    AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                    AppendUInt32(shader, 0x00000027u); // endrep
+                }
+                AppendUInt32(shader, 0x0000001Du); // endloop
             }
-            AppendUInt32(shader, 0x0000001Du); // endloop
+            else
+            {
+                const auto appendIf = [&](bool includeElse)
+                {
+                    AppendUInt32(shader, 0x00000028u | (1u << 24)); // if b0
+                    AppendUInt32(shader, source(regConstBool, 0, 0x00u));
+                    if (includeElse) AppendUInt32(shader, 0x0000002Au); // else
+                    AppendUInt32(shader, 0x0000002Bu); // endif
+                };
+                const auto appendLoop = [&]()
+                {
+                    AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
+                    AppendUInt32(shader, source(regLoop, 0, 0x00u));
+                    AppendUInt32(shader, source(regConstInt, 0));
+                    AppendUInt32(shader, 0x0000001Du); // endloop
+                };
+                const auto appendRep = [&]()
+                {
+                    AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
+                    AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                    AppendUInt32(shader, 0x00000027u); // endrep
+                };
+                const auto appendCall = [&](bool conditional)
+                {
+                    AppendUInt32(shader,
+                                 (conditional ? 0x0000001Au | (2u << 24)
+                                              : 0x00000019u | (1u << 24)));
+                    AppendUInt32(shader, source(regLabel, 0));
+                    if (conditional)
+                        AppendUInt32(shader, source(regConstBool, 0, 0x00u));
+                };
+
+                // This mixed prefix consumes 16 static-flow counts: IF+ELSE, LOOP, REP,
+                // six CALLs and six Boolean CALLNZs. For the ELSE overflow probe the prefix
+                // stops at 15, then IF reaches 16 and ELSE is the first excess operation.
+                appendIf(true);
+                appendLoop();
+                appendRep();
+                for (int index = 0; index < 6; ++index) appendCall(false);
+                const int conditionalCalls =
+                    flowControlProbe == SyntheticFlowControlProbe::Vertex20StaticFlowCount17Else
+                        ? 5
+                        : 6;
+                for (int index = 0; index < conditionalCalls; ++index) appendCall(true);
+
+                switch (flowControlProbe)
+                {
+                    case SyntheticFlowControlProbe::Vertex20StaticFlowCount16:
+                    case SyntheticFlowControlProbe::Vertex2xStaticFlowCount16: break;
+                    case SyntheticFlowControlProbe::Vertex20StaticFlowCount17If:
+                        appendIf(false);
+                        break;
+                    case SyntheticFlowControlProbe::Vertex20StaticFlowCount17Else:
+                        appendIf(true);
+                        break;
+                    case SyntheticFlowControlProbe::Vertex20StaticFlowCount17Loop:
+                        appendLoop();
+                        break;
+                    case SyntheticFlowControlProbe::Vertex20StaticFlowCount17Rep:
+                        appendRep();
+                        break;
+                    case SyntheticFlowControlProbe::Vertex20StaticFlowCount17Call:
+                        appendCall(false);
+                        break;
+                    case SyntheticFlowControlProbe::Vertex20StaticFlowCount17CallNz:
+                        appendCall(true);
+                        break;
+                    case SyntheticFlowControlProbe::Vertex2xStaticFlowCount17:
+                        appendIf(false);
+                        break;
+                    default: break;
+                }
+            }
             AppendUInt32(shader, 0x00000014u | (3u << 24)); // m4x4 oPos, v0, c0
             AppendUInt32(shader, destination(regRastOut, 0));
             AppendUInt32(shader, source(regInput, 0));
             AppendUInt32(shader, source(regConst, 0));
+            if (flowControlProbe >= SyntheticFlowControlProbe::Vertex20StaticFlowCount16)
+            {
+                AppendUInt32(shader, 0x0000001Cu); // ret from main
+                AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l0
+                AppendUInt32(shader, source(regLabel, 0));
+                AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+            }
         }
         else if (invalidMixedConstantAbsolute ==
                  SyntheticInvalidShaderModel3MixedConstantAbsolute::VertexAllAbsolute)

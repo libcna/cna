@@ -280,8 +280,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   flow grammar: it tracks typed `IF`/`ELSE`, `LOOP` and `REP` blocks, rejects orphaned, duplicate,
   crossing and unterminated terminators, and enforces the documented Shader Model 3 conditional
   and loop/repeat nesting limits plus exact `vs_2_0` loop/repeat depth. Twelve invalid programs and
-  five maximum/legal controls pass through Software and all 301 enabled EasyGL compiled-Effect
-  tests. SOFTWARE-388 replaces the remaining SM3
+  five maximum/legal controls pass through Software and all 301 then-current enabled EasyGL
+  compiled-Effect tests. SOFTWARE-436 additionally enforces the 16-count static-flow budget shared
+  by `vs_2_0` and `vs_2_x`; seven independent overflows and two mixed maximum programs cover
+  Boolean `IF`/`ELSE`, `LOOP`, `REP`, `CALL` and Boolean `CALLNZ`, and all 310 enabled EasyGL
+  compiled-Effect tests pass. SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
   swizzles, source modifiers, projection and sample-dependent temporary chains. SOFTWARE-389

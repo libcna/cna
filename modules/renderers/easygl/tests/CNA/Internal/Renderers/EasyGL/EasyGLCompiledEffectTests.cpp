@@ -1118,7 +1118,14 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::StaticIfDepth25,
         CNA::TestSupport::SyntheticFlowControlProbe::DynamicIfDepth25,
         CNA::TestSupport::SyntheticFlowControlProbe::LoopRepDepth5,
-        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth2));
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth2,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17If,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17Else,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17Loop,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17Rep,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17Call,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17CallNz,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex2xStaticFlowCount17));
 
 class EasyGLCompiledEffectValidFlowControlTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticFlowControlProbe>
@@ -1145,7 +1152,9 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::StaticIfDepth24,
         CNA::TestSupport::SyntheticFlowControlProbe::DynamicIfDepth24,
         CNA::TestSupport::SyntheticFlowControlProbe::LoopRepDepth4,
-        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth1));
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth1,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount16,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex2xStaticFlowCount16));
 
 class EasyGLCompiledEffectMatrixOperandTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidMatrixOperands>
