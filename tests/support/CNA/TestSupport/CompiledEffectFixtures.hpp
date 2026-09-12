@@ -1027,6 +1027,23 @@ namespace CNA::TestSupport
         SamplerSwizzle,
     };
 
+    /** @brief Shader Model 3 TEXLD-family destination modifier and control probe. */
+    enum class SyntheticTexldDestinationModifierProbe
+    {
+        /** @brief Emit no dedicated TEXLD-family destination-modifier probe. */
+        None,
+        /** @brief Apply forbidden saturation to an ordinary pixel TEXLD destination. */
+        Pixel30TexldSaturate,
+        /** @brief Apply forbidden saturation to a projective pixel TEXLDP destination. */
+        Pixel30TexldpSaturate,
+        /** @brief Apply forbidden saturation to a biased pixel TEXLDB destination. */
+        Pixel30TexldbSaturate,
+        /** @brief Apply permitted partial precision to a projective pixel TEXLDP destination. */
+        Pixel30TexldpPartialPrecision,
+        /** @brief Apply permitted partial precision to a biased pixel TEXLDB destination. */
+        Pixel30TexldbPartialPrecision,
+    };
+
     /** @brief Texture instruction encoded at a Shader Model profile boundary. */
     enum class SyntheticTextureInstructionProfileProbe
     {
@@ -1484,6 +1501,9 @@ namespace CNA::TestSupport
         /** @brief Selects an invalid Pixel Shader Model 2 TEXLD operand form. */
         SyntheticTexld20OperandProbe texld20OperandProbe =
             SyntheticTexld20OperandProbe::None;
+        /** @brief Selects a Shader Model 3 TEXLD-family destination modifier and control. */
+        SyntheticTexldDestinationModifierProbe texldDestinationModifierProbe =
+            SyntheticTexldDestinationModifierProbe::None;
         /** @brief Selects a texture instruction encoded at a profile boundary. */
         SyntheticTextureInstructionProfileProbe textureInstructionProfileProbe =
             SyntheticTextureInstructionProfileProbe::None;
@@ -1643,6 +1663,8 @@ namespace CNA::TestSupport
             SyntheticTextureSourceModifierProbe::None,
         SyntheticTexld20OperandProbe texld20OperandProbe =
             SyntheticTexld20OperandProbe::None,
+        SyntheticTexldDestinationModifierProbe texldDestinationModifierProbe =
+            SyntheticTexldDestinationModifierProbe::None,
         SyntheticTextureInstructionProfileProbe textureInstructionProfileProbe =
             SyntheticTextureInstructionProfileProbe::None,
         SyntheticTexlddOperandProbe texlddOperandProbe =
@@ -1844,6 +1866,8 @@ namespace CNA::TestSupport
                 SyntheticTextureSourceModifierProbe::PixelTexlddGradient;
         const bool probesTexld20Operand =
             texld20OperandProbe != SyntheticTexld20OperandProbe::None;
+        const bool probesPixelTexldDestinationModifier =
+            texldDestinationModifierProbe != SyntheticTexldDestinationModifierProbe::None;
         const bool probesPixelTextureInstructionProfile =
             textureInstructionProfileProbe ==
                 SyntheticTextureInstructionProfileProbe::Pixel20Texldd ||
@@ -1893,7 +1917,7 @@ namespace CNA::TestSupport
             probesMissingPixel30SamplerDeclaration || probesPixelImmediateConstantDefinition ||
             probesVertexFloatRedefinition || probesPixelSamplerDuplicate ||
             probesPixelTextureSourceModifier || probesPixel30TexlddOperand ||
-            probesPixelTexldlDestinationModifier;
+            probesPixelTexldlDestinationModifier || probesPixelTexldDestinationModifier;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -4044,7 +4068,8 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regInput, 0));
         }
         else if (samplesTexture || usesTextureGradients || probesPixelTextureSourceModifier ||
-                 probesTexld20Operand || probesPixelTextureInstructionProfile ||
+                 probesTexld20Operand || probesPixelTexldDestinationModifier ||
+                 probesPixelTextureInstructionProfile ||
                  probesTexlddOperand || probesPixelTexldlDestinationModifier)
         {
             // plans/plan_fx.md FX-110: a cube or volume sampler reads three components, a 2D one reads
@@ -4111,7 +4136,19 @@ namespace CNA::TestSupport
                                                     ? 0x0000005Fu
                                                     : 0x00000042u;
             const std::uint32_t textureLength = textureUsesGradients ? 5u : 3u;
-            AppendUInt32(shader, textureOpcode | (textureLength << 24));
+            const bool probesProjectedTexld =
+                texldDestinationModifierProbe ==
+                    SyntheticTexldDestinationModifierProbe::Pixel30TexldpSaturate ||
+                texldDestinationModifierProbe ==
+                    SyntheticTexldDestinationModifierProbe::Pixel30TexldpPartialPrecision;
+            const bool probesBiasedTexld =
+                texldDestinationModifierProbe ==
+                    SyntheticTexldDestinationModifierProbe::Pixel30TexldbSaturate ||
+                texldDestinationModifierProbe ==
+                    SyntheticTexldDestinationModifierProbe::Pixel30TexldbPartialPrecision;
+            const std::uint32_t textureControl = probesProjectedTexld ? 1u : probesBiasedTexld ? 2u : 0u;
+            AppendUInt32(shader,
+                         textureOpcode | (textureLength << 24) | (textureControl << 16));
             const std::uint32_t destinationType =
                 texld20OperandProbe == SyntheticTexld20OperandProbe::InputDestination
                     ? regInput
@@ -4137,6 +4174,18 @@ namespace CNA::TestSupport
                     ? (1u << 20)
                 : texld20OperandProbe ==
                       SyntheticTexld20OperandProbe::PartialPrecisionDestination
+                    ? (2u << 20)
+                : texldDestinationModifierProbe ==
+                          SyntheticTexldDestinationModifierProbe::Pixel30TexldSaturate ||
+                      texldDestinationModifierProbe ==
+                          SyntheticTexldDestinationModifierProbe::Pixel30TexldpSaturate ||
+                      texldDestinationModifierProbe ==
+                          SyntheticTexldDestinationModifierProbe::Pixel30TexldbSaturate
+                    ? (1u << 20)
+                : texldDestinationModifierProbe ==
+                          SyntheticTexldDestinationModifierProbe::Pixel30TexldpPartialPrecision ||
+                      texldDestinationModifierProbe ==
+                          SyntheticTexldDestinationModifierProbe::Pixel30TexldbPartialPrecision
                     ? (2u << 20)
                 : texlddOperandProbe ==
                           SyntheticTexlddOperandProbe::Pixel2xSaturateDestination ||
@@ -4219,7 +4268,8 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, source(gradientType, 0,
                                             swizzleGradient ? swizzleBgra : swizzleIdentity));
             }
-            if (probesTexld20Operand || probesTexlddOperand)
+            if (probesTexld20Operand || probesPixelTexldDestinationModifier ||
+                probesTexlddOperand)
             {
                 // Keep every destination probe independent from a later read of that destination.
                 AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, c0
@@ -6509,6 +6559,7 @@ namespace CNA::TestSupport
             options.callGraphProbe,
             options.textureSourceModifierProbe,
             options.texld20OperandProbe,
+            options.texldDestinationModifierProbe,
             options.textureInstructionProfileProbe,
             options.texlddOperandProbe,
             options.texldlDestinationModifierProbe);
@@ -6535,6 +6586,8 @@ namespace CNA::TestSupport
                      options.textureSourceModifierProbe <=
                          SyntheticTextureSourceModifierProbe::PixelTexldlSampler) ||
                     options.texld20OperandProbe != SyntheticTexld20OperandProbe::None ||
+                    options.texldDestinationModifierProbe !=
+                        SyntheticTexldDestinationModifierProbe::None ||
                     options.texlddOperandProbe != SyntheticTexlddOperandProbe::None ||
                     options.texldlDestinationModifierProbe !=
                         SyntheticTexldlDestinationModifierProbe::None ||
@@ -6585,6 +6638,8 @@ namespace CNA::TestSupport
                      options.textureSourceModifierProbe <=
                          SyntheticTextureSourceModifierProbe::PixelTexldlSampler) ||
                     options.texlddOperandProbe != SyntheticTexlddOperandProbe::None ||
+                    options.texldDestinationModifierProbe !=
+                        SyntheticTexldDestinationModifierProbe::None ||
                     options.texldlDestinationModifierProbe !=
                         SyntheticTexldlDestinationModifierProbe::None ||
                     options.pixelShaderUsesProjectiveModifiers ||

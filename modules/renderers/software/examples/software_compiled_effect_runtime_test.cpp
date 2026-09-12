@@ -4134,6 +4134,68 @@ namespace
               "compiled Effect parser rejected Microsoft-valid pixel TEXLDL _pp");
     }
 
+    void CheckCompiledTexldDestinationModifierValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticTexldDestinationModifierProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel30TexldSaturate,
+            Probe::Pixel30TexldpSaturate,
+            Probe::Pixel30TexldbSaturate,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.texldDestinationModifierProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted saturated TEXLD-family destinations: " +
+                  acceptedInvalidProbes);
+
+        constexpr std::array validProbes{
+            Probe::Pixel30TexldpPartialPrecision,
+            Probe::Pixel30TexldbPartialPrecision,
+        };
+        std::string rejectedValidProbes;
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.texldDestinationModifierProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                if (!rejectedValidProbes.empty()) rejectedValidProbes += ", ";
+                rejectedValidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(rejectedValidProbes.empty(),
+              "compiled Effect parser rejected Microsoft-valid TEXLD-family _pp: " +
+                  rejectedValidProbes);
+    }
+
     void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
@@ -6722,6 +6784,7 @@ int main()
         CheckCompiledTextureInstructionProfileValidation(renderer);
         CheckCompiledTexlddOperandValidation(renderer);
         CheckCompiledTexldlDestinationModifierValidation(renderer);
+        CheckCompiledTexldDestinationModifierValidation(renderer);
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);

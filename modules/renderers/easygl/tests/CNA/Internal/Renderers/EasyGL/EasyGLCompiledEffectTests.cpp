@@ -2010,6 +2010,61 @@ TEST(EasyGLCompiledEffectTexldlDestinationModifierTests, AcceptsPixelPartialPrec
     EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
+class EasyGLCompiledEffectInvalidTexldDestinationModifierTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidTexldDestinationModifierTest, RejectsModifier)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texldDestinationModifierProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTexldDestinationModifier,
+    EasyGLCompiledEffectInvalidTexldDestinationModifierTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::Pixel30TexldSaturate,
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::Pixel30TexldpSaturate,
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::Pixel30TexldbSaturate));
+
+class EasyGLCompiledEffectValidTexldDestinationModifierTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidTexldDestinationModifierTest, AcceptsModifier)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texldDestinationModifierProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidTexldDestinationModifier,
+    EasyGLCompiledEffectValidTexldDestinationModifierTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+            Pixel30TexldpPartialPrecision,
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+            Pixel30TexldbPartialPrecision));
+
 class EasyGLCompiledEffectTypedControlSourceTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticTypedControlSourceProbe>
 {

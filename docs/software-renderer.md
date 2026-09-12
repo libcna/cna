@@ -334,7 +334,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   otherwise permissive Shader Model 3 destination, coordinate and swizzle forms. Both compiled
   paths had accepted the two invalid saturated programs. Managed common validation now rejects
   saturation only; two rejection probes, the `_pp` control, the direct Software runtime and all
-  407 isolated EasyGL compiled-Effect tests pass. The dependency series now contains 75 patches.
+  407 isolated EasyGL compiled-Effect tests pass. SOFTWARE-450 then resolves MojoShader's adjacent
+  unverified `TEXLDP`/`TEXLDB` restriction. Microsoft's 44-case matrix shows that Shader Model 3
+  permits output/partial destinations, `_pp`, broad coordinate registers and source swizzles for
+  ordinary, projective and biased loads, but rejects `_sat` for all three. Both CNA paths accepted
+  those three invalid programs. Common validation now applies the saturation ban across profiles;
+  five paired probes and all 412 isolated EasyGL compiled-Effect tests pass. The dependency series
+  now contains 76 patches.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
