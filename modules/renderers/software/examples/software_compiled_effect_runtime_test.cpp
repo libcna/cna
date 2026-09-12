@@ -4768,6 +4768,91 @@ namespace
                   acceptedInvalidProbes);
     }
 
+    void CheckCompiledTexld20TemporaryInitialization(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticTexld20OperandProbe;
+        using Kind = CNA::TestSupport::SyntheticSamplerKind;
+        constexpr std::array invalidProbes{
+            Probe::OrdinaryIncompleteCoordinate,
+            Probe::ProjectedIncompleteCoordinate,
+            Probe::BiasedIncompleteCoordinate,
+        };
+        constexpr std::array validProbes{
+            Probe::OrdinaryCompleteCoordinate,
+            Probe::ProjectedCompleteCoordinate,
+            Probe::BiasedCompleteCoordinate,
+        };
+        constexpr std::array kinds{Kind::Sampler2D, Kind::SamplerCube, Kind::Sampler3D};
+
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            for (const Kind kind : kinds)
+            {
+                CNA::TestSupport::SyntheticEffectOptions options;
+                options.includeDrawableProgram = true;
+                options.includeSampler = true;
+                options.samplerKind = kind;
+                options.texld20OperandProbe = probe;
+                const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+                bool rejected = false;
+                try
+                {
+                    static_cast<void>(
+                        renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+                }
+                catch (const std::runtime_error&)
+                {
+                    rejected = true;
+                }
+                if (!rejected)
+                {
+                    if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                    acceptedInvalidProbes +=
+                        std::to_string(static_cast<int>(probe)) + "/" +
+                        std::to_string(static_cast<int>(kind));
+                }
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted incomplete ps_2_0 TEXLD coordinates: " +
+                  acceptedInvalidProbes);
+
+        std::string rejectedValidProbes;
+        for (const Probe probe : validProbes)
+        {
+            for (const Kind kind : kinds)
+            {
+                CNA::TestSupport::SyntheticEffectOptions options;
+                options.includeDrawableProgram = true;
+                options.includeSampler = true;
+                options.samplerKind = kind;
+                options.texld20OperandProbe = probe;
+                const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+                bool accepted = true;
+                try
+                {
+                    static_cast<void>(
+                        renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+                }
+                catch (const std::runtime_error&)
+                {
+                    accepted = false;
+                }
+                if (!accepted)
+                {
+                    if (!rejectedValidProbes.empty()) rejectedValidProbes += ", ";
+                    rejectedValidProbes +=
+                        std::to_string(static_cast<int>(probe)) + "/" +
+                        std::to_string(static_cast<int>(kind));
+                }
+            }
+        }
+        Check(rejectedValidProbes.empty(),
+              "compiled Effect parser rejected exact ps_2_0 TEXLD coordinates: " +
+                  rejectedValidProbes);
+    }
+
     void CheckCompiledTextureInstructionProfileValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTextureInstructionProfileProbe;
@@ -7836,6 +7921,7 @@ int main()
         CheckCompiledTextureGradientSamplerOperand(renderer);
         CheckCompiledTextureSourceModifierValidation(renderer);
         CheckCompiledTexld20OperandValidation(renderer);
+        CheckCompiledTexld20TemporaryInitialization(renderer);
         CheckCompiledTextureInstructionProfileValidation(renderer);
         CheckCompiledTexlddOperandValidation(renderer);
         CheckCompiledTexldlDestinationModifierValidation(renderer);

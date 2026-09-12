@@ -136,7 +136,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-bem-operand-validation.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-14-texture-selector-validation.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-shader-model-14-temporary-texture-selector-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-2x-temp-initialization.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-2x-temp-initialization.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-pixel-shader-20-texld-temp-initialization.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

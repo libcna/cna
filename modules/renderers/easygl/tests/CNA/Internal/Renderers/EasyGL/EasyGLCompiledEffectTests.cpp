@@ -2560,6 +2560,70 @@ TEST(EasyGLCompiledEffectTexld20OperandTest, AcceptsPartialPrecision)
     EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
+TEST(EasyGLCompiledEffectTexld20OperandTest, RejectsIncompleteTemporaryCoordinates)
+{
+    using Probe = CNA::TestSupport::SyntheticTexld20OperandProbe;
+    using Kind = CNA::TestSupport::SyntheticSamplerKind;
+    constexpr std::array probes{
+        Probe::OrdinaryIncompleteCoordinate,
+        Probe::ProjectedIncompleteCoordinate,
+        Probe::BiasedIncompleteCoordinate,
+    };
+    constexpr std::array kinds{Kind::Sampler2D, Kind::SamplerCube, Kind::Sampler3D};
+
+    for (const Probe probe : probes)
+    {
+        for (const Kind kind : kinds)
+        {
+            SCOPED_TRACE(::testing::Message()
+                         << "probe=" << static_cast<int>(probe)
+                         << ", sampler=" << static_cast<int>(kind));
+            GraphicsDevice device;
+            EasyGLRenderer* renderer = RendererOf(device);
+            if (renderer == nullptr) GTEST_SKIP() << "this build did not select EasyGL";
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.samplerKind = kind;
+            options.texld20OperandProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        }
+    }
+}
+
+TEST(EasyGLCompiledEffectTexld20OperandTest, AcceptsExactlyInitializedTemporaryCoordinates)
+{
+    using Probe = CNA::TestSupport::SyntheticTexld20OperandProbe;
+    using Kind = CNA::TestSupport::SyntheticSamplerKind;
+    constexpr std::array probes{
+        Probe::OrdinaryCompleteCoordinate,
+        Probe::ProjectedCompleteCoordinate,
+        Probe::BiasedCompleteCoordinate,
+    };
+    constexpr std::array kinds{Kind::Sampler2D, Kind::SamplerCube, Kind::Sampler3D};
+
+    for (const Probe probe : probes)
+    {
+        for (const Kind kind : kinds)
+        {
+            SCOPED_TRACE(::testing::Message()
+                         << "probe=" << static_cast<int>(probe)
+                         << ", sampler=" << static_cast<int>(kind));
+            GraphicsDevice device;
+            EasyGLRenderer* renderer = RendererOf(device);
+            if (renderer == nullptr) GTEST_SKIP() << "this build did not select EasyGL";
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.samplerKind = kind;
+            options.texld20OperandProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        }
+    }
+}
+
 TEST_P(EasyGLCompiledEffectTexld20OperandTest, RejectsOperand)
 {
     GraphicsDevice device;

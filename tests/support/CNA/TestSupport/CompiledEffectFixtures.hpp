@@ -1427,6 +1427,18 @@ namespace CNA::TestSupport
         ConstantCoordinate,
         /** @brief Apply a BGRA swizzle to the sampler operand. */
         SamplerSwizzle,
+        /** @brief Sample with an ordinary TEXLD from an incompletely initialized temporary. */
+        OrdinaryIncompleteCoordinate,
+        /** @brief Sample with an ordinary TEXLD from an exactly initialized temporary. */
+        OrdinaryCompleteCoordinate,
+        /** @brief Sample with TEXLDP from an incompletely initialized temporary. */
+        ProjectedIncompleteCoordinate,
+        /** @brief Sample with TEXLDP from an exactly initialized temporary. */
+        ProjectedCompleteCoordinate,
+        /** @brief Sample with TEXLDB from an incompletely initialized temporary. */
+        BiasedIncompleteCoordinate,
+        /** @brief Sample with TEXLDB from an exactly initialized temporary. */
+        BiasedCompleteCoordinate,
     };
 
     /** @brief Shader Model 3 TEXLD-family destination modifier and control probe. */
@@ -2380,6 +2392,9 @@ namespace CNA::TestSupport
                 SyntheticTextureSourceModifierProbe::PixelTexlddGradient;
         const bool probesTexld20Operand =
             texld20OperandProbe != SyntheticTexld20OperandProbe::None;
+        const bool probesTexld20TemporaryInitialization =
+            texld20OperandProbe >=
+                SyntheticTexld20OperandProbe::OrdinaryIncompleteCoordinate;
         const bool probesPixelTexldDestinationModifier =
             texldDestinationModifierProbe != SyntheticTexldDestinationModifierProbe::None;
         const bool probesPixel30TexldDestinationModifier =
@@ -5370,15 +5385,24 @@ namespace CNA::TestSupport
                 texldDestinationModifierProbe ==
                     SyntheticTexldDestinationModifierProbe::Pixel30TexldpPartialPrecision ||
                 texldDestinationModifierProbe ==
-                    SyntheticTexldDestinationModifierProbe::Pixel20TexldpPartialPrecision;
+                    SyntheticTexldDestinationModifierProbe::Pixel20TexldpPartialPrecision ||
+                texld20OperandProbe ==
+                    SyntheticTexld20OperandProbe::ProjectedIncompleteCoordinate ||
+                texld20OperandProbe ==
+                    SyntheticTexld20OperandProbe::ProjectedCompleteCoordinate;
             const bool probesBiasedTexld =
                 texldDestinationModifierProbe ==
                     SyntheticTexldDestinationModifierProbe::Pixel30TexldbSaturate ||
                 texldDestinationModifierProbe ==
-                    SyntheticTexldDestinationModifierProbe::Pixel30TexldbPartialPrecision;
+                    SyntheticTexldDestinationModifierProbe::Pixel30TexldbPartialPrecision ||
+                texld20OperandProbe ==
+                    SyntheticTexld20OperandProbe::BiasedIncompleteCoordinate ||
+                texld20OperandProbe ==
+                    SyntheticTexld20OperandProbe::BiasedCompleteCoordinate;
             const bool textureUsesFourComponents =
                 textureUsesGradients || textureUsesExplicitLod ||
-                probesPixelTexldDestinationModifier;
+                probesPixelTexldDestinationModifier || probesProjectedTexld ||
+                probesBiasedTexld;
             const std::uint32_t coordinateMask =
                 textureUsesFourComponents ? 0xFu : threeComponent ? 0x7u : 0x3u;
             const std::uint32_t samplerTextureType =
@@ -5412,6 +5436,25 @@ namespace CNA::TestSupport
             {
                 AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, t0
                 AppendUInt32(shader, destination(regTemp, 1, 0xFu));
+                AppendUInt32(shader, source(coordinateRegister, 0));
+            }
+            if (probesTexld20TemporaryInitialization)
+            {
+                const bool complete =
+                    texld20OperandProbe ==
+                        SyntheticTexld20OperandProbe::OrdinaryCompleteCoordinate ||
+                    texld20OperandProbe ==
+                        SyntheticTexld20OperandProbe::ProjectedCompleteCoordinate ||
+                    texld20OperandProbe ==
+                        SyntheticTexld20OperandProbe::BiasedCompleteCoordinate;
+                const bool needsW = probesProjectedTexld || probesBiasedTexld;
+                const std::uint32_t initializedMask = needsW
+                    ? (threeComponent ? (complete ? 0xFu : 0x7u)
+                                      : (complete ? 0xBu : 0x3u))
+                    : (threeComponent ? (complete ? 0x7u : 0x3u)
+                                      : (complete ? 0x3u : 0x1u));
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1.<mask>, t0
+                AppendUInt32(shader, destination(regTemp, 1, initializedMask));
                 AppendUInt32(shader, source(coordinateRegister, 0));
             }
             // texld r0, t0, s# or texldd r0, v0, s#, v0, v0.
@@ -5491,7 +5534,9 @@ namespace CNA::TestSupport
                 textureSourceModifierProbe ==
                     SyntheticTextureSourceModifierProbe::PixelTexldlCoordinate;
             const std::uint32_t texldCoordinateType =
-                texld20OperandProbe == SyntheticTexld20OperandProbe::ColorCoordinate
+                probesTexld20TemporaryInitialization
+                    ? regTemp
+                : texld20OperandProbe == SyntheticTexld20OperandProbe::ColorCoordinate
                     ? regInput
                 : texld20OperandProbe == SyntheticTexld20OperandProbe::ConstantCoordinate
                     ? regConst
@@ -5506,7 +5551,9 @@ namespace CNA::TestSupport
                     ? regTemp
                     : coordinateRegister;
             const std::uint32_t texldCoordinateIndex =
-                texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel2xTemporaryCoordinate
+                probesTexld20TemporaryInitialization ||
+                        texlddOperandProbe ==
+                            SyntheticTexlddOperandProbe::Pixel2xTemporaryCoordinate
                     ? 1u
                     : 0u;
             const bool swizzleTexlddCoordinate =

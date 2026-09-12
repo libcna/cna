@@ -404,8 +404,11 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   profile predicate shared by that validation series: real Microsoft assembly rejects an entirely
   uninitialized ordinary read and `TEXKILL` in exact `ps_2_0`, but accepts both in `ps_2_x` (as well
   as an all-uninitialized `ps_2_x TEXLDD`). Managed patch 93 therefore limits generic, matrix and
-  `TEXKILL` liveness to Pixel Shader 1.x/exact 2.0 and Vertex Shader 1.1. Remaining opcode-specific
-  source rules remain SOFTWARE-164/165 work.
+  `TEXKILL` liveness to Pixel Shader 1.x/exact 2.0 and Vertex Shader 1.1. SOFTWARE-469 next restores
+  the exact 2.0 rule for ordinary/projected/biased `TEXLD`: a temporary coordinate consumes XY for
+  2D or XYZ for cube/volume sampling, plus W for projection or bias. Managed patch 94 derives that
+  mask from the declared sampler type and the instruction control without requiring unused 2D Z.
+  Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
