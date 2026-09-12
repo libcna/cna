@@ -405,6 +405,41 @@ namespace CNA::TestSupport
         Vertex2xStaticFlowCount17,
     };
 
+    /** @brief Shader-stage/profile program used to probe D3D9 subroutine call-graph rules. */
+    enum class SyntheticCallGraphProbe
+    {
+        /** @brief Emit no dedicated subroutine call-graph probe. */
+        None,
+        /** @brief Emit four legal nested calls in a pixel Shader Model 2.x program. */
+        Pixel2xDepth4,
+        /** @brief Emit five nested calls in a pixel Shader Model 2.x program. */
+        Pixel2xDepth5,
+        /** @brief Emit four legal nested calls in a pixel Shader Model 3.0 program. */
+        Pixel30Depth4,
+        /** @brief Emit five nested calls in a pixel Shader Model 3.0 program. */
+        Pixel30Depth5,
+        /** @brief Emit a backward unconditional call in a pixel Shader Model 3.0 program. */
+        Pixel30BackwardCall,
+        /** @brief Emit a backward Boolean conditional call in a pixel Shader Model 3.0 program. */
+        Pixel30BackwardCallNz,
+        /** @brief Emit one legal call in an exact vertex Shader Model 2.0 program. */
+        Vertex20Depth1,
+        /** @brief Emit two nested calls in an exact vertex Shader Model 2.0 program. */
+        Vertex20Depth2,
+        /** @brief Emit four legal nested calls in a vertex Shader Model 2.x program. */
+        Vertex2xDepth4,
+        /** @brief Emit five nested calls in a vertex Shader Model 2.x program. */
+        Vertex2xDepth5,
+        /** @brief Emit four legal nested calls in a vertex Shader Model 3.0 program. */
+        Vertex30Depth4,
+        /** @brief Emit five nested calls in a vertex Shader Model 3.0 program. */
+        Vertex30Depth5,
+        /** @brief Emit a backward unconditional call in a vertex Shader Model 3.0 program. */
+        Vertex30BackwardCall,
+        /** @brief Emit a backward Boolean conditional call in a vertex Shader Model 3.0 program. */
+        Vertex30BackwardCallNz,
+    };
+
     /** @brief Invalid source/destination relationship deliberately emitted for a matrix opcode. */
     enum class SyntheticInvalidMatrixOperands
     {
@@ -1174,6 +1209,8 @@ namespace CNA::TestSupport
                 SyntheticInvalidShaderModel3MixedConstantAbsolute::None;
         /** @brief Selects a Shader Model 3 structured-flow validation probe. */
         SyntheticFlowControlProbe flowControlProbe = SyntheticFlowControlProbe::None;
+        /** @brief Selects a D3D9 subroutine call-graph validation probe. */
+        SyntheticCallGraphProbe callGraphProbe = SyntheticCallGraphProbe::None;
         /** @brief Selects a fixed-profile temporary-register boundary probe. */
         SyntheticTemporaryRegisterProbe temporaryRegisterProbe =
             SyntheticTemporaryRegisterProbe::None;
@@ -1349,7 +1386,8 @@ namespace CNA::TestSupport
             SyntheticMiscellaneousInputProbe::None,
         SyntheticSemanticDeclarationProbe semanticDeclarationProbe =
             SyntheticSemanticDeclarationProbe::None,
-        SyntheticFlowControlProbe flowControlProbe = SyntheticFlowControlProbe::None)
+        SyntheticFlowControlProbe flowControlProbe = SyntheticFlowControlProbe::None,
+        SyntheticCallGraphProbe callGraphProbe = SyntheticCallGraphProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1496,6 +1534,12 @@ namespace CNA::TestSupport
         const bool probesPixelFlowControl =
             flowControlProbe >= SyntheticFlowControlProbe::ProperlyNestedLoopIf &&
             flowControlProbe <= SyntheticFlowControlProbe::LoopRepDepth5;
+        const bool probesPixelCallGraph =
+            callGraphProbe >= SyntheticCallGraphProbe::Pixel2xDepth4 &&
+            callGraphProbe <= SyntheticCallGraphProbe::Pixel30BackwardCallNz;
+        const bool probesPixel2xCallGraph =
+            callGraphProbe == SyntheticCallGraphProbe::Pixel2xDepth4 ||
+            callGraphProbe == SyntheticCallGraphProbe::Pixel2xDepth5;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -1512,7 +1556,8 @@ namespace CNA::TestSupport
             probesPixel30SpecialControlSource || probesPixelRelativeAddressing ||
             probesPixelMiscellaneousInput ||
             probesPixelSemanticDeclarations ||
-            probesPixel30ConstantControl || probesPixelFlowControl;
+            probesPixel30ConstantControl || probesPixelFlowControl ||
+            (probesPixelCallGraph && !probesPixel2xCallGraph);
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -1545,7 +1590,7 @@ namespace CNA::TestSupport
                                                      probesPixel20OutputSource ||
                                                      probesPixel20SamplerSource
                                                ? 0xFFFF0200u
-                                           : probesPixel2xTemporary
+                                           : probesPixel2xTemporary || probesPixel2xCallGraph
                                                ? 0xFFFF02FFu
                                            : usesShaderModel14
                                                ? 0xFFFF0104u
@@ -3091,6 +3136,54 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, source(regTemp, 0));
             }
         }
+        else if (probesPixelCallGraph)
+        {
+            const bool backward =
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30BackwardCall ||
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30BackwardCallNz;
+            const bool conditionalBackward =
+                callGraphProbe == SyntheticCallGraphProbe::Pixel30BackwardCallNz;
+            const int depth =
+                callGraphProbe == SyntheticCallGraphProbe::Pixel2xDepth5 ||
+                        callGraphProbe == SyntheticCallGraphProbe::Pixel30Depth5
+                    ? 5
+                    : 4;
+            if (conditionalBackward)
+            {
+                AppendUInt32(shader, 0x0000002Fu | (2u << 24)); // defb b0, true
+                AppendUInt32(shader, destination(regConstBool, 0, 0x1u));
+                AppendUInt32(shader, 1u);
+            }
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, c0
+            AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x00000019u | (1u << 24)); // call l0/l1
+            AppendUInt32(shader, source(regLabel, backward ? 1u : 0u));
+            AppendUInt32(shader, 0x0000001Cu); // ret from main
+
+            const int labelCount = backward ? 2 : depth;
+            for (int label = 0; label < labelCount; ++label)
+            {
+                AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l#
+                AppendUInt32(shader, source(regLabel, static_cast<std::uint32_t>(label)));
+                if (backward && label == 1)
+                {
+                    AppendUInt32(shader,
+                                 (conditionalBackward ? 0x0000001Au | (2u << 24)
+                                                      : 0x00000019u | (1u << 24)));
+                    AppendUInt32(shader, source(regLabel, 0));
+                    if (conditionalBackward)
+                        AppendUInt32(shader, source(regConstBool, 0, 0x00u));
+                }
+                else if (!backward && label + 1 < labelCount)
+                {
+                    AppendUInt32(shader, 0x00000019u | (1u << 24)); // call next label
+                    AppendUInt32(shader,
+                                 source(regLabel, static_cast<std::uint32_t>(label + 1)));
+                }
+                AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+            }
+        }
         else if (usesSubroutine)
         {
             // Local constants make the called writes independent from reflected parameter data.
@@ -3644,7 +3737,9 @@ namespace CNA::TestSupport
                                                                     compositeWriteMaskProbe =
                                                                         SyntheticCompositeWriteMaskProbe::None,
                                                                 SyntheticFlowControlProbe flowControlProbe =
-                                                                    SyntheticFlowControlProbe::None)
+                                                                    SyntheticFlowControlProbe::None,
+                                                                SyntheticCallGraphProbe callGraphProbe =
+                                                                    SyntheticCallGraphProbe::None)
     {
         const bool usesShaderModel11 = usesShaderModel11Input ||
                                        usesShaderModel11ExtendedInputs || usesLegacyExpp ||
@@ -3753,6 +3848,15 @@ namespace CNA::TestSupport
         const bool probesVertex2xFlowControl =
             flowControlProbe == SyntheticFlowControlProbe::Vertex2xStaticFlowCount16 ||
             flowControlProbe == SyntheticFlowControlProbe::Vertex2xStaticFlowCount17;
+        const bool probesVertexCallGraph =
+            callGraphProbe >= SyntheticCallGraphProbe::Vertex20Depth1 &&
+            callGraphProbe <= SyntheticCallGraphProbe::Vertex30BackwardCallNz;
+        const bool probesVertex2xCallGraph =
+            callGraphProbe == SyntheticCallGraphProbe::Vertex2xDepth4 ||
+            callGraphProbe == SyntheticCallGraphProbe::Vertex2xDepth5;
+        const bool probesVertex30CallGraph =
+            callGraphProbe >= SyntheticCallGraphProbe::Vertex30Depth4 &&
+            callGraphProbe <= SyntheticCallGraphProbe::Vertex30BackwardCallNz;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture ||
             invalidMixedConstantAbsolute ==
@@ -3767,7 +3871,8 @@ namespace CNA::TestSupport
             probesVertex30ConstantControl || probesVertex30DestinationAccess ||
             probesVertex30OutputSource || probesVertex30Address || probesVertex30SamplerSource ||
             probesVertex30TypedControlSource || probesVertex30SpecialControlSource ||
-            probesVertexRelativeAddressing || probesVertexSemanticDeclarations;
+            probesVertexRelativeAddressing || probesVertexSemanticDeclarations ||
+            probesVertex30CallGraph;
         const bool probesVertex2xTemporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xMaximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange;
@@ -3778,7 +3883,8 @@ namespace CNA::TestSupport
                                                ? 0xFFFE0101u
                                            : probesVertex2xTemporary ||
                                                      probesVertex2xInstructionSlots ||
-                                                     probesVertex2xFlowControl
+                                                     probesVertex2xFlowControl ||
+                                                     probesVertex2xCallGraph
                                                ? 0xFFFE02FFu
                                            : usesShaderModel3
                                                ? 0xFFFE0300u
@@ -4760,6 +4866,60 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regInput, 0));
             AppendUInt32(shader, source(regConst, 0));
         }
+        else if (probesVertexCallGraph)
+        {
+            const bool backward =
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30BackwardCall ||
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30BackwardCallNz;
+            const bool conditionalBackward =
+                callGraphProbe == SyntheticCallGraphProbe::Vertex30BackwardCallNz;
+            const int depth =
+                callGraphProbe == SyntheticCallGraphProbe::Vertex20Depth1
+                    ? 1
+                : callGraphProbe == SyntheticCallGraphProbe::Vertex20Depth2
+                    ? 2
+                : callGraphProbe == SyntheticCallGraphProbe::Vertex2xDepth5 ||
+                        callGraphProbe == SyntheticCallGraphProbe::Vertex30Depth5
+                    ? 5
+                    : 4;
+            if (conditionalBackward)
+            {
+                AppendUInt32(shader, 0x0000002Fu | (2u << 24)); // defb b0, true
+                AppendUInt32(shader, destination(regConstBool, 0, 0x1u));
+                AppendUInt32(shader, 1u);
+            }
+            AppendUInt32(shader, 0x00000014u | (3u << 24)); // m4x4 output, v0, c0
+            AppendUInt32(shader,
+                         destination(usesShaderModel3 ? regTexCoordOut : regRastOut, 0));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(regConst, 0));
+            AppendUInt32(shader, 0x00000019u | (1u << 24)); // call l0/l1
+            AppendUInt32(shader, source(regLabel, backward ? 1u : 0u));
+            AppendUInt32(shader, 0x0000001Cu); // ret from main
+
+            const int labelCount = backward ? 2 : depth;
+            for (int label = 0; label < labelCount; ++label)
+            {
+                AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l#
+                AppendUInt32(shader, source(regLabel, static_cast<std::uint32_t>(label)));
+                if (backward && label == 1)
+                {
+                    AppendUInt32(shader,
+                                 (conditionalBackward ? 0x0000001Au | (2u << 24)
+                                                      : 0x00000019u | (1u << 24)));
+                    AppendUInt32(shader, source(regLabel, 0));
+                    if (conditionalBackward)
+                        AppendUInt32(shader, source(regConstBool, 0, 0x00u));
+                }
+                else if (!backward && label + 1 < labelCount)
+                {
+                    AppendUInt32(shader, 0x00000019u | (1u << 24)); // call next label
+                    AppendUInt32(shader,
+                                 source(regLabel, static_cast<std::uint32_t>(label + 1)));
+                }
+                AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+            }
+        }
         else if (probesVertex20FlowControl)
         {
             AppendUInt32(shader, 0x00000030u | (5u << 24)); // defi i0, 1, 0, 1, 0
@@ -5458,7 +5618,8 @@ namespace CNA::TestSupport
             options.relativeAddressingProbe,
             options.miscellaneousInputProbe,
             options.semanticDeclarationProbe,
-            options.flowControlProbe);
+            options.flowControlProbe,
+            options.callGraphProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -5552,7 +5713,8 @@ namespace CNA::TestSupport
                 options.relativeAddressingProbe,
                 options.semanticDeclarationProbe,
                 options.vertexShaderCompositeWriteMaskProbe,
-                options.flowControlProbe);
+                options.flowControlProbe,
+                options.callGraphProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

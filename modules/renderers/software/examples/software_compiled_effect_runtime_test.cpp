@@ -3088,6 +3088,64 @@ namespace
         }
     }
 
+    void CheckCompiledCallGraphValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticCallGraphProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel2xDepth5,
+            Probe::Pixel30Depth5,
+            Probe::Pixel30BackwardCall,
+            Probe::Pixel30BackwardCallNz,
+            Probe::Vertex20Depth2,
+            Probe::Vertex2xDepth5,
+            Probe::Vertex30Depth5,
+            Probe::Vertex30BackwardCall,
+            Probe::Vertex30BackwardCallNz,
+        };
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.callGraphProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            Check(rejected, "compiled Effect parser accepted an invalid subroutine call graph");
+        }
+
+        constexpr std::array validProbes{
+            Probe::Pixel2xDepth4,
+            Probe::Pixel30Depth4,
+            Probe::Vertex20Depth1,
+            Probe::Vertex2xDepth4,
+            Probe::Vertex30Depth4,
+        };
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.callGraphProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool accepted = true;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                accepted = false;
+            }
+            Check(accepted, "compiled Effect parser rejected a legal subroutine call graph");
+        }
+    }
+
     void CheckCompiledMatrixOperandValidation(SoftwareRenderer& renderer)
     {
         using Operands = CNA::TestSupport::SyntheticInvalidMatrixOperands;
@@ -6130,6 +6188,7 @@ int main()
         CheckCompiledShaderModel20DynamicFeatureValidation(renderer);
         CheckCompiledPixelShaderModel2xOpcodeValidation(renderer);
         CheckCompiledFlowControlStructureValidation(renderer);
+        CheckCompiledCallGraphValidation(renderer);
         CheckCompiledMatrixOperandValidation(renderer);
         CheckCompiledPreShaderModel3AbsoluteSourceValidation(renderer);
         CheckCompiledShaderModel3MixedConstantAbsoluteValidation(renderer);

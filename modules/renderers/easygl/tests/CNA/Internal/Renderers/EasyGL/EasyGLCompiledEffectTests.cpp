@@ -1156,6 +1156,64 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount16,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex2xStaticFlowCount16));
 
+class EasyGLCompiledEffectInvalidCallGraphTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticCallGraphProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidCallGraphTest, RejectsBackwardOrOverDepthCalls)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.callGraphProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidCalls,
+    EasyGLCompiledEffectInvalidCallGraphTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel2xDepth5,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30Depth5,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30BackwardCall,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30BackwardCallNz,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex20Depth2,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex2xDepth5,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Depth5,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30BackwardCall,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30BackwardCallNz));
+
+class EasyGLCompiledEffectValidCallGraphTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticCallGraphProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidCallGraphTest, AcceptsForwardCallsAtBoundaryDepth)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.callGraphProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    BoundaryDepths,
+    EasyGLCompiledEffectValidCallGraphTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel2xDepth4,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30Depth4,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex20Depth1,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex2xDepth4,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Depth4));
+
 class EasyGLCompiledEffectMatrixOperandTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidMatrixOperands>
 {
