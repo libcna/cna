@@ -1,0 +1,23 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2289,6 +2289,19 @@ static void state_DCL(Context *ctx)
+     const int wmask = arg->writemask;
+     const int mods = arg->result_mod;
+ 
++    const int pixel_interpolator = shader_is_pixel(ctx) &&
++        ((regtype == REG_TYPE_INPUT) || (regtype == REG_TYPE_TEXTURE));
++    if (pixel_interpolator)
++    {
++        const int allowed_mods = MOD_PP | MOD_CENTROID;
++        if ((mods & ~allowed_mods) != 0)
++            fail(ctx, "pixel input DCL only permits partial precision and centroid modifiers");
++    } // if
++    else if (mods != 0)
++    {
++        fail(ctx, "DCL register class does not permit destination modifiers");
++    } // else if
++
+     // parse_args_DCL() does a lot of state checking before we get here.
+ 
+     const int packed_semantic = shader_version_atleast(ctx, 3, 0) &&

@@ -3430,6 +3430,64 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticSemanticDeclarationProbe::VertexPositionPartialMask,
         CNA::TestSupport::SyntheticSemanticDeclarationProbe::VertexPointSizePartialMask));
 
+class EasyGLCompiledEffectInvalidDeclarationModifierTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticDeclarationModifierProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidDeclarationModifierTest,
+       RejectsModifiersForbiddenForTheDeclarationRegisterClass)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.declarationModifierProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectInvalidDeclarationModifierTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Pixel20InputSaturate,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Pixel30InputSaturate,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Pixel30PositionPartialPrecision,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Pixel30PositionCentroid,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Pixel30SamplerPartialPrecision,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Pixel30SamplerCentroid,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Vertex30InputSaturate,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Vertex30OutputSaturate));
+
+class EasyGLCompiledEffectValidDeclarationModifierTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticDeclarationModifierProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidDeclarationModifierTest,
+       AcceptsPixelInterpolatorPartialPrecisionAndCentroid)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.declarationModifierProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectValidDeclarationModifierTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::
+            Pixel20InputPartialPrecisionCentroid,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::
+            Pixel30InputPartialPrecisionCentroid));
+
 TEST(EasyGLCompiledEffectDrawTest, ShaderModel3PacksDisjointSemanticsIntoOneRegister)
 {
     GraphicsDevice device;

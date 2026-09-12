@@ -5840,6 +5840,71 @@ namespace
                   acceptedProbes);
     }
 
+    void CheckCompiledDeclarationModifierValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticDeclarationModifierProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel20InputSaturate,
+            Probe::Pixel30InputSaturate,
+            Probe::Pixel30PositionPartialPrecision,
+            Probe::Pixel30PositionCentroid,
+            Probe::Pixel30SamplerPartialPrecision,
+            Probe::Pixel30SamplerCentroid,
+            Probe::Vertex30InputSaturate,
+            Probe::Vertex30OutputSaturate,
+        };
+        std::string acceptedProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.declarationModifierProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                (void) renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+            }
+            catch (const std::exception&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedProbes.empty()) acceptedProbes += ", ";
+                acceptedProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedProbes.empty(),
+              "compiled Effect parser accepted invalid declaration modifiers: " +
+                  acceptedProbes);
+
+        constexpr std::array validProbes{
+            Probe::Pixel20InputPartialPrecisionCentroid,
+            Probe::Pixel30InputPartialPrecisionCentroid,
+        };
+        std::string rejectedProbes;
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.declarationModifierProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            try
+            {
+                (void) renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+            }
+            catch (const std::exception& error)
+            {
+                if (!rejectedProbes.empty()) rejectedProbes += ", ";
+                rejectedProbes += std::to_string(static_cast<int>(probe)) + ": " + error.what();
+            }
+        }
+        Check(rejectedProbes.empty(),
+              "compiled Effect parser rejected valid declaration modifiers: " +
+                  rejectedProbes);
+    }
+
     void CheckCompiledSemanticPacking()
     {
         using Probe = CNA::TestSupport::SyntheticSemanticDeclarationProbe;
@@ -8307,6 +8372,7 @@ int main()
         CheckCompiledRelativeAddressingValidation(renderer);
         CheckCompiledMiscellaneousInputValidation(renderer);
         CheckCompiledSemanticDeclarationValidation(renderer);
+        CheckCompiledDeclarationModifierValidation(renderer);
         CheckCompiledSemanticPacking();
         CheckCompiledCentroidInterpolation();
         CheckCompiledOutputRegisterRangeValidation(renderer);

@@ -1819,6 +1819,33 @@ namespace CNA::TestSupport
         VertexPointSizePartialMask,
     };
 
+    /** @brief D3D9 declaration destination-modifier rule exercised by a forged program. */
+    enum class SyntheticDeclarationModifierProbe
+    {
+        /** @brief Emit no dedicated declaration-modifier probe. */
+        None,
+        /** @brief Apply forbidden saturation to a Shader Model 2 pixel input declaration. */
+        Pixel20InputSaturate,
+        /** @brief Apply the legal partial-precision and centroid combination to a ps_2_0 input. */
+        Pixel20InputPartialPrecisionCentroid,
+        /** @brief Apply forbidden saturation to a Shader Model 3 pixel input declaration. */
+        Pixel30InputSaturate,
+        /** @brief Apply the legal partial-precision and centroid combination to a ps_3_0 input. */
+        Pixel30InputPartialPrecisionCentroid,
+        /** @brief Apply forbidden partial precision to the Shader Model 3 position input. */
+        Pixel30PositionPartialPrecision,
+        /** @brief Apply forbidden centroid interpolation to the Shader Model 3 position input. */
+        Pixel30PositionCentroid,
+        /** @brief Apply forbidden partial precision to a Shader Model 3 sampler declaration. */
+        Pixel30SamplerPartialPrecision,
+        /** @brief Apply forbidden centroid interpolation to a Shader Model 3 sampler declaration. */
+        Pixel30SamplerCentroid,
+        /** @brief Apply forbidden saturation to a Shader Model 3 vertex input declaration. */
+        Vertex30InputSaturate,
+        /** @brief Apply forbidden saturation to a Shader Model 3 vertex output declaration. */
+        Vertex30OutputSaturate,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -2170,6 +2197,9 @@ namespace CNA::TestSupport
         /** @brief Selects a Shader Model 3 semantic declaration/packing probe. */
         SyntheticSemanticDeclarationProbe semanticDeclarationProbe =
             SyntheticSemanticDeclarationProbe::None;
+        /** @brief Emits the selected declaration destination-modifier validation program. */
+        SyntheticDeclarationModifierProbe declarationModifierProbe =
+            SyntheticDeclarationModifierProbe::None;
         /** @brief Selects a Pixel Shader Model 2.0 `SINCOS` operand probe. */
         SyntheticSincosOperandProbe sincosOperandProbe =
             SyntheticSincosOperandProbe::None;
@@ -2323,6 +2353,8 @@ namespace CNA::TestSupport
             SyntheticMiscellaneousInputProbe::None,
         SyntheticSemanticDeclarationProbe semanticDeclarationProbe =
             SyntheticSemanticDeclarationProbe::None,
+        SyntheticDeclarationModifierProbe declarationModifierProbe =
+            SyntheticDeclarationModifierProbe::None,
         SyntheticFlowControlProbe flowControlProbe = SyntheticFlowControlProbe::None,
         SyntheticCallGraphProbe callGraphProbe = SyntheticCallGraphProbe::None,
         SyntheticTextureSourceModifierProbe textureSourceModifierProbe =
@@ -2570,6 +2602,16 @@ namespace CNA::TestSupport
                 SyntheticSemanticDeclarationProbe::PixelOverlappingMasks ||
             semanticDeclarationProbe ==
                 SyntheticSemanticDeclarationProbe::PixelDuplicateSemantic;
+        const bool probesPixel20DeclarationModifier =
+            declarationModifierProbe ==
+                SyntheticDeclarationModifierProbe::Pixel20InputSaturate ||
+            declarationModifierProbe ==
+                SyntheticDeclarationModifierProbe::Pixel20InputPartialPrecisionCentroid;
+        const bool probesPixel30DeclarationModifier =
+            declarationModifierProbe >=
+                SyntheticDeclarationModifierProbe::Pixel30InputSaturate &&
+            declarationModifierProbe <=
+                SyntheticDeclarationModifierProbe::Pixel30SamplerCentroid;
         const bool probesPixelFlowControl =
             flowControlProbe >= SyntheticFlowControlProbe::ProperlyNestedLoopIf &&
             flowControlProbe <= SyntheticFlowControlProbe::LoopRepDepth5;
@@ -2645,6 +2687,7 @@ namespace CNA::TestSupport
             probesPixel30SpecialControlSource || probesPixelRelativeAddressing ||
             probesPixelMiscellaneousInput ||
             probesPixelSemanticDeclarations ||
+            probesPixel30DeclarationModifier ||
             probesPixel30ConstantControl || probesPixelFlowControl ||
             (probesPixelCallGraph && !probesPixel2xCallGraph) ||
             probesMissingPixel30SamplerDeclaration || probesPixelImmediateConstantDefinition ||
@@ -2964,6 +3007,44 @@ namespace CNA::TestSupport
                         SyntheticDuplicateDeclarationProbe::PixelSamplerConflict
                     ? EffectFormat::SamplerTypeCube
                     : EffectFormat::SamplerType2D);
+        }
+        if (probesPixel20DeclarationModifier || probesPixel30DeclarationModifier)
+        {
+            using Probe = SyntheticDeclarationModifierProbe;
+            const bool shaderModel20 = probesPixel20DeclarationModifier;
+            const bool position =
+                declarationModifierProbe == Probe::Pixel30PositionPartialPrecision ||
+                declarationModifierProbe == Probe::Pixel30PositionCentroid;
+            const bool sampler =
+                declarationModifierProbe == Probe::Pixel30SamplerPartialPrecision ||
+                declarationModifierProbe == Probe::Pixel30SamplerCentroid;
+            const bool saturate =
+                declarationModifierProbe == Probe::Pixel20InputSaturate ||
+                declarationModifierProbe == Probe::Pixel30InputSaturate;
+            const bool partialPrecision =
+                declarationModifierProbe == Probe::Pixel20InputPartialPrecisionCentroid ||
+                declarationModifierProbe == Probe::Pixel30InputPartialPrecisionCentroid ||
+                declarationModifierProbe == Probe::Pixel30PositionPartialPrecision ||
+                declarationModifierProbe == Probe::Pixel30SamplerPartialPrecision;
+            const bool centroid =
+                declarationModifierProbe == Probe::Pixel20InputPartialPrecisionCentroid ||
+                declarationModifierProbe == Probe::Pixel30InputPartialPrecisionCentroid ||
+                declarationModifierProbe == Probe::Pixel30PositionCentroid ||
+                declarationModifierProbe == Probe::Pixel30SamplerCentroid;
+            const std::uint32_t resultModifier = (saturate ? 1u : 0u) |
+                                                 (partialPrecision ? 2u : 0u) |
+                                                 (centroid ? 4u : 0u);
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+            AppendUInt32(shader,
+                         sampler ? 0x80000000u |
+                                       (EffectFormat::SamplerType2D << 27)
+                                 : position || shaderModel20 ? 0x80000000u
+                                                            : 0x80000005u);
+            AppendUInt32(shader,
+                         destination(sampler ? regSampler
+                                             : position ? regMiscellaneous
+                                                        : shaderModel20 ? regTexture : regInput,
+                                     0, position ? 0x3u : 0xFu, resultModifier));
         }
         if (texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel20TextureXy ||
             texkillOperandProbe == SyntheticTexkillOperandProbe::Pixel20TextureXyz ||
@@ -6374,6 +6455,9 @@ namespace CNA::TestSupport
                                                                 SyntheticSemanticDeclarationProbe
                                                                     semanticDeclarationProbe =
                                                                         SyntheticSemanticDeclarationProbe::None,
+                                                                SyntheticDeclarationModifierProbe
+                                                                    declarationModifierProbe =
+                                                                        SyntheticDeclarationModifierProbe::None,
                                                                 SyntheticCompositeWriteMaskProbe
                                                                     compositeWriteMaskProbe =
                                                                         SyntheticCompositeWriteMaskProbe::None,
@@ -6561,6 +6645,11 @@ namespace CNA::TestSupport
         const bool probesVertexSemanticDeclarations =
             semanticDeclarationProbe != SyntheticSemanticDeclarationProbe::None &&
             !probesCentroid20;
+        const bool probesVertexDeclarationModifier =
+            declarationModifierProbe ==
+                SyntheticDeclarationModifierProbe::Vertex30InputSaturate ||
+            declarationModifierProbe ==
+                SyntheticDeclarationModifierProbe::Vertex30OutputSaturate;
         const bool probesCentroid =
             semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PixelCentroidControl ||
             semanticDeclarationProbe ==
@@ -6617,6 +6706,7 @@ namespace CNA::TestSupport
             probesVertex30OutputSource || probesVertex30Address || probesVertex30SamplerSource ||
             probesVertex30TypedControlSource || probesVertex30SpecialControlSource ||
             probesVertexRelativeAddressing || probesVertexSemanticDeclarations ||
+            probesVertexDeclarationModifier ||
             probesVertex30CallGraph || probesMissingVertexSamplerDeclaration ||
             probesVertexImmediateConstantDefinition || probesVertexSamplerDuplicate;
         const bool probesVertex2xTemporary =
@@ -6999,7 +7089,11 @@ namespace CNA::TestSupport
                             semanticDeclarationProbe ==
                                     SyntheticSemanticDeclarationProbe::VertexInputPartialMask
                                 ? 0x3u
-                                : 0xFu));
+                                : 0xFu) |
+                    (declarationModifierProbe ==
+                             SyntheticDeclarationModifierProbe::Vertex30InputSaturate
+                         ? 0x00100000u
+                         : 0u));
         }
         if (probesVertex20DeclarationDuplicate)
         {
@@ -7034,7 +7128,11 @@ namespace CNA::TestSupport
                             semanticDeclarationProbe ==
                                     SyntheticSemanticDeclarationProbe::VertexPositionPartialMask
                                 ? 0x3u
-                                : 0xFu));
+                                : 0xFu) |
+                    (declarationModifierProbe ==
+                             SyntheticDeclarationModifierProbe::Vertex30OutputSaturate
+                         ? 0x00100000u
+                         : 0u));
             if (semanticDeclarationProbe == SyntheticSemanticDeclarationProbe::PackedDisjoint ||
                 semanticDeclarationProbe ==
                     SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs ||
@@ -8760,6 +8858,7 @@ namespace CNA::TestSupport
             options.relativeAddressingProbe,
             options.miscellaneousInputProbe,
             options.semanticDeclarationProbe,
+            options.declarationModifierProbe,
             options.flowControlProbe,
             options.callGraphProbe,
             options.textureSourceModifierProbe,
@@ -8914,6 +9013,7 @@ namespace CNA::TestSupport
                 options.vertexInstructionSlotProbe,
                 options.relativeAddressingProbe,
                 options.semanticDeclarationProbe,
+                options.declarationModifierProbe,
                 options.vertexShaderCompositeWriteMaskProbe,
                 options.flowControlProbe,
                 options.callGraphProbe,

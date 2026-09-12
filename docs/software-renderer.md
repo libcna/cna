@@ -439,6 +439,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   SOFTWARE-477 completes `TEXDEPTH` destination validation: patch 102 rejects saturation and
   result shifts in addition to the already-enforced full mask, while retaining plain post-`PHASE`
   `texdepth r5` execution.
+  SOFTWARE-478 completes declaration destination-modifier validation: patch 103 preserves `_pp`,
+  `_centroid` and their combination on pixel interpolators, rejects saturation there, and rejects
+  every modifier on miscellaneous inputs, sampler declarations and vertex declarations.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
