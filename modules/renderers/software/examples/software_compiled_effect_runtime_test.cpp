@@ -4009,6 +4009,79 @@ namespace
               "compiled Effect parser rejected Microsoft-valid ps_2_x TEXLDD");
     }
 
+    void CheckCompiledTexlddOperandValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticTexlddOperandProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel2xOutputDestination,
+            Probe::Pixel2xPartialDestination,
+            Probe::Pixel2xSaturateDestination,
+            Probe::Pixel2xColorCoordinate,
+            Probe::Pixel2xConstantCoordinate,
+            Probe::Pixel2xCoordinateSwizzle,
+            Probe::Pixel2xSamplerSwizzle,
+            Probe::Pixel2xGradientSwizzle,
+            Probe::Pixel30SaturateDestination,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.texlddOperandProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid TEXLDD operands: " +
+                  acceptedInvalidProbes);
+
+        constexpr std::array validProbes{
+            Probe::Pixel2xPartialPrecisionDestination,
+            Probe::Pixel2xTemporaryCoordinate,
+            Probe::Pixel2xConstantGradients,
+            Probe::Pixel30OutputDestination,
+            Probe::Pixel30PartialDestination,
+            Probe::Pixel30ConstantCoordinate,
+            Probe::Pixel30SourceSwizzles,
+        };
+        std::string rejectedValidProbes;
+        for (const Probe probe : validProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.texlddOperandProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                if (!rejectedValidProbes.empty()) rejectedValidProbes += ", ";
+                rejectedValidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(rejectedValidProbes.empty(),
+              "compiled Effect parser rejected valid TEXLDD operands: " +
+                  rejectedValidProbes);
+    }
+
     void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
@@ -6595,6 +6668,7 @@ int main()
         CheckCompiledTextureSourceModifierValidation(renderer);
         CheckCompiledTexld20OperandValidation(renderer);
         CheckCompiledTextureInstructionProfileValidation(renderer);
+        CheckCompiledTexlddOperandValidation(renderer);
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);

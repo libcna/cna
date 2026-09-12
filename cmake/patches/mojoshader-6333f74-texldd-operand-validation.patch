@@ -1,0 +1,51 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -3087,14 +3087,41 @@ static void state_TEXLDD(Context *ctx)
+ {
+-    if (ctx->source_args[0].src_mod != SRCMOD_NONE)
++    const DestArgInfo *dst = &ctx->dest_arg;
++    const SourceArgInfo *src0 = &ctx->source_args[0];
++    const SourceArgInfo *src1 = &ctx->source_args[1];
++    const SourceArgInfo *src2 = &ctx->source_args[2];
++    const SourceArgInfo *src3 = &ctx->source_args[3];
++
++    if (dst->result_mod & MOD_SATURATE)
++        fail(ctx, "TEXLDD destination must not saturate");
++    else if (!shader_version_atleast(ctx, 3, 0))
++    {
++        if (dst->regtype != REG_TYPE_TEMP)
++            fail(ctx, "Shader Model 2 TEXLDD dest must be a temp register");
++        else if (dst->orig_writemask != 0xF)
++            fail(ctx, "Shader Model 2 TEXLDD dest must use a full write mask");
++        else if ((src0->regtype != REG_TYPE_TEXTURE) &&
++                 (src0->regtype != REG_TYPE_TEMP))
++            fail(ctx, "Shader Model 2 TEXLDD src0 must be texture or temp register");
++        else if (!no_swizzle(src0->swizzle))
++            fail(ctx, "Shader Model 2 TEXLDD src0 must not swizzle");
++        else if (!no_swizzle(src1->swizzle))
++            fail(ctx, "Shader Model 2 TEXLDD src1 must not swizzle");
++        else if (!no_swizzle(src2->swizzle))
++            fail(ctx, "Shader Model 2 TEXLDD src2 must not swizzle");
++        else if (!no_swizzle(src3->swizzle))
++            fail(ctx, "Shader Model 2 TEXLDD src3 must not swizzle");
++    } // else if
++
++    if (src0->src_mod != SRCMOD_NONE)
+         fail(ctx, "TEXLDD src0 must have no modifiers");
+-    else if (ctx->source_args[1].regtype != REG_TYPE_SAMPLER)
++    else if (src1->regtype != REG_TYPE_SAMPLER)
+         fail(ctx, "TEXLDD src1 must be sampler register");
+-    else if (ctx->source_args[1].src_mod != SRCMOD_NONE)
++    else if (src1->src_mod != SRCMOD_NONE)
+         fail(ctx, "TEXLDD src1 must have no modifiers");
+-    else if (ctx->source_args[2].src_mod != SRCMOD_NONE)
++    else if (src2->src_mod != SRCMOD_NONE)
+         fail(ctx, "TEXLDD src2 must have no modifiers");
+-    else if (ctx->source_args[3].src_mod != SRCMOD_NONE)
++    else if (src3->src_mod != SRCMOD_NONE)
+         fail(ctx, "TEXLDD src3 must have no modifiers");
+-    else if ( ((TextureType) ctx->source_args[1].regnum) == TEXTURE_TYPE_CUBE )
++    else if ( ((TextureType) src1->regnum) == TEXTURE_TYPE_CUBE )
+         ctx->instruction_count += 3;
+ } // state_TEXLDD

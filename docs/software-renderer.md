@@ -322,6 +322,13 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   match that counterintuitive boundary: six shared Effects accept the valid 2.x gradient form and
   reject the five invalid lower-profile forms. No production change was required, and adding a
   blanket Shader Model 3 guard would have introduced an XNA/D3D9 incompatibility.
+  SOFTWARE-448 continues with the measured operand boundary. Both paths accepted eight invalid
+  programs: a 2.x output or partial destination, 2.x and 3.0 saturation, a 2.x constant
+  coordinate, and 2.x coordinate/sampler/gradient swizzles. Common validation now bans saturation
+  for `TEXLDD` generally and, before Shader Model 3, requires a full temporary result, a
+  texture/temporary coordinate and identity swizzles on all four sources. Controls retain 2.x
+  `_pp`, temporary coordinates and constant gradients, plus Shader Model 3 output/partial results,
+  constant coordinates and source swizzles. Sixteen paired Software/EasyGL probes cover the rule.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

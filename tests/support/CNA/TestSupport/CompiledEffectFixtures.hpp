@@ -1046,6 +1046,45 @@ namespace CNA::TestSupport
         Vertex2xTexldl,
     };
 
+    /** @brief TEXLDD operand rule exercised by a forged profile-specific program. */
+    enum class SyntheticTexlddOperandProbe
+    {
+        /** @brief Emit no dedicated TEXLDD operand probe. */
+        None,
+        /** @brief Apply the permitted partial-precision modifier in Pixel Shader Model 2.x. */
+        Pixel2xPartialPrecisionDestination,
+        /** @brief Read Pixel Shader Model 2.x coordinates from an initialized temporary. */
+        Pixel2xTemporaryCoordinate,
+        /** @brief Read Pixel Shader Model 2.x gradients from float constants. */
+        Pixel2xConstantGradients,
+        /** @brief Write a Pixel Shader Model 3 TEXLDD result directly to oC0. */
+        Pixel30OutputDestination,
+        /** @brief Write only XY in a Pixel Shader Model 3 TEXLDD. */
+        Pixel30PartialDestination,
+        /** @brief Read Pixel Shader Model 3 coordinates from a float constant. */
+        Pixel30ConstantCoordinate,
+        /** @brief Swizzle all four Pixel Shader Model 3 TEXLDD sources. */
+        Pixel30SourceSwizzles,
+        /** @brief Write a Pixel Shader Model 2.x TEXLDD result directly to oC0. */
+        Pixel2xOutputDestination,
+        /** @brief Write only XY in a Pixel Shader Model 2.x TEXLDD. */
+        Pixel2xPartialDestination,
+        /** @brief Apply saturation to a Pixel Shader Model 2.x TEXLDD destination. */
+        Pixel2xSaturateDestination,
+        /** @brief Read Pixel Shader Model 2.x coordinates from colour input v0. */
+        Pixel2xColorCoordinate,
+        /** @brief Read Pixel Shader Model 2.x coordinates from float constant c0. */
+        Pixel2xConstantCoordinate,
+        /** @brief Swizzle the Pixel Shader Model 2.x coordinate operand. */
+        Pixel2xCoordinateSwizzle,
+        /** @brief Swizzle the Pixel Shader Model 2.x sampler operand. */
+        Pixel2xSamplerSwizzle,
+        /** @brief Swizzle both Pixel Shader Model 2.x gradient operands. */
+        Pixel2xGradientSwizzle,
+        /** @brief Apply saturation to a Pixel Shader Model 3 TEXLDD destination. */
+        Pixel30SaturateDestination,
+    };
+
     /** @brief A typed flow-control constant used as an ordinary arithmetic source by a probe. */
     enum class SyntheticTypedControlSourceProbe
     {
@@ -1435,6 +1474,9 @@ namespace CNA::TestSupport
         /** @brief Selects a texture instruction encoded at a profile boundary. */
         SyntheticTextureInstructionProfileProbe textureInstructionProfileProbe =
             SyntheticTextureInstructionProfileProbe::None;
+        /** @brief Selects a profile-specific TEXLDD operand form. */
+        SyntheticTexlddOperandProbe texlddOperandProbe =
+            SyntheticTexlddOperandProbe::None;
         /** @brief Selects a typed flow-control constant used as an ordinary source. */
         SyntheticTypedControlSourceProbe typedControlSourceProbe =
             SyntheticTypedControlSourceProbe::None;
@@ -1586,7 +1628,9 @@ namespace CNA::TestSupport
         SyntheticTexld20OperandProbe texld20OperandProbe =
             SyntheticTexld20OperandProbe::None,
         SyntheticTextureInstructionProfileProbe textureInstructionProfileProbe =
-            SyntheticTextureInstructionProfileProbe::None)
+            SyntheticTextureInstructionProfileProbe::None,
+        SyntheticTexlddOperandProbe texlddOperandProbe =
+            SyntheticTexlddOperandProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1796,6 +1840,14 @@ namespace CNA::TestSupport
                 SyntheticTextureInstructionProfileProbe::Pixel2xTexldd ||
             textureInstructionProfileProbe ==
                 SyntheticTextureInstructionProfileProbe::Pixel2xTexldl;
+        const bool probesTexlddOperand =
+            texlddOperandProbe != SyntheticTexlddOperandProbe::None;
+        const bool probesPixel30TexlddOperand =
+            (texlddOperandProbe >= SyntheticTexlddOperandProbe::Pixel30OutputDestination &&
+             texlddOperandProbe <= SyntheticTexlddOperandProbe::Pixel30SourceSwizzles) ||
+            texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel30SaturateDestination;
+        const bool probesPixel2xTexlddOperand =
+            probesTexlddOperand && !probesPixel30TexlddOperand;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesTextureGradients ||
             usesRasterInputs || usesPredication ||
@@ -1817,7 +1869,7 @@ namespace CNA::TestSupport
             (probesPixelCallGraph && !probesPixel2xCallGraph) ||
             probesMissingPixel30SamplerDeclaration || probesPixelImmediateConstantDefinition ||
             probesVertexFloatRedefinition || probesPixelSamplerDuplicate ||
-            probesPixelTextureSourceModifier;
+            probesPixelTextureSourceModifier || probesPixel30TexlddOperand;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -1851,7 +1903,8 @@ namespace CNA::TestSupport
                                                      probesPixel20SamplerSource
                                                ? 0xFFFF0200u
                                            : probesPixel2xTemporary || probesPixel2xCallGraph ||
-                                                     probesPixel2xTextureInstructionProfile
+                                                     probesPixel2xTextureInstructionProfile ||
+                                                     probesPixel2xTexlddOperand
                                                ? 0xFFFF02FFu
                                            : usesShaderModel14
                                                ? 0xFFFF0104u
@@ -1937,7 +1990,8 @@ namespace CNA::TestSupport
                             ? "ps_1_2"
                       : probesPixel20Temporary || probesPixel20FloatControl
                             ? "ps_2_0"
-                      : probesPixel2xTemporary || probesPixel2xTextureInstructionProfile
+                      : probesPixel2xTemporary || probesPixel2xTextureInstructionProfile ||
+                                probesPixel2xTexlddOperand
                             ? "ps_2_x"
             : usesShaderModel14
                 ? "ps_1_4"
@@ -3966,14 +4020,15 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regInput, 0));
         }
         else if (samplesTexture || usesTextureGradients || probesPixelTextureSourceModifier ||
-                 probesTexld20Operand || probesPixelTextureInstructionProfile)
+                 probesTexld20Operand || probesPixelTextureInstructionProfile ||
+                 probesTexlddOperand)
         {
             // plans/plan_fx.md FX-110: a cube or volume sampler reads three components, a 2D one reads
             // two, and the declaration has to say which -- both in the coordinate register's write
             // mask and in the sampler's own texture-type field.
             const bool threeComponent = samplerKind != SyntheticSamplerKind::Sampler2D;
             const bool textureUsesGradients =
-                usesTextureGradients || probesPixelTexlddSourceModifier ||
+                usesTextureGradients || probesPixelTexlddSourceModifier || probesTexlddOperand ||
                 textureInstructionProfileProbe ==
                     SyntheticTextureInstructionProfileProbe::Pixel20Texldd ||
                 textureInstructionProfileProbe ==
@@ -4005,7 +4060,8 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x80000000u | (usesShaderModel3 ? 5u : 0u));
             AppendUInt32(shader, destination(coordinateRegister, 0, coordinateMask));
             if (texld20OperandProbe == SyntheticTexld20OperandProbe::InputDestination ||
-                texld20OperandProbe == SyntheticTexld20OperandProbe::ColorCoordinate)
+                texld20OperandProbe == SyntheticTexld20OperandProbe::ColorCoordinate ||
+                texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel2xColorCoordinate)
             {
                 AppendUInt32(shader, 0x0000001Fu | (2u << 24)); // dcl_color0 v0
                 AppendUInt32(shader, 0x80000000u | 10u);
@@ -4016,6 +4072,13 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x0000001Fu | (2u << 24));
             AppendUInt32(shader, 0x80000000u | (samplerTextureType << 27));
             AppendUInt32(shader, destination(regSampler, samplerRegister, 0xFu));
+            if (texlddOperandProbe ==
+                SyntheticTexlddOperandProbe::Pixel2xTemporaryCoordinate)
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, t0
+                AppendUInt32(shader, destination(regTemp, 1, 0xFu));
+                AppendUInt32(shader, source(coordinateRegister, 0));
+            }
             // texld r0, t0, s# or texldd r0, v0, s#, v0, v0.
             const std::uint32_t textureOpcode = textureUsesGradients
                                                     ? 0x0000005Du
@@ -4031,9 +4094,17 @@ namespace CNA::TestSupport
                     ? regTexture
                 : texld20OperandProbe == SyntheticTexld20OperandProbe::OutputDestination
                     ? regColorOut
+                : texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel2xOutputDestination ||
+                      texlddOperandProbe ==
+                          SyntheticTexlddOperandProbe::Pixel30OutputDestination
+                    ? regColorOut
                     : regTemp;
             const std::uint32_t destinationMask =
-                texld20OperandProbe == SyntheticTexld20OperandProbe::PartialDestination
+                texld20OperandProbe == SyntheticTexld20OperandProbe::PartialDestination ||
+                        texlddOperandProbe ==
+                            SyntheticTexlddOperandProbe::Pixel2xPartialDestination ||
+                        texlddOperandProbe ==
+                            SyntheticTexlddOperandProbe::Pixel30PartialDestination
                     ? 0x3u
                     : 0xFu;
             const std::uint32_t destinationModifier =
@@ -4042,10 +4113,20 @@ namespace CNA::TestSupport
                 : texld20OperandProbe ==
                       SyntheticTexld20OperandProbe::PartialPrecisionDestination
                     ? (2u << 20)
+                : texlddOperandProbe ==
+                          SyntheticTexlddOperandProbe::Pixel2xSaturateDestination ||
+                      texlddOperandProbe ==
+                          SyntheticTexlddOperandProbe::Pixel30SaturateDestination
+                    ? (1u << 20)
+                : texlddOperandProbe ==
+                      SyntheticTexlddOperandProbe::Pixel2xPartialPrecisionDestination
+                    ? (2u << 20)
                     : 0u;
             AppendUInt32(shader,
                          destination(destinationType, 0, destinationMask) |
                              destinationModifier);
+            constexpr std::uint32_t swizzleBgra =
+                2u | (1u << 2) | (0u << 4) | (3u << 6);
             const bool negateCoordinate =
                 textureSourceModifierProbe ==
                     SyntheticTextureSourceModifierProbe::PixelTexlddCoordinate ||
@@ -4056,18 +4137,35 @@ namespace CNA::TestSupport
                     ? regInput
                 : texld20OperandProbe == SyntheticTexld20OperandProbe::ConstantCoordinate
                     ? regConst
+                : texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel2xColorCoordinate
+                    ? regInput
+                : texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel2xConstantCoordinate ||
+                      texlddOperandProbe ==
+                          SyntheticTexlddOperandProbe::Pixel30ConstantCoordinate
+                    ? regConst
+                : texlddOperandProbe ==
+                      SyntheticTexlddOperandProbe::Pixel2xTemporaryCoordinate
+                    ? regTemp
                     : coordinateRegister;
-            AppendUInt32(shader, source(texldCoordinateType, 0, swizzleIdentity,
+            const std::uint32_t texldCoordinateIndex =
+                texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel2xTemporaryCoordinate
+                    ? 1u
+                    : 0u;
+            const bool swizzleTexlddCoordinate =
+                texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel2xCoordinateSwizzle ||
+                texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel30SourceSwizzles;
+            AppendUInt32(shader, source(texldCoordinateType, texldCoordinateIndex,
+                                        swizzleTexlddCoordinate ? swizzleBgra : swizzleIdentity,
                                         negateCoordinate ? 1u : 0u));
-            constexpr std::uint32_t swizzleBgra =
-                2u | (1u << 2) | (0u << 4) | (3u << 6);
             const bool negateSampler =
                 textureSourceModifierProbe ==
                     SyntheticTextureSourceModifierProbe::PixelTexlddSampler ||
                 textureSourceModifierProbe ==
                     SyntheticTextureSourceModifierProbe::PixelTexldlSampler;
             const bool swizzleSampler =
-                texld20OperandProbe == SyntheticTexld20OperandProbe::SamplerSwizzle;
+                texld20OperandProbe == SyntheticTexld20OperandProbe::SamplerSwizzle ||
+                texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel2xSamplerSwizzle ||
+                texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel30SourceSwizzles;
             AppendUInt32(shader, source(regSampler, samplerRegister,
                                         swizzlesSampleResult || swizzleSampler ? swizzleBgra
                                                             : swizzleIdentity,
@@ -4077,11 +4175,20 @@ namespace CNA::TestSupport
                 const bool negateGradient =
                     textureSourceModifierProbe ==
                     SyntheticTextureSourceModifierProbe::PixelTexlddGradient;
-                AppendUInt32(shader, source(coordinateRegister, 0, swizzleIdentity,
+                const std::uint32_t gradientType =
+                    texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel2xConstantGradients
+                        ? regConst
+                        : coordinateRegister;
+                const bool swizzleGradient =
+                    texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel2xGradientSwizzle ||
+                    texlddOperandProbe == SyntheticTexlddOperandProbe::Pixel30SourceSwizzles;
+                AppendUInt32(shader, source(gradientType, 0,
+                                            swizzleGradient ? swizzleBgra : swizzleIdentity,
                                             negateGradient ? 1u : 0u));
-                AppendUInt32(shader, source(coordinateRegister, 0));
+                AppendUInt32(shader, source(gradientType, 0,
+                                            swizzleGradient ? swizzleBgra : swizzleIdentity));
             }
-            if (probesTexld20Operand)
+            if (probesTexld20Operand || probesTexlddOperand)
             {
                 // Keep every destination probe independent from a later read of that destination.
                 AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, c0
@@ -6357,7 +6464,8 @@ namespace CNA::TestSupport
             options.callGraphProbe,
             options.textureSourceModifierProbe,
             options.texld20OperandProbe,
-            options.textureInstructionProfileProbe);
+            options.textureInstructionProfileProbe,
+            options.texlddOperandProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -6368,6 +6476,10 @@ namespace CNA::TestSupport
                 options.vertexShaderReadsSecondStream,
                 options.vertexShaderSamplesTexture || options.pixelShaderSamplesTexture ||
                     options.pixelShaderUsesTextureGradients ||
+                    (options.textureInstructionProfileProbe >=
+                         SyntheticTextureInstructionProfileProbe::Pixel20Texldd &&
+                     options.textureInstructionProfileProbe <=
+                         SyntheticTextureInstructionProfileProbe::Pixel2xTexldl) ||
                     options.textureInstructionProfileProbe ==
                         SyntheticTextureInstructionProfileProbe::Vertex20Texldl ||
                     options.textureInstructionProfileProbe ==
@@ -6377,6 +6489,7 @@ namespace CNA::TestSupport
                      options.textureSourceModifierProbe <=
                          SyntheticTextureSourceModifierProbe::PixelTexldlSampler) ||
                     options.texld20OperandProbe != SyntheticTexld20OperandProbe::None ||
+                    options.texlddOperandProbe != SyntheticTexlddOperandProbe::None ||
                     options.pixelShaderUsesDerivatives ||
                     options.pixelShaderUsesRelativeTextureCoordinate ||
                     options.pixelShaderUsesDependentTemporaryTextureCoordinate ||
@@ -6415,10 +6528,15 @@ namespace CNA::TestSupport
                 options.shadersUsePredication,
                 options.vertexShaderSamplesTexture ||
                     options.pixelShaderUsesTextureGradients ||
+                    (options.textureInstructionProfileProbe >=
+                         SyntheticTextureInstructionProfileProbe::Pixel20Texldd &&
+                     options.textureInstructionProfileProbe <=
+                         SyntheticTextureInstructionProfileProbe::Pixel2xTexldl) ||
                     (options.textureSourceModifierProbe >=
                          SyntheticTextureSourceModifierProbe::PixelTexlddCoordinate &&
                      options.textureSourceModifierProbe <=
                          SyntheticTextureSourceModifierProbe::PixelTexldlSampler) ||
+                    options.texlddOperandProbe != SyntheticTexlddOperandProbe::None ||
                     options.pixelShaderUsesProjectiveModifiers ||
                     options.pixelShaderUsesProjectiveSwizzleModifiers ||
                     options.pixelShaderUsesShaderModel14TextureLoad ||

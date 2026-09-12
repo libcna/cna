@@ -1908,6 +1908,68 @@ TEST(EasyGLCompiledEffectTextureInstructionProfileTests, AcceptsPixel2xTexldd)
     EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
+class EasyGLCompiledEffectInvalidTexlddOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTexlddOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidTexlddOperandTest, RejectsOperand)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texlddOperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTexlddOperand,
+    EasyGLCompiledEffectInvalidTexlddOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xOutputDestination,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xPartialDestination,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xSaturateDestination,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xColorCoordinate,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xConstantCoordinate,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xCoordinateSwizzle,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xSamplerSwizzle,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xGradientSwizzle,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel30SaturateDestination));
+
+class EasyGLCompiledEffectValidTexlddOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTexlddOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidTexlddOperandTest, AcceptsOperand)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texlddOperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidTexlddOperand,
+    EasyGLCompiledEffectValidTexlddOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xPartialPrecisionDestination,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xTemporaryCoordinate,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xConstantGradients,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel30OutputDestination,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel30PartialDestination,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel30ConstantCoordinate,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel30SourceSwizzles));
+
 class EasyGLCompiledEffectTypedControlSourceTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticTypedControlSourceProbe>
 {
