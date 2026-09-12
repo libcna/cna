@@ -1334,6 +1334,41 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticInputRegisterProbe::Vertex20Destination,
         CNA::TestSupport::SyntheticInputRegisterProbe::Vertex30Destination));
 
+class EasyGLCompiledEffectDestinationRegisterAccessTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticDestinationRegisterAccessProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectDestinationRegisterAccessTest, RejectsRestrictedDestination)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.destinationRegisterAccessProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    RestrictedDestination,
+    EasyGLCompiledEffectDestinationRegisterAccessTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel20FloatConstant,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel30IntegerConstant,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel30BooleanConstant,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel30Sampler,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel30Miscellaneous,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel30Loop,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel30Predicate,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex20FloatConstant,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex30IntegerConstant,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex30BooleanConstant,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex30Sampler,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex30Loop,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex30Predicate));
+
 class EasyGLCompiledEffectOutputRegisterRangeTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>
 {

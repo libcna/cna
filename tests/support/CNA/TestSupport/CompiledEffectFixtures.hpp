@@ -685,6 +685,39 @@ namespace CNA::TestSupport
         Pixel14PhaseThenAlpha,
     };
 
+    /** @brief Non-writable or instruction-restricted destination register used by a probe. */
+    enum class SyntheticDestinationRegisterAccessProbe
+    {
+        /** @brief Emit no dedicated destination-access probe. */
+        None,
+        /** @brief Target a ps_2_0 float constant with MOV rather than DEF. */
+        Pixel20FloatConstant,
+        /** @brief Target a ps_3_0 integer constant with MOV rather than DEFI. */
+        Pixel30IntegerConstant,
+        /** @brief Target a ps_3_0 Boolean constant with MOV rather than DEFB. */
+        Pixel30BooleanConstant,
+        /** @brief Target a ps_3_0 sampler pseudo-register with MOV. */
+        Pixel30Sampler,
+        /** @brief Target the ps_3_0 vPos miscellaneous input with MOV. */
+        Pixel30Miscellaneous,
+        /** @brief Target the ps_3_0 loop counter with MOV. */
+        Pixel30Loop,
+        /** @brief Target the ps_3_0 predicate with MOV rather than SETP. */
+        Pixel30Predicate,
+        /** @brief Target a vs_2_0 float constant with MOV rather than DEF. */
+        Vertex20FloatConstant,
+        /** @brief Target a vs_3_0 integer constant with MOV rather than DEFI. */
+        Vertex30IntegerConstant,
+        /** @brief Target a vs_3_0 Boolean constant with MOV rather than DEFB. */
+        Vertex30BooleanConstant,
+        /** @brief Target a vs_3_0 sampler pseudo-register with MOV. */
+        Vertex30Sampler,
+        /** @brief Target the vs_3_0 loop counter with MOV. */
+        Vertex30Loop,
+        /** @brief Target the vs_3_0 predicate with MOV rather than SETP. */
+        Vertex30Predicate,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -917,6 +950,9 @@ namespace CNA::TestSupport
             SyntheticPixel1DestinationMaskProbe::None;
         /** @brief Selects a pixel Shader Model 1.x co-issue program. */
         SyntheticPixel1CoissueProbe pixel1CoissueProbe = SyntheticPixel1CoissueProbe::None;
+        /** @brief Selects a non-writable or instruction-restricted destination-register probe. */
+        SyntheticDestinationRegisterAccessProbe destinationRegisterAccessProbe =
+            SyntheticDestinationRegisterAccessProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -1022,7 +1058,9 @@ namespace CNA::TestSupport
             SyntheticPixel1InstructionSlotProbe::None,
         SyntheticPixel1DestinationMaskProbe pixel1DestinationMaskProbe =
             SyntheticPixel1DestinationMaskProbe::None,
-        SyntheticPixel1CoissueProbe pixel1CoissueProbe = SyntheticPixel1CoissueProbe::None)
+        SyntheticPixel1CoissueProbe pixel1CoissueProbe = SyntheticPixel1CoissueProbe::None,
+        SyntheticDestinationRegisterAccessProbe destinationRegisterAccessProbe =
+            SyntheticDestinationRegisterAccessProbe::None)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -1115,6 +1153,14 @@ namespace CNA::TestSupport
             pixel1CoissueProbe <= SyntheticPixel1CoissueProbe::Pixel11Triple;
         const bool probesPixel14Coissue =
             pixel1CoissueProbe >= SyntheticPixel1CoissueProbe::Pixel14Dp4;
+        const bool probesPixel20DestinationAccess =
+            destinationRegisterAccessProbe ==
+            SyntheticDestinationRegisterAccessProbe::Pixel20FloatConstant;
+        const bool probesPixel30DestinationAccess =
+            destinationRegisterAccessProbe >=
+                SyntheticDestinationRegisterAccessProbe::Pixel30IntegerConstant &&
+            destinationRegisterAccessProbe <=
+                SyntheticDestinationRegisterAccessProbe::Pixel30Predicate;
         const bool usesShaderModel3 =
             usesLoop || usesSubroutine || usesDerivatives || usesRasterInputs || usesPredication ||
             usesPredicatedTexkill || usesRelativeTextureCoordinate ||
@@ -1126,7 +1172,7 @@ namespace CNA::TestSupport
             invalidMixedConstantAbsolute ==
                 SyntheticInvalidShaderModel3MixedConstantAbsolute::PixelAllAbsolute ||
             probesPixel30Temporary || probesPixel30Input || probesPixel30InputDestination ||
-            probesPixelOutput ||
+            probesPixelOutput || probesPixel30DestinationAccess ||
             probesPixel30ConstantControl;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
@@ -1155,7 +1201,8 @@ namespace CNA::TestSupport
                                            : probesPixel12InstructionSlots
                                                ? 0xFFFF0102u
                                            : probesPixel20Temporary || probesPixel20FloatControl ||
-                                                     probesPixel20InputDestination
+                                                     probesPixel20InputDestination ||
+                                                     probesPixel20DestinationAccess
                                                ? 0xFFFF0200u
                                            : probesPixel2xTemporary
                                                ? 0xFFFF02FFu
@@ -1451,6 +1498,41 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regPredicate, maximum ? 0u : 1u, 0x1u));
             AppendUInt32(shader, source(regConst, 0, 0x00u));
             AppendUInt32(shader, source(regConst, 0, 0x00u));
+        }
+
+        if (probesPixel20DestinationAccess || probesPixel30DestinationAccess)
+        {
+            std::uint32_t registerType = regConst;
+            std::uint32_t writeMask = 0xFu;
+            switch (destinationRegisterAccessProbe)
+            {
+                case SyntheticDestinationRegisterAccessProbe::Pixel20FloatConstant:
+                    break;
+                case SyntheticDestinationRegisterAccessProbe::Pixel30IntegerConstant:
+                    registerType = regConstInt;
+                    break;
+                case SyntheticDestinationRegisterAccessProbe::Pixel30BooleanConstant:
+                    registerType = regConstBool;
+                    writeMask = 0x1u;
+                    break;
+                case SyntheticDestinationRegisterAccessProbe::Pixel30Sampler:
+                    registerType = regSampler;
+                    break;
+                case SyntheticDestinationRegisterAccessProbe::Pixel30Miscellaneous:
+                    registerType = regMiscellaneous;
+                    break;
+                case SyntheticDestinationRegisterAccessProbe::Pixel30Loop:
+                    registerType = regLoop;
+                    writeMask = 0x1u;
+                    break;
+                case SyntheticDestinationRegisterAccessProbe::Pixel30Predicate:
+                    registerType = regPredicate;
+                    break;
+                default: break;
+            }
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov restricted destination, c0
+            AppendUInt32(shader, destination(registerType, 0, writeMask));
+            AppendUInt32(shader, source(regConst, 0));
         }
 
         if (readsUninitializedDestination)
@@ -2819,6 +2901,9 @@ namespace CNA::TestSupport
                                                                 SyntheticConstantControlRegisterProbe
                                                                     constantControlRegisterProbe =
                                                                         SyntheticConstantControlRegisterProbe::None,
+                                                                SyntheticDestinationRegisterAccessProbe
+                                                                    destinationRegisterAccessProbe =
+                                                                        SyntheticDestinationRegisterAccessProbe::None,
                                                                 SyntheticVertexInstructionSlotProbe
                                                                     instructionSlotProbe =
                                                                         SyntheticVertexInstructionSlotProbe::None)
@@ -2868,6 +2953,14 @@ namespace CNA::TestSupport
                 SyntheticConstantControlRegisterProbe::Vertex20AddressMaximum &&
             constantControlRegisterProbe <=
                 SyntheticConstantControlRegisterProbe::Vertex20LoopOutOfRange;
+        const bool probesVertex20DestinationAccess =
+            destinationRegisterAccessProbe ==
+            SyntheticDestinationRegisterAccessProbe::Vertex20FloatConstant;
+        const bool probesVertex30DestinationAccess =
+            destinationRegisterAccessProbe >=
+                SyntheticDestinationRegisterAccessProbe::Vertex30IntegerConstant &&
+            destinationRegisterAccessProbe <=
+                SyntheticDestinationRegisterAccessProbe::Vertex30Predicate;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture ||
             invalidMixedConstantAbsolute ==
@@ -2879,7 +2972,7 @@ namespace CNA::TestSupport
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex30Maximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex30OutOfRange ||
             probesVertex30Input || probesVertex30InputDestination || probesVertex30Output ||
-            probesVertex30ConstantControl;
+            probesVertex30ConstantControl || probesVertex30DestinationAccess;
         const bool probesVertex2xTemporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xMaximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange;
@@ -3223,6 +3316,37 @@ namespace CNA::TestSupport
         {
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov v0, c0
             AppendUInt32(shader, destination(regInput, 0));
+            AppendUInt32(shader, source(regConst, 0));
+        }
+        if (probesVertex20DestinationAccess || probesVertex30DestinationAccess)
+        {
+            std::uint32_t registerType = regConst;
+            std::uint32_t writeMask = 0xFu;
+            switch (destinationRegisterAccessProbe)
+            {
+                case SyntheticDestinationRegisterAccessProbe::Vertex20FloatConstant:
+                    break;
+                case SyntheticDestinationRegisterAccessProbe::Vertex30IntegerConstant:
+                    registerType = regConstInt;
+                    break;
+                case SyntheticDestinationRegisterAccessProbe::Vertex30BooleanConstant:
+                    registerType = regConstBool;
+                    writeMask = 0x1u;
+                    break;
+                case SyntheticDestinationRegisterAccessProbe::Vertex30Sampler:
+                    registerType = regSampler;
+                    break;
+                case SyntheticDestinationRegisterAccessProbe::Vertex30Loop:
+                    registerType = regLoop;
+                    writeMask = 0x1u;
+                    break;
+                case SyntheticDestinationRegisterAccessProbe::Vertex30Predicate:
+                    registerType = regPredicate;
+                    break;
+                default: break;
+            }
+            AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov restricted destination, c0
+            AppendUInt32(shader, destination(registerType, 0, writeMask));
             AppendUInt32(shader, source(regConst, 0));
         }
         if (probesVertex20Output || probesVertex30Output)
@@ -4134,7 +4258,8 @@ namespace CNA::TestSupport
             options.pixel20InstructionSlotProbe,
             options.pixel1InstructionSlotProbe,
             options.pixel1DestinationMaskProbe,
-            options.pixel1CoissueProbe);
+            options.pixel1CoissueProbe,
+            options.destinationRegisterAccessProbe);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -4218,6 +4343,7 @@ namespace CNA::TestSupport
                 options.inputRegisterProbe,
                 options.outputRegisterProbe,
                 options.constantControlRegisterProbe,
+                options.destinationRegisterAccessProbe,
                 options.vertexInstructionSlotProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));

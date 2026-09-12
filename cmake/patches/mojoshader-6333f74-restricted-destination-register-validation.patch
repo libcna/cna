@@ -1,0 +1,56 @@
+diff --git a/mojoshader.c b/mojoshader.c
+index ba1ce4d..a02fb8d 100644
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -594,6 +594,43 @@ static void validate_input_register_destination(Context *ctx,
+     } // else if
+ } // validate_input_register_destination
+ 
++static void validate_restricted_destination_register(Context *ctx,
++                                                     const uint32 opcode)
++{
++    if (!ctx->have_dest_arg || (opcode == 31))  // DCL has a descriptive destination token.
++        return;
++
++    const RegisterType regtype = ctx->dest_arg.regtype;
++    if ((regtype == REG_TYPE_CONST) && (opcode != 81))  // DEF
++    {
++        fail(ctx, "float constant destination requires DEF");
++    } // if
++    else if ((regtype == REG_TYPE_CONSTINT) && (opcode != 48))  // DEFI
++    {
++        fail(ctx, "integer constant destination requires DEFI");
++    } // else if
++    else if ((regtype == REG_TYPE_CONSTBOOL) && (opcode != 47))  // DEFB
++    {
++        fail(ctx, "Boolean constant destination requires DEFB");
++    } // else if
++    else if (regtype == REG_TYPE_SAMPLER)
++    {
++        fail(ctx, "sampler pseudo-register cannot be an instruction destination");
++    } // else if
++    else if (regtype == REG_TYPE_MISCTYPE)
++    {
++        fail(ctx, "miscellaneous input register cannot be an instruction destination");
++    } // else if
++    else if (regtype == REG_TYPE_LOOP)
++    {
++        fail(ctx, "loop counter register cannot be an instruction destination");
++    } // else if
++    else if ((regtype == REG_TYPE_PREDICATE) && (opcode != 94))  // SETP
++    {
++        fail(ctx, "predicate destination requires SETP");
++    } // else if
++} // validate_restricted_destination_register
++
+ static void validate_output_register(Context *ctx, const RegisterType regtype,
+                                      const int regnum)
+ {
+@@ -2861,6 +2898,7 @@ static int parse_instruction_token(Context *ctx)
+         instruction->state(ctx);
+     validate_pixel_shader_model_one_destination_mask(ctx, opcode);
+     validate_input_register_destination(ctx, opcode);
++    validate_restricted_destination_register(ctx, opcode);
+     validate_pixel_shader_model_one_coissue_opcode(ctx, opcode);
+     validate_pixel_shader_model_one_coissue_pair(ctx, opcode);
+ 

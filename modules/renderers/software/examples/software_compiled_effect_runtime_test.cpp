@@ -3221,6 +3221,51 @@ namespace
                   acceptedInvalidProbes);
     }
 
+    void CheckCompiledDestinationRegisterAccessValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticDestinationRegisterAccessProbe;
+        constexpr std::array invalidProbes{
+            Probe::Pixel20FloatConstant,
+            Probe::Pixel30IntegerConstant,
+            Probe::Pixel30BooleanConstant,
+            Probe::Pixel30Sampler,
+            Probe::Pixel30Miscellaneous,
+            Probe::Pixel30Loop,
+            Probe::Pixel30Predicate,
+            Probe::Vertex20FloatConstant,
+            Probe::Vertex30IntegerConstant,
+            Probe::Vertex30BooleanConstant,
+            Probe::Vertex30Sampler,
+            Probe::Vertex30Loop,
+            Probe::Vertex30Predicate,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.destinationRegisterAccessProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted restricted destination-register probes: " +
+                  acceptedInvalidProbes);
+    }
+
     void CheckCompiledOutputRegisterRangeValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticOutputRegisterProbe;
@@ -5426,6 +5471,7 @@ int main()
         CheckCompiledTemporaryRegisterRangeValidation(renderer);
         CheckCompiledInputRegisterRangeValidation(renderer);
         CheckCompiledInputRegisterAccessValidation(renderer);
+        CheckCompiledDestinationRegisterAccessValidation(renderer);
         CheckCompiledOutputRegisterRangeValidation(renderer);
         CheckCompiledConstantControlRegisterRangeValidation(renderer);
         CheckCompiledVertexInstructionSlotValidation(renderer);
