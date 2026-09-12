@@ -737,6 +737,31 @@ namespace CNA::TestSupport
         Vertex30Generic,
     };
 
+    /** @brief Profile-specific vertex address-register access used by a probe. */
+    enum class SyntheticAddressRegisterAccessProbe
+    {
+        /** @brief Emit no dedicated address-register probe. */
+        None,
+        /** @brief Write vs_1_1 a0.x with its legal MOV instruction. */
+        Vertex11MovDestination,
+        /** @brief Write vs_2_0 a0.x with its legal MOVA instruction. */
+        Vertex20MovaDestination,
+        /** @brief Write vs_3_0 a0 with its legal MOVA instruction. */
+        Vertex30MovaDestination,
+        /** @brief Read vs_1_1 a0.x as an ordinary MOV source. */
+        Vertex11Source,
+        /** @brief Read vs_2_0 a0.x as an ordinary MOV source. */
+        Vertex20Source,
+        /** @brief Read vs_3_0 a0.x as an ordinary MOV source. */
+        Vertex30Source,
+        /** @brief Write vs_1_1 a0.x with ADD rather than MOV. */
+        Vertex11AddDestination,
+        /** @brief Write vs_2_0 a0 with MOV rather than MOVA. */
+        Vertex20MovDestination,
+        /** @brief Write vs_3_0 a0 with MOV rather than MOVA. */
+        Vertex30MovDestination,
+    };
+
     /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
     struct SyntheticSamplerState
     {
@@ -975,6 +1000,9 @@ namespace CNA::TestSupport
         /** @brief Selects a write-only output register used as a source. */
         SyntheticOutputRegisterSourceProbe outputRegisterSourceProbe =
             SyntheticOutputRegisterSourceProbe::None;
+        /** @brief Selects a profile-specific vertex address-register access probe. */
+        SyntheticAddressRegisterAccessProbe addressRegisterAccessProbe =
+            SyntheticAddressRegisterAccessProbe::None;
     };
 
     inline std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -2945,6 +2973,9 @@ namespace CNA::TestSupport
                                                                 SyntheticOutputRegisterSourceProbe
                                                                     outputRegisterSourceProbe =
                                                                         SyntheticOutputRegisterSourceProbe::None,
+                                                                SyntheticAddressRegisterAccessProbe
+                                                                    addressRegisterAccessProbe =
+                                                                        SyntheticAddressRegisterAccessProbe::None,
                                                                 SyntheticVertexInstructionSlotProbe
                                                                     instructionSlotProbe =
                                                                         SyntheticVertexInstructionSlotProbe::None)
@@ -2960,7 +2991,13 @@ namespace CNA::TestSupport
                                        instructionSlotProbe ==
                                            SyntheticVertexInstructionSlotProbe::Vertex11Maximum ||
                                        instructionSlotProbe ==
-                                           SyntheticVertexInstructionSlotProbe::Vertex11OutOfRange;
+                                           SyntheticVertexInstructionSlotProbe::Vertex11OutOfRange ||
+                                       addressRegisterAccessProbe ==
+                                           SyntheticAddressRegisterAccessProbe::Vertex11MovDestination ||
+                                       addressRegisterAccessProbe ==
+                                           SyntheticAddressRegisterAccessProbe::Vertex11Source ||
+                                       addressRegisterAccessProbe ==
+                                           SyntheticAddressRegisterAccessProbe::Vertex11AddDestination;
         const bool probesVertex11InstructionSlots =
             instructionSlotProbe == SyntheticVertexInstructionSlotProbe::Vertex11Maximum ||
             instructionSlotProbe == SyntheticVertexInstructionSlotProbe::Vertex11OutOfRange;
@@ -3007,6 +3044,12 @@ namespace CNA::TestSupport
             outputRegisterSourceProbe <= SyntheticOutputRegisterSourceProbe::Vertex20TexCoord;
         const bool probesVertex30OutputSource =
             outputRegisterSourceProbe == SyntheticOutputRegisterSourceProbe::Vertex30Generic;
+        const bool probesVertex30Address =
+            addressRegisterAccessProbe ==
+                SyntheticAddressRegisterAccessProbe::Vertex30MovaDestination ||
+            addressRegisterAccessProbe == SyntheticAddressRegisterAccessProbe::Vertex30Source ||
+            addressRegisterAccessProbe ==
+                SyntheticAddressRegisterAccessProbe::Vertex30MovDestination;
         const bool usesShaderModel3 =
             usesPredication || samplesTexture ||
             invalidMixedConstantAbsolute ==
@@ -3019,7 +3062,7 @@ namespace CNA::TestSupport
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex30OutOfRange ||
             probesVertex30Input || probesVertex30InputDestination || probesVertex30Output ||
             probesVertex30ConstantControl || probesVertex30DestinationAccess ||
-            probesVertex30OutputSource;
+            probesVertex30OutputSource || probesVertex30Address;
         const bool probesVertex2xTemporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xMaximum ||
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange;
@@ -3410,6 +3453,55 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov r1, write-only output
             AppendUInt32(shader, destination(regTemp, 1));
             AppendUInt32(shader, source(registerType, 0));
+        }
+        if (addressRegisterAccessProbe != SyntheticAddressRegisterAccessProbe::None)
+        {
+            const bool legalMov = addressRegisterAccessProbe ==
+                                  SyntheticAddressRegisterAccessProbe::Vertex11MovDestination;
+            const bool legalMova =
+                addressRegisterAccessProbe ==
+                    SyntheticAddressRegisterAccessProbe::Vertex20MovaDestination ||
+                addressRegisterAccessProbe ==
+                    SyntheticAddressRegisterAccessProbe::Vertex30MovaDestination;
+            const bool readsAddress =
+                addressRegisterAccessProbe == SyntheticAddressRegisterAccessProbe::Vertex11Source ||
+                addressRegisterAccessProbe == SyntheticAddressRegisterAccessProbe::Vertex20Source ||
+                addressRegisterAccessProbe == SyntheticAddressRegisterAccessProbe::Vertex30Source;
+            const bool invalidAdd = addressRegisterAccessProbe ==
+                                    SyntheticAddressRegisterAccessProbe::Vertex11AddDestination;
+            if (legalMov || (readsAddress && usesShaderModel11))
+            {
+                AppendUInt32(shader, 0x00000001u); // mov a0.x, c0.w
+                AppendUInt32(shader, destination(regAddress, 0, 0x1u));
+                AppendUInt32(shader, source(regConst, 0, 0xFFu));
+            }
+            else if (legalMova || readsAddress)
+            {
+                AppendUInt32(shader, 0x0000002Eu | (2u << 24)); // mova a0, c0
+                AppendUInt32(shader, destination(regAddress, 0,
+                                                 probesVertex30Address ? 0xFu : 0x1u));
+                AppendUInt32(shader, source(regConst, 0));
+            }
+            else if (invalidAdd)
+            {
+                AppendUInt32(shader, 0x00000002u); // add a0.x, c0, c0
+                AppendUInt32(shader, destination(regAddress, 0, 0x1u));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, source(regConst, 0));
+            }
+            else
+            {
+                AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov a0, c0
+                AppendUInt32(shader, destination(regAddress, 0));
+                AppendUInt32(shader, source(regConst, 0));
+            }
+            if (readsAddress)
+            {
+                AppendUInt32(shader,
+                             0x00000001u | (usesShaderModel11 ? 0u : (2u << 24))); // mov r1, a0.x
+                AppendUInt32(shader, destination(regTemp, 1));
+                AppendUInt32(shader, source(regAddress, 0, 0x00u));
+            }
         }
         if (probesVertex20Output || probesVertex30Output)
         {
@@ -4408,6 +4500,7 @@ namespace CNA::TestSupport
                 options.constantControlRegisterProbe,
                 options.destinationRegisterAccessProbe,
                 options.outputRegisterSourceProbe,
+                options.addressRegisterAccessProbe,
                 options.vertexInstructionSlotProbe);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));

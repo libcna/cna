@@ -1397,6 +1397,54 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Vertex20TexCoord,
         CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Vertex30Generic));
 
+TEST(EasyGLCompiledEffectAddressRegisterTest, AcceptsProfileSpecificWriteInstructions)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    constexpr std::array legalProbes{
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex11MovDestination,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex20MovaDestination,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex30MovaDestination,
+    };
+    for (const auto probe : legalProbes)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.addressRegisterAccessProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectAddressRegisterAccessTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticAddressRegisterAccessProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectAddressRegisterAccessTest, RejectsInvalidAccess)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.addressRegisterAccessProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidAddressAccess,
+    EasyGLCompiledEffectAddressRegisterAccessTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex11Source,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex20Source,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex30Source,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex11AddDestination,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex20MovDestination,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex30MovDestination));
+
 class EasyGLCompiledEffectOutputRegisterRangeTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>
 {

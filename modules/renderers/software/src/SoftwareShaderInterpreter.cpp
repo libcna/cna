@@ -1006,6 +1006,15 @@ namespace CNA::Internal::Renderers::Software
                 {
                 case 1: // MOV
                     result = source0;
+                    if (destination.type == RegisterType::Address)
+                    {
+                        for (float& component : result)
+                        {
+                            component = std::floor(std::abs(component) + 0.5f) *
+                                        (component > 0.0f ? 1.0f
+                                                         : component < 0.0f ? -1.0f : 0.0f);
+                        }
+                    }
                     break;
                 case 2:  // ADD
                 case 3:  // SUB

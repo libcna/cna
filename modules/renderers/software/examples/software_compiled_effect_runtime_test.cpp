@@ -536,6 +536,65 @@ namespace
                   legacyVarying->value[3] == 1.0f,
               "Shader Model 1.1 EXPP did not emit its legacy four-part result");
 
+        SoftwareShaderProgramEXT legacyAddress;
+        legacyAddress.stage = SoftwareShaderStageEXT::Vertex;
+        legacyAddress.majorVersion = 1u;
+        legacyAddress.minorVersion = 1u;
+        legacyAddress.inputSemantics = {{MOJOSHADER_USAGE_POSITION, 0u, 0u}};
+        legacyAddress.outputSemantics = {
+            {MOJOSHADER_USAGE_POSITION, 0u, 0u, rasterOutput},
+            {MOJOSHADER_USAGE_TEXCOORD, 0u, 0u, textureOutput},
+            {MOJOSHADER_USAGE_TEXCOORD, 1u, 1u, textureOutput},
+        };
+        const auto addLegacyAddress = [&](std::uint16_t opcode,
+                                          std::initializer_list<std::uint32_t> tokens)
+        {
+            SoftwareShaderInstructionEXT instruction;
+            instruction.opcode = opcode;
+            instruction.tokens.assign(tokens);
+            legacyAddress.instructions.push_back(std::move(instruction));
+        };
+        addLegacyAddress(1u,
+                         {1u, destination(rasterOutput, 0u), source(input, 0u)});
+        addLegacyAddress(1u,
+                         {1u, destination(address, 0u, 0x1u),
+                          source(constant, 4u, 0xFFu)});
+        addLegacyAddress(1u,
+                         {1u, destination(textureOutput, 0u),
+                          source(constant, 20u, 0xE4u, 0u, true)});
+        addLegacyAddress(1u,
+                         {1u, destination(address, 0u, 0x1u),
+                          source(constant, 5u, 0xFFu)});
+        addLegacyAddress(1u,
+                         {1u, destination(textureOutput, 1u),
+                          source(constant, 22u, 0xE4u, 0u, true)});
+        setConstant(4u, {0.0f, 0.0f, 0.0f, 1.6f});
+        setConstant(5u, {0.0f, 0.0f, 0.0f, -1.6f});
+        setConstant(20u, {20.0f, 20.0f, 20.0f, 20.0f});
+        setConstant(21u, {21.0f, 21.0f, 21.0f, 21.0f});
+        setConstant(22u, {22.0f, 22.0f, 22.0f, 22.0f});
+        const auto legacyAddressResult =
+            ExecuteSoftwareVertexShaderEXT(legacyAddress, floats, integers, booleans, inputs);
+        const auto positiveAddress = std::find_if(
+            legacyAddressResult.varyings.begin(), legacyAddressResult.varyings.end(),
+            [](const auto& value)
+            {
+                return value.usage == MOJOSHADER_USAGE_TEXCOORD && value.usageIndex == 0u;
+            });
+        const auto negativeAddress = std::find_if(
+            legacyAddressResult.varyings.begin(), legacyAddressResult.varyings.end(),
+            [](const auto& value)
+            {
+                return value.usage == MOJOSHADER_USAGE_TEXCOORD && value.usageIndex == 1u;
+            });
+        Check(positiveAddress != legacyAddressResult.varyings.end() &&
+                  negativeAddress != legacyAddressResult.varyings.end() &&
+                  positiveAddress->value ==
+                      std::array<float, 4>{22.0f, 22.0f, 22.0f, 22.0f} &&
+                  negativeAddress->value ==
+                      std::array<float, 4>{20.0f, 20.0f, 20.0f, 20.0f},
+              "Shader Model 1.1 MOV address conversion did not round positive and negative values");
+
         setConstant(35u, {-2.0f, 0.0f, 0.0f, 1.0f});
         setConstant(36u, {0.0f, 0.0f, 0.0f, 1.0f});
         SoftwareShaderProgramEXT logProgram;
@@ -3304,6 +3363,66 @@ namespace
                   acceptedInvalidProbes);
     }
 
+    void CheckCompiledAddressRegisterAccessValidation(SoftwareRenderer& renderer)
+    {
+        using Probe = CNA::TestSupport::SyntheticAddressRegisterAccessProbe;
+        constexpr std::array legalProbes{
+            Probe::Vertex11MovDestination,
+            Probe::Vertex20MovaDestination,
+            Probe::Vertex30MovaDestination,
+        };
+        for (const Probe probe : legalProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.addressRegisterAccessProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error& error)
+            {
+                Check(false, "compiled Effect parser rejected legal address-register probe " +
+                                 std::to_string(static_cast<int>(probe)) + ": " + error.what());
+            }
+        }
+
+        constexpr std::array invalidProbes{
+            Probe::Vertex11Source,
+            Probe::Vertex20Source,
+            Probe::Vertex30Source,
+            Probe::Vertex11AddDestination,
+            Probe::Vertex20MovDestination,
+            Probe::Vertex30MovDestination,
+        };
+        std::string acceptedInvalidProbes;
+        for (const Probe probe : invalidProbes)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.addressRegisterAccessProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
+            }
+            catch (const std::runtime_error&)
+            {
+                rejected = true;
+            }
+            if (!rejected)
+            {
+                if (!acceptedInvalidProbes.empty()) acceptedInvalidProbes += ", ";
+                acceptedInvalidProbes += std::to_string(static_cast<int>(probe));
+            }
+        }
+        Check(acceptedInvalidProbes.empty(),
+              "compiled Effect parser accepted invalid address-register probes: " +
+                  acceptedInvalidProbes);
+    }
+
     void CheckCompiledOutputRegisterRangeValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticOutputRegisterProbe;
@@ -5511,6 +5630,7 @@ int main()
         CheckCompiledInputRegisterAccessValidation(renderer);
         CheckCompiledDestinationRegisterAccessValidation(renderer);
         CheckCompiledOutputRegisterSourceValidation(renderer);
+        CheckCompiledAddressRegisterAccessValidation(renderer);
         CheckCompiledOutputRegisterRangeValidation(renderer);
         CheckCompiledConstantControlRegisterRangeValidation(renderer);
         CheckCompiledVertexInstructionSlotValidation(renderer);
