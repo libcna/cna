@@ -2270,11 +2270,12 @@ void main()
     }
 
     RenderTargetStorage CreateRenderTarget2D(
-        const int width, const int height, const int levelCount, const int depthFormat)
+        const int width, const int height, const int levelCount, const int depthFormat,
+        const int multiSampleCount)
     {
         RequireInitialized("RenderTarget2D creation");
         if (width <= 0 || height <= 0 || levelCount <= 0 ||
-            depthFormat < 0 || depthFormat > 3)
+            depthFormat < 0 || depthFormat > 3 || multiSampleCount < 0)
         {
             throw std::invalid_argument("RLGL: invalid RenderTarget2D creation request");
         }
@@ -2285,6 +2286,13 @@ void main()
 
         const FramebufferBindingRestore framebufferRestore;
         RenderTargetStorage storage;
+        if (multiSampleCount > 0)
+        {
+            GLint maxSamples = 0;
+            glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+            storage.multiSampleCount = std::min(multiSampleCount, static_cast<int>(maxSamples));
+            if (storage.multiSampleCount < 2) storage.multiSampleCount = 0;
+        }
         storage.colorTexture = CreateTexture2D(
             0, width, height, levelCount, nullptr);
         try
@@ -2292,9 +2300,43 @@ void main()
             storage.framebuffer = rlLoadFramebuffer();
             if (storage.framebuffer == 0)
                 throw std::runtime_error("RLGL: framebuffer allocation returned a zero name");
-            rlFramebufferAttach(
-                storage.framebuffer, storage.colorTexture,
-                RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+            if (storage.multiSampleCount > 0)
+            {
+                glGenRenderbuffers(1, &storage.multisampleColorRenderbuffer);
+                glBindRenderbuffer(
+                    GL_RENDERBUFFER, storage.multisampleColorRenderbuffer);
+                glRenderbufferStorageMultisample(
+                    GL_RENDERBUFFER, storage.multiSampleCount, GL_RGBA8, width, height);
+                GLint actualSamples = 0;
+                glGetRenderbufferParameteriv(
+                    GL_RENDERBUFFER, GL_RENDERBUFFER_SAMPLES, &actualSamples);
+                glBindRenderbuffer(GL_RENDERBUFFER, 0);
+                if (storage.multisampleColorRenderbuffer == 0 || actualSamples < 2)
+                {
+                    throw std::runtime_error(
+                        "RLGL: multisample color renderbuffer allocation failed");
+                }
+                storage.multiSampleCount = actualSamples;
+                rlFramebufferAttach(
+                    storage.framebuffer, storage.multisampleColorRenderbuffer,
+                    RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_RENDERBUFFER, 0);
+
+                storage.resolveFramebuffer = rlLoadFramebuffer();
+                if (storage.resolveFramebuffer == 0)
+                    throw std::runtime_error(
+                        "RLGL: resolve framebuffer allocation returned a zero name");
+                rlFramebufferAttach(
+                    storage.resolveFramebuffer, storage.colorTexture,
+                    RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+                if (!rlFramebufferComplete(storage.resolveFramebuffer))
+                    throw std::runtime_error("RLGL: resolve framebuffer is incomplete");
+            }
+            else
+            {
+                rlFramebufferAttach(
+                    storage.framebuffer, storage.colorTexture,
+                    RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+            }
 
             if (depthFormat != 0)
             {
@@ -2307,7 +2349,31 @@ void main()
                 // this one missing rlgl resource wrapper uses its already-loaded GL dispatch.
                 glGenRenderbuffers(1, &storage.depthStencilRenderbuffer);
                 glBindRenderbuffer(GL_RENDERBUFFER, storage.depthStencilRenderbuffer);
-                glRenderbufferStorage(GL_RENDERBUFFER, internalFormat, width, height);
+                if (storage.multiSampleCount > 0)
+                {
+                    glRenderbufferStorageMultisample(
+                        GL_RENDERBUFFER, storage.multiSampleCount,
+                        internalFormat, width, height);
+                }
+                else
+                {
+                    glRenderbufferStorage(
+                        GL_RENDERBUFFER, internalFormat, width, height);
+                }
+                if (storage.multiSampleCount > 0)
+                {
+                    GLint actualDepthSamples = 0;
+                    glGetRenderbufferParameteriv(
+                        GL_RENDERBUFFER, GL_RENDERBUFFER_SAMPLES, &actualDepthSamples);
+                    if (actualDepthSamples != storage.multiSampleCount)
+                    {
+                        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+                        glDeleteRenderbuffers(1, &storage.depthStencilRenderbuffer);
+                        storage.depthStencilRenderbuffer = 0;
+                        throw std::runtime_error(
+                            "RLGL: color and depth multisample counts do not match");
+                    }
+                }
                 glBindRenderbuffer(GL_RENDERBUFFER, 0);
                 if (storage.depthStencilRenderbuffer == 0)
                     throw std::runtime_error(
@@ -2334,6 +2400,11 @@ void main()
         }
         catch (...)
         {
+            if (storage.resolveFramebuffer != 0)
+            {
+                rlUnloadFramebuffer(storage.resolveFramebuffer);
+                storage.resolveFramebuffer = 0;
+            }
             if (storage.framebuffer != 0)
             {
                 rlUnloadFramebuffer(storage.framebuffer);
@@ -2344,6 +2415,11 @@ void main()
             {
                 glDeleteRenderbuffers(1, &storage.depthStencilRenderbuffer);
                 storage.depthStencilRenderbuffer = 0;
+            }
+            if (storage.multisampleColorRenderbuffer != 0)
+            {
+                glDeleteRenderbuffers(1, &storage.multisampleColorRenderbuffer);
+                storage.multisampleColorRenderbuffer = 0;
             }
             if (storage.colorTexture != 0)
             {
@@ -2364,7 +2440,12 @@ void main()
         }
         FramebufferBindingRestore restore;
         restore.ForgetDeletedFramebuffer(storage.framebuffer);
+        restore.ForgetDeletedFramebuffer(storage.resolveFramebuffer);
+        if (storage.resolveFramebuffer != 0)
+            rlUnloadFramebuffer(storage.resolveFramebuffer);
         if (storage.framebuffer != 0) rlUnloadFramebuffer(storage.framebuffer);
+        if (storage.multisampleColorRenderbuffer != 0)
+            glDeleteRenderbuffers(1, &storage.multisampleColorRenderbuffer);
         if (storage.colorTexture != 0) rlUnloadTexture(storage.colorTexture);
         storage = {};
     }
@@ -2375,6 +2456,25 @@ void main()
         if (framebuffer == 0)
             throw std::invalid_argument("RLGL: cannot bind a zero render-target framebuffer");
         rlEnableFramebuffer(framebuffer);
+    }
+
+    void ResolveRenderTarget2D(
+        const RenderTargetStorage& storage, const int width, const int height)
+    {
+        RequireInitialized("RenderTarget2D multisample resolve");
+        if (storage.multiSampleCount <= 0) return;
+        if (storage.framebuffer == 0 || storage.resolveFramebuffer == 0 ||
+            width <= 0 || height <= 0)
+        {
+            throw std::invalid_argument("RLGL: invalid RenderTarget2D resolve request");
+        }
+
+        const FramebufferBindingRestore framebufferRestore;
+        rlBindFramebuffer(RL_READ_FRAMEBUFFER, storage.framebuffer);
+        rlBindFramebuffer(RL_DRAW_FRAMEBUFFER, storage.resolveFramebuffer);
+        rlBlitFramebuffer(
+            0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT);
+        ThrowIfGlError("RenderTarget2D multisample resolve");
     }
 
     void GenerateRenderTargetMipmaps(

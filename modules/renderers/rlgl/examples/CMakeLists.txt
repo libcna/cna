@@ -55,6 +55,30 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_render_target PRIVATE SDL3::SDL3main)
     endif()
 
+    add_executable(cna_test_rlgl_render_target_full
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../opengl4/examples/opengl4_rendertarget2d_test.cpp")
+    target_link_libraries(cna_test_rlgl_render_target_full
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_render_target_full PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_msaa_first_readback
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_first_readback_test.cpp")
+    target_link_libraries(cna_test_rlgl_msaa_first_readback
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_msaa_first_readback PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_msaa_mip_readback
+        "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_mip_readback_test.cpp")
+    target_link_libraries(cna_test_rlgl_msaa_mip_readback
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_msaa_mip_readback PRIVATE SDL3::SDL3main)
+    endif()
+
     add_executable(cna_test_rlgl_buffer rlgl_buffer_test.cpp)
     target_include_directories(cna_test_rlgl_buffer PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     target_link_libraries(cna_test_rlgl_buffer PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
@@ -206,6 +230,21 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             NAME Rlgl_RenderTarget
             COMMAND cna_test_rlgl_render_target
             TIMEOUT 60 LABELS "GraphicsRenderTarget;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_RenderTarget_full
+            COMMAND cna_test_rlgl_render_target_full
+            TIMEOUT 60 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_MsaaFirstReadback
+            COMMAND cna_test_rlgl_msaa_first_readback
+            TIMEOUT 900 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_MsaaMipReadback
+            COMMAND cna_test_rlgl_msaa_mip_readback
+            TIMEOUT 1200 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_Buffer COMMAND cna_test_rlgl_buffer
             TIMEOUT 60 LABELS "GraphicsBuffer;Rlgl"

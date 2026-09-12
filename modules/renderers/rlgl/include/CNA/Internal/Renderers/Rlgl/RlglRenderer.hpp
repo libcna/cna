@@ -223,13 +223,13 @@ namespace CNA::Internal::Renderers::Rlgl
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
 
         /**
-         * @brief Creates a single-sample framebuffer-backed RenderTarget2D.
+         * @brief Creates a framebuffer-backed RenderTarget2D with optional multisampling.
          * @param w Width in pixels.
          * @param h Height in pixels.
          * @param depthFormat Raw XNA DepthFormat ordinal.
          * @param preserveContents Whether contents survive target switches.
          * @param mipMap Whether to allocate and regenerate a full mip chain.
-         * @param multiSampleCount Requested sample count; non-zero remains RLGL-041.
+         * @param multiSampleCount Requested sample count, clamped to the live device limit.
          * @return Renderer-owned target resource.
          */
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2D(

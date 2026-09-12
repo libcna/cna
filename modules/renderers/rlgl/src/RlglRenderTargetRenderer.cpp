@@ -76,14 +76,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 }
                 if (depthFormat_ < 0 || depthFormat_ > 3)
                     throw std::invalid_argument("RLGL: invalid DepthFormat ordinal");
-                if (multiSampleCount != 0)
-                {
-                    throw System::NotSupportedException(
-                        "RLGL: multisampled RenderTarget2D is not implemented yet "
-                        "(plans/plan_rlgl.md RLGL-041)");
-                }
                 storage_ = Bridge::CreateRenderTarget2D(
-                    width_, height_, levelCount_, depthFormat_);
+                    width_, height_, levelCount_, depthFormat_, multiSampleCount);
             }
 
             ~RlglRenderTargetRenderer() override
@@ -150,8 +144,11 @@ namespace CNA::Internal::Renderers::Rlgl
                 if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
                     throw std::out_of_range(
                         "RLGL: RenderTarget2D readback destination is too small");
+                Bridge::ResolveRenderTarget2D(storage_, width_, height_);
+                const unsigned int readFramebuffer = storage_.multiSampleCount > 0
+                    ? storage_.resolveFramebuffer : storage_.framebuffer;
                 Bridge::ReadRenderTarget2D(
-                    storage_.framebuffer, storage_.colorTexture, level,
+                    readFramebuffer, storage_.colorTexture, level,
                     levelWidth, levelHeight, x, y, width, height,
                     static_cast<std::uint8_t*>(data));
                 return true;
@@ -169,6 +166,7 @@ namespace CNA::Internal::Renderers::Rlgl
 
             void UnbindAsRenderTarget() override
             {
+                Bridge::ResolveRenderTarget2D(storage_, width_, height_);
                 if (levelCount_ > 1)
                 {
                     Bridge::GenerateRenderTargetMipmaps(
@@ -182,7 +180,10 @@ namespace CNA::Internal::Renderers::Rlgl
                 return storage_.colorTexture;
             }
 
-            [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
+            [[nodiscard]] int GetMultiSampleCount() const override
+            {
+                return storage_.multiSampleCount;
+            }
 
             [[nodiscard]] bool HasRealDepthBuffer(
                 const bool depthFormatWasRequested) const override
@@ -215,9 +216,12 @@ namespace CNA::Internal::Renderers::Rlgl
             {
                 return {
                     storage_.framebuffer,
+                    storage_.resolveFramebuffer,
                     storage_.colorTexture,
+                    storage_.multisampleColorRenderbuffer,
                     storage_.depthStencilRenderbuffer,
-                    width_, height_, depthFormat_, levelCount_, 0, preserveContents_};
+                    width_, height_, depthFormat_, levelCount_,
+                    storage_.multiSampleCount, preserveContents_};
             }
 
         private:

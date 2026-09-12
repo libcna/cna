@@ -144,6 +144,8 @@ namespace
     constexpr const char* kRendererName = "WEBGPU";
 #elif defined(CNA_RENDERER_SDL_GPU)
     constexpr const char* kRendererName = "SDL_GPU";
+#elif defined(CNA_RENDERER_RLGL)
+    constexpr const char* kRendererName = "RLGL";
 #elif defined(CNA_RENDERER_DIRECTX11)
     constexpr const char* kRendererName = "DIRECTX11";
 #elif defined(CNA_RENDERER_DIRECTX12)
@@ -210,7 +212,8 @@ namespace
 
     /** @brief Whether `SetRenderTargets` with more than one attachment is executed here. */
     constexpr bool kMrtSupported =
-#if defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_HEADLESS)
+#if defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_HEADLESS) || \
+    defined(CNA_RENDERER_RLGL)
         false;
 #else
         true;
@@ -233,7 +236,7 @@ namespace
 
     /** @brief Whether `RenderTargetCube` is a bindable render target here. */
     constexpr bool kCubeTargetSupported =
-#if defined(CNA_RENDERER_SOFTWARE)
+#if defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_RLGL)
         false;
 #else
         true;

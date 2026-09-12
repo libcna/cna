@@ -40,7 +40,9 @@ namespace CNA::Internal::Renderers::Rlgl
     struct RenderTargetResourceSnapshot
     {
         unsigned int framebuffer = 0;
+        unsigned int resolveFramebuffer = 0;
         unsigned int colorTexture = 0;
+        unsigned int multisampleColorRenderbuffer = 0;
         unsigned int depthStencilRenderbuffer = 0;
         int width = 0;
         int height = 0;
@@ -51,13 +53,13 @@ namespace CNA::Internal::Renderers::Rlgl
     };
 
     /**
-     * @brief Creates a single-sample Color RenderTarget2D resource.
+     * @brief Creates a Color RenderTarget2D resource with optional multisampling.
      * @param width Width in pixels.
      * @param height Height in pixels.
      * @param depthFormat Raw XNA DepthFormat ordinal.
      * @param preserveContents Whether target contents must survive target switches.
      * @param mipMap Whether to allocate and regenerate a full mip chain.
-     * @param multiSampleCount Requested sample count; non-zero is rejected until RLGL-041.
+     * @param multiSampleCount Requested sample count, clamped to the live device limit.
      * @param surfaceFormat Raw XNA SurfaceFormat ordinal; Color is the current baseline.
      * @return Renderer-owned framebuffer resource.
      */

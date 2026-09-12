@@ -99,12 +99,15 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         std::vector<std::uint8_t> bytes;
     };
 
-    /** @brief rlgl-owned names forming one single-sample RenderTarget2D. */
+    /** @brief rlgl-owned names forming one resolved or multisampled RenderTarget2D. */
     struct RenderTargetStorage
     {
         unsigned int framebuffer = 0;
+        unsigned int resolveFramebuffer = 0;
         unsigned int colorTexture = 0;
+        unsigned int multisampleColorRenderbuffer = 0;
         unsigned int depthStencilRenderbuffer = 0;
+        int multiSampleCount = 0;
     };
 
     /** @brief rlgl-owned shader and VAO used by the BasicEffect/AlphaTestEffect path. */
@@ -572,10 +575,11 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @param height Height in pixels.
      * @param levelCount Number of allocated color-texture mip levels.
      * @param depthFormat Raw XNA DepthFormat ordinal.
+     * @param multiSampleCount Requested multisample count, or zero.
      * @return Complete framebuffer storage whose color texture is rlgl-owned.
      */
     [[nodiscard]] RenderTargetStorage CreateRenderTarget2D(
-        int width, int height, int levelCount, int depthFormat);
+        int width, int height, int levelCount, int depthFormat, int multiSampleCount);
 
     /**
      * @brief Releases a RenderTarget2D while preserving an unrelated active framebuffer.
@@ -588,6 +592,15 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @param framebuffer Non-zero framebuffer name.
      */
     void BindFramebuffer(unsigned int framebuffer);
+
+    /**
+     * @brief Resolves a multisampled Color target into its sampleable texture through rlgl.
+     * @param storage Multisampled target storage.
+     * @param width Target width.
+     * @param height Target height.
+     */
+    void ResolveRenderTarget2D(
+        const RenderTargetStorage& storage, int width, int height);
 
     /**
      * @brief Regenerates a Color render target's full mip chain through rlgl.
