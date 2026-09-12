@@ -1038,6 +1038,8 @@ namespace CNA::TestSupport
         Pixel30TexldpSaturate,
         /** @brief Apply forbidden saturation to a biased pixel TEXLDB destination. */
         Pixel30TexldbSaturate,
+        /** @brief Apply permitted partial precision to a Shader Model 2 projective TEXLDP. */
+        Pixel20TexldpPartialPrecision,
         /** @brief Apply permitted partial precision to a projective pixel TEXLDP destination. */
         Pixel30TexldpPartialPrecision,
         /** @brief Apply permitted partial precision to a biased pixel TEXLDB destination. */
@@ -1868,6 +1870,10 @@ namespace CNA::TestSupport
             texld20OperandProbe != SyntheticTexld20OperandProbe::None;
         const bool probesPixelTexldDestinationModifier =
             texldDestinationModifierProbe != SyntheticTexldDestinationModifierProbe::None;
+        const bool probesPixel30TexldDestinationModifier =
+            probesPixelTexldDestinationModifier &&
+            texldDestinationModifierProbe !=
+                SyntheticTexldDestinationModifierProbe::Pixel20TexldpPartialPrecision;
         const bool probesPixelTextureInstructionProfile =
             textureInstructionProfileProbe ==
                 SyntheticTextureInstructionProfileProbe::Pixel20Texldd ||
@@ -1917,7 +1923,7 @@ namespace CNA::TestSupport
             probesMissingPixel30SamplerDeclaration || probesPixelImmediateConstantDefinition ||
             probesVertexFloatRedefinition || probesPixelSamplerDuplicate ||
             probesPixelTextureSourceModifier || probesPixel30TexlddOperand ||
-            probesPixelTexldlDestinationModifier || probesPixelTexldDestinationModifier;
+            probesPixelTexldlDestinationModifier || probesPixel30TexldDestinationModifier;
         const bool usesShaderModel14 = usesProjectiveModifiers ||
                                        usesProjectiveSwizzleModifiers ||
                                        usesShaderModel14TextureLoad ||
@@ -4092,10 +4098,23 @@ namespace CNA::TestSupport
                 textureInstructionProfileProbe ==
                     SyntheticTextureInstructionProfileProbe::Pixel2xTexldl ||
                 probesPixelTexldlDestinationModifier;
+            const bool probesProjectedTexld =
+                texldDestinationModifierProbe ==
+                    SyntheticTexldDestinationModifierProbe::Pixel30TexldpSaturate ||
+                texldDestinationModifierProbe ==
+                    SyntheticTexldDestinationModifierProbe::Pixel30TexldpPartialPrecision ||
+                texldDestinationModifierProbe ==
+                    SyntheticTexldDestinationModifierProbe::Pixel20TexldpPartialPrecision;
+            const bool probesBiasedTexld =
+                texldDestinationModifierProbe ==
+                    SyntheticTexldDestinationModifierProbe::Pixel30TexldbSaturate ||
+                texldDestinationModifierProbe ==
+                    SyntheticTexldDestinationModifierProbe::Pixel30TexldbPartialPrecision;
+            const bool textureUsesFourComponents =
+                textureUsesGradients || textureUsesExplicitLod ||
+                probesPixelTexldDestinationModifier;
             const std::uint32_t coordinateMask =
-                textureUsesGradients || textureUsesExplicitLod
-                                                     ? 0xFu
-                                                     : threeComponent ? 0x7u : 0x3u;
+                textureUsesFourComponents ? 0xFu : threeComponent ? 0x7u : 0x3u;
             const std::uint32_t samplerTextureType =
                 samplerKind == SyntheticSamplerKind::SamplerCube
                     ? EffectFormat::SamplerTypeCube
@@ -4136,17 +4155,8 @@ namespace CNA::TestSupport
                                                     ? 0x0000005Fu
                                                     : 0x00000042u;
             const std::uint32_t textureLength = textureUsesGradients ? 5u : 3u;
-            const bool probesProjectedTexld =
-                texldDestinationModifierProbe ==
-                    SyntheticTexldDestinationModifierProbe::Pixel30TexldpSaturate ||
-                texldDestinationModifierProbe ==
-                    SyntheticTexldDestinationModifierProbe::Pixel30TexldpPartialPrecision;
-            const bool probesBiasedTexld =
-                texldDestinationModifierProbe ==
-                    SyntheticTexldDestinationModifierProbe::Pixel30TexldbSaturate ||
-                texldDestinationModifierProbe ==
-                    SyntheticTexldDestinationModifierProbe::Pixel30TexldbPartialPrecision;
-            const std::uint32_t textureControl = probesProjectedTexld ? 1u : probesBiasedTexld ? 2u : 0u;
+            const std::uint32_t textureControl =
+                probesProjectedTexld ? 1u : probesBiasedTexld ? 2u : 0u;
             AppendUInt32(shader,
                          textureOpcode | (textureLength << 24) | (textureControl << 16));
             const std::uint32_t destinationType =
@@ -4183,6 +4193,8 @@ namespace CNA::TestSupport
                           SyntheticTexldDestinationModifierProbe::Pixel30TexldbSaturate
                     ? (1u << 20)
                 : texldDestinationModifierProbe ==
+                          SyntheticTexldDestinationModifierProbe::Pixel20TexldpPartialPrecision ||
+                      texldDestinationModifierProbe ==
                           SyntheticTexldDestinationModifierProbe::Pixel30TexldpPartialPrecision ||
                       texldDestinationModifierProbe ==
                           SyntheticTexldDestinationModifierProbe::Pixel30TexldbPartialPrecision
@@ -4268,8 +4280,7 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, source(gradientType, 0,
                                             swizzleGradient ? swizzleBgra : swizzleIdentity));
             }
-            if (probesTexld20Operand || probesPixelTexldDestinationModifier ||
-                probesTexlddOperand)
+            if (probesTexld20Operand || probesTexlddOperand)
             {
                 // Keep every destination probe independent from a later read of that destination.
                 AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, c0

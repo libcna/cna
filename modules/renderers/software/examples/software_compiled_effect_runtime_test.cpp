@@ -4196,6 +4196,78 @@ namespace
                   rejectedValidProbes);
     }
 
+    void CheckCompiledProjectedCubeTextureLoad()
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        GraphicsDevice device(
+            GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+            PresentationParameters());
+        TextureCube cube(device, 1, false, SurfaceFormat::Color);
+        for (int face = 0; face < 6; ++face)
+        {
+            const Color source = face == static_cast<int>(CubeMapFace::NegativeX)
+                                     ? Color::Green
+                                     : Color::Red;
+            cube.SetData(static_cast<CubeMapFace>(face), &source, 1);
+        }
+        struct Vertex { float x, y, z, u, v, q, w; };
+        const Vertex quad[6] = {
+            {-1, 1, 0, 1, 0, 0, -1}, {-1, -1, 0, 1, 0, 0, -1},
+            {1, -1, 0, 1, 0, 0, -1}, {-1, 1, 0, 1, 0, 0, -1},
+            {1, -1, 0, 1, 0, 0, -1}, {1, 1, 0, 1, 0, 0, -1},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        constexpr std::array profiles{
+            CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+                Pixel20TexldpPartialPrecision,
+            CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+                Pixel30TexldpPartialPrecision,
+        };
+        for (const auto profile : profiles)
+        {
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+            options.texldDestinationModifierProbe = profile;
+            options.samplerStates = {
+                {Fx::SampMagFilter, Fx::FilterPoint},
+                {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+            };
+            auto effect = CNA::TestSupport::CompiledEffectTestAccess::Create(
+                device, CNA::TestSupport::BuildSyntheticEffect(options));
+            effect->getParametersProperty()["Transform"]->SetValue(
+                Matrix::getIdentityProperty());
+            effect->getParametersProperty()["Tint"]->SetValue(Vector4::One);
+            effect->getParametersProperty()["FxTexture"]->SetValue(&cube);
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle probe(2, 2, 1, 1);
+            target.GetData(0, &probe, &centre, 0, 1);
+            Check(centre == Color::Green,
+                  "compiled cube TEXLDP did not divide its direction by negative W in profile " +
+                      std::to_string(static_cast<int>(profile)) + ": " +
+                      std::to_string(centre.getRProperty()) + "," +
+                      std::to_string(centre.getGProperty()) + "," +
+                      std::to_string(centre.getBProperty()) + "," +
+                      std::to_string(centre.getAProperty()));
+        }
+    }
+
     void CheckCompiledTypedControlSourceValidation(SoftwareRenderer& renderer)
     {
         using Probe = CNA::TestSupport::SyntheticTypedControlSourceProbe;
@@ -6785,6 +6857,7 @@ int main()
         CheckCompiledTexlddOperandValidation(renderer);
         CheckCompiledTexldlDestinationModifierValidation(renderer);
         CheckCompiledTexldDestinationModifierValidation(renderer);
+        CheckCompiledProjectedCubeTextureLoad();
         CheckCompiledTypedControlSourceValidation(renderer);
         CheckCompiledSpecialControlSourceValidation(renderer);
         CheckCompiledRelativeAddressingValidation(renderer);

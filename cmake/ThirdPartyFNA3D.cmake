@@ -119,7 +119,8 @@ function(cna_configure_mojoshader)
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texld20-operand-validation.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texldd-operand-validation.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texldl-saturate-validation.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texld-saturate-validation.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-texld-saturate-validation.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-projected-cube-texture.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

@@ -2065,6 +2065,39 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
             Pixel30TexldbPartialPrecision));
 
+TEST(EasyGLCompiledEffectDrawTest, ProjectedCubeLoadDividesDirectionByW)
+{
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    constexpr std::array profiles{
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+            Pixel20TexldpPartialPrecision,
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+            Pixel30TexldpPartialPrecision,
+    };
+    for (const auto profile : profiles)
+    {
+        SCOPED_TRACE(static_cast<int>(profile));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+        options.texldDestinationModifierProbe = profile;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+        };
+        Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+        EXPECT_EQ(CNA::TestSupport::DrawCompiledEffectProjectedCubeSampler(device, effect),
+                  Color::Green);
+    }
+}
+
 class EasyGLCompiledEffectTypedControlSourceTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticTypedControlSourceProbe>
 {

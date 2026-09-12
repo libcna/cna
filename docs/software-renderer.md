@@ -339,8 +339,12 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   permits output/partial destinations, `_pp`, broad coordinate registers and source swizzles for
   ordinary, projective and biased loads, but rejects `_sat` for all three. Both CNA paths accepted
   those three invalid programs. Common validation now applies the saturation ban across profiles;
-  five paired probes and all 412 isolated EasyGL compiled-Effect tests pass. The dependency series
-  now contains 76 patches.
+  five paired probes and all 412 isolated EasyGL compiled-Effect tests pass. The same audit then
+  exposed SOFTWARE-451: Microsoft accepts projective cube loads in both Pixel Shader Models 2
+  and 3, while the active HLSL and GLSL translators explicitly refused them. They now divide the
+  cube direction by W before lookup. A negative-W exact-pixel test distinguishes the green -X face
+  from an unprojected red +X sample in both profiles and both renderers; all 413 isolated EasyGL
+  compiled-Effect tests pass. The dependency series now contains 77 patches.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including

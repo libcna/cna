@@ -4003,6 +4003,61 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Draws a projective cube lookup whose negative divisor flips the selected face.
+     *
+     * @param device Device used for the draw.
+     * @param effect Parsed fixture effect containing a Shader Model 3 cube TEXLDP.
+     * @return Centre pixel after the projective cube lookup.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectProjectedCubeSampler(
+        GraphicsDevice& device, Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4::One);
+
+        TextureCube cube(device, 1, false, SurfaceFormat::Color);
+        for (int face = 0; face < 6; ++face)
+        {
+            const Color source = face == static_cast<int>(CubeMapFace::NegativeX)
+                                     ? Color::Green
+                                     : Color::Red;
+            cube.SetData(static_cast<CubeMapFace>(face), &source, 1);
+        }
+        effect.getParametersProperty()["FxTexture"]->SetValue(&cube);
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, w;
+        };
+        const Vertex quad[6] = {
+            {-1, 1, 0, 1, 0, 0, -1}, {-1, -1, 0, 1, 0, 0, -1},
+            {1, -1, 0, 1, 0, 0, -1}, {-1, 1, 0, 1, 0, 0, -1},
+            {1, -1, 0, 1, 0, 0, -1}, {1, 1, 0, 1, 0, 0, -1},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        return centre;
+    }
+
+    /**
      * @brief Proves a Shader Model 3 sampler source swizzle applies to the sampled result.
      *
      * @param device Device whose renderer executes classic compiled Effects.
