@@ -307,8 +307,7 @@ namespace CNA::Internal::Renderers::Rlgl
             world, view, projection, primitive, primitiveCount,
             0, 0, 0, params, false,
             currentViewportWidth_, currentViewportHeight_,
-            currentRenderTarget_ != nullptr
-                ? currentRenderTarget_->GetMultiSampleCount() : multiSampleCount_);
+            GetCurrentSampleCount());
     }
 
     void RlglRenderer::DrawIndexedColoredPrimitives(
@@ -324,8 +323,7 @@ namespace CNA::Internal::Renderers::Rlgl
             world, view, projection, primitive, primitiveCount,
             0, 0, 0, params, false,
             currentViewportWidth_, currentViewportHeight_,
-            currentRenderTarget_ != nullptr
-                ? currentRenderTarget_->GetMultiSampleCount() : multiSampleCount_);
+            GetCurrentSampleCount());
     }
 
     void RlglRenderer::DrawPrimitivesEx(
@@ -340,8 +338,7 @@ namespace CNA::Internal::Renderers::Rlgl
             world, view, projection, primitive, primitiveCount,
             params.vertexStart, 0, 0, params, true,
             currentViewportWidth_, currentViewportHeight_,
-            currentRenderTarget_ != nullptr
-                ? currentRenderTarget_->GetMultiSampleCount() : multiSampleCount_);
+            GetCurrentSampleCount());
     }
 
     void RlglRenderer::DrawIndexedPrimitivesEx(
@@ -357,7 +354,6 @@ namespace CNA::Internal::Renderers::Rlgl
             world, view, projection, primitive, primitiveCount,
             0, params.startIndex, params.baseVertex, params, true,
             currentViewportWidth_, currentViewportHeight_,
-            currentRenderTarget_ != nullptr
-                ? currentRenderTarget_->GetMultiSampleCount() : multiSampleCount_);
+            GetCurrentSampleCount());
     }
 }

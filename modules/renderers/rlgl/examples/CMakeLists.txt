@@ -93,6 +93,33 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_render_target_full PRIVATE SDL3::SDL3main)
     endif()
 
+    add_executable(cna_test_rlgl_render_target_cube rlgl_render_target_cube_test.cpp)
+    target_include_directories(cna_test_rlgl_render_target_cube
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_render_target_cube
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_render_target_cube PRIVATE SDL3::SDL3main)
+    endif()
+
+    set(RLGL_RENDER_TARGET_CUBE_CONTRACTS
+        getdata_contract
+        usage
+        msaa_face
+        plural_binding)
+    foreach(contract IN LISTS RLGL_RENDER_TARGET_CUBE_CONTRACTS)
+        add_executable(cna_test_rlgl_rendertargetcube_${contract}
+            "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_${contract}_test.cpp")
+        target_link_libraries(cna_test_rlgl_rendertargetcube_${contract}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_rendertargetcube_${contract}
+                PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+    target_compile_definitions(cna_test_rlgl_rendertargetcube_plural_binding
+        PRIVATE CNA_GFX096_CUBE_GETDATA=1)
+
     add_executable(cna_test_rlgl_msaa_first_readback
         "${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_msaa_first_readback_test.cpp")
     target_link_libraries(cna_test_rlgl_msaa_first_readback
@@ -290,6 +317,18 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             COMMAND cna_test_rlgl_render_target_full
             TIMEOUT 60 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_RenderTargetCube
+            COMMAND cna_test_rlgl_render_target_cube
+            TIMEOUT 60 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        foreach(contract IN LISTS RLGL_RENDER_TARGET_CUBE_CONTRACTS)
+            cna_register_renderer_test(
+                NAME Rlgl_RenderTargetCube_${contract}
+                COMMAND cna_test_rlgl_rendertargetcube_${contract}
+                TIMEOUT 180 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
         cna_register_renderer_test(
             NAME Rlgl_MsaaFirstReadback
             COMMAND cna_test_rlgl_msaa_first_readback

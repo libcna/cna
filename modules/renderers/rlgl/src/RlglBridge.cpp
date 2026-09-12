@@ -445,7 +445,9 @@ namespace
         }
     }
 
-    void ApplyTextureSwizzle(const TextureFormatInfo::Swizzle swizzle)
+    void ApplyTextureSwizzle(
+        const TextureFormatInfo::Swizzle swizzle,
+        const GLenum target = GL_TEXTURE_2D)
     {
         if (swizzle == TextureFormatInfo::Swizzle::Identity) return;
 
@@ -471,10 +473,10 @@ namespace
             blue = GL_ZERO;
             alpha = GL_RED;
         }
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, red);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, green);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, blue);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, alpha);
+        glTexParameteri(target, GL_TEXTURE_SWIZZLE_R, red);
+        glTexParameteri(target, GL_TEXTURE_SWIZZLE_G, green);
+        glTexParameteri(target, GL_TEXTURE_SWIZZLE_B, blue);
+        glTexParameteri(target, GL_TEXTURE_SWIZZLE_A, alpha);
     }
 
     [[nodiscard]] std::size_t CompressedLevelBytes(
@@ -2722,6 +2724,160 @@ void main()
         return storage;
     }
 
+    RenderTargetCubeStorage CreateRenderTargetCube(
+        const int size, const int levelCount, const int depthFormat,
+        const int multiSampleCount, const int surfaceFormat)
+    {
+        RequireInitialized("RenderTargetCube creation");
+        if (size <= 0 || levelCount <= 0 || depthFormat < 0 || depthFormat > 3 ||
+            multiSampleCount < 0 || !IsClassicRenderTargetFormat(surfaceFormat))
+        {
+            throw std::invalid_argument("RLGL: invalid RenderTargetCube creation request");
+        }
+
+        const TextureFormatInfo colorFormat = TextureFormat(surfaceFormat);
+        const FramebufferBindingRestore framebufferRestore;
+        const TextureBindingRestore textureRestore;
+        const UnpackAlignmentRestore unpackRestore;
+        RenderTargetCubeStorage storage;
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+        if (multiSampleCount > 0)
+        {
+            GLint maxSamples = 0;
+            glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+            storage.multiSampleCount = std::min(multiSampleCount, static_cast<int>(maxSamples));
+            if (storage.multiSampleCount < 2) storage.multiSampleCount = 0;
+        }
+
+        try
+        {
+            // rlgl 6.0 cannot allocate arbitrary exact cube formats or null-data cube mip chains.
+            // Keep that measured gap here; rlgl still owns cube binding/destruction and every FBO.
+            glGenTextures(1, &storage.colorTexture);
+            if (storage.colorTexture == 0)
+                throw std::runtime_error("RLGL: cube target texture allocation returned zero");
+            glBindTexture(GL_TEXTURE_CUBE_MAP, storage.colorTexture);
+            for (int face = 0; face < 6; ++face)
+            {
+                int levelSize = size;
+                for (int level = 0; level < levelCount; ++level)
+                {
+                    glTexImage2D(
+                        static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face),
+                        level, static_cast<GLint>(colorFormat.internalFormat),
+                        levelSize, levelSize, 0,
+                        colorFormat.transferFormat, colorFormat.transferType, nullptr);
+                    levelSize = std::max(1, levelSize / 2);
+                }
+            }
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, levelCount - 1);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+            ApplyTextureSwizzle(colorFormat.swizzle, GL_TEXTURE_CUBE_MAP);
+
+            storage.framebuffer = rlLoadFramebuffer();
+            if (storage.framebuffer == 0)
+                throw std::runtime_error("RLGL: cube target framebuffer allocation returned zero");
+
+            if (storage.multiSampleCount > 0)
+            {
+                for (unsigned int& renderbuffer : storage.multisampleColorRenderbuffers)
+                {
+                    glGenRenderbuffers(1, &renderbuffer);
+                    glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
+                    glRenderbufferStorageMultisample(
+                        GL_RENDERBUFFER, storage.multiSampleCount,
+                        colorFormat.internalFormat, size, size);
+                    GLint actualSamples = 0;
+                    glGetRenderbufferParameteriv(
+                        GL_RENDERBUFFER, GL_RENDERBUFFER_SAMPLES, &actualSamples);
+                    if (renderbuffer == 0 || actualSamples < 2 ||
+                        (storage.multiSampleCount > 0 &&
+                         actualSamples != storage.multiSampleCount))
+                    {
+                        throw std::runtime_error(
+                            "RLGL: cube target face MSAA allocation failed");
+                    }
+                    storage.multiSampleCount = actualSamples;
+                }
+                glBindRenderbuffer(GL_RENDERBUFFER, 0);
+                rlFramebufferAttach(
+                    storage.framebuffer, storage.multisampleColorRenderbuffers[0],
+                    RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_RENDERBUFFER, 0);
+
+                storage.resolveFramebuffer = rlLoadFramebuffer();
+                if (storage.resolveFramebuffer == 0)
+                    throw std::runtime_error(
+                        "RLGL: cube resolve framebuffer allocation returned zero");
+                rlFramebufferAttach(
+                    storage.resolveFramebuffer, storage.colorTexture,
+                    RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_CUBEMAP_POSITIVE_X, 0);
+                if (!rlFramebufferComplete(storage.resolveFramebuffer))
+                    throw std::runtime_error("RLGL: cube resolve framebuffer is incomplete");
+            }
+            else
+            {
+                rlFramebufferAttach(
+                    storage.framebuffer, storage.colorTexture,
+                    RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_CUBEMAP_POSITIVE_X, 0);
+            }
+
+            if (depthFormat != 0)
+            {
+                GLenum internalFormat = GL_DEPTH_COMPONENT16;
+                if (depthFormat == 2) internalFormat = GL_DEPTH_COMPONENT24;
+                else if (depthFormat == 3) internalFormat = GL_DEPTH24_STENCIL8;
+                glGenRenderbuffers(1, &storage.depthStencilRenderbuffer);
+                glBindRenderbuffer(GL_RENDERBUFFER, storage.depthStencilRenderbuffer);
+                if (storage.multiSampleCount > 0)
+                {
+                    glRenderbufferStorageMultisample(
+                        GL_RENDERBUFFER, storage.multiSampleCount,
+                        internalFormat, size, size);
+                    GLint actualDepthSamples = 0;
+                    glGetRenderbufferParameteriv(
+                        GL_RENDERBUFFER, GL_RENDERBUFFER_SAMPLES, &actualDepthSamples);
+                    if (actualDepthSamples != storage.multiSampleCount)
+                        throw std::runtime_error(
+                            "RLGL: cube color and depth sample counts do not match");
+                }
+                else
+                {
+                    glRenderbufferStorage(
+                        GL_RENDERBUFFER, internalFormat, size, size);
+                }
+                glBindRenderbuffer(GL_RENDERBUFFER, 0);
+                if (storage.depthStencilRenderbuffer == 0)
+                    throw std::runtime_error(
+                        "RLGL: cube depth/stencil allocation returned zero");
+                rlFramebufferAttach(
+                    storage.framebuffer, storage.depthStencilRenderbuffer,
+                    RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
+                if (depthFormat == 3)
+                {
+                    rlFramebufferAttach(
+                        storage.framebuffer, storage.depthStencilRenderbuffer,
+                        RL_ATTACHMENT_STENCIL, RL_ATTACHMENT_RENDERBUFFER, 0);
+                }
+            }
+
+            if (!rlFramebufferComplete(storage.framebuffer))
+                throw std::runtime_error("RLGL: RenderTargetCube framebuffer is incomplete");
+            ThrowIfGlError("RenderTargetCube allocation");
+        }
+        catch (...)
+        {
+            DestroyRenderTargetCube(storage);
+            throw;
+        }
+        return storage;
+    }
+
     int GetMaxRenderTargets()
     {
         RequireInitialized("MRT limit query");
@@ -2749,7 +2905,10 @@ void main()
             const bool hasRenderbuffer =
                 attachments[slot].multisampleColorRenderbuffer != 0;
             if (!hasTexture || (samples > 0) != hasRenderbuffer ||
-                attachments[slot].multiSampleCount != samples)
+                attachments[slot].multiSampleCount != samples ||
+                (attachments[slot].textureType != RL_ATTACHMENT_TEXTURE2D &&
+                 (attachments[slot].textureType < RL_ATTACHMENT_CUBEMAP_POSITIVE_X ||
+                  attachments[slot].textureType > RL_ATTACHMENT_CUBEMAP_NEGATIVE_Z)))
             {
                 throw std::invalid_argument(
                     "RLGL: MRT attachments have invalid or mismatched native storage");
@@ -2769,7 +2928,9 @@ void main()
                     : attachments[slot].colorTexture;
                 rlFramebufferAttach(
                     framebuffer, colorObject, RL_ATTACHMENT_COLOR_CHANNEL0 + slot,
-                    samples > 0 ? RL_ATTACHMENT_RENDERBUFFER : RL_ATTACHMENT_TEXTURE2D, 0);
+                    samples > 0 ? RL_ATTACHMENT_RENDERBUFFER
+                                : attachments[slot].textureType,
+                    0);
             }
 
             if (attachments[0].depthStencilRenderbuffer != 0)
@@ -2902,6 +3063,25 @@ void main()
         return true;
     }
 
+    bool ProbeRenderTargetCubeFormat(const int surfaceFormat)
+    {
+        RequireInitialized("RenderTargetCube format probe");
+        if (!IsClassicRenderTargetFormat(surfaceFormat)) return false;
+
+        RenderTargetCubeStorage storage;
+        try
+        {
+            storage = CreateRenderTargetCube(1, 1, 0, 0, surfaceFormat);
+        }
+        catch (...)
+        {
+            DestroyRenderTargetCube(storage);
+            return false;
+        }
+        DestroyRenderTargetCube(storage);
+        return true;
+    }
+
     int RenderTargetBytesPerTexel(const int surfaceFormat)
     {
         if (!IsClassicRenderTargetFormat(surfaceFormat))
@@ -2928,6 +3108,47 @@ void main()
         storage = {};
     }
 
+    void DestroyRenderTargetCube(RenderTargetCubeStorage& storage) noexcept
+    {
+        if (!bridgeInitialized)
+        {
+            storage = {};
+            return;
+        }
+
+        FramebufferBindingRestore restore;
+        restore.ForgetDeletedFramebuffer(storage.framebuffer);
+        restore.ForgetDeletedFramebuffer(storage.resolveFramebuffer);
+        const auto detach = [](const unsigned int framebuffer)
+        {
+            if (framebuffer == 0) return;
+            glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+            glFramebufferTexture2D(
+                GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, 0);
+            glFramebufferRenderbuffer(
+                GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, 0);
+            glFramebufferRenderbuffer(
+                GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+            glFramebufferRenderbuffer(
+                GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        };
+        detach(storage.resolveFramebuffer);
+        detach(storage.framebuffer);
+        if (storage.resolveFramebuffer != 0)
+            rlUnloadFramebuffer(storage.resolveFramebuffer);
+        if (storage.framebuffer != 0) rlUnloadFramebuffer(storage.framebuffer);
+        for (const unsigned int renderbuffer : storage.multisampleColorRenderbuffers)
+        {
+            if (renderbuffer != 0) glDeleteRenderbuffers(1, &renderbuffer);
+        }
+        if (storage.depthStencilRenderbuffer != 0)
+            glDeleteRenderbuffers(1, &storage.depthStencilRenderbuffer);
+        if (storage.colorTexture != 0) rlUnloadTexture(storage.colorTexture);
+        storage = {};
+    }
+
     void BindFramebuffer(const unsigned int framebuffer)
     {
         RequireInitialized("framebuffer binding");
@@ -2935,6 +3156,28 @@ void main()
             throw std::invalid_argument("RLGL: cannot bind a zero render-target framebuffer");
         rlEnableFramebuffer(framebuffer);
         ThrowIfGlError("framebuffer binding");
+    }
+
+    void BindRenderTargetCubeFace(
+        const RenderTargetCubeStorage& storage, const int face)
+    {
+        RequireInitialized("RenderTargetCube face binding");
+        if (storage.framebuffer == 0 || storage.colorTexture == 0 ||
+            face < 0 || face >= 6)
+        {
+            throw std::invalid_argument("RLGL: invalid RenderTargetCube face binding");
+        }
+        const unsigned int colorObject = storage.multiSampleCount > 0
+            ? storage.multisampleColorRenderbuffers[static_cast<std::size_t>(face)]
+            : storage.colorTexture;
+        rlFramebufferAttach(
+            storage.framebuffer, colorObject, RL_ATTACHMENT_COLOR_CHANNEL0,
+            storage.multiSampleCount > 0 ? RL_ATTACHMENT_RENDERBUFFER : face, 0);
+        if (!rlFramebufferComplete(storage.framebuffer))
+            throw std::runtime_error("RLGL: selected cube-face framebuffer is incomplete");
+        rlEnableFramebuffer(storage.framebuffer);
+        rlActiveDrawBuffers(1);
+        ThrowIfGlError("RenderTargetCube face binding");
     }
 
     void ResolveRenderTarget2D(
@@ -2956,6 +3199,32 @@ void main()
         ThrowIfGlError("RenderTarget2D multisample resolve");
     }
 
+    void ResolveRenderTargetCubeFace(
+        const RenderTargetCubeStorage& storage, const int face, const int size)
+    {
+        RequireInitialized("RenderTargetCube multisample resolve");
+        if (storage.multiSampleCount <= 0) return;
+        if (storage.framebuffer == 0 || storage.resolveFramebuffer == 0 ||
+            storage.colorTexture == 0 || face < 0 || face >= 6 || size <= 0)
+        {
+            throw std::invalid_argument("RLGL: invalid RenderTargetCube resolve request");
+        }
+
+        const FramebufferBindingRestore framebufferRestore;
+        rlFramebufferAttach(
+            storage.framebuffer,
+            storage.multisampleColorRenderbuffers[static_cast<std::size_t>(face)],
+            RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_RENDERBUFFER, 0);
+        rlFramebufferAttach(
+            storage.resolveFramebuffer, storage.colorTexture,
+            RL_ATTACHMENT_COLOR_CHANNEL0, face, 0);
+        rlBindFramebuffer(RL_READ_FRAMEBUFFER, storage.framebuffer);
+        rlBindFramebuffer(RL_DRAW_FRAMEBUFFER, storage.resolveFramebuffer);
+        rlBlitFramebuffer(
+            0, 0, size, size, 0, 0, size, size, GL_COLOR_BUFFER_BIT);
+        ThrowIfGlError("RenderTargetCube multisample resolve");
+    }
+
     void GenerateRenderTargetMipmaps(
         const unsigned int texture, const int width, const int height,
         const int expectedLevelCount)
@@ -2974,6 +3243,23 @@ void main()
             throw std::runtime_error(
                 "RLGL: generated RenderTarget2D mip count did not match its allocation");
         }
+    }
+
+    void GenerateRenderTargetCubeMipmaps(
+        const unsigned int texture, const int size, const int expectedLevelCount)
+    {
+        RequireInitialized("RenderTargetCube mip generation");
+        if (texture == 0 || size <= 0 || expectedLevelCount <= 1)
+            throw std::invalid_argument("RLGL: invalid RenderTargetCube mip generation request");
+        const TextureBindingRestore textureRestore;
+        glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
+        glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+        ThrowIfGlError("RenderTargetCube mip generation");
+        int calculatedLevels = 1;
+        for (int levelSize = size; levelSize > 1; levelSize = std::max(1, levelSize / 2))
+            ++calculatedLevels;
+        if (calculatedLevels != expectedLevelCount)
+            throw std::runtime_error("RLGL: cube mip count did not match its allocation");
     }
 
     void ReadRenderTarget2D(
@@ -3041,6 +3327,74 @@ void main()
             std::snprintf(value, sizeof(value), "0x%04X", static_cast<unsigned int>(readError));
             throw std::runtime_error(
                 std::string("RLGL: OpenGL error after RenderTarget2D readback: ") + value);
+        }
+    }
+
+    void ReadRenderTargetCube(
+        const unsigned int texture, const int face, const int level,
+        const int levelSize, const int x, const int y,
+        const int width, const int height, std::uint8_t* const pixels,
+        const int surfaceFormat)
+    {
+        RequireInitialized("RenderTargetCube readback");
+        if (texture == 0 || face < 0 || face >= 6 || level < 0 ||
+            levelSize <= 0 || x < 0 || y < 0 || width <= 0 || height <= 0 ||
+            x > levelSize - width || y > levelSize - height || pixels == nullptr ||
+            !IsClassicRenderTargetFormat(surfaceFormat))
+        {
+            throw std::invalid_argument("RLGL: invalid RenderTargetCube readback request");
+        }
+
+        const TextureFormatInfo colorFormat = TextureFormat(surfaceFormat);
+        const FramebufferBindingRestore framebufferRestore;
+        const unsigned int readFramebuffer = rlLoadFramebuffer();
+        if (readFramebuffer == 0)
+            throw std::runtime_error("RLGL: cube readback framebuffer allocation failed");
+        rlFramebufferAttach(
+            readFramebuffer, texture, RL_ATTACHMENT_COLOR_CHANNEL0, face, level);
+        if (!rlFramebufferComplete(readFramebuffer))
+        {
+            rlUnloadFramebuffer(readFramebuffer);
+            throw std::runtime_error("RLGL: cube readback framebuffer is incomplete");
+        }
+
+        rlBindFramebuffer(GL_READ_FRAMEBUFFER, readFramebuffer);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        GLint previousPackAlignment = 4;
+        glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(
+            x, levelSize - y - height, width, height,
+            colorFormat.transferFormat, colorFormat.transferType, pixels);
+        glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+        const GLenum readError = glGetError();
+
+        // rlUnloadFramebuffer deletes attached resources; detach the borrowed cube image first.
+        glBindFramebuffer(GL_FRAMEBUFFER, readFramebuffer);
+        glFramebufferTexture2D(
+            GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face), 0, level);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        rlUnloadFramebuffer(readFramebuffer);
+
+        const std::size_t rowBytes = static_cast<std::size_t>(width) *
+            static_cast<std::size_t>(colorFormat.bytesPerTexel);
+        std::vector<std::uint8_t> temporary(rowBytes);
+        for (int row = 0; row < height / 2; ++row)
+        {
+            std::uint8_t* const top = pixels + static_cast<std::size_t>(row) * rowBytes;
+            std::uint8_t* const bottom =
+                pixels + static_cast<std::size_t>(height - row - 1) * rowBytes;
+            std::memcpy(temporary.data(), top, rowBytes);
+            std::memcpy(top, bottom, rowBytes);
+            std::memcpy(bottom, temporary.data(), rowBytes);
+        }
+        if (readError != GL_NO_ERROR)
+        {
+            char value[16] = {};
+            std::snprintf(value, sizeof(value), "0x%04X", static_cast<unsigned int>(readError));
+            throw std::runtime_error(
+                std::string("RLGL: OpenGL error after RenderTargetCube readback: ") + value);
         }
     }
 

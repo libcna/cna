@@ -158,6 +158,9 @@ namespace
     // examples/rendertargetcube_msaa_face_test.cpp is the fuller oracle for it.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
+#elif defined(CNA_RENDERER_RLGL)
+    constexpr Contract kContract{"RLGL", true, Support::Exact, true, true,
+                                 true, Support::Exact, true, true, false};
 #elif defined(CNA_RENDERER_BGFX)
     // REMED-GFX-138: GFX-154's ordered frame completion resolves the cube attachment before the
     // readback blit, so MSAA readback is exact. REMED-GFX-195 then made every cube face's

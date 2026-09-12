@@ -148,6 +148,9 @@ namespace
     // re-attached to the render FBO on every bind.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true,
                                  Support::Exact, false, false};
+#elif defined(CNA_RENDERER_RLGL)
+    constexpr Contract kContract{"RLGL", true, Support::Exact, true,
+                                 Support::Exact, false, false};
 #elif defined(CNA_RENDERER_BGFX)
     // REMED-GFX-138 makes the resolved readback real. REMED-GFX-195 closes the separately exposed
     // Bgfx face-aliasing defect, so the same direct oracle now requires exact per-face contents.

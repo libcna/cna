@@ -220,6 +220,14 @@ namespace CNA::Internal::Renderers::Rlgl
             int surfaceFormat) const override;
 
         /**
+         * @brief Probes exact classic-XNA cube-target renderability.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+         * @return Supported only when an exact cube-face framebuffer completes.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetCubeFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
          * @brief Prevents Color transfers from reinterpreting signed-normalized formats.
          * @param surfaceFormat Raw `SurfaceFormat` ordinal.
          * @return Unsupported for signed-normalized layouts and Defer otherwise.
@@ -283,6 +291,33 @@ namespace CNA::Internal::Renderers::Rlgl
          */
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
             int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
+
+        /**
+         * @brief Creates a Color cube render target.
+         * @param size Width and height of all faces.
+         * @param depthFormat Raw XNA DepthFormat ordinal.
+         * @param preserveContents Whether contents survive face switches.
+         * @param mipMap Whether to allocate and regenerate a full mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @return Renderer-owned cube target.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents = false,
+            bool mipMap = false, int multiSampleCount = 0) override;
+
+        /**
+         * @brief Creates an exact format-explicit cube render target.
+         * @param size Width and height of all faces.
+         * @param depthFormat Raw XNA DepthFormat ordinal.
+         * @param preserveContents Whether contents survive face switches.
+         * @param mipMap Whether to allocate and regenerate a full mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+         * @return Renderer-owned cube target.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
             int multiSampleCount, int surfaceFormat) override;
 
         /**
@@ -621,6 +656,7 @@ namespace CNA::Internal::Renderers::Rlgl
         SamplerRecord& GetSamplerRecord(int slot);
         void ApplySamplerRecord(int slot, SamplerRecord& sampler);
         Bridge::PrimitivePipeline& GetPrimitivePipeline();
+        [[nodiscard]] int GetCurrentSampleCount() const;
         void ApplyCurrentRasterizerState();
         void FinalizeCurrentRenderTargets();
 
@@ -643,8 +679,9 @@ namespace CNA::Internal::Renderers::Rlgl
         int currentViewportWidth_ = 0;
         int currentViewportHeight_ = 0;
         bool viewportIsDefault_ = true;
-        IRenderTargetRenderer* currentRenderTarget_ = nullptr;
         std::array<IRenderTargetRenderer*, 4> currentRenderTargets_{};
+        std::array<IRenderTargetCubeRenderer*, 4> currentRenderTargetCubes_{};
+        std::array<int, 4> currentRenderTargetCubeFaces_{{-1, -1, -1, -1}};
         int currentRenderTargetCount_ = 0;
         unsigned int mrtFramebuffer_ = 0;
         int currentRenderTargetWidth_ = 0;

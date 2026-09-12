@@ -110,6 +110,17 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int multiSampleCount = 0;
     };
 
+    /** @brief rlgl-owned names forming one face-addressable RenderTargetCube. */
+    struct RenderTargetCubeStorage
+    {
+        unsigned int framebuffer = 0;
+        unsigned int resolveFramebuffer = 0;
+        unsigned int colorTexture = 0;
+        std::array<unsigned int, 6> multisampleColorRenderbuffers{};
+        unsigned int depthStencilRenderbuffer = 0;
+        int multiSampleCount = 0;
+    };
+
     /** @brief Native TextureCube storage facts exposed only to focused validation. */
     struct TextureCubeSnapshot
     {
@@ -127,6 +138,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         unsigned int colorTexture = 0;
         unsigned int multisampleColorRenderbuffer = 0;
         unsigned int depthStencilRenderbuffer = 0;
+        int textureType = 100; // rlgl's RL_ATTACHMENT_TEXTURE2D value.
         int depthFormat = 0;
         int multiSampleCount = 0;
     };
@@ -722,6 +734,19 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int multiSampleCount, int surfaceFormat);
 
     /**
+     * @brief Creates exact face-addressable cube render-target storage.
+     * @param size Width and height of all six faces.
+     * @param levelCount Number of allocated cube mip levels.
+     * @param depthFormat Raw XNA DepthFormat ordinal.
+     * @param multiSampleCount Requested sample count, or zero.
+     * @param surfaceFormat Raw classic render-target SurfaceFormat ordinal.
+     * @return Complete cube framebuffer storage with one sampleable texture.
+     */
+    [[nodiscard]] RenderTargetCubeStorage CreateRenderTargetCube(
+        int size, int levelCount, int depthFormat,
+        int multiSampleCount, int surfaceFormat);
+
+    /**
      * @brief Returns the usable simultaneous-color-target count of the live GL context.
      * @return The smaller of the draw-buffer and color-attachment limits, capped at XNA's four.
      */
@@ -764,6 +789,13 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     [[nodiscard]] bool ProbeRenderTargetFormat(int surfaceFormat);
 
     /**
+     * @brief Probes exact cube attachment support for one classic target format.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+     * @return True only when an exact cube-face framebuffer is complete.
+     */
+    [[nodiscard]] bool ProbeRenderTargetCubeFormat(int surfaceFormat);
+
+    /**
      * @brief Returns the native texel width of a supported render-target format.
      * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
      * @return Format-native byte count per texel.
@@ -777,10 +809,24 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     void DestroyRenderTarget2D(RenderTargetStorage& storage) noexcept;
 
     /**
+     * @brief Releases a RenderTargetCube without disturbing an unrelated framebuffer.
+     * @param storage Live or empty cube-target storage.
+     */
+    void DestroyRenderTargetCube(RenderTargetCubeStorage& storage) noexcept;
+
+    /**
      * @brief Binds one renderer-owned framebuffer for drawing.
      * @param framebuffer Non-zero framebuffer name.
      */
     void BindFramebuffer(unsigned int framebuffer);
+
+    /**
+     * @brief Attaches and binds one cube face for drawing.
+     * @param storage Cube render-target storage.
+     * @param face XNA cube face ordinal in the range zero through five.
+     */
+    void BindRenderTargetCubeFace(
+        const RenderTargetCubeStorage& storage, int face);
 
     /**
      * @brief Resolves a multisampled Color target into its sampleable texture through rlgl.
@@ -792,6 +838,15 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         const RenderTargetStorage& storage, int width, int height);
 
     /**
+     * @brief Resolves one face's multisample storage into the cube texture.
+     * @param storage Cube render-target storage.
+     * @param face XNA cube face ordinal.
+     * @param size Face edge in pixels.
+     */
+    void ResolveRenderTargetCubeFace(
+        const RenderTargetCubeStorage& storage, int face, int size);
+
+    /**
      * @brief Regenerates a Color render target's full mip chain through rlgl.
      * @param texture rlgl-owned Color texture name.
      * @param width Base-level width.
@@ -800,6 +855,15 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      */
     void GenerateRenderTargetMipmaps(
         unsigned int texture, int width, int height, int expectedLevelCount);
+
+    /**
+     * @brief Regenerates all faces of a cube render target's mip chain.
+     * @param texture Cube texture name.
+     * @param size Base face edge.
+     * @param expectedLevelCount Required resulting mip count.
+     */
+    void GenerateRenderTargetCubeMipmaps(
+        unsigned int texture, int size, int expectedLevelCount);
 
     /**
      * @brief Reads an RGBA8 target rectangle in XNA top-row-first order.
@@ -818,6 +882,24 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     void ReadRenderTarget2D(
         unsigned int framebuffer, unsigned int texture, int level,
         int levelWidth, int levelHeight, int x, int y, int width, int height,
+        std::uint8_t* pixels, int surfaceFormat);
+
+    /**
+     * @brief Reads one rendered cube-face rectangle in XNA top-row-first order.
+     * @param texture Cube texture name.
+     * @param face XNA cube face ordinal.
+     * @param level Mip level.
+     * @param levelSize Complete mip edge.
+     * @param x Rectangle left edge.
+     * @param y Rectangle top edge.
+     * @param width Rectangle width.
+     * @param height Rectangle height.
+     * @param pixels Destination holding format-native bytes.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+     */
+    void ReadRenderTargetCube(
+        unsigned int texture, int face, int level, int levelSize,
+        int x, int y, int width, int height,
         std::uint8_t* pixels, int surfaceFormat);
 
     /**

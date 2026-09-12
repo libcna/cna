@@ -59,9 +59,10 @@ success.
 | SkinnedEffect | ✅ | 1/2/4 weighted influences, all 72 bones, Byte4/Vector4 indices, joint/world normal transforms, textures/materials, three-light/specular shading, vertex color, per-vertex/per-pixel selection, post-skin fog, malformed declarations, and state transitions passed `RLGL-037` |
 | Plain `TextureCube` | ✅ | `Color` and DXT1/DXT3/DXT5 cover every transfer shape exposed by CNA's current cube API. Exact faces/mips/regions, native-or-decoded DXT storage, content loading, cube-unit binding, state restoration, and Color readback passed `RLGL-044`/`RLGL-045`; the other 16 classic labels are refused because CNA exposes no format-native transfer route for them |
 | `RenderTarget2D` (all eleven classic FNA target formats) | ✅ | Color, Rgba1010102, Rg32, Rgba64, Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, and HdrBlendable have exact single/MSAA storage, resolve, format-native CPU transfer/readback, mips, depth/stencil, switching, Preserve/Discard, and upright sampling evidence from `RLGL-039`/`041`/`042` |
-| Multiple render targets | ✅ | HiDef supports ordered sets of two through four `RenderTarget2D` objects through transactional rlgl-created FBOs and `rlActiveDrawBuffers`; indexed masks/Clear, slot-zero depth, mixed formats, MSAA resolve/mips, usage, transitions, and refusal safety passed `RLGL-040`. Reach correctly remains limited to one target |
+| `RenderTargetCube` (all eleven classic FNA target formats) | ✅ | Exact six-face/mip storage, per-face binding/readback, six independent MSAA color buffers, Depth16/Depth24/Depth24Stencil8, resolve/mips, Preserve/Discard, switching, and Color upload passed `RLGL-046`; public non-Color transfer is refused because CNA's current cube interface cannot express its format-native bytes |
+| Multiple render targets | ✅ | HiDef supports ordered sets of two through four RenderTarget2D objects, cube faces, or compatible mixtures through transactional rlgl-created FBOs and `rlActiveDrawBuffers`; indexed masks/Clear, slot-zero depth, mixed formats, MSAA resolve/mips, usage, transitions, and refusal safety passed `RLGL-040`/`046`. Reach correctly remains limited to one target |
 | Environment/custom effects and general 3D workloads | ❌ | These shapes remain explicit failures owned by `RLGL-036`/`RLGL-038`; multi-stream and instancing also remain separate gates, so `GraphicsCapability::ThreeD` remains false |
-| Render-target cubes, instancing, queries | ❌ | Explicitly unavailable; their implementation and validation are tracked by `RLGL-046` and `RLGL-016` |
+| Instancing and queries | ❌ | Explicitly unavailable; their implementation and validation are tracked by `RLGL-016` |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
 
@@ -108,6 +109,11 @@ cmake --build cmake-build-rlgl --parallel 3 --target \
       cna_test_rlgl_dual_texture_independent_uv cna_test_rlgl_skinned_effect \
       cna_test_rlgl_skinned_terms cna_test_rlgl_render_target \
       cna_test_rlgl_render_target_formats cna_test_rlgl_mrt \
+      cna_test_rlgl_render_target_cube \
+      cna_test_rlgl_rendertargetcube_getdata_contract \
+      cna_test_rlgl_rendertargetcube_usage \
+      cna_test_rlgl_rendertargetcube_msaa_face \
+      cna_test_rlgl_rendertargetcube_plural_binding \
       cna_test_rlgl_render_target_orientation cna_test_rlgl_render_target_full \
       cna_test_rlgl_msaa_first_readback cna_test_rlgl_msaa_mip_readback
 ```
@@ -151,6 +157,16 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_mrt
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_render_target_cube
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_rendertargetcube_getdata_contract
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_rendertargetcube_usage
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_rendertargetcube_msaa_face
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_rendertargetcube_plural_binding
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_render_target_orientation
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_render_target_full
@@ -167,7 +183,9 @@ fixtures, plus fourteen SkinnedEffect fixtures. They are labelled `Rlgl` plus th
 graphics category, with the proven offscreen environment attached to each CTest entry. The
 RenderTarget2D fixtures cover focused resource/state behavior, all eleven exact classic formats,
 ordered two-through-four-target MRT behavior, the unchanged EasyGL quadrant and OpenGL4 full-target
-oracles, and shared first-read/mipmap MSAA regression matrices.
+oracles, and shared first-read/mipmap MSAA regression matrices. RenderTargetCube fixtures cover all
+eleven exact renderable formats, six faces and mip chains, depth/stencil, per-face MSAA resolve,
+usage transitions, Color transfer/readback, and singular/plural cube/2D binding behavior.
 
 ## Dependency and offline builds
 
@@ -221,6 +239,7 @@ The dependency uses raylib's zlib/libpng license. Its required notice is preserv
 The dedicated `.github/workflows/rlgl-ci.yml` lane configures the Linux renderer against an
 independently checked-out copy of the exact upstream commit and compiles the renderer plus the
   smoke, texture, sampler, state, SpriteBatch, buffer, primitive, effect, XNA pixel-center, and
-  BasicEffect-lighting, DualTextureEffect, SkinnedEffect, and RenderTarget2D format executables. It
+  BasicEffect-lighting, DualTextureEffect, SkinnedEffect, RenderTarget2D, and RenderTargetCube
+  format/contract executables. It
   intentionally does not yet claim hosted runtime coverage; promotion to a CI runtime gate belongs
   to `RLGL-021` after the runner's context path is proven.

@@ -104,6 +104,55 @@ namespace CNA::Internal::Renderers::Rlgl
     [[nodiscard]] RenderTargetResourceSnapshot GetRenderTargetResourceSnapshotForTesting(
         const IRenderTargetRenderer& resource);
 
+    /** @brief Complete renderer/native RenderTargetCube facts for focused validation. */
+    struct RenderTargetCubeResourceSnapshot
+    {
+        unsigned int framebuffer = 0;
+        unsigned int resolveFramebuffer = 0;
+        unsigned int colorTexture = 0;
+        std::array<unsigned int, 6> multisampleColorRenderbuffers{};
+        unsigned int depthStencilRenderbuffer = 0;
+        int size = 0;
+        int depthFormat = 0;
+        int surfaceFormat = 0;
+        int levelCount = 1;
+        int multiSampleCount = 0;
+        int activeFace = 0;
+        bool preserveContents = false;
+    };
+
+    /**
+     * @brief Creates an exact face-addressable RLGL RenderTargetCube resource.
+     * @param size Width and height of all six faces.
+     * @param depthFormat Raw XNA DepthFormat ordinal.
+     * @param preserveContents Whether face contents must survive target switches.
+     * @param mipMap Whether to allocate and regenerate a complete mip chain.
+     * @param multiSampleCount Requested sample count.
+     * @param surfaceFormat Raw classic render-target SurfaceFormat ordinal.
+     * @return Renderer-owned cube target.
+     */
+    [[nodiscard]] std::unique_ptr<IRenderTargetCubeRenderer>
+    CreateRenderTargetCubeRenderer(
+        int size, int depthFormat, bool preserveContents,
+        bool mipMap, int multiSampleCount, int surfaceFormat);
+
+    /**
+     * @brief Captures RenderTargetCube resource state for focused validation.
+     * @param resource RLGL cube target.
+     * @return Native identities and applied creation parameters.
+     */
+    [[nodiscard]] RenderTargetCubeResourceSnapshot
+    GetRenderTargetCubeResourceSnapshotForTesting(
+        const IRenderTargetCubeRenderer& resource);
+
+    /**
+     * @brief Finalizes one rendered cube face without losing its subresource identity.
+     * @param resource RLGL cube target.
+     * @param face XNA cube face ordinal.
+     */
+    void FinalizeRenderTargetCubeFace(
+        IRenderTargetCubeRenderer& resource, int face);
+
     /**
      * @brief Creates the production low-level SpriteBatch implementation.
      * @param renderer Owning device used for viewport and sampler application.

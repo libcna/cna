@@ -384,6 +384,32 @@ namespace CNA::Internal::Renderers::Rlgl
             mipMap, multiSampleCount, surfaceFormat);
     }
 
+    std::unique_ptr<IRenderTargetCubeRenderer> RlglRenderer::CreateRenderTargetCube(
+        const int size, const int depthFormat, const bool preserveContents,
+        const bool mipMap, const int multiSampleCount)
+    {
+        return CreateRenderTargetCubeRenderer(
+            size, depthFormat, preserveContents, mipMap, multiSampleCount,
+            static_cast<int>(
+                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> RlglRenderer::CreateRenderTargetCubeEXT(
+        const int size, const int depthFormat, const bool preserveContents,
+        const bool mipMap, const int multiSampleCount, const int surfaceFormat)
+    {
+        if (ClassifyRenderTargetCubeFormatEXT(surfaceFormat) !=
+            RendererFormatVerdict::Supported)
+        {
+            throw System::NotSupportedException(
+                "RLGL: requested RenderTargetCube SurfaceFormat is not renderable on this "
+                "OpenGL context (plans/plan_rlgl.md RLGL-046)");
+        }
+        return CreateRenderTargetCubeRenderer(
+            size, depthFormat, preserveContents,
+            mipMap, multiSampleCount, surfaceFormat);
+    }
+
     int RlglRenderer::GetMaxRenderTargetsForProfileEXT(const int graphicsProfile) const
     {
         return graphicsProfile == 1 ? maxRenderTargets_ : 1;
@@ -446,6 +472,14 @@ namespace CNA::Internal::Renderers::Rlgl
             : RendererFormatVerdict::Unsupported;
     }
 
+    RendererFormatVerdict RlglRenderer::ClassifyRenderTargetCubeFormatEXT(
+        const int surfaceFormat) const
+    {
+        return Bridge::ProbeRenderTargetCubeFormat(surfaceFormat)
+            ? RendererFormatVerdict::Supported
+            : RendererFormatVerdict::Unsupported;
+    }
+
     RendererFormatVerdict RlglRenderer::ClassifyColorTransferFormatEXT(
         const int surfaceFormat) const
     {
@@ -485,7 +519,7 @@ namespace CNA::Internal::Renderers::Rlgl
 
     void RlglRenderer::GetSpriteBatchViewportSize(int& width, int& height)
     {
-        if (currentRenderTarget_ != nullptr)
+        if (currentRenderTargetCount_ > 0)
         {
             width = currentRenderTargetWidth_;
             height = currentRenderTargetHeight_;
@@ -572,6 +606,16 @@ namespace CNA::Internal::Renderers::Rlgl
         ApplySamplerRecord(slot, sampler);
     }
 
+    int RlglRenderer::GetCurrentSampleCount() const
+    {
+        if (currentRenderTargetCount_ <= 0) return multiSampleCount_;
+        if (currentRenderTargets_[0] != nullptr)
+            return currentRenderTargets_[0]->GetMultiSampleCount();
+        if (currentRenderTargetCubes_[0] != nullptr)
+            return currentRenderTargetCubes_[0]->GetMultiSampleCount();
+        throw std::logic_error("RLGL: active render-target set has no first attachment");
+    }
+
     void RlglRenderer::SetRenderTargets(
         const RenderTargetBindingDescriptor* renderTargets, const int count)
     {
@@ -596,62 +640,125 @@ namespace CNA::Internal::Renderers::Rlgl
         }
 
         std::array<IRenderTargetRenderer*, 4> targets{};
-        std::array<RenderTargetResourceSnapshot, 4> snapshots{};
+        std::array<IRenderTargetCubeRenderer*, 4> cubeTargets{};
+        std::array<int, 4> cubeFaces{{-1, -1, -1, -1}};
+        std::array<Bridge::MrtAttachment, 4> attachments{};
+        int targetWidth = 0;
+        int targetHeight = 0;
+        int targetSamples = 0;
+        int firstDepthFormat = 0;
+        int firstDepthBits = 0;
         for (int slot = 0; slot < count; ++slot)
         {
-            if (!renderTargets[slot].IsRenderTarget2D())
-                Unsupported("cube render-target faces", "RLGL-015");
-            targets[slot] = renderTargets[slot].GetRenderTarget2D();
-            if (targets[slot] == nullptr)
-                throw std::invalid_argument("RLGL: null RenderTarget2D binding");
-            snapshots[slot] =
-                GetRenderTargetResourceSnapshotForTesting(*targets[slot]);
-            if (snapshots[slot].width != renderTargets[slot].GetWidth() ||
-                snapshots[slot].height != renderTargets[slot].GetHeight() ||
-                snapshots[slot].multiSampleCount !=
-                    renderTargets[slot].GetAppliedMultiSampleCount())
+            if (renderTargets[slot].IsRenderTarget2D())
             {
-                throw std::invalid_argument(
-                    "RLGL: RenderTarget2D descriptor does not match native storage");
+                targets[slot] = renderTargets[slot].GetRenderTarget2D();
+                if (targets[slot] == nullptr)
+                    throw std::invalid_argument("RLGL: null RenderTarget2D binding");
+                const RenderTargetResourceSnapshot snapshot =
+                    GetRenderTargetResourceSnapshotForTesting(*targets[slot]);
+                if (snapshot.width != renderTargets[slot].GetWidth() ||
+                    snapshot.height != renderTargets[slot].GetHeight() ||
+                    snapshot.multiSampleCount !=
+                        renderTargets[slot].GetAppliedMultiSampleCount())
+                {
+                    throw std::invalid_argument(
+                        "RLGL: RenderTarget2D descriptor does not match native storage");
+                }
+                attachments[slot] = {
+                    snapshot.colorTexture,
+                    snapshot.multisampleColorRenderbuffer,
+                    snapshot.depthStencilRenderbuffer,
+                    100,
+                    snapshot.depthFormat,
+                    snapshot.multiSampleCount};
+                if (slot == 0)
+                {
+                    targetWidth = snapshot.width;
+                    targetHeight = snapshot.height;
+                    targetSamples = snapshot.multiSampleCount;
+                    firstDepthFormat = snapshot.depthFormat;
+                    firstDepthBits = targets[slot]->DepthBufferBitsEXT();
+                }
             }
+            else if (renderTargets[slot].IsRenderTargetCubeFace())
+            {
+                cubeTargets[slot] = renderTargets[slot].GetRenderTargetCube();
+                cubeFaces[slot] = renderTargets[slot].GetCubeFace();
+                if (cubeTargets[slot] == nullptr ||
+                    cubeFaces[slot] < 0 || cubeFaces[slot] >= 6)
+                {
+                    throw std::invalid_argument("RLGL: invalid RenderTargetCube face binding");
+                }
+                const RenderTargetCubeResourceSnapshot snapshot =
+                    GetRenderTargetCubeResourceSnapshotForTesting(*cubeTargets[slot]);
+                if (snapshot.size != renderTargets[slot].GetWidth() ||
+                    snapshot.size != renderTargets[slot].GetHeight() ||
+                    snapshot.multiSampleCount !=
+                        renderTargets[slot].GetAppliedMultiSampleCount())
+                {
+                    throw std::invalid_argument(
+                        "RLGL: RenderTargetCube descriptor does not match native storage");
+                }
+                attachments[slot] = {
+                    snapshot.colorTexture,
+                    snapshot.multisampleColorRenderbuffers[
+                        static_cast<std::size_t>(cubeFaces[slot])],
+                    snapshot.depthStencilRenderbuffer,
+                    cubeFaces[slot],
+                    snapshot.depthFormat,
+                    snapshot.multiSampleCount};
+                if (slot == 0)
+                {
+                    targetWidth = snapshot.size;
+                    targetHeight = snapshot.size;
+                    targetSamples = snapshot.multiSampleCount;
+                    firstDepthFormat = snapshot.depthFormat;
+                    firstDepthBits = cubeTargets[slot]->DepthBufferBitsEXT();
+                }
+            }
+            else
+            {
+                throw std::invalid_argument("RLGL: unknown render-target binding kind");
+            }
+
             if (slot > 0 &&
-                (snapshots[slot].width != snapshots[0].width ||
-                 snapshots[slot].height != snapshots[0].height ||
-                 snapshots[slot].multiSampleCount != snapshots[0].multiSampleCount))
+                (renderTargets[slot].GetWidth() != targetWidth ||
+                 renderTargets[slot].GetHeight() != targetHeight ||
+                 renderTargets[slot].GetAppliedMultiSampleCount() != targetSamples))
             {
                 throw std::invalid_argument(
                     "RLGL: MRT dimensions and applied sample counts must match");
             }
             for (int previous = 0; previous < slot; ++previous)
             {
-                if (targets[previous] == targets[slot])
+                const bool duplicate2D = targets[slot] != nullptr &&
+                    targets[previous] == targets[slot];
+                const bool duplicateCubeFace = cubeTargets[slot] != nullptr &&
+                    cubeTargets[previous] == cubeTargets[slot] &&
+                    cubeFaces[previous] == cubeFaces[slot];
+                if (duplicate2D || duplicateCubeFace)
                     throw std::invalid_argument(
-                        "RLGL: one RenderTarget2D cannot occupy multiple MRT slots");
+                        "RLGL: one render-target subresource cannot occupy multiple MRT slots");
             }
         }
 
         if (count == 1)
         {
-            if (currentRenderTargetCount_ != 1 || currentRenderTarget_ != targets[0])
+            const bool sameBinding = currentRenderTargetCount_ == 1 &&
+                currentRenderTargets_[0] == targets[0] &&
+                currentRenderTargetCubes_[0] == cubeTargets[0] &&
+                currentRenderTargetCubeFaces_[0] == cubeFaces[0];
+            if (!sameBinding)
             {
                 FinalizeCurrentRenderTargets();
                 Bridge::DestroyMrtFramebuffer(mrtFramebuffer_);
             }
-            targets[0]->BindAsRenderTarget();
+            if (targets[0] != nullptr) targets[0]->BindAsRenderTarget();
+            else cubeTargets[0]->BindAsRenderTargetFace(cubeFaces[0]);
         }
         else
         {
-            std::array<Bridge::MrtAttachment, 4> attachments{};
-            for (int slot = 0; slot < count; ++slot)
-            {
-                attachments[slot] = {
-                    snapshots[slot].colorTexture,
-                    snapshots[slot].multisampleColorRenderbuffer,
-                    snapshots[slot].depthStencilRenderbuffer,
-                    snapshots[slot].depthFormat,
-                    snapshots[slot].multiSampleCount};
-            }
-
             unsigned int candidate = Bridge::CreateMrtFramebuffer(
                 attachments.data(), count);
             try
@@ -670,26 +777,32 @@ namespace CNA::Internal::Renderers::Rlgl
         }
 
         currentRenderTargets_ = targets;
+        currentRenderTargetCubes_ = cubeTargets;
+        currentRenderTargetCubeFaces_ = cubeFaces;
         currentRenderTargetCount_ = count;
-        currentRenderTarget_ = targets[0];
-        currentRenderTargetWidth_ = snapshots[0].width;
-        currentRenderTargetHeight_ = snapshots[0].height;
-        currentTargetDepthBits_ = snapshots[0].depthFormat != 0
-            ? targets[0]->DepthBufferBitsEXT() : 0;
+        currentRenderTargetWidth_ = targetWidth;
+        currentRenderTargetHeight_ = targetHeight;
+        currentTargetDepthBits_ = firstDepthFormat != 0 ? firstDepthBits : 0;
         ApplyCurrentRasterizerState();
     }
 
     void RlglRenderer::FinalizeCurrentRenderTargets()
     {
         const auto targets = currentRenderTargets_;
+        const auto cubeTargets = currentRenderTargetCubes_;
+        const auto cubeFaces = currentRenderTargetCubeFaces_;
         const int count = currentRenderTargetCount_;
         for (int slot = 0; slot < count; ++slot)
         {
-            if (targets[slot] != nullptr) targets[slot]->UnbindAsRenderTarget();
+            if (targets[slot] != nullptr)
+                targets[slot]->UnbindAsRenderTarget();
+            else if (cubeTargets[slot] != nullptr)
+                FinalizeRenderTargetCubeFace(*cubeTargets[slot], cubeFaces[slot]);
         }
         currentRenderTargets_.fill(nullptr);
+        currentRenderTargetCubes_.fill(nullptr);
+        currentRenderTargetCubeFaces_.fill(-1);
         currentRenderTargetCount_ = 0;
-        currentRenderTarget_ = nullptr;
         currentRenderTargetWidth_ = 0;
         currentRenderTargetHeight_ = 0;
         currentTargetDepthBits_ = depthBits_;
@@ -812,7 +925,7 @@ namespace CNA::Internal::Renderers::Rlgl
 
     void RlglRenderer::ApplyCurrentRasterizerState()
     {
-        const int appliedDepthBits = currentRenderTarget_ != nullptr
+        const int appliedDepthBits = currentRenderTargetCount_ > 0
             ? currentTargetDepthBits_ : depthBits_;
         const float depthScale = appliedDepthBits > 0
             ? std::ldexp(1.0f, appliedDepthBits) - 1.0f
@@ -844,9 +957,9 @@ namespace CNA::Internal::Renderers::Rlgl
         const int x, const int y, const int w, const int h,
         const float minDepth, const float maxDepth)
     {
-        int framebufferHeight = currentRenderTarget_ != nullptr
+        int framebufferHeight = currentRenderTargetCount_ > 0
             ? currentRenderTargetHeight_ : 0;
-        if (currentRenderTarget_ == nullptr)
+        if (currentRenderTargetCount_ == 0)
         {
             int framebufferWidth = 0;
             GetPhysicalSize(framebufferWidth, framebufferHeight);
@@ -868,9 +981,9 @@ namespace CNA::Internal::Renderers::Rlgl
     void RlglRenderer::SetScissorRect(
         const int x, const int y, const int w, const int h)
     {
-        int framebufferHeight = currentRenderTarget_ != nullptr
+        int framebufferHeight = currentRenderTargetCount_ > 0
             ? currentRenderTargetHeight_ : 0;
-        if (currentRenderTarget_ == nullptr)
+        if (currentRenderTargetCount_ == 0)
         {
             int framebufferWidth = 0;
             GetPhysicalSize(framebufferWidth, framebufferHeight);

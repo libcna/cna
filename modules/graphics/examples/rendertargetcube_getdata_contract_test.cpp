@@ -164,6 +164,9 @@ namespace
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, true, false};
+#elif defined(CNA_RENDERER_RLGL)
+    constexpr Contract kContract{"RLGL", true, Support::Exact, Support::Exact,
+                                 true, true, Support::Exact, MipTargets::Real, true, true, true, true, false};
 #elif defined(CNA_RENDERER_BGFX)
     // REMED-GFX-138: GFX-154's ordered completion now exposes both bgfx's resolved cube level 0
     // and every auto-generated mip before the readback blit. The combined MSAA+mip path is exact
