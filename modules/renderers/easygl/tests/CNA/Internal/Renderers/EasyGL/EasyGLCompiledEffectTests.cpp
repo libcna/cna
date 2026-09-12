@@ -1306,6 +1306,57 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedInputRegisters)
     }
 }
 
+class EasyGLCompiledEffectOutputRegisterRangeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectOutputRegisterRangeTest, RejectsFirstOutOfRangeRegister)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.outputRegisterProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangeOutput,
+    EasyGLCompiledEffectOutputRegisterRangeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticOutputRegisterProbe::Pixel30ColorOutOfRange,
+        CNA::TestSupport::SyntheticOutputRegisterProbe::Pixel30DepthOutOfRange,
+        CNA::TestSupport::SyntheticOutputRegisterProbe::Vertex20ColorOutOfRange,
+        CNA::TestSupport::SyntheticOutputRegisterProbe::Vertex20TexCoordOutOfRange,
+        CNA::TestSupport::SyntheticOutputRegisterProbe::Vertex20RasterOutOfRange,
+        CNA::TestSupport::SyntheticOutputRegisterProbe::Vertex30OutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedOutputRegisters)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticOutputRegisterProbe;
+    for (const Probe probe : {
+             Probe::Pixel30ColorMaximum,
+             Probe::Pixel30DepthMaximum,
+             Probe::Vertex20ColorMaximum,
+             Probe::Vertex20TexCoordMaximum,
+             Probe::Vertex20RasterMaximum,
+             Probe::Vertex30Maximum,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.outputRegisterProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
 {
     GraphicsDevice device;
