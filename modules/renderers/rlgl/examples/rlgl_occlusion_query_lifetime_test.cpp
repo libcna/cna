@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "System/IDisposable.hpp"
 
 #include <cstdio>
@@ -14,6 +15,15 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
+    template <typename TOperation>
+    [[nodiscard]] bool ThrowsDisposed(TOperation&& operation)
+    {
+        try { operation(); }
+        catch (const System::ObjectDisposedException&) { return true; }
+        catch (...) {}
+        return false;
+    }
+
     class RlglOcclusionQueryLifetimeTest final : public Game
     {
     public:
@@ -43,8 +53,12 @@ namespace
                   "device disposal marks its tracked query disposed");
             Check(!query->HasRenderer(),
                   "device disposal releases an active query before context shutdown");
-            Check(!query->getIsCompleteProperty() && query->getPixelCountProperty() == 0,
-                  "a disposed query reports safe default values");
+            Check(ThrowsDisposed([query] { (void)query->getIsCompleteProperty(); }) &&
+                      ThrowsDisposed([query] { (void)query->getPixelCountProperty(); }) &&
+                      ThrowsDisposed([query] { (void)query->isPixelCountPreciseEXT(); }) &&
+                      ThrowsDisposed([query] { query->Begin(); }) &&
+                      ThrowsDisposed([query] { query->End(); }),
+                  "every disposed query operation throws ObjectDisposedException");
 
             bool repeatedDisposeSucceeded = true;
             try

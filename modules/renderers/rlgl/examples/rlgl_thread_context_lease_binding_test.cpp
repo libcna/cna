@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_rlgl.md RLGL-053: exact platform binding, nesting, exclusion, and thread-handover
-// evidence for the standalone-rlgl context lease. No native window-toolkit API crosses this test.
+// plans/plan_rlgl.md RLGL-053/RLGL-058: exact platform binding, failure rollback, nesting,
+// exclusion, and thread-handover evidence. No native window-toolkit API crosses this test.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Platform/IPlatform.hpp"
@@ -15,6 +15,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <memory>
 #include <stdexcept>
@@ -23,6 +24,21 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::Internal::Renderers::RendererThreadContextLeaseRelease;
+
+namespace
+{
+    void SetBindFailureStage(const char* const stage)
+    {
+#if defined(_WIN32)
+        (void)_putenv_s("CNA_RLGL_DEBUG_FAIL_BIND_STAGE", stage != nullptr ? stage : "");
+#else
+        if (stage != nullptr)
+            (void)setenv("CNA_RLGL_DEBUG_FAIL_BIND_STAGE", stage, 1);
+        else
+            (void)unsetenv("CNA_RLGL_DEBUG_FAIL_BIND_STAGE");
+#endif
+    }
+}
 
 class RlglThreadContextLeaseBindingTest final : public Game
 {
@@ -116,6 +132,24 @@ private:
         try
         {
             glContext->MakeCurrent(rendererBinding.window, otherContext);
+            for (const char* const stage : {
+                     "before-make-current", "after-make-current"})
+            {
+                SetBindFailureStage(stage);
+                bool failed = false;
+                try
+                {
+                    auto rejected = renderer.AcquireThreadContextLeaseEXT();
+                    (void)rejected;
+                }
+                catch (const std::exception&)
+                {
+                    failed = true;
+                }
+                SetBindFailureStage(nullptr);
+                Check(failed && glContext->GetCurrentBinding().context == otherContext,
+                    "injected lease failure restores the unrelated caller binding");
+            }
             {
                 auto lease = renderer.AcquireThreadContextLeaseEXT(
                     RendererThreadContextLeaseRelease::ReleaseRendererBinding);
@@ -211,6 +245,7 @@ private:
 
 int main()
 {
+    SetBindFailureStage(nullptr);
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
     RlglThreadContextLeaseBindingTest game;

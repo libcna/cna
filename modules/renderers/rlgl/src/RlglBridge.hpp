@@ -266,6 +266,19 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         StencilPlane = 1u << 2u,
     };
 
+    /** @brief Result of polling the current robust OpenGL context for a native reset. */
+    enum class GraphicsResetStatus
+    {
+        /** @brief The current context has not reported a graphics reset. */
+        NoError,
+        /** @brief This context caused the reset. */
+        Guilty,
+        /** @brief Another context caused the reset. */
+        Innocent,
+        /** @brief The reset cause could not be attributed. */
+        Unknown
+    };
+
     /**
      * @brief Loads rlgl's GL dispatch and creates its default resources.
      * @param loader CNA platform entry-point loader.
@@ -275,6 +288,18 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      */
     [[nodiscard]] std::string Initialize(
         CNA::Platform::GlProcAddressLoader loader, int width, int height);
+
+    /**
+     * @brief Reports whether this context exposes a graphics-reset status entry point.
+     * @return True when native reset status can be polled.
+     */
+    [[nodiscard]] bool SupportsGraphicsResetStatus() noexcept;
+
+    /**
+     * @brief Polls the current context for a native graphics reset.
+     * @return The reported reset status, or NoError when no reset occurred.
+     */
+    [[nodiscard]] GraphicsResetStatus PollGraphicsResetStatus();
 
     /** @brief Releases rlgl's default resources while its context is current. */
     void Shutdown() noexcept;

@@ -73,6 +73,15 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_resource_recreate PRIVATE SDL3::SDL3main)
     endif()
 
+    add_executable(cna_test_rlgl_lifecycle_matrix rlgl_lifecycle_matrix_test.cpp)
+    target_include_directories(cna_test_rlgl_lifecycle_matrix
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_lifecycle_matrix
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_lifecycle_matrix PRIVATE SDL3::SDL3main)
+    endif()
+
     add_executable(cna_test_rlgl_texture rlgl_texture_test.cpp)
     target_include_directories(cna_test_rlgl_texture PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     target_link_libraries(cna_test_rlgl_texture PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
@@ -528,6 +537,11 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             COMMAND cna_test_rlgl_resource_recreate
             TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsResource;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_LifecycleMatrix
+            COMMAND cna_test_rlgl_lifecycle_matrix
+            TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsDevice;GraphicsResource;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_Texture COMMAND cna_test_rlgl_texture
             TIMEOUT 60 LABELS "GraphicsTexture;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
@@ -700,6 +714,7 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
                 NAME Rlgl_EnvironmentMapEffect_${test_name}
                 COMMAND cna_test_rlgl_environmentmapeffect_${test_name}
                 TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
                 ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         endforeach()
         cna_register_renderer_test(
@@ -737,6 +752,7 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
                 NAME Rlgl_SkinnedEffect_${test_name}
                 COMMAND cna_test_rlgl_skinnedeffect_${test_name}
                 TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
                 ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         endforeach()
         if(CNA_RLGL_COMPILED_EFFECTS)

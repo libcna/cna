@@ -72,6 +72,20 @@ namespace CNA::Internal::Renderers::Rlgl
         bool mojoShaderContextRealized = false;
         /** @brief Whether the optional MojoShader GL context is live now. */
         bool mojoShaderContextLive = false;
+        /** @brief XNA SurfaceFormat ordinal matching the actual default framebuffer. */
+        int appliedBackBufferFormat = 0;
+        /** @brief XNA DepthFormat ordinal matching the granted depth/stencil planes. */
+        int appliedDepthStencilFormat = 0;
+        /** @brief Multisample count granted by the platform context. */
+        int appliedMultiSampleCount = 0;
+        /** @brief Whether the platform granted robust-access, lose-context-on-reset semantics. */
+        bool robustContext = false;
+        /** @brief Whether a native graphics-reset status entry point is available. */
+        bool nativeLossPollingAvailable = false;
+        /** @brief Number of ordinary GraphicsDevice presentation Reset calls observed. */
+        std::size_t presentationResets = 0;
+        /** @brief Number of native losses detected without the explicit debug-loss entry point. */
+        std::size_t detectedNativeLosses = 0;
         /** @brief Stable diagnostic from the latest failed recreation attempt. */
         std::string unavailableReason;
     };
@@ -225,6 +239,38 @@ namespace CNA::Internal::Renderers::Rlgl
          */
         [[nodiscard]] int GetAppliedMultiSampleCountEXT(
             int requestedMultiSampleCount) const override;
+
+        /**
+         * @brief Keeps the context-created sample count during an ordinary presentation Reset.
+         * @param requestedMultiSampleCount Requested new sample count.
+         * @return The unchanged platform-granted context sample count.
+         */
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+
+        /**
+         * @brief Records an ordinary presentation Reset without treating it as native context loss.
+         * @param backBufferFormat Normalized requested backbuffer format ordinal.
+         * @param depthStencilFormat Normalized requested depth/stencil format ordinal.
+         * @param isFullScreen Whether the presentation request is fullscreen.
+         */
+        void UpdatePresentationFormatEXT(
+            int backBufferFormat, int depthStencilFormat, bool isFullScreen) override;
+
+        /**
+         * @brief Returns the SurfaceFormat matching the actual context framebuffer.
+         * @param requestedFormat Requested format retained only for interface parity.
+         * @return Applied SurfaceFormat ordinal.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(
+            int requestedFormat) const override;
+
+        /**
+         * @brief Returns the DepthFormat matching the actual context depth/stencil planes.
+         * @param requestedFormat Requested format retained only for interface parity.
+         * @return Applied DepthFormat ordinal.
+         */
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(
+            int requestedFormat) const override;
 
         /**
          * @brief Reports whether the created back buffer has both depth and stencil planes.
@@ -850,7 +896,10 @@ namespace CNA::Internal::Renderers::Rlgl
         };
 
         void CreateContext(int requestedMultiSampleCount);
+        void RefreshContextAttributes();
         [[nodiscard]] std::string InitializeContextState();
+        void TransitionToContextLost(const std::string& reason, bool nativeDetection);
+        void ThrowIfNativeContextWasReset();
         void InvalidateRendererNativeState() noexcept;
         void DestroyRendererNativeState() noexcept;
         void RestoreRendererNativeState();
@@ -893,6 +942,10 @@ namespace CNA::Internal::Renderers::Rlgl
         int multiSampleCount_ = 0;
         int depthBits_ = 0;
         int stencilBits_ = 0;
+        int backBufferFormat_ = 0;
+        int depthStencilFormat_ = 0;
+        bool robustContext_ = false;
+        bool nativeLossPollingAvailable_ = false;
         int maxTextureSize_ = 0;
         int maxSamplerSlots_ = 0;
         int maxRenderTargets_ = 1;
@@ -928,6 +981,8 @@ namespace CNA::Internal::Renderers::Rlgl
         std::atomic<RlglContextRecoveryState> contextRecoveryState_{
             RlglContextRecoveryState::Available};
         std::size_t contextGeneration_ = 0;
+        std::atomic<std::size_t> presentationResets_{0};
+        std::atomic<std::size_t> detectedNativeLosses_{0};
         std::string unavailableReason_;
         bool lifecycleClaimed_ = false;
         bool rlglInitialized_ = false;

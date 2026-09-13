@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -21,29 +22,39 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool OcclusionQuery::getIsCompleteProperty() const
     {
+        System::ObjectDisposedException::ThrowIf(
+            getIsDisposedProperty(), getNameProperty());
         if (renderer_) return renderer_->IsComplete();
         return false;
     }
 
     int OcclusionQuery::getPixelCountProperty() const
     {
+        System::ObjectDisposedException::ThrowIf(
+            getIsDisposedProperty(), getNameProperty());
         if (renderer_) return renderer_->PixelCount();
         return 0;
     }
 
     bool OcclusionQuery::isPixelCountPreciseEXT() const
     {
+        System::ObjectDisposedException::ThrowIf(
+            getIsDisposedProperty(), getNameProperty());
         if (renderer_) return renderer_->PixelCountIsPreciseEXT();
         return false;
     }
 
     void OcclusionQuery::Begin()
     {
+        System::ObjectDisposedException::ThrowIf(
+            getIsDisposedProperty(), getNameProperty());
         if (renderer_) renderer_->Begin();
     }
 
     void OcclusionQuery::End()
     {
+        System::ObjectDisposedException::ThrowIf(
+            getIsDisposedProperty(), getNameProperty());
         if (renderer_) renderer_->End();
     }
 

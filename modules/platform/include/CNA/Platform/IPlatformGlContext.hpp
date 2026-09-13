@@ -35,6 +35,15 @@ namespace CNA::Platform {
         /** @brief Requested profile. */
         GlProfile profile = GlProfile::Core;
 
+        /** @brief Requested red-channel size in bits. */
+        int redBits = 8;
+        /** @brief Requested green-channel size in bits. */
+        int greenBits = 8;
+        /** @brief Requested blue-channel size in bits. */
+        int blueBits = 8;
+        /** @brief Requested alpha-channel size in bits. */
+        int alphaBits = 8;
+
         /** @brief Requested depth buffer size in bits; zero for none. */
         int depthBits = 24;
         /** @brief Requested stencil buffer size in bits; zero for none. */
@@ -47,6 +56,11 @@ namespace CNA::Platform {
 
         /** @brief Whether to request a double-buffered visual. */
         bool doubleBuffer = true;
+
+        /** @brief Whether to request robust-access context semantics. */
+        bool robustAccess = false;
+        /** @brief Whether a graphics reset should report context loss to the application. */
+        bool loseContextOnReset = false;
     };
 
     /** @brief An opaque handle to a created OpenGL context. Null means "no context". */

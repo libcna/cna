@@ -3,6 +3,7 @@
 #include "CNA/Internal/Renderers/Rlgl/RlglRenderer.hpp"
 
 #include "CNA/Logger.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <exception>
 #include <functional>
 #include <mutex>
 #include <stdexcept>
@@ -42,7 +44,8 @@ namespace CNA::Internal::Renderers::Rlgl
         bool lifecycleActive = false;
 
         CNA::Platform::GlContextDescription RequestedContext(
-            const int multiSampleCount, const bool withMultisampling)
+            const int multiSampleCount, const bool withMultisampling,
+            const bool robustAccess)
         {
             CNA::Platform::GlContextDescription description;
             description.majorVersion = 3;
@@ -51,6 +54,8 @@ namespace CNA::Internal::Renderers::Rlgl
             description.depthBits = 24;
             description.stencilBits = 8;
             description.doubleBuffer = true;
+            description.robustAccess = robustAccess;
+            description.loseContextOnReset = robustAccess;
             if (withMultisampling && multiSampleCount > 1)
             {
                 description.multisampleBuffers = 1;
@@ -77,16 +82,94 @@ namespace CNA::Internal::Renderers::Rlgl
             lifecycleActive = false;
         }
 
-        void ThrowInjectedRecreateFailure(const char* const stage)
+        void ThrowInjectedLifecycleFailure(
+            const char* const variable, const char* const operation,
+            const char* const stage)
         {
-            const char* const requested =
-                std::getenv("CNA_RLGL_DEBUG_FAIL_RECREATE_STAGE");
+            const char* const requested = std::getenv(variable);
             if (requested != nullptr && std::string_view(requested) == stage)
             {
                 throw std::runtime_error(
-                    std::string("RLGL: injected context recreation failure at stage '") +
-                    stage + "'");
+                    std::string("RLGL: injected ") + operation +
+                    " failure at stage '" + stage + "'");
             }
+        }
+
+        void ThrowInjectedCreateFailure(const char* const stage)
+        {
+            ThrowInjectedLifecycleFailure(
+                "CNA_RLGL_DEBUG_FAIL_CREATE_STAGE", "renderer creation", stage);
+        }
+
+        void ThrowInjectedRecreateFailure(const char* const stage)
+        {
+            ThrowInjectedLifecycleFailure(
+                "CNA_RLGL_DEBUG_FAIL_RECREATE_STAGE", "context recreation", stage);
+        }
+
+        void ThrowInjectedBindFailure(const char* const stage)
+        {
+            ThrowInjectedLifecycleFailure(
+                "CNA_RLGL_DEBUG_FAIL_BIND_STAGE", "context binding", stage);
+        }
+
+        [[nodiscard]] int AppliedBackBufferFormat(
+            const CNA::Platform::GlContextDescription& granted)
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            if (granted.redBits == 10 && granted.greenBits == 10 &&
+                granted.blueBits == 10 && granted.alphaBits == 2)
+            {
+                return static_cast<int>(SurfaceFormat::Rgba1010102);
+            }
+            if (granted.redBits >= 8 && granted.greenBits >= 8 &&
+                granted.blueBits >= 8 && granted.alphaBits >= 8)
+            {
+                return static_cast<int>(SurfaceFormat::Color);
+            }
+            if (granted.redBits == 5 && granted.greenBits == 6 &&
+                granted.blueBits == 5 && granted.alphaBits == 0)
+            {
+                return static_cast<int>(SurfaceFormat::Bgr565);
+            }
+            if (granted.redBits == 5 && granted.greenBits == 5 &&
+                granted.blueBits == 5 && granted.alphaBits == 1)
+            {
+                return static_cast<int>(SurfaceFormat::Bgra5551);
+            }
+            if (granted.redBits == 4 && granted.greenBits == 4 &&
+                granted.blueBits == 4 && granted.alphaBits == 4)
+            {
+                return static_cast<int>(SurfaceFormat::Bgra4444);
+            }
+            throw std::runtime_error(
+                "RLGL: platform granted a default framebuffer format that has no exact "
+                "classic XNA SurfaceFormat mapping");
+        }
+
+        [[nodiscard]] int AppliedDepthStencilFormat(
+            const CNA::Platform::GlContextDescription& granted)
+        {
+            using Microsoft::Xna::Framework::Graphics::DepthFormat;
+            if (granted.depthBits <= 0) return static_cast<int>(DepthFormat::None);
+            if (granted.stencilBits > 0)
+                return static_cast<int>(DepthFormat::Depth24Stencil8);
+            if (granted.depthBits >= 24)
+                return static_cast<int>(DepthFormat::Depth24);
+            return static_cast<int>(DepthFormat::Depth16);
+        }
+
+        [[nodiscard]] const char* GraphicsResetStatusName(
+            const Bridge::GraphicsResetStatus status)
+        {
+            switch (status)
+            {
+            case Bridge::GraphicsResetStatus::NoError: return "no error";
+            case Bridge::GraphicsResetStatus::Guilty: return "guilty context reset";
+            case Bridge::GraphicsResetStatus::Innocent: return "innocent context reset";
+            case Bridge::GraphicsResetStatus::Unknown: return "unknown context reset";
+            }
+            return "unknown context reset";
         }
 
         [[noreturn]] void Unsupported(const char* operation, const char* task)
@@ -449,14 +532,18 @@ namespace CNA::Internal::Renderers::Rlgl
 
         try
         {
+            ThrowInjectedCreateFailure("before-context");
             CreateContext(args.multiSampleCount);
+            ThrowInjectedCreateFailure("after-context");
             const std::string version = InitializeContextState();
+            ThrowInjectedCreateFailure("after-bridge");
             contextGeneration_ = 1;
             threadContextLeaseControl_ =
                 std::make_shared<RlglThreadContextLeaseControl>(platformContext_);
             resourceLifetime_ =
                 std::make_shared<RlglResourceLifetime>(threadContextLeaseControl_);
             resourceLifetime_->SetRecoveryEnabled(args.contextRecoveryEnabled);
+            ThrowInjectedCreateFailure("after-registry");
             IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
             registered_ = true;
 
@@ -527,20 +614,44 @@ namespace CNA::Internal::Renderers::Rlgl
     void RlglRenderer::CreateContext(const int requestedMultiSampleCount)
     {
         const bool wantMultisampling = requestedMultiSampleCount > 1;
-        try
+        const std::array<std::array<bool, 2>, 4> attempts{{
+            {{wantMultisampling, true}},
+            {{wantMultisampling, false}},
+            {{false, true}},
+            {{false, false}}}};
+        std::exception_ptr lastFailure;
+        for (std::size_t attempt = 0; attempt < attempts.size(); ++attempt)
         {
-            platformContext_ = std::make_shared<PlatformGlContextOwner>(
-                *platformGlService_, surface_.GetWindowId(),
-                RequestedContext(requestedMultiSampleCount, wantMultisampling));
+            bool duplicate = false;
+            for (std::size_t prior = 0; prior < attempt; ++prior)
+                duplicate = duplicate || attempts[prior] == attempts[attempt];
+            if (duplicate) continue;
+
+            try
+            {
+                platformContext_ = std::make_shared<PlatformGlContextOwner>(
+                    *platformGlService_, surface_.GetWindowId(),
+                    RequestedContext(
+                        requestedMultiSampleCount,
+                        attempts[attempt][0], attempts[attempt][1]));
+                break;
+            }
+            catch (const CNA::Platform::PlatformException&)
+            {
+                lastFailure = std::current_exception();
+            }
         }
-        catch (const CNA::Platform::PlatformException&)
+        if (!platformContext_)
         {
-            if (!wantMultisampling) throw;
-            platformContext_ = std::make_shared<PlatformGlContextOwner>(
-                *platformGlService_, surface_.GetWindowId(),
-                RequestedContext(requestedMultiSampleCount, false));
+            if (lastFailure) std::rethrow_exception(lastFailure);
+            throw std::runtime_error("RLGL: no OpenGL context creation attempt was made");
         }
 
+        RefreshContextAttributes();
+    }
+
+    void RlglRenderer::RefreshContextAttributes()
+    {
         const auto granted = platformContext_->GetAttributes();
         if (granted.profile != CNA::Platform::GlProfile::Core ||
             granted.majorVersion < 3 ||
@@ -552,6 +663,9 @@ namespace CNA::Internal::Renderers::Rlgl
 
         depthBits_ = granted.depthBits;
         stencilBits_ = granted.stencilBits;
+        backBufferFormat_ = AppliedBackBufferFormat(granted);
+        depthStencilFormat_ = AppliedDepthStencilFormat(granted);
+        robustContext_ = granted.robustAccess && granted.loseContextOnReset;
         multiSampleCount_ =
             granted.multisampleBuffers > 0 && granted.multisampleSamples > 1
                 ? granted.multisampleSamples
@@ -570,6 +684,8 @@ namespace CNA::Internal::Renderers::Rlgl
         maxSamplerSlots_ = Bridge::GetMaxSamplerSlots();
         maxRenderTargets_ = Bridge::GetMaxRenderTargets();
         maxSamplerAnisotropy_ = Bridge::GetMaxSamplerAnisotropy();
+        nativeLossPollingAvailable_ =
+            robustContext_ && Bridge::SupportsGraphicsResetStatus();
         if (maxSamplerSlots_ < static_cast<int>(samplers_.size()))
         {
             throw std::runtime_error(
@@ -813,19 +929,57 @@ namespace CNA::Internal::Renderers::Rlgl
             throw std::runtime_error("RLGL: renderer context is no longer available");
 
         control->mutex.lock();
+        bool outerAcquisition = false;
+        CNA::Platform::GlContextBinding ownedBinding;
         try
         {
+            if (contextRecoveryState_.load(std::memory_order_acquire) !=
+                RlglContextRecoveryState::Available)
+            {
+                throw std::runtime_error(
+                    "RLGL: renderer context is unavailable; restore it before acquiring draw access");
+            }
             auto& state = ThreadContextLeaseStates()[control.get()];
             if (state.depth == 0)
             {
+                outerAcquisition = true;
                 state.previousBinding = control->platformContext->GetCurrentBinding();
                 state.release = release;
+                ThrowInjectedBindFailure("before-make-current");
                 control->platformContext->MakeCurrent();
+                ownedBinding = control->platformContext->GetCurrentBinding();
+                ThrowInjectedBindFailure("after-make-current");
+                ThrowIfNativeContextWasReset();
             }
             ++state.depth;
         }
         catch (...)
         {
+            if (outerAcquisition)
+            {
+                const auto found = ThreadContextLeaseStates().find(control.get());
+                if (found != ThreadContextLeaseStates().end())
+                {
+                    try
+                    {
+                        const bool lostRendererBinding =
+                            contextRecoveryState_.load(std::memory_order_acquire) !=
+                                RlglContextRecoveryState::Available &&
+                            found->second.previousBinding.context == ownedBinding.context;
+                        if (lostRendererBinding) control->platformContext->ClearCurrent();
+                        else control->platformContext->RestoreBinding(
+                            found->second.previousBinding,
+                            RendererThreadContextLeaseRelease::RestorePreviousBinding);
+                    }
+                    catch (const std::exception& restoreError)
+                    {
+                        CNA::Logger::Error(
+                            std::string("RLGL: failed to restore a binding after lease acquisition ") +
+                                "failed: " + restoreError.what(),
+                            CNA::LogCategory::RENDER);
+                    }
+                }
+            }
             ThreadContextLeaseStates().erase(control.get());
             control->mutex.unlock();
             throw;
@@ -860,6 +1014,38 @@ namespace CNA::Internal::Renderers::Rlgl
             RlglContextRecoveryState::Available;
     }
 
+    void RlglRenderer::TransitionToContextLost(
+        const std::string& reason, const bool nativeDetection)
+    {
+        const auto control = threadContextLeaseControl_;
+        std::unique_lock<std::recursive_mutex> lock;
+        if (control) lock = std::unique_lock<std::recursive_mutex>(control->mutex);
+        if (contextRecoveryState_.load(std::memory_order_acquire) !=
+            RlglContextRecoveryState::Available)
+        {
+            return;
+        }
+        contextRecoveryState_.store(
+            RlglContextRecoveryState::Lost, std::memory_order_release);
+        unavailableReason_ = reason;
+        if (nativeDetection)
+            detectedNativeLosses_.fetch_add(1, std::memory_order_relaxed);
+        if (resourceLifetime_)
+            resourceLifetime_->InvalidateNativeResourcesForContextLoss();
+        InvalidateRendererNativeState();
+        NotifyDeviceEvent(RendererDeviceEvent::Lost);
+    }
+
+    void RlglRenderer::ThrowIfNativeContextWasReset()
+    {
+        const Bridge::GraphicsResetStatus status = Bridge::PollGraphicsResetStatus();
+        if (status == Bridge::GraphicsResetStatus::NoError) return;
+        const std::string reason = std::string("RLGL: native OpenGL context loss detected (") +
+            GraphicsResetStatusName(status) + ")";
+        TransitionToContextLost(reason, true);
+        throw std::runtime_error(reason);
+    }
+
     void RlglRenderer::DebugSimulateContextLoss()
     {
         const auto control = threadContextLeaseControl_;
@@ -867,19 +1053,7 @@ namespace CNA::Internal::Renderers::Rlgl
             throw std::runtime_error("RLGL: renderer context is no longer available");
 
         const std::scoped_lock lock(control->mutex);
-        if (contextRecoveryState_.load(std::memory_order_acquire) !=
-            RlglContextRecoveryState::Available)
-        {
-            return;
-        }
-
-        contextRecoveryState_.store(
-            RlglContextRecoveryState::Lost, std::memory_order_release);
-        unavailableReason_.clear();
-        if (resourceLifetime_)
-            resourceLifetime_->InvalidateNativeResourcesForContextLoss();
-        InvalidateRendererNativeState();
-        NotifyDeviceEvent(RendererDeviceEvent::Lost);
+        TransitionToContextLost("RLGL: debug-simulated OpenGL context loss", false);
     }
 
     void RlglRenderer::DebugRestoreContext()
@@ -954,6 +1128,7 @@ namespace CNA::Internal::Renderers::Rlgl
             RetargetThreadContextLeaseBinding(
                 *control, ownedBinding.context, platformContext_->GetCurrentBinding());
             ThrowInjectedRecreateFailure("after-context");
+            RefreshContextAttributes();
             const std::string version = InitializeContextState();
             ThrowInjectedRecreateFailure("after-bridge");
             RestoreRendererNativeState();
@@ -1031,6 +1206,15 @@ namespace CNA::Internal::Renderers::Rlgl
         snapshot.mojoShaderContextRealized = restoreMojoShaderContext_;
         snapshot.mojoShaderContextLive = mojoShaderContext_ != nullptr;
 #endif
+        snapshot.appliedBackBufferFormat = backBufferFormat_;
+        snapshot.appliedDepthStencilFormat = depthStencilFormat_;
+        snapshot.appliedMultiSampleCount = multiSampleCount_;
+        snapshot.robustContext = robustContext_;
+        snapshot.nativeLossPollingAvailable = nativeLossPollingAvailable_;
+        snapshot.presentationResets =
+            presentationResets_.load(std::memory_order_relaxed);
+        snapshot.detectedNativeLosses =
+            detectedNativeLosses_.load(std::memory_order_relaxed);
         snapshot.unavailableReason = unavailableReason_;
         return snapshot;
     }
@@ -1042,7 +1226,17 @@ namespace CNA::Internal::Renderers::Rlgl
 
     void RlglRenderer::Present()
     {
-        platformContext_->SwapBuffers();
+        ThrowIfNativeContextWasReset();
+        try
+        {
+            platformContext_->SwapBuffers();
+        }
+        catch (const std::exception& error)
+        {
+            TransitionToContextLost(
+                std::string("RLGL: native presentation failed: ") + error.what(), true);
+            throw;
+        }
     }
 
     void RlglRenderer::GetPhysicalSize(int& width, int& height) const
@@ -1142,6 +1336,34 @@ namespace CNA::Internal::Renderers::Rlgl
     {
         (void)requestedMultiSampleCount;
         return multiSampleCount_;
+    }
+
+    int RlglRenderer::ApplyMultiSampleCount(const int requestedMultiSampleCount)
+    {
+        (void)requestedMultiSampleCount;
+        return multiSampleCount_;
+    }
+
+    void RlglRenderer::UpdatePresentationFormatEXT(
+        const int backBufferFormat, const int depthStencilFormat,
+        const bool isFullScreen)
+    {
+        (void)backBufferFormat;
+        (void)depthStencilFormat;
+        (void)isFullScreen;
+        presentationResets_.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    int RlglRenderer::GetAppliedBackBufferFormatEXT(const int requestedFormat) const
+    {
+        (void)requestedFormat;
+        return backBufferFormat_;
+    }
+
+    int RlglRenderer::GetAppliedDepthStencilFormatEXT(const int requestedFormat) const
+    {
+        (void)requestedFormat;
+        return depthStencilFormat_;
     }
 
     bool RlglRenderer::SupportsDepthStencil() const

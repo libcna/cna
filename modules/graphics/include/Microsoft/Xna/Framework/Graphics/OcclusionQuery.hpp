@@ -16,6 +16,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class OcclusionQuery : public GraphicsResource
     {
     public:
+        using GraphicsResource::Dispose;
+
         /**
          * @brief Creates an occlusion query for the specified graphics device.
          *

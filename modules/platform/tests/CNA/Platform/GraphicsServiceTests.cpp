@@ -22,9 +22,15 @@ TEST(GlContextTests, DefaultDescriptionRequestsAUsableModernCoreContext)
     EXPECT_EQ(description.majorVersion, 3);
     EXPECT_EQ(description.minorVersion, 3);
     EXPECT_EQ(description.profile, GlProfile::Core);
+    EXPECT_EQ(description.redBits, 8);
+    EXPECT_EQ(description.greenBits, 8);
+    EXPECT_EQ(description.blueBits, 8);
+    EXPECT_EQ(description.alphaBits, 8);
     EXPECT_GT(description.depthBits, 0);
     EXPECT_GT(description.stencilBits, 0);
     EXPECT_TRUE(description.doubleBuffer);
+    EXPECT_FALSE(description.robustAccess);
+    EXPECT_FALSE(description.loseContextOnReset);
 }
 
 TEST(GlContextTests, MultisamplingIsOffByDefault)

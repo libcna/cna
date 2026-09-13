@@ -79,7 +79,16 @@ namespace Microsoft::Xna::Framework::Graphics
         void flushBatch();
         void flushSingle(const SpriteInfo& s);
 
+    protected:
+        /**
+         * @brief Releases the renderer-side batch before marking this resource disposed.
+         * @param disposing True when called through Dispose; false from destruction.
+         */
+        void Dispose(bool disposing) override;
+
     public:
+        using GraphicsResource::Dispose;
+
         /**
          * @brief Creates a sprite batch bound to a graphics device.
          *

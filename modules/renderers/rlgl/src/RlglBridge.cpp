@@ -34,6 +34,27 @@ namespace
 
 namespace
 {
+    using GraphicsResetStatusProc = GLenum (GLAD_API_PTR*)();
+    GraphicsResetStatusProc graphicsResetStatusProc = nullptr;
+
+    constexpr GLenum kGuiltyContextReset = 0x8253;
+    constexpr GLenum kInnocentContextReset = 0x8254;
+    constexpr GLenum kUnknownContextReset = 0x8255;
+
+    [[nodiscard]] bool HasGlExtension(const char* const expected)
+    {
+        GLint extensionCount = 0;
+        glGetIntegerv(GL_NUM_EXTENSIONS, &extensionCount);
+        for (GLint index = 0; index < extensionCount; ++index)
+        {
+            const auto* const extension = reinterpret_cast<const char*>(
+                glGetStringi(GL_EXTENSIONS, static_cast<GLuint>(index)));
+            if (extension != nullptr && std::strcmp(extension, expected) == 0)
+                return true;
+        }
+        return false;
+    }
+
     void RlglTraceLog(const int level, const char* format, ...)
     {
         char message[2048] = {};
@@ -532,6 +553,31 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         if (driverVersion == nullptr)
             throw std::runtime_error("RLGL: current context returned no OpenGL version string");
 
+        GLint majorVersion = 0;
+        GLint minorVersion = 0;
+        glGetIntegerv(GL_MAJOR_VERSION, &majorVersion);
+        glGetIntegerv(GL_MINOR_VERSION, &minorVersion);
+        const bool coreResetStatus = majorVersion > 4 ||
+            (majorVersion == 4 && minorVersion >= 5);
+        const bool khrRobustness = HasGlExtension("GL_KHR_robustness");
+        const bool arbRobustness = HasGlExtension("GL_ARB_robustness");
+        graphicsResetStatusProc = nullptr;
+        if (coreResetStatus || khrRobustness)
+        {
+            graphicsResetStatusProc = reinterpret_cast<GraphicsResetStatusProc>(
+                loader("glGetGraphicsResetStatus"));
+            if (graphicsResetStatusProc == nullptr)
+            {
+                graphicsResetStatusProc = reinterpret_cast<GraphicsResetStatusProc>(
+                    loader("glGetGraphicsResetStatusKHR"));
+            }
+        }
+        if (graphicsResetStatusProc == nullptr && arbRobustness)
+        {
+            graphicsResetStatusProc = reinterpret_cast<GraphicsResetStatusProc>(
+                loader("glGetGraphicsResetStatusARB"));
+        }
+
         rlglInit(width, height);
         try
         {
@@ -550,11 +596,37 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
             bridgeInitialized = false;
             bufferUploadVertexArray = 0;
             activeOcclusionQuery = 0;
+            graphicsResetStatusProc = nullptr;
             lastPrimitiveDraw = {};
             throw;
         }
 
         return reinterpret_cast<const char*>(driverVersion);
+    }
+
+    bool SupportsGraphicsResetStatus() noexcept
+    {
+        return bridgeInitialized && graphicsResetStatusProc != nullptr;
+    }
+
+    GraphicsResetStatus PollGraphicsResetStatus()
+    {
+        RequireInitialized("graphics-reset polling");
+        if (const char* const forced = std::getenv("CNA_RLGL_DEBUG_FORCE_NATIVE_LOSS");
+            forced != nullptr && forced[0] != '\0' && forced[0] != '0')
+        {
+            return GraphicsResetStatus::Unknown;
+        }
+        if (graphicsResetStatusProc == nullptr) return GraphicsResetStatus::NoError;
+
+        switch (graphicsResetStatusProc())
+        {
+        case GL_NO_ERROR: return GraphicsResetStatus::NoError;
+        case kGuiltyContextReset: return GraphicsResetStatus::Guilty;
+        case kInnocentContextReset: return GraphicsResetStatus::Innocent;
+        case kUnknownContextReset: return GraphicsResetStatus::Unknown;
+        default: return GraphicsResetStatus::Unknown;
+        }
     }
 
     void Shutdown() noexcept
@@ -571,6 +643,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
             bufferUploadVertexArray = 0;
         }
         bridgeInitialized = false;
+        graphicsResetStatusProc = nullptr;
         rlglClose();
         RLGL = {};
         isGpuReady = false;
@@ -597,6 +670,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         RLGL = {};
         isGpuReady = false;
         bridgeInitialized = false;
+        graphicsResetStatusProc = nullptr;
         bufferUploadVertexArray = 0;
         activeOcclusionQuery = 0;
         lastPrimitiveDraw = {};

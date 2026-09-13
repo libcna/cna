@@ -104,6 +104,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
     SpriteBatch::~SpriteBatch() = default;
 
+    void SpriteBatch::Dispose(const bool disposing)
+    {
+        if (!getIsDisposedProperty())
+        {
+            renderer_.reset();
+            spriteQueue_.clear();
+            begun = false;
+            customEffect_ = nullptr;
+        }
+        GraphicsResource::Dispose(disposing);
+    }
+
     GetTypeNameCPP(SpriteBatch, "Microsoft.Xna.Framework.Graphics.SpriteBatch")
 
     // -----------------------------------------------------------------------
@@ -184,6 +196,8 @@ namespace Microsoft::Xna::Framework::Graphics
                             Effect* effect,
                             Matrix transformMatrix)
     {
+        System::ObjectDisposedException::ThrowIf(
+            getIsDisposedProperty(), getNameProperty());
         if (begun)
             throw std::runtime_error("Begin has been called before calling End.");
 
@@ -293,6 +307,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::End()
     {
+        System::ObjectDisposedException::ThrowIf(
+            getIsDisposedProperty(), getNameProperty());
         if (!begun)
             throw std::runtime_error("End was called, but Begin has not yet been called.");
         if (renderer_)

@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
@@ -122,6 +123,17 @@ TEST(SpriteBatchTest, BeginWithoutRendererDoesNotThrow)
 {
     SpriteBatch batch;
     EXPECT_NO_THROW(batch.Begin());
+}
+
+TEST(SpriteBatchTest, RepeatedDisposeRejectsBeginAndEnd)
+{
+    SpriteBatch batch;
+    batch.Begin();
+    EXPECT_NO_THROW(batch.Dispose());
+    EXPECT_NO_THROW(batch.Dispose());
+    EXPECT_TRUE(batch.getIsDisposedProperty());
+    EXPECT_THROW(batch.Begin(), System::ObjectDisposedException);
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
 }
 
 TEST(SpriteBatchTest, BeginSortBlendWithoutRendererDoesNotThrow)
