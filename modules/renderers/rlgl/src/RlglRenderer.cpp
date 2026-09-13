@@ -166,13 +166,6 @@ namespace CNA::Internal::Renderers::Rlgl
             return "unknown context reset";
         }
 
-        [[noreturn]] void Unsupported(const char* operation, const char* task)
-        {
-            throw System::NotSupportedException(
-                std::string(kRendererName) + ": " + operation +
-                " is not implemented yet (plans/plan_rlgl.md " + task + ")");
-        }
-
         class RlglThreadContextLease final : public IRendererThreadContextLease
         {
         public:

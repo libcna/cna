@@ -1,6 +1,6 @@
 # RLGL renderer
 
-`CNA_GRAPHICS_RENDERER=RLGL` selects CNA's experimental renderer built on the standalone
+`CNA_GRAPHICS_RENDERER=RLGL` selects CNA's renderer built on the standalone
 [`rlgl.h`](https://github.com/raysan5/raylib/blob/dbc56a87da87d973a9c5baa4e7438a9d20121d28/src/rlgl.h)
 low-level OpenGL abstraction from raylib 6.0. CNA compiles that header directly; it does not build,
 link, initialize, or otherwise use the raylib application framework.
@@ -8,7 +8,9 @@ link, initialize, or otherwise use the raylib application framework.
 The authoritative implementation ledger and EasyGL capability matrix are in
 [`../plans/plan_rlgl.md`](../plans/plan_rlgl.md). This document describes only the capability that
 has actually been validated. The systematic shared-test and golden comparison is recorded in
-[`rlgl-parity-campaign.md`](rlgl-parity-campaign.md). RLGL is not yet suitable for normal CNA games.
+[`rlgl-parity-campaign.md`](rlgl-parity-campaign.md). RLGL has reached EasyGL-equivalent classic
+XNA 4.0 renderer parity on the validated Linux SDL3-offscreen/Mesa configuration. Platform results
+and modern CNAEXT exclusions are stated explicitly below rather than implied by that declaration.
 
 ## Architecture and ownership
 
@@ -377,11 +379,11 @@ checked-out copies of the exact raylib and FNA3D/MojoShader revisions, with no c
 dependency drift. Its `cna_test_rlgl_all` meta-target derives dependencies from every executable in
 the RLGL test directory, including the central parity corpus when tests are enabled; the workflow
 therefore has no handwritten target inventory to become stale. It installs Mesa's software driver,
-builds with two jobs, and executes all 134 currently registered `Rlgl` tests through SDL3 offscreen.
+builds with two jobs, and executes all 141 currently registered `Rlgl` tests through SDL3 offscreen.
 Before CTest, the workflow executes `cna_test_rlgl_smoke` directly, so its exit-77 no-context result
 fails the shell instead of being accepted as a CTest skip. The same workflow also runs the renderer
 identity, target, runtime-dispatch, combination, and descriptor integration gates. A hosted result
 becomes evidence only when the workflow actually runs after a push or pull request; the
-workflow-equivalent local build and all 134 tests pass on the validated Linux environment. Windows,
+workflow-equivalent local build and all 141 tests pass on the validated Linux environment. Windows,
 macOS, on-screen Linux, and SDL2 runtime behavior remain explicitly outside this lane and are not
 claimed by it.
