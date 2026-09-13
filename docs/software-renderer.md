@@ -452,6 +452,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   operand: patch 107 rejects modifiers and explicit selectors in both shader stages. It also
   corrects older synthetic loop controls that encoded replicate-X instead of Microsoft's identity
   selector, so the retained positive evidence is genuine.
+  SOFTWARE-483 closes the adjacent opcode-control gap: patch 108 requires `SETP`, `IFC` and
+  `BREAKC` to encode one of D3D9's six comparison relations. Software had accepted reserved zero
+  controls at Effect creation, while EasyGL rejected them only through invalid downstream GLSL.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is

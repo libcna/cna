@@ -3901,6 +3901,12 @@ namespace
             Probe::PixelLoopConstantSwizzle,
             Probe::PixelRepConstantNegate,
             Probe::PixelRepConstantSwizzle,
+            Probe::PixelSetpMissingComparison,
+            Probe::PixelSetpReservedComparison,
+            Probe::PixelIfcMissingComparison,
+            Probe::PixelIfcReservedComparison,
+            Probe::PixelBreakcMissingComparison,
+            Probe::PixelBreakcReservedComparison,
             Probe::Vertex20LoopRepDepth2,
             Probe::Vertex20StaticFlowCount17If,
             Probe::Vertex20StaticFlowCount17Else,
@@ -3923,6 +3929,12 @@ namespace
             Probe::Vertex30LoopConstantSwizzle,
             Probe::Vertex30RepConstantNegate,
             Probe::Vertex30RepConstantSwizzle,
+            Probe::Vertex30SetpMissingComparison,
+            Probe::Vertex30SetpReservedComparison,
+            Probe::Vertex30IfcMissingComparison,
+            Probe::Vertex30IfcReservedComparison,
+            Probe::Vertex30BreakcMissingComparison,
+            Probe::Vertex30BreakcReservedComparison,
         };
         for (const Probe probe : invalidProbes)
         {
@@ -3958,6 +3970,7 @@ namespace
             Probe::PixelBreakPPredicateNot,
             Probe::PixelBreakPPredicateReplicateY,
             Probe::PixelPlainLoopRepOperands,
+            Probe::PixelComparisonControls1Through6,
             Probe::Vertex20LoopRepDepth1,
             Probe::Vertex20StaticFlowCount16,
             Probe::Vertex2xStaticFlowCount16,
@@ -3970,6 +3983,7 @@ namespace
             Probe::Vertex30BreakPPredicateNot,
             Probe::Vertex30BreakPPredicateReplicateY,
             Probe::Vertex30PlainLoopRepOperands,
+            Probe::Vertex30ComparisonControls1Through6,
         };
         for (const Probe probe : validProbes)
         {

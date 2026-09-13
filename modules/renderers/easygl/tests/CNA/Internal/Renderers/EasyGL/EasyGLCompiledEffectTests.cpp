@@ -1902,6 +1902,12 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::PixelLoopConstantSwizzle,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelRepConstantNegate,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelRepConstantSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelSetpMissingComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelSetpReservedComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelIfcMissingComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelIfcReservedComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakcMissingComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakcReservedComparison,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth2,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17If,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17Else,
@@ -1923,7 +1929,13 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30LoopConstantNegate,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30LoopConstantSwizzle,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30RepConstantNegate,
-        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30RepConstantSwizzle));
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30RepConstantSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30SetpMissingComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30SetpReservedComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfcMissingComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfcReservedComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakcMissingComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakcReservedComparison));
 
 class EasyGLCompiledEffectValidFlowControlTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticFlowControlProbe>
@@ -1960,6 +1972,7 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateNot,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateReplicateY,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelPlainLoopRepOperands,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelComparisonControls1Through6,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth1,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount16,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex2xStaticFlowCount16,
@@ -1971,7 +1984,8 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzBooleanNot,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateNot,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateReplicateY,
-        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30PlainLoopRepOperands));
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30PlainLoopRepOperands,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30ComparisonControls1Through6));
 
 class EasyGLCompiledEffectInvalidCallGraphTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticCallGraphProbe>

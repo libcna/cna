@@ -627,6 +627,20 @@ namespace CNA::TestSupport
         PixelRepConstantSwizzle,
         /** @brief Use plain identity sources for pixel Shader Model 3 `LOOP` and `REP`. */
         PixelPlainLoopRepOperands,
+        /** @brief Omit the required comparison control from a pixel Shader Model 3 `SETP`. */
+        PixelSetpMissingComparison,
+        /** @brief Use the upper reserved comparison control in a pixel Shader Model 3 `SETP`. */
+        PixelSetpReservedComparison,
+        /** @brief Omit the required comparison control from a pixel Shader Model 3 `IFC`. */
+        PixelIfcMissingComparison,
+        /** @brief Use the upper reserved comparison control in a pixel Shader Model 3 `IFC`. */
+        PixelIfcReservedComparison,
+        /** @brief Omit the required comparison control from a pixel Shader Model 3 `BREAKC`. */
+        PixelBreakcMissingComparison,
+        /** @brief Use the upper reserved comparison control in a pixel Shader Model 3 `BREAKC`. */
+        PixelBreakcReservedComparison,
+        /** @brief Use all six legal pixel Shader Model 3 comparison controls. */
+        PixelComparisonControls1Through6,
         /** @brief Emit one legal loop/repeat level in an exact vertex Shader Model 2.0 program. */
         Vertex20LoopRepDepth1,
         /** @brief Emit two loop/repeat levels in an exact vertex Shader Model 2.0 program. */
@@ -695,6 +709,20 @@ namespace CNA::TestSupport
         Vertex30RepConstantSwizzle,
         /** @brief Use plain identity sources for vertex Shader Model 3 `LOOP` and `REP`. */
         Vertex30PlainLoopRepOperands,
+        /** @brief Omit the required comparison control from a vertex Shader Model 3 `SETP`. */
+        Vertex30SetpMissingComparison,
+        /** @brief Use the upper reserved comparison control in a vertex Shader Model 3 `SETP`. */
+        Vertex30SetpReservedComparison,
+        /** @brief Omit the required comparison control from a vertex Shader Model 3 `IFC`. */
+        Vertex30IfcMissingComparison,
+        /** @brief Use the upper reserved comparison control in a vertex Shader Model 3 `IFC`. */
+        Vertex30IfcReservedComparison,
+        /** @brief Omit the required comparison control from a vertex Shader Model 3 `BREAKC`. */
+        Vertex30BreakcMissingComparison,
+        /** @brief Use the upper reserved comparison control in a vertex Shader Model 3 `BREAKC`. */
+        Vertex30BreakcReservedComparison,
+        /** @brief Use all six legal vertex Shader Model 3 comparison controls. */
+        Vertex30ComparisonControls1Through6,
     };
 
     /** @brief Shader-stage/profile program used to probe D3D9 subroutine call-graph rules. */
@@ -2734,7 +2762,7 @@ namespace CNA::TestSupport
                 SyntheticDeclarationModifierProbe::Pixel30SamplerCentroid;
         const bool probesPixelFlowControl =
             flowControlProbe >= SyntheticFlowControlProbe::ProperlyNestedLoopIf &&
-            flowControlProbe <= SyntheticFlowControlProbe::PixelPlainLoopRepOperands;
+            flowControlProbe <= SyntheticFlowControlProbe::PixelComparisonControls1Through6;
         const bool probesPixelCallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Pixel2xDepth4 &&
             callGraphProbe <= SyntheticCallGraphProbe::Pixel30PlainLabelOperands;
@@ -5986,6 +6014,34 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, source(regPredicate, 0, swizzle, modifier));
                 AppendUInt32(shader, 0x00000027u); // endrep
             };
+            const auto appendSetp = [&](std::uint32_t control)
+            {
+                AppendUInt32(shader,
+                             0x0000005Eu | (control << 16u) |
+                                 (3u << 24)); // setp_comp p0, c0, c0
+                AppendUInt32(shader, destination(regPredicate, 0, 0xFu));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, source(regConst, 0));
+            };
+            const auto appendIfcControl = [&](std::uint32_t control)
+            {
+                AppendUInt32(shader,
+                             0x00000029u | (control << 16u) |
+                                 (2u << 24)); // if_comp c0.x, c0.y
+                AppendUInt32(shader, source(regConst, 0, 0x00u));
+                AppendUInt32(shader, source(regConst, 0, 0x55u));
+                AppendUInt32(shader, 0x0000002Bu); // endif
+            };
+            const auto appendBreakcControl = [&](std::uint32_t control)
+            {
+                appendRep();
+                AppendUInt32(shader,
+                             0x0000002Du | (control << 16u) |
+                                 (2u << 24)); // break_comp c0.x, c0.y
+                AppendUInt32(shader, source(regConst, 0, 0x00u));
+                AppendUInt32(shader, source(regConst, 0, 0x55u));
+                AppendUInt32(shader, 0x00000027u); // endrep
+            };
 
             AppendUInt32(shader, 0x0000002Fu | (2u << 24)); // defb b0, true
             AppendUInt32(shader, destination(regConstBool, 0, 0x1u));
@@ -6188,6 +6244,32 @@ namespace CNA::TestSupport
                     AppendUInt32(shader, 0x0000001Du); // endloop
                     appendRep();
                     AppendUInt32(shader, 0x00000027u); // endrep
+                    break;
+                case SyntheticFlowControlProbe::PixelSetpMissingComparison:
+                    appendSetp(0u);
+                    break;
+                case SyntheticFlowControlProbe::PixelSetpReservedComparison:
+                    appendSetp(7u);
+                    break;
+                case SyntheticFlowControlProbe::PixelIfcMissingComparison:
+                    appendIfcControl(0u);
+                    break;
+                case SyntheticFlowControlProbe::PixelIfcReservedComparison:
+                    appendIfcControl(7u);
+                    break;
+                case SyntheticFlowControlProbe::PixelBreakcMissingComparison:
+                    appendBreakcControl(0u);
+                    break;
+                case SyntheticFlowControlProbe::PixelBreakcReservedComparison:
+                    appendBreakcControl(7u);
+                    break;
+                case SyntheticFlowControlProbe::PixelComparisonControls1Through6:
+                    for (std::uint32_t control = 1u; control <= 6u; ++control)
+                    {
+                        appendSetp(control);
+                        appendIfcControl(control);
+                        appendBreakcControl(control);
+                    }
                     break;
                 case SyntheticFlowControlProbe::None:
                 case SyntheticFlowControlProbe::Vertex20LoopRepDepth1:
@@ -6996,6 +7078,10 @@ namespace CNA::TestSupport
         const bool probesVertex30LoopRepOperand =
             flowControlProbe >= SyntheticFlowControlProbe::Vertex30LoopCounterNegate &&
             flowControlProbe <= SyntheticFlowControlProbe::Vertex30PlainLoopRepOperands;
+        const bool probesVertex30ComparisonControl =
+            flowControlProbe >= SyntheticFlowControlProbe::Vertex30SetpMissingComparison &&
+            flowControlProbe <=
+                SyntheticFlowControlProbe::Vertex30ComparisonControls1Through6;
         const bool probesVertexCallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Vertex20Depth1 &&
             callGraphProbe <= SyntheticCallGraphProbe::Vertex30PlainLabelOperands;
@@ -7044,6 +7130,7 @@ namespace CNA::TestSupport
             probesVertexRelativeAddressing || probesVertexSemanticDeclarations ||
             probesVertexDeclarationModifier ||
             probesVertex30PredicateFlowOperand || probesVertex30LoopRepOperand ||
+            probesVertex30ComparisonControl ||
             probesVertex30CallGraph ||
             probesMissingVertexSamplerDeclaration ||
             probesVertexImmediateConstantDefinition || probesVertexSamplerDuplicate;
@@ -8424,6 +8511,82 @@ namespace CNA::TestSupport
                                     repConstantSwizzle ? 0x00u : 0xE4u,
                                     repConstantNegate ? 1u : 0u));
                 AppendUInt32(shader, 0x00000027u); // endrep
+            }
+            AppendUInt32(shader, 0x00000014u | (3u << 24)); // m4x4 o0, v0, c0
+            AppendUInt32(shader, destination(regTexCoordOut, 0));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(regConst, 0));
+        }
+        else if (probesVertex30ComparisonControl)
+        {
+            const bool setp =
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30SetpMissingComparison ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30SetpReservedComparison;
+            const bool ifc =
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30IfcMissingComparison ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30IfcReservedComparison;
+            const bool breakc =
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30BreakcMissingComparison ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30BreakcReservedComparison;
+            const bool reserved =
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30SetpReservedComparison ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30IfcReservedComparison ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30BreakcReservedComparison;
+            const bool allControls =
+                flowControlProbe ==
+                SyntheticFlowControlProbe::Vertex30ComparisonControls1Through6;
+
+            const auto appendSetp = [&](std::uint32_t control)
+            {
+                AppendUInt32(shader,
+                             0x0000005Eu | (control << 16u) |
+                                 (3u << 24)); // setp_comp p0, c0, c0
+                AppendUInt32(shader, destination(regPredicate, 0, 0xFu));
+                AppendUInt32(shader, source(regConst, 0));
+                AppendUInt32(shader, source(regConst, 0));
+            };
+            const auto appendIfc = [&](std::uint32_t control)
+            {
+                AppendUInt32(shader,
+                             0x00000029u | (control << 16u) |
+                                 (2u << 24)); // if_comp c0.x, c0.y
+                AppendUInt32(shader, source(regConst, 0, 0x00u));
+                AppendUInt32(shader, source(regConst, 0, 0x55u));
+                AppendUInt32(shader, 0x0000002Bu); // endif
+            };
+            const auto appendBreakc = [&](std::uint32_t control)
+            {
+                AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
+                AppendUInt32(shader, source(regConstInt, 0));
+                AppendUInt32(shader,
+                             0x0000002Du | (control << 16u) |
+                                 (2u << 24)); // break_comp c0.x, c0.y
+                AppendUInt32(shader, source(regConst, 0, 0x00u));
+                AppendUInt32(shader, source(regConst, 0, 0x55u));
+                AppendUInt32(shader, 0x00000027u); // endrep
+            };
+
+            AppendUInt32(shader, 0x00000030u | (5u << 24)); // defi i0, 1, 0, 1, 0
+            AppendUInt32(shader, destination(regConstInt, 0, 0xFu));
+            AppendUInt32(shader, 1u);
+            AppendUInt32(shader, 0u);
+            AppendUInt32(shader, 1u);
+            AppendUInt32(shader, 0u);
+            if (allControls)
+            {
+                for (std::uint32_t control = 1u; control <= 6u; ++control)
+                {
+                    appendSetp(control);
+                    appendIfc(control);
+                    appendBreakc(control);
+                }
+            }
+            else
+            {
+                const std::uint32_t control = reserved ? 7u : 0u;
+                if (setp) appendSetp(control);
+                else if (ifc) appendIfc(control);
+                else if (breakc) appendBreakc(control);
             }
             AppendUInt32(shader, 0x00000014u | (3u << 24)); // m4x4 o0, v0, c0
             AppendUInt32(shader, destination(regTexCoordOut, 0));
