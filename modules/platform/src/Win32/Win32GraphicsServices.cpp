@@ -211,6 +211,13 @@ namespace CNA::Platform::Win32 {
     {
         if (context == nullptr)
         {
+            // Unbinding when nothing is bound is cleanup, not an error -- it legitimately runs
+            // after a partial initialization, and a renderer's teardown path calls it
+            // unconditionally. Some drivers (and Wine) fail wglMakeCurrent(null, null) outright
+            // with ERROR_INVALID_HANDLE in that state, so the no-op is recognised here rather
+            // than reported as a failure the caller can do nothing about.
+            if (wglGetCurrentContext() == nullptr)
+                return;
             if (wglMakeCurrent(nullptr, nullptr) == FALSE)
                 ThrowLastError("Win32GlContext::MakeCurrent");
             return;

@@ -108,5 +108,37 @@ foreach(_cna_runtime_dll libgcc_s_seh-1.dll libgcc_s_dw2-1.dll libgcc_s_sjlj-1.d
     endif()
 endforeach()
 
+# Points Win32NoSdlTests at the tree it audits. Under Wine the host filesystem is reached as the
+# Z: drive, so a bare POSIX path would simply not open and the audit would skip rather than run --
+# the same reasoning as cmake/UnitTests.cmake's copy of this.
+if(CMAKE_CROSSCOMPILING)
+    set(CNA_WIN32_SOURCE_ROOT "Z:${CNA_ROOT}/modules/platform/src/Win32")
+else()
+    set(CNA_WIN32_SOURCE_ROOT "${CNA_ROOT}/modules/platform/src/Win32")
+endif()
+target_compile_definitions(cna_platform_win32_tests
+        PRIVATE CNA_WIN32_SOURCE_ROOT="${CNA_WIN32_SOURCE_ROOT}")
+
+# --- the real renderer integration probe (plans/plan_win32.md WIN32-0062/WIN32-0063) -------------
+# A separate program rather than a test case: it needs d3d11/d3d12/dxgi, and a GPU dependency does
+# not belong in the platform module's own suite -- `platform != renderer` is exactly the invariant
+# this workstream exists to keep. It also reports "no Direct3D on this machine" as a distinct exit
+# status, because that is an environment limitation rather than a defect.
+add_executable(cna_win32_directx_probe win32_directx_probe.cpp)
+target_link_libraries(cna_win32_directx_probe PRIVATE cna_platform_win32 d3d11 d3d12 dxgi)
+target_compile_options(cna_win32_directx_probe PRIVATE -Wall -Wextra)
+foreach(_cna_runtime_dll libgcc_s_seh-1.dll libgcc_s_dw2-1.dll libgcc_s_sjlj-1.dll
+                         libstdc++-6.dll libwinpthread-1.dll)
+    execute_process(COMMAND "${CMAKE_CXX_COMPILER}" "-print-file-name=${_cna_runtime_dll}"
+            OUTPUT_VARIABLE _cna_runtime_path OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(_cna_runtime_path AND _cna_runtime_path MATCHES "[/\\\\]" AND EXISTS "${_cna_runtime_path}")
+        file(TO_CMAKE_PATH "${_cna_runtime_path}" _cna_runtime_path)
+        add_custom_command(TARGET cna_win32_directx_probe POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${_cna_runtime_path}" $<TARGET_FILE_DIR:cna_win32_directx_probe>
+                VERBATIM)
+    endif()
+endforeach()
+
 enable_testing()
 add_test(NAME CnaPlatformWin32Tests COMMAND cna_platform_win32_tests)

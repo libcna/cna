@@ -107,6 +107,11 @@ def classify(record: FileRecord) -> str | None:
     if path in {
         "modules/content/tests/CNA/Internal/GltfImport/GltfFixtureCorpusTests.cpp",
         "modules/content/tests/CNA/Internal/GltfImport/GltfRendererPbrFallbackPolicyTests.cpp",
+        # plans/plan_win32.md WIN32-0061. Reads the native Win32 backend's own sources and asserts
+        # that none of them references SDL. The only SDL tokens in it are the needles it searches
+        # for, which is what this category exists for -- and a test that enforces the absence of a
+        # dependency is the last place the manifest should push someone to weaken.
+        "modules/platform/tests/CNA/Platform/Win32NoSdlTests.cpp",
     }:
         return "text-evidence-assertion"
 

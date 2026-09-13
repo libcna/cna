@@ -1014,6 +1014,26 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    if(CNA_PLATFORM STREQUAL "WIN32" AND TARGET ${CNA_TEST_OBJECT_TARGET_platform})
+        # plans/plan_win32.md WIN32-0061: Win32NoSdlTests reads the backend's own sources and
+        # asserts that none of them mentions SDL, carries no unrecorded TODO, and reaches
+        # <windows.h> only through the module's one guarded entry point. It needs to be told where
+        # that tree is; without the path it skips rather than passing vacuously.
+        #
+        # Under a mingw-w64 cross-build the produced .exe runs through Wine, which reaches the
+        # host filesystem as the Z: drive -- a bare POSIX path would simply not open. The native
+        # Windows build needs no such prefix.
+        if(CMAKE_CROSSCOMPILING)
+            set(_cna_win32_source_root "Z:${CMAKE_SOURCE_DIR}/modules/platform/src/Win32")
+        else()
+            set(_cna_win32_source_root "${CMAKE_SOURCE_DIR}/modules/platform/src/Win32")
+        endif()
+        target_compile_definitions(${CNA_TEST_OBJECT_TARGET_platform} PRIVATE
+            CNA_WIN32_SOURCE_ROOT="${_cna_win32_source_root}"
+        )
+        unset(_cna_win32_source_root)
+    endif()
+
     if(TARGET cna_platform_terminal_restoration_harness)
         # plans/plan_platform.md PLAT-131: same reasoning as cna_net_two_process_harness above, and more
         # sharply -- four of the five exit paths TerminalSession must restore on destroy the

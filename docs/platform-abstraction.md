@@ -188,6 +188,21 @@ The platform boundary is outside inner draw, audio-callback and input-element lo
 The checked-in performance baseline and PLAT-120 comparison define the measured noise floor; a
 regression beyond it is investigated rather than waived.
 
+## Implementations
+
+| `CNA_PLATFORM` | Implementation | Availability | Capability boundary |
+|---|---|---|---|
+| `SDL3` (default) | `CNA::Platform::Sdl3` | everywhere | the reference the conformance suite compares others against |
+| `SDL2` | `CNA::Platform::Sdl2` | everywhere | [`docs/platform-sdl2.md`](platform-sdl2.md) |
+| `WIN32` | `CNA::Platform::Win32` | Windows targets only | [`docs/platform-win32.md`](platform-win32.md) |
+| `HEADLESS` | `CNA::Platform::Headless` | everywhere, and always compiled | no window, no display, no input; every refusal path |
+| `TERMINAL` | `CNA::Platform::Terminal` | POSIX targets only | [`docs/platform-terminal-analysis.md`](platform-terminal-analysis.md) |
+
+`HEADLESS` is compiled into every binary whatever the selection says, and `TERMINAL` into every
+POSIX one, because the conformance suite needs more than one implementation live in one process to
+be worth anything. `WIN32` is compiled only when selected: every one of its translation units
+includes `<windows.h>`, so there is nothing to compile it against elsewhere.
+
 ## Adding an implementation
 
 1. Add `modules/platform/src/<Name>/` and implement the entire `IPlatform` surface. Share only

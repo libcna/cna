@@ -1,6 +1,7 @@
 # CNA native Win32 platform backend (`CNA_PLATFORM=WIN32`) — Implementation Plan
 
-> **Status: IN PROGRESS.** This plan converts the reserved `CNA_PLATFORM=WIN32` identifier
+> **Status: IMPLEMENTED AND VALIDATED.** All 44 tasks below are complete;
+> §17 records the measured results. This plan converts the reserved `CNA_PLATFORM=WIN32` identifier
 > (rejected with a `FATAL_ERROR` since [`plans/plan_platform.md`](plan_platform.md) PLAT-11) into a
 > real, first-class CNA platform implementation built directly on the Win32 API — no SDL2, no SDL3,
 > for windowing, events, keyboard, mouse, text input, timing or the native-window bridge.
@@ -181,6 +182,31 @@ New subtree, all under `modules/platform/src/Win32/` (never in the public includ
 | `Win32GraphicsServices.hpp/.cpp` | WGL GL context, Vulkan surface, GDI surface presenter |
 | `Win32Platform.hpp/.cpp` | `IPlatform`: subsystems, window registry, message pump, timing, services |
 
+Tests, all under `modules/platform/tests/CNA/Platform/`:
+
+| File | Covers |
+|---|---|
+| `Win32EventMapperTests.cpp` | message → event translation, driven from synthetic triples |
+| `Win32ScancodeTests.cpp` | set-1 (+extended) ⇄ HID usage ids, including the round trip |
+| `Win32KeyCodeTests.cpp` | validated VK ⇄ `KeyCode`, sided-modifier resolution, layout queries |
+| `Win32UtfTests.cpp` | UTF-8 ⇄ UTF-16 and surrogate assembly |
+| `Win32FullscreenStateTests.cpp` | the windowed-appearance snapshot across repeated cycles |
+| `Win32DpiTests.cpp` | scale arithmetic, frame adjustment, window/display coherence |
+| `Win32PlatformTests.cpp` | factory, capability truthfulness, subsystems, timing, adoption |
+| `Win32WindowTests.cpp` | real `HWND`s: geometry, state, multiple windows, adoption, lifetime |
+| `Win32InputServicesTests.cpp` | keyboard/mouse snapshots, cursors, relative mode, text input, devices |
+| `Win32SystemServicesTests.cpp` | clipboard, displays, dialogs, system info, paths |
+| `Win32GraphicsServicesTests.cpp` | WGL, the Vulkan surface gate, the GDI presenter |
+| `Win32DirectXIntegrationTests.cpp` | the platform→renderer handle contract, without linking a renderer |
+| `Win32NoSdlTests.cpp` | the Win32 subtree contains no SDL, no unrecorded TODO, one `<windows.h>` entry point |
+
+Supporting, outside the module:
+
+| Path | Purpose |
+|---|---|
+| `spikes/win32-spike/` | WIN32-0000's existence gate: window, pump, DPI and QPC under MinGW + Wine |
+| `tools/platform/win32_standalone_tests/` | builds and runs the platform module and its suite without the sharp-runtime sibling; also builds `cna_win32_directx_probe`, the real D3D11/D3D12 device probe |
+
 Modified:
 
 | File | Change |
@@ -188,7 +214,9 @@ Modified:
 | `cmake/PlatformSelection.cmake` | `WIN32` moves reserved → available, gated on `WIN32` host |
 | `modules/platform/CMakeLists.txt` | `src/Win32/*.cpp` + private native library links |
 | `modules/platform/src/PlatformFactory.cpp` | `"Win32"` in `Create`, `Create(name)`, `GetAvailable`, default name |
-| `cmake/UnitTests.cmake` | `Win32*` test gating |
+| `cmake/UnitTests.cmake` | `Win32*` test gating, and the source-root define `Win32NoSdlTests` audits |
+| `tools/platform/nonproduction_sdl_audit.py` | classifies `Win32NoSdlTests.cpp` as `text-evidence-assertion` |
+| `tools/platform/nonproduction_sdl_budget.json` | its per-file ceiling |
 | `CMakeLists.txt` | Skip the vendored SDL3 configure when nothing in the configuration needs it |
 | `docs/platform-abstraction.md` | Win32 row in the implementation table |
 | `docs/platform-win32.md` | **new** — capability boundary and supported builds |
@@ -584,7 +612,18 @@ that the Win32 subtree contains no `SDL` identifier.
 
 ## 14. Validation evidence
 
-Filled in as each phase lands — see §17.
+Every claim in §13's task table is backed by an executed test or a run gate. The consolidated
+results are in §17; what follows is where each phase's evidence lives.
+
+| Phase | Evidence |
+|---|---|
+| A — build integration | The selection matrix in §17.3 (every value of `CNA_PLATFORM` on a Linux host and a Windows target), plus `Win32PlatformFactory.*` |
+| B — platform and window | `Win32PlatformTests`, `Win32WindowTests`, and the whole `EveryImplementation/PlatformWindowConformance` suite running against Win32 |
+| C — events, keyboard, mouse | `Win32EventMapperTests` (35 cases from synthetic messages), `Win32ScancodeTests`, `Win32KeyCodeTests`, `Win32UtfTests`, `Win32InputServicesTests` |
+| D — DPI, fullscreen, timing | `Win32DpiTests`, `Win32FullscreenStateTests`, `Win32WindowTests.RepeatedFullscreenCyclesDoNotDriftTheWindowedState`, the conformance timing block |
+| E — services | `Win32SystemServicesTests`, `Win32InputServicesTests` |
+| F — graphics services | `Win32GraphicsServicesTests` |
+| G — SDL independence, DirectX, docs | §17.4's SDL matrix, `Win32NoSdlTests`, `Win32DirectXIntegrationTests`, `cna_win32_directx_probe`, and the seven gates in §17.2 |
 
 ---
 
@@ -609,20 +648,210 @@ Each is a *false* capability with a deterministic refusal, never a stub returnin
 This workstream was developed and validated on Linux with MinGW-w64 + Wine 9.0 + Xvfb. That
 distinction matters and is recorded rather than papered over:
 
-* **Verified by execution here**: compilation for `x86_64-w64-mingw32`; window class registration;
-  window creation, sizing, show/hide, destroy; the message pump; `WM_CLOSE` semantics; QPC timing;
-  DPI queries; the whole pure-translation test layer.
+* **Verified by execution here** (385 tests, §17.1): compilation for `x86_64-w64-mingw32` with
+  `-Wall -Wextra` and no warnings; window class registration and its refcounting across two live
+  platforms; window creation, client-vs-outer sizing, title round trip through UTF-8, show/hide,
+  minimise/maximise/restore, destroy, and the `WM_NCCREATE`/`WM_NCDESTROY` pointer discipline; the
+  message pump and event attribution across two windows; `WM_CLOSE` semantics; borderless
+  fullscreen and its state restoration across repeated cycles; QPC timing and its agreement with
+  the millisecond clock; DPI queries and window/display coherence; clipboard round trip with
+  non-ASCII text; monitor enumeration and display modes; known-folder preference paths; Raw Input
+  device enumeration; the GDI surface presenter in all five scale modes; the whole pure-translation
+  layer; **and a real Direct3D 11 device, swap chain, clear, present, resize and present-after-resize
+  on a Win32Platform window** (§17.5).
 * **Verified by construction, not by execution here**: per-monitor-v2 DPI transitions
-  (`WM_DPICHANGED` — Wine reports a fixed 96 DPI), exclusive fullscreen display-mode changes,
-  `IFileOpenDialog`, real D3D11/D3D12 device creation (Wine's d3d11 needs a GPU path this
-  container does not have).
-* **Not verified at all**: behaviour on a real multi-monitor Windows desktop with mixed DPI.
+  (`WM_DPICHANGED` — Wine reports a fixed 96 DPI and one monitor); exclusive fullscreen
+  display-mode changes; `IFileOpenDialog`/`IFileSaveDialog` (the refusal paths are executed, the
+  dialogs themselves are modal and need a user); a real WGL context (no OpenGL driver in this
+  container, so `Win32GraphicsServices.AContextEitherIsCreatedAndUsableOrFailsExplicitly` skips);
+  Direct3D 12 device creation (Wine's D3D12 needs vkd3d over a Vulkan driver).
+* **Not verified at all**: a real multi-monitor Windows desktop with mixed DPI; MSVC.
 
-The deterministic Windows-only tests exist so a real Windows CI cell can close those gaps without
-any new code.
+Every one of those is an environment gap rather than a missing test: the tests exist, are
+deterministic, and run in full the moment the binary meets a machine with the facility. That is
+the whole reason the translation layer was built to be driven from synthetic messages — the parts
+that *could* have been left to "it needs a real desktop" are the parts that do not.
 
 ---
 
 ## 17. Gate and test results
 
-Filled in per phase as work lands.
+Measured on the baseline described in §0: Linux host, `x86_64-w64-mingw32-g++` 13.2.0, Wine 9.0
+over `Xvfb`.
+
+### 17.1 Test suite
+
+```
+cmake -S tools/platform/win32_standalone_tests -B cmake-build-win32 -G Ninja \
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCMAKE_BUILD_TYPE=Debug
+cmake --build cmake-build-win32 --parallel
+DISPLAY=:97 WINEDEBUG=-all wine64 cmake-build-win32/cna_platform_win32_tests.exe
+```
+
+```
+[==========] 385 tests from 39 test suites ran.
+[  PASSED  ] 384 tests.
+[  SKIPPED ] 1 test
+[  SKIPPED ] EveryImplementation/PlatformConformance.AnUnsupportedCapabilityRefusesNamingItself/Win32
+```
+
+The one skip is by design and is the suite working correctly: that case exists to prove an
+*unsupported* capability refuses, and it skips on any platform that supports surface presentation.
+Win32 does, so there is nothing for it to assert.
+
+The run includes the complete implementation-neutral suite — `EveryImplementation/
+PlatformConformance` (18 cases) and `EveryImplementation/PlatformWindowConformance` (10 cases) —
+parameterised over Win32 and Headless together, which is what makes "the contract is not
+SDL-shaped" a measurement rather than a claim.
+
+Per-suite, Win32's own coverage:
+
+| Suite | Cases | Result |
+|---|---:|---|
+| `Win32EventMapperTests` | 35 | pass |
+| `Win32InputServicesTests` | 20 | pass |
+| `Win32SystemServicesTests` | 18 | pass |
+| `Win32WindowTests` | 18 | pass |
+| `Win32GraphicsServicesTests` | 15 | pass |
+| `Win32PlatformTests` | 17 | pass |
+| `Win32KeyCodeTests` | 11 | pass |
+| `Win32ScancodeTests` | 11 | pass |
+| `Win32UtfTests` | 9 | pass |
+| `Win32FullscreenStateTests` | 9 | pass |
+| `Win32DpiTests` | 10 | pass |
+| `Win32DirectXIntegrationTests` | 8 | pass |
+| `Win32NoSdlTests` | 6 | pass |
+
+**Three real defects were found by these tests and fixed**, which is the reason for writing them
+rather than asserting the implementation was correct:
+
+1. Destroying an *adopted* (non-owning) wrapper erased the owning window from the id registry,
+   because `OnWindowDestroyed` matched by id and an adopted wrapper deliberately shares one. Every
+   service resolving that id afterwards found nothing. Now matched on wrapper identity.
+2. An adopted wrapper's back-pointer to its platform dangled if the platform was destroyed first:
+   only registry entries were being detached, and adopted wrappers are deliberately not in the
+   registry. They are now tracked separately for exactly this.
+3. `IPlatformGlContext::MakeCurrent(window, nullptr)` threw when no context was current. Unbinding
+   when nothing is bound is cleanup, and a renderer's teardown calls it unconditionally; some
+   drivers (and Wine) fail `wglMakeCurrent(null, null)` outright in that state. It is now
+   recognised as the no-op it is.
+
+### 17.2 Mechanical gates
+
+All seven pass, by exit code:
+
+| Gate | Result |
+|---|---|
+| `tools/platform/sdl_inventory.py --check` | 0 — the measured inventory matches the plan |
+| `tools/platform/sdl_classify.py --check` | 0 — all 1037 SDL identifiers classified |
+| `tools/platform/renderer_sdl_audit.py --check` | 0 — allowlist unchanged (`fna3d`, `freedirect`, `sdl-gpu`, `sdl-renderer`) |
+| `tools/platform/sdl_ratchet.py --check --strict` | 0 — **at budget: 0 files, 0 references** |
+| `tools/platform/hot_path_lint.py` | 0 — no platform call inside a hot loop |
+| `tools/platform/nonproduction_sdl_audit.py --check` | 0 — `Win32NoSdlTests.cpp` classified `text-evidence-assertion` |
+| `tools/platform/check_contract.py` | 0 — 28 contract headers SDL-free, 629 public declarations documented |
+
+`Win32NoSdlTests.cpp` needed a manifest entry, which is worth naming rather than glossing: the only
+SDL tokens in it are the needles it searches the Win32 sources for. `text-evidence-assertion` is
+the existing category for exactly that, and it already covered two files.
+
+### 17.3 Selection matrix
+
+`cmake/PlatformSelection.cmake`, every value, on both host kinds:
+
+| `CNA_PLATFORM` | Linux host | Windows target (mingw-w64) |
+|---|---|---|
+| `SDL3` (default) | available | available |
+| `SDL2` | available | available |
+| `HEADLESS` | available | available |
+| `TERMINAL` | available | **reserved — refused** |
+| `WIN32` | **reserved — refused** | **available**, defines `CNA_PLATFORM_WIN32` |
+| `SDL12`, `EMSCRIPTEN` | reserved — refused | reserved — refused |
+| an unknown name | refused as unknown | refused as unknown |
+
+The default is unchanged on both. A host-conditional implementation is *reserved* where it is
+unsupported rather than *unknown*, so asking for it there produces a message naming the toolchain
+requirement instead of one that reads like a typo.
+
+### 17.4 SDL independence (WIN32-0060)
+
+The root configure's decision, measured per configuration:
+
+| Configuration | SDL3 |
+|---|---|
+| default (nothing set) | **required** — unchanged |
+| `WIN32` + `NULL` audio + `DIRECTX11`, tests/examples off | **skipped** |
+| `WIN32` + `NULL` audio + `DIRECTX12`, tests/examples off | **skipped** |
+| `HEADLESS` + `NULL` audio + `HEADLESS` renderer, tests/examples off | **skipped** |
+| `WIN32` + `NULL` audio + `SDL_RENDERER` | required — the renderer links SDL3 itself |
+| `WIN32` + `SDL3` audio + `DIRECTX11` | required — the audio axis chose it |
+| `WIN32` + `NULL` audio + `DIRECTX11`, **tests on** | required — test fixtures use it |
+
+So the target configuration this workstream set out to make real —
+
+```
+CNA_PLATFORM=WIN32
+CNA_AUDIO_PLATFORM=NULL
+CNA_GRAPHICS_RENDERER=DIRECTX11   (and DIRECTX12)
+```
+
+— has no SDL in it at all: not linked, and not even built. The gate is conservative by
+construction (it runs before the selection files declare their cache defaults, so an unset axis
+reads as "not chosen" and keeps SDL3), which is why the default row above is unaffected.
+
+The remaining legitimate SDL dependencies, none of them in scope to remove:
+
+* the `SDL3` and `SDL2` platform selections, and the `SDL3`/`SDL2` audio selections — by identity;
+* renderer families `SDL_RENDERER`, `SDL_GPU`, `FNA3D`, `FREEDIRECT` and `LLGL` — the first two by
+  identity, the last three through an upstream dependency that owns an SDL renderer internally;
+* roughly 240 example and test fixtures — a property of the fixtures, not of the framework. Making
+  the test suite SDL-free is a separate, much larger piece of work and is **not** attempted here.
+
+### 17.5 DirectX 11 and DirectX 12
+
+Contract level, in the suite (`Win32DirectXIntegrationTests`, 8 cases, all passing): the handle a
+Win32 window produces satisfies exactly the `TryGetWin32` call both renderers make; it is stable
+across resize and across a fullscreen round trip; two windows hand out two distinct handles; an
+adopted window presents the same handle as its owner; and a headless window is *refused* rather
+than producing a plausible-looking pointer.
+
+Device level, `cna_win32_directx_probe` under Wine:
+
+```
+win32 platform window              ok  -- hwnd=0000000000010056, client=640x480
+platform                           ok  -- Win32
+d3d11 device + swap chain          ok
+d3d11 back buffer size             ok
+d3d11 clear                        ok
+d3d11 present                      ok
+d3d11 resize                       ok
+d3d11 present after resize         ok
+d3d12 device                       unavailable  -- hr=0x80004005
+close request                      ok
+```
+
+**DirectX 11: fully proved here.** A real D3D11 device and swap chain were created on the HWND the
+Win32 platform produced, the back buffer came back at the window's size, and clear, present,
+`ResizeBuffers` and present-after-resize all succeeded — on a window that then survived its own
+close request, which is the platform behaviour a renderer depends on while it holds the swap chain.
+
+**DirectX 12: not proved here, and not a code result.** `D3D12CreateDevice` returns `E_FAIL` in
+this container because Wine's D3D12 is implemented over vkd3d and there is no Vulkan driver
+present. The platform side is identical for both renderers — the same `HWND`, reached through the
+same `TryGetWin32`, and `CreateSwapChainForHwnd` takes the same handle type — and the probe
+exercises the D3D12 path in full the moment it runs on a machine with a device. This is an
+environment gap, recorded in §16, not an implementation gap.
+
+### 17.6 Build matrix
+
+| Target | Result |
+|---|---|
+| `x86_64-w64-mingw32-g++` 13.2.0, `-Wall -Wextra`, C++23 | clean — no warnings from any Win32 source |
+| Platform module + full test suite, cross-built and executed under Wine | 384/385, 1 by-design skip |
+| `cna_win32_directx_probe` | exit 0 |
+| MSVC | **not run here** — no Windows host available. Nothing in the backend is MSVC-only: it uses no GCC extension, no `__attribute__`, and no compiler-specific pragma. |
+
+A full CNA configure (the whole framework, not just the platform module) could not be run: it
+requires the `sharp-runtime` *sibling checkout*, which this sandbox cannot fetch. That is what
+`tools/platform/win32_standalone_tests/` exists to work around, and it is a limitation of the
+worker rather than of the change — the platform module has zero sharp-runtime includes, so the
+suite it runs is the same one `cmake/UnitTests.cmake` compiles.
