@@ -304,6 +304,13 @@ namespace CNA::Internal::Renderers::Rlgl
                 Bridge::DestroySpritePipeline(pipeline_);
             }
 
+            void InvalidateNativeResource() noexcept override
+            {
+                pipeline_ = {};
+                ClearBatch();
+                begun_ = false;
+            }
+
             [[nodiscard]] int VertexCount() const
             {
                 return static_cast<int>(vertices_.size() / kFloatsPerVertex);

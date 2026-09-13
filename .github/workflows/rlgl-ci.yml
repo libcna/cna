@@ -111,6 +111,7 @@ jobs:
             cna_test_rlgl_background_content_context \
             cna_test_rlgl_resource_lifetime \
             cna_test_rlgl_resource_recovery_shadow \
+            cna_test_rlgl_context_recreate \
             cna_test_rlgl_texture \
             cna_test_rlgl_texture_cube \
             cna_test_rlgl_texture_cube_oracle \

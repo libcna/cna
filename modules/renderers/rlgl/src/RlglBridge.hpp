@@ -70,6 +70,8 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         int backStencilPass = 0;
         bool cullEnabled = false;
         int cullFace = 0;
+        std::array<int, 4> viewport{};
+        std::array<double, 2> depthRange{};
         bool scissorEnabled = false;
         std::array<int, 4> scissorBox{};
         int polygonMode = 0;
@@ -276,6 +278,14 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
 
     /** @brief Releases rlgl's default resources while its context is current. */
     void Shutdown() noexcept;
+
+    /**
+     * @brief Abandons old-context GPU identities while freeing rlgl's CPU allocations only.
+     *
+     * This must be used after a context-loss notification and before a replacement context is
+     * created. It deliberately issues no OpenGL calls.
+     */
+    void AbandonLostContext() noexcept;
 
     /**
      * @brief Updates rlgl's physical framebuffer bookkeeping.

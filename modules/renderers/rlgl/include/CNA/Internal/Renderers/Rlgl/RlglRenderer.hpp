@@ -5,7 +5,10 @@
 #include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 
 #include <array>
+#include <atomic>
+#include <functional>
 #include <memory>
+#include <string>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -28,6 +31,50 @@ namespace CNA::Internal::Renderers::Rlgl
         struct CompiledEffectDrawResources;
         struct PrimitivePipeline;
     }
+
+    /** @brief Observable stages of the RLGL native-context recovery transaction. */
+    enum class RlglContextRecoveryState
+    {
+        /** @brief The renderer owns a complete native context and accepts draw work. */
+        Available,
+        /** @brief Native identities were invalidated after a reported context loss. */
+        Lost,
+        /** @brief A replacement context and renderer state are being constructed. */
+        Recreating,
+        /** @brief The latest recreation attempt failed and drawing remains closed. */
+        Unavailable
+    };
+
+    /** @brief Context-recovery facts exposed to focused RLGL validation. */
+    struct RlglContextRecoverySnapshot
+    {
+        /** @brief Current availability stage. */
+        RlglContextRecoveryState state = RlglContextRecoveryState::Available;
+        /** @brief Number of successfully initialized native contexts, including the first. */
+        std::size_t contextGeneration = 0;
+        /** @brief Whether standalone rlgl is initialized in the current context. */
+        bool rlglInitialized = false;
+        /** @brief Number of sampler slots whose native objects must survive recreation. */
+        std::size_t realizedSamplers = 0;
+        /** @brief Number of those sampler slots that currently own replacement objects. */
+        std::size_t liveSamplers = 0;
+        /** @brief Current native sampler identities by slot. */
+        std::array<unsigned int, 16> samplerIds{};
+        /** @brief Whether the lazy stock primitive pipeline has been realized. */
+        bool primitivePipelineRealized = false;
+        /** @brief Whether the current context owns the realized stock primitive pipeline. */
+        bool primitivePipelineLive = false;
+        /** @brief Whether the optional compiled-draw VAO set has been realized. */
+        bool compiledDrawResourcesRealized = false;
+        /** @brief Whether the optional compiled-draw VAO set is live now. */
+        bool compiledDrawResourcesLive = false;
+        /** @brief Whether the optional MojoShader GL context has been realized. */
+        bool mojoShaderContextRealized = false;
+        /** @brief Whether the optional MojoShader GL context is live now. */
+        bool mojoShaderContextLive = false;
+        /** @brief Stable diagnostic from the latest failed recreation attempt. */
+        std::string unavailableReason;
+    };
 
     /**
      * @brief Standalone-rlgl renderer device using a CNA-owned OpenGL 3.3 core context.
@@ -70,6 +117,25 @@ namespace CNA::Internal::Renderers::Rlgl
          * @param enabled True to register future resources for recovery.
          */
         void SetContextRecoveryEnabled(bool enabled) override;
+
+        /**
+         * @brief Reports whether the native context transaction currently permits drawing.
+         * @return True only while the renderer is fully available.
+         */
+        [[nodiscard]] bool CanBeginDrawEXT() const override;
+
+        /** @brief Simulates native context loss and raises the renderer device-lost event. */
+        void DebugSimulateContextLoss() override;
+
+        /** @brief Attempts context recreation and raises resetting/reset events in order. */
+        void DebugRestoreContext() override;
+
+        /**
+         * @brief Captures the current context-recovery state for focused validation.
+         * @return State, generation, realized core objects, and any failure diagnostic.
+         */
+        [[nodiscard]] RlglContextRecoverySnapshot
+            GetContextRecoverySnapshotForTesting() const;
 
         /** @brief RLGL devices cannot be copied because each owns a GL context lifecycle. */
         RlglRenderer(const RlglRenderer&) = delete;
@@ -720,19 +786,76 @@ namespace CNA::Internal::Renderers::Rlgl
             int maxAnisotropy = 4;
             int maxMipLevel = 0;
             float lodBias = 0.0f;
+            bool realized = false;
         };
 
         struct StencilRecord
         {
+            bool stateApplied = false;
+            bool depthEnableAssigned = false;
+            bool depthWriteAssigned = false;
+            bool depthEnable = false;
+            bool depthWriteEnable = false;
+            int depthFunction = 0;
             bool enabled = false;
             bool twoSided = false;
             int function = 0;
             int counterClockwiseFunction = 0;
             int readMask = 0;
+            int writeMask = 0;
             int reference = 0;
+            int pass = 0;
+            int fail = 0;
+            int depthFail = 0;
+            int counterClockwisePass = 0;
+            int counterClockwiseFail = 0;
+            int counterClockwiseDepthFail = 0;
+            bool referenceAssigned = false;
+        };
+
+        struct BlendRecord
+        {
+            bool stateApplied = false;
+            int colorSource = 0;
+            int alphaSource = 0;
+            int colorDestination = 0;
+            int alphaDestination = 0;
+            int colorFunction = 0;
+            int alphaFunction = 0;
+            BlendWriteState writeState{};
+            bool factorApplied = false;
+            std::array<float, 4> factor{{1.0f, 1.0f, 1.0f, 1.0f}};
+            bool enabledApplied = false;
+            bool enabled = false;
+        };
+
+        struct ViewportRecord
+        {
+            bool applied = false;
+            int x = 0;
+            int y = 0;
+            int width = 0;
+            int height = 0;
+            float minDepth = 0.0f;
+            float maxDepth = 1.0f;
+        };
+
+        struct ScissorRecord
+        {
+            bool applied = false;
+            int x = 0;
+            int y = 0;
+            int width = 0;
+            int height = 0;
         };
 
         void CreateContext(int requestedMultiSampleCount);
+        [[nodiscard]] std::string InitializeContextState();
+        void InvalidateRendererNativeState() noexcept;
+        void DestroyRendererNativeState() noexcept;
+        void RestoreRendererNativeState();
+        void ReapplyDeviceState();
+        void NotifyDeviceEvent(RendererDeviceEvent event);
         void GetPhysicalSize(int& width, int& height) const;
         void GetLogicalSize(int& width, int& height) const;
         SamplerRecord& GetSamplerRecord(int slot);
@@ -774,7 +897,10 @@ namespace CNA::Internal::Renderers::Rlgl
         int maxRenderTargets_ = 1;
         float maxSamplerAnisotropy_ = 1.0f;
         std::array<SamplerRecord, 16> samplers_{};
+        BlendRecord blend_{};
         StencilRecord stencil_{};
+        ViewportRecord viewport_{};
+        ScissorRecord scissor_{};
         int currentViewportWidth_ = 0;
         int currentViewportHeight_ = 0;
         bool viewportIsDefault_ = true;
@@ -791,6 +917,17 @@ namespace CNA::Internal::Renderers::Rlgl
         bool rasterizerScissorTestEnabled_ = false;
         float rasterizerDepthBias_ = 0.0f;
         float rasterizerSlopeScaleDepthBias_ = 0.0f;
+        bool rasterizerStateApplied_ = false;
+        bool restorePrimitivePipeline_ = false;
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        bool restoreCompiledDrawResources_ = false;
+        bool restoreMojoShaderContext_ = false;
+#endif
+        std::function<void(RendererDeviceEvent)> deviceEventCallback_;
+        std::atomic<RlglContextRecoveryState> contextRecoveryState_{
+            RlglContextRecoveryState::Available};
+        std::size_t contextGeneration_ = 0;
+        std::string unavailableReason_;
         bool lifecycleClaimed_ = false;
         bool rlglInitialized_ = false;
         bool registered_ = false;

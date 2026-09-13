@@ -240,6 +240,15 @@ namespace CNA::Internal::Renderers::Rlgl
                 Bridge::DestroyRenderTarget2D(storage_);
             }
 
+            void InvalidateNativeResource() noexcept override
+            {
+                storage_.framebuffer = 0;
+                storage_.resolveFramebuffer = 0;
+                storage_.colorTexture = 0;
+                storage_.multisampleColorRenderbuffer = 0;
+                storage_.depthStencilRenderbuffer = 0;
+            }
+
             [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
             {
                 return {0, 0, true};

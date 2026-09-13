@@ -11,10 +11,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <functional>
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 namespace CNA::Internal::Renderers::Rlgl
@@ -75,6 +77,18 @@ namespace CNA::Internal::Renderers::Rlgl
             lifecycleActive = false;
         }
 
+        void ThrowInjectedRecreateFailure(const char* const stage)
+        {
+            const char* const requested =
+                std::getenv("CNA_RLGL_DEBUG_FAIL_RECREATE_STAGE");
+            if (requested != nullptr && std::string_view(requested) == stage)
+            {
+                throw std::runtime_error(
+                    std::string("RLGL: injected context recreation failure at stage '") +
+                    stage + "'");
+            }
+        }
+
         [[noreturn]] void Unsupported(const char* operation, const char* task)
         {
             throw System::NotSupportedException(
@@ -113,6 +127,25 @@ namespace CNA::Internal::Renderers::Rlgl
             static thread_local std::unordered_map<
                 const RlglThreadContextLeaseControl*, RlglThreadContextLeaseState> states;
             return states;
+        }
+
+        void RetargetThreadContextLeaseBinding(
+            const RlglThreadContextLeaseControl& control,
+            const CNA::Platform::GlContextHandle oldContext,
+            const CNA::Platform::GlContextBinding& replacement)
+        {
+            auto& states = ThreadContextLeaseStates();
+            const auto state = states.find(&control);
+            if (state != states.end() && state->second.previousBinding.context == oldContext)
+                state->second.previousBinding = replacement;
+        }
+
+        [[nodiscard]] bool HasActiveThreadContextLease(
+            const RlglThreadContextLeaseControl& control)
+        {
+            const auto& states = ThreadContextLeaseStates();
+            const auto state = states.find(&control);
+            return state != states.end() && state->second.depth > 0;
         }
 
         void ReleaseThreadContextLease(
@@ -193,6 +226,18 @@ namespace CNA::Internal::Renderers::Rlgl
 
         const std::scoped_lock lock(control->mutex);
         recoveryEnabled_.store(enabled, std::memory_order_release);
+    }
+
+    void RlglResourceLifetime::InvalidateNativeResourcesForContextLoss() noexcept
+    {
+        const auto control = contextControl_.lock();
+        if (!control) return;
+
+        const std::scoped_lock lock(control->mutex);
+        if (!active_.load(std::memory_order_acquire)) return;
+        for (auto resource = resources_.rbegin(); resource != resources_.rend(); ++resource)
+            (*resource)->InvalidateNativeResource();
+        contextLossInvalidations_.fetch_add(1, std::memory_order_relaxed);
     }
 
     void RlglResourceLifetime::Dispose(IRlglNativeResource& resource) noexcept
@@ -302,6 +347,8 @@ namespace CNA::Internal::Renderers::Rlgl
             snapshot.active = active_.load(std::memory_order_acquire);
             snapshot.recoveryResources =
                 registeredRecoveryResources_.load(std::memory_order_relaxed);
+            snapshot.contextLossInvalidations =
+                contextLossInvalidations_.load(std::memory_order_relaxed);
             snapshot.recoveryEnabledForNewResources =
                 recoveryEnabled_.load(std::memory_order_acquire);
         };
@@ -333,6 +380,7 @@ namespace CNA::Internal::Renderers::Rlgl
         , virtualHeight_(args.virtualHeight)
         , presentationMode_(args.presentationMode)
         , swapInterval_(args.swapInterval)
+        , deviceEventCallback_(args.deviceEventCallback)
     {
         RequirePlatformGlWindow(args.surface, kRendererName);
         ClaimLifecycle();
@@ -341,24 +389,8 @@ namespace CNA::Internal::Renderers::Rlgl
         try
         {
             CreateContext(args.multiSampleCount);
-
-            int width = 0;
-            int height = 0;
-            GetPhysicalSize(width, height);
-            const std::string version = Bridge::Initialize(
-                platformContext_->GetLoader(), width, height);
-            rlglInitialized_ = true;
-            maxTextureSize_ = Bridge::GetMaxTextureSize();
-            maxSamplerSlots_ = Bridge::GetMaxSamplerSlots();
-            maxRenderTargets_ = Bridge::GetMaxRenderTargets();
-            maxSamplerAnisotropy_ = Bridge::GetMaxSamplerAnisotropy();
-            if (maxSamplerSlots_ < static_cast<int>(samplers_.size()))
-            {
-                throw std::runtime_error(
-                    "RLGL: the OpenGL context exposes fewer than 16 fragment texture units");
-            }
-
-            platformContext_->SetSwapInterval(swapInterval_);
+            const std::string version = InitializeContextState();
+            contextGeneration_ = 1;
             threadContextLeaseControl_ =
                 std::make_shared<RlglThreadContextLeaseControl>(platformContext_);
             resourceLifetime_ =
@@ -408,25 +440,7 @@ namespace CNA::Internal::Renderers::Rlgl
             try
             {
                 platformContext_->MakeCurrent();
-                if (primitivePipeline_)
-                {
-                    Bridge::DestroyPrimitivePipeline(*primitivePipeline_);
-                    primitivePipeline_.reset();
-                }
-#if defined(CNA_RLGL_COMPILED_EFFECTS)
-                if (compiledEffectDrawResources_)
-                {
-                    Bridge::DestroyCompiledEffectDrawResources(
-                        *compiledEffectDrawResources_);
-                    compiledEffectDrawResources_.reset();
-                }
-                DestroyCompiledEffectContext();
-#endif
-                Bridge::DestroyMrtFramebuffer(mrtFramebuffer_);
-                std::array<unsigned int, 16> samplerIds{};
-                for (std::size_t index = 0; index < samplers_.size(); ++index)
-                    samplerIds[index] = samplers_[index].id;
-                Bridge::DestroySamplers(samplerIds.data(), samplerIds.size());
+                DestroyRendererNativeState();
                 Bridge::Shutdown();
             }
             catch (const std::exception& error)
@@ -483,6 +497,173 @@ namespace CNA::Internal::Renderers::Rlgl
                 : 0;
     }
 
+    std::string RlglRenderer::InitializeContextState()
+    {
+        int width = 0;
+        int height = 0;
+        GetPhysicalSize(width, height);
+        const std::string version = Bridge::Initialize(
+            platformContext_->GetLoader(), width, height);
+        rlglInitialized_ = true;
+        maxTextureSize_ = Bridge::GetMaxTextureSize();
+        maxSamplerSlots_ = Bridge::GetMaxSamplerSlots();
+        maxRenderTargets_ = Bridge::GetMaxRenderTargets();
+        maxSamplerAnisotropy_ = Bridge::GetMaxSamplerAnisotropy();
+        if (maxSamplerSlots_ < static_cast<int>(samplers_.size()))
+        {
+            throw std::runtime_error(
+                "RLGL: the OpenGL context exposes fewer than 16 fragment texture units");
+        }
+        platformContext_->SetSwapInterval(swapInterval_);
+        return version;
+    }
+
+    void RlglRenderer::InvalidateRendererNativeState() noexcept
+    {
+        for (SamplerRecord& sampler : samplers_)
+        {
+            sampler.realized = sampler.realized || sampler.id != 0;
+            sampler.id = 0;
+        }
+        restorePrimitivePipeline_ = restorePrimitivePipeline_ || primitivePipeline_ != nullptr;
+        primitivePipeline_.reset();
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        restoreCompiledDrawResources_ =
+            restoreCompiledDrawResources_ || compiledEffectDrawResources_ != nullptr;
+        compiledEffectDrawResources_.reset();
+        restoreMojoShaderContext_ = restoreMojoShaderContext_ || mojoShaderContext_ != nullptr;
+        mojoShaderContext_ = nullptr;
+#endif
+        mrtFramebuffer_ = 0;
+        Bridge::AbandonLostContext();
+        rlglInitialized_ = false;
+    }
+
+    void RlglRenderer::DestroyRendererNativeState() noexcept
+    {
+        if (primitivePipeline_)
+        {
+            Bridge::DestroyPrimitivePipeline(*primitivePipeline_);
+            primitivePipeline_.reset();
+        }
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        if (compiledEffectDrawResources_)
+        {
+            Bridge::DestroyCompiledEffectDrawResources(*compiledEffectDrawResources_);
+            compiledEffectDrawResources_.reset();
+        }
+        DestroyCompiledEffectContext();
+#endif
+        Bridge::DestroyMrtFramebuffer(mrtFramebuffer_);
+        std::array<unsigned int, 16> samplerIds{};
+        for (std::size_t index = 0; index < samplers_.size(); ++index)
+        {
+            samplerIds[index] = samplers_[index].id;
+            samplers_[index].id = 0;
+        }
+        Bridge::DestroySamplers(samplerIds.data(), samplerIds.size());
+    }
+
+    void RlglRenderer::RestoreRendererNativeState()
+    {
+        for (std::size_t index = 0; index < samplers_.size(); ++index)
+        {
+            SamplerRecord& sampler = samplers_[index];
+            if (!sampler.realized) continue;
+            sampler.id = Bridge::CreateSampler();
+            ApplySamplerRecord(static_cast<int>(index), sampler);
+        }
+        if (restorePrimitivePipeline_)
+        {
+            primitivePipeline_ = std::make_unique<Bridge::PrimitivePipeline>(
+                Bridge::CreatePrimitivePipeline());
+        }
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        if (restoreMojoShaderContext_) (void)GetMojoShaderContext();
+        if (restoreCompiledDrawResources_)
+        {
+            compiledEffectDrawResources_ =
+                std::make_unique<Bridge::CompiledEffectDrawResources>(
+                    Bridge::CreateCompiledEffectDrawResources());
+        }
+#endif
+        ReapplyDeviceState();
+    }
+
+    void RlglRenderer::ReapplyDeviceState()
+    {
+        if (blend_.stateApplied)
+        {
+            Bridge::ApplyBlendState(
+                blend_.colorSource, blend_.alphaSource,
+                blend_.colorDestination, blend_.alphaDestination,
+                blend_.colorFunction, blend_.alphaFunction,
+                blend_.writeState.colorWriteChannels,
+                blend_.writeState.multiSampleMask);
+        }
+        if (blend_.factorApplied)
+        {
+            Bridge::SetBlendFactor(
+                blend_.factor[0], blend_.factor[1],
+                blend_.factor[2], blend_.factor[3]);
+        }
+        if (blend_.enabledApplied) Bridge::SetBlendEnabled(blend_.enabled);
+
+        if (stencil_.stateApplied)
+        {
+            Bridge::ApplyDepthStencilState(
+                stencil_.depthEnable, stencil_.depthWriteEnable,
+                stencil_.depthFunction, stencil_.enabled, stencil_.function,
+                stencil_.pass, stencil_.fail, stencil_.depthFail,
+                stencil_.readMask, stencil_.writeMask, stencil_.reference,
+                stencil_.twoSided, stencil_.counterClockwiseFunction,
+                stencil_.counterClockwisePass, stencil_.counterClockwiseFail,
+                stencil_.counterClockwiseDepthFail);
+        }
+        else
+        {
+            if (stencil_.depthEnableAssigned)
+                Bridge::SetDepthTestEnabled(stencil_.depthEnable);
+            if (stencil_.depthWriteAssigned)
+                Bridge::SetDepthWriteEnabled(stencil_.depthWriteEnable);
+        }
+        if (stencil_.referenceAssigned)
+        {
+            Bridge::SetStencilReference(
+                stencil_.enabled, stencil_.twoSided,
+                stencil_.function, stencil_.counterClockwiseFunction,
+                stencil_.readMask, stencil_.reference);
+        }
+        if (rasterizerStateApplied_) ApplyCurrentRasterizerState();
+
+        if (currentRenderTargetCount_ == 0 && viewport_.applied)
+        {
+            int physicalWidth = 0;
+            int physicalHeight = 0;
+            GetPhysicalSize(physicalWidth, physicalHeight);
+            (void)physicalWidth;
+            Bridge::SetViewport(
+                viewport_.x, physicalHeight - viewport_.y - viewport_.height,
+                viewport_.width, viewport_.height,
+                viewport_.minDepth, viewport_.maxDepth);
+        }
+        if (currentRenderTargetCount_ == 0 && scissor_.applied)
+        {
+            int physicalWidth = 0;
+            int physicalHeight = 0;
+            GetPhysicalSize(physicalWidth, physicalHeight);
+            (void)physicalWidth;
+            Bridge::SetScissor(
+                scissor_.x, physicalHeight - scissor_.y - scissor_.height,
+                scissor_.width, scissor_.height);
+        }
+    }
+
+    void RlglRenderer::NotifyDeviceEvent(const RendererDeviceEvent event)
+    {
+        if (deviceEventCallback_) deviceEventCallback_(event);
+    }
+
     std::unique_ptr<IRendererThreadContextLease>
     RlglRenderer::AcquireThreadContextLeaseEXT(
         const RendererThreadContextLeaseRelease release)
@@ -531,6 +712,181 @@ namespace CNA::Internal::Renderers::Rlgl
     void RlglRenderer::SetContextRecoveryEnabled(const bool enabled)
     {
         if (resourceLifetime_) resourceLifetime_->SetRecoveryEnabled(enabled);
+    }
+
+    bool RlglRenderer::CanBeginDrawEXT() const
+    {
+        return contextRecoveryState_.load(std::memory_order_acquire) ==
+            RlglContextRecoveryState::Available;
+    }
+
+    void RlglRenderer::DebugSimulateContextLoss()
+    {
+        const auto control = threadContextLeaseControl_;
+        if (!control)
+            throw std::runtime_error("RLGL: renderer context is no longer available");
+
+        const std::scoped_lock lock(control->mutex);
+        if (contextRecoveryState_.load(std::memory_order_acquire) !=
+            RlglContextRecoveryState::Available)
+        {
+            return;
+        }
+
+        contextRecoveryState_.store(
+            RlglContextRecoveryState::Lost, std::memory_order_release);
+        unavailableReason_.clear();
+        if (resourceLifetime_)
+            resourceLifetime_->InvalidateNativeResourcesForContextLoss();
+        InvalidateRendererNativeState();
+        NotifyDeviceEvent(RendererDeviceEvent::Lost);
+    }
+
+    void RlglRenderer::DebugRestoreContext()
+    {
+        const auto control = threadContextLeaseControl_;
+        if (!control || !platformContext_)
+            throw std::runtime_error("RLGL: renderer context is no longer available");
+
+        const std::scoped_lock lock(control->mutex);
+        const RlglContextRecoveryState previousState =
+            contextRecoveryState_.load(std::memory_order_acquire);
+        if (previousState == RlglContextRecoveryState::Available) return;
+        if (previousState == RlglContextRecoveryState::Recreating)
+            throw std::runtime_error("RLGL: context recreation is already in progress");
+
+        contextRecoveryState_.store(
+            RlglContextRecoveryState::Recreating, std::memory_order_release);
+        unavailableReason_.clear();
+
+        CNA::Platform::GlContextBinding previousBinding;
+        bool previousBindingCaptured = false;
+        bool previousWasRenderer = false;
+
+        const auto restoreCallerBinding = [
+            this, &previousBinding, &previousBindingCaptured, &previousWasRenderer](
+            const bool recreationSucceeded) noexcept
+        {
+            if (!previousBindingCaptured) return;
+            try
+            {
+                if (previousWasRenderer)
+                {
+                    if (!recreationSucceeded) platformContext_->ClearCurrent();
+                    return;
+                }
+                platformContext_->RestoreBinding(
+                    previousBinding,
+                    RendererThreadContextLeaseRelease::RestorePreviousBinding);
+            }
+            catch (const std::exception& error)
+            {
+                CNA::Logger::Error(
+                    std::string("RLGL: failed to restore caller binding after context ") +
+                        "recreation: " + error.what(),
+                    CNA::LogCategory::RENDER);
+            }
+        };
+
+        try
+        {
+            NotifyDeviceEvent(RendererDeviceEvent::Resetting);
+            previousBinding = platformContext_->GetCurrentBinding();
+            previousBindingCaptured = true;
+            platformContext_->MakeCurrent();
+            const CNA::Platform::GlContextBinding ownedBinding =
+                platformContext_->GetCurrentBinding();
+            previousWasRenderer = previousBinding.context != nullptr &&
+                previousBinding.context == ownedBinding.context;
+            previousWasRenderer = previousWasRenderer ||
+                HasActiveThreadContextLease(*control);
+            ThrowInjectedRecreateFailure("before-context");
+            try
+            {
+                platformContext_->Recreate();
+            }
+            catch (...)
+            {
+                RetargetThreadContextLeaseBinding(
+                    *control, ownedBinding.context, {});
+                throw;
+            }
+            RetargetThreadContextLeaseBinding(
+                *control, ownedBinding.context, platformContext_->GetCurrentBinding());
+            ThrowInjectedRecreateFailure("after-context");
+            const std::string version = InitializeContextState();
+            ThrowInjectedRecreateFailure("after-bridge");
+            RestoreRendererNativeState();
+            ThrowInjectedRecreateFailure("after-state");
+
+            ++contextGeneration_;
+            contextRecoveryState_.store(
+                RlglContextRecoveryState::Available, std::memory_order_release);
+            restoreCallerBinding(true);
+            CNA::Logger::Info(
+                "RLGL renderer recreated standalone rlgl 6.0 with OpenGL " + version,
+                CNA::LogCategory::RENDER);
+        }
+        catch (const std::exception& error)
+        {
+            unavailableReason_ = error.what();
+            if (rlglInitialized_)
+            {
+                try
+                {
+                    platformContext_->MakeCurrent();
+                    DestroyRendererNativeState();
+                    Bridge::Shutdown();
+                }
+                catch (const std::exception& cleanupError)
+                {
+                    CNA::Logger::Error(
+                        std::string("RLGL: failed to clean a partial context recreation: ") +
+                            cleanupError.what(),
+                        CNA::LogCategory::RENDER);
+                }
+                rlglInitialized_ = false;
+            }
+            contextRecoveryState_.store(
+                RlglContextRecoveryState::Unavailable, std::memory_order_release);
+            restoreCallerBinding(false);
+            throw;
+        }
+
+        // A user DeviceReset handler may throw. The native transaction is already complete at
+        // this point, so preserve the available context and the restored caller binding.
+        NotifyDeviceEvent(RendererDeviceEvent::Reset);
+    }
+
+    RlglContextRecoverySnapshot
+    RlglRenderer::GetContextRecoverySnapshotForTesting() const
+    {
+        const auto control = threadContextLeaseControl_;
+        std::unique_lock<std::recursive_mutex> lock;
+        if (control) lock = std::unique_lock<std::recursive_mutex>(control->mutex);
+
+        RlglContextRecoverySnapshot snapshot;
+        snapshot.state = contextRecoveryState_.load(std::memory_order_acquire);
+        snapshot.contextGeneration = contextGeneration_;
+        snapshot.rlglInitialized = rlglInitialized_;
+        snapshot.realizedSamplers = static_cast<std::size_t>(std::count_if(
+            samplers_.begin(), samplers_.end(),
+            [](const SamplerRecord& sampler) { return sampler.realized; }));
+        snapshot.liveSamplers = static_cast<std::size_t>(std::count_if(
+            samplers_.begin(), samplers_.end(),
+            [](const SamplerRecord& sampler) { return sampler.id != 0; }));
+        for (std::size_t index = 0; index < samplers_.size(); ++index)
+            snapshot.samplerIds[index] = samplers_[index].id;
+        snapshot.primitivePipelineRealized = restorePrimitivePipeline_;
+        snapshot.primitivePipelineLive = primitivePipeline_ != nullptr;
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        snapshot.compiledDrawResourcesRealized = restoreCompiledDrawResources_;
+        snapshot.compiledDrawResourcesLive = compiledEffectDrawResources_ != nullptr;
+        snapshot.mojoShaderContextRealized = restoreMojoShaderContext_;
+        snapshot.mojoShaderContextLive = mojoShaderContext_ != nullptr;
+#endif
+        snapshot.unavailableReason = unavailableReason_;
+        return snapshot;
     }
 
     void RlglRenderer::Clear(const float r, const float g, const float b, const float a)
@@ -909,6 +1265,7 @@ namespace CNA::Internal::Renderers::Rlgl
             throw std::out_of_range("RLGL: sampler slot is outside the XNA range");
         SamplerRecord& sampler = samplers_[static_cast<std::size_t>(slot)];
         if (sampler.id == 0) sampler.id = Bridge::CreateSampler();
+        sampler.realized = true;
         return sampler;
     }
 
@@ -1194,16 +1551,22 @@ namespace CNA::Internal::Renderers::Rlgl
 
     void RlglRenderer::SetDepthTestEnabled(const bool enabled)
     {
+        stencil_.depthEnable = enabled;
+        stencil_.depthEnableAssigned = true;
         Bridge::SetDepthTestEnabled(enabled);
     }
 
     void RlglRenderer::SetBlendEnabled(const bool enabled)
     {
+        blend_.enabled = enabled;
+        blend_.enabledApplied = true;
         Bridge::SetBlendEnabled(enabled);
     }
 
     void RlglRenderer::SetDepthWriteEnabled(const bool enabled)
     {
+        stencil_.depthWriteEnable = enabled;
+        stencil_.depthWriteAssigned = true;
         Bridge::SetDepthWriteEnabled(enabled);
     }
 
@@ -1213,6 +1576,14 @@ namespace CNA::Internal::Renderers::Rlgl
         const int colorBlendFunc, const int alphaBlendFunc,
         const BlendWriteState& writeState)
     {
+        blend_.stateApplied = true;
+        blend_.colorSource = colorSrcBlend;
+        blend_.alphaSource = alphaSrcBlend;
+        blend_.colorDestination = colorDstBlend;
+        blend_.alphaDestination = alphaDstBlend;
+        blend_.colorFunction = colorBlendFunc;
+        blend_.alphaFunction = alphaBlendFunc;
+        blend_.writeState = writeState;
         Bridge::ApplyBlendState(
             colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
             colorBlendFunc, alphaBlendFunc,
@@ -1222,6 +1593,8 @@ namespace CNA::Internal::Renderers::Rlgl
     void RlglRenderer::SetBlendFactor(
         const float r, const float g, const float b, const float a)
     {
+        blend_.factorApplied = true;
+        blend_.factor = {r, g, b, a};
         Bridge::SetBlendFactor(r, g, b, a);
     }
 
@@ -1234,12 +1607,26 @@ namespace CNA::Internal::Renderers::Rlgl
         const int ccwStencilPass, const int ccwStencilFail,
         const int ccwStencilDepthFail)
     {
+        stencil_.stateApplied = true;
+        stencil_.depthEnableAssigned = true;
+        stencil_.depthWriteAssigned = true;
+        stencil_.depthEnable = depthEnable;
+        stencil_.depthWriteEnable = depthWriteEnable;
+        stencil_.depthFunction = depthFunc;
         stencil_.enabled = stencilEnable;
         stencil_.twoSided = twoSidedStencilMode;
         stencil_.function = stencilFunc;
         stencil_.counterClockwiseFunction = ccwStencilFunc;
         stencil_.readMask = stencilMask;
+        stencil_.writeMask = stencilWriteMask;
         stencil_.reference = referenceStencil;
+        stencil_.pass = stencilPass;
+        stencil_.fail = stencilFail;
+        stencil_.depthFail = stencilDepthFail;
+        stencil_.counterClockwisePass = ccwStencilPass;
+        stencil_.counterClockwiseFail = ccwStencilFail;
+        stencil_.counterClockwiseDepthFail = ccwStencilDepthFail;
+        stencil_.referenceAssigned = true;
         Bridge::ApplyDepthStencilState(
             depthEnable, depthWriteEnable, depthFunc,
             stencilEnable, stencilFunc, stencilPass, stencilFail, stencilDepthFail,
@@ -1250,6 +1637,7 @@ namespace CNA::Internal::Renderers::Rlgl
     void RlglRenderer::SetReferenceStencil(const int value)
     {
         stencil_.reference = value;
+        stencil_.referenceAssigned = true;
         Bridge::SetStencilReference(
             stencil_.enabled, stencil_.twoSided,
             stencil_.function, stencil_.counterClockwiseFunction,
@@ -1265,6 +1653,7 @@ namespace CNA::Internal::Renderers::Rlgl
         rasterizerScissorTestEnabled_ = scissorTestEnable;
         rasterizerDepthBias_ = depthBias;
         rasterizerSlopeScaleDepthBias_ = slopeScaleDepthBias;
+        rasterizerStateApplied_ = true;
         ApplyCurrentRasterizerState();
     }
 
@@ -1302,6 +1691,7 @@ namespace CNA::Internal::Renderers::Rlgl
         const int x, const int y, const int w, const int h,
         const float minDepth, const float maxDepth)
     {
+        viewport_ = {true, x, y, w, h, minDepth, maxDepth};
         int framebufferHeight = currentRenderTargetCount_ > 0
             ? currentRenderTargetHeight_ : 0;
         if (currentRenderTargetCount_ == 0)
@@ -1326,6 +1716,7 @@ namespace CNA::Internal::Renderers::Rlgl
     void RlglRenderer::SetScissorRect(
         const int x, const int y, const int w, const int h)
     {
+        scissor_ = {true, x, y, w, h};
         int framebufferHeight = currentRenderTargetCount_ > 0
             ? currentRenderTargetHeight_ : 0;
         if (currentRenderTargetCount_ == 0)

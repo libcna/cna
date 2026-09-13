@@ -31,6 +31,9 @@ namespace CNA::Internal::Renderers::Rlgl
         /** @brief Releases and clears every native handle owned by this resource. */
         virtual void ReleaseNativeResource() noexcept = 0;
 
+        /** @brief Clears old-context native identities without issuing graphics API calls. */
+        virtual void InvalidateNativeResource() noexcept = 0;
+
         /**
          * @brief Describes CPU state retained for context recovery.
          * @return Retained byte count, defined texture subresources, and content-loss policy.
@@ -62,6 +65,8 @@ namespace CNA::Internal::Renderers::Rlgl
         std::size_t retainedCpuBytes = 0;
         /** @brief Total currently defined texture mip or cube face/level shadows. */
         std::size_t definedTextureSubresources = 0;
+        /** @brief Number of context-loss invalidation passes applied to the live children. */
+        std::size_t contextLossInvalidations = 0;
         /** @brief Whether resources created from now on join the recovery registry. */
         bool recoveryEnabledForNewResources = true;
     };
@@ -93,6 +98,14 @@ namespace CNA::Internal::Renderers::Rlgl
         void SetRecoveryEnabled(bool enabled);
 
         /**
+         * @brief Invalidates every child identity before the old graphics context is replaced.
+         *
+         * This path deliberately makes no graphics API calls. CPU recovery descriptions and both
+         * registries remain intact for a later recreation transaction.
+         */
+        void InvalidateNativeResourcesForContextLoss() noexcept;
+
+        /**
          * @brief Releases and unregisters a resource while the renderer context is current.
          * @param resource Resource entering its C++ destructor.
          */
@@ -117,6 +130,7 @@ namespace CNA::Internal::Renderers::Rlgl
         std::atomic<std::size_t> registeredRecoveryResources_{0};
         std::atomic<std::size_t> releasedResources_{0};
         std::atomic<std::size_t> lateDisposals_{0};
+        std::atomic<std::size_t> contextLossInvalidations_{0};
         std::atomic<bool> active_{true};
         std::atomic<bool> recoveryEnabled_{true};
     };

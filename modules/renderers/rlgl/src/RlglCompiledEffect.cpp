@@ -287,6 +287,13 @@ namespace CNA::Internal::Renderers::Rlgl
         context_ = nullptr;
     }
 
+    void RlglCompiledEffect::InvalidateNativeResource() noexcept
+    {
+        passActive_ = false;
+        effectData_ = nullptr;
+        context_ = nullptr;
+    }
+
     RlglResourceRecoveryInfo RlglCompiledEffect::GetRecoveryInfo() const noexcept
     {
         RlglResourceRecoveryInfo info;
@@ -497,6 +504,7 @@ namespace CNA::Internal::Renderers::Rlgl
     Bridge::CompiledEffectDrawResources& RlglRenderer::GetCompiledEffectDrawResources()
     {
         platformContext_->MakeCurrent();
+        restoreCompiledDrawResources_ = true;
         if (!compiledEffectDrawResources_)
         {
             compiledEffectDrawResources_ =
@@ -792,6 +800,7 @@ namespace CNA::Internal::Renderers::Rlgl
     void* RlglRenderer::GetMojoShaderContext()
     {
         platformContext_->MakeCurrent();
+        restoreMojoShaderContext_ = true;
         if (mojoShaderContext_ == nullptr)
         {
             void* loader = reinterpret_cast<void*>(platformContext_->GetLoader());

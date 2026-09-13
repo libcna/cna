@@ -216,6 +216,11 @@ namespace CNA::Internal::Renderers::Rlgl
                 id_ = 0;
             }
 
+            void InvalidateNativeResource() noexcept override
+            {
+                id_ = 0;
+            }
+
             [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
             {
                 RlglResourceRecoveryInfo info;

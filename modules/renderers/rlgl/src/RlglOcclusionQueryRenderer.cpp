@@ -63,6 +63,12 @@ namespace CNA::Internal::Renderers::Rlgl
                 Bridge::DestroyOcclusionQuery(query_);
             }
 
+            void InvalidateNativeResource() noexcept override
+            {
+                query_ = 0;
+                hasBeenBegun_ = false;
+            }
+
             unsigned int query_ = 0;
             bool hasBeenBegun_ = false;
             std::shared_ptr<RlglResourceLifetime> lifetime_;

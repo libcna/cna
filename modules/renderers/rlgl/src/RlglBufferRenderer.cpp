@@ -140,6 +140,11 @@ namespace CNA::Internal::Renderers::Rlgl
                 id_ = 0;
             }
 
+            void InvalidateNativeResource() noexcept override
+            {
+                id_ = 0;
+            }
+
             [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
             {
                 return {cpuBytes_.size(), 0, false};
@@ -313,6 +318,11 @@ namespace CNA::Internal::Renderers::Rlgl
             void ReleaseNativeResource() noexcept override
             {
                 Bridge::DestroyBuffer(id_);
+                id_ = 0;
+            }
+
+            void InvalidateNativeResource() noexcept override
+            {
                 id_ = 0;
             }
 

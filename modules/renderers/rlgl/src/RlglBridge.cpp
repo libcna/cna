@@ -545,6 +545,12 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         catch (...)
         {
             rlglClose();
+            RLGL = {};
+            isGpuReady = false;
+            bridgeInitialized = false;
+            bufferUploadVertexArray = 0;
+            activeOcclusionQuery = 0;
+            lastPrimitiveDraw = {};
             throw;
         }
 
@@ -566,6 +572,34 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         }
         bridgeInitialized = false;
         rlglClose();
+        RLGL = {};
+        isGpuReady = false;
+        bufferUploadVertexArray = 0;
+        activeOcclusionQuery = 0;
+        lastPrimitiveDraw = {};
+    }
+
+    void AbandonLostContext() noexcept
+    {
+        for (int index = 0; index < RLGL.defaultBatch.bufferCount; ++index)
+        {
+            rlVertexBuffer& buffer = RLGL.defaultBatch.vertexBuffer[index];
+            RL_FREE(buffer.vertices);
+            RL_FREE(buffer.texcoords);
+            RL_FREE(buffer.normals);
+            RL_FREE(buffer.colors);
+            RL_FREE(buffer.indices);
+        }
+        RL_FREE(RLGL.defaultBatch.vertexBuffer);
+        RL_FREE(RLGL.defaultBatch.draws);
+        RL_FREE(RLGL.State.defaultShaderLocs);
+
+        RLGL = {};
+        isGpuReady = false;
+        bridgeInitialized = false;
+        bufferUploadVertexArray = 0;
+        activeOcclusionQuery = 0;
+        lastPrimitiveDraw = {};
     }
 
     void SetFramebufferSize(const int width, const int height)
@@ -874,6 +908,8 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
 
         snapshot.cullEnabled = glIsEnabled(GL_CULL_FACE) == GL_TRUE;
         glGetIntegerv(GL_CULL_FACE_MODE, &snapshot.cullFace);
+        glGetIntegerv(GL_VIEWPORT, snapshot.viewport.data());
+        glGetDoublev(GL_DEPTH_RANGE, snapshot.depthRange.data());
         snapshot.scissorEnabled = glIsEnabled(GL_SCISSOR_TEST) == GL_TRUE;
         glGetIntegerv(GL_SCISSOR_BOX, snapshot.scissorBox.data());
         GLint polygonModes[2] = {};

@@ -611,6 +611,7 @@ namespace CNA::Internal::Renderers::Rlgl
 
     Bridge::PrimitivePipeline& RlglRenderer::GetPrimitivePipeline()
     {
+        restorePrimitivePipeline_ = true;
         if (!primitivePipeline_)
         {
             primitivePipeline_ = std::make_unique<Bridge::PrimitivePipeline>(
