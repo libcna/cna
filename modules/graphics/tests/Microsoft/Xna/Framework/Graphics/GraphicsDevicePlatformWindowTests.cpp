@@ -16,6 +16,32 @@
 #include <string>
 #include <vector>
 
+namespace CNA::Internal
+{
+    /**
+     * @brief Reaches `GraphicsDevice`'s internal viewport refresh, the way `GameWindow` does.
+     *
+     * `UpdateViewportFromWindow()` is private and `GameWindow` is a friend, because that call is
+     * the framework's own reaction to a resize rather than something a game invokes. The test
+     * below reproduces exactly that reaction, so it needs the same access -- through the named
+     * test peer this codebase already uses for the equivalent cases (`Texture2DArray`,
+     * `StorageTexture2D`, `StorageBuffer`), rather than by widening the XNA-visible API.
+     */
+    class GraphicsDevicePlatformWindowTestPeer
+    {
+    public:
+        /**
+         * @brief Runs the viewport refresh a window resize triggers.
+         *
+         * @param device The device to refresh.
+         */
+        static void RefreshViewport(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device)
+        {
+            device.UpdateViewportFromWindow();
+        }
+    };
+}
+
 namespace {
 
 using CNA::Platform::IPlatformWindow;
@@ -320,7 +346,7 @@ TEST(GraphicsDevicePlatformWindowTests,
     const auto heightBefore = device.getViewportProperty().getHeightProperty();
 
     trace.throwFromPixelSize = true;
-    EXPECT_NO_THROW(device.UpdateViewportFromWindow());
+    EXPECT_NO_THROW(CNA::Internal::GraphicsDevicePlatformWindowTestPeer::RefreshViewport(device));
 
     // The refusal is absorbed, not acted on: the viewport keeps the value it already had rather
     // than collapsing to whatever a failed query left behind.

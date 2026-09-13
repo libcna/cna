@@ -201,6 +201,20 @@ namespace CNA::Platform::X11 {
         /** @brief Records that the window was mapped or unmapped. @param mapped The new state. */
         void SetMapped(bool mapped) { mapped_ = mapped; }
 
+        /**
+         * @brief Records that the X server has already destroyed this window.
+         *
+         * A window manager, a `DestroyNotify` from another client, or a user closing the window
+         * through the window manager can destroy the X window while this wrapper still exists.
+         * Without this, the destructor's `XDestroyWindow` and every property read in between
+         * target an XID the server has released — which is a `BadWindow` at best and, once the
+         * XID has been reused, a request against somebody else's window.
+         *
+         * The colormap this object created is *not* forgotten: it is a separate resource and is
+         * still ours to free.
+         */
+        void MarkDestroyedByServer();
+
         /** @brief Records the fullscreen mode observed from `_NET_WM_STATE`. @param mode The mode. */
         void SetObservedFullscreenMode(WindowFullscreenMode mode) { fullscreenMode_ = mode; }
 

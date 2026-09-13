@@ -708,16 +708,33 @@ namespace CNA::Platform::X11 {
             {
                 if (window == nullptr) { return; }
                 window->SetMapped(false);
+
                 // An unmap is how iconification looks on the wire under ICCCM: the window manager
                 // unmaps the window and sets WM_STATE to IconicState. Distinguishing that from an
                 // application's own Hide() means asking the server which it was.
-                WindowEvent minimized;
-                minimized.window = windowId;
-                minimized.kind = window->IsMinimized() ? WindowEventKind::Minimized
-                                                       : WindowEventKind::Restored;
-                if (minimized.kind == WindowEventKind::Minimized)
+                //
+                // The trap is for the one case where that question cannot be answered: a window
+                // being *closed* is unmapped and then destroyed, and by the time this code runs
+                // the DestroyNotify may already be in the queue behind us -- so the property read
+                // is a BadWindow against an XID the server has released. That is an ordinary race
+                // rather than a fault, and without the trap it would print an alarming
+                // "X protocol error ignored" line every time a user closed a window.
+                bool minimized = false;
                 {
-                    destination.emplace_back(minimized);
+                    X11ErrorTrap trap(display);
+                    minimized = window->IsMinimized();
+                    trap.Sync();
+                    if (trap.HasError())
+                    {
+                        minimized = false;
+                    }
+                }
+                if (minimized)
+                {
+                    WindowEvent event;
+                    event.window = windowId;
+                    event.kind = WindowEventKind::Minimized;
+                    destination.emplace_back(event);
                 }
                 return;
             }
@@ -807,8 +824,12 @@ namespace CNA::Platform::X11 {
             case DestroyNotify:
             {
                 if (window == nullptr) { return; }
-                // The window is gone at the server. Dropping it from the registry here is what
-                // stops a later event resolving to a window whose XID has been reused.
+                // The window is gone at the server -- destroyed by the window manager, by another
+                // client, or by a user closing it. Telling the wrapper first is what stops its
+                // destructor calling XDestroyWindow on an XID the server has already released;
+                // dropping it from the registry then stops a later event resolving to a window
+                // whose XID has since been handed to somebody else.
+                window->MarkDestroyedByServer();
                 ForgetWindow(windowId);
                 return;
             }

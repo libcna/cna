@@ -66,8 +66,14 @@ namespace CNA::Platform::X11 {
     {
         if (display_ != nullptr)
         {
-            X11ErrorPolicy::Unregister(display_);
+            // XCloseDisplay FIRST, then unregister. Closing flushes the output buffer and reads
+            // the replies, so it can deliver a protocol error for a request issued moments
+            // earlier -- a window another client destroyed, typically. Restoring Xlib's default
+            // handler before that flush means the error arrives at the handler that calls
+            // exit(), which turns an ordinary teardown into a process kill. Measured: an
+            // X_DestroyWindow BadWindow during X11WithWindowManager teardown did exactly that.
             XCloseDisplay(display_);
+            X11ErrorPolicy::Unregister(display_);
             display_ = nullptr;
         }
     }

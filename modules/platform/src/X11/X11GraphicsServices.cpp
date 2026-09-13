@@ -250,12 +250,17 @@ namespace CNA::Platform::X11 {
         {
             chosen.visual = info->visual;
             chosen.depth = info->depth;
-            chosen.fbConfig = configs[0];
+            // `GLXFBConfig` is itself an opaque POINTER (`struct __GLXFBConfigRec*`), so the
+            // config VALUE goes into the void*, not the address of the array slot holding it.
+            // Getting that wrong is not a compile error -- both are pointers -- and it produced a
+            // GLXBadFBConfig from glXCreateContextAttribsARB with a perfectly valid config, which
+            // is what the real-context test caught.
+            chosen.fbConfig = static_cast<void*>(configs[0]);
             XFree(info);
         }
-        // configs is deliberately NOT freed: chosen.fbConfig points into it, and the window that
-        // is about to be created holds that pointer for as long as it can host a context. The
-        // allocation is one array per window creation, bounded by the number of GL windows.
+        // The ARRAY is XMalloc'd and must be freed; the GLXFBConfig values inside it stay valid
+        // for the lifetime of the display, which is what makes carrying one on the window sound.
+        XFree(configs);
 #else
         (void) depthBits;
         (void) stencilBits;
@@ -284,7 +289,7 @@ namespace CNA::Platform::X11 {
         {
             throw PlatformException("X11GlContext::CreateContext", "unknown window id");
         }
-        auto* fbConfig = static_cast<GLXFBConfig*>(target->GetGlFbConfig());
+        auto fbConfig = static_cast<GLXFBConfig>(target->GetGlFbConfig());
         if (fbConfig == nullptr)
         {
             // The window was created without WindowRenderIntent::OpenGl, so its visual was not
@@ -336,14 +341,14 @@ namespace CNA::Platform::X11 {
             }
             attributes.push_back(0);
 
-            context = createContextAttribs(display, *fbConfig, nullptr, True, attributes.data());
+            context = createContextAttribs(display, fbConfig, nullptr, kXTrue, attributes.data());
         }
         if (context == nullptr)
         {
             // The driver refused the requested version or the extension is absent. A plain
             // GLX 1.3 context is the honest fallback -- GetContextAttributes reports what was
             // actually granted, so a caller that needed 4.5 still finds out.
-            context = glXCreateNewContext(display, *fbConfig, GLX_RGBA_TYPE, nullptr, True);
+            context = glXCreateNewContext(display, fbConfig, GLX_RGBA_TYPE, nullptr, kXTrue);
         }
         trap.Sync();
         if (context == nullptr)
@@ -358,7 +363,7 @@ namespace CNA::Platform::X11 {
         record.granted = description;
         int value = 0;
         const auto readConfig = [&](const int attribute, int& destination) {
-            if (glXGetFBConfigAttrib(display, *fbConfig, attribute, &value) == 0)
+            if (glXGetFBConfigAttrib(display, fbConfig, attribute, &value) == 0)
             {
                 destination = value;
             }
@@ -371,7 +376,7 @@ namespace CNA::Platform::X11 {
         readConfig(GLX_STENCIL_SIZE, record.granted.stencilBits);
         readConfig(GLX_SAMPLE_BUFFERS, record.granted.multisampleBuffers);
         readConfig(GLX_SAMPLES, record.granted.multisampleSamples);
-        if (glXGetFBConfigAttrib(display, *fbConfig, GLX_DOUBLEBUFFER, &value) == 0)
+        if (glXGetFBConfigAttrib(display, fbConfig, GLX_DOUBLEBUFFER, &value) == 0)
         {
             record.granted.doubleBuffer = value != 0;
         }

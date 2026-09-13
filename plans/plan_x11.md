@@ -233,20 +233,18 @@ shared by three backends.
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
 | X11-0090 | `CNA_ENABLE_SDL` build gate | ✅ | `cmake/SdlAvailability.cmake` + `cmake/RendererIdentityDefault.cmake`. `CNA_ENABLE_SDL` is `AUTO` by default and byte-for-byte today's behaviour. `OFF` skips the SDL sub-build entirely and refuses any selection that needs it, naming which one. The renderer default rule is extracted into a shared include rather than restated, so an SDL-free configuration cannot silently stop being SDL-free when the per-host default moves. |
-| X11-0091 | Zero SDL in the backend | ⬜ | `grep -rn 'SDL' modules/platform/src/X11/` is empty; asserted by a test, not only by a grep in this document. |
-| X11-0092 | SDL-free configuration proof | ⬜ | `CNA_PLATFORM=X11 CNA_AUDIO_PLATFORM=NULL CNA_GRAPHICS_RENDERER=<native>` configures, builds and runs with no SDL target in the link graph; `ldd` of the test binary shows no `libSDL`. |
-
+| X11-0091 | Zero SDL in the backend | ✅ | `X11IsSdlFreeTests.cpp` -- a compile-time `#error` on every SDL header sentinel, plus a scan of every file under `src/X11/` with comments and string literals stripped (so the documentation may explain SDL while the code may not call it; the stripper is itself unit-tested so the scan cannot rot into a no-op). **And** `tools/platform/sdl_ratchet.py` now denylists `modules/platform/src/X11/` from the module-wide exemption `modules/platform/` otherwise has -- verified by experiment: a synthetic `SDL_Init` in that directory takes the ratchet from 0 to 1 file / 2 references and fails the strict check. |
+| X11-0092 | SDL-free configuration proof | ✅ | Measured. `-DCNA_PLATFORM=X11 -DCNA_AUDIO_PLATFORM=NULL -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_ENABLE_SDL=OFF` configures without touching the SDL submodules, builds, and its test binary shows **no `libSDL` in `ldd`** and **0 undefined `SDL_` symbols in `nm -uC`**; 360 tests pass. Five test/harness targets needed their SDL link edge made conditional (`TARGET SDL3::SDL3`) rather than removed -- the two compiled-effect tools, the devices shutdown-ordering harness, the headless renderer examples and the portable Metal suite; all keep exactly their previous link edge wherever SDL is configured. |
 ### Phase L — tests, regression, documentation (M12–M14)
 
 | ID | Task | Status | Acceptance criteria / Notes |
 |---|---|---|---|
 | X11-0100 | Server-free unit tests | ✅ | `modules/platform/tests/CNA/Platform/X11KeyboardMappingTests.cpp` -- 24 cases over the scancode table, the keysym table, the modifier mask, wheel/button numbering, focus filtering and auto-repeat coalescing. All run with no `DISPLAY`. |
-| X11-0101 | Xvfb integration tests | ⬜ | an isolated server on a free display number (never a hardcoded `:99`), torn down with the fixture. |
-| X11-0102 | Window-manager integration | ⬜ | `openbox` under Xvfb for maximise/minimise/restore/fullscreen/focus; skipped with a recorded reason when no WM is installed. |
+| X11-0101 | Xvfb integration tests | ✅ | `X11PlatformIntegrationTests.cpp` (34 cases) and `X11ClipboardInteropTests.cpp` (5 cases), driven by `tools/platform/x11_test_server.sh`, which **searches for a free display number** rather than assuming `:99` -- a fixed number collides with a parallel ctest job and the collision reads as flakiness -- and exits 77 (ctest's skip code) when `Xvfb` is absent. Registered as `CnaX11IntegrationTests`. The clipboard half exchanges selections with `xclip`, a genuinely external X client, including a 512 KB `INCR` transfer in both directions. |
+| X11-0102 | Window-manager integration | ✅ | `X11WindowManagerTests.cpp` (10 cases), registered as `CnaX11WindowManagerTests`, starting `openbox` under the same launcher. Covers EWMH fullscreen enter/leave and three repeated round trips, minimise/restore with their events, maximise/restore by observed size, focus on map, focus transfer between two windows, closing a secondary window not ending the application, and the title read back through `xdotool` rather than through CNA. Skips with the reason recorded when `openbox` is absent. |
 | X11-0103 | Conformance | ✅ | `EveryImplementation/PlatformConformance.*` and `PlatformWindowConformance.*` green for `X11`. **Two real defects found and fixed, neither by weakening a test:** the capability set was being recomputed per call and reported `textInput`/`clipboard` true while their accessors were still null before `Video`; and `AcquireSubsystem` refused the subsystems X11 has no facility for, where the cross-implementation rule is that acquisition is bookkeeping and absence is reported through a null service. See the evidence log. |
 | X11-0104 | Regression matrix | ⬜ | SDL3, SDL2, Headless, Terminal suites, ratchet, hot-path lint, contract check, CMake selection tests. |
-| X11-0105 | `docs/platform-x11.md` | ⬜ | capability boundary, dependency table, DPI policy, threading/locale/error-handler policy, how to run the tests. |
-
+| X11-0105 | `docs/platform-x11.md` | ✅ | `docs/platform-x11.md`: dependency table with what each optional library gates, the full capability boundary with a reason per row, the keyboard/text/mouse/display/fullscreen/clipboard/graphics designs, the DPI policy, the threading/locale/error-handler ownership rules, how to run the three suites, what Xvfb cannot cover, and the three independent mechanisms that keep SDL out. |
 ---
 
 ## 5. Capability matrix (target)
@@ -291,6 +289,52 @@ shared by three backends.
 
 ---
 
-## 7. Evidence log
+## 7. Findings that are not this backend's
+
+Recorded rather than fixed, because each is pre-existing, generic, and outside what a platform
+backend may change. Each was **reproduced without X11** before being classified that way.
+
+### F-1 — `plans/plan_platform.md` §2 is stale at the baseline commit
+
+`python3 tools/platform/sdl_inventory.py --check` already failed at `e05b3d0f`, before a line of
+this work existed (verified by stashing the whole change and re-running). Regenerating it would
+put an unrelated diff in this branch's commits, so it is left as it was found.
+
+### F-2 — `GraphicsDevicePlatformWindowTests` could not compile for any non-SDL3 platform
+
+**Fixed**, because it blocked the regression matrix and the fix is three lines.
+`AViewportRefreshSurvivesAWindowThatRefusesItsDrawableSize` calls the private
+`GraphicsDevice::UpdateViewportFromWindow()`. Its own `#if` skips the body under an SDL3
+selection, so the error was invisible there — and a hard compile error under every other one.
+Reproduced identically with `-DCNA_PLATFORM=HEADLESS -DCNA_GRAPHICS_RENDERER=HEADLESS`, which is
+what establishes it as generic rather than X11's.
+
+Fixed the way this codebase already handles the identical case three times over
+(`Texture2DArrayGraphicsDeviceTestPeer`, `StorageTexture2DGraphicsDeviceTestPeer`,
+`StorageBufferGraphicsDeviceTestPeer`): a named `CNA::Internal::GraphicsDevicePlatformWindowTestPeer`
+friend, rather than widening the XNA-visible API. The test itself is the regression test.
+
+### F-3 — `CNA_AUDIO_PLATFORM=NULL` cannot link anything containing `cna_content`
+
+`modules/content/src/Xnb/XnbCanonicalData.cpp` calls `CNA::Internal::Audio::DecodeWavToPcm16`
+unconditionally, and that function lives in `modules/audio/src/Backend/Sdl3Mixer/WavDecoder.cpp`,
+which `modules/audio/CMakeLists.txt` compiles **only** for `CNA_AUDIO_PLATFORM=SDL3`. So any
+executable linking the content module under NULL or SDL2 audio fails with an undefined symbol.
+
+Reproduced with no X11 involved at all: a three-line probe compiled against
+`modules/audio/include` and linked against the `libcna_audio.a` from a
+`-DCNA_PLATFORM=HEADLESS -DCNA_AUDIO_PLATFORM=NULL` build produces exactly the same undefined
+reference.
+
+**Not fixed here, deliberately.** The decoder is a real SDL user (`SDL_LoadWAV_IO`,
+`SDL_ConvertAudioSamples`), so the fix is a native WAV/ADPCM decoder in the content or audio
+module — not a build-system adjustment, and squarely inside the "do not implement an audio
+backend" boundary this workstream was given. It costs this branch nothing: platform and audio are
+independent axes, so the X11 regression matrix runs with the default SDL3 audio, and the SDL-free
+proof is the platform-layer claim that was actually asked for.
+
+---
+
+## 8. Evidence log
 
 Filled in as tasks complete. Each entry names the exact command and its result.

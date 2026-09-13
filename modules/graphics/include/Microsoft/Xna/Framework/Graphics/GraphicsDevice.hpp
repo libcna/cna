@@ -59,6 +59,7 @@ namespace CNA::Internal
     class Texture2DArrayGraphicsDeviceTestPeer;
     class StorageTexture2DGraphicsDeviceTestPeer;
     class StorageBufferGraphicsDeviceTestPeer;
+    class GraphicsDevicePlatformWindowTestPeer;
 }
 
 namespace Microsoft::Xna::Framework
@@ -1841,5 +1842,13 @@ namespace Microsoft::Xna::Framework::Graphics
         friend class CNA::Internal::Texture2DArrayGraphicsDeviceTestPeer;
         friend class CNA::Internal::StorageTexture2DGraphicsDeviceTestPeer;
         friend class CNA::Internal::StorageBufferGraphicsDeviceTestPeer;
+        // plans/plan_x11.md X11-0104. GraphicsDevicePlatformWindowTests reproduces what
+        // GameWindow.ClientSizeChanged runs -- a viewport refresh driven from the frame's event
+        // pump -- and GameWindow is a friend above precisely because that call is internal. The
+        // test reached it directly, which compiled only for an SDL3 selection (where its own
+        // `#if` skips the body) and was a hard error under every other platform. Found by
+        // building the suite with CNA_PLATFORM=X11; reproduced identically with
+        // CNA_PLATFORM=HEADLESS, so the defect is the test's access, not the X11 backend.
+        friend class CNA::Internal::GraphicsDevicePlatformWindowTestPeer;
     };
 }

@@ -1382,6 +1382,40 @@ if(CNA_BUILD_TESTS)
                 --gtest_shuffle --gtest_repeat=3
         LABELS "platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
+    # plans/plan_x11.md X11-0100/X11-0101/X11-0102: the native X11 backend's three suites, split
+    # by what each one actually needs.
+    #
+    # The split is not organisational tidiness. A bare Xvfb has no window manager, so maximise,
+    # minimise, restore, EWMH fullscreen and focus do not happen there at all -- asserting them
+    # against one would test the environment rather than the backend. And the translation tables
+    # need no server whatsoever, so they must keep running on a machine that has none.
+    if(CNA_PLATFORM STREQUAL "X11")
+        # No display needed: the keyboard/wheel/focus/auto-repeat tables and the SDL-containment
+        # scan are pure functions over committed source.
+        cna_register_renderer_test(NAME CnaX11MappingTests
+            COMMAND CnaTests --gtest_filter=X11ScancodeMapping.*:X11KeyCodeMapping.*:X11ModifierMapping.*:X11ButtonMapping.*:X11FocusFiltering.*:X11AutoRepeat.*:X11IsSdlFree.*
+            LABELS "platform" TIMEOUT 120)
+
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh")
+            # A private Xvfb per run, on a display number the launcher searches for rather than
+            # one hardcoded: a fixed :99 collides with a parallel ctest job and the collision
+            # looks like flakiness. The launcher exits 77 (ctest's skip code) where Xvfb or
+            # openbox is absent, so a machine without them records a skip rather than a failure.
+            cna_register_renderer_test(NAME CnaX11IntegrationTests
+                COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
+                        $<TARGET_FILE:CnaTests>
+                        --gtest_filter=X11Live.*:X11ClipboardInterop.*
+                LABELS "platform" TIMEOUT 300)
+
+            cna_register_renderer_test(NAME CnaX11WindowManagerTests
+                COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
+                        --window-manager
+                        $<TARGET_FILE:CnaTests>
+                        --gtest_filter=X11WithWindowManager.*
+                LABELS "platform" TIMEOUT 300)
+        endif()
+    endif()
+
     if(MINGW)
         # Statically link MinGW runtime into the test binary too, so it can
         # run outside CLion without libgcc_s_seh-1.dll / libstdc++-6.dll.

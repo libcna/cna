@@ -396,6 +396,21 @@ namespace CNA::Platform::X11 {
         inputContext_ = context;
     }
 
+    void X11Window::MarkDestroyedByServer()
+    {
+        if (inputContext_ != nullptr)
+        {
+            // The input method holds this window as its client window. Destroying the context now
+            // rather than in the destructor keeps the IM from using an XID the server has freed.
+            XDestroyIC(inputContext_);
+            inputContext_ = nullptr;
+        }
+        window_ = kNone;
+        ownsWindow_ = false;
+        mapped_ = false;
+        focused_ = false;
+    }
+
     void X11Window::SetCachedSize(const int width, const int height)
     {
         cachedWidth_ = width;

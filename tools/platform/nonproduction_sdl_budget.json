@@ -213,6 +213,10 @@
       "category": "containment-assertion",
       "max_references": 1
     },
+    "modules/platform/tests/CNA/Platform/X11IsSdlFreeTests.cpp": {
+      "category": "containment-assertion",
+      "max_references": 12
+    },
     "modules/renderers/bgfx/examples/bgfx_gfx196_noop_reset_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 6
@@ -377,10 +381,6 @@
       "category": "renderer-integration-executable",
       "max_references": 2
     },
-    "modules/renderers/directx11/examples/directx11_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 5
-    },
     "modules/renderers/directx12/examples/directx12_swapchain_diag.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 19
@@ -459,11 +459,11 @@
     },
     "modules/renderers/directx9/examples/directx9_hresult_test.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 13
+      "max_references": 12
     },
     "modules/renderers/directx9/examples/directx9_smoke_test.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 14
+      "max_references": 12
     },
     "modules/renderers/easygl/examples/easygl_backbuffer_resize_test.cpp": {
       "category": "renderer-integration-executable",
@@ -835,7 +835,7 @@
     },
     "modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectTests.cpp": {
       "category": "renderer-native-runtime-test",
-      "max_references": 22
+      "max_references": 21
     },
     "modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/SdlGpuShaderCrossTests.cpp": {
       "category": "renderer-native-runtime-test",
@@ -927,7 +927,7 @@
     },
     "modules/renderers/sdl-renderer/examples/sdlrenderer_occlusionquery_throws_test.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 4
+      "max_references": 2
     },
     "modules/renderers/sdl-renderer/examples/sdlrenderer_presentationparameters_resize_test.cpp": {
       "category": "renderer-integration-executable",
@@ -1108,10 +1108,6 @@
     "modules/renderers/sdl-renderer/examples/sdlrenderer_viewport_project_unproject_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 2
-    },
-    "modules/renderers/software/examples/software_smoke_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 7
     },
     "modules/renderers/sokol/examples/sokol_gl_context_transactional_test.cpp": {
       "category": "renderer-integration-executable",
