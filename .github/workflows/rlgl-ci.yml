@@ -182,6 +182,11 @@ jobs:
             cna_test_rlgl_skinnedeffect_fog \
             cna_test_rlgl_skinnedeffect_world_normal \
             cna_test_rlgl_skinnedeffect_combined \
+            cna_test_rlgl_model_draw \
+            cna_test_rlgl_model_json_reader_texture \
+            cna_test_rlgl_model_two_meshes_effects \
+            cna_test_rlgl_model_hierarchy_child_mesh \
+            cna_test_rlgl_model_skinned_animation_playback \
             cna_test_rlgl_compiled_effect_runtime \
             cna_test_rlgl_compiled_effect_draw
 

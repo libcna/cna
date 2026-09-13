@@ -994,6 +994,12 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     [[nodiscard]] int GetMaxRenderTargets();
 
     /**
+     * @brief Returns the maximum render-target sample count of the live GL context.
+     * @return The device-reported GL_MAX_SAMPLES value, clamped to zero or greater.
+     */
+    [[nodiscard]] int GetMaxRenderTargetSamples();
+
+    /**
      * @brief Creates and validates a new MRT framebuffer from borrowed target storage.
      * @param attachments Ordered color attachments; slot zero also supplies depth/stencil.
      * @param count Number of attachments in the range two through four.

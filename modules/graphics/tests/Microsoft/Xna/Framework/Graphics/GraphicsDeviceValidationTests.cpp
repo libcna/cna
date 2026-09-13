@@ -203,7 +203,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         bindings.emplace_back(targets.back().get());
     }
     if (CNA_RENDERER_IS(SdlRenderer, FreeDirect, DirectX1, DirectX2, DirectX3, DirectX5,
-                        DirectX6, DirectX7, DirectX8, Gdi, Software, Rlgl))
+                        DirectX6, DirectX7, DirectX8, Gdi, Software))
     {
     // Task 709 (the SDL_RENDERER family) / DX3-27 (DirectDraw, plans/plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plans/plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plans/plan_dx2.md) / plans/plan_dx3.md (same 2D
@@ -217,14 +217,19 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // throws for count > 1 because the renderer has one active colour buffer. It was absent, so
     // this test demanded a clean bind from a renderer that cannot do one; its SupportsCapability()
     // now reports MultipleRenderTargets as false to match.
-    // RLGL reaches this branch for a profile reason: the default GraphicsDevice is Reach and RLGL
-    // enforces that profile's one-target ceiling. Its focused HiDef fixture validates four slots.
     // Sokol left this list at plans/plan_sokol.md SOKOL-26: it is now real-MRT-capable too (a genuine
     // multi-attachment sg_pass, 2-4 RenderTarget2D targets), so 4 real targets bind cleanly here
     // exactly like EasyGL/Vulkan/D3D11/etc. do below.
     // Diligent left this list at plans/plan_diligent.md DILIGENT-24: it is now real-MRT-capable
     // too (up to four attachments), so 4 real targets bind cleanly here as well.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
+    }
+    else if (CNA_RENDERER_IS(Rlgl))
+    {
+        // RLGL supports four native MRT slots in HiDef, but this default device is Reach. The
+        // shared profile guard rejects the binding with the XNA-facing exception before the
+        // renderer sees it; RLGL's focused HiDef fixtures validate the successful four-slot path.
+        EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
     }
     else if (CNA_RENDERER_IS(Stub, OpenVg, NanoVg))
     {

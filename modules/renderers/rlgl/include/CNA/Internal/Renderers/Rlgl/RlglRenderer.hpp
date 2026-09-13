@@ -990,6 +990,7 @@ namespace CNA::Internal::Renderers::Rlgl
         int maxVertexSamplerSlots_ = 0;
 #endif
         int maxRenderTargets_ = 1;
+        int maxRenderTargetSamples_ = 0;
         float maxSamplerAnisotropy_ = 1.0f;
         std::array<SamplerRecord, 16> samplers_{};
 #if defined(CNA_RLGL_COMPILED_EFFECTS)

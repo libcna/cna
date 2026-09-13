@@ -3923,9 +3923,8 @@ void main()
         RenderTargetStorage storage;
         if (multiSampleCount > 0)
         {
-            GLint maxSamples = 0;
-            glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-            storage.multiSampleCount = std::min(multiSampleCount, static_cast<int>(maxSamples));
+            storage.multiSampleCount = std::min(
+                multiSampleCount, GetMaxRenderTargetSamples());
             if (storage.multiSampleCount < 2) storage.multiSampleCount = 0;
         }
         storage.colorTexture = CreateTexture2D(
@@ -4087,9 +4086,8 @@ void main()
 
         if (multiSampleCount > 0)
         {
-            GLint maxSamples = 0;
-            glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-            storage.multiSampleCount = std::min(multiSampleCount, static_cast<int>(maxSamples));
+            storage.multiSampleCount = std::min(
+                multiSampleCount, GetMaxRenderTargetSamples());
             if (storage.multiSampleCount < 2) storage.multiSampleCount = 0;
         }
 
@@ -4232,6 +4230,15 @@ void main()
         return std::clamp(
             std::min(static_cast<int>(drawBuffers), static_cast<int>(colorAttachments)),
             1, 4);
+    }
+
+    int GetMaxRenderTargetSamples()
+    {
+        RequireInitialized("render-target sample-count query");
+        GLint maxSamples = 0;
+        glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+        ThrowIfGlError("render-target sample-count query");
+        return std::max(0, static_cast<int>(maxSamples));
     }
 
     unsigned int CreateMrtFramebuffer(

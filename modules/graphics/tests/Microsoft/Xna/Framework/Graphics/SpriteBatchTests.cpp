@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <optional>
 
+#include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
@@ -40,6 +41,7 @@ using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using CNA::Internal::Renderers::DummyTextureRenderer;
 using CNA::Internal::Renderers::RecordingSpriteBatchRenderer;
+using namespace CNA::Testing::Renderers; // NOLINT(google-build-using-namespace)
 using System::ArgumentOutOfRangeException;
 
 // -----------------------------------------------------------------------
@@ -1696,6 +1698,9 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 TEST(SpriteBatchCrossDeviceTest, ImmediateRefusesATextureFromAnotherDeviceAndStaysUsable)
 {
+    if (CNA_RENDERER_IS(Rlgl))
+        GTEST_SKIP() << "rlgl 6.0 has process-global state and permits only one live RLGL device";
+
     GraphicsDevice owning;
     GraphicsDevice other;
     Texture2D foreign(owning, 4, 4, false, SurfaceFormat::Color);
@@ -1715,6 +1720,9 @@ TEST(SpriteBatchCrossDeviceTest, ImmediateRefusesATextureFromAnotherDeviceAndSta
 
 TEST(SpriteBatchCrossDeviceTest, DeferredRefusesAtDrawRatherThanWedgingTheBatchAtEnd)
 {
+    if (CNA_RENDERER_IS(Rlgl))
+        GTEST_SKIP() << "rlgl 6.0 has process-global state and permits only one live RLGL device";
+
     GraphicsDevice owning;
     GraphicsDevice other;
     Texture2D foreign(owning, 4, 4, false, SurfaceFormat::Color);

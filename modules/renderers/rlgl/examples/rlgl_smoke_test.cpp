@@ -59,8 +59,8 @@ protected:
         renderer.GetViewportSize(logicalWidth, logicalHeight);
         Check(logicalWidth == kInitialWidth && logicalHeight == kInitialHeight,
               "GraphicsDevice exposes the requested native-backbuffer logical size");
-        Check(!renderer.SupportsCapability(CNA::GraphicsCapability::ThreeD),
-              "unfinished 3D resources are reported unsupported, not inferred from OpenGL");
+        Check(renderer.SupportsCapability(CNA::GraphicsCapability::ThreeD),
+              "the completed representative workload ladder advertises the 3D pipeline");
         Check(renderer.GetSwapIntervalEXT() == 0,
               "requested immediate presentation interval reached the renderer");
 

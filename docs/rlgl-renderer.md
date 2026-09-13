@@ -71,15 +71,18 @@ success.
 | Multiple render targets | ✅ | HiDef supports ordered sets of two through four RenderTarget2D objects, cube faces, or compatible mixtures through transactional rlgl-created FBOs and `rlActiveDrawBuffers`; indexed masks/Clear, slot-zero depth, mixed formats, MSAA resolve/mips, usage, transitions, and refusal safety passed `RLGL-040`/`046`. The shared source-effect MRT oracle passed 20/20 distinct-output, mask, depth, real-MSAA-resolve, immediate-sampling, replacement, usage/refusal, and native-error checks in `RLGL-043`. Reach correctly remains limited to one target |
 | Compiled XNA effects | ✅ | With `CNA_RLGL_COMPILED_EFFECTS=ON`, the pinned MojoShader path executes the same 17 shared contracts as DirectX11: reflection/state, ordinary/multi-stream/instanced indexed and non-indexed draws, SpriteBatch, reflected attributes/uniforms, fragment and vertex 2D/cube samplers, pass selection, render-target orientation, stock-compatible depth, switching, stress/truncation, and context restoration (`RLGL-047`/`048`/`049`/`051`). `GraphicsCapability::CompiledEffects` is true in this build. Volume sampling is explicitly refused at the missing RLGL `Texture3D` resource boundary. |
 | CNAEXT source `ShaderEffect` | ✅ | RLGL-050 compiles and links caller desktop GLSL, reports structured diagnostics, maps declaration-order attributes, uploads every loose uniform/array form, binds Texture2D/TextureCube, drives indexed/non-indexed 3D and SpriteBatch draws, survives source/stock transitions, and rebuilds retained source/uniform state after context recreation. Real volume sampling remains unavailable because RLGL has no `Texture3D` resource. |
-| Representative general 3D workloads | ❌ | The workload ladder remains a separate RLGL-018 gate, so the umbrella `GraphicsCapability::ThreeD` stays false despite validated stock, source, compiled, multi-stream, and instanced primitive draws |
+| Representative general 3D workloads | ✅ | RLGL-018 completed the staged clear/present through multipass ladder and reused five unchanged EasyGL Model workloads: basic draw, JSON texture content, two meshes with independent effects, child-bone hierarchy, and animated SkinnedEffect playback. `GraphicsCapability::ThreeD` is now true. |
 | Classic stock-effect instancing | ✅ | Hardware indexed instancing preserves per-stream offsets/divisors, every topology, both index widths, start/base ranges, effect-World composition, dynamic updates, and state recovery. The shared suites passed 70/72 tests (two named EasyGL/D3D skips), the parity sample passed 6/6 pixels, the native-state fixture passed 28/28 gates, and both focused executables passed AddressSanitizer in `RLGL-016` |
 | Occlusion queries | ✅ | A renderer-private GL 3.3 bridge uses exact `GL_SAMPLES_PASSED`; visible/additive/zero/occluded counts, asynchronous completion, permissive Begin/End sequencing, state recovery, and resource/device lifetime passed `RLGL-052` |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
 | Device loss/reset and resource restoration | ✅ | Robust contexts are requested and core/KHR/ARB reset status is polled when the platform grants robust lose-on-reset semantics; otherwise RLGL truthfully records the non-robust fallback and can only detect bind/swap failure. Presentation-only Reset, repeated detected loss/recreation, transactional restoration, event/status order, `ContentLost`, and disposal/failure matrices passed `RLGL-058`. |
 
 `SupportsCapability(AnisotropicFiltering)` follows rlgl's live extension probe and measured ceiling.
+`DepthStencilBuffer` and `StencilBuffer` follow the planes actually granted by the platform context;
+`MultiSampleAntiAliasing` follows the live `GL_MAX_SAMPLES` limit used to clamp render targets.
 `MultipleRenderTargets` additionally requires the current device profile's ceiling to exceed one,
 so it is false for Reach and true for a validated HiDef device with sufficient GL limits.
+`ThreeD` and `WireFrame` are true after the representative workload and pixel gates passed.
 `MultiStreamVertexInput` and `Instancing` are true for their validated ordinary, stock-effect, and
 optional compiled-effect routes. `CustomEffects` and `ExecutesShaderEffectSourceEXT()` are true;
 the accepted source pairs are exactly desktop GLSL vertex and fragment stages. Unlisted capability
@@ -217,6 +220,16 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_skinned_terms
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_model_draw
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_model_json_reader_texture
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_model_two_meshes_effects
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_model_hierarchy_child_mesh
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_model_skinned_animation_playback
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_render_target
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_render_target_formats
@@ -247,8 +260,8 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
 With `CNA_BUILD_TESTS=ON`, the executables are registered as `Rlgl_Smoke`, `Rlgl_Texture`,
 `Rlgl_Sampler`, `Rlgl_State`, `Rlgl_SpriteBatch`, `Rlgl_Buffer`, `Rlgl_Primitive`, `Rlgl_Effect`,
 `Rlgl_XnaPixelCenter`, ten focused BasicEffect-lighting fixtures, two DualTextureEffect fixtures,
-eighteen EnvironmentMapEffect fixtures, fourteen SkinnedEffect fixtures, and, when the opt-in is
-enabled, `Rlgl_CompiledEffect_runtime`. They are labelled
+eighteen EnvironmentMapEffect fixtures, fourteen SkinnedEffect fixtures, five unchanged shared
+Model workloads, and, when the opt-in is enabled, `Rlgl_CompiledEffect_runtime`. They are labelled
 `Rlgl` plus their focused graphics category, with the proven offscreen environment attached to
 each CTest entry. The
 RenderTarget2D fixtures cover focused resource/state behavior, all eleven exact classic formats,
@@ -260,6 +273,8 @@ usage transitions, Color transfer/readback, and singular/plural cube/2D binding 
 EnvironmentMapEffect fixtures reuse EasyGL and shared cross-renderer oracles for the complete
 lighting/reflection formula, per-vertex Fresnel, amount saturation, fog, sampler-slot independence,
 all primitive routes, and both plain and rendered cube sources.
+The Model workloads compose content readers, mesh parts, independent effects, bone transforms, and
+animated skinning above those focused renderer contracts without RLGL-specific application code.
 
 ## Dependency and offline builds
 

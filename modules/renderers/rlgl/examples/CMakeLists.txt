@@ -483,6 +483,23 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         endif()
     endforeach()
 
+    # RLGL-018: representative Model-level workloads reused without renderer-specific copies.
+    set(RLGL_MODEL_WORKLOAD_TESTS
+        model_draw
+        model_json_reader_texture
+        model_two_meshes_effects
+        model_hierarchy_child_mesh
+        model_skinned_animation_playback)
+    foreach(test_name IN LISTS RLGL_MODEL_WORKLOAD_TESTS)
+        add_executable(cna_test_rlgl_${test_name}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_${test_name}_test.cpp")
+        target_link_libraries(cna_test_rlgl_${test_name}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_${test_name} PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+
     if(CNA_RLGL_COMPILED_EFFECTS)
         add_executable(cna_test_rlgl_compiled_effect_runtime
             rlgl_compiled_effect_runtime_test.cpp)
@@ -779,6 +796,14 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
                 COMMAND cna_test_rlgl_skinnedeffect_${test_name}
                 TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
                 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
+        foreach(test_name IN LISTS RLGL_MODEL_WORKLOAD_TESTS)
+            cna_register_renderer_test(
+                NAME Rlgl_Workload_${test_name}
+                COMMAND cna_test_rlgl_${test_name}
+                TIMEOUT 60
+                LABELS "Graphics3D;GraphicsModel;GraphicsWorkload;GraphicsParity;Rlgl"
                 ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         endforeach()
         if(CNA_RLGL_COMPILED_EFFECTS)

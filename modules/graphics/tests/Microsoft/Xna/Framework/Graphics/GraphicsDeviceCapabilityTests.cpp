@@ -210,12 +210,12 @@ struct CapabilityExpectation
         case GraphicsRendererType::Igl:
             return {true, false, true};
 
-        // plans/plan_rlgl.md RLGL-040/RLGL-052: the default GraphicsDevice uses Reach, whose XNA
-        // profile ceiling is one target. The renderer-local HiDef test separately proves all four
-        // native MRT slots. RLGL-052 supplies an exact desktop GL sample-count query; source
-        // ShaderEffect remains deliberately unavailable.
+        // plans/plan_rlgl.md RLGL-040/RLGL-050/RLGL-052: the default GraphicsDevice uses Reach,
+        // whose XNA profile ceiling is one target. The renderer-local HiDef test separately proves
+        // all four native MRT slots. Exact GL queries and source ShaderEffect execution back the
+        // other two answers.
         case GraphicsRendererType::Rlgl:
-            return {false, true, false};
+            return {false, true, true};
 
         default:
             return {true, true, true};
@@ -241,6 +241,7 @@ struct CapabilityExpectation
     (defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_VULKAN) && defined(CNA_VULKAN_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_WEBGPU) && defined(CNA_WEBGPU_COMPILED_EFFECTS)) || \
+    (defined(CNA_RENDERER_RLGL) && defined(CNA_RLGL_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_DIRECTX9) && defined(CNA_DIRECTX9_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_DIRECTX11) && defined(CNA_DIRECTX11_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_DIRECTX12) && defined(CNA_DIRECTX12_COMPILED_EFFECTS))

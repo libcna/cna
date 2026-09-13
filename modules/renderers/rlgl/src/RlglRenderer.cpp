@@ -687,6 +687,7 @@ namespace CNA::Internal::Renderers::Rlgl
         maxVertexSamplerSlots_ = Bridge::GetMaxCompiledEffectVertexSamplerSlots();
 #endif
         maxRenderTargets_ = Bridge::GetMaxRenderTargets();
+        maxRenderTargetSamples_ = Bridge::GetMaxRenderTargetSamples();
         maxSamplerAnisotropy_ = Bridge::GetMaxSamplerAnisotropy();
         nativeLossPollingAvailable_ =
             robustContext_ && Bridge::SupportsGraphicsResetStatus();
@@ -1424,8 +1425,16 @@ namespace CNA::Internal::Renderers::Rlgl
         {
         case CNA::GraphicsCapability::AnisotropicFiltering:
             return maxSamplerAnisotropy_ > 1.0f;
+        case CNA::GraphicsCapability::DepthStencilBuffer:
+            return SupportsDepthStencil();
+        case CNA::GraphicsCapability::StencilBuffer:
+            return SupportsStencilBuffer();
+        case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+            return maxRenderTargetSamples_ >= 2;
         case CNA::GraphicsCapability::MultipleRenderTargets:
             return maxRenderTargets_ >= 2;
+        case CNA::GraphicsCapability::ThreeD:
+        case CNA::GraphicsCapability::WireFrame:
         case CNA::GraphicsCapability::OcclusionQuery:
         case CNA::GraphicsCapability::CustomEffects:
         case CNA::GraphicsCapability::MultiStreamVertexInput:

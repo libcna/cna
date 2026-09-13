@@ -412,7 +412,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
     // component order. Verified by a real sampled draw including a NEGATIVE texel
     // (Vulkan_NormalizedByteFormat), which is the only thing that distinguishes SNORM storage from
     // UNORM storage of the same bytes.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Rlgl))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
     }
@@ -425,7 +425,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
     // plan_vulkan.md VULKAN-174: and on Vulkan, as VK_FORMAT_R8G8B8A8_SNORM.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, WebGPU, Vulkan, SdlGpu, Rlgl))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -442,7 +442,7 @@ TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
     // VK_FORMAT_A1R5G5B5_UNORM_PACK16 field for field -- core 1.0, no extension. Verified by a real
     // sampled draw (Vulkan_Packed16Format), not by a readback, which Texture2D serves from a CPU
     // copy and which therefore cannot see a wrong channel order.
-    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu))
+    if (CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Vulkan, SdlGpu, Rlgl))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
     }
@@ -585,7 +585,7 @@ TEST_F(HiDefFormatConstructionTest, TheProfileItselfRefusesNothing)
 
 TEST_F(HiDefFormatConstructionTest, SingleIsTheRenderersCallOnHiDef)
 {
-    if (CNA_RENDERER_IS(Igl))
+    if (CNA_RENDERER_IS(Igl, Rlgl))
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
     else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
@@ -593,41 +593,65 @@ TEST_F(HiDefFormatConstructionTest, SingleIsTheRenderersCallOnHiDef)
 
 TEST_F(HiDefFormatConstructionTest, Vector2IsTheRenderersCallOnHiDef)
 {
+    if (CNA_RENDERER_IS(Rlgl))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2));
+    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, Vector4IsTheRenderersCallOnHiDef)
 {
+    if (CNA_RENDERER_IS(Rlgl))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4));
+    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, HalfSingleIsTheRenderersCallOnHiDef)
 {
+    if (CNA_RENDERER_IS(Rlgl))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle));
+    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, HalfVector2IsTheRenderersCallOnHiDef)
 {
+    if (CNA_RENDERER_IS(Rlgl))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2));
+    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, HalfVector4IsTheRenderersCallOnHiDef)
 {
+    if (CNA_RENDERER_IS(Rlgl))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4));
+    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, HdrBlendableIsTheRenderersCallOnHiDef)
 {
+    if (CNA_RENDERER_IS(Rlgl))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable));
+    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, Rgba1010102IsTheRenderersCallOnHiDef)
 {
+    if (CNA_RENDERER_IS(Rlgl))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102));
+    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
 }
 
 TEST_F(HiDefFormatConstructionTest, Rgba64IsTheRenderersCallOnHiDef)
 {
+    if (CNA_RENDERER_IS(Rlgl))
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64));
+    else
         EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
 }
 
@@ -715,6 +739,10 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // not an alternative to it.
         const bool profileAllows =
             Texture::IsFormatAllowedByProfileEXT(GraphicsProfile::Reach, format);
+        // RLGL-011: all twenty classic XNA Texture2D formats have exact transfer and sampled-pixel
+        // evidence. Extension formats appended after HdrBlendable retain their separate verdicts.
+        const bool rlglClassic = CNA_RENDERER_IS(Rlgl) &&
+            static_cast<int>(format) <= static_cast<int>(SurfaceFormat::HdrBlendable);
         // WEBGPU-144/SDLGPU-69: block-compressed support is a runtime storage decision. WebGPU and
         // SDL GPU may upload native BC blocks; SDL GPU can instead decode them into RGBA8 while
         // preserving the public compressed-transfer contract.
@@ -726,6 +754,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         const bool rendererBlockCompressed =
             gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format));
         const bool supported = profileAllows && (format == SurfaceFormat::Color
+            || rlglClassic
             || rendererBlockCompressed
             || (easyGlSignedNormalized && (format == SurfaceFormat::NormalizedByte4
                                            || format == SurfaceFormat::NormalizedByte2))

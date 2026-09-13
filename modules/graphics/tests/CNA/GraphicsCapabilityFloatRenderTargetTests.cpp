@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
@@ -18,6 +19,7 @@ using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using namespace CNA::Testing::Renderers; // NOLINT(google-build-using-namespace)
 
 namespace {
 
@@ -136,7 +138,16 @@ TEST(GraphicsCapabilityFloatRenderTargetTest, ThePreExistingAnswersAreUnchanged)
 
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::CustomEffects));
-    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets));
+    if (CNA_RENDERER_IS(Rlgl))
+    {
+        // RLGL-040: the renderer has four slots, but the default device used here is Reach and its
+        // XNA profile ceiling is one. The focused RLGL HiDef fixture covers the true branch.
+        EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets));
+    }
+    else
+    {
+        EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets));
+    }
 }
 
 TEST(GraphicsCapabilityFloatRenderTargetTest, ColourRenderTargetsAreAlwaysSupported)
