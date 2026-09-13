@@ -3895,6 +3895,12 @@ namespace
             Probe::PixelCallNzBooleanNegate,
             Probe::PixelBreakPPredicateNegate,
             Probe::PixelBreakPPredicateVectorSwizzle,
+            Probe::PixelLoopCounterNegate,
+            Probe::PixelLoopCounterSwizzle,
+            Probe::PixelLoopConstantNegate,
+            Probe::PixelLoopConstantSwizzle,
+            Probe::PixelRepConstantNegate,
+            Probe::PixelRepConstantSwizzle,
             Probe::Vertex20LoopRepDepth2,
             Probe::Vertex20StaticFlowCount17If,
             Probe::Vertex20StaticFlowCount17Else,
@@ -3911,6 +3917,12 @@ namespace
             Probe::Vertex30CallNzBooleanNegate,
             Probe::Vertex30BreakPPredicateNegate,
             Probe::Vertex30BreakPPredicateVectorSwizzle,
+            Probe::Vertex30LoopCounterNegate,
+            Probe::Vertex30LoopCounterSwizzle,
+            Probe::Vertex30LoopConstantNegate,
+            Probe::Vertex30LoopConstantSwizzle,
+            Probe::Vertex30RepConstantNegate,
+            Probe::Vertex30RepConstantSwizzle,
         };
         for (const Probe probe : invalidProbes)
         {
@@ -3928,7 +3940,7 @@ namespace
                 rejected = true;
             }
             Check(rejected,
-                  "compiled Effect parser accepted invalid structured flow control or condition "
+                  "compiled Effect parser accepted invalid structured flow control or control "
                   "operand " + std::to_string(static_cast<int>(probe)));
         }
 
@@ -3945,6 +3957,7 @@ namespace
             Probe::PixelCallNzBooleanNot,
             Probe::PixelBreakPPredicateNot,
             Probe::PixelBreakPPredicateReplicateY,
+            Probe::PixelPlainLoopRepOperands,
             Probe::Vertex20LoopRepDepth1,
             Probe::Vertex20StaticFlowCount16,
             Probe::Vertex2xStaticFlowCount16,
@@ -3956,6 +3969,7 @@ namespace
             Probe::Vertex30CallNzBooleanNot,
             Probe::Vertex30BreakPPredicateNot,
             Probe::Vertex30BreakPPredicateReplicateY,
+            Probe::Vertex30PlainLoopRepOperands,
         };
         for (const Probe probe : validProbes)
         {
@@ -3975,7 +3989,7 @@ namespace
                 errorMessage = error.what();
             }
             Check(accepted,
-                  "compiled Effect parser rejected legal structured flow control or condition "
+                  "compiled Effect parser rejected legal structured flow control or control "
                   "operand " + std::to_string(static_cast<int>(probe)) + ": " + errorMessage);
         }
     }

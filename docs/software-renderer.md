@@ -448,6 +448,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   translation consume the encoded scalar predicate component instead of an invalid Boolean vector.
   SOFTWARE-481 completes the label-source side of subroutine validation: patch 106 rejects every
   modifier and nonidentity selector on `CALL`, `CALLNZ` and `LABEL` operands in both shader stages.
+  SOFTWARE-482 extends the plain identity-source contract to both `LOOP` operands and the `REP`
+  operand: patch 107 rejects modifiers and explicit selectors in both shader stages. It also
+  corrects older synthetic loop controls that encoded replicate-X instead of Microsoft's identity
+  selector, so the retained positive evidence is genuine.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is

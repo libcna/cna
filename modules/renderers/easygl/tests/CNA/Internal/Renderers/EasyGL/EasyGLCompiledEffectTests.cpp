@@ -1861,7 +1861,7 @@ class EasyGLCompiledEffectInvalidFlowControlTest :
 };
 
 TEST_P(EasyGLCompiledEffectInvalidFlowControlTest,
-       RejectsInvalidStructureNestingOrConditionOperand)
+       RejectsInvalidStructureNestingOrControlOperand)
 {
     GraphicsDevice device;
     EasyGLRenderer* renderer = RendererOf(device);
@@ -1896,6 +1896,12 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzBooleanNegate,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateNegate,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateVectorSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelLoopCounterNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelLoopCounterSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelLoopConstantNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelLoopConstantSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelRepConstantNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelRepConstantSwizzle,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth2,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17If,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17Else,
@@ -1911,7 +1917,13 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzPredicateVectorSwizzle,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzBooleanNegate,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateNegate,
-        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateVectorSwizzle));
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateVectorSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30LoopCounterNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30LoopCounterSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30LoopConstantNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30LoopConstantSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30RepConstantNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30RepConstantSwizzle));
 
 class EasyGLCompiledEffectValidFlowControlTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticFlowControlProbe>
@@ -1919,7 +1931,7 @@ class EasyGLCompiledEffectValidFlowControlTest :
 };
 
 TEST_P(EasyGLCompiledEffectValidFlowControlTest,
-       AcceptsLegalStructureBoundaryDepthAndConditionOperand)
+       AcceptsLegalStructureBoundaryDepthAndControlOperand)
 {
     GraphicsDevice device;
     EasyGLRenderer* renderer = RendererOf(device);
@@ -1947,6 +1959,7 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzBooleanNot,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateNot,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateReplicateY,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelPlainLoopRepOperands,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth1,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount16,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex2xStaticFlowCount16,
@@ -1957,7 +1970,8 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzPredicateReplicateY,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzBooleanNot,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateNot,
-        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateReplicateY));
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateReplicateY,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30PlainLoopRepOperands));
 
 class EasyGLCompiledEffectInvalidCallGraphTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticCallGraphProbe>

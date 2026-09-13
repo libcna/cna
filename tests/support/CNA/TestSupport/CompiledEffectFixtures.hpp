@@ -613,6 +613,20 @@ namespace CNA::TestSupport
         PixelBreakPPredicateNot,
         /** @brief Select the replicated Y component of a pixel predicate used by `BREAKP`. */
         PixelBreakPPredicateReplicateY,
+        /** @brief Negate the loop-counter source of a pixel Shader Model 3 `LOOP`. */
+        PixelLoopCounterNegate,
+        /** @brief Swizzle the loop-counter source of a pixel Shader Model 3 `LOOP`. */
+        PixelLoopCounterSwizzle,
+        /** @brief Negate the integer-constant source of a pixel Shader Model 3 `LOOP`. */
+        PixelLoopConstantNegate,
+        /** @brief Swizzle the integer-constant source of a pixel Shader Model 3 `LOOP`. */
+        PixelLoopConstantSwizzle,
+        /** @brief Negate the integer-constant source of a pixel Shader Model 3 `REP`. */
+        PixelRepConstantNegate,
+        /** @brief Swizzle the integer-constant source of a pixel Shader Model 3 `REP`. */
+        PixelRepConstantSwizzle,
+        /** @brief Use plain identity sources for pixel Shader Model 3 `LOOP` and `REP`. */
+        PixelPlainLoopRepOperands,
         /** @brief Emit one legal loop/repeat level in an exact vertex Shader Model 2.0 program. */
         Vertex20LoopRepDepth1,
         /** @brief Emit two loop/repeat levels in an exact vertex Shader Model 2.0 program. */
@@ -667,6 +681,20 @@ namespace CNA::TestSupport
         Vertex30BreakPPredicateNot,
         /** @brief Select the replicated Y component of a vertex predicate used by `BREAKP`. */
         Vertex30BreakPPredicateReplicateY,
+        /** @brief Negate the loop-counter source of a vertex Shader Model 3 `LOOP`. */
+        Vertex30LoopCounterNegate,
+        /** @brief Swizzle the loop-counter source of a vertex Shader Model 3 `LOOP`. */
+        Vertex30LoopCounterSwizzle,
+        /** @brief Negate the integer-constant source of a vertex Shader Model 3 `LOOP`. */
+        Vertex30LoopConstantNegate,
+        /** @brief Swizzle the integer-constant source of a vertex Shader Model 3 `LOOP`. */
+        Vertex30LoopConstantSwizzle,
+        /** @brief Negate the integer-constant source of a vertex Shader Model 3 `REP`. */
+        Vertex30RepConstantNegate,
+        /** @brief Swizzle the integer-constant source of a vertex Shader Model 3 `REP`. */
+        Vertex30RepConstantSwizzle,
+        /** @brief Use plain identity sources for vertex Shader Model 3 `LOOP` and `REP`. */
+        Vertex30PlainLoopRepOperands,
     };
 
     /** @brief Shader-stage/profile program used to probe D3D9 subroutine call-graph rules. */
@@ -2706,7 +2734,7 @@ namespace CNA::TestSupport
                 SyntheticDeclarationModifierProbe::Pixel30SamplerCentroid;
         const bool probesPixelFlowControl =
             flowControlProbe >= SyntheticFlowControlProbe::ProperlyNestedLoopIf &&
-            flowControlProbe <= SyntheticFlowControlProbe::PixelBreakPPredicateReplicateY;
+            flowControlProbe <= SyntheticFlowControlProbe::PixelPlainLoopRepOperands;
         const bool probesPixelCallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Pixel2xDepth4 &&
             callGraphProbe <= SyntheticCallGraphProbe::Pixel30PlainLabelOperands;
@@ -3284,7 +3312,7 @@ namespace CNA::TestSupport
             const bool maximum = constantControlRegisterProbe ==
                                  SyntheticConstantControlRegisterProbe::Pixel30IntegerMaximum;
             AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i#
-            AppendUInt32(shader, source(regConstInt, maximum ? 15u : 16u, 0x00u));
+            AppendUInt32(shader, source(regConstInt, maximum ? 15u : 16u));
             AppendUInt32(shader, 0x00000027u); // endrep
         }
         if (constantControlRegisterProbe ==
@@ -4111,7 +4139,7 @@ namespace CNA::TestSupport
                     break;
                 case SyntheticInvalidPixelShaderModel20Opcode::Rep:
                     AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
-                    AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                    AppendUInt32(shader, source(regConstInt, 0));
                     AppendUInt32(shader, 0x00000027u); // endrep
                     break;
                 case SyntheticInvalidPixelShaderModel20Opcode::If:
@@ -5942,13 +5970,13 @@ namespace CNA::TestSupport
             const auto appendLoop = [&]()
             {
                 AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
-                AppendUInt32(shader, source(regLoop, 0, 0x00u));
+                AppendUInt32(shader, source(regLoop, 0));
                 AppendUInt32(shader, source(regConstInt, 0));
             };
             const auto appendRep = [&]()
             {
                 AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
-                AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                AppendUInt32(shader, source(regConstInt, 0));
             };
             const auto appendProbedBreakP = [&](std::uint32_t swizzle,
                                                 std::uint32_t modifier)
@@ -6120,6 +6148,46 @@ namespace CNA::TestSupport
                     break;
                 case SyntheticFlowControlProbe::PixelBreakPPredicateReplicateY:
                     appendProbedBreakP(0x55u, 0u);
+                    break;
+                case SyntheticFlowControlProbe::PixelLoopCounterNegate:
+                    AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop -aL, i0
+                    AppendUInt32(shader, source(regLoop, 0, 0xE4u, 1u));
+                    AppendUInt32(shader, source(regConstInt, 0));
+                    AppendUInt32(shader, 0x0000001Du); // endloop
+                    break;
+                case SyntheticFlowControlProbe::PixelLoopCounterSwizzle:
+                    AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL.x, i0
+                    AppendUInt32(shader, source(regLoop, 0, 0x00u));
+                    AppendUInt32(shader, source(regConstInt, 0));
+                    AppendUInt32(shader, 0x0000001Du); // endloop
+                    break;
+                case SyntheticFlowControlProbe::PixelLoopConstantNegate:
+                    AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, -i0
+                    AppendUInt32(shader, source(regLoop, 0));
+                    AppendUInt32(shader, source(regConstInt, 0, 0xE4u, 1u));
+                    AppendUInt32(shader, 0x0000001Du); // endloop
+                    break;
+                case SyntheticFlowControlProbe::PixelLoopConstantSwizzle:
+                    AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0.x
+                    AppendUInt32(shader, source(regLoop, 0));
+                    AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                    AppendUInt32(shader, 0x0000001Du); // endloop
+                    break;
+                case SyntheticFlowControlProbe::PixelRepConstantNegate:
+                    AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep -i0
+                    AppendUInt32(shader, source(regConstInt, 0, 0xE4u, 1u));
+                    AppendUInt32(shader, 0x00000027u); // endrep
+                    break;
+                case SyntheticFlowControlProbe::PixelRepConstantSwizzle:
+                    AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0.x
+                    AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                    AppendUInt32(shader, 0x00000027u); // endrep
+                    break;
+                case SyntheticFlowControlProbe::PixelPlainLoopRepOperands:
+                    appendLoop();
+                    AppendUInt32(shader, 0x0000001Du); // endloop
+                    appendRep();
+                    AppendUInt32(shader, 0x00000027u); // endrep
                     break;
                 case SyntheticFlowControlProbe::None:
                 case SyntheticFlowControlProbe::Vertex20LoopRepDepth1:
@@ -6925,6 +6993,9 @@ namespace CNA::TestSupport
             flowControlProbe >= SyntheticFlowControlProbe::Vertex30IfPredicateNegate &&
             flowControlProbe <=
                 SyntheticFlowControlProbe::Vertex30BreakPPredicateReplicateY;
+        const bool probesVertex30LoopRepOperand =
+            flowControlProbe >= SyntheticFlowControlProbe::Vertex30LoopCounterNegate &&
+            flowControlProbe <= SyntheticFlowControlProbe::Vertex30PlainLoopRepOperands;
         const bool probesVertexCallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Vertex20Depth1 &&
             callGraphProbe <= SyntheticCallGraphProbe::Vertex30PlainLabelOperands;
@@ -6972,7 +7043,8 @@ namespace CNA::TestSupport
             probesVertex30TypedControlSource || probesVertex30SpecialControlSource ||
             probesVertexRelativeAddressing || probesVertexSemanticDeclarations ||
             probesVertexDeclarationModifier ||
-            probesVertex30PredicateFlowOperand || probesVertex30CallGraph ||
+            probesVertex30PredicateFlowOperand || probesVertex30LoopRepOperand ||
+            probesVertex30CallGraph ||
             probesMissingVertexSamplerDeclaration ||
             probesVertexImmediateConstantDefinition || probesVertexSamplerDuplicate;
         const bool probesVertex2xTemporary =
@@ -7728,7 +7800,7 @@ namespace CNA::TestSupport
                     SyntheticConstantControlRegisterProbe::Vertex30IntegerOutOfRange)
             {
                 AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i#
-                AppendUInt32(shader, source(regConstInt, maximum ? 15u : 16u, 0x00u));
+                AppendUInt32(shader, source(regConstInt, maximum ? 15u : 16u));
                 AppendUInt32(shader, 0x00000027u); // endrep
             }
             else if (constantControlRegisterProbe ==
@@ -7769,8 +7841,8 @@ namespace CNA::TestSupport
             else
             {
                 AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL#, i0
-                AppendUInt32(shader, source(regLoop, maximum ? 0u : 1u, 0x00u));
-                AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                AppendUInt32(shader, source(regLoop, maximum ? 0u : 1u));
+                AppendUInt32(shader, source(regConstInt, 0));
                 AppendUInt32(shader, 0x0000001Du); // endloop
             }
         }
@@ -7904,7 +7976,7 @@ namespace CNA::TestSupport
                 case SyntheticInvalidShaderModel20DynamicFeature::VertexBreak:
                 case SyntheticInvalidShaderModel20DynamicFeature::VertexBreakc:
                     AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
-                    AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                    AppendUInt32(shader, source(regConstInt, 0));
                     if (shaderModel20InvalidDynamicFeature ==
                         SyntheticInvalidShaderModel20DynamicFeature::VertexBreak)
                     {
@@ -8308,6 +8380,56 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regInput, 0));
             AppendUInt32(shader, source(regConst, 0));
         }
+        else if (probesVertex30LoopRepOperand)
+        {
+            const bool loopCounterNegate =
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30LoopCounterNegate;
+            const bool loopCounterSwizzle =
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30LoopCounterSwizzle;
+            const bool loopConstantNegate =
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30LoopConstantNegate;
+            const bool loopConstantSwizzle =
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30LoopConstantSwizzle;
+            const bool repConstantNegate =
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30RepConstantNegate;
+            const bool repConstantSwizzle =
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30RepConstantSwizzle;
+            const bool plainOperands =
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30PlainLoopRepOperands;
+
+            AppendUInt32(shader, 0x00000030u | (5u << 24)); // defi i0, 1, 0, 1, 0
+            AppendUInt32(shader, destination(regConstInt, 0, 0xFu));
+            AppendUInt32(shader, 1u);
+            AppendUInt32(shader, 0u);
+            AppendUInt32(shader, 1u);
+            AppendUInt32(shader, 0u);
+            if (!repConstantNegate && !repConstantSwizzle)
+            {
+                AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
+                AppendUInt32(shader,
+                             source(regLoop, 0,
+                                    loopCounterSwizzle ? 0x00u : 0xE4u,
+                                    loopCounterNegate ? 1u : 0u));
+                AppendUInt32(shader,
+                             source(regConstInt, 0,
+                                    loopConstantSwizzle ? 0x00u : 0xE4u,
+                                    loopConstantNegate ? 1u : 0u));
+                AppendUInt32(shader, 0x0000001Du); // endloop
+            }
+            if (repConstantNegate || repConstantSwizzle || plainOperands)
+            {
+                AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
+                AppendUInt32(shader,
+                             source(regConstInt, 0,
+                                    repConstantSwizzle ? 0x00u : 0xE4u,
+                                    repConstantNegate ? 1u : 0u));
+                AppendUInt32(shader, 0x00000027u); // endrep
+            }
+            AppendUInt32(shader, 0x00000014u | (3u << 24)); // m4x4 o0, v0, c0
+            AppendUInt32(shader, destination(regTexCoordOut, 0));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(regConst, 0));
+        }
         else if (probesVertex30PredicateFlowOperand)
         {
             const bool booleanCondition =
@@ -8395,7 +8517,7 @@ namespace CNA::TestSupport
             else if (breakP)
             {
                 AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
-                AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                AppendUInt32(shader, source(regConstInt, 0));
                 AppendUInt32(shader, 0x00000060u | (1u << 24)); // breakp p0
                 AppendUInt32(shader, condition);
                 AppendUInt32(shader, 0x00000027u); // endrep
@@ -8584,12 +8706,12 @@ namespace CNA::TestSupport
                 flowControlProbe == SyntheticFlowControlProbe::Vertex20LoopRepDepth2)
             {
                 AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
-                AppendUInt32(shader, source(regLoop, 0, 0x00u));
+                AppendUInt32(shader, source(regLoop, 0));
                 AppendUInt32(shader, source(regConstInt, 0));
                 if (flowControlProbe == SyntheticFlowControlProbe::Vertex20LoopRepDepth2)
                 {
                     AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
-                    AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                    AppendUInt32(shader, source(regConstInt, 0));
                     AppendUInt32(shader, 0x00000027u); // endrep
                 }
                 AppendUInt32(shader, 0x0000001Du); // endloop
@@ -8606,14 +8728,14 @@ namespace CNA::TestSupport
                 const auto appendLoop = [&]()
                 {
                     AppendUInt32(shader, 0x0000001Bu | (2u << 24)); // loop aL, i0
-                    AppendUInt32(shader, source(regLoop, 0, 0x00u));
+                    AppendUInt32(shader, source(regLoop, 0));
                     AppendUInt32(shader, source(regConstInt, 0));
                     AppendUInt32(shader, 0x0000001Du); // endloop
                 };
                 const auto appendRep = [&]()
                 {
                     AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
-                    AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                    AppendUInt32(shader, source(regConstInt, 0));
                     AppendUInt32(shader, 0x00000027u); // endrep
                 };
                 const auto appendCall = [&](bool conditional)
