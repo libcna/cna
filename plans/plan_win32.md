@@ -606,7 +606,7 @@ that the Win32 subtree contains no `SDL` identifier.
 | WIN32-0062 | DirectX11 accepts the Win32Platform window | ✅ | `Win32DirectXIntegrationTests` |
 | WIN32-0063 | DirectX12 accepts the Win32Platform window | ✅ | `Win32DirectXIntegrationTests` |
 | WIN32-0064 | All five mechanical gates stay clean | ✅ | §17 |
-| WIN32-0065 | `docs/platform-win32.md` + `docs/platform-abstraction.md` + `plans/plan_platform.md` §12 | ✅ | |
+| WIN32-0065 | `docs/platform-win32.md` + `docs/platform-abstraction.md` + `plans/plan_platform.md` §12 + the CI cells | ✅ | `.github/workflows/platform-ci.yml` gains two jobs: `win32-cross` (mingw-w64 + Wine, on every push, the part that regresses silently) and `win32-native` (MSVC on `windows-latest`, `workflow_dispatch`-only, matching the precedent `d3d-windows-ci.yml` set) |
 
 ---
 
@@ -893,7 +893,7 @@ nothing but the standard library — is itself the measurement that makes the ha
 | `x86_64-w64-mingw32-g++` 13.2.0, `-Wall -Wextra`, C++23 | clean — no warnings from any Win32 source |
 | Platform module + full test suite, cross-built and executed under Wine | 385/386, 1 by-design skip |
 | `cna_win32_directx_probe` | exit 0 |
-| MSVC | **not run here** — no Windows host available. Nothing in the backend is MSVC-only: it uses no GCC extension, no `__attribute__`, and no compiler-specific pragma. |
+| MSVC | **not run here** — no Windows host available. Nothing in the backend is MSVC-only: it uses no GCC extension, no `__attribute__`, and no compiler-specific pragma. The `win32-native` CI job builds it with MSVC on demand, and the harness carries `/W4` for that compiler rather than letting `-Wall -Wextra` reach it. |
 
 A full CNA configure (the whole framework, not just the platform module) could not be run: it
 requires the `sharp-runtime` *sibling checkout*, which this sandbox cannot fetch. That is what

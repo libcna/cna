@@ -45,6 +45,15 @@ project(CnaPlatformStandaloneTests CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# The warning set, expressed so it survives a native MSVC build of the same harness: cl.exe reads
+# `-Wall` as `/Wall` -- a different and far noisier level than GCC's -- and does not know `-Wextra`
+# at all. /W4 is the MSVC equivalent of what the rest of CNA asks for.
+if(MSVC)
+    set(CNA_HARNESS_WARNINGS /W4)
+else()
+    set(CNA_HARNESS_WARNINGS -Wall -Wextra)
+endif()
 get_filename_component(CNA_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 
 # The real selection file, not a paraphrase of it: this harness is also how the selection's
@@ -87,7 +96,7 @@ target_include_directories(cna_platform
         PUBLIC "${CNA_ROOT}/modules/platform/include"
         PUBLIC "${CNA_ROOT}/modules/platform/src"
         PUBLIC "${CNA_ROOT}/modules/core/include")
-target_compile_options(cna_platform PRIVATE -Wall -Wextra)
+target_compile_options(cna_platform PRIVATE ${CNA_HARNESS_WARNINGS})
 
 if(CNA_PLATFORM STREQUAL "WIN32")
     # Operating-system import libraries only -- nothing to fetch or vendor. PRIVATE for the same
@@ -188,7 +197,7 @@ target_include_directories(cna_platform_tests
         PRIVATE "${CNA_ROOT}/modules/platform/tests"
         PRIVATE "${CNA_ROOT}/modules/core/include")
 target_link_libraries(cna_platform_tests PRIVATE cna_platform gtest gtest_main)
-target_compile_options(cna_platform_tests PRIVATE -Wall -Wextra)
+target_compile_options(cna_platform_tests PRIVATE ${CNA_HARNESS_WARNINGS})
 
 # The SDL implementation suites include SDL's own headers to build native event structures, so the
 # test target needs SDL directly -- cna_platform links it PRIVATE precisely so it does not leak to
@@ -221,7 +230,7 @@ endif()
 if(CNA_PLATFORM STREQUAL "WIN32")
     add_executable(cna_win32_directx_probe win32_directx_probe.cpp)
     target_link_libraries(cna_win32_directx_probe PRIVATE cna_platform d3d11 d3d12 dxgi)
-    target_compile_options(cna_win32_directx_probe PRIVATE -Wall -Wextra)
+    target_compile_options(cna_win32_directx_probe PRIVATE ${CNA_HARNESS_WARNINGS})
 endif()
 
 # --- MinGW runtime ------------------------------------------------------------------------------
