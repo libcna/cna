@@ -1,6 +1,6 @@
 # CNA Software Renderer Adversarial Parity Handoff
 
-Updated: 2026-09-13, continued through SOFTWARE-85 closure
+Updated: 2026-09-13, continued through SOFTWARE-86 closure
 
 This document is the restart point for the hostile Software-versus-EasyGL classic XNA 4.0/Core
 parity review. Do not interpret the large completed task count or green regression suites as proof
@@ -35,13 +35,13 @@ infallible oracle.
 - Repository: `/rv/data/development/github.com/openeggbert/cnasoftware`
 - Branch: `software`, tracking `origin/software`
 - Adversarial challenge start: `92ed418b3dfcd4a2e03ea8c0d092a0b4caca9e9f`
-- Last task commit before SOFTWARE-85: `c7d674ea2` —
-  `docs(SOFTWARE-207): classify declaration wrapper identity`
-- Campaign delta at that commit: 337 commits, 701 changed files, 67,420 insertions and 6,740
+- Last task commit before SOFTWARE-86: `2df8f3f60` —
+  `docs(SOFTWARE-85): close optional window blit`
+- Campaign delta at that commit: 338 commits, 701 changed files, 67,442 insertions and 6,750
   deletions relative to the challenge start. Recompute rather than copying these numbers into
   a future final report because this handoff commit and subsequent work change them.
-- `origin/software` was at `6861caf32` when this update was written. Before the SOFTWARE-85 task
-  commit, the local branch was twelve commits ahead. Do not push without a new explicit request in
+- `origin/software` was at `6861caf32` when this update was written. Before the SOFTWARE-86 task
+  commit, the local branch was thirteen commits ahead. Do not push without a new explicit request in
   the active conversation.
 - The only expected worktree entry after the handoff commit is the user's untracked `.junie/`.
   Preserve it. Do not stage it.
@@ -85,9 +85,8 @@ The evidence-backed verdict remains:
 `SOFTWARE-164/165` are now complete. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software advertises
 `GraphicsCapability::CompiledEffects=true`, accepts the public compiled-Effect entry point and
 passes the complete shared conformance surface plus the formerly skipped public Effect tests.
-Opt-out builds retain the dependency-free false capability. The remaining plan boundaries are the
-independently blocked repository-wide `SOFTWARE-100` and the historical no-goal `SOFTWARE-86`;
-do not treat this handoff as
+Opt-out builds retain the dependency-free false capability. The only remaining plan boundary is
+the independently blocked repository-wide `SOFTWARE-100`; do not treat this handoff as
 authority to stop before the active user's explicit completion goal is met.
 
 The prompted sampler, AddressW, and multisample-rasterizer hypotheses were all confirmed and fixed;
@@ -98,7 +97,15 @@ classic-XNA parity requirement, not a CNAEXT deferral. `SOFTWARE-178` removes Ea
 GLES/WebGL `GL_LINES` wireframe: native polygon mode is used where the active context exposes it,
 and every triangle path is refused consistently where it does not.
 
-## Latest completed work: SOFTWARE-85
+## Latest completed work: SOFTWARE-86
+
+Speculative SIMD, multithreading and tiling are closed as the explicit non-goal in design decision
+1. The Software renderer is a deterministic correctness oracle, not a real-time gameplay backend,
+and no concrete acceptance test demonstrates an impractical runtime. `Software_Rasterizer` passes
+in 0.09 seconds in the current configuration. A future measured regression may justify a new,
+narrow task; it does not keep this historical option open.
+
+## Earlier completed work: SOFTWARE-85
 
 The historical opt-in CPU-framebuffer-to-window blitter is closed as intentionally non-applicable,
 not implemented. Software deliberately owns no native window, video subsystem or swapchain;
@@ -350,7 +357,6 @@ The following are the only non-complete rows in `plans/plan_software.md` at this
 | Task | Meaning and next treatment |
 |---|---|
 | `SOFTWARE-100` | Independently blocked repository-wide acceptance row. Its exact unrelated test and GDI/sharp-runtime blockers are documented in the plan; do not broaden the renderer campaign to hide them. |
-| `SOFTWARE-86` | Historical optional performance work. Explicitly not a goal without a real impractical test. |
 
 All rows through `SOFTWARE-484` are closed except for the rows above. Assign the next demonstrated issue as
 `SOFTWARE-485`; never add a task merely to keep numbering moving.

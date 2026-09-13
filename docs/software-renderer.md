@@ -79,7 +79,9 @@ non-indexed user/buffer draws. That makes it useful for:
 Software is a first-class stock-effect correctness renderer: an XNA-style CNA application that does
 not use compiled custom Effects can rely on the verified CPU contract without a GPU. It is not
 optimized to match GPU throughput—there is no SIMD, multithreading or tile binning—because
-determinism and fidelity remain the primary goals (see `plans/plan_software.md` design decision 1).
+determinism and fidelity remain the primary goals. `SOFTWARE-86` closes speculative optimization
+as an explicit non-goal; a future performance task requires a measured impractical test rather
+than a general throughput objective (see `plans/plan_software.md` design decision 1).
 
 ## Writing a Software test
 

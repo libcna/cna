@@ -118,7 +118,8 @@ the window-dependent `Software_PresentLifecycle` supervisor, whose expected-abor
 open X11 and returned the skip code. The prior authenticated-Xvfb baseline was 156/156. At the
 start, the plan had 94 explicit task rows: 91 complete, `SOFTWARE-100` blocked by its documented
 repository-wide criteria, and the historical optional `SOFTWARE-85/86` pending at that time.
-SOFTWARE-85 is now closed as non-applicable to the display-free renderer contract.
+SOFTWARE-85 is now closed as non-applicable to the display-free renderer contract, and SOFTWARE-86
+is closed as the plan's explicit no-speculative-optimization decision.
 
 The `SOFTWARE-168` vertex-sampler closure was verified by the displayless Software runtime, two
 shared EasyGL output contracts and the complete 60/60 EasyGL compiled-effect family. After
