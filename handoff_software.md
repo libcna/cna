@@ -1,6 +1,6 @@
 # CNA Software Renderer Adversarial Parity Handoff
 
-Updated: 2026-09-13, continued through SOFTWARE-481
+Updated: 2026-09-13, continued through SOFTWARE-484
 
 This document is the restart point for the hostile Software-versus-EasyGL classic XNA 4.0/Core
 parity review. Do not interpret the large completed task count or green regression suites as proof
@@ -35,15 +35,15 @@ infallible oracle.
 - Repository: `/rv/data/development/github.com/openeggbert/cnasoftware`
 - Branch: `software`, tracking `origin/software`
 - Adversarial challenge start: `92ed418b3dfcd4a2e03ea8c0d092a0b4caca9e9f`
-- Last technical commit before this handoff update: `63be571e6` —
-  `fix(SOFTWARE-481): validate label source tokens`
-- Campaign delta at that commit: 328 commits, 695 changed files, 66,058 insertions and 6,593
+- Last technical commit before this handoff update: `1c8a231f7` —
+  `fix(SOFTWARE-484): reject reserved instruction controls`
+- Campaign delta at that commit: 332 commits, 698 changed files, 66,632 insertions and 6,594
   deletions relative to the challenge start. Recompute rather than copying these numbers into
   a future final report because this handoff commit and subsequent work change them.
 - `origin/software` was at `6861caf32` when this update was written. Before this handoff commit,
-  the local branch was three commits ahead: `1f08c30eb` (SOFTWARE-479), `f63424552`
-  (SOFTWARE-480), and `63be571e6` (SOFTWARE-481). This handoff commit will make it four commits
-  ahead. Do not push without a new explicit request in the active conversation.
+  the local branch was seven commits ahead, ending with `7f36a0ad4` (SOFTWARE-482),
+  `ed7b15c43` (SOFTWARE-483), and `1c8a231f7` (SOFTWARE-484). This handoff commit will make it
+  eight commits ahead. Do not push without a new explicit request in the active conversation.
 - The only expected worktree entry after the handoff commit is the user's untracked `.junie/`.
   Preserve it. Do not stage it.
 
@@ -95,7 +95,7 @@ the exact evidence and task mapping are in the `Final adversarial parity challen
 executes classic Effect Framework data through MojoShader/FNA3D-compatible structures. It is a real
 classic-XNA parity requirement, not a CNAEXT deferral.
 
-## Latest completed work: SOFTWARE-470 through SOFTWARE-481
+## Latest completed work: SOFTWARE-470 through SOFTWARE-484
 
 `SOFTWARE-470` audited the Shader Model 2 `SINCOS` scratch operands.
 
@@ -230,6 +230,29 @@ Twelve negative controls and two stage-level positive programs now pass. Focused
 the complete isolated compiled family is 647/647, the display-free Software runtime passes, and all
 160 Software CTests pass.
 
+`SOFTWARE-482` extended the same plain-source audit to `LOOP` and `REP`. Microsoft emits identity
+selectors for plain `aL`/`i#` controls and rejects arithmetic modifiers or explicit selectors.
+Both compiled paths accepted all twelve forged stage/instruction variants before managed patch
+107 required `SRCMOD_NONE` and identity selectors. Older synthetic loop controls were corrected
+from replicate-X to the real identity encoding. Focused EasyGL is 72/72, the complete compiled
+family is 661/661, the display-free Software runtime passes, and all 160 Software CTests pass.
+
+`SOFTWARE-483` audited the instruction control byte on `SETP`, `IFC` and `BREAKC`. The D3D9 ABI
+reserves values 0 and 7 and defines the six comparison relations at 1..6; Microsoft's assembler
+rejects suffix-free forms and accepts comparison-suffixed controls. Software accepted all six
+zero-control programs, while EasyGL rejected them only downstream. Managed patch 108 validates
+the range in shared instruction state. Twelve negative and two all-six positive programs pass;
+focused EasyGL is 86/86, the complete family is 675/675, and Software remains 160/160.
+
+`SOFTWARE-484` completed the adjacent control-byte audit for ordinary opcodes. D3D9 assigns
+opcode-specific controls only to the comparison instructions and Shader Model 2+ `TEXLD` forms;
+Software and EasyGL accepted control value 1 on forged `NOP` and `MOV` instructions in both
+Shader Model 3 stages. Managed patch 109 rejects nonzero controls unless that opcode/profile owns
+the field, leaving the exact comparison and texture ranges to their existing validators. Four
+negative probes pass with the retained legal controls. Focused EasyGL is 101/101, the complete
+compiled family is 679/679, the display-free Software runtime passes, and all 160 Software CTests
+pass.
+
 ## Recent compiled-Effect validation commits
 
 These commits form one evidence chain. Preserve their distinctions when debugging regressions:
@@ -260,6 +283,9 @@ These commits form one evidence chain. Preserve their distinctions when debuggin
   `CALLNZ` expressions.
 - `63be571e6` — SOFTWARE-481, require plain identity label sources for `CALL`, `CALLNZ` and
   `LABEL`.
+- `7f36a0ad4` — SOFTWARE-482, require plain identity `LOOP` and `REP` control sources.
+- `ed7b15c43` — SOFTWARE-483, validate comparison instruction control values 1 through 6.
+- `1c8a231f7` — SOFTWARE-484, reject reserved controls on every other opcode/profile.
 
 The lesson from SOFTWARE-468 is important: never generalize an exact `ps_2_0` assembler result to
 `ps_2_x`, `ps_3_0`, or a vertex profile without measuring it. The Microsoft profile boundaries can
@@ -281,8 +307,8 @@ The following are the only non-complete rows in `plans/plan_software.md` at this
 | `SOFTWARE-86` | Historical optional performance work. Explicitly not a goal without a real impractical test. |
 
 All rows through `SOFTWARE-163`, the completed later ranges stated in the plan, and
-`SOFTWARE-315..481` are closed except for the rows above. Assign the next demonstrated issue as
-`SOFTWARE-482`; never add a task merely to keep numbering moving.
+`SOFTWARE-315..484` are closed except for the rows above. Assign the next demonstrated issue as
+`SOFTWARE-485`; never add a task merely to keep numbering moving.
 
 ## Recommended next audit direction
 
@@ -330,7 +356,7 @@ the flag incrementally.
 - Durable audit evidence: `plans/plan_software.md` and
   `docs/software-easygl-parity-ledger.md`
 
-The patch series contains 106 ordered patches at this handoff. New patches must be appended in
+The patch series contains 109 ordered patches at this handoff. New patches must be appended in
 dependency order and must apply to pinned MojoShader commit
 `6333f74dbd5644789a63e903816441b16c1e8b60` through FNA3D pin `3240147`.
 
@@ -458,17 +484,18 @@ nearby Microsoft-positive control so an apparent rejection is not merely bad ass
 The last broad results relevant to the latest technical commit are:
 
 - Software renderer CTest label: 160/160 pass, display-free.
-- EasyGL compiled-Effect family: 647/647 pass on isolated Mesa/Xvfb.
+- EasyGL compiled-Effect family: 679/679 pass on isolated Mesa/Xvfb.
 - Focused SOFTWARE-470 EasyGL cases: 5/5 pass; focused SOFTWARE-471 cases: 7/7 pass;
   focused SOFTWARE-472 cases: 3/3 pass; focused SOFTWARE-473 cases: 9/9 pass; focused
   SOFTWARE-474 cases: 20/20 pass; focused SOFTWARE-475 plus the adjacent slot regression:
   22/22 pass; focused SOFTWARE-477 phase-state pair: 2/2 pass; focused SOFTWARE-478
   declaration-modifier matrix: 10/10 pass; focused SOFTWARE-479 flow family: 38/38 pass;
   focused SOFTWARE-480 flow family: 58/58 pass; focused SOFTWARE-481 call-graph/label family:
-  38/38 pass.
+  38/38 pass; focused SOFTWARE-482 flow family: 72/72 pass; focused SOFTWARE-483 flow family:
+  86/86 pass; focused SOFTWARE-484 flow family: 101/101 pass.
 - The last full Software `CnaGraphicsTests` checkpoint documented in the ledger is
   2,625/2,688 with 63 classified skips. It was not rerun for
-  SOFTWARE-470/471/472/473/474/475/476/477/478/479/480/481 because those tasks changed only compiled-Effect test/validation
+  SOFTWARE-470/471/472/473/474/475/476/477/478/479/480/481/482/483/484 because those tasks changed only compiled-Effect test/validation
   inputs covered by the focused runtime, full Software label, and complete EasyGL compiled family.
 
 The exact 63-skip classification is in
@@ -501,6 +528,6 @@ include start/end SHAs, branch, commit and LOC counts, new/completed/remaining t
 new findings, compiled-Effect verdict, exact skips, all test families run, and the reason for the
 classification. At this handoff the correct classification is C.
 
-This run stops after SOFTWARE-481 and this handoff are committed. Do not open SOFTWARE-482 until
+This run stops after SOFTWARE-484 and this handoff are committed. Do not open SOFTWARE-485 until
 the owner explicitly resumes the campaign in the active conversation. Do not push without a new
 explicit request for the current branch state.
