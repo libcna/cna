@@ -155,6 +155,16 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_mrt PRIVATE SDL3::SDL3main)
     endif()
 
+    # RLGL-043: reuse the EasyGL MRT oracle. Select its shared GL-source/native-error branch while
+    # retaining the target's one truthful renderer identity.
+    add_executable(cna_test_rlgl_mrt_oracle
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_mrt_test.cpp")
+    target_compile_definitions(cna_test_rlgl_mrt_oracle PRIVATE CNA_MRT_ORACLE_GL_SOURCE)
+    target_link_libraries(cna_test_rlgl_mrt_oracle PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_mrt_oracle PRIVATE SDL3::SDL3main)
+    endif()
+
     add_executable(cna_test_rlgl_render_target_full
         "${CMAKE_CURRENT_SOURCE_DIR}/../../opengl4/examples/opengl4_rendertarget2d_test.cpp")
     target_link_libraries(cna_test_rlgl_render_target_full
@@ -595,6 +605,11 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             NAME Rlgl_Mrt
             COMMAND cna_test_rlgl_mrt
             TIMEOUT 60 LABELS "GraphicsRenderTarget;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_Mrt_oracle
+            COMMAND cna_test_rlgl_mrt_oracle
+            TIMEOUT 60 LABELS "GraphicsRenderTarget;GraphicsEffect;GraphicsParity;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(
             NAME Rlgl_RenderTarget_full

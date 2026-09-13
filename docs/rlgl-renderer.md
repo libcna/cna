@@ -68,7 +68,7 @@ success.
 | Plain `TextureCube` | ✅ | `Color` and DXT1/DXT3/DXT5 cover every transfer shape exposed by CNA's current cube API. Exact faces/mips/regions, native-or-decoded DXT storage, content loading, cube-unit binding, state restoration, and Color readback passed `RLGL-044`/`RLGL-045`; the other 16 classic labels are refused because CNA exposes no format-native transfer route for them |
 | `RenderTarget2D` (all eleven classic FNA target formats) | ✅ | Color, Rgba1010102, Rg32, Rgba64, Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, and HdrBlendable have exact single/MSAA storage, resolve, format-native CPU transfer/readback, mips, depth/stencil, switching, Preserve/Discard, and upright sampling evidence from `RLGL-039`/`041`/`042` |
 | `RenderTargetCube` (all eleven classic FNA target formats) | ✅ | Exact six-face/mip storage, per-face binding/readback, six independent MSAA color buffers, Depth16/Depth24/Depth24Stencil8, resolve/mips, Preserve/Discard, switching, and Color upload passed `RLGL-046`; public non-Color transfer is refused because CNA's current cube interface cannot express its format-native bytes |
-| Multiple render targets | ✅ | HiDef supports ordered sets of two through four RenderTarget2D objects, cube faces, or compatible mixtures through transactional rlgl-created FBOs and `rlActiveDrawBuffers`; indexed masks/Clear, slot-zero depth, mixed formats, MSAA resolve/mips, usage, transitions, and refusal safety passed `RLGL-040`/`046`. Reach correctly remains limited to one target |
+| Multiple render targets | ✅ | HiDef supports ordered sets of two through four RenderTarget2D objects, cube faces, or compatible mixtures through transactional rlgl-created FBOs and `rlActiveDrawBuffers`; indexed masks/Clear, slot-zero depth, mixed formats, MSAA resolve/mips, usage, transitions, and refusal safety passed `RLGL-040`/`046`. The shared source-effect MRT oracle passed 20/20 distinct-output, mask, depth, real-MSAA-resolve, immediate-sampling, replacement, usage/refusal, and native-error checks in `RLGL-043`. Reach correctly remains limited to one target |
 | Compiled XNA effects | ✅ | With `CNA_RLGL_COMPILED_EFFECTS=ON`, the pinned MojoShader path executes the same 17 shared contracts as DirectX11: reflection/state, ordinary/multi-stream/instanced indexed and non-indexed draws, SpriteBatch, reflected attributes/uniforms, fragment and vertex 2D/cube samplers, pass selection, render-target orientation, stock-compatible depth, switching, stress/truncation, and context restoration (`RLGL-047`/`048`/`049`/`051`). `GraphicsCapability::CompiledEffects` is true in this build. Volume sampling is explicitly refused at the missing RLGL `Texture3D` resource boundary. |
 | CNAEXT source `ShaderEffect` | ✅ | RLGL-050 compiles and links caller desktop GLSL, reports structured diagnostics, maps declaration-order attributes, uploads every loose uniform/array form, binds Texture2D/TextureCube, drives indexed/non-indexed 3D and SpriteBatch draws, survives source/stock transitions, and rebuilds retained source/uniform state after context recreation. Real volume sampling remains unavailable because RLGL has no `Texture3D` resource. |
 | Representative general 3D workloads | ❌ | The workload ladder remains a separate RLGL-018 gate, so the umbrella `GraphicsCapability::ThreeD` stays false despite validated stock, source, compiled, multi-stream, and instanced primitive draws |
@@ -140,6 +140,7 @@ cmake --build cmake-build-rlgl --parallel 3 --target \
       cna_test_rlgl_environment_map_render_target_cube cna_test_rlgl_skinned_effect \
       cna_test_rlgl_skinned_terms cna_test_rlgl_render_target \
       cna_test_rlgl_render_target_formats cna_test_rlgl_mrt \
+      cna_test_rlgl_mrt_oracle \
       cna_test_rlgl_render_target_cube \
       cna_test_rlgl_rendertargetcube_getdata_contract \
       cna_test_rlgl_rendertargetcube_usage \
@@ -222,6 +223,8 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_mrt
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_mrt_oracle
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_render_target_cube
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_rendertargetcube_getdata_contract
@@ -249,8 +252,9 @@ enabled, `Rlgl_CompiledEffect_runtime`. They are labelled
 `Rlgl` plus their focused graphics category, with the proven offscreen environment attached to
 each CTest entry. The
 RenderTarget2D fixtures cover focused resource/state behavior, all eleven exact classic formats,
-ordered two-through-four-target MRT behavior, the unchanged EasyGL quadrant and OpenGL4 full-target
-oracles, and shared first-read/mipmap MSAA regression matrices. RenderTargetCube fixtures cover all
+ordered two-through-four-target MRT behavior, the shared four-output source-effect MRT oracle, the
+unchanged EasyGL quadrant and OpenGL4 full-target oracles, and shared first-read/mipmap MSAA
+regression matrices. RenderTargetCube fixtures cover all
 eleven exact renderable formats, six faces and mip chains, depth/stencil, per-face MSAA resolve,
 usage transitions, Color transfer/readback, and singular/plural cube/2D binding behavior.
 EnvironmentMapEffect fixtures reuse EasyGL and shared cross-renderer oracles for the complete
@@ -318,7 +322,7 @@ Offline compiled-effect builds can add
 The dedicated `.github/workflows/rlgl-ci.yml` lane configures the Linux renderer against an
 independently checked-out copy of the exact upstream commit and compiles the renderer plus the
   smoke, context/lifetime, texture, sampler, state, SpriteBatch, buffer, primitive, effect, XNA pixel-center, and
-  BasicEffect-lighting, DualTextureEffect, SkinnedEffect, RenderTarget2D, RenderTargetCube, and
+  BasicEffect-lighting, DualTextureEffect, SkinnedEffect, RenderTarget2D/MRT, RenderTargetCube, and
   optional compiled-effect runtime and ordinary/SpriteBatch-draw executables. It
   intentionally does not yet claim hosted runtime coverage; promotion to a CI runtime gate belongs
   to `RLGL-021` after the runner's context path is proven.

@@ -123,6 +123,7 @@ jobs:
             cna_test_rlgl_render_target \
             cna_test_rlgl_render_target_formats \
             cna_test_rlgl_mrt \
+            cna_test_rlgl_mrt_oracle \
             cna_test_rlgl_render_target_cube \
             cna_test_rlgl_rendertargetcube_getdata_contract \
             cna_test_rlgl_rendertargetcube_usage \
