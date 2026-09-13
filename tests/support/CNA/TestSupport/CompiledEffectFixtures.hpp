@@ -641,6 +641,10 @@ namespace CNA::TestSupport
         PixelBreakcReservedComparison,
         /** @brief Use all six legal pixel Shader Model 3 comparison controls. */
         PixelComparisonControls1Through6,
+        /** @brief Set a reserved opcode-specific control on a pixel Shader Model 3 `NOP`. */
+        PixelNopReservedInstructionControl,
+        /** @brief Set a reserved opcode-specific control on a pixel Shader Model 3 `MOV`. */
+        PixelMovReservedInstructionControl,
         /** @brief Emit one legal loop/repeat level in an exact vertex Shader Model 2.0 program. */
         Vertex20LoopRepDepth1,
         /** @brief Emit two loop/repeat levels in an exact vertex Shader Model 2.0 program. */
@@ -723,6 +727,10 @@ namespace CNA::TestSupport
         Vertex30BreakcReservedComparison,
         /** @brief Use all six legal vertex Shader Model 3 comparison controls. */
         Vertex30ComparisonControls1Through6,
+        /** @brief Set a reserved opcode-specific control on a vertex Shader Model 3 `NOP`. */
+        Vertex30NopReservedInstructionControl,
+        /** @brief Set a reserved opcode-specific control on a vertex Shader Model 3 `MOV`. */
+        Vertex30MovReservedInstructionControl,
     };
 
     /** @brief Shader-stage/profile program used to probe D3D9 subroutine call-graph rules. */
@@ -2762,7 +2770,7 @@ namespace CNA::TestSupport
                 SyntheticDeclarationModifierProbe::Pixel30SamplerCentroid;
         const bool probesPixelFlowControl =
             flowControlProbe >= SyntheticFlowControlProbe::ProperlyNestedLoopIf &&
-            flowControlProbe <= SyntheticFlowControlProbe::PixelComparisonControls1Through6;
+            flowControlProbe <= SyntheticFlowControlProbe::PixelMovReservedInstructionControl;
         const bool probesPixelCallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Pixel2xDepth4 &&
             callGraphProbe <= SyntheticCallGraphProbe::Pixel30PlainLabelOperands;
@@ -6271,6 +6279,16 @@ namespace CNA::TestSupport
                         appendBreakcControl(control);
                     }
                     break;
+                case SyntheticFlowControlProbe::PixelNopReservedInstructionControl:
+                    AppendUInt32(shader, 0x00000000u | (1u << 16)); // nop with reserved control
+                    break;
+                case SyntheticFlowControlProbe::PixelMovReservedInstructionControl:
+                    AppendUInt32(shader,
+                                 0x00000001u | (1u << 16) |
+                                     (2u << 24)); // mov r0, c0 with reserved control
+                    AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                    AppendUInt32(shader, source(regConst, 0));
+                    break;
                 case SyntheticFlowControlProbe::None:
                 case SyntheticFlowControlProbe::Vertex20LoopRepDepth1:
                 case SyntheticFlowControlProbe::Vertex20LoopRepDepth2: break;
@@ -7082,6 +7100,11 @@ namespace CNA::TestSupport
             flowControlProbe >= SyntheticFlowControlProbe::Vertex30SetpMissingComparison &&
             flowControlProbe <=
                 SyntheticFlowControlProbe::Vertex30ComparisonControls1Through6;
+        const bool probesVertex30ReservedInstructionControl =
+            flowControlProbe >=
+                SyntheticFlowControlProbe::Vertex30NopReservedInstructionControl &&
+            flowControlProbe <=
+                SyntheticFlowControlProbe::Vertex30MovReservedInstructionControl;
         const bool probesVertexCallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Vertex20Depth1 &&
             callGraphProbe <= SyntheticCallGraphProbe::Vertex30PlainLabelOperands;
@@ -7130,7 +7153,7 @@ namespace CNA::TestSupport
             probesVertexRelativeAddressing || probesVertexSemanticDeclarations ||
             probesVertexDeclarationModifier ||
             probesVertex30PredicateFlowOperand || probesVertex30LoopRepOperand ||
-            probesVertex30ComparisonControl ||
+            probesVertex30ComparisonControl || probesVertex30ReservedInstructionControl ||
             probesVertex30CallGraph ||
             probesMissingVertexSamplerDeclaration ||
             probesVertexImmediateConstantDefinition || probesVertexSamplerDuplicate;
@@ -8587,6 +8610,26 @@ namespace CNA::TestSupport
                 if (setp) appendSetp(control);
                 else if (ifc) appendIfc(control);
                 else if (breakc) appendBreakc(control);
+            }
+            AppendUInt32(shader, 0x00000014u | (3u << 24)); // m4x4 o0, v0, c0
+            AppendUInt32(shader, destination(regTexCoordOut, 0));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, source(regConst, 0));
+        }
+        else if (probesVertex30ReservedInstructionControl)
+        {
+            if (flowControlProbe ==
+                SyntheticFlowControlProbe::Vertex30NopReservedInstructionControl)
+            {
+                AppendUInt32(shader, 0x00000000u | (1u << 16)); // nop with reserved control
+            }
+            else
+            {
+                AppendUInt32(shader,
+                             0x00000001u | (1u << 16) |
+                                 (2u << 24)); // mov r0, c0 with reserved control
+                AppendUInt32(shader, destination(regTemp, 0, 0xFu));
+                AppendUInt32(shader, source(regConst, 0));
             }
             AppendUInt32(shader, 0x00000014u | (3u << 24)); // m4x4 o0, v0, c0
             AppendUInt32(shader, destination(regTexCoordOut, 0));

@@ -1908,6 +1908,8 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::PixelIfcReservedComparison,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakcMissingComparison,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakcReservedComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelNopReservedInstructionControl,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelMovReservedInstructionControl,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth2,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17If,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17Else,
@@ -1935,7 +1937,9 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfcMissingComparison,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfcReservedComparison,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakcMissingComparison,
-        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakcReservedComparison));
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakcReservedComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30NopReservedInstructionControl,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30MovReservedInstructionControl));
 
 class EasyGLCompiledEffectValidFlowControlTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticFlowControlProbe>

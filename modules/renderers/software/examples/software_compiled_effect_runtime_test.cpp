@@ -3907,6 +3907,8 @@ namespace
             Probe::PixelIfcReservedComparison,
             Probe::PixelBreakcMissingComparison,
             Probe::PixelBreakcReservedComparison,
+            Probe::PixelNopReservedInstructionControl,
+            Probe::PixelMovReservedInstructionControl,
             Probe::Vertex20LoopRepDepth2,
             Probe::Vertex20StaticFlowCount17If,
             Probe::Vertex20StaticFlowCount17Else,
@@ -3935,6 +3937,8 @@ namespace
             Probe::Vertex30IfcReservedComparison,
             Probe::Vertex30BreakcMissingComparison,
             Probe::Vertex30BreakcReservedComparison,
+            Probe::Vertex30NopReservedInstructionControl,
+            Probe::Vertex30MovReservedInstructionControl,
         };
         for (const Probe probe : invalidProbes)
         {

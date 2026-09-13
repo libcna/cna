@@ -455,6 +455,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   SOFTWARE-483 closes the adjacent opcode-control gap: patch 108 requires `SETP`, `IFC` and
   `BREAKC` to encode one of D3D9's six comparison relations. Software had accepted reserved zero
   controls at Effect creation, while EasyGL rejected them only through invalid downstream GLSL.
+  SOFTWARE-484 completes the control-byte audit outside those comparison opcodes: patch 109 rejects
+  nonzero controls on instructions that do not own the field, including forged pixel/vertex `NOP`
+  and `MOV`, while retaining the separately bounded comparison and Shader Model 2+ `TEXLD` forms.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
