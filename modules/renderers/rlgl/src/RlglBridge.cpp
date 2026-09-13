@@ -2,6 +2,7 @@
 
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/Internal/Renderers/Rlgl/RlglRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
@@ -536,6 +537,82 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     namespace
     {
         PrimitiveDrawSnapshot lastPrimitiveDraw;
+        RlglPerformanceSnapshot performanceCounters;
+
+        [[nodiscard]] std::size_t UniformByteCount(const int type, const int count)
+        {
+            if (count <= 0) return 0;
+            std::size_t components = 0;
+            switch (type)
+            {
+            case RL_SHADER_UNIFORM_FLOAT: components = 1; break;
+            case RL_SHADER_UNIFORM_VEC2: components = 2; break;
+            case RL_SHADER_UNIFORM_VEC3: components = 3; break;
+            case RL_SHADER_UNIFORM_VEC4: components = 4; break;
+            case RL_SHADER_UNIFORM_INT:
+                return static_cast<std::size_t>(count) * sizeof(int);
+            case RL_SHADER_UNIFORM_IVEC2:
+                return 2 * static_cast<std::size_t>(count) * sizeof(int);
+            case RL_SHADER_UNIFORM_IVEC3:
+                return 3 * static_cast<std::size_t>(count) * sizeof(int);
+            case RL_SHADER_UNIFORM_IVEC4:
+                return 4 * static_cast<std::size_t>(count) * sizeof(int);
+            default: return 0;
+            }
+            return components * static_cast<std::size_t>(count) * sizeof(float);
+        }
+
+        [[nodiscard]] bool UniformValueChanged(
+            PrimitivePipeline::UniformCacheEntry& cache,
+            const int location, const int type, const int count,
+            const void* const value, const std::size_t byteCount)
+        {
+            if (location < 0) return false;
+            const bool cacheable = value != nullptr && byteCount > 0 &&
+                byteCount <= cache.bytes.size();
+            if (cacheable && cache.valid && cache.location == location &&
+                cache.type == type && cache.count == count && cache.byteCount == byteCount &&
+                std::memcmp(cache.bytes.data(), value, byteCount) == 0)
+            {
+                return false;
+            }
+            cache.valid = cacheable;
+            cache.location = location;
+            cache.type = type;
+            cache.count = count;
+            cache.byteCount = cacheable ? byteCount : 0;
+            if (cacheable) std::memcpy(cache.bytes.data(), value, byteCount);
+            return true;
+        }
+
+        void SetCachedUniform(
+            PrimitivePipeline& pipeline, std::size_t& slot,
+            const int location, const void* const value, const int type, const int count)
+        {
+            if (slot >= pipeline.uniformCache.size())
+                throw std::logic_error("RLGL: stock uniform cache capacity exceeded");
+            auto& cache = pipeline.uniformCache[slot++];
+            if (!UniformValueChanged(
+                    cache, location, type, count, value, UniformByteCount(type, count)))
+                return;
+            rlSetUniform(location, value, type, count);
+            ++performanceCounters.uniformUploads;
+        }
+
+        void SetCachedUniformMatrix(
+            PrimitivePipeline& pipeline, std::size_t& slot,
+            const int location, const float* const values, const ::Matrix& matrix)
+        {
+            if (slot >= pipeline.uniformCache.size())
+                throw std::logic_error("RLGL: stock uniform cache capacity exceeded");
+            auto& cache = pipeline.uniformCache[slot++];
+            constexpr int matrixType = -2;
+            if (!UniformValueChanged(
+                    cache, location, matrixType, 1, values, 16 * sizeof(float)))
+                return;
+            rlSetUniformMatrix(location, matrix);
+            ++performanceCounters.uniformUploads;
+        }
 
         class RlglShaderEffectRenderer final
             : public IEffectRenderer, public IRlglNativeResource
@@ -1209,6 +1286,31 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         };
     }
 
+    void ResetPerformanceCounters()
+    {
+        performanceCounters = {};
+    }
+
+    RlglPerformanceSnapshot GetPerformanceCounters()
+    {
+        return performanceCounters;
+    }
+
+    void RecordAttributeScratchBuild()
+    {
+        ++performanceCounters.attributeScratchBuilds;
+    }
+
+    void RecordSemanticLookup()
+    {
+        ++performanceCounters.semanticLookups;
+    }
+
+    void RecordMatrixConversions(const std::uint64_t count)
+    {
+        performanceCounters.matrixConversions += count;
+    }
+
     std::unique_ptr<IEffectRenderer> CreateShaderEffectRenderer(
         const std::string& vertexSource, const std::string& fragmentSource,
         const std::shared_ptr<RlglResourceLifetime>& lifetime,
@@ -1443,18 +1545,21 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
 
     void SetDepthTestEnabled(const bool enabled)
     {
+        ++performanceCounters.stateApplications;
         if (enabled) rlEnableDepthTest();
         else rlDisableDepthTest();
     }
 
     void SetBlendEnabled(const bool enabled)
     {
+        ++performanceCounters.stateApplications;
         if (enabled) rlEnableColorBlend();
         else rlDisableColorBlend();
     }
 
     void SetDepthWriteEnabled(const bool enabled)
     {
+        ++performanceCounters.stateApplications;
         if (enabled) rlEnableDepthMask();
         else rlDisableDepthMask();
     }
@@ -1465,6 +1570,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         const int colorBlendFunction, const int alphaBlendFunction,
         const int* colorWriteMasks, const unsigned int sampleMask)
     {
+        ++performanceCounters.stateApplications;
         RequireInitialized("blend-state application");
         if (colorWriteMasks == nullptr)
             throw std::invalid_argument("RLGL: color write masks must not be null");
@@ -1509,6 +1615,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     void SetBlendFactor(
         const float r, const float g, const float b, const float a)
     {
+        ++performanceCounters.stateApplications;
         RequireInitialized("blend-factor application");
         glBlendColor(r, g, b, a);
         ThrowIfGlError("blend-factor application");
@@ -1523,6 +1630,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         const int counterClockwiseStencilPass, const int counterClockwiseStencilFail,
         const int counterClockwiseStencilDepthFail)
     {
+        ++performanceCounters.stateApplications;
         RequireInitialized("depth/stencil-state application");
         if (depthEnable)
         {
@@ -1579,6 +1687,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         const int stencilFunction, const int counterClockwiseStencilFunction,
         const int stencilReadMask, const int referenceStencil)
     {
+        ++performanceCounters.stateApplications;
         RequireInitialized("reference-stencil application");
         if (!stencilEnable) return;
         if (twoSidedStencilMode)
@@ -1603,6 +1712,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         const int cullMode, const int fillMode, const bool scissorTestEnable,
         const float depthBiasUnits, const float slopeScaleDepthBias)
     {
+        ++performanceCounters.stateApplications;
         RequireInitialized("rasterizer-state application");
         if (cullMode == 0)
         {
@@ -1809,6 +1919,10 @@ void main()
     void FlushImmediateBatch()
     {
         RequireInitialized("immediate-batch flush");
+        ++performanceCounters.flushRequests;
+        if (RLGL.State.vertexCounter == 0) return;
+        ++performanceCounters.batchFlushes;
+        performanceCounters.bufferUploads += 4;
         rlDrawRenderBatchActive();
         ThrowIfGlError("immediate-batch flush");
     }
@@ -1954,10 +2068,13 @@ void main()
         else
         {
             rlEnableShader(pipeline.program);
+            ++performanceCounters.programBinds;
             rlSetUniformMatrix(pipeline.projectionLocation, projection);
+            ++performanceCounters.uniformUploads;
             constexpr int textureUnit = 0;
             rlSetUniform(
                 pipeline.textureLocation, &textureUnit, RL_SHADER_UNIFORM_INT, 1);
+            ++performanceCounters.uniformUploads;
         }
 
         if (!rlEnableVertexArray(pipeline.vertexArray))
@@ -1971,7 +2088,9 @@ void main()
         rlUpdateVertexBufferElements(
             pipeline.indexBuffer, indices,
             indexCount * static_cast<int>(sizeof(std::uint16_t)), 0);
+        performanceCounters.bufferUploads += 2;
         rlDrawVertexArrayElements(0, indexCount, nullptr);
+        ++performanceCounters.drawCalls;
         rlDisableVertexArray();
         rlDisableVertexBuffer();
         rlDisableShader();
@@ -2026,6 +2145,7 @@ void main()
         GLint previous = 0;
         glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previous);
         rlUpdateVertexBuffer(id, data, byteCount, 0);
+        ++performanceCounters.bufferUploads;
         rlEnableVertexBuffer(static_cast<unsigned int>(previous));
         ThrowIfGlError("vertex-buffer update");
     }
@@ -2041,6 +2161,7 @@ void main()
         GLint previous = 0;
         glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &previous);
         rlUpdateVertexBufferElements(id, data, byteCount, 0);
+        ++performanceCounters.bufferUploads;
         rlEnableVertexBufferElement(static_cast<unsigned int>(previous));
         ThrowIfGlError("index-buffer update");
     }
@@ -2071,6 +2192,7 @@ void main()
             glBufferData(GL_ARRAY_BUFFER, byteCapacity, nullptr, GL_DYNAMIC_DRAW);
             rlEnableVertexBuffer(static_cast<unsigned int>(previous));
         }
+        ++performanceCounters.bufferUploads;
         ThrowIfGlError("buffer orphan");
     }
 
@@ -2818,7 +2940,7 @@ void main()
 #endif
 
     void DrawPrimitiveGeometry(
-        const PrimitivePipeline& pipeline,
+        PrimitivePipeline& pipeline,
         const unsigned int vertexBuffer, const unsigned int indexBuffer,
         const VertexAttributeBinding* const attributes, const int attributeCount,
         const float* const worldViewProjectionColumnMajor,
@@ -2850,6 +2972,7 @@ void main()
                 occupiedAttributeLocations[attribute.location] ||
                 attribute.componentCount <= 0 || attribute.stride <= 0 ||
                 attribute.offset < 0 || attribute.divisor < 0 ||
+                attribute.vertexBufferIdentity == 0 ||
                 (attribute.vertexBuffer == 0 && vertexBuffer == 0))
             {
                 throw std::invalid_argument("RLGL: invalid vertex attribute binding");
@@ -2871,6 +2994,8 @@ void main()
 
         FlushImmediateBatch();
         rlEnableShader(pipeline.program);
+        ++performanceCounters.programBinds;
+        std::size_t uniformCacheSlot = 0;
         ::Matrix matrix{};
         matrix.m0 = worldViewProjectionColumnMajor[0];
         matrix.m1 = worldViewProjectionColumnMajor[1];
@@ -2888,7 +3013,9 @@ void main()
         matrix.m13 = worldViewProjectionColumnMajor[13];
         matrix.m14 = worldViewProjectionColumnMajor[14];
         matrix.m15 = worldViewProjectionColumnMajor[15];
-        rlSetUniformMatrix(pipeline.worldViewProjectionLocation, matrix);
+        SetCachedUniformMatrix(
+            pipeline, uniformCacheSlot,
+            pipeline.worldViewProjectionLocation, worldViewProjectionColumnMajor, matrix);
 
         ::Matrix worldMatrix{};
         worldMatrix.m0 = params.worldColMajor[0];
@@ -2907,7 +3034,9 @@ void main()
         worldMatrix.m13 = params.worldColMajor[13];
         worldMatrix.m14 = params.worldColMajor[14];
         worldMatrix.m15 = params.worldColMajor[15];
-        rlSetUniformMatrix(pipeline.worldLocation, worldMatrix);
+        SetCachedUniformMatrix(
+            pipeline, uniformCacheSlot,
+            pipeline.worldLocation, params.worldColMajor, worldMatrix);
 
         const float* const w = params.worldColMajor;
         const float a=w[0], d=w[1], g=w[2];
@@ -2924,25 +3053,33 @@ void main()
              (a*e-b*d)*inverseDeterminant}};
         for (int column = 0; column < 3; ++column)
         {
-            rlSetUniform(
+            SetCachedUniform(
+                pipeline, uniformCacheSlot,
                 pipeline.normalMatrixLocations[static_cast<std::size_t>(column)],
                 normalMatrix[column], RL_SHADER_UNIFORM_VEC3, 1);
         }
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.diffuseColorLocation, params.diffuseColor, RL_SHADER_UNIFORM_VEC4, 1);
         const float vertexColorFlag = params.vertexColorEnabled ? 1.0f : 0.0f;
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.vertexColorEnabledLocation, &vertexColorFlag,
             RL_SHADER_UNIFORM_FLOAT, 1);
         constexpr int textureUnit = 0;
-        rlSetUniform(pipeline.textureLocation, &textureUnit, RL_SHADER_UNIFORM_INT, 1);
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
+            pipeline.textureLocation, &textureUnit, RL_SHADER_UNIFORM_INT, 1);
         constexpr int textureUnit1 = 1;
-        rlSetUniform(pipeline.texture1Location, &textureUnit1, RL_SHADER_UNIFORM_INT, 1);
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
+            pipeline.texture1Location, &textureUnit1, RL_SHADER_UNIFORM_INT, 1);
         // The unified program has active sampler2D and samplerCube uniforms. OpenGL rejects a
         // draw if differently typed active samplers name one physical unit, so the cube uses unit
         // 2 while inheriting XNA's logical SamplerStates[1] object below.
         constexpr int environmentTextureUnit = 2;
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.environmentMapLocation, &environmentTextureUnit,
             RL_SHADER_UNIFORM_INT, 1);
         const float textureFlipV[2] = {
@@ -2952,51 +3089,66 @@ void main()
             params.dualTexture && params.texture1 != nullptr &&
                     SampledRowsAreBottomUp(*params.texture1)
                 ? 1.0f : 0.0f};
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.textureFlipVLocation, textureFlipV, RL_SHADER_UNIFORM_VEC2, 1);
         const float textureFlag = params.textureEnabled ? 1.0f : 0.0f;
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.textureEnabledLocation, &textureFlag,
             RL_SHADER_UNIFORM_FLOAT, 1);
         const float dualTextureFlag = params.dualTexture ? 1.0f : 0.0f;
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.dualTextureLocation, &dualTextureFlag,
             RL_SHADER_UNIFORM_FLOAT, 1);
         const float environmentMappingFlag = params.envMapping ? 1.0f : 0.0f;
         const float fresnelEnabledFlag = params.fresnelEnabled ? 1.0f : 0.0f;
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.environmentMappingLocation, &environmentMappingFlag,
             RL_SHADER_UNIFORM_FLOAT, 1);
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.environmentMapAmountLocation, &params.envMapAmount,
             RL_SHADER_UNIFORM_FLOAT, 1);
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.environmentMapSpecularLocation, params.envMapSpecular,
             RL_SHADER_UNIFORM_VEC3, 1);
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.fresnelEnabledLocation, &fresnelEnabledFlag,
             RL_SHADER_UNIFORM_FLOAT, 1);
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.fresnelFactorLocation, &params.fresnelFactor,
             RL_SHADER_UNIFORM_FLOAT, 1);
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.alphaTestLocation, params.alphaTest, RL_SHADER_UNIFORM_VEC4, 1);
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.fogVectorLocation, params.fogVector, RL_SHADER_UNIFORM_VEC4, 1);
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.fogColorLocation, params.fogColor, RL_SHADER_UNIFORM_VEC3, 1);
         const float lightingFlag = params.lightingEnabled ? 1.0f : 0.0f;
         const float perPixelFlag = params.preferPerPixelLighting ? 1.0f : 0.0f;
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.lightingEnabledLocation, &lightingFlag, RL_SHADER_UNIFORM_FLOAT, 1);
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.preferPerPixelLightingLocation, &perPixelFlag,
             RL_SHADER_UNIFORM_FLOAT, 1);
         const float skinnedFlag = params.skinned ? 1.0f : 0.0f;
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.skinnedLocation, &skinnedFlag, RL_SHADER_UNIFORM_FLOAT, 1);
         const float instancedFlag = instanced ? 1.0f : 0.0f;
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.instancedLocation, &instancedFlag, RL_SHADER_UNIFORM_FLOAT, 1);
         if (params.skinned)
         {
@@ -3025,18 +3177,23 @@ void main()
                 rows[10] = matrixValues[10];
                 rows[11] = matrixValues[14];
             }
-            rlSetUniform(
+            SetCachedUniform(
+                pipeline, uniformCacheSlot,
                 pipeline.boneRowsLocation, boneRows.data(),
                 RL_SHADER_UNIFORM_VEC4, params.boneCount * 3);
-            rlSetUniform(
+            SetCachedUniform(
+                pipeline, uniformCacheSlot,
                 pipeline.weightsPerVertexLocation, &params.weightsPerVertex,
                 RL_SHADER_UNIFORM_INT, 1);
         }
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.ambientColorLocation, params.ambientColor, RL_SHADER_UNIFORM_VEC3, 1);
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.emissiveColorLocation, params.emissiveColor, RL_SHADER_UNIFORM_VEC3, 1);
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.eyePositionLocation, params.eyePositionWorld,
             RL_SHADER_UNIFORM_VEC3, 1);
         const float* const lightDirections[3] = {
@@ -3048,20 +3205,25 @@ void main()
         for (int light = 0; light < 3; ++light)
         {
             const std::size_t index = static_cast<std::size_t>(light);
-            rlSetUniform(
+            SetCachedUniform(
+                pipeline, uniformCacheSlot,
                 pipeline.lightDirectionLocations[index], lightDirections[light],
                 RL_SHADER_UNIFORM_VEC3, 1);
-            rlSetUniform(
+            SetCachedUniform(
+                pipeline, uniformCacheSlot,
                 pipeline.lightDiffuseLocations[index], lightDiffuse[light],
                 RL_SHADER_UNIFORM_VEC3, 1);
-            rlSetUniform(
+            SetCachedUniform(
+                pipeline, uniformCacheSlot,
                 pipeline.lightSpecularLocations[index], lightSpecular[light],
                 RL_SHADER_UNIFORM_VEC3, 1);
         }
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.specularColorLocation, params.specularColor,
             RL_SHADER_UNIFORM_VEC3, 1);
-        rlSetUniform(
+        SetCachedUniform(
+            pipeline, uniformCacheSlot,
             pipeline.specularPowerLocation, &params.specularPower,
             RL_SHADER_UNIFORM_FLOAT, 1);
         GLint previousEnvironmentSampler = 0;
@@ -3122,23 +3284,60 @@ void main()
         }
         for (unsigned int location = 0; location < 16u; ++location)
         {
+            auto& cached = pipeline.attributeCache[location];
+            if (!cached.enabled || occupiedAttributeLocations[location]) continue;
             rlDisableVertexAttribute(location);
-            rlSetVertexAttributeDivisor(location, 0);
+            if (cached.divisor != 0) rlSetVertexAttributeDivisor(location, 0);
             constexpr float defaultAttribute[4] = {0.0f, 0.0f, 0.0f, 1.0f};
             rlSetVertexAttributeDefault(
                 static_cast<int>(location), defaultAttribute, RL_SHADER_ATTRIB_VEC4, 4);
+            performanceCounters.vertexAttributeChanges += cached.divisor != 0 ? 3 : 2;
+            cached = {};
         }
         for (int index = 0; index < attributeCount; ++index)
         {
             const VertexAttributeBinding& attribute = attributes[index];
             const unsigned int attributeBuffer = attribute.vertexBuffer != 0
                 ? attribute.vertexBuffer : vertexBuffer;
+            auto& cached = pipeline.attributeCache[attribute.location];
+            const bool pointerChanged = !cached.enabled ||
+                cached.vertexBuffer != attributeBuffer ||
+                cached.vertexBufferIdentity != attribute.vertexBufferIdentity ||
+                cached.componentCount != attribute.componentCount ||
+                cached.scalarType != attribute.scalarType ||
+                cached.normalized != attribute.normalized ||
+                cached.stride != attribute.stride ||
+                cached.offset != attribute.offset;
+            const bool divisorChanged = !cached.enabled ||
+                cached.divisor != attribute.divisor;
+            if (!pointerChanged && !divisorChanged) continue;
             rlEnableVertexBuffer(attributeBuffer);
-            rlEnableVertexAttribute(attribute.location);
-            rlSetVertexAttribute(
-                attribute.location, attribute.componentCount, attribute.scalarType,
-                attribute.normalized, attribute.stride, attribute.offset);
-            rlSetVertexAttributeDivisor(attribute.location, attribute.divisor);
+            if (!cached.enabled)
+            {
+                rlEnableVertexAttribute(attribute.location);
+                ++performanceCounters.vertexAttributeChanges;
+            }
+            if (pointerChanged)
+            {
+                rlSetVertexAttribute(
+                    attribute.location, attribute.componentCount, attribute.scalarType,
+                    attribute.normalized, attribute.stride, attribute.offset);
+                ++performanceCounters.vertexAttributeChanges;
+            }
+            if (divisorChanged)
+            {
+                rlSetVertexAttributeDivisor(attribute.location, attribute.divisor);
+                ++performanceCounters.vertexAttributeChanges;
+            }
+            cached.vertexBuffer = attributeBuffer;
+            cached.vertexBufferIdentity = attribute.vertexBufferIdentity;
+            cached.componentCount = attribute.componentCount;
+            cached.scalarType = attribute.scalarType;
+            cached.normalized = attribute.normalized;
+            cached.stride = attribute.stride;
+            cached.offset = attribute.offset;
+            cached.divisor = attribute.divisor;
+            cached.enabled = true;
         }
 
         PrimitiveDrawSnapshot snapshot;
@@ -3239,16 +3438,11 @@ void main()
             }
         }
 
-        for (int index = 0; index < attributeCount; ++index)
-        {
-            if (attributes[index].divisor != 0)
-                rlSetVertexAttributeDivisor(attributes[index].location, 0);
-        }
-
         rlDisableVertexArray();
         rlDisableVertexBuffer();
         releaseTextures();
         rlDisableShader();
+        ++performanceCounters.drawCalls;
         ThrowIfGlError("primitive draw");
         lastPrimitiveDraw = snapshot;
     }
@@ -3859,6 +4053,7 @@ void main()
         rlActiveTextureSlot(unit);
         if (id == 0) rlDisableTextureCubemap();
         else rlEnableTextureCubemap(id);
+        ++performanceCounters.textureBinds;
         ThrowIfGlError("TextureCube binding");
     }
 
@@ -4511,12 +4706,14 @@ void main()
         if (framebuffer == 0)
             throw std::invalid_argument("RLGL: cannot bind a zero render-target framebuffer");
         rlEnableFramebuffer(framebuffer);
+        ++performanceCounters.framebufferTransitions;
         ThrowIfGlError("framebuffer binding");
     }
 
     void BindRenderTargetCubeFace(
         const RenderTargetCubeStorage& storage, const int face)
     {
+        ++performanceCounters.framebufferTransitions;
         RequireInitialized("RenderTargetCube face binding");
         if (storage.framebuffer == 0 || storage.colorTexture == 0 ||
             face < 0 || face >= 6)
@@ -4780,6 +4977,7 @@ void main()
         rlActiveTextureSlot(unit);
         if (id == 0) rlDisableTexture();
         else rlEnableTexture(id);
+        ++performanceCounters.textureBinds;
     }
 
     unsigned int GetBoundTexture2DForTesting(const int unit)
@@ -4859,6 +5057,7 @@ void main()
         const int addressU, const int addressV, const int addressW,
         const int maxAnisotropy, const int maxMipLevel, const float lodBias)
     {
+        ++performanceCounters.stateApplications;
         RequireInitialized("sampler application");
         if (sampler == 0 || slot < 0 || slot >= GetMaxSamplerSlots())
             throw std::out_of_range("RLGL: sampler or texture slot is invalid");
@@ -4995,5 +5194,6 @@ void main()
     void BindDefaultFramebuffer()
     {
         rlDisableFramebuffer();
+        ++performanceCounters.framebufferTransitions;
     }
 }

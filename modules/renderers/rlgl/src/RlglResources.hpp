@@ -246,6 +246,7 @@ namespace CNA::Internal::Renderers::Rlgl
     struct VertexAttributeBinding
     {
         unsigned int vertexBuffer = 0;
+        std::uint64_t vertexBufferIdentity = 0;
         unsigned int location = 0;
         int componentCount = 0;
         int scalarType = 0;
@@ -311,6 +312,14 @@ namespace CNA::Internal::Renderers::Rlgl
      * @return Non-zero native name once storage has been allocated.
      */
     [[nodiscard]] unsigned int GetNativeBufferId(const IVertexBufferRenderer& resource);
+
+    /**
+     * @brief Returns a process-unique identity for one RLGL vertex resource lifetime.
+     * @param resource RLGL vertex resource.
+     * @return Non-zero identity that is not reused when GL recycles a native buffer name.
+     */
+    [[nodiscard]] std::uint64_t GetVertexBufferIdentity(
+        const IVertexBufferRenderer& resource);
 
     /**
      * @brief Returns the native buffer name of an RLGL index resource.

@@ -9,6 +9,7 @@
 #include "RlglBridge.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -26,6 +27,8 @@ namespace CNA::Internal::Renderers::Rlgl
         using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
         using Microsoft::Xna::Framework::Graphics::VertexElement;
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+
+        std::atomic<std::uint64_t> nextVertexBufferIdentity{1};
 
         [[nodiscard]] int CheckedByteCapacity(
             const int elementCapacity, const std::size_t elementSize, const char* label)
@@ -64,7 +67,9 @@ namespace CNA::Internal::Renderers::Rlgl
             RlglVertexBufferRenderer(
                 const int vertexCapacity,
                 std::shared_ptr<RlglResourceLifetime> lifetime)
-                : capacity_(vertexCapacity)
+                : bindingIdentity_(nextVertexBufferIdentity.fetch_add(
+                      1, std::memory_order_relaxed))
+                , capacity_(vertexCapacity)
                 , lifetime_(std::move(lifetime))
             {
                 if (capacity_ < 0)
@@ -102,6 +107,10 @@ namespace CNA::Internal::Renderers::Rlgl
 
             [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
             [[nodiscard]] unsigned int NativeId() const noexcept { return id_; }
+            [[nodiscard]] std::uint64_t BindingIdentity() const noexcept
+            {
+                return bindingIdentity_;
+            }
             [[nodiscard]] int Capacity() const noexcept { return capacity_; }
             [[nodiscard]] std::size_t Stride() const noexcept { return stride_; }
             [[nodiscard]] const std::vector<VertexElement>& Declaration() const noexcept
@@ -241,6 +250,7 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
             unsigned int id_ = 0;
+            const std::uint64_t bindingIdentity_;
             int capacity_ = 0;
             int vertexCount_ = 0;
             std::size_t stride_ = 0;
@@ -471,6 +481,14 @@ namespace CNA::Internal::Renderers::Rlgl
         if (buffer == nullptr)
             throw std::invalid_argument("RLGL: vertex resource belongs to another renderer");
         return buffer->NativeId();
+    }
+
+    std::uint64_t GetVertexBufferIdentity(const IVertexBufferRenderer& resource)
+    {
+        const auto* const buffer = dynamic_cast<const RlglVertexBufferRenderer*>(&resource);
+        if (buffer == nullptr)
+            throw std::invalid_argument("RLGL: vertex resource belongs to another renderer");
+        return buffer->BindingIdentity();
     }
 
     unsigned int GetNativeBufferId(const IIndexBufferRenderer& resource)

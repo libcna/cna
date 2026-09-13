@@ -13,6 +13,7 @@
 namespace CNA::Internal::Renderers::Rlgl
 {
     class RlglResourceLifetime;
+    struct RlglPerformanceSnapshot;
     struct VertexAttributeBinding;
 }
 
@@ -163,6 +164,29 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     /** @brief rlgl-owned shader and VAO used by the BasicEffect/AlphaTestEffect path. */
     struct PrimitivePipeline
     {
+        struct UniformCacheEntry
+        {
+            std::array<std::uint8_t, 64> bytes{};
+            std::size_t byteCount = 0;
+            int location = -1;
+            int type = -1;
+            int count = 0;
+            bool valid = false;
+        };
+
+        struct AttributeCacheEntry
+        {
+            unsigned int vertexBuffer = 0;
+            std::uint64_t vertexBufferIdentity = 0;
+            int componentCount = 0;
+            int scalarType = 0;
+            int stride = 0;
+            int offset = 0;
+            int divisor = 0;
+            bool normalized = false;
+            bool enabled = false;
+        };
+
         unsigned int program = 0;
         unsigned int vertexArray = 0;
         int worldViewProjectionLocation = -1;
@@ -198,7 +222,27 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         std::array<int, 3> lightSpecularLocations{-1, -1, -1};
         int specularColorLocation = -1;
         int specularPowerLocation = -1;
+        std::array<UniformCacheEntry, 48> uniformCache{};
+        std::array<AttributeCacheEntry, 16> attributeCache{};
     };
+
+    /** @brief Resets performance counters while preserving warmed renderer caches. */
+    void ResetPerformanceCounters();
+
+    /**
+     * @brief Returns work performed since the latest performance-counter reset.
+     * @return Renderer-local operation counts.
+     */
+    [[nodiscard]] RlglPerformanceSnapshot GetPerformanceCounters();
+
+    /** @brief Records construction of one allocation-free attribute scratch list. */
+    void RecordAttributeScratchBuild();
+
+    /** @brief Records one vertex-declaration semantic search. */
+    void RecordSemanticLookup();
+
+    /** @brief Records public-to-native matrix conversions. @param count Conversion count. */
+    void RecordMatrixConversions(std::uint64_t count);
 
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
     /** @brief One same-format top-row sampling copy for a rendered Texture2D sampler slot. */
@@ -610,7 +654,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @param thirtyTwoBitIndices Whether indexed data uses unsigned 32-bit elements.
      */
     void DrawPrimitiveGeometry(
-        const PrimitivePipeline& pipeline,
+        PrimitivePipeline& pipeline,
         unsigned int vertexBuffer, unsigned int indexBuffer,
         const VertexAttributeBinding* attributes, int attributeCount,
         const float* worldViewProjectionColumnMajor,

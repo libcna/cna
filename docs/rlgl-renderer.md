@@ -278,6 +278,68 @@ all primitive routes, and both plain and rendered cube sources.
 The Model workloads compose content readers, mesh parts, independent effects, bone transforms, and
 animated skinning above those focused renderer contracts without RLGL-specific application code.
 
+## Performance campaign
+
+`cna_bench_graphics_renderer` provides the reproducible RLGL-020 workload. Build both backends as
+Release configurations, then run each process in isolation with the same software driver and CPU
+placement:
+
+```bash
+cmake -S . -B /tmp/cna-rlgl-perf -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCNA_GRAPHICS_RENDERER=RLGL \
+      -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=ON \
+      -DCNA_RLGL_COMPILED_EFFECTS=OFF -DCNA_ENABLE_DRACO=OFF \
+      -DCNA_USE_SYSTEM_SDL=ON \
+      -DFETCHCONTENT_SOURCE_DIR_RLGL=/absolute/path/to/raylib
+cmake -S . -B /tmp/cna-easygl-perf -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCNA_GRAPHICS_RENDERER=OPENGL33 \
+      -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=ON \
+      -DCNA_ENABLE_DRACO=OFF -DCNA_USE_SYSTEM_SDL=ON
+cmake --build /tmp/cna-rlgl-perf --target cna_bench_graphics_renderer --parallel 4
+cmake --build /tmp/cna-easygl-perf --target cna_bench_graphics_renderer --parallel 4
+
+taskset -c 0 env SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  LP_NUM_THREADS=1 CNA_BENCH_PHASE_FRAMES=2400 CNA_BENCH_MESH_DRAWS=50 \
+  /tmp/cna-rlgl-perf/cna_bench_graphics_renderer
+```
+
+The recorded Linux run used SDL3 offscreen and Mesa llvmpipe 25.0.7. Seven alternating processes
+per renderer produced the following median of the per-process medians; each process measured 2,400
+frames per phase and every frame drew 500 sprites plus 50 `BasicEffect` meshes:
+
+| Phase / metric | RLGL p50 (ms) | EasyGL p50 (ms) | RLGL relative to EasyGL |
+|---|---:|---:|---:|
+| Stable submission | 0.308 | 0.324 | 4.8% faster |
+| Stable end-to-end | 0.506 | 0.588 | 14.0% faster |
+| Churn submission | 0.304 | 0.327 | 7.0% faster |
+| Churn end-to-end | 0.535 | 0.602 | 11.2% faster |
+
+The pre-change single-process diagnostic recorded 0.794/1.179 ms stable and 0.768/1.145 ms churn
+for submission/end-to-end p50. The optimized seven-run medians above therefore remove the observed
+stock-mesh hot-path regression. A five-process sprite-only control remained close end-to-end:
+0.429/0.431 ms for RLGL versus 0.401/0.423 ms for EasyGL in stable/churn phases. These are software
+driver measurements, not hardware-GPU throughput claims. Periodic driver scheduling stalls made
+the one-CPU p95 values noisy, especially with meshes, so the gate uses repeated p50 values and
+structural work counters instead of treating one tail sample as renderer CPU cost.
+
+After warm-up the 4,800 measured mesh-workload frames reported the same structural counts in all
+seven RLGL runs: 244,800 draws/program binds/empty-flush requests, 24,000 actual state applications,
+4,800 texture binds, 9,600 buffer uploads, 4,799 framebuffer transitions, 489,600 uniform uploads,
+240,000 allocation-free attribute scratch builds and matrix conversions, and 2,160,000 declaration
+semantic searches. There were zero non-empty batch flushes, vertex-attribute changes, or attribute
+scratch heap allocations. Before the fixes, the same public workload requested 11,774,400 complete
+sampler applications and uploaded all 39 stock uniforms per mesh draw.
+
+The changes preserve draw ordering and public state semantics: an empty immediate batch is skipped;
+complete sampler state reaches GL only when its value changed; stock uniform bytes and VAO attribute
+descriptions are cached; attribute preparation uses a fixed 16-location array; and the VAO cache keys
+buffers by a process-unique resource identity so recycled GL names cannot alias old state. Program
+selection, one fixed scratch build, matrix conversion, and declaration validation remain per draw.
+Their measured steady-state result did not justify weakening explicit shader binding or semantic
+validation.
+
 ## Dependency and offline builds
 
 `cmake/ThirdPartyRlgl.cmake` fetches the official `raysan5/raylib` source archive at exact raylib

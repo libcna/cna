@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_rlgl.md RLGL-031: declaration-driven primitive topology, offset, transform, and
-// public user/static-buffer evidence. Exit 77 means no usable GL context.
+// plans/plan_rlgl.md RLGL-031/RLGL-020: declaration-driven primitive topology, offset,
+// transform, public user/static-buffer evidence, and steady-state work-cache structure.
+// Exit 77 means no usable GL context.
 
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "CNA/Internal/Renderers/Rlgl/RlglRenderer.hpp"
@@ -134,6 +135,31 @@ protected:
                   triangleCall.primitiveMode == 0x0004 && triangleCall.elementCount == 3 &&
                   !triangleCall.indexed && triangleCall.usedRlglDrawWrapper,
               "triangle-list submission uses rlgl's low-level draw wrapper and shades pixels");
+
+        auto performanceVertex = renderer.CreateVertexBuffer(3);
+        performanceVertex->SetVertexDeclaration(
+            VertexPositionColor::getVertexDeclarationStatic());
+        performanceVertex->SetData(redTriangle.data(), 3, sizeof(PositionColorStream));
+        renderer.DrawColoredPrimitives(
+            *performanceVertex,
+            identity, identity, identity, PrimitiveType::TriangleList, 1);
+        renderer.ResetPerformanceCountersForTesting();
+        renderer.DrawColoredPrimitives(
+            *performanceVertex,
+            identity, identity, identity, PrimitiveType::TriangleList, 1);
+        renderer.DrawColoredPrimitives(
+            *performanceVertex,
+            identity, identity, identity, PrimitiveType::TriangleList, 1);
+        const auto steadyWork = renderer.GetPerformanceSnapshotForTesting();
+        Check(steadyWork.drawCalls == 2 && steadyWork.programBinds == 2 &&
+                  steadyWork.flushRequests == 2 && steadyWork.batchFlushes == 0 &&
+                  steadyWork.uniformUploads == 0 &&
+                  steadyWork.vertexAttributeChanges == 0 &&
+                  steadyWork.attributeScratchBuilds == 2 &&
+                  steadyWork.attributeHeapAllocations == 0 &&
+                  steadyWork.matrixConversions == 2 && steadyWork.semanticLookups == 18,
+              "steady stock draws reuse uniforms/attributes, avoid empty flushes, and allocate "
+              "no attribute scratch heap storage");
 
         const std::array<PositionColorStream, 4> strip{{
             {-0.75f, -0.75f, 0.0f, 0, 255, 0, 255},

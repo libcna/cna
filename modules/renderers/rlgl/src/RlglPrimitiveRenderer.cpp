@@ -29,6 +29,41 @@ namespace CNA::Internal::Renderers::Rlgl
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
+        class VertexAttributeList
+        {
+        public:
+            VertexAttributeList()
+            {
+                Bridge::RecordAttributeScratchBuild();
+            }
+
+            void reserve(std::size_t) noexcept {}
+
+            void push_back(const VertexAttributeBinding& value)
+            {
+                if (size_ >= values_.size())
+                    throw System::NotSupportedException(
+                        "RLGL: vertex input exceeds the 16-location GL 3.3 limit");
+                values_[size_++] = value;
+            }
+
+            [[nodiscard]] VertexAttributeBinding* begin() noexcept { return values_.data(); }
+            [[nodiscard]] VertexAttributeBinding* end() noexcept
+            {
+                return values_.data() + size_;
+            }
+            [[nodiscard]] const VertexAttributeBinding* data() const noexcept
+            {
+                return values_.data();
+            }
+            [[nodiscard]] std::size_t size() const noexcept { return size_; }
+            [[nodiscard]] bool empty() const noexcept { return size_ == 0; }
+
+        private:
+            std::array<VertexAttributeBinding, 16> values_{};
+            std::size_t size_ = 0;
+        };
+
         [[nodiscard]] int PrimitiveElementCount(
             const PrimitiveType primitive, const int primitiveCount)
         {
@@ -81,6 +116,7 @@ namespace CNA::Internal::Renderers::Rlgl
             const std::vector<VertexElement>& declaration,
             const VertexElementUsage usage, const int usageIndex)
         {
+            Bridge::RecordSemanticLookup();
             const auto found = std::find_if(
                 declaration.begin(), declaration.end(),
                 [usage, usageIndex](const VertexElement& element)
@@ -91,7 +127,7 @@ namespace CNA::Internal::Renderers::Rlgl
             return found == declaration.end() ? nullptr : &*found;
         }
 
-        [[nodiscard]] std::vector<VertexAttributeBinding> BuildSingleStreamStockAttributes(
+        [[nodiscard]] VertexAttributeList BuildSingleStreamStockAttributes(
             const IVertexBufferRenderer& vertexBuffer,
             const bool vertexColorEnabled, const bool textureEnabled,
             const bool lightingEnabled, const bool dualTexture, const bool skinned)
@@ -215,7 +251,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     "(plans/plan_rlgl.md RLGL-037)");
             }
 
-            std::vector<VertexAttributeBinding> result;
+            VertexAttributeList result;
             result.reserve(
                 1u + (vertexColorEnabled ? 1u : 0u) + (textureEnabled ? 1u : 0u) +
                 (lightingEnabled ? 1u : 0u) + (dualTexture ? 1u : 0u) +
@@ -233,6 +269,13 @@ namespace CNA::Internal::Renderers::Rlgl
             {
                 result.push_back(DescribeVertexAttribute(*blendWeight, 5, stride));
                 result.push_back(DescribeVertexAttribute(*blendIndices, 6, stride));
+            }
+            const unsigned int nativeBuffer = GetNativeBufferId(vertexBuffer);
+            const std::uint64_t bufferIdentity = GetVertexBufferIdentity(vertexBuffer);
+            for (VertexAttributeBinding& attribute : result)
+            {
+                attribute.vertexBuffer = nativeBuffer;
+                attribute.vertexBufferIdentity = bufferIdentity;
             }
             return result;
         }
@@ -259,7 +302,8 @@ namespace CNA::Internal::Renderers::Rlgl
 
             int expectedCombinedByteBase = 0;
             std::array<bool, kMaxVertexStreams> occupiedSlots{};
-            std::vector<std::pair<VertexElementUsage, int>> declaredSemantics;
+            std::array<std::pair<VertexElementUsage, int>, 16> declaredSemantics{};
+            std::size_t declaredSemanticCount = 0;
             for (int streamIndex = 0; streamIndex < params.vertexStreamCount; ++streamIndex)
             {
                 const GpuVertexStreamBinding& stream = params.vertexStreams[streamIndex];
@@ -292,15 +336,21 @@ namespace CNA::Internal::Renderers::Rlgl
                         element.getVertexElementUsageProperty(),
                         element.getUsageIndexProperty()};
                     if (std::find(
-                            declaredSemantics.begin(), declaredSemantics.end(), semantic) !=
-                        declaredSemantics.end())
+                            declaredSemantics.begin(),
+                            declaredSemantics.begin() + declaredSemanticCount,
+                            semantic) != declaredSemantics.begin() + declaredSemanticCount)
                     {
                         throw System::NotSupportedException(
                             "RLGL: a multi-stream declaration set cannot bind the same "
                             "vertex semantic more than once "
                             "(plans/plan_rlgl.md RLGL-016/RLGL-032)");
                     }
-                    declaredSemantics.push_back(semantic);
+                    if (declaredSemanticCount >= declaredSemantics.size())
+                    {
+                        throw System::NotSupportedException(
+                            "RLGL: multi-stream declarations exceed the 16-location GL limit");
+                    }
+                    declaredSemantics[declaredSemanticCount++] = semantic;
                 }
 
                 if (stream.instanceFrequency != 0)
@@ -342,12 +392,12 @@ namespace CNA::Internal::Renderers::Rlgl
             return {};
         }
 
-        [[nodiscard]] std::vector<VertexAttributeBinding> BuildStockAttributes(
+        [[nodiscard]] VertexAttributeList BuildStockAttributes(
             const IVertexBufferRenderer& vertexBuffer, const GpuDrawParams& params)
         {
             if (params.vertexStreamCount < 2)
             {
-                std::vector<VertexAttributeBinding> result =
+                VertexAttributeList result =
                     BuildSingleStreamStockAttributes(
                         vertexBuffer, params.vertexColorEnabled, params.textureEnabled,
                         params.lightingEnabled, params.dualTexture, params.skinned);
@@ -360,8 +410,13 @@ namespace CNA::Internal::Renderers::Rlgl
                         throw std::invalid_argument("RLGL: invalid single-stream binding");
                     }
                     const unsigned int nativeBuffer = GetNativeBufferId(*stream.buffer);
+                    const std::uint64_t bufferIdentity =
+                        GetVertexBufferIdentity(*stream.buffer);
                     for (VertexAttributeBinding& attribute : result)
+                    {
                         attribute.vertexBuffer = nativeBuffer;
+                        attribute.vertexBufferIdentity = bufferIdentity;
+                    }
                 }
                 return result;
             }
@@ -446,7 +501,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     "(plans/plan_rlgl.md RLGL-032)");
             }
 
-            std::vector<VertexAttributeBinding> result;
+            VertexAttributeList result;
             result.reserve(instanced ? 11u : 7u);
             const auto append = [&params, &result](
                 const LocatedVertexElement& located, const unsigned int location)
@@ -468,6 +523,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     *located.element, location, stream.strideInBytes,
                     stream.vertexOffset * stream.strideInBytes);
                 binding.vertexBuffer = GetNativeBufferId(*stream.buffer);
+                binding.vertexBufferIdentity = GetVertexBufferIdentity(*stream.buffer);
                 result.push_back(binding);
             };
 
@@ -520,6 +576,7 @@ namespace CNA::Internal::Renderers::Rlgl
                         VertexAttributeBinding binding = DescribeVertexAttribute(
                             element, location++, stream.strideInBytes, baseOffset);
                         binding.vertexBuffer = GetNativeBufferId(*stream.buffer);
+                        binding.vertexBufferIdentity = GetVertexBufferIdentity(*stream.buffer);
                         binding.divisor = stream.instanceFrequency;
                         result.push_back(binding);
                     }
@@ -534,12 +591,12 @@ namespace CNA::Internal::Renderers::Rlgl
             return result;
         }
 
-        [[nodiscard]] std::vector<VertexAttributeBinding>
+        [[nodiscard]] VertexAttributeList
         BuildShaderEffectAttributes(
             const IVertexBufferRenderer& primaryVertexBuffer,
             const GpuDrawParams& params, const bool allowInstancing)
         {
-            std::vector<VertexAttributeBinding> result;
+            VertexAttributeList result;
             unsigned int location = 0;
             bool foundPerVertexStream = false;
             bool foundInstanceStream = false;
@@ -577,6 +634,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     VertexAttributeBinding binding = DescribeVertexAttribute(
                         element, location++, stride, baseOffset);
                     binding.vertexBuffer = GetNativeBufferId(buffer);
+                    binding.vertexBufferIdentity = GetVertexBufferIdentity(buffer);
                     binding.divisor = divisor;
                     result.push_back(binding);
                 }
@@ -677,7 +735,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 throw System::NotSupportedException(
                     "RLGL ShaderEffect: invalid classic instancing range");
             }
-            const std::vector<VertexAttributeBinding> attributes =
+            const VertexAttributeList attributes =
                 BuildShaderEffectAttributes(vertexBuffer, params, instanced);
             float worldValues[16]{};
             float viewValues[16]{};
@@ -685,6 +743,7 @@ namespace CNA::Internal::Renderers::Rlgl
             world.ToColumnMajor(worldValues);
             view.ToColumnMajor(viewValues);
             projection.ToColumnMajor(projectionValues);
+            Bridge::RecordMatrixConversions(3);
             Bridge::DrawShaderEffectGeometry(
                 *params.customEffectRenderer,
                 GetNativeBufferId(vertexBuffer),
@@ -727,7 +786,7 @@ namespace CNA::Internal::Renderers::Rlgl
         }
 
         void Submit(
-            const Bridge::PrimitivePipeline& pipeline,
+            Bridge::PrimitivePipeline& pipeline,
             const IVertexBufferRenderer& vertexBuffer,
             const IIndexBufferRenderer* const indexBuffer,
             const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -779,7 +838,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 if (hasExplicitDeclaration && !hasColor)
                     effectiveParams.vertexColorEnabled = false;
             }
-            const std::vector<VertexAttributeBinding> attributes =
+            const VertexAttributeList attributes =
                 BuildStockAttributes(vertexBuffer, effectiveParams);
             Matrix worldViewProjection = world * view * projection;
             if (applyXnaPixelCenter && viewportWidth > 0 && viewportHeight > 0 &&
@@ -792,6 +851,7 @@ namespace CNA::Internal::Renderers::Rlgl
             }
             float columnMajor[16]{};
             worldViewProjection.ToColumnMajor(columnMajor);
+            Bridge::RecordMatrixConversions(1);
             const unsigned int texture =
                 effectiveParams.textureEnabled && effectiveParams.texture0 != nullptr
                     ? GetNativeTextureId(*effectiveParams.texture0) : 0u;

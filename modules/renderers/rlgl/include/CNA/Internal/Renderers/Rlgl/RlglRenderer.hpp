@@ -6,6 +6,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -97,6 +98,39 @@ namespace CNA::Internal::Renderers::Rlgl
         std::string unavailableReason;
     };
 
+    /** @brief Renderer-local work counters used by the RLGL performance campaign. */
+    struct RlglPerformanceSnapshot
+    {
+        /** @brief Native draw submissions issued by the measured renderer paths. */
+        std::uint64_t drawCalls = 0;
+        /** @brief Complete pipeline or sampler state applications requested. */
+        std::uint64_t stateApplications = 0;
+        /** @brief Shader-program bind calls issued for measured draws. */
+        std::uint64_t programBinds = 0;
+        /** @brief Texture-object bind calls issued by measured resource paths. */
+        std::uint64_t textureBinds = 0;
+        /** @brief Vertex or index buffer uploads issued after the counter reset. */
+        std::uint64_t bufferUploads = 0;
+        /** @brief Explicit framebuffer bind transitions issued after the counter reset. */
+        std::uint64_t framebufferTransitions = 0;
+        /** @brief Requests to drain rlgl's immediate-mode batch before CNA-owned work. */
+        std::uint64_t flushRequests = 0;
+        /** @brief Requested drains that contained vertices and performed a real batch flush. */
+        std::uint64_t batchFlushes = 0;
+        /** @brief Uniform uploads that survived the stock-pipeline value cache. */
+        std::uint64_t uniformUploads = 0;
+        /** @brief Native vertex-attribute state changes that survived the VAO cache. */
+        std::uint64_t vertexAttributeChanges = 0;
+        /** @brief Fixed-capacity attribute scratch lists built for submitted draws. */
+        std::uint64_t attributeScratchBuilds = 0;
+        /** @brief Heap allocations made by attribute scratch construction. */
+        std::uint64_t attributeHeapAllocations = 0;
+        /** @brief Vertex semantic searches performed while preparing draw attributes. */
+        std::uint64_t semanticLookups = 0;
+        /** @brief Public Matrix values converted to native column-major arrays. */
+        std::uint64_t matrixConversions = 0;
+    };
+
     /**
      * @brief Standalone-rlgl renderer device using a CNA-owned OpenGL 3.3 core context.
      *
@@ -157,6 +191,15 @@ namespace CNA::Internal::Renderers::Rlgl
          */
         [[nodiscard]] RlglContextRecoverySnapshot
             GetContextRecoverySnapshotForTesting() const;
+
+        /** @brief Resets renderer-local work counters without invalidating warmed caches. */
+        void ResetPerformanceCountersForTesting();
+
+        /**
+         * @brief Captures renderer work performed since the latest counter reset.
+         * @return Draw, state, binding, upload, flush, allocation, conversion, and lookup counts.
+         */
+        [[nodiscard]] RlglPerformanceSnapshot GetPerformanceSnapshotForTesting() const;
 
         /** @brief RLGL devices cannot be copied because each owns a GL context lifecycle. */
         RlglRenderer(const RlglRenderer&) = delete;
@@ -870,6 +913,7 @@ namespace CNA::Internal::Renderers::Rlgl
             int maxMipLevel = 0;
             float lodBias = 0.0f;
             bool realized = false;
+            bool nativeApplied = false;
         };
 
         struct StencilRecord

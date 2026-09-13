@@ -687,12 +687,14 @@ namespace CNA::Internal::Renderers::Rlgl
         {
             sampler.realized = sampler.realized || sampler.id != 0;
             sampler.id = 0;
+            sampler.nativeApplied = false;
         }
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
         for (SamplerRecord& sampler : vertexSamplers_)
         {
             sampler.realized = sampler.realized || sampler.id != 0;
             sampler.id = 0;
+            sampler.nativeApplied = false;
         }
 #endif
         restorePrimitivePipeline_ = restorePrimitivePipeline_ || primitivePipeline_ != nullptr;
@@ -734,6 +736,7 @@ namespace CNA::Internal::Renderers::Rlgl
         {
             samplerIds[index] = samplers_[index].id;
             samplers_[index].id = 0;
+            samplers_[index].nativeApplied = false;
         }
         Bridge::DestroySamplers(samplerIds.data(), samplerIds.size());
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
@@ -742,6 +745,7 @@ namespace CNA::Internal::Renderers::Rlgl
         {
             vertexSamplerIds[index] = vertexSamplers_[index].id;
             vertexSamplers_[index].id = 0;
+            vertexSamplers_[index].nativeApplied = false;
         }
         Bridge::DestroySamplers(vertexSamplerIds.data(), vertexSamplerIds.size());
 #endif
@@ -1250,6 +1254,22 @@ namespace CNA::Internal::Renderers::Rlgl
         return snapshot;
     }
 
+    void RlglRenderer::ResetPerformanceCountersForTesting()
+    {
+        const auto control = threadContextLeaseControl_;
+        std::unique_lock<std::recursive_mutex> lock;
+        if (control) lock = std::unique_lock<std::recursive_mutex>(control->mutex);
+        Bridge::ResetPerformanceCounters();
+    }
+
+    RlglPerformanceSnapshot RlglRenderer::GetPerformanceSnapshotForTesting() const
+    {
+        const auto control = threadContextLeaseControl_;
+        std::unique_lock<std::recursive_mutex> lock;
+        if (control) lock = std::unique_lock<std::recursive_mutex>(control->mutex);
+        return Bridge::GetPerformanceCounters();
+    }
+
     void RlglRenderer::Clear(const float r, const float g, const float b, const float a)
     {
         Bridge::Clear(Bridge::ColorPlane, r, g, b, a, 1.0f, 0);
@@ -1751,7 +1771,11 @@ namespace CNA::Internal::Renderers::Rlgl
         if (slot < 0 || slot >= static_cast<int>(samplers_.size()) || slot >= maxSamplerSlots_)
             throw std::out_of_range("RLGL: sampler slot is outside the XNA range");
         SamplerRecord& sampler = samplers_[static_cast<std::size_t>(slot)];
-        if (sampler.id == 0) sampler.id = Bridge::CreateSampler();
+        if (sampler.id == 0)
+        {
+            sampler.id = Bridge::CreateSampler();
+            sampler.nativeApplied = false;
+        }
         sampler.realized = true;
         return sampler;
     }
@@ -1762,6 +1786,7 @@ namespace CNA::Internal::Renderers::Rlgl
             sampler.id, slot, sampler.filter,
             sampler.addressU, sampler.addressV, sampler.addressW,
             sampler.maxAnisotropy, sampler.maxMipLevel, sampler.lodBias);
+        sampler.nativeApplied = true;
     }
 
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
@@ -1776,7 +1801,11 @@ namespace CNA::Internal::Renderers::Rlgl
                 "limit");
         }
         SamplerRecord& sampler = vertexSamplers_[static_cast<std::size_t>(slot)];
-        if (sampler.id == 0) sampler.id = Bridge::CreateSampler();
+        if (sampler.id == 0)
+        {
+            sampler.id = Bridge::CreateSampler();
+            sampler.nativeApplied = false;
+        }
         sampler.realized = true;
         return sampler;
     }
@@ -1788,6 +1817,7 @@ namespace CNA::Internal::Renderers::Rlgl
             sampler.id, Bridge::GetCompiledEffectVertexSamplerOffset() + slot,
             sampler.filter, sampler.addressU, sampler.addressV, sampler.addressW,
             sampler.maxAnisotropy, sampler.maxMipLevel, sampler.lodBias);
+        sampler.nativeApplied = true;
     }
 #endif
 
@@ -1796,6 +1826,10 @@ namespace CNA::Internal::Renderers::Rlgl
         const int maxAnisotropy)
     {
         SamplerRecord& sampler = GetSamplerRecord(slot);
+        const bool changed = !sampler.nativeApplied || sampler.filter != filter ||
+            sampler.addressU != addressU || sampler.addressV != addressV ||
+            sampler.addressW != addressU || sampler.maxAnisotropy != maxAnisotropy ||
+            sampler.maxMipLevel != 0 || sampler.lodBias != 0.0f;
         sampler.filter = filter;
         sampler.addressU = addressU;
         sampler.addressV = addressV;
@@ -1803,23 +1837,26 @@ namespace CNA::Internal::Renderers::Rlgl
         sampler.maxAnisotropy = maxAnisotropy;
         sampler.maxMipLevel = 0;
         sampler.lodBias = 0.0f;
-        ApplySamplerRecord(slot, sampler);
+        if (changed) ApplySamplerRecord(slot, sampler);
     }
 
     void RlglRenderer::ApplySamplerMipState(
         const int slot, const int maxMipLevel, const float lodBias)
     {
         SamplerRecord& sampler = GetSamplerRecord(slot);
+        const bool changed = !sampler.nativeApplied ||
+            sampler.maxMipLevel != maxMipLevel || sampler.lodBias != lodBias;
         sampler.maxMipLevel = maxMipLevel;
         sampler.lodBias = lodBias;
-        ApplySamplerRecord(slot, sampler);
+        if (changed) ApplySamplerRecord(slot, sampler);
     }
 
     void RlglRenderer::ApplySamplerAddressW(const int slot, const int addressW)
     {
         SamplerRecord& sampler = GetSamplerRecord(slot);
+        const bool changed = !sampler.nativeApplied || sampler.addressW != addressW;
         sampler.addressW = addressW;
-        ApplySamplerRecord(slot, sampler);
+        if (changed) ApplySamplerRecord(slot, sampler);
     }
 
     int RlglRenderer::GetCurrentSampleCount() const
