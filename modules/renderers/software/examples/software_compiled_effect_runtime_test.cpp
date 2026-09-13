@@ -3887,6 +3887,9 @@ namespace
             Probe::StaticIfDepth25,
             Probe::DynamicIfDepth25,
             Probe::LoopRepDepth5,
+            Probe::PixelIfPredicateNegate,
+            Probe::PixelIfPredicateVectorSwizzle,
+            Probe::PixelIfBooleanNegate,
             Probe::Vertex20LoopRepDepth2,
             Probe::Vertex20StaticFlowCount17If,
             Probe::Vertex20StaticFlowCount17Else,
@@ -3895,6 +3898,9 @@ namespace
             Probe::Vertex20StaticFlowCount17Call,
             Probe::Vertex20StaticFlowCount17CallNz,
             Probe::Vertex2xStaticFlowCount17,
+            Probe::Vertex30IfPredicateNegate,
+            Probe::Vertex30IfPredicateVectorSwizzle,
+            Probe::Vertex30IfBooleanNegate,
         };
         for (const Probe probe : invalidProbes)
         {
@@ -3912,7 +3918,7 @@ namespace
                 rejected = true;
             }
             Check(rejected,
-                  "compiled Effect parser accepted invalid structured flow control");
+                  "compiled Effect parser accepted invalid structured flow control or IF operand");
         }
 
         constexpr std::array validProbes{
@@ -3920,9 +3926,15 @@ namespace
             Probe::StaticIfDepth24,
             Probe::DynamicIfDepth24,
             Probe::LoopRepDepth4,
+            Probe::PixelIfPredicateNot,
+            Probe::PixelIfPredicateReplicateY,
+            Probe::PixelIfBooleanNot,
             Probe::Vertex20LoopRepDepth1,
             Probe::Vertex20StaticFlowCount16,
             Probe::Vertex2xStaticFlowCount16,
+            Probe::Vertex30IfPredicateNot,
+            Probe::Vertex30IfPredicateReplicateY,
+            Probe::Vertex30IfBooleanNot,
         };
         for (const Probe probe : validProbes)
         {
@@ -3940,7 +3952,7 @@ namespace
                 accepted = false;
             }
             Check(accepted,
-                  "compiled Effect parser rejected legal structured flow control");
+                  "compiled Effect parser rejected legal structured flow control or IF operand");
         }
     }
 

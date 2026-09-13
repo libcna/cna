@@ -2,7 +2,7 @@
 
 ## Status
 
-The Software renderer is a **CPU-only rasterizer graphics renderer**, verified 2026-09-11. Select it
+The Software renderer is a **CPU-only rasterizer graphics renderer**, verified 2026-09-13. Select it
 with:
 
 ```bash
@@ -442,6 +442,8 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   SOFTWARE-478 completes declaration destination-modifier validation: patch 103 preserves `_pp`,
   `_centroid` and their combination on pixel interpolators, rejects saturation there, and rejects
   every modifier on miscellaneous inputs, sampler declarations and vertex declarations.
+  SOFTWARE-479 completes `IF` source-token validation: patch 104 allows only plain/logical-NOT
+  Boolean or predicate conditions and requires every predicate selector to replicate one component.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
