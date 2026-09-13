@@ -1,0 +1,54 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1260,6 +1260,32 @@
+ } // current_scope_inherits_loop
+ 
+ 
++static int opcode_reads_sources_componentwise(const uint32 opcode)
++{
++    switch (opcode)
++    {
++        case 1:  // MOV
++        case 2:  // ADD
++        case 3:  // SUB
++        case 4:  // MAD
++        case 5:  // MUL
++        case 10: // MIN
++        case 11: // MAX
++        case 12: // SLT
++        case 13: // SGE
++        case 18: // LRP
++        case 19: // FRC
++        case 35: // ABS
++        case 88: // CMP
++        case 91: // DSX
++        case 92: // DSY
++            return 1;
++        default:
++            return 0;
++    } // switch
++} // opcode_reads_sources_componentwise
++
++
+ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+ {
+     int retval = 1;
+@@ -1551,7 +1577,7 @@
+             failf(ctx, "Temp register r%d used uninitialized", info->regnum);
+         else if (validates_uninitialized_temporaries &&
+                  !ctx->ignore_temp_read_validation &&
+-                 (ctx->current_opcode == 1) &&  // MOV.
++                 opcode_reads_sources_componentwise(ctx->current_opcode) &&
+                  (info->regtype == REG_TYPE_TEMP) && (reg) && ctx->have_dest_arg)
+         {
+             const int dest_writemask = ctx->dest_arg.writemask;
+@@ -1566,7 +1592,7 @@
+             const int prior_writemask = same_destination
+                 ? ctx->dest_arg_prior_writemask : reg->written;
+             if ((prior_writemask & required_writemask) != required_writemask)
+-                failf(ctx, "MOV reads uninitialized component(s) of r%d", info->regnum);
++                failf(ctx, "Instruction reads uninitialized component(s) of r%d", info->regnum);
+         } // else if
+     } // if
+ 

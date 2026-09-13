@@ -73,16 +73,17 @@ TEST(ColorTest, FloatRgbConstructorScalesToByteRange)
     Color c(1.0f, 0.0f, 0.5f);
     EXPECT_EQ(c.getRProperty(), 255);
     EXPECT_EQ(c.getGProperty(), 0);
+    EXPECT_EQ(c.getBProperty(), 128);
     EXPECT_EQ(c.getAProperty(), 255);
 }
 
 TEST(ColorTest, FloatRgbaConstructorScalesToByteRange)
 {
-    Color c(0.0f, 1.0f, 0.0f, 1.0f);
+    Color c(0.0f, 1.0f, 0.0f, 0.5f);
     EXPECT_EQ(c.getRProperty(), 0);
     EXPECT_EQ(c.getGProperty(), 255);
     EXPECT_EQ(c.getBProperty(), 0);
-    EXPECT_EQ(c.getAProperty(), 255);
+    EXPECT_EQ(c.getAProperty(), 128);
 }
 
 // --- Static named colors ---
@@ -298,7 +299,7 @@ TEST(ColorTest, FromNonPremultipliedVector4ScalesRgbByAlpha)
     // (tests/reference/xna40/framework/framework-packing-oracle.json, color/vector4_quarters).
     Color c = Color::FromNonPremultiplied(Vector4(1.0f, 0.0f, 0.0f, 0.5f));
     EXPECT_EQ(c.getAProperty(), 128);
-    EXPECT_GT(c.getRProperty(), 0);
+    EXPECT_EQ(c.getRProperty(), 128);
     EXPECT_EQ(c.getGProperty(), 0);
     EXPECT_EQ(c.getBProperty(), 0);
 }
@@ -326,6 +327,7 @@ TEST(ColorTest, Vector4ConstructorSetsAllComponents)
 {
     Color c(Vector4(1.0f, 0.5f, 0.0f, 1.0f));
     EXPECT_EQ(c.getRProperty(), 255);
+    EXPECT_EQ(c.getGProperty(), 128);
     EXPECT_EQ(c.getBProperty(), 0);
     EXPECT_EQ(c.getAProperty(), 255);
 }
@@ -335,6 +337,7 @@ TEST(ColorTest, Vector3ConstructorSetsRgbAndOpaqueAlpha)
     Color c(Vector3(0.0f, 1.0f, 0.5f));
     EXPECT_EQ(c.getRProperty(), 0);
     EXPECT_EQ(c.getGProperty(), 255);
+    EXPECT_EQ(c.getBProperty(), 128);
     EXPECT_EQ(c.getAProperty(), 255);
 }
 
@@ -475,6 +478,31 @@ TEST(ColorTest, PackFromVector4AtOneGivesTwoFiftyFive)
     EXPECT_EQ(c.getGProperty(), 255);
     EXPECT_EQ(c.getBProperty(), 255);
     EXPECT_EQ(c.getAProperty(), 255);
+}
+
+TEST(ColorTest, PackFromVector4JustOutsideRangeClamps)
+{
+    Color c(0, 0, 0, 0);
+    c.PackFromVector4(Vector4(2.0f, 0.0f, 0.0f, 0.0f));
+    EXPECT_EQ(c.getRProperty(), 255);
+}
+
+TEST(ColorTest, PackFromVector4NegativeClampsToZero)
+{
+    Color c(0, 0, 0, 0);
+    c.PackFromVector4(Vector4(-1.0f, 0.0f, 0.0f, 0.0f));
+    EXPECT_EQ(c.getRProperty(), 0);
+}
+
+TEST(ColorTest, PackFromVector4RoundsMidpointToEven)
+{
+    Color c(0, 0, 0, 0);
+    const float evenLowerTie = 128.5f / 255.0f;
+    c.PackFromVector4(Vector4(0.5f, evenLowerTie, 0.5f, evenLowerTie));
+    EXPECT_EQ(c.getRProperty(), 128);
+    EXPECT_EQ(c.getGProperty(), 128);
+    EXPECT_EQ(c.getBProperty(), 128);
+    EXPECT_EQ(c.getAProperty(), 128);
 }
 
 TEST(ColorTest, PackFromVector4RoundsAndSaturatesLikeTheConstructor)

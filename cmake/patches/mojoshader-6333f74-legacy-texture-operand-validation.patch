@@ -1,0 +1,102 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -3167,6 +3167,12 @@ static void state_texops(Context *ctx, const char *opcode,
+         failf(ctx, "%s source must be a texture register", opcode);
+     if (src->regnum >= dst->regnum)  // so says MSDN.
+         failf(ctx, "%s dest must be a higher register than source", opcode);
++    if (dst->result_mod != 0)
++        failf(ctx, "%s destination must not use result modifiers", opcode);
++    if (dst->result_shift != 0)
++        failf(ctx, "%s destination must not use result shifts", opcode);
++    if (!no_swizzle(src->swizzle))
++        failf(ctx, "%s source register must not be swizzled", opcode);
+ 
+     if (dims)
+     {
+@@ -3201,11 +3207,8 @@ static void state_texbem(Context *ctx, const char *opcode)
+     if (shader_version_atleast(ctx, 1, 4))
+         failf(ctx, "%s opcode not available after Shader Model 1.3", opcode);
+ 
+-    if (!shader_version_atleast(ctx, 1, 2))
+-    {
+-        if (ctx->source_args[0].src_mod == SRCMOD_SIGN)
+-            failf(ctx, "%s forbids _bx2 on source reg before ps_1_2", opcode);
+-    } // if
++    if (ctx->source_args[0].src_mod != SRCMOD_NONE)
++        failf(ctx, "%s source register must be unsigned and unmodified", opcode);
+ 
+     if ((ctx->source_args[0].regnum >= 0) && (ctx->source_args[0].regnum < 32))
+         ctx->texbem_read_registers |= 1u << ctx->source_args[0].regnum;
+@@ -3253,12 +3256,18 @@ static void state_legacy_dependent_texture(Context *ctx, const char *opcode,
+     const SourceMod modifier = ctx->source_args[0].src_mod;
+     if (!shader_version_atleast(ctx, 1, 2) || shader_version_atleast(ctx, 1, 4))
+         failf(ctx, "%s opcode only available in Shader Model 1.2/1.3", opcode);
+-    if ((modifier != SRCMOD_NONE) && (modifier != SRCMOD_SIGN) &&
+-        (modifier != SRCMOD_SIGNNEGATE))
++    if ((modifier != SRCMOD_NONE) && (modifier != SRCMOD_SIGN))
+         failf(ctx, "%s source only permits the _bx2 modifier", opcode);
+     state_texops(ctx, opcode, sampler_dims, 0);
+ }
+ 
++static void state_texm_source_modifier(Context *ctx, const char *opcode)
++{
++    const SourceMod modifier = ctx->source_args[0].src_mod;
++    if ((modifier != SRCMOD_NONE) && (modifier != SRCMOD_SIGN))
++        failf(ctx, "%s source only permits the _bx2 modifier", opcode);
++} // state_texm_source_modifier
++
+ static void state_TEXREG2RGB(Context *ctx)
+ {
+     state_legacy_dependent_texture(ctx, "TEXREG2RGB", 2);
+@@ -3286,6 +3295,7 @@ static void state_TEXM3X2PAD(Context *ctx)
+     if ((ctx->texm3x2pad_dst0 != -1) ||
+         (ctx->texm3x3pad_dst0 != -1))
+         fail(ctx, "TEXM3X2PAD starts an invalid texture-matrix sequence");
++    state_texm_source_modifier(ctx, "TEXM3X2PAD");
+     state_texops(ctx, "TEXM3X2PAD", 0, 0);
+ 
+     ctx->texm3x2pad_src0 = ctx->source_args[0].regnum;
+@@ -3298,6 +3308,7 @@ static void state_TEXM3X2TEX(Context *ctx)
+         fail(ctx, "TEXM3X2TEX opcode not available after Shader Model 1.3");
+     if (ctx->texm3x2pad_dst0 == -1)
+         fail(ctx, "TEXM3X2TEX opcode without matching TEXM3X2PAD");
++    state_texm_source_modifier(ctx, "TEXM3X2TEX");
+     state_texops(ctx, "TEXM3X2TEX", 2, 0);
+     if (ctx->source_args[0].regnum != ctx->texm3x2pad_src0)
+         fail(ctx, "TEXM3X2TEX source differs from matching TEXM3X2PAD");
+@@ -3320,6 +3331,7 @@ static void state_TEXM3X2DEPTH(Context *ctx)
+         fail(ctx, "TEXM3X2DEPTH opcode only available in Shader Model 1.3");
+     if (ctx->texm3x2pad_dst0 == -1)
+         fail(ctx, "TEXM3X2DEPTH opcode without matching TEXM3X2PAD");
++    state_texm_source_modifier(ctx, "TEXM3X2DEPTH");
+     state_texops(ctx, "TEXM3X2DEPTH", 0, 0);
+     if (ctx->source_args[0].regnum != ctx->texm3x2pad_src0)
+         fail(ctx, "TEXM3X2DEPTH source differs from matching TEXM3X2PAD");
+@@ -3334,6 +3346,7 @@ static void state_TEXM3X3PAD(Context *ctx)
+         fail(ctx, "TEXM3X2TEX opcode not available after Shader Model 1.3");
+     if (ctx->texm3x2pad_dst0 != -1)
+         fail(ctx, "TEXM3X3PAD starts an invalid texture-matrix sequence");
++    state_texm_source_modifier(ctx, "TEXM3X3PAD");
+     state_texops(ctx, "TEXM3X3PAD", 0, 0);
+ 
+     if (ctx->texm3x3pad_dst0 == -1)
+@@ -3362,6 +3375,7 @@ static void state_texm3x3(Context *ctx, const char *opcode, const int dims)
+         failf(ctx, "%s opcode not available after Shader Model 1.3", opcode);
+     if (ctx->texm3x3pad_dst1 == -1)
+         failf(ctx, "%s opcode without matching TEXM3X3PADs", opcode);
++    state_texm_source_modifier(ctx, opcode);
+     state_texops(ctx, opcode, dims, 0);
+     if ((ctx->source_args[0].regnum != ctx->texm3x3pad_src0) ||
+         (ctx->source_args[0].regnum != ctx->texm3x3pad_src1))
+@@ -3401,6 +3415,10 @@ static void state_TEXM3X3SPEC(Context *ctx)
+     state_texm3x3(ctx, "TEXM3X3SPEC", 3);
+     if (ctx->source_args[1].regtype != REG_TYPE_CONST)
+         fail(ctx, "TEXM3X3SPEC final arg must be a constant register");
++    if (ctx->source_args[1].src_mod != SRCMOD_NONE)
++        fail(ctx, "TEXM3X3SPEC final arg must be unmodified");
++    if (!no_swizzle(ctx->source_args[1].swizzle))
++        fail(ctx, "TEXM3X3SPEC final arg must not be swizzled");
+ } // state_TEXM3X3SPEC
+ 
+ static void state_TEXM3X3VSPEC(Context *ctx)

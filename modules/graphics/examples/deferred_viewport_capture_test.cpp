@@ -142,7 +142,7 @@ namespace
 #elif defined(CNA_RENDERER_VULKAN)
     constexpr Contract kContract{"VULKAN", Support::Exact, Support::Exact, true, true, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
-    constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true, true, true, false};
+    constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true, true, true, true};
 #elif defined(CNA_RENDERER_BGFX)
     // `depthRangeApplies` false: measured here. bgfx has no per-view depth-range call at all --
     // `bgfx::setViewRect` carries no min/max depth and the range is expected to be folded into the
@@ -159,7 +159,7 @@ namespace
     // `depthRangeApplies` true: measured, not assumed. The software rasterizer's depth COMPARE is a
     // fixed LessEqual (REMED-GFX-083's documented boundary), but it does remap the interpolated
     // depth through Viewport.MinDepth/MaxDepth, so checks E1/E2 assert the honoured outcome here.
-    constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true, true, true, false};
+    constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true, true, true, true};
 #elif defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing and its readback is REMED-GFX-127/130's deterministic refusal.
     // Every sequence must still be legal and must not throw.
@@ -1617,8 +1617,8 @@ class DeferredViewportCaptureTest : public Game
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
-        if (kContract.wantHiDefProfile)
-            gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
+        // This renderer contract deliberately exercises a 32-bit dynamic index buffer.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->ApplyChanges();
         Game::Initialize();
 

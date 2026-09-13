@@ -217,10 +217,9 @@ namespace CNA::Internal::Renderers::SdlRenderer
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(
             int size, int depthFormat, bool preserveContents = false, bool mipMap = false,
             int multiSampleCount = 0) override;
-        // Task 727: the shared IGraphicsRenderer::CreateOcclusionQuery default silently returns
-        // nullptr (no throw) -- OcclusionQuery::Begin/End then silently no-op instead of ever
-        // running a real occlusion query. This override throws in the default policy and returns
-        // a completed zero-pixel null query in WarnAndStub.
+        // Task 727: retain an explicit native rejection for direct renderer callers. The public
+        // OcclusionQuery constructor now rejects the false capability before reaching this seam
+        // (SOFTWARE-199). WarnAndStub still returns its internal completed-zero placeholder.
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
         void DrawColoredPrimitives(const IVertexBufferRenderer& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,

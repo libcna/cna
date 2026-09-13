@@ -36,14 +36,13 @@ namespace CNA::Internal::Renderers::Headless
                 throw HeadlessValidationException(message);
         }
 
-        bool AllowsNeutralWhitePrimaryTexture(const GpuDrawParams& params)
+        bool AllowsImplicitPrimaryTexture(const GpuDrawParams& params)
         {
-            // SkinnedEffect, PbrEffect and SkinnedPbrEffect deliberately set textureEnabled even
-            // when their optional base texture is absent. GPU renderers bind a neutral white
-            // texture for those stock-effect routes, so HEADLESS must validate the same public
-            // contract rather than rejecting a model that the native renderers accept. Ordinary
-            // BasicEffect draws remain strict: textureEnabled with no texture is still an error.
-            return params.skinned || params.pbr;
+            // Stock effects can deliberately select a textured shader with a null public texture.
+            // Native renderers provide the effect-specific fallback sample, so HEADLESS validates
+            // the same public contract instead of requiring a resource the effect API makes
+            // optional. Ordinary BasicEffect draws remain strict.
+            return params.alphaTestEffect || params.skinned || params.pbr;
         }
     }
 
@@ -894,7 +893,7 @@ namespace CNA::Internal::Renderers::Headless
                                                const GpuDrawParams& params)
     {
         Require(state_, !(params.textureEnabled && params.texture0 == nullptr &&
-                          !AllowsNeutralWhitePrimaryTexture(params)),
+                          !AllowsImplicitPrimaryTexture(params)),
                "HeadlessRenderer::DrawPrimitivesEx: TextureEnabled=true but texture0 is null");
         Require(state_, !(params.dualTexture && params.texture1 == nullptr),
                "HeadlessRenderer::DrawPrimitivesEx: DualTexture=true but texture1 is null");
@@ -911,7 +910,7 @@ namespace CNA::Internal::Renderers::Headless
                                                        int primitiveCount, const GpuDrawParams& params)
     {
         Require(state_, !(params.textureEnabled && params.texture0 == nullptr &&
-                          !AllowsNeutralWhitePrimaryTexture(params)),
+                          !AllowsImplicitPrimaryTexture(params)),
                "HeadlessRenderer::DrawIndexedPrimitivesEx: TextureEnabled=true but texture0 is null");
         Require(state_, !(params.dualTexture && params.texture1 == nullptr),
                "HeadlessRenderer::DrawIndexedPrimitivesEx: DualTexture=true but texture1 is null");

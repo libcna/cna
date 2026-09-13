@@ -2,9 +2,9 @@
 // Task 202: GraphicsDevice null/invalid-argument validation.
 //
 // Verifies that GraphicsDevice throws the correct exception types for:
-//   1. SetVertexBuffers with more than 16 bindings (ArgumentOutOfRangeException)
-//   2. SetVertexBuffers with null entries (ArgumentNullException)
-//   3. GetBackBufferData with null data pointer (std::invalid_argument)
+//   1. SetVertexBuffers with more than 16 bindings (NotSupportedException)
+//   2. SetVertexBuffers with null entries (ArgumentException)
+//   3. GetBackBufferData with null data pointer (ArgumentNullException)
 //   4. Present() while a render target is bound (InvalidOperationException)
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -13,9 +13,10 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
-#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -44,26 +45,24 @@ protected:
         Game::Initialize();
         auto& device = getGraphicsDeviceProperty();
 
-        // 1. SetVertexBuffers with 17 bindings must throw ArgumentOutOfRangeException
+        // 1. SetVertexBuffers with 17 bindings must throw NotSupportedException.
         {
             std::vector<VertexBufferBinding> tooMany(17);
             bool threw = false;
             try { device.SetVertexBuffers(tooMany); }
-            catch (const System::ArgumentOutOfRangeException&) { threw = true; }
+            catch (const System::NotSupportedException&) { threw = true; }
             catch (...) {}
-            check(threw, "SetVertexBuffers(17) throws ArgumentOutOfRangeException");
+            check(threw, "SetVertexBuffers(17) throws NotSupportedException");
         }
 
-        // 2. REMED-GFX-222: 16 default/null bindings must be ACCEPTED, not rejected. FNA's own
-        // PrepareVertexBindingArray carries null entries through, so a null-entry guard here would
-        // reject a shape XNA allows. This assertion was written before REMED-GFX-222 landed and
-        // asserted the opposite; it is restored to the current shared contract, which every
-        // renderer including this one already implements.
+        // 2. Microsoft XNA rejects a null entry even though FNA stores it and fails only when a
+        // later draw dereferences the slot. The Microsoft behavior is the CNA authority.
         {
             bool threw = false;
             try { device.SetVertexBuffers(std::vector<VertexBufferBinding>(16)); }
-            catch (...) { threw = true; }
-            check(!threw, "SetVertexBuffers(16 null entries) is accepted");
+            catch (const System::ArgumentException&) { threw = true; }
+            catch (...) {}
+            check(threw, "SetVertexBuffers(16 null entries) throws ArgumentException");
             device.SetVertexBuffers({});
         }
 
@@ -83,13 +82,14 @@ protected:
         }
 #endif
 
-        // 4. GetBackBufferData with null data must throw std::invalid_argument
+        // 4. GetBackBufferData with null data must throw ArgumentNullException.
         {
+            device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
             bool threw = false;
             try { device.GetBackBufferData(static_cast<Color*>(nullptr), 0); }
-            catch (const std::invalid_argument&) { threw = true; }
+            catch (const System::ArgumentNullException&) { threw = true; }
             catch (...) {}
-            check(threw, "GetBackBufferData(nullptr) throws invalid_argument");
+            check(threw, "GetBackBufferData(nullptr) throws ArgumentNullException");
         }
 
         // 5. Present while a render target is bound must throw InvalidOperationException

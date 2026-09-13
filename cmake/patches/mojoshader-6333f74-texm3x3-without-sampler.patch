@@ -1,0 +1,15 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1888,6 +1888,11 @@ static void state_texm3x3(Context *ctx, const char *opcode, const int dims)
+     state_texops(ctx, opcode, dims, 0);
+     ctx->reset_texmpad = 1;
+ 
++    // TEXM3X3 performs only the matrix multiply and ignores all textures.
++    // It therefore has no sampler whose dimensionality needs validation. -CNA
++    if (dims == 0)
++        return;
++
+     RegisterList *sreg = reglist_find(&ctx->samplers, REG_TYPE_SAMPLER,
+                                       ctx->dest_arg.regnum);
+     const TextureType ttype = (TextureType) (sreg ? sreg->index : 0);

@@ -78,7 +78,7 @@ namespace
     /// reads the result back.
     [[nodiscard]] bool EnvironmentMapRasterizes()
     {
-        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, OpenGL4);
+        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, OpenGL4, Software);
     }
 
     class EnvironmentMapFresnelClampTest : public ::testing::Test
@@ -139,7 +139,7 @@ namespace
             for (int i = 0; i < effect.getCurrentTechniqueProperty()->getPassesProperty()
                                         .getCountProperty(); ++i)
             {
-                effect.getCurrentTechniqueProperty()->getPassesProperty()[i].Apply();
+                effect.getCurrentTechniqueProperty()->getPassesProperty()[i]->Apply();
                 device.DrawUserPrimitives(PrimitiveType::TriangleList, quad.data(), 0, 2);
             }
             device.SetRenderTarget(nullptr);

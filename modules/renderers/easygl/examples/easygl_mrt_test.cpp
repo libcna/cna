@@ -38,6 +38,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #if defined(CNA_RENDERER_EASYGL)
 #include <SDL3/SDL.h>
@@ -565,7 +567,7 @@ class MrtTest final : public Game
         {
             device.SetRenderTargets(Bindings({small.get(), wide.get()}));
         }
-        catch (const std::runtime_error&)
+        catch (const System::ArgumentException&)
         {
             dimensionsThrew = true;
         }
@@ -584,7 +586,7 @@ class MrtTest final : public Game
         {
             device.SetRenderTargets(Bindings(five));
         }
-        catch (const std::invalid_argument&)
+        catch (const System::NotSupportedException&)
         {
             countThrew = true;
         }
@@ -630,7 +632,7 @@ class MrtTest final : public Game
             getGraphicsDeviceProperty().SetRenderTargets(
                 Bindings({msaa0.get(), plain.get()}));
         }
-        catch (const std::runtime_error&)
+        catch (const System::ArgumentException&)
         {
             samplesThrew = true;
         }
@@ -702,6 +704,7 @@ public:
     MrtTest()
     {
         graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphics_->setPreferredBackBufferWidthProperty(96);
         graphics_->setPreferredBackBufferHeightProperty(72);
     }

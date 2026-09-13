@@ -213,6 +213,7 @@ public:
 int main()
 {
     AvatarTintRoutingIntegrationTest game;
+    game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();
 }

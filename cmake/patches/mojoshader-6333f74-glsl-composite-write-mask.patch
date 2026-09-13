@@ -1,0 +1,37 @@
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -1865,16 +1865,16 @@
+ 
+ void emit_GLSL_DST(Context *ctx)
+ {
+-    // !!! FIXME: needs to take ctx->dst_arg.writemask into account.
+     char src0_y[64]; make_GLSL_srcarg_string_y(ctx, 0, src0_y, sizeof (src0_y));
+     char src1_y[64]; make_GLSL_srcarg_string_y(ctx, 1, src1_y, sizeof (src1_y));
+     char src0_z[64]; make_GLSL_srcarg_string_z(ctx, 0, src0_z, sizeof (src0_z));
+     char src1_w[64]; make_GLSL_srcarg_string_w(ctx, 1, src1_w, sizeof (src1_w));
++    char mask[6]; get_GLSL_writemask_suffix(ctx->dest_arg.writemask, mask, sizeof (mask));
+ 
+     char code[128];
+     make_GLSL_destarg_assign(ctx, code, sizeof (code),
+-                             "vec4(1.0, %s * %s, %s, %s)",
+-                             src0_y, src1_y, src0_z, src1_w);
++                             "vec4(1.0, %s * %s, %s, %s)%s",
++                             src0_y, src1_y, src0_z, src1_w, mask);
+     output_line(ctx, "%s", code);
+ } // emit_GLSL_DST
+ 
+@@ -2082,12 +2082,12 @@
+ 
+ void emit_GLSL_CRS(Context *ctx)
+ {
+-    // !!! FIXME: needs to take ctx->dst_arg.writemask into account.
+     char src0[64]; make_GLSL_srcarg_string_vec3(ctx, 0, src0, sizeof (src0));
+     char src1[64]; make_GLSL_srcarg_string_vec3(ctx, 1, src1, sizeof (src1));
++    char mask[6]; get_GLSL_writemask_suffix(ctx->dest_arg.writemask, mask, sizeof (mask));
+     char code[128];
+     make_GLSL_destarg_assign(ctx, code, sizeof (code),
+-                             "cross(%s, %s)", src0, src1);
++                             "cross(%s, %s)%s", src0, src1, mask);
+     output_line(ctx, "%s", code);
+ } // emit_GLSL_CRS
+ 

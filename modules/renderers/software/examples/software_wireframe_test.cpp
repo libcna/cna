@@ -170,6 +170,18 @@ class SoftwareWireframeTest : public Game
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 1);
     }
 
+    void LineColoredVerts(GraphicsDevice& dev, const Color& c0, const Color& c1)
+    {
+        const VertexPositionColor verts[2] = {
+            { Vector3(-0.5f, 0.0f, 0.5f), c0 },
+            { Vector3( 0.5f, 0.0f, 0.5f), c1 },
+        };
+        BasicEffect fx(dev);
+        fx.VertexColorEnabled = true;
+        fx.Apply();
+        dev.DrawUserPrimitives(PrimitiveType::LineList, verts, 0, 1);
+    }
+
     // DrawIndexedColoredPrimitives (via DrawUserIndexedPrimitives<VertexPositionColor>).
     void TriIndexedColored(GraphicsDevice& dev, const Color& c)
     {
@@ -263,6 +275,13 @@ class SoftwareWireframeTest : public Game
         std::vector<Color> pix(static_cast<std::size_t>(w) * h, Color(0, 0, 0, 0));
         const Rectangle whole(0, 0, w, h);
         dev.GetBackBufferData(&whole, pix.data(), 0, static_cast<int>(pix.size()));
+        return pix;
+    }
+
+    std::vector<Color> Read(Texture2D& texture, int w, int h)
+    {
+        std::vector<Color> pix(static_cast<std::size_t>(w) * h, Color(0, 0, 0, 0));
+        texture.GetData(pix.data(), 0, static_cast<int>(pix.size()));
         return pix;
     }
 
@@ -610,6 +629,28 @@ protected:
                   "O2: near v1 the bottom edge is green-dominant");
         }
 
+        // ===== O3 (SOFTWARE-346): XNA line varyings use the logical D3D pixel centre ===============
+        // A 64-wide viewport maps the endpoints to logical XNA screen coordinates 16 and 48.
+        // Microsoft XNA 4.0 covers x=16..47 and returns these exact round-to-nearest RGBA8 values.
+        // Evaluating at the CPU coverage centre (x+0.5) after the 63/128 geometry translation made
+        // the midpoint (127,0,128), proving coverage placement and interpolation placement differ.
+        {
+            SetVp(dev, 0, 0, 64, 64);
+            SetRaster(dev, CullMode::None, FillMode::Solid);
+            dev.Clear(Color::Black);
+            LineColoredVerts(dev, red, blue);
+            SetVp(dev, 0, 0, kBBW, kBBH);
+            const std::vector<Color> pix = Read(dev);
+            check(At(pix, 16, 32) == Color(255, 0, 0, 255) &&
+                      At(pix, 17, 32) == Color(247, 0, 8, 255) &&
+                      At(pix, 32, 32) == Color(128, 0, 128, 255) &&
+                      At(pix, 33, 32) == Color(120, 0, 135, 255) &&
+                      At(pix, 47, 32) == Color(8, 0, 247, 255),
+                  "O3: LineList varying values match measured XNA at endpoints and half-byte midpoint");
+            check(At(pix, 15, 32) == Color::Black && At(pix, 48, 32) == Color::Black,
+                  "O4: exact XNA line interpolation retains directed endpoint coverage");
+        }
+
         // ===== P (Phase 27/28): far-offscreen and degenerate triangles are safe =====================
         {
             SetVp(dev, 0, 0, kBBW, kBBH);
@@ -647,8 +688,8 @@ protected:
             SetRaster(dev, CullMode::None, FillMode::WireFrame);
             dev.Clear(Color::Black);
             TriEx(dev, green);   // big triangle mapped over the 64x48 RT
-            std::vector<Color> pix = Read(dev, rtW, rtH);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            std::vector<Color> pix = Read(rt, rtW, rtH);
             SetVp(dev, 0, 0, kBBW, kBBH);
             const BBox b = Box(pix, isGreen, rtW, rtH);
             // RT centroid ~ (32,29); interior must be empty, edges present, all within the RT.
@@ -669,8 +710,8 @@ protected:
             dev.setScissorRectangleProperty(Rectangle(14, 10, 24, 18));   // fb-space x[14,37] y[10,27]
             dev.Clear(Color::Black);
             TriEx(dev, green);
-            std::vector<Color> pix = Read(dev, rtW, rtH);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            std::vector<Color> pix = Read(rt, rtW, rtH);
             SetVp(dev, 0, 0, kBBW, kBBH);
             // Effective clip = RT INTERSECT Viewport INTERSECT Scissor = x[14,37] y[10,27].
             const int outside = OutsideRect(pix, anyLit, 14, 10, 37, 27, rtW, rtH);
@@ -688,6 +729,7 @@ public:
     SoftwareWireframeTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
     }

@@ -6,6 +6,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
+#include "CNA/Internal/Renderers/Common/XnaStateConversion.hpp"
 #include "CNA/GraphicsRendererSelection.hpp"
 #include "CNA/IndirectDrawArguments.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
@@ -33,6 +34,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -43,6 +45,7 @@
 #include <vector>
 
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -57,6 +60,27 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // Matches FNA's internal GraphicsDevice.MAX_RENDERTARGET_BINDINGS.
         constexpr std::size_t MAX_RENDERTARGET_BINDINGS = 4;
+
+        [[nodiscard]] int SaturatingDrawOffsetAdd(int left, int right) noexcept
+        {
+            const std::int64_t sum = static_cast<std::int64_t>(left) + right;
+            return static_cast<int>(std::clamp(
+                sum,
+                static_cast<std::int64_t>((std::numeric_limits<int>::min)()),
+                static_cast<std::int64_t>((std::numeric_limits<int>::max)())));
+        }
+
+        [[nodiscard]] float NormalizeClearDepth(float depth) noexcept
+        {
+            // Direct3D's clear path saturates the public Single to its normalized depth range.
+            // Its observed NaN conversion is the lower endpoint rather than an unordered stored
+            // value; CPU renderers need this explicit normalization instead of a native API call.
+            if (std::isnan(depth))
+            {
+                return 0.0f;
+            }
+            return std::clamp(depth, 0.0f, 1.0f);
+        }
 
         constexpr std::array<SurfaceFormat, 27> CapabilitySurfaceFormats = {
             SurfaceFormat::Color,
@@ -118,6 +142,56 @@ namespace Microsoft::Xna::Framework::Graphics
                     return frameworkDefault;
             }
             return false;
+        }
+
+        [[nodiscard]] constexpr bool IsPointFilterOnlyFormat(const SurfaceFormat format)
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Single:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::Vector4:
+                case SurfaceFormat::HalfSingle:
+                case SurfaceFormat::HalfVector2:
+                case SurfaceFormat::HalfVector4:
+                case SurfaceFormat::HdrBlendable:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        [[nodiscard]] constexpr bool IsNonBlendableRenderTargetFormat(
+            const SurfaceFormat format)
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Single:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::Vector4:
+                case SurfaceFormat::HalfSingle:
+                case SurfaceFormat::HalfVector2:
+                case SurfaceFormat::HalfVector4:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        [[nodiscard]] bool RequiresRenderTargetBlendSupport(const BlendState& state)
+        {
+            const bool blendingEnabled =
+                state.getColorSourceBlendProperty() != Blend::One ||
+                state.getColorDestinationBlendProperty() != Blend::Zero ||
+                state.getColorBlendFunctionProperty() != BlendFunction::Add ||
+                state.getAlphaSourceBlendProperty() != Blend::One ||
+                state.getAlphaDestinationBlendProperty() != Blend::Zero ||
+                state.getAlphaBlendFunctionProperty() != BlendFunction::Add;
+            return blendingEnabled ||
+                state.getColorWriteChannelsProperty() != ColorWriteChannels::All ||
+                state.getColorWriteChannels1Property() != ColorWriteChannels::All ||
+                state.getColorWriteChannels2Property() != ColorWriteChannels::All ||
+                state.getColorWriteChannels3Property() != ColorWriteChannels::All;
         }
 
         int toSwapInterval(PresentInterval pi)
@@ -300,8 +374,10 @@ namespace Microsoft::Xna::Framework::Graphics
           depthStencilState_(DepthStencilState::Default),
           rasterizerState_(RasterizerState::CullCounterClockwise),
           blendFactor_(Color::White),
-          textures_(this),
-          vertexTextures_(this)
+          textures_(this, false),
+          samplerStates_(this, false),
+          vertexTextures_(this, true),
+          vertexSamplerStates_(this, true)
     {
         CNA::Platform::IPlatformGlContext* const glContext = platform_->GetGlContext();
         const CNA::Platform::GlContextBinding callerGlBinding =
@@ -345,13 +421,13 @@ namespace Microsoft::Xna::Framework::Graphics
             // (GraphicsDevice.cs: "BlendState = BlendState.Opaque; DepthStencilState =
             // DepthStencilState.Default; RasterizerState = RasterizerState.CullCounterClockwise;") —
             // Task 896 ported only the 3rd line; this now ports the other 2 as well, matching FNA.
-            setBlendStateProperty(blendState_);
+            setBlendStateProperty(BlendState::Opaque);
             // A 2D-only renderer has no native depth/stencil state to initialize. Skipping this one
             // constructor-time synchronization lets such a renderer reject every later public state
             // assignment consistently, instead of needing a special first-call exception.
             if (renderer_->SupportsDepthStencil())
-                setDepthStencilStateProperty(depthStencilState_);
-            setRasterizerStateProperty(rasterizerState_);
+                setDepthStencilStateProperty(DepthStencilState::Default);
+            setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
             restoreCallerGlBinding();
         }
         catch (...)
@@ -367,6 +443,7 @@ namespace Microsoft::Xna::Framework::Graphics
     GraphicsDevice::~GraphicsDevice()
     {
         Dispose();
+        resourceDeviceLifetime_.reset();
     }
 
     GraphicsAdapter& GraphicsDevice::getAdapterProperty() const
@@ -391,22 +468,41 @@ namespace Microsoft::Xna::Framework::Graphics
 
     const Viewport& GraphicsDevice::getViewportProperty() const
     {
+        ThrowIfDisposed();
         return viewport_;
     }
 
     void GraphicsDevice::setViewportProperty(const Viewport& value)
     {
+        ThrowIfDisposed();
+        int surfaceWidth;
+        int surfaceHeight;
+        GetActiveRenderDimensions(surfaceWidth, surfaceHeight);
+        int x = value.getXProperty();
+        int y = value.getYProperty();
+        int width = value.getWidthProperty();
+        int height = value.getHeightProperty();
+        const float minDepth = value.getMinDepthProperty();
+        const float maxDepth = value.getMaxDepthProperty();
+        if (x < 0 || y < 0 || width <= 0 || height <= 0
+            || static_cast<std::int64_t>(x) + width > surfaceWidth
+            || static_cast<std::int64_t>(y) + height > surfaceHeight
+            || minDepth < 0.0f || minDepth > 1.0f
+            || maxDepth < 0.0f || maxDepth > 1.0f
+            || maxDepth < minDepth)
+        {
+            throw System::ArgumentException(
+                "The viewport must fit inside the active render surface and use an ordered "
+                "depth range between zero and one.",
+                "value");
+        }
         if (renderer_)
         {
             // The public Viewport is logical; the renderer seam is not. See
             // MapLogicalRectToPresentation for why, and for the cases where it is the identity.
-            int x = value.getXProperty();
-            int y = value.getYProperty();
-            int width = value.getWidthProperty();
-            int height = value.getHeightProperty();
             MapLogicalRectToPresentation(x, y, width, height);
             renderer_->SetViewport(x, y, width, height,
-                                   value.getMinDepthProperty(), value.getMaxDepthProperty());
+                                   minDepth, maxDepth);
         }
         // Commit the public cache only after the native/renderer operation succeeds.  In particular,
         // D3D9's checked SetViewport path may reject a bad/lost device; retaining the old viewport
@@ -443,20 +539,119 @@ namespace Microsoft::Xna::Framework::Graphics
         return isDisposed_;
     }
 
+    void GraphicsDevice::ThrowIfDisposed() const
+    {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("GraphicsDevice");
+    }
+
+    void GraphicsDevice::GetActiveRenderDimensions(int& width, int& height) const
+    {
+        width = presentationParameters_.getBackBufferWidthProperty();
+        height = presentationParameters_.getBackBufferHeightProperty();
+        if (currentRenderTargets_.empty())
+        {
+            // CNA's presentation modes can make the active logical backbuffer wider than the
+            // requested PresentationParameters while preserving its virtual height.  Validate
+            // public Viewport/ScissorRectangle values against that live logical surface, which is
+            // also what UpdateViewportFromWindow publishes and renders into.  This distinction is
+            // especially important during GraphicsDeviceManager's synchronous window-change
+            // callback: the renderer has already observed the new drawable while Reset has not yet
+            // committed the replacement PresentationParameters.
+            if (renderer_ != nullptr)
+            {
+                int liveWidth = 0;
+                int liveHeight = 0;
+                renderer_->GetViewportSize(liveWidth, liveHeight);
+                if (liveWidth > 0 && liveHeight > 0)
+                {
+                    width = liveWidth;
+                    height = liveHeight;
+                }
+            }
+            return;
+        }
+
+        const Texture* const target = currentRenderTargets_[0].getRenderTargetProperty();
+        if (const auto* const target2D = dynamic_cast<const RenderTarget2D*>(target))
+        {
+            width = target2D->getWidthProperty();
+            height = target2D->getHeightProperty();
+        }
+        else if (const auto* const targetCube = dynamic_cast<const RenderTargetCube*>(target))
+        {
+            width = targetCube->getWidthProperty();
+            height = targetCube->getHeightProperty();
+        }
+    }
+
+    ClearOptions GraphicsDevice::GetDefaultClearOptions() const
+    {
+        ClearOptions options = ClearOptions::Target;
+        bool hasRealDepthBuffer = false;
+        bool hasRealStencilBuffer = false;
+        if (!currentRenderTargets_.empty())
+        {
+            Texture* bound = currentRenderTargets_[0].getRenderTargetProperty();
+            const auto* target2D = dynamic_cast<RenderTarget2D*>(bound);
+            const auto* targetCube = target2D == nullptr
+                ? dynamic_cast<RenderTargetCube*>(bound)
+                : nullptr;
+            if (targetCube != nullptr)
+            {
+                const DepthFormat depthFormat = targetCube->getDepthStencilFormatProperty();
+                const auto* targetRenderer = targetCube->GetRenderTargetCubeRenderer();
+                hasRealDepthBuffer = targetRenderer != nullptr &&
+                    targetRenderer->HasRealDepthBuffer(depthFormat != DepthFormat::None);
+                hasRealStencilBuffer = targetRenderer != nullptr &&
+                    targetRenderer->HasRealStencilBuffer(depthFormat == DepthFormat::Depth24Stencil8);
+            }
+            else
+            {
+                const DepthFormat depthFormat = target2D != nullptr
+                    ? target2D->getDepthStencilFormatProperty()
+                    : DepthFormat::None;
+                const auto* targetRenderer = target2D != nullptr
+                    ? target2D->GetRenderTargetRenderer()
+                    : nullptr;
+                hasRealDepthBuffer = targetRenderer != nullptr &&
+                    targetRenderer->HasRealDepthBuffer(depthFormat != DepthFormat::None);
+                hasRealStencilBuffer = targetRenderer != nullptr &&
+                    targetRenderer->HasRealStencilBuffer(depthFormat == DepthFormat::Depth24Stencil8);
+            }
+        }
+        else if (renderer_ != nullptr)
+        {
+            const DepthFormat depthFormat =
+                presentationParameters_.getDepthStencilFormatProperty();
+            hasRealDepthBuffer = renderer_->HasRealBackBufferDepthBuffer(
+                depthFormat != DepthFormat::None);
+            hasRealStencilBuffer = renderer_->HasRealBackBufferStencilBuffer(
+                depthFormat == DepthFormat::Depth24Stencil8);
+        }
+
+        if (hasRealDepthBuffer)
+        {
+            options |= ClearOptions::DepthBuffer;
+        }
+        if (hasRealStencilBuffer)
+        {
+            options |= ClearOptions::Stencil;
+        }
+        return options;
+    }
+
     void GraphicsDevice::Clear(const Color& color)
     {
-        // Task 928: real XNA/FNA's single-argument overload clears the target, depth buffer,
-        // AND stencil together -- Clear(ClearOptions.Target | ClearOptions.DepthBuffer |
-        // ClearOptions.Stencil, color, Viewport.MaxDepth, 0) -- not just the color target. The
-        // depth value used is the device's own CURRENT viewport's MaxDepth (not a hardcoded 1.0),
-        // matching FNA's exact `Viewport.MaxDepth` reference (a GraphicsDevice property, not a
-        // static constant).
-        Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-              color, getViewportProperty().getMaxDepthProperty(), 0);
+        // SOFTWARE-333: Microsoft selects its active DefaultClearOptions here; FNA instead asks
+        // for all three aspects and later masks unavailable planes. SOFTWARE-334 restores the
+        // separate Microsoft depth value: 1.0f, independent of the current viewport range.
+        Clear(GetDefaultClearOptions(), color, 1.0f, 0);
     }
 
     void GraphicsDevice::Clear(float r, float g, float b, float a)
     {
+        ThrowIfDisposed();
         if (renderer_ != nullptr)
         {
             auto contextLease = AcquireRendererThreadContextLease();
@@ -464,8 +659,16 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    void GraphicsDevice::Clear(ClearOptions options, const Vector4& color, float depth, int stencil)
+    {
+        // Microsoft XNA 4.0 quantizes this overload through Color before clearing. FNA forwards
+        // raw floats instead; keep the deliberate Microsoft behavior at this public boundary.
+        Clear(options, Color(color), depth, stencil);
+    }
+
     void GraphicsDevice::Clear(ClearOptions options, const Color& color, float depth, int stencil)
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
         {
             return;
@@ -473,74 +676,23 @@ namespace Microsoft::Xna::Framework::Graphics
 
         auto contextLease = AcquireRendererThreadContextLease();
 
-        if (hasClearFlag(options, ClearOptions::DepthBuffer))
+        const ClearOptions availableOptions = GetDefaultClearOptions();
+        const bool missingDepth = hasClearFlag(options, ClearOptions::DepthBuffer) &&
+                                  !hasClearFlag(availableOptions, ClearOptions::DepthBuffer);
+        const bool missingStencil = hasClearFlag(options, ClearOptions::Stencil) &&
+                                    !hasClearFlag(availableOptions, ClearOptions::Stencil);
+        if (missingDepth || missingStencil)
         {
-            if (depth < 0.0f || depth > 1.0f)
-                throw System::ArgumentOutOfRangeException(
-                    "depth", std::to_string(depth),
-                    "'depth' must be between 0.0 and 1.0.");
+            throw System::InvalidOperationException(
+                "Cannot clear depth or stencil because the device does not have an active depth "
+                "or stencil buffer.");
         }
 
-        // GDI-050: depth and stencil are independent attachment decisions. Historically this used
-        // one SupportsDepthStencil()/HasRealDepthBuffer() answer and reduced a target with no depth
-        // to ClearOptions::Target, silently deleting Stencil too. That made GDI's real standalone
-        // CPU stencil plane unreachable through the public GraphicsDevice API. Ask for each aspect
-        // independently and mask only the unsupported flag. Combined depth/stencil renderers retain
-        // their prior behavior through the interface's compatibility defaults.
-        bool hasRealDepthBuffer = false;
-        bool hasRealStencilBuffer = false;
-        if (!currentRenderTargets_.empty())
-        {
-            // REMED-GFX-142: a bound RenderTargetCube has to be asked too. This branch only ever
-            // recognized RenderTarget2D, so a cube binding fell through to `rt == nullptr` and
-            // both attachment flags were silently dropped, on every renderer, whatever depth
-            // format the cube actually had. SetRenderTargets already asks both target kinds (see
-            // its own `IsRenderTarget2D()` branch); this is the same question at the other call
-            // site.
-            Texture* bound = currentRenderTargets_[0].getRenderTargetProperty();
-            const auto* rt = dynamic_cast<RenderTarget2D*>(bound);
-            const auto* cube = (rt == nullptr) ? dynamic_cast<RenderTargetCube*>(bound) : nullptr;
-            if (cube != nullptr)
-            {
-                const DepthFormat depthFormat = cube->getDepthStencilFormatProperty();
-                const bool depthFormatRequested = depthFormat != DepthFormat::None;
-                const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
-                const auto* cubeRenderer = cube->GetRenderTargetCubeRenderer();
-                hasRealDepthBuffer =
-                    cubeRenderer && cubeRenderer->HasRealDepthBuffer(depthFormatRequested);
-                hasRealStencilBuffer =
-                    cubeRenderer && cubeRenderer->HasRealStencilBuffer(stencilFormatRequested);
-            }
-            else
-            {
-                const DepthFormat depthFormat =
-                    rt ? rt->getDepthStencilFormatProperty() : DepthFormat::None;
-                const bool depthFormatRequested = depthFormat != DepthFormat::None;
-                const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
-                const auto* rtRenderer = rt ? rt->GetRenderTargetRenderer() : nullptr;
-                hasRealDepthBuffer = rtRenderer && rtRenderer->HasRealDepthBuffer(depthFormatRequested);
-                hasRealStencilBuffer =
-                    rtRenderer && rtRenderer->HasRealStencilBuffer(stencilFormatRequested);
-            }
-        }
-        else
-        {
-            hasRealDepthBuffer = renderer_->SupportsDepthBuffer();
-            hasRealStencilBuffer = renderer_->SupportsStencilBuffer();
-        }
-        if (!hasRealDepthBuffer)
-        {
-            options &= ~ClearOptions::DepthBuffer;
-        }
-        if (!hasRealStencilBuffer)
-        {
-            options &= ~ClearOptions::Stencil;
-        }
-
-        const float r = static_cast<float>(color.getRProperty()) / 255.0f;
-        const float g = static_cast<float>(color.getGProperty()) / 255.0f;
-        const float b = static_cast<float>(color.getBProperty()) / 255.0f;
-        const float a = static_cast<float>(color.getAProperty()) / 255.0f;
+        const Vector4 normalizedColor = color.ToVector4();
+        const float r = normalizedColor.X;
+        const float g = normalizedColor.Y;
+        const float b = normalizedColor.Z;
+        const float a = normalizedColor.W;
 
         const bool clearTarget  = hasClearFlag(options, ClearOptions::Target);
         const bool clearDepth   = hasClearFlag(options, ClearOptions::DepthBuffer);
@@ -548,14 +700,15 @@ namespace Microsoft::Xna::Framework::Graphics
         // against `options` nor threaded through to any renderer, so a requested stencil clear
         // silently did nothing on every renderer.
         const bool clearStencil = hasClearFlag(options, ClearOptions::Stencil);
+        const float normalizedDepth = clearDepth ? NormalizeClearDepth(depth) : depth;
 
         if (clearTarget && clearDepth && clearStencil)
         {
-            renderer_->ClearColorDepthAndStencil(r, g, b, a, depth, stencil);
+            renderer_->ClearColorDepthAndStencil(r, g, b, a, normalizedDepth, stencil);
         }
         else if (clearTarget && clearDepth)
         {
-            renderer_->ClearColorAndDepth(r, g, b, a, depth);
+            renderer_->ClearColorAndDepth(r, g, b, a, normalizedDepth);
         }
         else if (clearTarget && clearStencil)
         {
@@ -563,7 +716,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         else if (clearDepth && clearStencil)
         {
-            renderer_->ClearDepthAndStencil(depth, stencil);
+            renderer_->ClearDepthAndStencil(normalizedDepth, stencil);
         }
         else if (clearTarget)
         {
@@ -571,7 +724,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         else if (clearDepth)
         {
-            renderer_->ClearDepth(depth);
+            renderer_->ClearDepth(normalizedDepth);
         }
         else if (clearStencil)
         {
@@ -586,6 +739,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Present()
     {
+        ThrowIfDisposed();
         if (renderTargetBound_)
             throw System::InvalidOperationException("Cannot present while render targets are bound");
 
@@ -622,6 +776,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Reset(const PresentationParameters& presentationParameters, GraphicsAdapter* adapter)
     {
+        ThrowIfDisposed();
         const PresentationParameters previousPresentationParameters =
             presentationParameters_.Clone();
         GraphicsAdapter* const previousAdapter = adapter_;
@@ -629,6 +784,13 @@ namespace Microsoft::Xna::Framework::Graphics
         const int previousVirtualHeight = virtualHeight_;
 
         DeviceResetting.Raise(this, System::EventArgs::Empty);
+
+        // SOFTWARE-228: Microsoft XNA saves ordinary draw state, explicitly unbinds every render
+        // target before resetting the backbuffer, and does not restore the target set afterward.
+        // Leaving CNA's binding alive makes the resized renderer and public device disagree and
+        // keeps Present() rejected even though Reset established a new backbuffer.
+        if (!currentRenderTargets_.empty())
+            SetRenderTargets({});
 
         PresentationParameters appliedPresentationParameters = presentationParameters.Clone();
         if (renderer_ != nullptr)
@@ -722,6 +884,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
+        // Match FNA's lifecycle boundary: the device becomes disposed before callbacks or owned
+        // resources run. This makes reentrant Dispose idempotent and prevents a Disposing handler
+        // from issuing work against native objects that are in the process of being torn down.
+        isDisposed_ = true;
+
+        Disposing.Raise(this, System::EventArgs::Empty);
+
         // Copy and clear the resource list before iterating.
         // This makes RemoveResourceReference a no-op when called re-entrantly
         // from within the resources' own Dispose() methods (matches FNA pattern).
@@ -731,11 +900,9 @@ namespace Microsoft::Xna::Framework::Graphics
         for (GraphicsResource* res : toDispose)
             static_cast<System::IDisposable*>(res)->Dispose();
 
-        Disposing.Raise(this, System::EventArgs::Empty);
         // Order matters: the window goes first, because the video subsystem is what backs it.
         destroyNativeResources();
         setVideoSubsystemAcquired(false);
-        isDisposed_ = true;
     }
 
     void GraphicsDevice::OnResourceCreated(System::Object* resource)
@@ -811,8 +978,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetIndexBuffer(const IndexBuffer* indexBuffer)
     {
+        ThrowIfDisposed();
         if (indexBuffer && indexBuffer->getIsDisposedProperty())
             throw System::ObjectDisposedException(indexBuffer->getNameProperty());
+        if (indexBuffer && indexBuffer->getGraphicsDeviceProperty() != this)
+            throw System::InvalidOperationException(
+                "SetIndexBuffer: the index buffer belongs to a different GraphicsDevice.");
         currentIndexBuffer_ = indexBuffer;
     }
 
@@ -878,13 +1049,101 @@ namespace Microsoft::Xna::Framework::Graphics
             default:
                 throw System::InvalidOperationException("Unrecognized primitive type!");
             }
-            if (count > std::numeric_limits<int>::max())
+            if (count < std::numeric_limits<int>::min() ||
+                count > std::numeric_limits<int>::max())
             {
                 throw System::ArgumentOutOfRangeException(
                     "primitiveCount", std::to_string(primitiveCount),
                     "The requested primitive range is too large.");
             }
             return static_cast<int>(count);
+        }
+
+        [[nodiscard]] constexpr int ProfileMaximumPrimitiveCount(GraphicsProfile profile)
+        {
+            return profile == GraphicsProfile::Reach ? 65'535 : 1'048'575;
+        }
+
+        void ValidateProfilePrimitiveCount(GraphicsProfile profile,
+                                           int primitiveCount,
+                                           const char* parameterName = "primitiveCount")
+        {
+            const int maximum = ProfileMaximumPrimitiveCount(profile);
+            if (primitiveCount > maximum)
+            {
+                throw System::NotSupportedException(
+                    std::string(parameterName) + " exceeds the active graphics profile limit of " +
+                    std::to_string(maximum) + '.');
+            }
+        }
+
+        void ValidateProfileUserIndexWidth(GraphicsProfile profile, std::int64_t indexSize)
+        {
+            if (profile == GraphicsProfile::Reach &&
+                indexSize == static_cast<std::int64_t>(sizeof(std::uint32_t)))
+            {
+                throw System::NotSupportedException(
+                    "Thirty-two-bit user indices are not supported by the Reach graphics profile.");
+            }
+        }
+
+        [[nodiscard]] Blend AdjustAlphaBlendForProfile(Blend blend)
+        {
+            switch (blend)
+            {
+                case Blend::SourceColor:             return Blend::SourceAlpha;
+                case Blend::InverseSourceColor:      return Blend::InverseSourceAlpha;
+                case Blend::DestinationColor:        return Blend::DestinationAlpha;
+                case Blend::InverseDestinationColor: return Blend::InverseDestinationAlpha;
+                default:                             return blend;
+            }
+        }
+
+        [[nodiscard]] bool UsesSeparateBlendFactors(Blend color, Blend alpha)
+        {
+            return AdjustAlphaBlendForProfile(color) != AdjustAlphaBlendForProfile(alpha);
+        }
+
+        void ValidateBlendStateForProfile(GraphicsProfile profile, const BlendState& state)
+        {
+            if (profile == GraphicsProfile::Reach)
+            {
+                if (UsesSeparateBlendFactors(state.getColorSourceBlendProperty(),
+                                             state.getAlphaSourceBlendProperty()) ||
+                    UsesSeparateBlendFactors(state.getColorDestinationBlendProperty(),
+                                             state.getAlphaDestinationBlendProperty()) ||
+                    state.getColorBlendFunctionProperty() !=
+                        state.getAlphaBlendFunctionProperty())
+                {
+                    throw System::NotSupportedException(
+                        "Separate alpha blending is not supported by the Reach graphics profile.");
+                }
+                if (state.getColorDestinationBlendProperty() == Blend::SourceAlphaSaturation ||
+                    state.getAlphaDestinationBlendProperty() == Blend::SourceAlphaSaturation)
+                {
+                    throw System::NotSupportedException(
+                        "SourceAlphaSaturation is not supported as a destination blend factor by "
+                        "the Reach graphics profile.");
+                }
+            }
+
+            const auto invalidMinMaxFactors = [](BlendFunction function,
+                                                 Blend source,
+                                                 Blend destination)
+            {
+                return (function == BlendFunction::Min || function == BlendFunction::Max) &&
+                       (source != Blend::One || destination != Blend::One);
+            };
+            if (invalidMinMaxFactors(state.getColorBlendFunctionProperty(),
+                                     state.getColorSourceBlendProperty(),
+                                     state.getColorDestinationBlendProperty()) ||
+                invalidMinMaxFactors(state.getAlphaBlendFunctionProperty(),
+                                     state.getAlphaSourceBlendProperty(),
+                                     state.getAlphaDestinationBlendProperty()))
+            {
+                throw System::NotSupportedException(
+                    "Min and Max blend functions require One/One factors on XNA profiles.");
+            }
         }
     }
 
@@ -917,6 +1176,121 @@ namespace Microsoft::Xna::Framework::Graphics
             folded = std::min(folded, binding.getVertexOffsetProperty());
         }
         return folded == std::numeric_limits<int>::max() ? 0 : folded;
+    }
+
+    void GraphicsDevice::ThrowIfBoundVertexBufferDisposed() const
+    {
+        if (currentVertexBuffer_ != nullptr && currentVertexBuffer_->getIsDisposedProperty())
+            throw System::ObjectDisposedException(currentVertexBuffer_->getNameProperty());
+        for (const VertexBufferBinding& binding : currentVertexBuffers_)
+        {
+            const VertexBuffer* const buffer = binding.getVertexBufferProperty();
+            if (buffer != nullptr && buffer->getIsDisposedProperty())
+                throw System::ObjectDisposedException(buffer->getNameProperty());
+        }
+    }
+
+    void GraphicsDevice::ThrowIfBoundIndexBufferDisposed() const
+    {
+        if (currentIndexBuffer_ != nullptr && currentIndexBuffer_->getIsDisposedProperty())
+            throw System::ObjectDisposedException(currentIndexBuffer_->getNameProperty());
+    }
+
+    void GraphicsDevice::DetachDestroyedVertexBuffer(const VertexBuffer* vertexBuffer) noexcept
+    {
+        if (currentVertexBuffer_ == vertexBuffer)
+        {
+            currentVertexBuffer_ = nullptr;
+            currentVertexBuffers_.clear();
+            return;
+        }
+        for (const VertexBufferBinding& binding : currentVertexBuffers_)
+        {
+            if (binding.getVertexBufferProperty() == vertexBuffer)
+            {
+                currentVertexBuffer_ = nullptr;
+                currentVertexBuffers_.clear();
+                return;
+            }
+        }
+    }
+
+    void GraphicsDevice::DetachDestroyedIndexBuffer(const IndexBuffer* indexBuffer) noexcept
+    {
+        if (currentIndexBuffer_ == indexBuffer)
+            currentIndexBuffer_ = nullptr;
+    }
+
+    void GraphicsDevice::DetachMovedTexture(const Texture* texture) noexcept
+    {
+        textures_.RemoveDisposedTexture(texture);
+        vertexTextures_.RemoveDisposedTexture(texture);
+    }
+
+    void GraphicsDevice::TransferMovedVertexBuffer(
+        const VertexBuffer* source, const VertexBuffer* destination) noexcept
+    {
+        if (currentVertexBuffer_ == source)
+            currentVertexBuffer_ = destination;
+        for (VertexBufferBinding& binding : currentVertexBuffers_)
+        {
+            if (binding.getVertexBufferProperty() == source)
+            {
+                binding = VertexBufferBinding(
+                    const_cast<VertexBuffer*>(destination),
+                    binding.getVertexOffsetProperty(),
+                    binding.getInstanceFrequencyProperty());
+            }
+        }
+    }
+
+    void GraphicsDevice::TransferMovedIndexBuffer(
+        const IndexBuffer* source, const IndexBuffer* destination) noexcept
+    {
+        if (currentIndexBuffer_ == source)
+            currentIndexBuffer_ = destination;
+    }
+
+    void GraphicsDevice::TransferMovedTexture(
+        const Texture* source, Texture* destination) noexcept
+    {
+        for (Texture*& slot : textures_.textures_)
+        {
+            if (slot == source)
+                slot = destination;
+        }
+        for (Texture*& slot : vertexTextures_.textures_)
+        {
+            if (slot == source)
+                slot = destination;
+        }
+        for (RenderTargetBinding& binding : currentRenderTargets_)
+        {
+            binding.ReplaceRenderTargetAfterMove(source, destination);
+        }
+    }
+
+    void GraphicsDevice::TransferResourceReference(
+        GraphicsResource* source, GraphicsResource* destination) noexcept
+    {
+        auto sourceIt = resources_.end();
+        auto destinationIt = resources_.end();
+        for (auto it = resources_.begin(); it != resources_.end(); ++it)
+        {
+            if (*it == source)
+                sourceIt = it;
+            if (*it == destination)
+                destinationIt = it;
+        }
+        if (sourceIt == resources_.end())
+            return;
+        if (destinationIt == resources_.end())
+        {
+            *sourceIt = destination;
+            return;
+        }
+        *sourceIt = resources_.back();
+        resources_.pop_back();
     }
 
     void GraphicsDevice::FillVertexStreamBindings(
@@ -980,23 +1354,38 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<int>(currentVertexBuffers_.size()),
             CNA::Internal::Renderers::kMaxVertexStreams);
         int combinedByteBase = 0;
-        // REMED-GFX-201: XNA composes the bound declarations by SEMANTIC, not by position. FNA3D's
-        // drivers walk the bindings in slot order tracking every (usage, usageIndex) pair already
-        // claimed; a later element that repeats a claimed pair is pushed to the next free usage
-        // index, which no stock vertex shader has an input for, so it resolves to "Stream not in
-        // use!" and is skipped. A second stream that simply repeats stream 0's declaration
-        // therefore contributes nothing at all -- it is not a second half of the vertex.
+        // REMED-GFX-201/SOFTWARE-320: XNA composes the bound declarations by semantic. FNA3D's
+        // drivers walk every element in binding order and move a repeated (usage, usageIndex) pair
+        // to the first free index of that same usage. Preserve that effective index explicitly:
+        // a stock shader may ignore the remapped duplicate while still consuming another unique
+        // element in the same stream, and an arbitrary compiled effect may consume the remapped
+        // index itself.
         bool usageClaimed[static_cast<std::size_t>(VertexElementUsage::TessellateFactor) + 1u]
                          [16] = {};
-        const auto claimUsage = [&](const VertexElement& element) -> bool {
+        const auto remapUsage = [&](const VertexElement& element) -> int {
             const auto usage = static_cast<std::size_t>(element.getVertexElementUsageProperty());
-            const int index = element.getUsageIndexProperty();
+            int index = element.getUsageIndexProperty();
             if (usage >= std::size(usageClaimed) || index < 0 || index >= 16)
-                return false;
+                return index;
             if (usageClaimed[usage][static_cast<std::size_t>(index)])
-                return false;
+            {
+                index = -1;
+                for (int candidate = 0; candidate < 16; ++candidate)
+                {
+                    if (!usageClaimed[usage][static_cast<std::size_t>(candidate)])
+                    {
+                        index = candidate;
+                        break;
+                    }
+                }
+                if (index < 0)
+                {
+                    throw System::NotSupportedException(
+                        "All sixteen usage indices for one vertex semantic are already bound.");
+                }
+            }
             usageClaimed[usage][static_cast<std::size_t>(index)] = true;
-            return true;
+            return index;
         };
 
         for (int slot = 0; slot < bindingCount; ++slot)
@@ -1006,25 +1395,6 @@ namespace Microsoft::Xna::Framework::Graphics
             if (buffer == nullptr)
                 continue;   // SetVertexBuffers rejects nulls; a defaulted binding is simply unused
 
-            // REMED-GFX-202: the usage claim covers per-instance streams too, exactly as FNA3D's
-            // own drivers walk one `attrUse` table across every binding regardless of frequency.
-            {
-                const auto& elements = buffer->getVertexDeclarationProperty().GetVertexElements();
-                int claimed = 0;
-                for (const VertexElement& element : elements)
-                    if (claimUsage(element)) ++claimed;
-                if (!elements.empty() && claimed == 0)
-                    continue;   // every element repeats an earlier stream's: not in use
-                if (claimed != static_cast<int>(elements.size()))
-                {
-                    throw System::NotSupportedException(
-                        "The VertexBuffer bound to slot " + std::to_string(slot) +
-                        " repeats some but not all of an earlier binding's vertex element "
-                        "usages. CNA describes a combined vertex layout by its byte stride, so a "
-                        "partially-duplicated stream has no expressible layout.");
-                }
-            }
-
             auto& stream = p.vertexStreams[static_cast<std::size_t>(p.vertexStreamCount)];
             stream.slot = slot;
             stream.buffer = &buffer->GetRenderer();
@@ -1032,6 +1402,33 @@ namespace Microsoft::Xna::Framework::Graphics
                 buffer->getVertexDeclarationProperty().getVertexStrideProperty();
             stream.instanceFrequency = binding.getInstanceFrequencyProperty();
             stream.vertexCount = buffer->getVertexCountProperty();  // plans/plan_fx.md FX-131, see above
+            // REMED-GFX-202: one usage table covers per-vertex and per-instance streams, exactly as
+            // FNA3D's native drivers do. Keep every stream: even a fully colliding declaration can
+            // become usage indices 1..15 and be consumed by the active shader.
+            const auto& elements =
+                buffer->getVertexDeclarationProperty().GetVertexElements();
+            stream.effectiveUsageIndexCount = static_cast<int>(elements.size());
+            // SOFTWARE-321: XNA's native declaration binding only fetches inputs declared by the
+            // active vertex shader. Per-instance streams use declaration order as matrix columns
+            // on CNA's stock instancing route and therefore remain wholly active; per-vertex
+            // streams are active only when at least one collision-remapped semantic is consumed.
+            // An empty declaration is CNAEXT's legacy packed-layout route. The Software renderer
+            // consumes its bytes by the renderer-known upload stride, so it is active even though
+            // there are no public semantics to match here.
+            stream.vertexShaderInputUsed =
+                stream.instanceFrequency != 0 || elements.empty();
+            for (std::size_t elementIndex = 0; elementIndex < elements.size(); ++elementIndex)
+            {
+                const int effectiveUsageIndex = remapUsage(elements[elementIndex]);
+                stream.effectiveUsageIndices[elementIndex] = effectiveUsageIndex;
+                if (stream.instanceFrequency == 0 &&
+                    CNA::Internal::Renderers::StockEffectUsesVertexSemantic(
+                        p, elements[elementIndex].getVertexElementUsageProperty(),
+                        effectiveUsageIndex))
+                {
+                    stream.vertexShaderInputUsed = true;
+                }
+            }
             if (stream.instanceFrequency == 0)
             {
                 stream.combinedByteBase = combinedByteBase;
@@ -1100,7 +1497,7 @@ namespace Microsoft::Xna::Framework::Graphics
         for (int i = 0; i < p.vertexStreamCount; ++i)
         {
             const auto& stream = p.vertexStreams[static_cast<std::size_t>(i)];
-            if (stream.instanceFrequency <= 0)
+            if (stream.instanceFrequency <= 0 || !stream.vertexShaderInputUsed)
                 continue;
             // REMED-GFX-118's arithmetic, per stream: one record is consumed for each complete
             // frequency-sized group of instances, and the first instance starts at record
@@ -1122,7 +1519,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::ValidateVertexStreamRanges(
         const CNA::Internal::Renderers::GpuDrawParams& p,
-        int startElement,
+        std::int64_t startElement,
         int elementCount,
         const char* parameterName,
         const std::string& parameterValue) const
@@ -1130,19 +1527,21 @@ namespace Microsoft::Xna::Framework::Graphics
         for (int i = 0; i < p.vertexStreamCount; ++i)
         {
             const auto& stream = p.vertexStreams[static_cast<std::size_t>(i)];
-            if (stream.instanceFrequency != 0)
+            if (stream.instanceFrequency != 0 || !stream.vertexShaderInputUsed)
                 continue;   // the instanced route validates its per-instance stream separately
-            // Every term is an element count of THIS stream, so the arithmetic is done against
-            // this stream's own capacity -- a short secondary stream is rejected even when
-            // stream 0 could satisfy the same request.
-            const int available = stream.vertexCount;
-            if (stream.vertexOffset > available ||
-                startElement > available - stream.vertexOffset ||
-                elementCount > available - stream.vertexOffset - startElement)
+            // Every term is an element count of THIS shader-consumed stream, so the arithmetic is
+            // done against this stream's own capacity. On renderers that retain the compatibility
+            // guard, a short active secondary stream is rejected even when stream 0 is long enough;
+            // an inactive stream is never fetched.
+            const std::int64_t available = stream.vertexCount;
+            const std::int64_t effectiveStart =
+                static_cast<std::int64_t>(stream.vertexOffset) + startElement;
+            if (effectiveStart < 0 || effectiveStart > available ||
+                elementCount > available - effectiveStart)
             {
                 throw System::ArgumentOutOfRangeException(
                     parameterName, parameterValue,
-                    "The requested vertex range exceeds the vertex buffer bound to slot " +
+                    "The requested vertex range exceeds the bound vertex buffer in slot " +
                         std::to_string(stream.slot) + '.');
             }
         }
@@ -1150,36 +1549,24 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::DrawPrimitives(PrimitiveType primitiveType, int vertexStart, int primitiveCount)
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawPrimitives");
 
-        if (currentVertexBuffer_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawPrimitives: no vertex buffer is bound.");
-
-        if (currentEffect_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawPrimitives: no effect has been applied.");
-
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(vertexStart, "vertexStart");
+        ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
 
-        // REMED-GFX-113: vertexStart is a vertex-element offset and primitiveCount fixes the exact
-        // topology-derived vertex count, so the pair [vertexStart, vertexStart + consumed) must fit
-        // the bound buffer. Rejecting here keeps every renderer's native binding an exact range: a
-        // request that leaves the buffer is an error, never a silently clamped or widened draw.
         const int consumedVertexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
-        const int availableVertexCount = currentVertexBuffer_->getVertexCountProperty();
-        // REMED-GFX-200: the binding offset moves the whole range, so it is part of what must fit.
-        const int bindingVertexOffset = CurrentVertexBufferOffset();
-        if (bindingVertexOffset > availableVertexCount ||
-            vertexStart > availableVertexCount - bindingVertexOffset ||
-            consumedVertexCount > availableVertexCount - bindingVertexOffset - vertexStart)
-        {
-            throw System::ArgumentOutOfRangeException(
-                "primitiveCount", std::to_string(primitiveCount),
-                "The requested primitive range exceeds the bound vertex buffer.");
-        }
+
+        if (currentEffect_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawPrimitives: no effect has been applied.");
+        if (currentVertexBuffer_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawPrimitives: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -1196,14 +1583,37 @@ namespace Microsoft::Xna::Framework::Graphics
         // offsets and each stream carries the rest itself; with one it is the whole offset and the
         // remainder is 0, which is exactly what REMED-GFX-200 measured.
         const int foldedOffset = FoldedVertexStreamOffset();
-        p.vertexStart = vertexStart + foldedOffset;
+        // An invalid native range is forwarded rather than rejected, but folding CNA's binding
+        // offset into the 32-bit renderer channel must not itself invoke signed-overflow UB.
+        p.vertexStart = SaturatingDrawOffsetAdd(vertexStart, foldedOffset);
         FillVertexStreamBindings(
             p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
-        // Argument validation first, capability second: an out-of-range request is wrong on every
-        // renderer, so it must report the same public exception everywhere.
-        ValidateVertexStreamRanges(
-            p, p.vertexStart, consumedVertexCount,
-            "primitiveCount", std::to_string(primitiveCount));
+        // The legacy empty-declaration route has no stream metadata. Its named buffer remains the
+        // authoritative byte source and therefore keeps the original whole-buffer range check.
+        if (p.vertexStreamCount == 0)
+        {
+            System::ArgumentOutOfRangeException::ThrowIfNegative(vertexStart, "vertexStart");
+            const int availableVertexCount = currentVertexBuffer_->getVertexCountProperty();
+            const int bindingVertexOffset = CurrentVertexBufferOffset();
+            if (bindingVertexOffset > availableVertexCount ||
+                vertexStart > availableVertexCount - bindingVertexOffset ||
+                consumedVertexCount > availableVertexCount - bindingVertexOffset - vertexStart)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "primitiveCount", std::to_string(primitiveCount),
+                    "The requested primitive range exceeds the bound vertex buffer.");
+            }
+        }
+        else if (renderer_->RequiresManagedBufferedDrawRangeValidationEXT())
+        {
+            // SOFTWARE-322: XNA forwards these values to its native D3D draw. Keep CNA's former
+            // managed guard only for renderers whose CPU staging would otherwise read invalid
+            // host memory; Software and EasyGL explicitly opt into native-style forwarding.
+            System::ArgumentOutOfRangeException::ThrowIfNegative(vertexStart, "vertexStart");
+            ValidateVertexStreamRanges(
+                p, p.vertexStart, consumedVertexCount,
+                "primitiveCount", std::to_string(primitiveCount));
+        }
         ValidateVertexStreamCapability(p);
         applySamplerStatesToRenderer();
         renderer_->DrawPrimitivesEx(
@@ -1222,49 +1632,29 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount
     )
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawIndexedPrimitives");
 
-        if (currentVertexBuffer_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound.");
-
-        if (currentIndexBuffer_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no index buffer is bound.");
-
-        if (currentEffect_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawIndexedPrimitives: no effect has been applied.");
-
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(baseVertex, "baseVertex");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
 
         const int consumedIndexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
-        const int availableIndexCount = currentIndexBuffer_->GetRenderer().GetIndexCount();
-        if (startIndex > availableIndexCount ||
-            consumedIndexCount > availableIndexCount - startIndex)
-        {
-            throw System::ArgumentOutOfRangeException(
-                "primitiveCount", std::to_string(primitiveCount),
-                "The requested primitive range exceeds the bound index buffer.");
-        }
 
-        const int availableVertexCount = currentVertexBuffer_->getVertexCountProperty();
-        // REMED-GFX-200: the binding offset moves the whole declared range, so it is part of what
-        // must fit -- exactly as DrawInstancedPrimitives below has counted it since REMED-GFX-118.
-        const int bindingVertexOffset = CurrentVertexBufferOffset();
-        if (bindingVertexOffset > availableVertexCount ||
-            baseVertex > availableVertexCount - bindingVertexOffset ||
-            minVertexIndex > availableVertexCount - bindingVertexOffset - baseVertex ||
-            numVertices > availableVertexCount - bindingVertexOffset - baseVertex - minVertexIndex)
-        {
-            throw System::ArgumentOutOfRangeException(
-                "numVertices", std::to_string(numVertices),
-                "The declared vertex range exceeds the bound vertex buffer.");
-        }
+        if (currentEffect_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawIndexedPrimitives: no effect has been applied.");
+        if (currentIndexBuffer_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawIndexedPrimitives: no index buffer is bound.");
+        ThrowIfBoundIndexBufferDisposed();
+        if (currentVertexBuffer_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -1281,17 +1671,46 @@ namespace Microsoft::Xna::Framework::Graphics
         // REMED-GFX-201: baseVertex advances EVERY per-vertex stream, each by that many of its own
         // elements, which is FNA3D's `vertexStride * (vertexOffset + baseVertex)` per binding.
         const int foldedOffset = FoldedVertexStreamOffset();
-        p.baseVertex = baseVertex + foldedOffset;
+        p.baseVertex = SaturatingDrawOffsetAdd(baseVertex, foldedOffset);
         p.minVertexIndex = minVertexIndex;
         p.numVertices = numVertices;
         FillVertexStreamBindings(
             p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
-        // The declared window is [baseVertex + minVertexIndex, + numVertices) in every stream's
-        // own elements, so every stream must hold it -- not only the one named by `vb`. Argument
-        // validation precedes the capability gate for the reason DrawPrimitives states.
-        ValidateVertexStreamRanges(
-            p, p.baseVertex + minVertexIndex, numVertices,
-            "numVertices", std::to_string(numVertices));
+        const bool validateBufferedRange = p.vertexStreamCount == 0 ||
+            renderer_->RequiresManagedBufferedDrawRangeValidationEXT();
+        if (validateBufferedRange)
+        {
+            System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
+            System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
+            const int availableIndexCount = currentIndexBuffer_->GetRenderer().GetIndexCount();
+            if (startIndex > availableIndexCount ||
+                consumedIndexCount > availableIndexCount - startIndex)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "primitiveCount", std::to_string(primitiveCount),
+                    "The requested primitive range exceeds the bound index buffer.");
+            }
+        }
+        if (p.vertexStreamCount == 0)
+        {
+            const int availableVertexCount = currentVertexBuffer_->getVertexCountProperty();
+            const int bindingVertexOffset = CurrentVertexBufferOffset();
+            const std::int64_t declaredVertexStart =
+                static_cast<std::int64_t>(bindingVertexOffset) + baseVertex + minVertexIndex;
+            if (declaredVertexStart < 0 || declaredVertexStart > availableVertexCount ||
+                numVertices > static_cast<std::int64_t>(availableVertexCount) - declaredVertexStart)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "numVertices", std::to_string(numVertices),
+                    "The declared vertex range exceeds the bound vertex buffer.");
+            }
+        }
+        else if (validateBufferedRange)
+        {
+            ValidateVertexStreamRanges(
+                p, static_cast<std::int64_t>(p.baseVertex) + minVertexIndex, numVertices,
+                "numVertices", std::to_string(numVertices));
+        }
         ValidateVertexStreamCapability(p);
         applySamplerStatesToRenderer();
         renderer_->DrawIndexedPrimitivesEx(
@@ -1340,60 +1759,31 @@ namespace Microsoft::Xna::Framework::Graphics
         const int numVertices, const int startIndex, const int primitiveCount,
         const int instanceCount, const int firstInstance)
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawInstancedPrimitives");
 
-        if (currentVertexBuffer_ == nullptr)
-            throw std::runtime_error(
-                "GraphicsDevice::DrawInstancedPrimitives: no vertex buffer is bound.");
-
-        if (currentIndexBuffer_ == nullptr)
-            throw std::runtime_error(
-                "GraphicsDevice::DrawInstancedPrimitives: no index buffer is bound.");
-
-        if (currentEffect_ == nullptr)
-            throw std::runtime_error(
-                "GraphicsDevice::DrawInstancedPrimitives: no effect has been applied.");
-
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(baseVertex, "baseVertex");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(instanceCount, "instanceCount");
+        ValidateProfilePrimitiveCount(graphicsProfile_, instanceCount, "instanceCount");
 
-        // REMED-GFX-118: the instanced entry point takes the same indexed contract as
-        // DrawIndexedPrimitives above -- startIndex is an index-element offset, primitiveCount
-        // fixes the exact topology-derived index count, baseVertex is added to every decoded index
-        // once, and minVertexIndex/numVertices declare the referenced vertex window. Rejecting a
-        // request that leaves either bound buffer here keeps every renderer's native binding an
-        // exact range instead of a silently widened or clamped draw. instanceCount is validated
-        // independently: it never widens or narrows the geometry range.
         const int consumedIndexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
-        const int availableIndexCount = currentIndexBuffer_->GetRenderer().GetIndexCount();
-        if (startIndex > availableIndexCount ||
-            consumedIndexCount > availableIndexCount - startIndex)
-        {
-            throw System::ArgumentOutOfRangeException(
-                "primitiveCount", std::to_string(primitiveCount),
-                "The requested primitive range exceeds the bound index buffer.");
-        }
 
-        // REMED-GFX-200: the same binding-0 rule the ordinary routes above now use, single-sourced.
-        const int vertexBufferOffset = CurrentVertexBufferOffset();
-
-        const int availableVertexCount = currentVertexBuffer_->getVertexCountProperty();
-        if (vertexBufferOffset > availableVertexCount ||
-            baseVertex > availableVertexCount - vertexBufferOffset ||
-            minVertexIndex > availableVertexCount - vertexBufferOffset - baseVertex ||
-            numVertices > availableVertexCount - vertexBufferOffset - baseVertex - minVertexIndex)
-        {
-            throw System::ArgumentOutOfRangeException(
-                "numVertices", std::to_string(numVertices),
-                "The declared vertex range exceeds the bound vertex buffer.");
-        }
+        if (currentEffect_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawInstancedPrimitives: no effect has been applied.");
+        if (currentIndexBuffer_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawInstancedPrimitives: no index buffer is bound.");
+        ThrowIfBoundIndexBufferDisposed();
+        if (currentVertexBuffer_ == nullptr)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawInstancedPrimitives: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -1420,14 +1810,31 @@ namespace Microsoft::Xna::Framework::Graphics
         // the per-vertex streams has no reason to be shared with them.
         FillVertexStreamBindings(
             p, /*foldedOffset=*/0, /*allowLegacyEmptyDeclarationFallback=*/false);
-        // The declared window is [baseVertex + minVertexIndex, + numVertices) in every per-vertex
-        // stream's own elements, and every per-instance stream owes one record per complete
-        // frequency-sized group of instances. Argument validation precedes the capability gate for
-        // the reason DrawPrimitives states: an out-of-range request is wrong on every renderer.
-        ValidateVertexStreamRanges(
-            p, baseVertex + minVertexIndex, numVertices,
-            "numVertices", std::to_string(numVertices));
-        ValidateInstanceStreamRanges(p, instanceCount, firstInstance);
+        const auto& boundDeclaration = currentVertexBuffer_->getVertexDeclarationProperty();
+        const bool legacyEmptyDeclaration = boundDeclaration.GetVertexElements().empty() &&
+            boundDeclaration.getVertexStrideProperty() == 0;
+        const bool validateBufferedRange = legacyEmptyDeclaration ||
+            renderer_->RequiresManagedBufferedDrawRangeValidationEXT();
+        if (validateBufferedRange)
+        {
+            System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
+            System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
+            const int availableIndexCount = currentIndexBuffer_->GetRenderer().GetIndexCount();
+            if (startIndex > availableIndexCount ||
+                consumedIndexCount > availableIndexCount - startIndex)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "primitiveCount", std::to_string(primitiveCount),
+                    "The requested primitive range exceeds the bound index buffer.");
+            }
+            // The declared window is [baseVertex + minVertexIndex, + numVertices) in every
+            // per-vertex stream's own elements, and every per-instance stream owes one record per
+            // complete frequency-sized group beginning at firstInstance.
+            ValidateVertexStreamRanges(
+                p, static_cast<std::int64_t>(baseVertex) + minVertexIndex, numVertices,
+                "numVertices", std::to_string(numVertices));
+            ValidateInstanceStreamRanges(p, instanceCount, firstInstance);
+        }
         ValidateVertexStreamCapability(p);
         applySamplerStatesToRenderer();
         renderer_->DrawInstancedPrimitivesEx(
@@ -1472,6 +1879,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
         const int argumentByteOffset)
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawPrimitivesIndirectEXT");
@@ -1485,6 +1893,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error(
                 "GraphicsDevice::DrawPrimitivesIndirectEXT: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
         if (currentEffect_ == nullptr)
             throw std::runtime_error(
                 "GraphicsDevice::DrawPrimitivesIndirectEXT: no effect has been applied.");
@@ -1515,6 +1924,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
         const int argumentByteOffset)
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawIndexedPrimitivesIndirectEXT");
@@ -1528,9 +1938,11 @@ namespace Microsoft::Xna::Framework::Graphics
         if (currentVertexBuffer_ == nullptr)
             throw std::runtime_error(
                 "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: no vertex buffer is bound.");
+        ThrowIfBoundVertexBufferDisposed();
         if (currentIndexBuffer_ == nullptr)
             throw std::runtime_error(
                 "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: no index buffer is bound.");
+        ThrowIfBoundIndexBufferDisposed();
         if (currentEffect_ == nullptr)
             throw std::runtime_error(
                 "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: no effect has been applied.");
@@ -1555,6 +1967,31 @@ namespace Microsoft::Xna::Framework::Graphics
             world, view, proj, primitiveType, argumentBuffer, argumentByteOffset, p);
     }
 
+    namespace
+    {
+        void ValidateUserSourceRange(std::int64_t first,
+                                     std::int64_t count,
+                                     std::int64_t elementSize,
+                                     const char* firstName,
+                                     const char* countName);
+        int ValidateUserPrimitiveArguments(const void* vertexData,
+                                           int vertexOffset,
+                                           PrimitiveType primitiveType,
+                                           int primitiveCount,
+                                           std::int64_t vertexSize,
+                                           GraphicsProfile graphicsProfile);
+        int ValidateUserIndexedArguments(const void* vertexData,
+                                         int vertexOffset,
+                                         int numVertices,
+                                         const void* indexData,
+                                         int indexOffset,
+                                         PrimitiveType primitiveType,
+                                         int primitiveCount,
+                                         std::int64_t vertexSize,
+                                         std::int64_t indexSize,
+                                         GraphicsProfile graphicsProfile);
+    }
+
     void GraphicsDevice::DrawUserPrimitives(
         PrimitiveType primitiveType,
         const void* vertexData,
@@ -1562,27 +1999,17 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount
     )
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
 
+        const int totalVerts = ValidateUserPrimitiveArguments(
+            vertexData, vertexOffset, primitiveType, primitiveCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionColor)), graphicsProfile_);
         if (currentEffect_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
-
-        // Compute vertex count from primitive type (mirrors FNA PrimitiveVerts).
-        int totalVerts;
-        switch (primitiveType)
-        {
-            case PrimitiveType::TriangleList:  totalVerts = primitiveCount * 3; break;
-            case PrimitiveType::TriangleStrip: totalVerts = primitiveCount + 2; break;
-            case PrimitiveType::LineList:      totalVerts = primitiveCount * 2; break;
-            case PrimitiveType::LineStrip:     totalVerts = primitiveCount + 1; break;
-            case PrimitiveType::PointListEXT:  totalVerts = primitiveCount;     break;
-            default:
-                throw System::InvalidOperationException("Unrecognized primitive type!");
-        }
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
 
         // vertexData points to an array of VertexPositionColor starting at vertexOffset.
         const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
@@ -1627,27 +2054,18 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount
     )
     {
+        ThrowIfDisposed();
         if (renderer_ == nullptr)
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
 
+        const int indexCount = ValidateUserIndexedArguments(
+            vertexData, vertexOffset, numVertices, indexData, indexOffset, primitiveType,
+            primitiveCount, static_cast<std::int64_t>(sizeof(VertexPositionColor)),
+            static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         if (currentEffect_ == nullptr)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
-
-        // Compute total index count from primitive type (mirrors FNA PrimitiveVerts).
-        int indexCount = 0;
-        switch (primitiveType)
-        {
-            case PrimitiveType::TriangleList:  indexCount = primitiveCount * 3; break;
-            case PrimitiveType::TriangleStrip: indexCount = primitiveCount + 2; break;
-            case PrimitiveType::LineList:      indexCount = primitiveCount * 2; break;
-            case PrimitiveType::LineStrip:     indexCount = primitiveCount + 1; break;
-            case PrimitiveType::PointListEXT:  indexCount = primitiveCount;     break;
-            default:
-                throw System::InvalidOperationException("Unrecognized primitive type!");
-        }
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
 
         // Pack vertices from caller array (assumed VertexPositionColor layout).
         const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
@@ -1688,25 +2106,11 @@ namespace Microsoft::Xna::Framework::Graphics
     // Public CNAEXT static — mirrors FNA's private PrimitiveVerts().
     int GraphicsDevice::PrimitiveVerts(PrimitiveType type, int primitiveCount)
     {
-        switch (type)
-        {
-            case PrimitiveType::TriangleList:  return primitiveCount * 3;
-            case PrimitiveType::TriangleStrip: return primitiveCount + 2;
-            case PrimitiveType::LineList:      return primitiveCount * 2;
-            case PrimitiveType::LineStrip:     return primitiveCount + 1;
-            case PrimitiveType::PointListEXT:  return primitiveCount;
-            default:
-                throw System::InvalidOperationException("Unrecognized primitive type!");
-        }
+        return CheckedPrimitiveElementCount(type, primitiveCount);
     }
 
     namespace
     {
-        int VertexCountForUserPrimitives(PrimitiveType type, int primitiveCount)
-        {
-            return GraphicsDevice::PrimitiveVerts(type, primitiveCount);
-        }
-
         // The GPU vertex streams of the built-in types, shared with their VertexDeclarations and
         // with VertexBuffer so a stride can never be described in two places at once.
         using GpuVPC  = CNA::Internal::Graphics::PositionColorStream;         // 16
@@ -1792,6 +2196,52 @@ namespace Microsoft::Xna::Framework::Graphics
                     "The requested source byte range is too large.");
             }
         }
+
+        int ValidateUserPrimitiveArguments(const void* vertexData,
+                                           int vertexOffset,
+                                           PrimitiveType primitiveType,
+                                           int primitiveCount,
+                                           std::int64_t vertexSize,
+                                           GraphicsProfile graphicsProfile)
+        {
+            System::ArgumentNullException::ThrowIfNull(vertexData, "vertexData");
+            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
+                primitiveCount, "primitiveCount");
+            ValidateProfilePrimitiveCount(graphicsProfile, primitiveCount);
+            const int vertexCount = CheckedPrimitiveElementCount(primitiveType, primitiveCount);
+            ValidateUserSourceRange(vertexOffset, vertexCount, vertexSize,
+                                    "vertexOffset", "primitiveCount");
+            return vertexCount;
+        }
+
+        int ValidateUserIndexedArguments(const void* vertexData,
+                                         int vertexOffset,
+                                         int numVertices,
+                                         const void* indexData,
+                                         int indexOffset,
+                                         PrimitiveType primitiveType,
+                                         int primitiveCount,
+                                         std::int64_t vertexSize,
+                                         std::int64_t indexSize,
+                                         GraphicsProfile graphicsProfile)
+        {
+            // The 32-bit-index profile gate lives in XNA's public UInt32 overload and therefore
+            // precedes the shared array/range validation. For UInt16 this is a no-op.
+            ValidateProfileUserIndexWidth(graphicsProfile, indexSize);
+            System::ArgumentNullException::ThrowIfNull(vertexData, "vertexData");
+            System::ArgumentNullException::ThrowIfNull(indexData, "indexData");
+            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
+                numVertices, "numVertices");
+            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
+                primitiveCount, "primitiveCount");
+            ValidateProfilePrimitiveCount(graphicsProfile, primitiveCount);
+            const int indexCount = CheckedPrimitiveElementCount(primitiveType, primitiveCount);
+            ValidateUserSourceRange(vertexOffset, numVertices, vertexSize,
+                                    "vertexOffset", "numVertices");
+            ValidateUserSourceRange(indexOffset, indexCount, indexSize,
+                                    "indexOffset", "primitiveCount");
+            return indexCount;
+        }
     }
 
     // Grows the scratch buffer only when the requested size exceeds current capacity, so
@@ -1813,12 +2263,18 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionColor* data, int offset, int count)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
+        const int n = ValidateUserPrimitiveArguments(
+            data, offset, type, count, static_cast<std::int64_t>(sizeof(VertexPositionColor)),
+            graphicsProfile_);
         if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
-        const int n = VertexCountForUserPrimitives(type, count);
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPC)));
         for (int i = 0; i < n; ++i)
         {
@@ -1838,12 +2294,18 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionTexture* data, int offset, int count)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
+        const int n = ValidateUserPrimitiveArguments(
+            data, offset, type, count, static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
+            graphicsProfile_);
         if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
-        const int n = VertexCountForUserPrimitives(type, count);
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPT)));
         for (int i = 0; i < n; ++i)
         {
@@ -1863,12 +2325,18 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionColorTexture* data, int offset, int count)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
+        const int n = ValidateUserPrimitiveArguments(
+            data, offset, type, count,
+            static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)), graphicsProfile_);
         if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
-        const int n = VertexCountForUserPrimitives(type, count);
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPCT)));
         for (int i = 0; i < n; ++i)
         {
@@ -1888,12 +2356,18 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const VertexPositionNormalTexture* data, int offset, int count)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
+        const int n = ValidateUserPrimitiveArguments(
+            data, offset, type, count,
+            static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)), graphicsProfile_);
         if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(count, "primitiveCount");
-        const int n = VertexCountForUserPrimitives(type, count);
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPNT)));
         for (int i = 0; i < n; ++i)
         {
@@ -1920,14 +2394,19 @@ namespace Microsoft::Xna::Framework::Graphics
                                             int primitiveCount,
                                             const VertexDeclaration& vertexDeclaration)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        vertexDeclaration.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
-        const int n      = VertexCountForUserPrimitives(type, primitiveCount);
-        ValidateUserSourceRange(vertexOffset, n, stride, "vertexOffset", "primitiveCount");
+        const int n      = ValidateUserPrimitiveArguments(
+            vertexData, vertexOffset, type, primitiveCount, stride, graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         // Apply vertexOffset in bytes then upload n vertices worth of raw data.
         const auto* src = static_cast<const std::uint8_t*>(vertexData)
                           + static_cast<std::ptrdiff_t>(vertexOffset) * stride;
@@ -1950,11 +2429,13 @@ namespace Microsoft::Xna::Framework::Graphics
         const VertexDeclaration& vertexDeclaration)
     {
         using Stream = CNA::Internal::Graphics::VertexStream<VertexT>;
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        vertexDeclaration.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
         if (stride != CNA::Internal::Graphics::VertexStreamStride<VertexT>)
         {
@@ -1963,9 +2444,12 @@ namespace Microsoft::Xna::Framework::Graphics
                 "supplied vertex type.",
                 "vertexDeclaration");
         }
-        const int n = VertexCountForUserPrimitives(type, primitiveCount);
-        ValidateUserSourceRange(vertexOffset, n, static_cast<std::int64_t>(sizeof(VertexT)),
-                                "vertexOffset", "primitiveCount");
+        const int n = ValidateUserPrimitiveArguments(
+            vertexData, vertexOffset, type, primitiveCount,
+            static_cast<std::int64_t>(sizeof(VertexT)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         auto* packed = static_cast<Stream*>(
             AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(Stream)));
         for (int i = 0; i < n; ++i)
@@ -2014,33 +2498,23 @@ namespace Microsoft::Xna::Framework::Graphics
     // DrawUserIndexedPrimitives — typed overloads
     // -----------------------------------------------------------------------
 
-    namespace
-    {
-        int IndexCountForPrimitives(PrimitiveType type, int primitiveCount)
-        {
-            switch (type)
-            {
-                case PrimitiveType::TriangleList:  return primitiveCount * 3;
-                case PrimitiveType::TriangleStrip: return primitiveCount + 2;
-                case PrimitiveType::LineList:      return primitiveCount * 2;
-                case PrimitiveType::LineStrip:     return primitiveCount + 1;
-                case PrimitiveType::PointListEXT:  return primitiveCount;
-                default:
-                    throw System::InvalidOperationException("Unrecognized primitive type!");
-            }
-        }
-    }
-
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
                                                    const VertexPositionColor* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionColor)),
+            static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPC)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2064,12 +2538,19 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
+            static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2093,12 +2574,19 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColorTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)),
+            static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPCT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2122,12 +2610,19 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionNormalTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint16_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)),
+            static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPNT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2153,12 +2648,19 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColor* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionColor)),
+            static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPC)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2182,12 +2684,19 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
+            static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2211,12 +2720,19 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionColorTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)),
+            static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPCT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2240,12 +2756,19 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const VertexPositionNormalTexture* vertices, int vOffset, int numVerts,
                                                    const std::uint32_t* indices, int iOffset, int primCount)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
+        const int ic = ValidateUserIndexedArguments(
+            vertices, vOffset, numVerts, indices, iOffset, type, primCount,
+            static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)),
+            static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
-        const int ic = IndexCountForPrimitives(type, primCount);
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPNT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -2275,16 +2798,20 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint16_t* indexData, int iOffset, int primCount,
                                                    const VertexDeclaration& vd)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
+        vd.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vd);
-        const int ic     = IndexCountForPrimitives(type, primCount);
-        ValidateUserSourceRange(vOffset, numVerts, stride, "vertexOffset", "numVertices");
-        ValidateUserSourceRange(iOffset, ic, static_cast<std::int64_t>(sizeof(std::uint16_t)),
-                                "indexOffset", "primitiveCount");
+        const int ic     = ValidateUserIndexedArguments(
+            vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
+            static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = renderer_->CreateVertexBuffer(numVerts);
@@ -2306,16 +2833,20 @@ namespace Microsoft::Xna::Framework::Graphics
                                                    const std::uint32_t* indexData, int iOffset, int primCount,
                                                    const VertexDeclaration& vd)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
+        vd.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vd);
-        const int ic     = IndexCountForPrimitives(type, primCount);
-        ValidateUserSourceRange(vOffset, numVerts, stride, "vertexOffset", "numVertices");
-        ValidateUserSourceRange(iOffset, ic, static_cast<std::int64_t>(sizeof(std::uint32_t)),
-                                "indexOffset", "primitiveCount");
+        const int ic     = ValidateUserIndexedArguments(
+            vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
+            static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = renderer_->CreateVertexBuffer(numVerts);
@@ -2343,11 +2874,13 @@ namespace Microsoft::Xna::Framework::Graphics
         const VertexDeclaration& vertexDeclaration)
     {
         using Stream = CNA::Internal::Graphics::VertexStream<VertexT>;
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
         renderer_->Ensure3DSupported("GraphicsDevice::DrawUserIndexedPrimitives");
-        if (!currentEffect_)
-            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        vertexDeclaration.ValidateForProfile(graphicsProfile_);
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
         if (stride != CNA::Internal::Graphics::VertexStreamStride<VertexT>)
         {
@@ -2356,9 +2889,13 @@ namespace Microsoft::Xna::Framework::Graphics
                 "supplied vertex type.",
                 "vertexDeclaration");
         }
-        ValidateUserSourceRange(vertexOffset, numVertices,
-                                static_cast<std::int64_t>(sizeof(VertexT)),
-                                "vertexOffset", "numVertices");
+        ValidateUserIndexedArguments(
+            vertexData, vertexOffset, numVertices, indexData, indexOffset, type, primitiveCount,
+            static_cast<std::int64_t>(sizeof(VertexT)),
+            static_cast<std::int64_t>(sizeof(IndexT)), graphicsProfile_);
+        if (!currentEffect_)
+            throw System::InvalidOperationException(
+                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         auto* packed = static_cast<Stream*>(
             AcquireUserVertexScratch(static_cast<std::size_t>(numVertices) * sizeof(Stream)));
         for (int i = 0; i < numVertices; ++i)
@@ -2868,6 +3405,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat format) const
     {
+        if (!Texture::IsRenderTargetFormatAllowedByProfileEXT(graphicsProfile_, format))
+            return false;
         // plans/plan_modern.md MOD-103/MOD-104: asks the same question RenderTarget2D's constructor asks
         // (plans/plan_runtimerenderer.md design decision 9's tri-state verdict), so the two can never
         // disagree -- a format this returns true for is a format RenderTarget2D will accept, and one
@@ -3664,21 +4203,178 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    void GraphicsDevice::validateDrawState(
+        const CNA::Internal::Renderers::GpuDrawParams* drawParams) const
+    {
+        // Microsoft XNA's VerifyCanDraw performs these profile restrictions only when a draw is
+        // submitted. HiDef can allocate float/half resources, but their D3D9 storage does not
+        // permit filtered sampling; six of those formats also do not permit blending or masked
+        // color writes. Keeping the guard shared makes ordinary draws and SpriteBatch use the same
+        // rules and prevents capable CPU/GL backends from silently offering behavior XNA rejects.
+        const auto validateFilteredTexture = [](const SurfaceFormat format, const int slot,
+                                                const SamplerStateCollection& samplers)
+        {
+            if (slot >= 0 && slot < samplers.ActiveSamplerCount() &&
+                IsPointFilterOnlyFormat(format) &&
+                samplers[slot].getFilterProperty() != TextureFilter::Point)
+            {
+                throw System::NotSupportedException(
+                    "The active GraphicsProfile does not support filtering SurfaceFormat " +
+                    std::to_string(static_cast<int>(format)) + ".");
+            }
+        };
+        const auto validateNpotTexture =
+            [this](const int width, const int height, const int slot,
+                   const SamplerStateCollection& samplers)
+        {
+            const auto isPowerOfTwo = [](const int value)
+            {
+                return value > 0 && (value & (value - 1)) == 0;
+            };
+            if (graphicsProfile_ == GraphicsProfile::Reach &&
+                (!isPowerOfTwo(width) || !isPowerOfTwo(height)) &&
+                slot >= 0 && slot < samplers.ActiveSamplerCount() &&
+                (samplers[slot].getAddressUProperty() != TextureAddressMode::Clamp ||
+                 samplers[slot].getAddressVProperty() != TextureAddressMode::Clamp))
+            {
+                throw System::NotSupportedException(
+                    "Reach requires Clamp addressing for non-power-of-two Texture2D resources.");
+            }
+        };
+
+        CNA::Internal::Renderers::GpuDrawParams currentEffectParams;
+        if (drawParams == nullptr && currentEffect_ != nullptr)
+        {
+            currentEffect_->FillGpuDrawParams(currentEffectParams);
+            drawParams = &currentEffectParams;
+        }
+        if (drawParams != nullptr)
+        {
+            if (drawParams->texture0 != nullptr)
+            {
+                validateFilteredTexture(
+                    static_cast<SurfaceFormat>(drawParams->texture0->GetSurfaceFormatEXT()), 0,
+                    samplerStates_);
+                validateNpotTexture(
+                    drawParams->texture0->GetWidth(), drawParams->texture0->GetHeight(), 0,
+                    samplerStates_);
+            }
+            if (drawParams->texture1 != nullptr)
+            {
+                validateFilteredTexture(
+                    static_cast<SurfaceFormat>(drawParams->texture1->GetSurfaceFormatEXT()), 1,
+                    samplerStates_);
+                validateNpotTexture(
+                    drawParams->texture1->GetWidth(), drawParams->texture1->GetHeight(), 1,
+                    samplerStates_);
+            }
+            if (drawParams->envMap != nullptr)
+                validateFilteredTexture(
+                    static_cast<SurfaceFormat>(drawParams->envMap->GetSurfaceFormatEXT()), 1,
+                    samplerStates_);
+
+            // Compiled Effect passes bind through the public device collection. Stock effects and
+            // SpriteBatch instead carry the exact textures above; validating stale public slot 0
+            // in those paths would reject a texture the draw has actually replaced.
+            if (drawParams->compiledDeviceTextures != nullptr)
+            {
+                for (int slot = 0; slot < TextureCollection::MaxTextures; ++slot)
+                {
+                    if (const Texture* texture = (*drawParams->compiledDeviceTextures)[slot])
+                    {
+                        validateFilteredTexture(texture->getFormatProperty(), slot, samplerStates_);
+                        if (const auto* texture2D = dynamic_cast<const Texture2D*>(texture))
+                        {
+                            validateNpotTexture(
+                                texture2D->getWidthProperty(), texture2D->getHeightProperty(), slot,
+                                samplerStates_);
+                        }
+                    }
+                }
+            }
+            if (drawParams->compiledDeviceVertexTextures != nullptr &&
+                drawParams->compiledDeviceVertexSamplerStates != nullptr)
+            {
+                const auto& vertexTextures = *drawParams->compiledDeviceVertexTextures;
+                const auto& vertexSamplers = *drawParams->compiledDeviceVertexSamplerStates;
+                for (int slot = 0; slot < vertexTextures.ActiveTextureCount(); ++slot)
+                {
+                    if (const Texture* texture = vertexTextures[slot])
+                    {
+                        validateFilteredTexture(texture->getFormatProperty(), slot,
+                                                vertexSamplers);
+                        if (const auto* texture2D = dynamic_cast<const Texture2D*>(texture))
+                        {
+                            validateNpotTexture(texture2D->getWidthProperty(),
+                                               texture2D->getHeightProperty(), slot,
+                                               vertexSamplers);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (RequiresRenderTargetBlendSupport(blendState_))
+        {
+            for (const RenderTargetBinding& binding : currentRenderTargets_)
+            {
+                const Texture* target = binding.getRenderTargetProperty();
+                if (target != nullptr &&
+                    IsNonBlendableRenderTargetFormat(target->getFormatProperty()))
+                {
+                    throw System::NotSupportedException(
+                        "The active GraphicsProfile does not support blending or masked color "
+                        "writes for SurfaceFormat " +
+                        std::to_string(static_cast<int>(target->getFormatProperty())) + ".");
+                }
+            }
+        }
+    }
+
     void GraphicsDevice::applySamplerStatesToRenderer(int firstSlot)
     {
-        if (!renderer_) return;
+        if (!renderer_)
+        {
+            ThrowIfDisposed();
+            return;
+        }
+
         if (firstSlot < 0) firstSlot = 0;
+        if (firstSlot == 0)
+        {
+            validateDrawState();
+
+            // FNA reapplies RasterizerState at every draw, rather than only when the property
+            // object is assigned. Native application also depends on the active destination's
+            // sample/depth configuration.
+            const RasterizerState& rs = rasterizerState_;
+            renderer_->ApplyRasterizerState(
+                CNA::Internal::Renderers::NormalizeXnaCullModeOrdinal(
+                    static_cast<int>(rs.getCullModeProperty())),
+                CNA::Internal::Renderers::NormalizeXnaFillModeOrdinal(
+                    static_cast<int>(rs.getFillModeProperty())),
+                rs.getScissorTestEnableProperty(),
+                rs.getDepthBiasProperty(),
+                rs.getSlopeScaleDepthBiasProperty());
+            renderer_->ApplyRasterizerMultiSampleState(
+                rs.getMultiSampleAntiAliasProperty());
+        }
         for (int i = firstSlot; i < SamplerStateCollection::MaxSamplers; ++i)
         {
             const SamplerState& ss = samplerStates_[i];
             renderer_->ApplySamplerState(i,
-                (int)ss.getFilterProperty(),
-                (int)ss.getAddressUProperty(),
-                (int)ss.getAddressVProperty(),
+                CNA::Internal::Renderers::NormalizeXnaTextureFilterOrdinal(
+                    static_cast<int>(ss.getFilterProperty())),
+                CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                    static_cast<int>(ss.getAddressUProperty())),
+                CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                    static_cast<int>(ss.getAddressVProperty())),
                 ss.getMaxAnisotropyProperty());
             renderer_->ApplySamplerMipState(i, ss.getMaxMipLevelProperty(),
                                            ss.getMipMapLevelOfDetailBiasProperty());
-            renderer_->ApplySamplerAddressW(i, (int)ss.getAddressWProperty());
+            renderer_->ApplySamplerAddressW(
+                i, CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                       static_cast<int>(ss.getAddressWProperty())));
         }
     }
 
@@ -3725,6 +4421,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GraphicsDeviceStatus GraphicsDevice::getGraphicsDeviceStatusProperty() const
     {
+        ThrowIfDisposed();
         // plans/plan_dx9.md D9-34: tracks the real renderer-reported status via deviceStatus_ (updated by
         // the deviceEventCallback lambda in createRenderer()). Every renderer except D3D9 never calls
         // that callback, so this stays Normal for them -- identical behavior to before this field
@@ -3734,6 +4431,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     DisplayMode GraphicsDevice::getDisplayModeProperty() const
     {
+        ThrowIfDisposed();
         if (presentationParameters_.getIsFullScreenProperty())
         {
             int w = 0, h = 0;
@@ -3752,6 +4450,15 @@ namespace Microsoft::Xna::Framework::Graphics
     const BlendState& GraphicsDevice::getBlendStateProperty() const { return blendState_; }
     void GraphicsDevice::setBlendStateProperty(const BlendState& value)
     {
+        ThrowIfDisposed();
+        // Microsoft XNA compares the managed state reference before Apply(), so assigning the
+        // already-active object is a no-op even after that object has been disposed. The two
+        // standalone device properties deliberately dirty this cache and force the same object
+        // through Apply again; preserve that distinction with CNA's shared payload identity.
+        if (value.state_ == blendState_.state_ && !blendStateDirty_)
+            return;
+        ValidateBlendStateForProfile(graphicsProfile_, value);
+        value.BindForUse(this);
         if (renderer_)
         {
             // REMED-GFX-077: the four per-MRT colour write masks + the coverage sample mask travel
@@ -3763,12 +4470,18 @@ namespace Microsoft::Xna::Framework::Graphics
             writeState.colorWriteChannels[3] = (int)value.getColorWriteChannels3Property();
             writeState.multiSampleMask = static_cast<unsigned int>(value.getMultiSampleMaskProperty());
             renderer_->ApplyBlendState(
-                (int)value.getColorSourceBlendProperty(),
-                (int)value.getAlphaSourceBlendProperty(),
-                (int)value.getColorDestinationBlendProperty(),
-                (int)value.getAlphaDestinationBlendProperty(),
-                (int)value.getColorBlendFunctionProperty(),
-                (int)value.getAlphaBlendFunctionProperty(),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(value.getColorSourceBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(value.getAlphaSourceBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(value.getColorDestinationBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(value.getAlphaDestinationBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendFunctionOrdinal(
+                    static_cast<int>(value.getColorBlendFunctionProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendFunctionOrdinal(
+                    static_cast<int>(value.getAlphaBlendFunctionProperty())),
                 writeState);
             renderer_->SetBlendFactor(
                 value.getBlendFactorProperty().getRProperty() / 255.0f,
@@ -3780,56 +4493,100 @@ namespace Microsoft::Xna::Framework::Graphics
         // render-state update can otherwise leave the old GPU state active.
         blendState_ = value;
         blendFactor_ = value.getBlendFactorProperty();
+        multiSampleMask_ = value.getMultiSampleMaskProperty();
+        blendStateDirty_ = false;
     }
 
     DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() { return depthStencilState_; }
     const DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() const { return depthStencilState_; }
     void GraphicsDevice::setDepthStencilStateProperty(const DepthStencilState& value)
     {
+        ThrowIfDisposed();
+        if (value.state_ == depthStencilState_.state_ && !depthStencilStateDirty_)
+            return;
+        value.BindForUse(this);
         if (renderer_)
         {
             renderer_->ApplyDepthStencilState(
                 value.getDepthBufferEnableProperty(),
                 value.getDepthBufferWriteEnableProperty(),
-                (int)value.getDepthBufferFunctionProperty(),
+                CNA::Internal::Renderers::NormalizeXnaCompareFunctionOrdinal(
+                    static_cast<int>(value.getDepthBufferFunctionProperty())),
                 value.getStencilEnableProperty(),
-                (int)value.getStencilFunctionProperty(),
-                (int)value.getStencilPassProperty(),
-                (int)value.getStencilFailProperty(),
-                (int)value.getStencilDepthBufferFailProperty(),
+                CNA::Internal::Renderers::NormalizeXnaCompareFunctionOrdinal(
+                    static_cast<int>(value.getStencilFunctionProperty())),
+                CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
+                    static_cast<int>(value.getStencilPassProperty())),
+                CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
+                    static_cast<int>(value.getStencilFailProperty())),
+                CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
+                    static_cast<int>(value.getStencilDepthBufferFailProperty())),
                 value.getStencilMaskProperty(),
                 value.getStencilWriteMaskProperty(),
-                value.getReferenceStencilProperty(),
+                CNA::Internal::Renderers::NormalizeXnaReferenceStencil(
+                    value.getReferenceStencilProperty()),
                 value.getTwoSidedStencilModeProperty(),
-                (int)value.getCounterClockwiseStencilFunctionProperty(),
-                (int)value.getCounterClockwiseStencilPassProperty(),
-                (int)value.getCounterClockwiseStencilFailProperty(),
-                (int)value.getCounterClockwiseStencilDepthBufferFailProperty());
-            renderer_->SetReferenceStencil(value.getReferenceStencilProperty());
+                CNA::Internal::Renderers::NormalizeXnaCompareFunctionOrdinal(
+                    static_cast<int>(value.getCounterClockwiseStencilFunctionProperty())),
+                CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
+                    static_cast<int>(value.getCounterClockwiseStencilPassProperty())),
+                CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
+                    static_cast<int>(value.getCounterClockwiseStencilFailProperty())),
+                CNA::Internal::Renderers::NormalizeXnaStencilOperationOrdinal(
+                    static_cast<int>(value.getCounterClockwiseStencilDepthBufferFailProperty())));
+            renderer_->SetReferenceStencil(
+                CNA::Internal::Renderers::NormalizeXnaReferenceStencil(
+                    value.getReferenceStencilProperty()));
         }
         // Commit only after both native operations succeed, so the public cache never describes a
         // depth/stencil configuration that a failed renderer update did not install.
         depthStencilState_ = value;
         referenceStencil_ = value.getReferenceStencilProperty();
+        depthStencilStateDirty_ = false;
     }
 
     RasterizerState& GraphicsDevice::getRasterizerStateProperty() { return rasterizerState_; }
     const RasterizerState& GraphicsDevice::getRasterizerStateProperty() const { return rasterizerState_; }
     void GraphicsDevice::setRasterizerStateProperty(const RasterizerState& value)
     {
+        ThrowIfDisposed();
+        if (value.state_ == rasterizerState_.state_)
+            return;
+        value.BindForUse(this);
         if (renderer_)
+        {
             renderer_->ApplyRasterizerState(
-                (int)value.getCullModeProperty(),
-                (int)value.getFillModeProperty(),
+                CNA::Internal::Renderers::NormalizeXnaCullModeOrdinal(
+                    static_cast<int>(value.getCullModeProperty())),
+                CNA::Internal::Renderers::NormalizeXnaFillModeOrdinal(
+                    static_cast<int>(value.getFillModeProperty())),
                 value.getScissorTestEnableProperty(),
                 value.getDepthBiasProperty(),
                 value.getSlopeScaleDepthBiasProperty());
+            renderer_->ApplyRasterizerMultiSampleState(
+                value.getMultiSampleAntiAliasProperty());
+        }
         rasterizerState_ = value;
     }
 
-    Rectangle GraphicsDevice::getScissorRectangleProperty() const { return scissorRectangle_; }
+    Rectangle GraphicsDevice::getScissorRectangleProperty() const
+    {
+        ThrowIfDisposed();
+        return scissorRectangle_;
+    }
     void GraphicsDevice::setScissorRectangleProperty(const Rectangle& value)
     {
+        ThrowIfDisposed();
+        int surfaceWidth;
+        int surfaceHeight;
+        GetActiveRenderDimensions(surfaceWidth, surfaceHeight);
+        if (value.X < 0 || value.Y < 0 || value.Width < 0 || value.Height < 0
+            || static_cast<std::int64_t>(value.X) + value.Width > surfaceWidth
+            || static_cast<std::int64_t>(value.Y) + value.Height > surfaceHeight)
+        {
+            throw System::ArgumentException(
+                "The scissor rectangle must fit inside the active render surface.", "value");
+        }
         if (renderer_)
         {
             // Same logical-versus-drawable split as the Viewport setter above: EasyGL, Magnum and
@@ -3849,26 +4606,69 @@ namespace Microsoft::Xna::Framework::Graphics
     Color GraphicsDevice::getBlendFactorProperty() const { return blendFactor_; }
     void GraphicsDevice::setBlendFactorProperty(const Color& value)
     {
-        blendFactor_ = value;
+        ThrowIfDisposed();
         if (renderer_)
             renderer_->SetBlendFactor(
                 value.getRProperty() / 255.0f,
                 value.getGProperty() / 255.0f,
                 value.getBProperty() / 255.0f,
                 value.getAProperty() / 255.0f);
+        blendFactor_ = value;
+        blendStateDirty_ = true;
     }
 
     int GraphicsDevice::getMultiSampleMaskProperty() const { return multiSampleMask_; }
-    void GraphicsDevice::setMultiSampleMaskProperty(int value) { multiSampleMask_ = value; }
+    void GraphicsDevice::setMultiSampleMaskProperty(int value)
+    {
+        ThrowIfDisposed();
+        if (renderer_)
+        {
+            // SOFTWARE-166: this is a standalone XNA GraphicsDevice property, just like
+            // BlendFactor and ReferenceStencil. Re-apply the current blend equation and colour
+            // masks with only the coverage mask replaced; mutating blendState_ would incorrectly
+            // rewrite the caller-visible BlendState object that supplied the rest of the state.
+            CNA::Internal::Renderers::BlendWriteState writeState;
+            writeState.colorWriteChannels[0] =
+                static_cast<int>(blendState_.getColorWriteChannelsProperty());
+            writeState.colorWriteChannels[1] =
+                static_cast<int>(blendState_.getColorWriteChannels1Property());
+            writeState.colorWriteChannels[2] =
+                static_cast<int>(blendState_.getColorWriteChannels2Property());
+            writeState.colorWriteChannels[3] =
+                static_cast<int>(blendState_.getColorWriteChannels3Property());
+            writeState.multiSampleMask = static_cast<unsigned int>(value);
+            renderer_->ApplyBlendState(
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(blendState_.getColorSourceBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(blendState_.getAlphaSourceBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(blendState_.getColorDestinationBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendOrdinal(
+                    static_cast<int>(blendState_.getAlphaDestinationBlendProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendFunctionOrdinal(
+                    static_cast<int>(blendState_.getColorBlendFunctionProperty())),
+                CNA::Internal::Renderers::NormalizeXnaBlendFunctionOrdinal(
+                    static_cast<int>(blendState_.getAlphaBlendFunctionProperty())),
+                writeState);
+        }
+        // Preserve transactional state application: an incapable renderer may reject a
+        // non-default mask, in which case the public cache continues to describe installed state.
+        multiSampleMask_ = value;
+        blendStateDirty_ = true;
+    }
 
     int GraphicsDevice::getReferenceStencilProperty() const { return referenceStencil_; }
     void GraphicsDevice::setReferenceStencilProperty(int value)
     {
+        ThrowIfDisposed();
         if (renderer_)
-            renderer_->SetReferenceStencil(value);
+            renderer_->SetReferenceStencil(
+                CNA::Internal::Renderers::NormalizeXnaReferenceStencil(value));
         // Match the other state setters: a renderer rejection must not leave the public cache
         // describing state that was never installed.
         referenceStencil_ = value;
+        depthStencilStateDirty_ = true;
     }
 
     void GraphicsDevice::Reset()
@@ -3893,8 +4693,33 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount)
     {
-        if (data == nullptr)
-            throw std::invalid_argument("data");
+        GetBackBufferDataCore(rect, data, startIndex, elementCount, 4u, true);
+    }
+
+    void GraphicsDevice::GetBackBufferDataCore(
+        const Rectangle* rect, void* data, int startIndex, int elementCount,
+        std::size_t elementSizeInBytes, bool colorObjects)
+    {
+        ThrowIfDisposed();
+        if (graphicsProfile_ == GraphicsProfile::Reach)
+        {
+            throw System::NotSupportedException(
+                "GetBackBufferData is not supported by the Reach graphics profile.");
+        }
+        System::ArgumentNullException::ThrowIfNull(data, "data");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
+            elementCount, "elementCount");
+        if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
+            static_cast<std::int64_t>((std::numeric_limits<int>::max)()))
+        {
+            throw System::ArgumentOutOfRangeException("elementCount");
+        }
+        if (!currentRenderTargets_.empty())
+        {
+            throw System::InvalidOperationException(
+                "The back buffer cannot be read while a render target is active.");
+        }
 
         // REMED-GFX-165: the read region is derived from the AUTHORITATIVE backbuffer description --
         // PresentationParameters -- never from the renderer's live viewport. A rectangle-less call
@@ -3919,8 +4744,9 @@ namespace Microsoft::Xna::Framework::Graphics
             // A rectangle is validated against the REAL backbuffer bounds, before any native copy, so
             // an out-of-range request fails deterministically rather than reading outside the resource.
             if (w <= 0 || h <= 0 || x < 0 || y < 0 ||
-                x + w > backBufferWidth || y + h > backBufferHeight)
-                throw std::out_of_range(
+                w > backBufferWidth || h > backBufferHeight ||
+                x > backBufferWidth - w || y > backBufferHeight - h)
+                throw System::ArgumentException(
                     "GetBackBufferData: rectangle is outside the backbuffer bounds");
         }
         else
@@ -3944,20 +4770,53 @@ namespace Microsoft::Xna::Framework::Graphics
             std::fflush(stderr);
         }
 
-        if (elementCount < w * h)
-            throw std::runtime_error("GetBackBufferData: data array too small for requested region");
-        Texture::ValidateGetDataFormat(presentationParameters_.getBackBufferFormatProperty(), 4);
-
-        // Color inherits a vtable pointer, so its first byte is NOT the R component.
-        // Use a plain byte buffer for ReadBackbuffer, then unpack each RGBA group
-        // into a Color(r, g, b, a) to avoid writing into the vtable pointer.
-        const int pixelCount = w * h;
-        std::vector<uint8_t> buf(static_cast<std::size_t>(pixelCount) * 4);
-        renderer_->ReadBackbuffer(x, y, w, h, buf.data());
-        for (int i = 0; i < pixelCount; ++i)
+        const SurfaceFormat backBufferFormat =
+            presentationParameters_.getBackBufferFormatProperty();
+        const int formatSize = Texture::GetFormatSizeEXT(backBufferFormat);
+        if (elementSizeInBytes == 0u ||
+            elementSizeInBytes > static_cast<std::size_t>((std::numeric_limits<int>::max)()) ||
+            static_cast<std::size_t>(formatSize) % elementSizeInBytes != 0u)
         {
-            const uint8_t* p = buf.data() + i * 4;
-            data[startIndex + i] = Color(p[0], p[1], p[2], p[3]);
+            throw System::ArgumentException(
+                "GetBackBufferData: destination element size is invalid for the backbuffer format");
+        }
+        if (!colorObjects && formatSize != 4)
+        {
+            throw System::NotSupportedException(
+                "GetBackBufferData: generic reads of non-Color backbuffers require a native "
+                "declared-format readback path");
+        }
+
+        const std::int64_t pixelCount64 =
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h);
+        const std::int64_t requiredBytes =
+            pixelCount64 * (colorObjects ? 4 : formatSize);
+        const std::int64_t suppliedBytes =
+            static_cast<std::int64_t>(elementCount) *
+            static_cast<std::int64_t>(elementSizeInBytes);
+        if (suppliedBytes != requiredBytes)
+            throw System::ArgumentException(
+                "GetBackBufferData: elementCount does not match the requested byte count");
+
+        const std::size_t pixelCount = static_cast<std::size_t>(pixelCount64);
+        std::vector<uint8_t> buf(pixelCount * 4u);
+        renderer_->ReadBackbuffer(x, y, w, h, buf.data());
+        if (!colorObjects)
+        {
+            auto* destination = static_cast<std::uint8_t*>(data) +
+                static_cast<std::size_t>(startIndex) * elementSizeInBytes;
+            std::memcpy(destination, buf.data(), buf.size());
+            return;
+        }
+
+        // Color inherits a vtable pointer, so its first byte is NOT the R component. Unpack the
+        // renderer's plain RGBA groups into actual Color objects instead of overwriting vtables.
+        auto* colors = static_cast<Color*>(data);
+        for (std::size_t i = 0; i < pixelCount; ++i)
+        {
+            const uint8_t* p = buf.data() + i * 4u;
+            colors[static_cast<std::size_t>(startIndex) + i] =
+                Color(p[0], p[1], p[2], p[3]);
         }
     }
 
@@ -4039,22 +4898,40 @@ namespace Microsoft::Xna::Framework::Graphics
             SetRenderTargets({});
             return;
         }
-        SetRenderTargets({RenderTargetBinding(
-            static_cast<Texture*>(renderTarget), cubeMapFace)});
+        SetRenderTargets({RenderTargetBinding(renderTarget, cubeMapFace)});
     }
 
     void GraphicsDevice::SetRenderTargets(const std::vector<RenderTargetBinding>& renderTargets)
     {
+        ThrowIfDisposed();
+
+        // SOFTWARE-222: Microsoft XNA returns immediately when the complete binding set is
+        // unchanged, comparing each target resource and selected cube face. This also makes an
+        // empty-to-empty call a no-op. Do this before validation or renderer work so repeated
+        // bindings do not resolve/discard content or reset application viewport/scissor state.
+        bool bindingsUnchanged = renderTargets.size() == currentRenderTargets_.size();
+        for (std::size_t i = 0; bindingsUnchanged && i < renderTargets.size(); ++i)
+        {
+            bindingsUnchanged =
+                renderTargets[i].getRenderTargetProperty()
+                    == currentRenderTargets_[i].getRenderTargetProperty()
+                && renderTargets[i].getCubeMapFaceProperty()
+                    == currentRenderTargets_[i].getCubeMapFaceProperty();
+        }
+        if (bindingsUnchanged)
+            return;
+
         if (renderTargets.size() > MAX_RENDERTARGET_BINDINGS)
-            throw std::invalid_argument("SetRenderTargets: at most " +
-                std::to_string(MAX_RENDERTARGET_BINDINGS) + " render targets may be bound at once.");
+            throw System::NotSupportedException(
+                "SetRenderTargets: at most " + std::to_string(MAX_RENDERTARGET_BINDINGS)
+                + " render targets may be bound at once.");
 
         // D9-103 follow-up: GraphicsProfile.Reach's own MaxRenderTargets=1 ceiling (D9-100's own
         // table) -- a SEPARATE, lower, software-imposed limit from MAX_RENDERTARGET_BINDINGS
         // above (XNA's own general 4-target ceiling) and from D9-54's own hardware-cap
         // enforcement inside the renderer (NumSimultaneousRTs, which could be higher).
-        // plans/plan_runtimerenderer.md design decision 9: asked of the active renderer; renderers with
-        // no profile distinction report no ceiling.
+        // SOFTWARE-179: asked through the active renderer contract, whose common default carries
+        // this renderer-independent profile rule. A renderer may still report a lower limit.
         if (renderer_ != nullptr)
         {
             const int profile = static_cast<int>(graphicsProfile_);
@@ -4094,11 +4971,18 @@ namespace Microsoft::Xna::Framework::Graphics
             const auto& binding = renderTargets[i];
             Texture* texture = binding.getRenderTargetProperty();
             if (!texture)
-                throw std::invalid_argument(
+                throw System::ArgumentException(
                     "SetRenderTargets: binding " + std::to_string(i)
-                    + " has a null render target.");
+                    + " has a null render target.",
+                    "renderTargets");
             if (texture->getIsDisposedProperty())
                 throw System::ObjectDisposedException(texture->getNameProperty());
+            // SOFTWARE-221: XNA resources are owned by one GraphicsDevice. Accepting a target
+            // created by another device can hand this renderer a backend object from another
+            // context and must be rejected before either public or renderer binding state changes.
+            if (texture->getGraphicsDeviceProperty() != this)
+                throw System::InvalidOperationException(
+                    "SetRenderTargets: the render target belongs to a different GraphicsDevice.");
 
             if (auto* rt2D = dynamic_cast<RenderTarget2D*>(texture))
             {
@@ -4139,24 +5023,33 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
-        // XNA/FNA/native MRT compatibility is subresource-based. Different faces of one cube are
-        // distinct and may be bound together; the identical face (or 2D slice) may not occupy two
-        // slots. Dimensions and real device-applied sample counts must agree.
+        // SOFTWARE-220: Microsoft XNA compares the render-target resource identity, not the
+        // selected cube subresource, before binding an MRT set. It also requires every target to
+        // have the same dimensions, real sample count and pixel size. Formats with the same pixel
+        // size remain compatible, so comparing exact SurfaceFormat values would be too strict.
         for (std::size_t i = 1; i < descriptors.size(); ++i)
         {
+            for (std::size_t previous = 0; previous < i; ++previous)
+            {
+                if (publicTargets[i] == publicTargets[previous])
+                    throw System::ArgumentException(
+                        "SetRenderTargets: the same render target cannot be bound to more than "
+                        "one slot.");
+            }
             if (descriptors[i].GetWidth() != descriptors[0].GetWidth()
                 || descriptors[i].GetHeight() != descriptors[0].GetHeight())
-                throw std::runtime_error(
+                throw System::ArgumentException(
                     "SetRenderTargets: render targets must have matching dimensions.");
             if (descriptors[i].GetAppliedMultiSampleCount()
                 != descriptors[0].GetAppliedMultiSampleCount())
-                throw std::runtime_error(
+                throw System::ArgumentException(
                     "SetRenderTargets: render targets must have matching applied sample counts.");
-            for (std::size_t previous = 0; previous < i; ++previous)
-                if (descriptors[i].IsSameSubresource(descriptors[previous]))
-                    throw std::runtime_error(
-                        "SetRenderTargets: the same render-target subresource cannot be bound "
-                        "to more than one slot.");
+            if (Texture::GetFormatSizeEXT(
+                    renderTargets[i].getRenderTargetProperty()->getFormatProperty())
+                != Texture::GetFormatSizeEXT(
+                    renderTargets[0].getRenderTargetProperty()->getFormatProperty()))
+                throw System::ArgumentException(
+                    "SetRenderTargets: render targets must have matching pixel sizes.");
         }
 
         if (renderer_)
@@ -4214,32 +5107,71 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer, int vertexOffset)
     {
+        ThrowIfDisposed();
+        if (vertexBuffer == nullptr)
+        {
+            currentVertexBuffer_ = nullptr;
+            currentVertexBuffers_.clear();
+            return;
+        }
         System::ArgumentOutOfRangeException::ThrowIfNegative(vertexOffset, "vertexOffset");
-        if (vertexBuffer && vertexBuffer->getIsDisposedProperty())
+        if (vertexBuffer->getIsDisposedProperty())
             throw System::ObjectDisposedException(vertexBuffer->getNameProperty());
+        if (vertexBuffer->getGraphicsDeviceProperty() != this)
+            throw System::InvalidOperationException(
+                "SetVertexBuffer: the vertex buffer belongs to a different GraphicsDevice.");
 
         currentVertexBuffer_ = vertexBuffer;
         currentVertexBuffers_.clear();
-        if (vertexBuffer != nullptr)
-        {
-            currentVertexBuffers_.emplace_back(
-                const_cast<VertexBuffer*>(vertexBuffer), vertexOffset, 0);
-        }
+        currentVertexBuffers_.emplace_back(
+            const_cast<VertexBuffer*>(vertexBuffer), vertexOffset, 0);
     }
 
     void GraphicsDevice::SetVertexBuffers(const std::vector<VertexBufferBinding>& vertexBuffers)
     {
+        ThrowIfDisposed();
         constexpr int kMaxVertexBufferBindings = 16; // XNA4 HiDef spec limit
         if (static_cast<int>(vertexBuffers.size()) > kMaxVertexBufferBindings)
-            throw System::ArgumentOutOfRangeException(
-                "vertexBuffers",
-                std::to_string(vertexBuffers.size()),
-                "Max Vertex Buffers supported is " + std::to_string(kMaxVertexBufferBindings));
+            throw System::NotSupportedException(
+                "Max Vertex Buffers supported is "
+                + std::to_string(kMaxVertexBufferBindings) + ".");
 
-        // A null-buffer binding is a legal unused slot in XNA -- FNA itself stores
-        // VertexBufferBinding.None entries -- so only the binding count is validated here;
-        // the draw dispatch already skips defaulted bindings.
-        currentVertexBuffers_ = vertexBuffers;
+        // Microsoft XNA applies bindings in order and its finally block keeps only the prefix
+        // processed before a validation failure. FNA accepts null entries, but doing so diverges
+        // from the higher-authority Microsoft implementation and later fails during vertex fetch.
+        std::size_t processed = 0;
+        currentVertexBuffers_.reserve(vertexBuffers.size());
+        try
+        {
+            for (; processed < vertexBuffers.size(); ++processed)
+            {
+                const VertexBufferBinding& binding = vertexBuffers[processed];
+                const VertexBuffer* const buffer = binding.getVertexBufferProperty();
+                if (buffer == nullptr)
+                    throw System::ArgumentException(
+                        "SetVertexBuffers: null vertex-buffer bindings are not allowed.");
+                if (buffer->getIsDisposedProperty())
+                    throw System::ObjectDisposedException(buffer->getNameProperty());
+                if (buffer->getGraphicsDeviceProperty() != this)
+                    throw System::InvalidOperationException(
+                        "SetVertexBuffers: a vertex buffer belongs to a different GraphicsDevice.");
+
+                if (processed < currentVertexBuffers_.size())
+                    currentVertexBuffers_[processed] = binding;
+                else
+                    currentVertexBuffers_.push_back(binding);
+            }
+        }
+        catch (...)
+        {
+            currentVertexBuffers_.resize(processed);
+            currentVertexBuffer_ = currentVertexBuffers_.empty()
+                ? nullptr
+                : currentVertexBuffers_[0].getVertexBufferProperty();
+            throw;
+        }
+
+        currentVertexBuffers_.resize(vertexBuffers.size());
         currentVertexBuffer_ = vertexBuffers.empty()
             ? nullptr
             : vertexBuffers[0].getVertexBufferProperty();

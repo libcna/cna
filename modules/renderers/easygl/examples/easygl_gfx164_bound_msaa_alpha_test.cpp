@@ -1,14 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-164 -- an active EasyGL multisampled RenderTarget2D must expose its current
-// colour attachment to GetData without requiring the caller to unbind it first.
-//
-// The ticket's original fixture reads the target while it is still bound.  Before the fix,
-// EasyGLRenderTargetRenderer::GetData read the single-sample resolve texture, but the only resolve
-// lived in UnbindAsRenderTarget.  The active target therefore returned the untouched resolve
-// storage -- observed as (0,0,0,0) -- even though its multisample renderbuffer held the requested
-// opaque black Clear and the rendered triangles.  Explicitly unbinding, or switching to a target
-// consumer, ran the resolve and made the same pixels exact.
+// REMED-GFX-164 / SOFTWARE-246 -- multisampled RenderTarget2D alpha and resolve coverage.
+// Microsoft XNA refuses GetData while the resource is an active render target; unbinding is the
+// public resolve boundary. This fixture proves exact RGBA delivery after that boundary and proves
+// that rejected active reads preserve both the destination and the active producer binding.
 //
 // This fixture keeps those stages discriminating.  Its colours distinguish transparent black,
 // opaque black, zero-RGB/nonzero-alpha, several nonzero RGB/alpha combinations, an untouched
@@ -40,6 +35,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_opengl.h>
@@ -96,6 +92,7 @@ namespace
         Gfx164Test()
         {
             gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+            gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
             gdm_->setPreferredBackBufferWidthProperty(32);
             gdm_->setPreferredBackBufferHeightProperty(32);
         }
@@ -241,6 +238,31 @@ namespace
             CheckUniformWindow(data, kStart, count, expected, label);
         }
 
+        void CheckActiveReadRejected(RenderTarget2D& target, const std::string& label,
+                                     bool rectangle = false)
+        {
+            const Rectangle rect(2, 1, 3, 5);
+            const int count = rectangle ? rect.Width * rect.Height : kCount;
+            std::vector<Color> data(
+                static_cast<std::size_t>(kStart + count + kSuffix), kSentinel);
+            bool rejected = false;
+            try
+            {
+                target.GetData(0, rectangle ? &rect : nullptr, data.data(), kStart, count);
+            }
+            catch (const System::InvalidOperationException&)
+            {
+                rejected = true;
+            }
+            catch (...)
+            {
+            }
+            const bool untouched = std::all_of(
+                data.begin(), data.end(), [](const Color& value) { return Same(value, kSentinel); });
+            Check(rejected, label + ": active GetData throws InvalidOperationException");
+            Check(untouched, label + ": rejected read leaves the complete destination untouched");
+        }
+
         void RunConstructionAndFormat(GraphicsDevice& dev)
         {
             auto plain = MakeTarget(dev, 0);
@@ -314,10 +336,11 @@ namespace
                 NeutralState(dev);
                 dev.Clear(clears[i]);
                 const std::string label = prefix + " clear " + std::to_string(i) + " " + Text(clears[i]);
-                ReadFull(*target, clears[i], label + " first active read");
-                ReadRectangle(*target, clears[i], label + " valid rectangle repeated read");
+                CheckActiveReadRejected(*target, label + " active full read");
+                CheckActiveReadRejected(*target, label + " active rectangle read", true);
                 dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
                 ReadFull(*target, clears[i], label + " post-unbind control");
+                ReadRectangle(*target, clears[i], label + " post-unbind rectangle");
             }
 
             const std::array<Color, 4> draws = {
@@ -330,13 +353,14 @@ namespace
                 dev.Clear(kTransparentBlack);
                 DrawUniform(dev, draws[i]);
                 const std::string label = prefix + " draw " + std::to_string(i) + " " + Text(draws[i]);
-                ReadFull(*target, draws[i], label + " active read");
+                CheckActiveReadRejected(*target, label + " active read");
 
-                // GetData must restore the active draw FBO.  No rebind occurs before this Clear.
+                // A rejected active read must leave the producer binding intact.
                 const Color afterRead = (i & 1U) ? kOpaqueBlack : kAlphaOne;
                 dev.Clear(afterRead);
-                ReadRectangle(*target, afterRead, label + " continued producer after read");
+                CheckActiveReadRejected(*target, label + " continued producer active read", true);
                 dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                ReadRectangle(*target, afterRead, label + " continued producer after unbind");
             }
         }
 
@@ -365,13 +389,15 @@ namespace
             Check(delivered && rawExact == kCount,
                   "native transfer: renderer glReadPixels delivers exact RGBA bytes",
                   std::to_string(rawExact) + "/" + std::to_string(kCount));
-            ReadFull(*target, expected,
-                     "GetData delivery: public Color bytes match the native RGBA transfer");
+            CheckActiveReadRejected(*target,
+                                    "GetData delivery: public active-target contract");
 
             dev.Clear(kOpaqueBlack);
-            ReadFull(*target, kOpaqueBlack,
-                     "GetData delivery: native read did not disturb the active producer binding");
+            CheckActiveReadRejected(*target,
+                                    "GetData delivery: native read preserves active producer");
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ReadFull(*target, kOpaqueBlack,
+                     "GetData delivery: post-unbind Color bytes match native RGBA storage");
         }
 
         void RunTargetSampling(GraphicsDevice& dev)
@@ -397,16 +423,18 @@ namespace
             sprites.Draw(*source, Rectangle(0, 0, kW, kH), Color::White);
             sprites.End();
 
-            ReadFull(*consumer, expected,
-                     "target sampling: sampled MSAA producer reaches active MSAA consumer");
+            CheckActiveReadRejected(*consumer,
+                                    "target sampling: active MSAA consumer read");
             ReadFull(*source, expected,
                      "target sampling before direct readback preserves the producer texture");
 
             // Reading an idle source must not redirect the still-active consumer's draw target.
             dev.Clear(kZeroRgbAlpha);
-            ReadFull(*consumer, kZeroRgbAlpha,
-                     "target sampling: unrelated source read preserves consumer binding");
+            CheckActiveReadRejected(*consumer,
+                                    "target sampling: unrelated source read preserves consumer binding");
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ReadFull(*consumer, kZeroRgbAlpha,
+                     "target sampling: consumer resolves exactly after unbind");
         }
 
         void RunActiveMrtReadback(GraphicsDevice& dev)
@@ -417,18 +445,17 @@ namespace
                                    RenderTargetBinding(second.get()) });
             NeutralState(dev);
             dev.Clear(kAlphaHigh);
-            ReadFull(*first, kAlphaHigh,
-                     "active MRT: slot 0 direct read resolves current colour");
+            CheckActiveReadRejected(*first, "active MRT: slot 0 direct read");
 
             // The slot-0 read must restore the MRT draw FBO, not that target's single-target FBO.
             dev.Clear(kAlphaLow);
-            ReadFull(*second, kAlphaLow,
-                     "active MRT: continued producer reaches slot 1 after slot 0 read");
-            ReadFull(*first, kAlphaLow,
-                     "active MRT: continued producer also reaches slot 0");
+            CheckActiveReadRejected(*second, "active MRT: slot 1 direct read");
+            CheckActiveReadRejected(*first, "active MRT: repeated slot 0 direct read");
             dev.SetRenderTargets({});
             ReadFull(*second, kAlphaLow,
-                     "active MRT: post-unbind resolve agrees with the direct read");
+                     "active MRT: post-unbind slot 1 resolve is exact");
+            ReadFull(*first, kAlphaLow,
+                     "active MRT: post-unbind slot 0 resolve is exact");
         }
 
         void RunOrdinaryTextureControl(GraphicsDevice& dev)
@@ -488,8 +515,9 @@ namespace
                 dev.SetRenderTarget(target.get());
                 NeutralState(dev);
                 dev.Clear(kAlphaHigh);
-                ReadFull(*target, kAlphaHigh, "disposal: final active read is exact");
+                CheckActiveReadRejected(*target, "disposal: active read before unbind");
                 dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                ReadFull(*target, kAlphaHigh, "disposal: final resolved read is exact");
                 target->Dispose();
                 Check(target->getIsDisposedProperty(), "disposal: target disposes after direct readback");
             }
@@ -498,9 +526,11 @@ namespace
             dev.SetRenderTarget(heldToTeardown_.get());
             NeutralState(dev);
             dev.Clear(kAlphaLow);
-            ReadFull(*heldToTeardown_, kAlphaLow,
-                     "device teardown: live target's final active read is exact");
+            CheckActiveReadRejected(*heldToTeardown_,
+                                    "device teardown: live target active read");
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ReadFull(*heldToTeardown_, kAlphaLow,
+                     "device teardown: live target final resolved read is exact");
             Check(true, "device teardown: live target retained through game shutdown");
         }
 

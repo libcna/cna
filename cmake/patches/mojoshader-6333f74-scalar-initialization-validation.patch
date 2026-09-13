@@ -1,0 +1,50 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1286,6 +1286,25 @@
+ } // opcode_reads_sources_componentwise
+ 
+ 
++static int opcode_reads_sources_scalar(const uint32 opcode)
++{
++    switch (opcode)
++    {
++        case 6:  // RCP
++        case 7:  // RSQ
++        case 14: // EXP
++        case 15: // LOG
++        case 32: // POW
++        case 37: // SINCOS
++        case 78: // EXPP
++        case 79: // LOGP
++            return 1;
++        default:
++            return 0;
++    } // switch
++} // opcode_reads_sources_scalar
++
++
+ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+ {
+     int retval = 1;
+@@ -1594,6 +1613,20 @@
+             if ((prior_writemask & required_writemask) != required_writemask)
+                 failf(ctx, "Instruction reads uninitialized component(s) of r%d", info->regnum);
+         } // else if
++        else if (validates_uninitialized_temporaries &&
++                 !ctx->ignore_temp_read_validation &&
++                 opcode_reads_sources_scalar(ctx->current_opcode) &&
++                 (info->regtype == REG_TYPE_TEMP) && (reg))
++        {
++            const int same_destination = ctx->have_dest_arg &&
++                (ctx->dest_arg.regtype == REG_TYPE_TEMP) &&
++                (ctx->dest_arg.regnum == info->regnum);
++            const int prior_writemask = same_destination
++                ? ctx->dest_arg_prior_writemask : reg->written;
++            const int required_writemask = 1 << info->swizzle_x;
++            if ((prior_writemask & required_writemask) == 0)
++                failf(ctx, "Scalar instruction reads uninitialized component of r%d", info->regnum);
++        } // else if
+     } // if
+ 
+     return retval;

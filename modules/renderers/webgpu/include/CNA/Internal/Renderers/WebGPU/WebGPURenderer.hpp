@@ -637,11 +637,9 @@ namespace CNA::Internal::Renderers::WebGPU
     /// via `wgpuQueueWriteTexture`/a staged `wgpuCommandEncoderCopyTextureToBuffer` readback
     /// exactly like `WebGPUTextureRenderer`'s own 2D equivalents, just with a third (depth) extent
     /// dimension. Mirrors `VulkanTexture3DRenderer`'s minimal scope: upload/readback only, no
-    /// render-target-ness (XNA's `Texture3D` itself is never renderable). Mip-level COUNT uses the
-    /// same width/height-only `CalculateMipLevels()` formula as `Texture3D.cpp` (depth does not
-    /// participate in the count, matching FNA's `Texture3D` constructor) -- wgpu-native still
-    /// halves the actual per-level depth extent automatically (standard 3D-texture mip rules),
-    /// this only affects how many levels are allocated.
+    /// render-target-ness (XNA's `Texture3D` itself is never renderable). Mip levels follow
+    /// `Texture3D.cpp`'s complete three-dimensional chain; wgpu-native halves every per-level
+    /// extent automatically.
     class WebGPUTexture3DRenderer final : public ITexture3DRenderer
     {
     public:
@@ -1897,7 +1895,7 @@ namespace CNA::Internal::Renderers::WebGPU
         /**
          * @brief WEBGPU-144 Phase 2: WebGPU keeps loaded block-compressed content compressed.
          *
-         * The `Texture2D::FromStream` (DDS) and `.xnb` content loaders keep the raw DXT/BC blocks
+         * `Texture2D::DDSFromStreamEXT` and `.xnb` content loaders keep the raw DXT/BC blocks
          * and upload them to a `WGPUTextureFormat_BC*` instead of CPU-decompressing to `Color`. The
          * actual per-format capability (and the `bcSupported_` device-feature gate) is still enforced
          * by @ref IsCompressedTransferFormatEXT, which the loaders AND with this flag.

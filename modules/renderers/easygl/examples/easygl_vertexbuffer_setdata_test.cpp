@@ -196,6 +196,7 @@ public:
     VbSetDataTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
     }
 
     int getResult() const { return fail_ > 0 ? 1 : 0; }

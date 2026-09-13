@@ -22,7 +22,7 @@
 # green without a documented, per-scene reason -- same discipline xna-diff.py's own header already
 # states.
 #
-# Usage: scripts/run-oracle-corpus-diff-easygl.sh <path-to-cna_oracle_render_easygl>
+# Usage: scripts/run-oracle-corpus-diff-easygl.sh <path-to-cna_oracle_render_easygl> [scene ...]
 
 set -uo pipefail
 
@@ -30,10 +30,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 if [ $# -lt 1 ]; then
-    echo "usage: $0 <path-to-cna_oracle_render_easygl>" >&2
+    echo "usage: $0 <path-to-cna_oracle_render_easygl> [scene ...]" >&2
     exit 2
 fi
 CNA_ORACLE_RENDER_EXE="$1"
+shift
+
+if [ ! -x "$CNA_ORACLE_RENDER_EXE" ]; then
+    echo "oracle renderer is not executable: $CNA_ORACLE_RENDER_EXE" >&2
+    exit 2
+fi
 
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-x11}"
 export DISPLAY="${DISPLAY:-:0}"
@@ -43,10 +49,19 @@ REFERENCE_DIR="$REPO_ROOT/tools/xna-oracle/reference"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
+SCENES=()
+if [ $# -gt 0 ]; then
+    for name in "$@"; do
+        SCENES+=("$SCENES_DIR/$name.scene")
+    done
+else
+    SCENES=("$SCENES_DIR"/*.scene)
+fi
+
 TOTAL=0
 FAILED=0
 
-for scene in "$SCENES_DIR"/*.scene; do
+for scene in "${SCENES[@]}"; do
     name="$(basename "$scene" .scene)"
     reference="$REFERENCE_DIR/$name.png"
     TOTAL=$((TOTAL + 1))

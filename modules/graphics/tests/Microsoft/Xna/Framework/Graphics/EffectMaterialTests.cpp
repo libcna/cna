@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// Task 883: EffectMaterial::Clone() — the last of the 8 concrete Effect
-// subclasses (6 XNA stock effects + EffectMaterial + the CNAEXT ShaderEffect
-// extension) to gain a Clone() override once Effect::Clone() became a pure
-// virtual base-class contract.
+// EffectMaterial deliberately has no Clone override in XNA: calling the
+// inherited Effect.Clone returns an independent base Effect.
 
 #include <gtest/gtest.h>
 
@@ -26,18 +24,17 @@ using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::EffectMaterial;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 
-TEST(EffectMaterialTest, CloneReturnsIndependentEffectMaterial)
+TEST(EffectMaterialTest, InheritedCloneReturnsIndependentBaseEffect)
 {
     GraphicsDevice gd;
     BasicEffect source(gd);
     EffectMaterial material(source);
 
     std::unique_ptr<Effect> cloned(material.Clone());
-    auto* clone = dynamic_cast<EffectMaterial*>(cloned.get());
-
-    ASSERT_NE(clone, nullptr);
-    EXPECT_NE(static_cast<Effect*>(clone), static_cast<Effect*>(&material));
-    EXPECT_EQ(clone->GetTypeName(), "Microsoft.Xna.Framework.Graphics.EffectMaterial");
+    ASSERT_NE(cloned, nullptr);
+    EXPECT_EQ(dynamic_cast<EffectMaterial*>(cloned.get()), nullptr);
+    EXPECT_NE(cloned.get(), static_cast<Effect*>(&material));
+    EXPECT_EQ(cloned->GetTypeName(), "Microsoft.Xna.Framework.Graphics.Effect");
 }
 
 
@@ -65,6 +62,28 @@ namespace
     };
 }
 
+TEST(EffectMaterialTest, InheritedCloneCarriesIndependentCompiledState)
+{
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "renderer does not support compiled effects";
+
+    const auto bytes = LoadCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+    CompiledSourceEffect source(gd, bytes);
+    EffectMaterial material(source);
+
+    std::unique_ptr<Effect> clone(material.Clone());
+    ASSERT_NE(clone, nullptr);
+    EXPECT_EQ(dynamic_cast<EffectMaterial*>(clone.get()), nullptr);
+    EXPECT_EQ(clone->getParametersProperty().getCountProperty(),
+              material.getParametersProperty().getCountProperty());
+    EXPECT_EQ(clone->getTechniquesProperty().getCountProperty(),
+              material.getTechniquesProperty().getCountProperty());
+    EXPECT_NE(clone->getParametersProperty()[0], material.getParametersProperty()[0]);
+    EXPECT_NE(clone->getCurrentTechniqueProperty(), material.getCurrentTechniqueProperty());
+}
+
 // SAMPLE-028: EffectMaterial used to construct through Effect(GraphicsDevice), which
 // throws away everything about the source -- a material cloned from a compiled effect had
 // ZERO parameters, so a game setting effect.Parameters["X"] got a null back. XNA's
@@ -86,8 +105,8 @@ TEST(EffectMaterialTest, CarriesTheSourceEffectsParametersAcross)
               source.getParametersProperty().getCountProperty());
     for (int i = 0; i < source.getParametersProperty().getCountProperty(); ++i)
     {
-        EXPECT_EQ(material.getParametersProperty()[i].getNameProperty(),
-                  source.getParametersProperty()[i].getNameProperty());
+        EXPECT_EQ(material.getParametersProperty()[i]->getNameProperty(),
+                  source.getParametersProperty()[i]->getNameProperty());
     }
 }
 
@@ -100,7 +119,7 @@ TEST(EffectMaterialTest, ParametersAreReachableByName)
     const auto bytes = LoadCompiledEffectFixture();
     ASSERT_FALSE(bytes.empty());
     CompiledSourceEffect source(gd, bytes);
-    const std::string firstName = source.getParametersProperty()[0].getNameProperty();
+    const std::string firstName = source.getParametersProperty()[0]->getNameProperty();
 
     EffectMaterial material(source);
     // The lookup that returned nullptr before this fix, which a game then dereferenced.
@@ -132,7 +151,7 @@ TEST(EffectMaterialTest, CloningANonCompiledSourceGivesTheBareDefaultTechnique)
     EffectMaterial material(source);
 
     ASSERT_EQ(material.getTechniquesProperty().getCountProperty(), 1);
-    EXPECT_EQ(material.getTechniquesProperty()[0].getNameProperty(), "Default");
+    EXPECT_EQ(material.getTechniquesProperty()[0]->getNameProperty(), "Default");
     EXPECT_NE(material.getCurrentTechniqueProperty(), nullptr);
 }
 
@@ -148,8 +167,8 @@ TEST(EffectMaterialTest, TheCloneIsIndependentOfItsSource)
     EffectMaterial a(source);
     EffectMaterial b(source);
 
-    EXPECT_NE(&a.getParametersProperty()[0], &source.getParametersProperty()[0]);
-    EXPECT_NE(&a.getParametersProperty()[0], &b.getParametersProperty()[0]);
+    EXPECT_NE(a.getParametersProperty()[0], source.getParametersProperty()[0]);
+    EXPECT_NE(a.getParametersProperty()[0], b.getParametersProperty()[0]);
 }
 
 // SAMPLE-032: EffectParameter stores a raw Texture*, so a material whose parameters name

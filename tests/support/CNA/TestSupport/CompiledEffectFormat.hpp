@@ -104,6 +104,12 @@ namespace CNA::TestSupport::EffectFormat
         RsSrcBlendAlpha = 100,
         RsDestBlendAlpha = 101,
         RsBlendOpAlpha = 102,
+        RsBumpEnvMat00 = 112,
+        RsBumpEnvMat01 = 113,
+        RsBumpEnvMat10 = 114,
+        RsBumpEnvMat11 = 115,
+        RsBumpEnvLScale = 117,
+        RsBumpEnvLOffset = 118,
         RsVertexShader = 146,
         RsPixelShader = 147,
         /// Undocumented token the legacy Effect compiler emits as sampler metadata; FNA ignores it.

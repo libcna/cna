@@ -14,11 +14,11 @@
 //       TriangleList  = 3 * primitiveCount        TriangleStrip = primitiveCount + 2
 //       LineList      = 2 * primitiveCount        LineStrip     = primitiveCount + 1
 //       PointListEXT  = primitiveCount
-//   minVertexIndex/numVertices are range-validation hints, never addressing
+//   minVertexIndex/numVertices are native range hints, never addressing
 //   instanceCount  chooses how many instances consume that one geometry range; it never changes
 //       how much geometry is consumed, and the geometry range never changes how many instances run
-//   a range that leaves the bound index or vertex buffer is rejected before native submission,
-//       never silently clamped
+//   native ranges that leave a bound buffer are forwarded by XNA rather than converted into a
+//       managed exception (SOFTWARE-322)
 //
 // Fixture geometry — a two-axis oracle. The target is divided into `kSlotCount` equal-width
 // vertical slots (the geometry axis) and `kRowCount` equal-height horizontal bands (the instance
@@ -46,6 +46,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 // Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced.
 using namespace CNA::Testing::Renderers;
@@ -66,6 +67,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -85,6 +87,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 // plans/plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
 // BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
@@ -110,6 +113,7 @@ using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
@@ -127,14 +131,15 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 // REMED-GFX-123: the binding-offset/InstanceFrequency oracle is asserted only on the renderers whose
 // instanced path has actually been corrected to consume VertexBufferBinding.VertexOffset and
 // InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123), Vulkan, bgfx and
-// WebGPU (REMED-GFX-211/213). D3D9 runs the index-range contract above and nothing here; whether
+// WebGPU (REMED-GFX-211/213), and Software (SOFTWARE-129). D3D9 runs the index-range contract above
+// and nothing here; whether
 // it honours the binding offsets is a separate question that belongs to its own measurement, not
 // to this file's compiled expectations, and no D3D display has been reachable to take it.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedBindingOffsetOracle()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                           DirectX11, DirectX12, Vulkan, Bgfx, WebGPU);
+                           DirectX11, DirectX12, Vulkan, Bgfx, WebGPU, Software);
 }
 
 namespace
@@ -668,6 +673,7 @@ namespace
         // front.
         void SetUp() override
         {
+            device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
                 GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
             if (!device.SupportsCapability(GraphicsCapability::Instancing))
@@ -908,7 +914,7 @@ namespace
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_VULKAN) || \
     defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_DIRECTX9) || \
     defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12)
+    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_SOFTWARE)
 
 // Zero-offset control. Identical state, buffers and instance stream to every case below, with
 // startIndex = baseVertex = 0 and the geometry range covering the complete first three slots. It
@@ -1433,9 +1439,9 @@ TEST_F(InstancedDrawRangeTest, DeferredInstancedDrawsAtoBtoAKeepTheirOwnParamete
     }
 }
 
-// The public entry point rejects every out-of-contract request before it can reach a native draw,
-// and never clamps one into a smaller valid range.
-TEST_F(InstancedDrawRangeTest, InvalidInstancedRangesAreRejectedNotClamped)
+// Required count/profile validation remains managed. Buffer-capacity, offsets and range hints are
+// natively forwarded by XNA and follow each renderer's host-memory safety contract.
+TEST_F(InstancedDrawRangeTest, RequiredInstancedCountsAndNativeRangesRemainDistinct)
 {
     RequireInstancedRendering();
 
@@ -1465,20 +1471,40 @@ TEST_F(InstancedDrawRangeTest, InvalidInstancedRangesAreRejectedNotClamped)
     });
     device.SetIndexBuffer(&indexBuffer);
 
+    const bool managedRangeGuard =
+        device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT();
+    const auto expectBufferedRangeOutcome = [&](auto&& draw, const std::string& label) {
+        bool caughtRange = false;
+        try
+        {
+            draw();
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            caughtRange = true;
+        }
+        catch (const std::exception& e)
+        {
+            ADD_FAILURE() << label << ": wrong exception: " << e.what();
+            return;
+        }
+        EXPECT_EQ(managedRangeGuard, caughtRange) << label;
+    };
+
     constexpr int kIndexCount = kSlotCount * kVerticesPerSlot;
     // Negative and non-positive scalars.
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kIndexCount, -1, 1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, kIndexCount, -1, 1, 1);
+    }, "negative startIndex");
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, -1, 0, kIndexCount, 0, 1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, -1, 0, kIndexCount, 0, 1, 1);
+    }, "negative baseVertex");
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, -1, kIndexCount, 0, 1, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 0, -1, kIndexCount, 0, 1, 1);
+    }, "negative minVertexIndex hint");
     EXPECT_THROW(
         device.DrawInstancedPrimitives(
             PrimitiveType::TriangleList, 0, 0, 0, 0, 1, 1),
@@ -1497,44 +1523,43 @@ TEST_F(InstancedDrawRangeTest, InvalidInstancedRangesAreRejectedNotClamped)
         System::ArgumentOutOfRangeException);
 
     // Index range leaving the logical index buffer, both by offset and by count.
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kIndexCount, kIndexCount, 1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, kIndexCount, kIndexCount, 1, 1);
+    }, "startIndex at the buffer end");
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kIndexCount, 19, 1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, kIndexCount, 19, 1, 1);
+    }, "index range crossing the buffer end");
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kIndexCount, 0, kSlotCount + 1, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 0, 0, kIndexCount, 0, kSlotCount + 1, 1);
+    }, "primitive count consuming more indices than the buffer");
 
     // Declared vertex range leaving the logical vertex buffer after baseVertex.
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, kIndexCount + 1, 0, 1, 0, 1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, kIndexCount + 1, 0, 1, 0, 1, 1);
+    }, "baseVertex past the vertex buffer");
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 18, 0, kIndexCount, 0, 1, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 18, 0, kIndexCount, 0, 1, 1);
+    }, "declared vertex range crossing the buffer end");
 
     // More instances than the bound per-instance stream can supply.
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kIndexCount, 0, 1, kRowCount + 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 0, 0, kIndexCount, 0, 1, kRowCount + 1);
+    }, "instance range crossing the instance buffer end");
 
-    // Topology-count overflow: 3 * primitiveCount must be computed in checked arithmetic and
-    // rejected, never wrapped into a small valid-looking count.
+    // Microsoft XNA rejects the profile-count violation before topology expansion can overflow.
     EXPECT_THROW(
         device.DrawInstancedPrimitives(
             PrimitiveType::TriangleList, 0, 0, kIndexCount, 0,
             std::numeric_limits<int>::max(), 1),
-        System::ArgumentOutOfRangeException);
+        System::NotSupportedException);
 
-    // A rejected request must leave the device able to draw the valid range that follows it.
+    // Native undefined draws and managed rejections alike must leave the next valid draw usable.
     device.Clear(Color::Black);
     const int instances = InstancesFor(2);
     device.DrawInstancedPrimitives(
@@ -1542,8 +1567,8 @@ TEST_F(InstancedDrawRangeTest, InvalidInstancedRangesAreRejectedNotClamped)
     const FrameSnapshot pixels = CaptureBackbuffer(device, layout.width, layout.height);
     const ExpectedRange range = ResolveExpectedRange(3, 6, 2);
     ExpectInstancedGeometryRendered(
-        pixels, layout, range, instances, "after rejected requests");
-    ExpectColumnsExclusive(pixels, layout, range, Color::Black, "after rejected requests");
+        pixels, layout, range, instances, "after native-range probes");
+    ExpectColumnsExclusive(pixels, layout, range, Color::Black, "after native-range probes");
 }
 
 // The range contract holds on a RenderTarget2D exactly as on the backbuffer, the target-only draw
@@ -1892,7 +1917,7 @@ TEST_F(InstancedDrawRangeTest, SourceUpdatesAfterAQueuedInstancedDrawDoNotAlterI
 
     meshBuffer.SetData(
         replacementMesh.data(), 0, static_cast<int>(replacementMesh.size()),
-        SetDataOptions::None);
+        SetDataOptions::Discard);
     // Queued against the band-3 mesh: slot 6, one instance -> cell (6, band 3).
     device.DrawInstancedPrimitives(
         PrimitiveType::TriangleList, 18, 0, kSlotCount * kVerticesPerSlot - 18, 0, 1, 1);
@@ -1952,7 +1977,7 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
         // Instance counts here only have to be legal -- this case is about lifetime, not pixels.
         meshBuffer.SetData(
             fixture.mesh.data(), 0, static_cast<int>(fixture.mesh.size()),
-            SetDataOptions::None);
+            SetDataOptions::Discard);
         device.DrawInstancedPrimitives(
             PrimitiveType::TriangleList, 18, 0, kSlotCount * kVerticesPerSlot - 18, 0, 1, 1);
 
@@ -1968,6 +1993,55 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
     EXPECT_NO_THROW(device.Present());
 }
 #endif
+
+// Microsoft XNA forwards baseVertex as a signed D3D9 value. Here the consumed identity indices
+// 12..20 are compensated by -12 and must address slots 0..2; dropping the base renders the visible
+// decoy range 4..6, while applying it twice underflows the vertex buffer.
+TEST_F(InstancedDrawRangeTest, InstancedDrawAcceptsCompensatedNegativeBaseVertex)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software);
+    RequireInstancedRendering();
+
+    const GridLayout layout = BackbufferLayout();
+    const InstancedFixture fixture = BuildFixture(layout);
+
+    VertexBuffer meshBuffer(
+        device, PositionColorDeclaration(),
+        static_cast<int>(fixture.mesh.size()), BufferUsage::None);
+    meshBuffer.SetData(fixture.mesh.data(), static_cast<int>(fixture.mesh.size()));
+
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits,
+        static_cast<int>(fixture.indices.size()), BufferUsage::None);
+    indexBuffer.SetData(fixture.indices.data(), static_cast<int>(fixture.indices.size()));
+
+    VertexBuffer instanceBuffer(
+        device, InstanceMatrixDeclaration(), kRowCount, BufferUsage::None);
+    instanceBuffer.SetDataRaw(
+        fixture.instances.data(), kRowCount, static_cast<int>(sizeof(InstanceMatrix)));
+
+    BasicEffect effect(device);
+    ApplyInstancedEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffers({
+        VertexBufferBinding(&meshBuffer, 0, 0),
+        VertexBufferBinding(&instanceBuffer, 0, 1),
+    });
+    device.SetIndexBuffer(&indexBuffer);
+    const int instances = InstancesFor(2);
+    device.DrawInstancedPrimitives(
+        PrimitiveType::TriangleList, -12, 12, 9, 12, 3, instances);
+
+    const FrameSnapshot pixels = CaptureBackbuffer(device, layout.width, layout.height);
+    const ExpectedRange range = ResolveExpectedRange(12, -12, 3);
+    ASSERT_EQ(0, range.firstSlot);
+    ExpectInstancedGeometryRendered(
+        pixels, layout, range, instances, "compensated negative baseVertex");
+    ExpectColumnsExclusive(
+        pixels, layout, range, Color::Black, "compensated negative baseVertex");
+    ExpectInstanceRowsExclusive(
+        pixels, layout, instances, Color::Black, "compensated negative baseVertex");
+}
 
 #ifdef CNA_TEST_BGFX_AVAILABLE
 // REMED-GFX-121, pinned: `vs_instanced3d.sc` builds the per-instance world matrix with the raw

@@ -266,8 +266,7 @@ namespace Microsoft::Xna::Framework
     }
 
     Color::Color(float r, float g, float b, float alpha)
-        : Color(ToByteFromUnitClamped(r), ToByteFromUnitClamped(g), ToByteFromUnitClamped(b),
-                ToByteFromUnitClamped(alpha))
+        : Color(ToByteFromUnitClamped(r), ToByteFromUnitClamped(g), ToByteFromUnitClamped(b), ToByteFromUnitClamped(alpha))
     {
     }
 

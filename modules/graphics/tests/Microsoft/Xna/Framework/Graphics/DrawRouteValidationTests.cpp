@@ -3,11 +3,9 @@
 // user-primitive routes, out-of-range draw arguments, `PrimitiveType` validation, a draw with no
 // vertex or index buffer, and `BufferUsage.WriteOnly`'s readback refusal.
 //
-// Renderer-neutral, and mostly about REFUSALS. The rule every case below shares is the one a
-// validation layer exists to enforce: an argument that would read past the end of a bound buffer
-// must be rejected BEFORE it reaches the native API, by a named exception, rather than submitted
-// and left to the driver. A renderer that forwards it either crashes, renders garbage, or -- worst
-// -- works today on the one driver that tolerates it.
+// Renderer-neutral, and mostly about REFUSALS. Required state is rejected by the public layer;
+// buffer-capacity hints follow the renderer safety contract because XNA forwards those ranges to
+// the native API. Renderers that perform unchecked host-side staging retain the managed guard.
 //
 // Each rejection test is paired with the SAME call at a legal argument, so a test cannot pass by
 // refusing everything. That pairing is the point: "the draw threw" proves nothing on its own.
@@ -15,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -22,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <array>
@@ -46,6 +47,7 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
@@ -83,6 +85,7 @@ namespace
 TEST(DrawRouteValidation, ThirtyTwoBitIndicesDrawAndReadBack)
 {
     GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     const auto quad = Quad();
     VertexBuffer vertices(device, VertexPositionColor::getVertexDeclarationStatic(), 4,
                           BufferUsage::None);
@@ -126,7 +129,7 @@ TEST(DrawRouteValidation, TheUserPrimitiveRoutesDraw)
 }
 
 // Out-of-range draw arguments, each paired with the same call at a legal value.
-TEST(DrawRouteValidation, ARangeThatLeavesItsBufferIsRefusedByName)
+TEST(DrawRouteValidation, ARangeThatLeavesItsBufferMatchesRendererSafetyContract)
 {
     GraphicsDevice device;
     const auto quad = Quad();
@@ -145,21 +148,37 @@ TEST(DrawRouteValidation, ARangeThatLeavesItsBufferIsRefusedByName)
     // The legal call, first: everything below must differ from it only in the argument under test.
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2));
 
+    const bool managedRangeGuard =
+        device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT();
+    const auto expectRangeOutcome = [managedRangeGuard](auto&& draw) {
+        bool caughtRange = false;
+        try
+        {
+            draw();
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            caughtRange = true;
+        }
+        EXPECT_EQ(managedRangeGuard, caughtRange);
+    };
+
     // startIndex past the end of the index buffer.
-    EXPECT_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 4, 2),
-                 System::ArgumentOutOfRangeException)
-        << "startIndex 4 with 2 triangles needs indices 4..9 of a 6-index buffer";
+    expectRangeOutcome([&] {
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 4, 2);
+    });
     // primitiveCount past the end.
-    EXPECT_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 3),
-                 System::ArgumentOutOfRangeException)
-        << "3 triangles need 9 indices and the buffer holds 6";
+    expectRangeOutcome([&] {
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 3);
+    });
     // numVertices past the end of the vertex buffer.
-    EXPECT_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 8, 0, 2),
-                 System::ArgumentOutOfRangeException)
-        << "8 vertices declared against a 4-vertex buffer";
+    expectRangeOutcome([&] {
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 8, 0, 2);
+    });
     // A negative argument.
-    EXPECT_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, -1, 2),
-                 System::ArgumentOutOfRangeException);
+    expectRangeOutcome([&] {
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, -1, 2);
+    });
     // And the legal call still works afterwards, so none of the refusals left the device unusable.
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2));
 
@@ -167,7 +186,7 @@ TEST(DrawRouteValidation, ARangeThatLeavesItsBufferIsRefusedByName)
     device.SetVertexBuffer(nullptr);
 }
 
-TEST(DrawRouteValidation, ANonIndexedRangeThatLeavesItsBufferIsRefused)
+TEST(DrawRouteValidation, ANonIndexedRangeThatLeavesItsBufferMatchesRendererSafetyContract)
 {
     GraphicsDevice device;
     const auto quad = Quad();
@@ -179,12 +198,22 @@ TEST(DrawRouteValidation, ANonIndexedRangeThatLeavesItsBufferIsRefused)
     ApplyEffect(device, effect);
 
     EXPECT_NO_THROW(device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, 2));
-    EXPECT_THROW(device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, 8),
-                 System::ArgumentOutOfRangeException)
-        << "8 strip triangles need 10 vertices and the buffer holds 4";
-    EXPECT_THROW(device.DrawPrimitives(PrimitiveType::TriangleStrip, 3, 2),
-                 System::ArgumentOutOfRangeException)
-        << "starting at vertex 3 leaves only 1 vertex for 2 triangles";
+    const bool managedRangeGuard =
+        device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT();
+    const auto expectRangeOutcome = [managedRangeGuard](auto&& draw) {
+        bool caughtRange = false;
+        try
+        {
+            draw();
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            caughtRange = true;
+        }
+        EXPECT_EQ(managedRangeGuard, caughtRange);
+    };
+    expectRangeOutcome([&] { device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, 8); });
+    expectRangeOutcome([&] { device.DrawPrimitives(PrimitiveType::TriangleStrip, 3, 2); });
     EXPECT_NO_THROW(device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, 2));
     device.SetVertexBuffer(nullptr);
 }
@@ -196,7 +225,8 @@ TEST(DrawRouteValidation, ADrawWithNoVertexBufferIsRefused)
     BasicEffect effect(device);
     device.SetVertexBuffer(nullptr);
     ApplyEffect(device, effect);
-    EXPECT_THROW(device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1), std::runtime_error);
+    EXPECT_THROW(device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+                 System::InvalidOperationException);
 }
 
 TEST(DrawRouteValidation, AnIndexedDrawWithNoIndexBufferIsRefused)
@@ -211,7 +241,7 @@ TEST(DrawRouteValidation, AnIndexedDrawWithNoIndexBufferIsRefused)
     device.SetIndexBuffer(nullptr);
     ApplyEffect(device, effect);
     EXPECT_THROW(device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2),
-                 std::runtime_error);
+                 System::InvalidOperationException);
     device.SetVertexBuffer(nullptr);
 }
 
@@ -281,8 +311,9 @@ TEST(DrawRouteValidation, AWriteOnlyBufferRefusesGetData)
     }
 }
 
-// Dynamic-buffer churn: many SetData calls into one buffer, each followed by a draw. A renderer
-// that recycled the buffer's storage while a queued draw still referenced it fails here.
+// Dynamic-buffer churn: many legal unbound SetData calls into one buffer, each followed by a draw.
+// XNA refuses an ordinary update while the resource is bound, so every iteration observes that
+// ownership rule before rebinding the same allocation.
 TEST(DrawRouteValidation, RepeatedSetDataAndDrawOnOneBuffer)
 {
     GraphicsDevice device;
@@ -295,8 +326,11 @@ TEST(DrawRouteValidation, RepeatedSetDataAndDrawOnOneBuffer)
     {
         auto quad = Quad();
         const auto shade = static_cast<SharpRuntime::bytecs>(40 + iteration * 8);
-        for (auto& vertex : quad) vertex.Color = Color(shade, shade, shade, 255);
+        for (auto& vertex : quad)
+            vertex.Color = Color(shade, shade, shade, static_cast<SharpRuntime::bytecs>(255));
+        device.SetVertexBuffer(nullptr);
         vertices.SetData(quad.data(), 4);
+        device.SetVertexBuffer(&vertices);
         ApplyEffect(device, effect);
         EXPECT_NO_THROW(device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, 2))
             << "iteration " << iteration;

@@ -249,8 +249,10 @@ TEST(EffectAnnotationCollectionTest, IndexByIntReturnsAnnotation)
     EffectAnnotationCollection col;
     col.Add(MakeScalarFloat("first",  1.0f));
     col.Add(MakeScalarFloat("second", 2.0f));
-    EXPECT_EQ(col[0].getNameProperty(), "first");
-    EXPECT_EQ(col[1].getNameProperty(), "second");
+    ASSERT_NE(col[0], nullptr);
+    ASSERT_NE(col[1], nullptr);
+    EXPECT_EQ(col[0]->getNameProperty(), "first");
+    EXPECT_EQ(col[1]->getNameProperty(), "second");
 }
 
 TEST(EffectAnnotationCollectionTest, IndexByNameReturnsCorrectAnnotation)
@@ -276,7 +278,19 @@ TEST(EffectAnnotationCollectionTest, ConstIndexByIntReturnsAnnotation)
     EffectAnnotationCollection col;
     col.Add(MakeScalarFloat("z", 3.0f));
     const EffectAnnotationCollection& cref = col;
-    EXPECT_EQ(cref[0].getNameProperty(), "z");
+    ASSERT_NE(cref[0], nullptr);
+    EXPECT_EQ(cref[0]->getNameProperty(), "z");
+}
+
+TEST(EffectAnnotationCollectionTest, InvalidIntegerIndicesReturnNull)
+{
+    EffectAnnotationCollection col;
+    col.Add(MakeScalarFloat("z", 3.0f));
+    const EffectAnnotationCollection& cref = col;
+    EXPECT_EQ(col[-1], nullptr);
+    EXPECT_EQ(col[1], nullptr);
+    EXPECT_EQ(cref[-1], nullptr);
+    EXPECT_EQ(cref[1], nullptr);
 }
 
 TEST(EffectAnnotationCollectionTest, ConstIndexByNameReturnsAnnotation)

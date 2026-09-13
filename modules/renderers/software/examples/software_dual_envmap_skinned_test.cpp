@@ -2,11 +2,10 @@
 // plans/plan_software.md Phase S9 (SOFTWARE-82): DualTextureEffect, EnvironmentMapEffect, and
 // SkinnedEffect support in the Software renderer.
 //
-// None of these compute per-light diffuse lighting (design decision 6: no lighting engine in
-// v1) -- their "lit" base color is just vertexColor*diffuseColor*texture0, the same
-// simplification already used for the plain BasicEffect path. What IS genuinely new and tested
-// here: DualTextureEffect's second-texture blend, EnvironmentMapEffect's real cube-map storage +
-// reflection-vector sampling, and SkinnedEffect's real per-vertex bone-transform skinning.
+// This historical combined probe now isolates each effect's original purpose from the completed
+// classic lighting implementation: DualTextureEffect's second-texture blend,
+// EnvironmentMapEffect's real cube-map storage + reflection-vector sampling, and SkinnedEffect's
+// real per-vertex bone-transform skinning.
 //
 // Check A -- DualTextureEffect: two solid-color textures combine as
 //   `(tex0*2) * tex1 * diffuse` (FNA's own PSDualTexture formula), verified against a
@@ -135,8 +134,9 @@ protected:
                   "DualTextureEffect: (tex0*2)*tex1*diffuse matches the hand-computed color");
         }
 
-        // Checks B/C: EnvironmentMapEffect. World=View=identity -> eye at (0,0,0). A quad at
-        // Z=-2 facing the camera (Normal=(0,0,1)) has eyeVector=(0,0,1)=Normal, so
+        // Checks B/C: EnvironmentMapEffect. World=View=identity -> eye at (0,0,0), with a real
+        // perspective projection so Z=-2 lies inside XNA/D3D's 0 <= clip.Z <= clip.W volume. A quad
+        // at Z=-2 facing the camera (Normal=(0,0,1)) has eyeVector=(0,0,1)=Normal, so
         // reflect(-E,N)=(0,0,1) -- must sample the cube's PositiveZ face exactly.
         {
             TextureCube cube(dev, 4, false, SurfaceFormat::Color);
@@ -163,15 +163,28 @@ protected:
             VertexBuffer vb(dev, VertexPositionNormalTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
             vb.SetData(verts, 6);
 
+            const auto configureWhiteBase = [](EnvironmentMapEffect& effect)
+            {
+                effect.setDiffuseColorProperty(Vector3::One);
+                effect.setAmbientLightColorProperty(Vector3::Zero);
+                effect.setEmissiveColorProperty(Vector3::One);
+                effect.getDirectionalLight0Property().setEnabledProperty(false);
+                effect.getDirectionalLight1Property().setEnabledProperty(false);
+                effect.getDirectionalLight2Property().setEnabledProperty(false);
+            };
+
             // Check B: full env-map override, no Fresnel view-angle weighting (FresnelFactor=0),
             // so blendFactor==EnvironmentMapAmount exactly regardless of view angle.
             {
                 dev.Clear(Color::Black, 1.0f);
                 EnvironmentMapEffect fx(dev);
+                configureWhiteBase(fx);
                 fx.setTextureProperty(&white);
                 fx.setEnvironmentMapProperty(&cube);
                 fx.setEnvironmentMapAmountProperty(1.0f);
                 fx.setFresnelFactorProperty(0.0f);
+                fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
+                    1.5707963f, 1.0f, 0.1f, 100.0f));
                 fx.Apply();
                 dev.SetVertexBuffer(&vb);
                 dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
@@ -187,10 +200,13 @@ protected:
             {
                 dev.Clear(Color::Black, 1.0f);
                 EnvironmentMapEffect fx(dev);
+                configureWhiteBase(fx);
                 fx.setTextureProperty(&white);
                 fx.setEnvironmentMapProperty(&cube);
                 fx.setEnvironmentMapAmountProperty(0.0f);
                 fx.setFresnelFactorProperty(0.0f);
+                fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
+                    1.5707963f, 1.0f, 0.1f, 100.0f));
                 fx.Apply();
                 dev.SetVertexBuffer(&vb);
                 dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
@@ -222,7 +238,18 @@ protected:
 
             SkinnedEffect fx(dev);
             fx.setTextureProperty(&white);
-            fx.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+            // Isolate the bone translation from the now-complete lighting path. An emissive-only
+            // red material produces the historical solid probe colour without depending on the
+            // stock default light rig or the vertex normal.
+            fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+            fx.setAmbientLightColorProperty(Vector3::Zero);
+            fx.setEmissiveColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+            fx.setSpecularColorProperty(Vector3::Zero);
+            fx.DirectionalLight0.setEnabledProperty(false);
+            fx.DirectionalLight1.setEnabledProperty(false);
+            fx.DirectionalLight2.setEnabledProperty(false);
+            fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
+                1.5707963f, 1.0f, 0.1f, 100.0f));
             std::vector<Matrix> bones(2, Matrix::getIdentityProperty());
             bones[1] = Matrix::CreateTranslation(0.5f, 0.0f, 0.0f);
             fx.SetBoneTransforms(bones);
@@ -247,6 +274,7 @@ public:
     SoftwareDualEnvmapSkinnedTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

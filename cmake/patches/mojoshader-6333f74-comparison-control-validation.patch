@@ -1,0 +1,48 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2894,11 +2894,18 @@
+         fail(ctx, "BREAK outside LOOP/ENDLOOP or REP/ENDREP");
+ } // state_BREAK
+ 
++static int comparison_control_is_valid(const uint32 control)
++{
++    return (control >= 1) && (control <= 6);
++} // comparison_control_is_valid
++
+ static void state_SETP(Context *ctx)
+ {
+     const RegisterType regtype = ctx->dest_arg.regtype;
+     if (regtype != REG_TYPE_PREDICATE)
+         fail(ctx, "SETP argument isn't predicate register");
++    else if (!comparison_control_is_valid(ctx->instruction_controls))
++        fail(ctx, "SETP requires a valid comparison control");
+ } // state_SETP
+ 
+ static void state_REP(Context *ctx)
+@@ -3121,7 +3128,12 @@
+ 
+ static void state_IFC(Context *ctx)
+ {
+-    if (!replicate_swizzle(ctx->source_args[0].swizzle))
++    if (!comparison_control_is_valid(ctx->instruction_controls))
++    {
++        fail(ctx, "IFC requires a valid comparison control");
++        return;
++    } // if
++    else if (!replicate_swizzle(ctx->source_args[0].swizzle))
+     {
+         fail(ctx, "IFC src0 must have replicate swizzle");
+         return;
+@@ -3189,7 +3201,9 @@
+ 
+ static void state_BREAKC(Context *ctx)
+ {
+-    if (!replicate_swizzle(ctx->source_args[0].swizzle))
++    if (!comparison_control_is_valid(ctx->instruction_controls))
++        fail(ctx, "BREAKC requires a valid comparison control");
++    else if (!replicate_swizzle(ctx->source_args[0].swizzle))
+         fail(ctx, "BREAKC src1 must have replicate swizzle");
+     else if (!replicate_swizzle(ctx->source_args[1].swizzle))
+         fail(ctx, "BREAKC src2 must have replicate swizzle");
+

@@ -2194,9 +2194,15 @@ protected:
         try
         {
             envCube_ = std::make_unique<TextureCube>(dev, 1, false, SurfaceFormat::Color);
-            const Color face[1] = { Color(255, 255, 255, 255) };
-            for (int f = 0; f < 6; ++f)
-                envCube_->SetData(static_cast<CubeMapFace>(f), face, 0, 1);
+            // HEADLESS retains a real bindable cube resource but intentionally refuses pixel
+            // storage. This fixture only needs an inert cube slot there; the diffuse texture is
+            // the resource under test and EnvironmentMapAmount is zero.
+            if (std::string(kRendererName) != "HEADLESS")
+            {
+                const Color face[1] = { Color(255, 255, 255, 255) };
+                for (int f = 0; f < 6; ++f)
+                    envCube_->SetData(static_cast<CubeMapFace>(f), face, 0, 1);
+            }
         }
         catch (...) { envCube_.reset(); }
     }

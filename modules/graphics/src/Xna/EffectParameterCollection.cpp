@@ -1,12 +1,20 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
+#include "System/String.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     int EffectParameterCollection::getCountProperty() const { return (int)elements_.size(); }
 
-    EffectParameter& EffectParameterCollection::operator[](int index) { return *elements_.at(index); }
-    const EffectParameter& EffectParameterCollection::operator[](int index) const { return *elements_.at(index); }
+    EffectParameter* EffectParameterCollection::operator[](int index)
+    {
+        return index >= 0 && index < getCountProperty() ? elements_[index].get() : nullptr;
+    }
+
+    const EffectParameter* EffectParameterCollection::operator[](int index) const
+    {
+        return index >= 0 && index < getCountProperty() ? elements_[index].get() : nullptr;
+    }
 
     EffectParameter* EffectParameterCollection::operator[](const std::string& name)
     {
@@ -29,13 +37,17 @@ namespace Microsoft::Xna::Framework::Graphics
     EffectParameter* EffectParameterCollection::GetParameterBySemantic(const std::string& semantic)
     {
         for (auto& e : elements_)
-            if (e->getSemanticProperty() == semantic) return e.get();
+            if (System::String::Compare(e->getSemanticProperty(), semantic,
+                                        System::StringComparison::OrdinalIgnoreCase) == 0)
+                return e.get();
         return nullptr;
     }
     const EffectParameter* EffectParameterCollection::GetParameterBySemantic(const std::string& semantic) const
     {
         for (const auto& e : elements_)
-            if (e->getSemanticProperty() == semantic) return e.get();
+            if (System::String::Compare(e->getSemanticProperty(), semantic,
+                                        System::StringComparison::OrdinalIgnoreCase) == 0)
+                return e.get();
         return nullptr;
     }
 

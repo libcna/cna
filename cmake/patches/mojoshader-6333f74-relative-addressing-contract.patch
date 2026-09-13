@@ -1,0 +1,136 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1117,6 +1117,18 @@ static int adjust_swizzle(Context *ctx, const RegisterType regtype,
+ } // adjust_swizzle
+ 
+ 
++static int current_scope_inherits_loop(Context *ctx)
++{
++    if (ctx->loops > 0)
++        return 1;
++    if (ctx->current_label_register_plus_one == 0)
++        return 0;
++    const RegisterList *reg = reglist_find(&ctx->used_registers, REG_TYPE_LABEL,
++                              ctx->current_label_register_plus_one - 1);
++    return (reg != NULL) && (reg->misc == 1);
++} // current_scope_inherits_loop
++
++
+ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+ {
+     int retval = 1;
+@@ -1239,17 +1251,31 @@ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+ 
+             info->relative_component = (relswiz & 0x3);
+ 
++            if ((info->relative_regtype == REG_TYPE_LOOP) &&
++                !current_scope_inherits_loop(ctx))
++            {
++                fail(ctx, "relative aL addressing requires LOOP/ENDLOOP scope");
++            } // if
++
+             retval++;
+         } // else
+ 
+         if (info->regtype == REG_TYPE_INPUT)
+         {
+-            if ( (shader_is_pixel(ctx)) || (!shader_version_atleast(ctx, 3, 0)) )
++            if (!shader_version_atleast(ctx, 3, 0))
+                 fail(ctx, "relative addressing of input registers not supported in this shader model");
++            else if (shader_is_pixel(ctx) &&
++                     (info->relative_regtype != REG_TYPE_LOOP))
++                fail(ctx, "pixel input relative addressing requires aL");
+             ctx->have_relative_input_registers = 1;
++            set_used_register(ctx, info->relative_regtype,
++                              info->relative_regnum, 0);
+         } // if
+         else if (info->regtype == REG_TYPE_CONST)
+         {
++            if (shader_is_pixel(ctx))
++                fail(ctx, "relative addressing of pixel constants is not supported");
++
+             // figure out what array we're in...
+             if (!ctx->ignores_ctab)
+             {
+@@ -2023,6 +2048,7 @@ static void state_RET(Context *ctx)
+         fail(ctx, "LOOP without ENDLOOP");
+     if (ctx->reps > 0)
+         fail(ctx, "REP without ENDREP");
++    ctx->current_label_register_plus_one = 0;
+ } // state_RET
+ 
+ static void check_label_register(Context *ctx, int arg, const char *opcode)
+@@ -2047,6 +2073,8 @@ static void state_LABEL(Context *ctx)
+         fail(ctx, "LABEL not followed by a RET");
+     check_label_register(ctx, 0, "LABEL");
+     set_defined_register(ctx, REG_TYPE_LABEL, ctx->source_args[0].regnum);
++    ctx->current_label_register_plus_one =
++        ctx->source_args[0].regnum + 1;
+ } // state_LABEL
+ 
+ static void check_call_loop_wrappage(Context *ctx, const int regnum)
+@@ -2057,7 +2085,7 @@ static void check_call_loop_wrappage(Context *ctx, const int regnum)
+     //  it must always be called in a loop_. So we'll just pass our loop
+     //  variable as a function parameter in those cases.
+ 
+-    const int current_usage = (ctx->loops > 0) ? 1 : -1;
++    const int current_usage = current_scope_inherits_loop(ctx) ? 1 : -1;
+     RegisterList *reg = reglist_find(&ctx->used_registers, REG_TYPE_LABEL, regnum);
+ 
+     if (reg == NULL)
+diff --git a/profiles/mojoshader_profile.h b/profiles/mojoshader_profile.h
+--- a/profiles/mojoshader_profile.h
++++ b/profiles/mojoshader_profile.h
+@@ -148,6 +148,7 @@ typedef struct Context
+     int coissue;
+     int loops;
+     int reps;
++    int current_label_register_plus_one;
+     int max_reps;
+     int cmps;
+     int scratch_registers;
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -793,12 +793,34 @@ void emit_GLSL_finalize(Context *ctx)
+     output_blank_line(ctx);
+     pop_output(ctx);
+ 
+-    // If we had a relative addressing of REG_TYPE_INPUT, we need to build
+-    //  an array for it at the start of main(). GLSL doesn't let you specify
+-    //  arrays of attributes.
+-    //vec4 blah_array[BIGGEST_ARRAY];
+-    if (ctx->have_relative_input_registers) // !!! FIXME
+-        fail(ctx, "Relative addressing of input registers not supported.");
++    // GLSL cannot dynamically index independent attribute/varying variables.
++    // Mirror D3D9's fixed input bank in a local-addressable array instead.
++    if (ctx->have_relative_input_registers)
++    {
++        const int input_count = shader_is_pixel(ctx) ? 10 : 16;
++        char array_name[64];
++        get_GLSL_input_array_varname(ctx, array_name, sizeof (array_name));
++        push_output(ctx, &ctx->globals);
++        output_line(ctx, "vec4 %s[%d];", array_name, input_count);
++        pop_output(ctx);
++
++        push_output(ctx, &ctx->mainline_intro);
++        const RegisterList *item = ctx->attributes.next;
++        while (item != NULL)
++        {
++            if ((item->regtype == REG_TYPE_INPUT) &&
++                (item->regnum >= 0) && (item->regnum < input_count))
++            {
++                char input_name[64];
++                get_GLSL_varname_in_buf(ctx, REG_TYPE_INPUT, item->regnum,
++                                        input_name, sizeof (input_name));
++                output_line(ctx, "%s[%d] = %s;", array_name,
++                            item->regnum, input_name);
++            } // if
++            item = item->next;
++        } // while
++        pop_output(ctx);
++    } // if
+ 
+     push_output(ctx, &ctx->preflight);
+     output_GLSL_uniform_array(ctx, REG_TYPE_CONST, ctx->uniform_float4_count);

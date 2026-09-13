@@ -10,7 +10,10 @@ the content-loading model, and known limitations, and closes the phase.
 ## 1. API surface audit (Task 421)
 
 `SpriteFont`'s property surface (`Characters`, `DefaultCharacter`, `LineSpacing`, `Spacing`) matches
-FNA exactly, both in type and behavior. One real gap was found and fixed:
+the classic XNA shape. The final Software parity challenge subsequently found one intentional
+Microsoft/FNA behavior difference (`SOFTWARE-353`): Microsoft's internal content constructor
+preserves an invalid default character, its public setter rejects it, and terminal lookup failures
+name `character`; CNA now follows Microsoft. The original API-surface pass found this separate gap:
 
 - **`MeasureString(StringBuilder)` was entirely missing** (Task 421 found it, Task 423 fixed it —
   see §3). FNA has both `MeasureString(string)` and `MeasureString(StringBuilder)`; CNA had only the
@@ -21,8 +24,10 @@ FNA exactly, both in type and behavior. One real gap was found and fixed:
 Already comprehensively tested before this phase: empty string, single/multiple characters with and
 without `Spacing`, height driven by the tallest glyph's cropping height, multi-line `\n`
 accumulation, a lone interior `\r`, and unknown-character behavior both with and without a
-`DefaultCharacter` configured. Task 422 re-verified the whole algorithm line-by-line against FNA and
-added 3 further edge cases: consecutive `\r`s, a leading `\n`, and a trailing `\n`. The last is a
+`DefaultCharacter` configured. Task 422 compared the algorithm against FNA; `SOFTWARE-353` later
+recovered Microsoft's distinct invalid-default and `ArgumentException("character")` behavior and
+made that behavior authoritative. Task 422 also added 3 further edge cases: consecutive `\r`s, a
+leading `\n`, and a trailing `\n`. The last is a
 non-obvious FNA behavior worth calling out explicitly: **a trailing newline adds a full second,
 empty line's height** (`Y = 2×LineSpacing`, not `1×`) — the `\n` handler's own height-add and the
 loop's unconditional final height-add both fire. A caller assuming "N lines of text = N×LineSpacing"

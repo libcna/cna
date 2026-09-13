@@ -30,20 +30,33 @@
 
 // Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
 using namespace CNA::Testing::Renderers;
+#include <array>
 #include <cstdint>
+#include <iterator>
+#include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <type_traits>
+#include <typeinfo>
+#include <utility>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "System/FormatException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -52,6 +65,8 @@ using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+using Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
@@ -159,6 +174,29 @@ void ExpectUploadStoredOrRefused(Fn&& upload)
     else
         EXPECT_THROW(upload(), System::NotSupportedException);
 }
+
+template <typename Exception, typename Fn>
+void ExpectExactException(Fn&& action, const std::string& parameter = {})
+{
+    try
+    {
+        action();
+        ADD_FAILURE() << "expected " << typeid(Exception).name();
+    }
+    catch (const Exception& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(Exception));
+        if constexpr (std::is_base_of_v<System::ArgumentException, Exception>)
+        {
+            if (!parameter.empty())
+                EXPECT_EQ(exception.getParamNameProperty(), parameter);
+        }
+    }
+    catch (...)
+    {
+        ADD_FAILURE() << "unexpected exception type; expected " << typeid(Exception).name();
+    }
+}
 } // namespace
 
 // -----------------------------------------------------------------------
@@ -170,6 +208,14 @@ class TextureCubeTest : public ::testing::Test
 protected:
     GraphicsDevice gd;
 };
+
+TEST_F(TextureCubeTest, ConstructorRejectsNonPositiveSizeBeforeRendererAllocation)
+{
+    EXPECT_THROW((void)TextureCube(gd, 0, false, SurfaceFormat::Color),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)TextureCube(gd, -1, true, SurfaceFormat::Color),
+                 System::ArgumentOutOfRangeException);
+}
 
 TEST_F(TextureCubeTest, ConstructorSetsSize)
 {
@@ -199,6 +245,7 @@ TEST_F(TextureCubeTest, GetTypeNameReturnsFullyQualifiedName)
 
 TEST_F(TextureCubeTest, MipMapFalseIsAlwaysOne)
 {
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     EXPECT_EQ(TextureCube(gd, 8, false, SurfaceFormat::Color).getLevelCountProperty(), 1);
     EXPECT_EQ(TextureCube(gd, 3, false, SurfaceFormat::Color).getLevelCountProperty(), 1);
 }
@@ -212,6 +259,7 @@ TEST_F(TextureCubeTest, MipMapTruePowerOfTwo)
 
 TEST_F(TextureCubeTest, MipMapTrueNonPowerOfTwo)
 {
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     EXPECT_EQ(TextureCube(gd, 3, true, SurfaceFormat::Color).getLevelCountProperty(), 2);
     EXPECT_EQ(TextureCube(gd, 7, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
 }
@@ -245,31 +293,307 @@ TEST_F(TextureCubeTest, CopyAssignmentSharesTheUnderlyingRenderer)
 // (Task 272 audit finding) — its presence here is itself part of the fix.
 // -----------------------------------------------------------------------
 
-TEST_F(TextureCubeTest, SetDataSimpleNullDataThrowsInvalidArgument)
+TEST_F(TextureCubeTest, SetDataSimpleNullDataThrowsArgumentNull)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, static_cast<const Color*>(nullptr), 4),
-                 std::invalid_argument);
+                 System::ArgumentNullException);
 }
 
-TEST_F(TextureCubeTest, SetDataSimpleZeroElementCountThrowsOutOfRange)
+TEST_F(TextureCubeTest, SetDataSimpleZeroElementCountThrowsArgumentOutOfRange)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     Color buf[1] = { Color(0, 0, 0, 0) };
-    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, buf, 0), std::out_of_range);
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, buf, 0),
+                 System::ArgumentOutOfRangeException);
 }
 
-TEST_F(TextureCubeTest, SetDataStartIndexNullDataThrowsInvalidArgument)
+TEST_F(TextureCubeTest, SetDataStartIndexNullDataThrowsArgumentNull)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
-    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, nullptr, 0, 4), std::invalid_argument);
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, nullptr, 0, 4),
+                 System::ArgumentNullException);
 }
 
-TEST_F(TextureCubeTest, SetDataStartIndexNegativeStartIndexThrowsOutOfRange)
+TEST_F(TextureCubeTest, SetDataStartIndexNegativeStartIndexThrowsArgumentOutOfRange)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, buf.data(), -1, 4), std::out_of_range);
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, buf.data(), -1, 4),
+                 System::ArgumentOutOfRangeException);
+}
+
+// SOFTWARE-275: the XNA generic byte instantiation addresses byte-array windows for every
+// uncompressed cube format. CNA previously exposed byte writes only for DXT and had no byte
+// GetData overload at all, so the exact payload used by TextureCubeReader could not round-trip.
+TEST_F(TextureCubeTest, ByteTransfersUseByteCountsAndCallerArrayWindowsForClassicFormats)
+{
+    if (!CubeStorageSupported())
+        GTEST_SKIP() << "The active renderer creates no cube texture storage.";
+
+    TextureCube texture(gd, 1, false, SurfaceFormat::Color);
+    const std::array<std::uint8_t, 8> source{
+        0xEEu, 0xEEu, 0x11u, 0x22u, 0x33u, 0x44u, 0xEEu, 0xEEu};
+    texture.SetData(CubeMapFace::NegativeX, 0, nullptr, source.data(), 2, 4);
+
+    std::array<std::uint8_t, 10> destination{};
+    destination.fill(0xCDu);
+    texture.GetData(CubeMapFace::NegativeX, 0, nullptr,
+                    destination.data(), 3, 4);
+    EXPECT_TRUE(std::equal(source.begin() + 2, source.begin() + 6,
+                           destination.begin() + 3));
+    EXPECT_TRUE(std::all_of(destination.begin(), destination.begin() + 3,
+                            [](std::uint8_t value) { return value == 0xCDu; }));
+    EXPECT_TRUE(std::all_of(destination.begin() + 7, destination.end(),
+                            [](std::uint8_t value) { return value == 0xCDu; }));
+}
+
+TEST_F(TextureCubeTest, GenericValueTypeRoundTripsAFaceMipRectangleAndCallerWindows)
+{
+    if (!CubeStorageSupported())
+        GTEST_SKIP() << "The active renderer creates no cube texture storage.";
+
+    struct RawWord
+    {
+        std::uint16_t low;
+        std::uint16_t high;
+        bool operator==(const RawWord&) const = default;
+    };
+    static_assert(std::is_trivially_copyable_v<RawWord>);
+    static_assert(sizeof(RawWord) == 4);
+
+    TextureCube texture(gd, 4, true, SurfaceFormat::Color);
+    const Rectangle region(0, 0, 1, 2);
+    const RawWord sentinel{0xBEEFu, 0xCAFEu};
+    const std::array<RawWord, 4> source{{
+        sentinel, {0x1122u, 0x3344u}, {0x5566u, 0x7788u}, sentinel}};
+    texture.SetData(CubeMapFace::NegativeZ, 1, &region, source.data(), 1, 2);
+
+    std::array<RawWord, 5> destination{{sentinel, sentinel, sentinel, sentinel, sentinel}};
+    texture.GetData(CubeMapFace::NegativeZ, 1, &region,
+                    destination.data(), 2, 2);
+    EXPECT_EQ(destination[0], sentinel);
+    EXPECT_EQ(destination[1], sentinel);
+    EXPECT_EQ(destination[2], source[1]);
+    EXPECT_EQ(destination[3], source[2]);
+    EXPECT_EQ(destination[4], sentinel);
+}
+
+TEST_F(TextureCubeTest, ScalarFloatElementsSpanOneVector4CubeTexel)
+{
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    if (gd.GetRenderer().ClassifyTextureCubeFormatEXT(
+            static_cast<int>(SurfaceFormat::Vector4)) !=
+        CNA::Internal::Renderers::RendererFormatVerdict::Supported)
+    {
+        GTEST_SKIP() << "The active renderer cannot allocate a Vector4 cube texture.";
+    }
+
+    TextureCube texture(gd, 1, false, SurfaceFormat::Vector4);
+    const std::array<float, 4> source{{1.25f, -2.5f, 3.75f, -4.125f}};
+    texture.SetData(CubeMapFace::PositiveY, source.data(),
+                    static_cast<int>(source.size()));
+    std::array<float, 4> destination{};
+    texture.GetData(CubeMapFace::PositiveY, destination.data(),
+                    static_cast<int>(destination.size()));
+    EXPECT_EQ(destination, source);
+}
+
+TEST_F(TextureCubeTest, ColorElementsSpanOneVector4CubeTexelWithoutConversion)
+{
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    if (gd.GetRenderer().ClassifyTextureCubeFormatEXT(
+            static_cast<int>(SurfaceFormat::Vector4)) !=
+        CNA::Internal::Renderers::RendererFormatVerdict::Supported)
+    {
+        GTEST_SKIP() << "The active renderer cannot allocate a Vector4 cube texture.";
+    }
+
+    TextureCube texture(gd, 1, false, SurfaceFormat::Vector4);
+    const std::array<Color, 4> source{{
+        Color(0x01, 0x23, 0x45, 0x67), Color(0x89, 0xAB, 0xCD, 0xEF),
+        Color(0x10, 0x32, 0x54, 0x76), Color(0x98, 0xBA, 0xDC, 0xFE)}};
+    texture.SetData(CubeMapFace::NegativeY, source.data(),
+                    static_cast<int>(source.size()));
+    std::array<Color, 4> destination{};
+    texture.GetData(CubeMapFace::NegativeY, destination.data(),
+                    static_cast<int>(destination.size()));
+    EXPECT_EQ(destination, source);
+}
+
+TEST_F(TextureCubeTest, TotalByteCountMustBeExactAndElementWidthMustDivideFormat)
+{
+    TextureCube texture(gd, 1, false, SurfaceFormat::Color);
+    const std::array<Color, 2> colors{{Color::Red, Color::Blue}};
+    std::array<Color, 2> destination{};
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, colors.data(), 2),
+                 System::ArgumentException);
+    EXPECT_THROW(texture.GetData(CubeMapFace::PositiveX, destination.data(), 2),
+                 System::ArgumentException);
+
+    std::uint64_t tooWide = 0;
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, &tooWide, 1),
+                 System::ArgumentException);
+    EXPECT_THROW(texture.GetData(CubeMapFace::PositiveX, &tooWide, 1),
+                 System::ArgumentException);
+}
+
+// SOFTWARE-282: recovered Microsoft XNA 4.0 TextureCube.CopyData<T> IL supplies the authority for
+// these identities and their order. In particular, GetLevelDesc validates the mip before
+// ValidateCopyParameters, and cubeMapFace is not consumed until the later native surface call.
+TEST_F(TextureCubeTest, AllGenericRoutesUseMicrosoftNullAndMipExceptionIdentities)
+{
+    TextureCube texture(gd, 2, true, SurfaceFormat::Color);
+    std::array<Color, 4> colors{};
+    std::array<std::uint8_t, 16> bytes{};
+    std::array<Bgra4444, 8> packed{};
+    std::array<float, 4> floats{};
+    std::array<std::uint32_t, 4> raw{};
+
+    ExpectExactException<System::ArgumentNullException>([&] {
+        texture.SetData(CubeMapFace::PositiveX, 0, nullptr,
+                        static_cast<const Color*>(nullptr), -1, 0);
+    }, "data");
+    ExpectExactException<System::ArgumentNullException>([&] {
+        texture.SetData(CubeMapFace::PositiveX, 0, nullptr,
+                        static_cast<const std::uint8_t*>(nullptr), -1, 0);
+    }, "data");
+    ExpectExactException<System::ArgumentNullException>([&] {
+        texture.SetData(CubeMapFace::PositiveX, 0, nullptr,
+                        static_cast<const Bgra4444*>(nullptr), -1, 0);
+    }, "data");
+    ExpectExactException<System::ArgumentNullException>([&] {
+        texture.SetData(CubeMapFace::PositiveX, 0, nullptr,
+                        static_cast<const float*>(nullptr), -1, 0);
+    }, "data");
+    ExpectExactException<System::ArgumentNullException>([&] {
+        texture.SetData(CubeMapFace::PositiveX, 0, nullptr,
+                        static_cast<const std::uint32_t*>(nullptr), -1, 0);
+    }, "data");
+
+    ExpectExactException<System::ArgumentNullException>([&] {
+        texture.GetData(CubeMapFace::PositiveX, 0, nullptr,
+                        static_cast<Color*>(nullptr), -1, 0);
+    }, "data");
+    ExpectExactException<System::ArgumentNullException>([&] {
+        texture.GetData(CubeMapFace::PositiveX, 0, nullptr,
+                        static_cast<std::uint8_t*>(nullptr), -1, 0);
+    }, "data");
+    ExpectExactException<System::ArgumentNullException>([&] {
+        texture.GetData(CubeMapFace::PositiveX, 0, nullptr,
+                        static_cast<Bgra4444*>(nullptr), -1, 0);
+    }, "data");
+    ExpectExactException<System::ArgumentNullException>([&] {
+        texture.GetData(CubeMapFace::PositiveX, 0, nullptr,
+                        static_cast<float*>(nullptr), -1, 0);
+    }, "data");
+    ExpectExactException<System::ArgumentNullException>([&] {
+        texture.GetData(CubeMapFace::PositiveX, 0, nullptr,
+                        static_cast<std::uint32_t*>(nullptr), -1, 0);
+    }, "data");
+
+    const int badLevel = texture.getLevelCountProperty();
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.SetData(CubeMapFace::PositiveX, badLevel, nullptr,
+                        colors.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.SetData(CubeMapFace::PositiveX, badLevel, nullptr,
+                        bytes.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.SetData(CubeMapFace::PositiveX, badLevel, nullptr,
+                        packed.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.SetData(CubeMapFace::PositiveX, badLevel, nullptr,
+                        floats.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.SetData(CubeMapFace::PositiveX, badLevel, nullptr,
+                        raw.data(), -1, 0);
+    });
+
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.GetData(CubeMapFace::PositiveX, badLevel, nullptr,
+                        colors.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.GetData(CubeMapFace::PositiveX, badLevel, nullptr,
+                        bytes.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.GetData(CubeMapFace::PositiveX, badLevel, nullptr,
+                        packed.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.GetData(CubeMapFace::PositiveX, badLevel, nullptr,
+                        floats.data(), -1, 0);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.GetData(CubeMapFace::PositiveX, badLevel, nullptr,
+                        raw.data(), -1, 0);
+    });
+}
+
+TEST_F(TextureCubeTest, CopyValidationOrderEndsWithCubeFace)
+{
+    TextureCube texture(gd, 2, false, SurfaceFormat::Color);
+    const auto invalidFace = static_cast<CubeMapFace>(6);
+    const Rectangle invalidRect(1, 1, 2, 2);
+    std::array<Color, 4> colors{};
+    std::uint64_t tooWide = 0;
+
+    ExpectExactException<System::ArgumentOutOfRangeException>([&] {
+        texture.SetData(invalidFace, 0, &invalidRect, &tooWide, -1, 0);
+    }, "dataIndex");
+    ExpectExactException<System::ArgumentOutOfRangeException>([&] {
+        texture.GetData(invalidFace, 0, &invalidRect, &tooWide, 0, 0);
+    }, "elementCount");
+
+    ExpectExactException<System::ArgumentException>([&] {
+        texture.SetData(invalidFace, 0, &invalidRect, &tooWide, 0, 1);
+    });
+    ExpectExactException<System::ArgumentException>([&] {
+        texture.GetData(invalidFace, 0, &invalidRect, &tooWide, 0, 1);
+    });
+
+    ExpectExactException<System::ArgumentException>([&] {
+        texture.SetData(invalidFace, 0, &invalidRect, colors.data(), 0, 3);
+    }, "rect");
+    ExpectExactException<System::ArgumentException>([&] {
+        texture.GetData(invalidFace, 0, &invalidRect, colors.data(), 0, 3);
+    }, "rect");
+
+    ExpectExactException<System::ArgumentException>([&] {
+        texture.SetData(invalidFace, 0, nullptr, colors.data(), 0, 3);
+    });
+    ExpectExactException<System::ArgumentException>([&] {
+        texture.GetData(invalidFace, 0, nullptr, colors.data(), 0, 3);
+    });
+
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.SetData(invalidFace, 0, nullptr, colors.data(), 0, 4);
+    });
+    ExpectExactException<System::InvalidOperationException>([&] {
+        texture.GetData(invalidFace, 0, nullptr, colors.data(), 0, 4);
+    });
+}
+
+TEST_F(TextureCubeTest, DisposedStatePrecedesNullAndEveryOtherCopyArgument)
+{
+    TextureCube texture(gd, 2, false, SurfaceFormat::Color);
+    texture.Dispose();
+    const auto invalidFace = static_cast<CubeMapFace>(6);
+
+    ExpectExactException<System::ObjectDisposedException>([&] {
+        texture.SetData(invalidFace, -1, nullptr,
+                        static_cast<const Color*>(nullptr), -1, 0);
+    });
+    ExpectExactException<System::ObjectDisposedException>([&] {
+        texture.GetData(invalidFace, -1, nullptr,
+                        static_cast<Color*>(nullptr), -1, 0);
+    });
 }
 
 // REMED-GFX-135: both overloads used to be bare EXPECT_NO_THROWs, which a renderer that dropped
@@ -298,12 +622,12 @@ TEST_F(TextureCubeTest, SetDataExactElementCountStoresOrRefusesDeterministically
 // (Task 272: previously none of these existed at all)
 // -----------------------------------------------------------------------
 
-TEST_F(TextureCubeTest, SetDataRectNullDataThrowsInvalidArgument)
+TEST_F(TextureCubeTest, SetDataRectNullDataThrowsArgumentNull)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, nullptr,
                              static_cast<const Color*>(nullptr), 0, 4),
-                 std::invalid_argument);
+                 System::ArgumentNullException);
 }
 
 TEST_F(TextureCubeTest, SetDataCompressedBytesUploadsAnEntireDxt1Face)
@@ -316,10 +640,106 @@ TEST_F(TextureCubeTest, SetDataCompressedBytesUploadsAnEntireDxt1Face)
     const std::uint8_t solidRedDxt1[8] = {0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0};
     ASSERT_NO_THROW(tex.SetData(CubeMapFace::PositiveX, solidRedDxt1, 8));
 
-    std::vector<Color> pixels(16);
-    ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, pixels.data(), 16));
-    for (const Color& pixel : pixels)
-        EXPECT_EQ(pixel, Color(255, 0, 0, 255));
+    std::array<std::uint8_t, 8> bytes{};
+    ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, bytes.data(), 8));
+    EXPECT_TRUE(std::equal(std::begin(solidRedDxt1), std::end(solidRedDxt1),
+                           bytes.begin()));
+}
+
+TEST_F(TextureCubeTest, SetDataCompressedBytesRoundTripsEveryClassicDxtFormat)
+{
+    if (!gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "The active renderer has no compressed cube transfer route.";
+
+    const std::vector<std::pair<SurfaceFormat, std::vector<std::uint8_t>>> cases{
+        {SurfaceFormat::Dxt1,
+         {0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0}},
+        {SurfaceFormat::Dxt3,
+         {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+          0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0}},
+        {SurfaceFormat::Dxt5,
+         {0xFF, 0xFF, 0, 0, 0, 0, 0, 0,
+          0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0}},
+    };
+
+    for (const auto& [format, block] : cases)
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        ASSERT_TRUE(gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(format)));
+        TextureCube texture(gd, 4, false, format);
+        ASSERT_NO_THROW(texture.SetData(CubeMapFace::NegativeY, block.data(),
+                                        static_cast<int>(block.size())));
+        std::vector<std::uint8_t> exact(block.size() + 4u, 0xCDu);
+        ASSERT_NO_THROW(texture.GetData(
+            CubeMapFace::NegativeY, 0, nullptr, exact.data(), 2,
+            static_cast<int>(block.size())));
+        EXPECT_TRUE(std::equal(block.begin(), block.end(), exact.begin() + 2));
+        EXPECT_EQ(exact.front(), 0xCDu);
+        EXPECT_EQ(exact.back(), 0xCDu);
+    }
+}
+
+TEST_F(TextureCubeTest, CompressedTransfersRejectNonByteElementTypes)
+{
+    if (!gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "The active renderer has no compressed cube transfer route.";
+
+    TextureCube texture(gd, 4, false, SurfaceFormat::Dxt1);
+    std::array<Color, 2> colors{{Color::Red, Color::Blue}};
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, colors.data(), 2),
+                 System::ArgumentException);
+    EXPECT_THROW(texture.GetData(CubeMapFace::PositiveX, colors.data(), 2),
+                 System::ArgumentException);
+}
+
+TEST_F(TextureCubeTest, SetDataCompressedPartialBlockPreservesTheRestOfTheFace)
+{
+    if (!gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "The active renderer has no compressed cube transfer route.";
+
+    TextureCube texture(gd, 8, false, SurfaceFormat::Dxt1);
+    const std::uint8_t redBlock[8] = {0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0};
+    std::vector<std::uint8_t> redFace;
+    for (int block = 0; block < 4; ++block)
+        redFace.insert(redFace.end(), std::begin(redBlock), std::end(redBlock));
+    texture.SetData(CubeMapFace::PositiveZ, redFace.data(),
+                    static_cast<int>(redFace.size()));
+
+    const std::uint8_t greenBlock[8] = {0xE0, 0x07, 0xE0, 0x07, 0, 0, 0, 0};
+    const Rectangle upperRight(4, 0, 4, 4);
+    texture.SetData(CubeMapFace::PositiveZ, 0, &upperRight,
+                    greenBlock, 0, 8);
+
+    std::array<std::uint8_t, 10> exact{};
+    exact.fill(0xCDu);
+    texture.GetData(CubeMapFace::PositiveZ, 0, &upperRight,
+                    exact.data(), 1, 8);
+    EXPECT_TRUE(std::equal(std::begin(greenBlock), std::end(greenBlock), exact.begin() + 1));
+    EXPECT_EQ(exact.front(), 0xCDu);
+    EXPECT_EQ(exact.back(), 0xCDu);
+
+    std::array<std::uint8_t, 32> whole{};
+    texture.GetData(CubeMapFace::PositiveZ, whole.data(),
+                    static_cast<int>(whole.size()));
+    EXPECT_TRUE(std::equal(std::begin(redBlock), std::end(redBlock), whole.begin()));
+    EXPECT_TRUE(std::equal(std::begin(greenBlock), std::end(greenBlock), whole.begin() + 8));
+    EXPECT_TRUE(std::equal(std::begin(redBlock), std::end(redBlock), whole.begin() + 16));
+    EXPECT_TRUE(std::equal(std::begin(redBlock), std::end(redBlock), whole.begin() + 24));
+}
+
+TEST_F(TextureCubeTest, CompressedNpotConstructionIsRejected)
+{
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    if (gd.GetRenderer().ClassifyTextureCubeFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)) !=
+        CNA::Internal::Renderers::RendererFormatVerdict::Supported)
+        GTEST_SKIP() << "the active renderer cannot create a DXT1 cube texture";
+    EXPECT_THROW((void)TextureCube(gd, 7, false, SurfaceFormat::Dxt1),
+                 System::ArgumentException);
 }
 
 TEST_F(TextureCubeTest, SetDataCompressedBytesUploadsRequestedFaceMip)
@@ -333,40 +753,81 @@ TEST_F(TextureCubeTest, SetDataCompressedBytesUploadsRequestedFaceMip)
     ASSERT_NO_THROW(tex.SetData(CubeMapFace::NegativeZ, 1, nullptr,
                                 solidGreenDxt1, 0, 8));
 
-    std::vector<Color> pixels(16);
+    std::array<std::uint8_t, 8> bytes{};
     ASSERT_NO_THROW(tex.GetData(CubeMapFace::NegativeZ, 1, nullptr,
-                                pixels.data(), 0, 16));
-    for (const Color& pixel : pixels)
-        EXPECT_EQ(pixel, Color(0, 255, 0, 255));
+                                bytes.data(), 0, 8));
+    EXPECT_TRUE(std::equal(std::begin(solidGreenDxt1), std::end(solidGreenDxt1),
+                           bytes.begin()));
 }
 
-TEST_F(TextureCubeTest, SetDataRectZeroElementCountThrowsOutOfRange)
+TEST_F(TextureCubeTest, SetDataCompressedRegionEndpointOverflowThrowsCleanly)
+{
+    if (!gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
+            static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "The active renderer has no compressed cube transfer route.";
+
+    TextureCube texture(gd, 4, false, SurfaceFormat::Dxt1);
+    std::array<std::uint8_t, 8> bytes{};
+    const Rectangle overflowingX(std::numeric_limits<int>::max(), 0, 4, 4);
+    const Rectangle overflowingY(0, std::numeric_limits<int>::max(), 4, 4);
+
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, 0, &overflowingX,
+                                 bytes.data(), 0, 8), System::ArgumentException);
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, 0, &overflowingY,
+                                 bytes.data(), 0, 8), System::ArgumentException);
+}
+
+TEST_F(TextureCubeTest, SetDataRectZeroElementCountThrowsArgumentOutOfRange)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     Color buf[1] = { Color(0, 0, 0, 0) };
-    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, nullptr, buf, 0, 0), std::out_of_range);
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, nullptr, buf, 0, 0),
+                 System::ArgumentOutOfRangeException);
 }
 
-TEST_F(TextureCubeTest, SetDataRectNegativeStartIndexThrowsOutOfRange)
+TEST_F(TextureCubeTest, SetDataRectNegativeStartIndexThrowsArgumentOutOfRange)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, nullptr, buf.data(), -1, 4), std::out_of_range);
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, nullptr, buf.data(), -1, 4),
+                 System::ArgumentOutOfRangeException);
 }
 
-TEST_F(TextureCubeTest, SetDataRectNegativeLevelThrowsOutOfRange)
+TEST_F(TextureCubeTest, SetDataRectOverflowingTransferWindowThrowsOutOfRange)
+{
+    TextureCube texture(gd, 1, false, SurfaceFormat::Color);
+    Color value(1, 2, 3, 4);
+
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, 0, nullptr, &value,
+                                 (std::numeric_limits<int>::max)(), 1),
+                 System::ArgumentOutOfRangeException);
+}
+
+TEST_F(TextureCubeTest, SetDataRectNegativeLevelThrowsInvalidOperation)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, -1, nullptr, buf.data(), 0, 4), std::out_of_range);
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, -1, nullptr, buf.data(), 0, 4),
+                 System::InvalidOperationException);
 }
 
-TEST_F(TextureCubeTest, SetDataRectOutOfBoundsThrowsOutOfRange)
+TEST_F(TextureCubeTest, SetDataRectLevelAtLevelCountThrowsInvalidOperation)
+{
+    TextureCube texture(gd, 4, true, SurfaceFormat::Color);
+    Color value(1, 2, 3, 4);
+
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX,
+                                 texture.getLevelCountProperty(), nullptr,
+                                 &value, 0, 1), System::InvalidOperationException);
+}
+
+TEST_F(TextureCubeTest, SetDataRectOutOfBoundsThrowsArgumentException)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     Color buf[1] = { Color(0, 0, 0, 0) };
     const Rectangle rect(1, 1, 2, 2); // extends past the 2x2 face
-    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 4), std::out_of_range);
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 4),
+                 System::ArgumentException);
 }
 
 // REMED-GFX-135: was a bare EXPECT_NO_THROW. It now asserts the outcome, and -- where the renderer
@@ -394,12 +855,13 @@ TEST_F(TextureCubeTest, SetDataRectWithinBoundsStoresOnlyThatTexel)
 // Task 913: elementCount must cover the full requested region (w*h) — previously unvalidated,
 // so a too-small elementCount caused the renderer to write/read past the caller-supplied buffer
 // (confirmed via a live heap-corruption crash while building Task 663's DDS test fixture).
-TEST_F(TextureCubeTest, SetDataRectElementCountLessThanRegionThrowsOutOfRange)
+TEST_F(TextureCubeTest, SetDataRectElementCountLessThanRegionThrowsArgumentException)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     Color buf[1] = { Color(1, 2, 3, 4) };
     const Rectangle rect(0, 0, 2, 2); // 4 texels requested, only 1 element provided
-    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1), std::out_of_range);
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1),
+                 System::ArgumentException);
 }
 
 // -----------------------------------------------------------------------
@@ -443,45 +905,72 @@ TEST_F(TextureCubeTest, SetDataNullRectAtMipLevelRejectsFullFaceSizedElementCoun
     std::vector<Color> buf(16, Color(1, 2, 3, 4));
     const Rectangle fullFaceRect(0, 0, 4, 4); // valid for level 0, not level 1
     EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 1, &fullFaceRect, buf.data(), 0, 16),
-                 std::out_of_range);
+                 System::ArgumentException);
 }
 
 // -----------------------------------------------------------------------
 // GetData — argument guards (mirrors SetData's guards)
 // -----------------------------------------------------------------------
 
-TEST_F(TextureCubeTest, GetDataSimpleNullDataThrowsInvalidArgument)
+TEST_F(TextureCubeTest, GetDataSimpleNullDataThrowsArgumentNull)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
-    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, nullptr, 4), std::invalid_argument);
+    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, nullptr, 4),
+                 System::ArgumentNullException);
 }
 
-TEST_F(TextureCubeTest, GetDataStartIndexNegativeStartIndexThrowsOutOfRange)
-{
-    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
-    std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, buf.data(), -1, 4), std::out_of_range);
-}
-
-TEST_F(TextureCubeTest, GetDataRectNullDataThrowsInvalidArgument)
-{
-    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
-    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, 0, nullptr, nullptr, 0, 4), std::invalid_argument);
-}
-
-TEST_F(TextureCubeTest, GetDataRectNegativeLevelThrowsOutOfRange)
+TEST_F(TextureCubeTest, GetDataStartIndexNegativeStartIndexThrowsArgumentOutOfRange)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, -1, nullptr, buf.data(), 0, 4), std::out_of_range);
+    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, buf.data(), -1, 4),
+                 System::ArgumentOutOfRangeException);
 }
 
-TEST_F(TextureCubeTest, GetDataRectOutOfBoundsThrowsOutOfRange)
+TEST_F(TextureCubeTest, GetDataOverflowingTransferWindowThrowsOutOfRange)
+{
+    TextureCube texture(gd, 1, false, SurfaceFormat::Color);
+    Color destination(9, 8, 7, 6);
+
+    EXPECT_THROW(texture.GetData(CubeMapFace::PositiveX, &destination,
+                                 (std::numeric_limits<int>::max)(), 1),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_EQ(destination, Color(9, 8, 7, 6));
+}
+
+TEST_F(TextureCubeTest, GetDataRectNullDataThrowsArgumentNull)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, 0, nullptr, nullptr, 0, 4),
+                 System::ArgumentNullException);
+}
+
+TEST_F(TextureCubeTest, GetDataRectNegativeLevelThrowsInvalidOperation)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    std::vector<Color> buf(4, Color(0, 0, 0, 0));
+    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, -1, nullptr, buf.data(), 0, 4),
+                 System::InvalidOperationException);
+}
+
+TEST_F(TextureCubeTest, GetDataRectLevelAtLevelCountThrowsInvalidOperation)
+{
+    TextureCube texture(gd, 4, true, SurfaceFormat::Color);
+    Color destination(9, 8, 7, 6);
+
+    EXPECT_THROW(texture.GetData(CubeMapFace::PositiveX,
+                                 texture.getLevelCountProperty(), nullptr,
+                                 &destination, 0, 1), System::InvalidOperationException);
+    EXPECT_EQ(destination, Color(9, 8, 7, 6));
+}
+
+TEST_F(TextureCubeTest, GetDataRectOutOfBoundsThrowsArgumentException)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     Color buf[1] = { Color(0, 0, 0, 0) };
     const Rectangle rect(1, 1, 2, 2);
-    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 4), std::out_of_range);
+    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 4),
+                 System::ArgumentException);
 }
 
 // REMED-GFX-130 false-positive audit: this test used to be a bare EXPECT_NO_THROW, which asserted
@@ -515,72 +1004,72 @@ TEST_F(TextureCubeTest, GetDataRectWithinBoundsReturnsUploadedTexelOrRejectsDete
 }
 
 // Task 913: see the identical SetData test above for the full rationale.
-TEST_F(TextureCubeTest, GetDataRectElementCountLessThanRegionThrowsOutOfRange)
+TEST_F(TextureCubeTest, GetDataRectElementCountLessThanRegionThrowsArgumentException)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     Color buf[1] = { Color(0, 0, 0, 0) };
     const Rectangle rect(0, 0, 2, 2); // 4 texels requested, only 1 element provided
-    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1), std::out_of_range);
+    EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1),
+                 System::ArgumentException);
 }
 
 // -----------------------------------------------------------------------
-// Invalid CubeMapFace values (Task 279)
+// Invalid CubeMapFace values (SOFTWARE-282)
 //
-// FNA itself never validates cubeMapFace — it's passed straight through to
-// FNA3D_SetTextureDataCube/FNA3D_GetTextureDataCube with no range check (confirmed in
-// TextureCube.cs). All 3 CNA renderers (EasyGL/Vulkan/Bgfx) already guard against an
-// out-of-range face value at the renderer layer (`if (face < 0 || face >= 6) return;`), so an
-// invalid face was already memory-safe — it just silently did nothing instead of surfacing a
-// clear, catchable error. This is a deliberate CNA safety extra beyond FNA, matching the
-// established pattern of Tasks 265/271/272's added guards.
+// Recovered Microsoft XNA 4.0 IL passes cubeMapFace to IDirect3DCubeTexture9 only after all
+// managed copy validation. D3DERR_INVALIDCALL is translated by GraphicsHelpers into
+// InvalidOperationException. FNA delegates the value to FNA3D without a managed guard; the
+// Microsoft runtime is the higher authority for this exact exception contract.
 // -----------------------------------------------------------------------
 
-TEST_F(TextureCubeTest, SetDataInvalidFaceBelowRangeThrowsOutOfRange)
+TEST_F(TextureCubeTest, SetDataInvalidFaceBelowRangeThrowsInvalidOperation)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     Color buf[4] = { Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0) };
     const auto invalidFace = static_cast<CubeMapFace>(-1);
-    EXPECT_THROW(tex.SetData(invalidFace, buf, 4), std::out_of_range);
+    EXPECT_THROW(tex.SetData(invalidFace, buf, 4), System::InvalidOperationException);
 }
 
-TEST_F(TextureCubeTest, SetDataInvalidFaceAboveRangeThrowsOutOfRange)
+TEST_F(TextureCubeTest, SetDataInvalidFaceAboveRangeThrowsInvalidOperation)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     Color buf[4] = { Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0) };
     const auto invalidFace = static_cast<CubeMapFace>(6);
-    EXPECT_THROW(tex.SetData(invalidFace, buf, 4), std::out_of_range);
+    EXPECT_THROW(tex.SetData(invalidFace, buf, 4), System::InvalidOperationException);
 }
 
-TEST_F(TextureCubeTest, SetDataRectInvalidFaceThrowsOutOfRange)
+TEST_F(TextureCubeTest, SetDataRectInvalidFaceThrowsInvalidOperation)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     Color buf[1] = { Color(0, 0, 0, 0) };
     const auto invalidFace = static_cast<CubeMapFace>(6);
-    EXPECT_THROW(tex.SetData(invalidFace, 0, nullptr, buf, 0, 4), std::out_of_range);
+    EXPECT_THROW(tex.SetData(invalidFace, 0, nullptr, buf, 0, 4),
+                 System::InvalidOperationException);
 }
 
-TEST_F(TextureCubeTest, GetDataInvalidFaceBelowRangeThrowsOutOfRange)
+TEST_F(TextureCubeTest, GetDataInvalidFaceBelowRangeThrowsInvalidOperation)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     Color buf[4] = { Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0) };
     const auto invalidFace = static_cast<CubeMapFace>(-1);
-    EXPECT_THROW(tex.GetData(invalidFace, buf, 4), std::out_of_range);
+    EXPECT_THROW(tex.GetData(invalidFace, buf, 4), System::InvalidOperationException);
 }
 
-TEST_F(TextureCubeTest, GetDataInvalidFaceAboveRangeThrowsOutOfRange)
+TEST_F(TextureCubeTest, GetDataInvalidFaceAboveRangeThrowsInvalidOperation)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     Color buf[4] = { Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0) };
     const auto invalidFace = static_cast<CubeMapFace>(6);
-    EXPECT_THROW(tex.GetData(invalidFace, buf, 4), std::out_of_range);
+    EXPECT_THROW(tex.GetData(invalidFace, buf, 4), System::InvalidOperationException);
 }
 
-TEST_F(TextureCubeTest, GetDataRectInvalidFaceThrowsOutOfRange)
+TEST_F(TextureCubeTest, GetDataRectInvalidFaceThrowsInvalidOperation)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     Color buf[1] = { Color(0, 0, 0, 0) };
     const auto invalidFace = static_cast<CubeMapFace>(6);
-    EXPECT_THROW(tex.GetData(invalidFace, 0, nullptr, buf, 0, 4), std::out_of_range);
+    EXPECT_THROW(tex.GetData(invalidFace, 0, nullptr, buf, 0, 4),
+                 System::InvalidOperationException);
 }
 
 // REMED-GFX-135: uploading the SAME colour to all six faces could not distinguish them, so this
@@ -772,7 +1261,12 @@ TEST_F(TextureCubeTest, DisposeUnbindsFromGraphicsDeviceTextures)
 
 TEST_F(TextureCubeTest, DisposeUnbindsFromGraphicsDeviceVertexTextures)
 {
-    auto tex = std::make_unique<TextureCube>(gd, 4, false, SurfaceFormat::Color);
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    if (gd.GetRenderer().ClassifyTextureCubeFormatEXT(
+            static_cast<int>(SurfaceFormat::Single)) !=
+        CNA::Internal::Renderers::RendererFormatVerdict::Supported)
+        GTEST_SKIP() << "the active renderer cannot create a vertex-sampleable cube texture";
+    auto tex = std::make_unique<TextureCube>(gd, 4, false, SurfaceFormat::Single);
     gd.getVertexTexturesProperty()(0, tex.get());
     ASSERT_EQ(gd.getVertexTexturesProperty()[0], static_cast<Texture*>(tex.get()));
 

@@ -3,8 +3,9 @@
 //
 // FNA behaviour verified here:
 //   1. Texture2D disposed while bound in Textures[0] → slot becomes nullptr.
-//   2. VertexBuffer disposed while bound → no crash (FNA keeps stale ref; CNA matches).
-//   3. IndexBuffer disposed while bound → no crash (same).
+//   2. VertexBuffer disposed while bound → no crash and the live wrapper remains cached, as FNA.
+//      Destroying that wrapper then clears the C++-only dangling binding hazard.
+//   3. IndexBuffer has the same explicit-dispose/destructor split.
 //   4. RenderTarget2D disposed while still set as render target →
 //      throws InvalidOperationException ("Disposing target that is still bound").
 //   5. RenderTarget2D disposed after being unbound → no exception.
@@ -102,7 +103,7 @@ protected:
 
         // ── 1. Texture2D disposed while bound → slot cleared ──────────────
         {
-            Texture2D tex(dev, 2, 2);
+            Texture2D tex(dev, 2, 2, false, SurfaceFormat::Single);
             dev.getTexturesProperty()(0, &tex);
             check(dev.getTexturesProperty()[0] == &tex,
                   "Texture2D: slot[0] holds texture before dispose");
@@ -115,6 +116,19 @@ protected:
                   "Texture2D: IsDisposed true after dispose");
         }
 
+        // XNA's sampler collection strongly roots its managed Texture object. CNA's pointer-valued
+        // C++ collection cannot do that, so destructor-only cleanup must emulate the only observable
+        // managed outcome: no slot may retain an address after the wrapper ceases to exist.
+        {
+            Texture2D tex(dev, 2, 2, false, SurfaceFormat::Single);
+            dev.getTexturesProperty()(0, &tex);
+            dev.getVertexTexturesProperty()(0, &tex);
+        }
+        check(dev.getTexturesProperty()[0] == nullptr,
+              "Texture2D: destructor clears the pixel-stage slot");
+        check(dev.getVertexTexturesProperty()[0] == nullptr,
+              "Texture2D: destructor clears the vertex-stage slot");
+
         // ── 2. VertexBuffer disposed while bound → no crash ───────────────
         {
             VertexBuffer vb(dev, 4);
@@ -126,8 +140,20 @@ protected:
             check(ok, "VertexBuffer: disposing while bound does not throw");
             check(vb.getIsDisposedProperty(),
                   "VertexBuffer: IsDisposed true after dispose while bound");
-            dev.SetVertexBuffer(nullptr);   // clear stale binding
+            check(dev.GetVertexBuffer() == &vb,
+                  "VertexBuffer: explicit Dispose retains FNA's live-wrapper binding");
         }
+        check(dev.GetVertexBuffer() == nullptr && dev.GetVertexBuffers().empty(),
+              "VertexBuffer: wrapper destruction clears the stale binding");
+
+        {
+            VertexBuffer first(dev, 4);
+            VertexBuffer dying(dev, 4);
+            dev.SetVertexBuffers({VertexBufferBinding(&first, 0, 0),
+                                  VertexBufferBinding(&dying, 0, 1)});
+        }
+        check(dev.GetVertexBuffer() == nullptr && dev.GetVertexBuffers().empty(),
+              "VertexBuffer: destroying any stream clears the complete binding set");
 
         // ── 3. IndexBuffer disposed while bound → no crash ────────────────
         {
@@ -139,8 +165,11 @@ protected:
             check(ok, "IndexBuffer: disposing while bound does not throw");
             check(ib.getIsDisposedProperty(),
                   "IndexBuffer: IsDisposed true after dispose while bound");
-            dev.SetIndexBuffer(nullptr);    // clear stale binding
+            check(dev.GetIndexBuffer() == &ib,
+                  "IndexBuffer: explicit Dispose retains FNA's live-wrapper binding");
         }
+        check(dev.GetIndexBuffer() == nullptr,
+              "IndexBuffer: wrapper destruction clears the stale binding");
 
         // ── 4. RenderTarget2D disposed while still set → throws ───────────
         {
@@ -235,6 +264,7 @@ public:
     BoundResourceDisposeTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
     }
 
     int getResult() const { return fail_ > 0 ? 1 : 0; }

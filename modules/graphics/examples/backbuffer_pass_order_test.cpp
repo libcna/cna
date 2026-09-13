@@ -171,10 +171,10 @@ namespace
                                  true, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", Support::Exact, true, Support::Exact,
-                                 false, true, true, true, true, true, true, true, true, false};
+                                 true, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true, true, true, true, true, false};
+                                 true, true, true, true, true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_BGFX)
     // `mixedQueuesKeepPublicOrder` was false until REMED-GFX-157. bgfx submits both families
     // immediately into a view, and bgfx's DEFAULT view mode radix-sorts a view's draws by sort key
@@ -882,8 +882,7 @@ class BackbufferPassOrderTest : public Game
         }
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
-        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-                  kBlack, 1.0f, 0);
+        dev.Clear(kBlack);
         Draw3D(dev, *nearFullVb_, true);              // writes depth 0.3 everywhere
         ProduceInto(dev, *t, kMagenta);
         dev.Clear(ClearOptions::Target, kBlue, 1.0f, 0);
@@ -905,8 +904,7 @@ class BackbufferPassOrderTest : public Game
         }
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
-        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-                  kBlack, 1.0f, 0);
+        dev.Clear(kBlack);
         SpriteStripes(0, 1, kRed);
         Draw3D(dev, *nearStripeVb_[1], true);         // stripe 1 at depth 0.3
         ProduceInto(dev, *t, kMagenta);
@@ -939,8 +937,7 @@ class BackbufferPassOrderTest : public Game
         }
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
-        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-                  kBlack, 1.0f, 0);
+        dev.Clear(kBlack);
         Draw3D(dev, *nearStripeVb_[0], true);
         Draw3D(dev, *nearStripeVb_[1], true);
         ProduceInto(dev, *t, kMagenta);
@@ -963,8 +960,7 @@ class BackbufferPassOrderTest : public Game
         }
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
-        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-                  kBlack, 1.0f, 0);
+        dev.Clear(kBlack);
         // A NEAR draw inside the target's own pass, with depth on, then a FAR draw on the
         // backbuffer covering the same stripes: the target's depth is a different attachment and
         // must not reject it.

@@ -112,6 +112,19 @@ namespace CNA::Internal::Renderers::EasyGL
      * to owe. The MRT slots are the one case where the neighbours' finalization IS observable,
      * which is why a detach clears one SLOT rather than abandoning the set.
      */
+    struct EasyGLMrtBindingEXT
+    {
+        /** @brief Bound 2D target when this slot names a RenderTarget2D. */
+        EasyGLRenderTargetRenderer* rt2D = nullptr;
+        /** @brief Bound cube target when this slot names one of its faces. */
+        EasyGLRenderTargetCubeRenderer* cube = nullptr;
+        /** @brief Cube-face ordinal used when `cube` is non-null. */
+        int cubeFace = 0;
+
+        /** @brief Returns whether this slot names no live attachment. */
+        [[nodiscard]] bool IsEmpty() const { return rt2D == nullptr && cube == nullptr; }
+    };
+
     /**
      * @brief CNAEXT. Depth precision of a `Microsoft::Xna::Framework::Graphics::DepthFormat` ordinal.
      *
@@ -153,11 +166,13 @@ namespace CNA::Internal::Renderers::EasyGL
         /** @brief Currently bound `RenderTargetCube` renderer, or nullptr. */
         IRenderTargetCubeRenderer* cube = nullptr;
         /** @brief Currently bound ordered multi-target set; entries beyond `mrtCount` are unused. */
-        std::array<EasyGLRenderTargetRenderer*, 4> mrt = {};
+        std::array<EasyGLMrtBindingEXT, 4> mrt = {};
         /** @brief Number of live slots in `mrt`; 0 when no multi-target set is bound. */
         int mrtCount = 0;
         /** @brief Native draw FBO for the active MRT set, used to restore it after direct readback. */
         unsigned int mrtFramebuffer = 0;
+        /** @brief Raw XNA DepthFormat ordinal for the active destination. */
+        int depthFormat = 3;
         /** @brief Extent of the bound destination in pixels; 0 means the default framebuffer. */
         int width  = 0;
         /** @brief Extent of the bound destination in pixels; 0 means the default framebuffer. */
@@ -197,6 +212,11 @@ namespace CNA::Internal::Renderers::EasyGL
         void BindGL(int unit) const override;
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        /** @brief Reports whether exact DXT bytes exist for a declared mip level. */
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override;
+        /** @brief Reads exact DXT block rows; uncompressed texture readback remains unsupported. */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;
@@ -224,6 +244,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void AllocateDeclaredLevels();
 
         std::shared_ptr<std::vector<uint8_t>> pixels_;
+        /** @brief Exact raw DXT block stream for each declared mip level. */
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
         std::weak_ptr<::easygl::ResourceRegistry> registry_;
         int surfaceFormat_ = 0;
         // Task 924: real mip level count this texture was created with -- GL_TEXTURE_MAX_LEVEL
@@ -267,6 +289,28 @@ namespace CNA::Internal::Renderers::EasyGL
         int GetHeight() const override { return height_; }
 
         void BindGL(int unit) const override;
+        /**
+         * @brief Uploads a complete level-zero image in the target's declared format.
+         * @param data Source pixels in top-row-first order.
+         * @param stride Source row pitch in bytes.
+         */
+        void UpdatePixels(const uint8_t* data, int stride) override;
+        /**
+         * @brief Uploads a complete mip image in the target's declared format.
+         * @param level Destination mip level.
+         * @param data Source pixels in top-row-first order.
+         * @param levelW Expected mip width.
+         * @param levelH Expected mip height.
+         */
+        void UpdatePixelsLevel(int level, const uint8_t* data,
+                               int levelW, int levelH) override;
+        /**
+         * @brief Reports every allocated target mip as directly readable.
+         * @param level Mip level to query.
+         * @return True when the level belongs to this target's allocated chain.
+         */
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override
+        { return level >= 0 && level < levelCount_; }
 
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
@@ -302,6 +346,8 @@ namespace CNA::Internal::Renderers::EasyGL
         friend class EasyGLRenderer;
 
         void CreateResources();
+        void UploadPixelsLevel(int level, const uint8_t* data,
+                               int levelW, int levelH, int stride);
         /** @brief Resolves this target's multisample colour storage into its public texture. */
         void ResolveColorEXT(const char* traceEvent) const;
         /// REMED-GFX-168: this target's own native identities, for `CNA_EASYGL_TARGET_TRACE`.
@@ -363,17 +409,42 @@ namespace CNA::Internal::Renderers::EasyGL
         // ITextureCubeRenderer — bind and upload to the shared cube texture.
         void BindGL(int unit) const override;
         /**
-         * @brief Uploads CPU pixels into a rendered cube face's mip level.
+         * @brief Uploads declared-format texels into a rendered cube face's mip level.
          *
          * REMED-GFX-135: the only render-target cube in CNA that implements this rather than
          * inheriting `IRenderTargetCubeRenderer::SetData`'s refusal -- the FBO's colour attachment
          * IS a normal GL cube texture here, so glTexSubImage2D reaches it directly.
          *
+         * @param face Cube face index.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the destination rectangle.
+         * @param y Top edge of the destination rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Source texels in the target's declared format.
+         * @param dataLength Available source bytes.
          * @return True once the whole region has been uploaded with no GL error; false for an
          *         out-of-range face/level/region or a driver-rejected upload.
          */
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+
+        /**
+         * @brief Uploads exact declared-format texels into a rendered cube face.
+         *
+         * @param face Cube face index.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the destination rectangle.
+         * @param y Top edge of the destination rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Source texels in the target's declared format.
+         * @param dataLength Available source bytes.
+         * @return True once the complete region has been uploaded in the target's real format.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
 
         /**
          * @brief Reads a RENDERED cube face's mip level back to the CPU.
@@ -397,13 +468,30 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param y          Top edge of the requested region, in texels.
          * @param w          Width of the requested region, in texels.
          * @param h          Height of the requested region, in texels.
-         * @param data       Destination for tightly packed RGBA8 rows, top row first.
-         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @param data       Destination for tightly packed declared-format rows, top row first.
+         * @param dataLength Size of @p data in bytes.
          * @return True once the whole region was read; false for an out-of-range face/level/region
          *         or an incomplete framebuffer.
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+
+        /**
+         * @brief Reads exact declared-format texels from a rendered cube face.
+         *
+         * @param face Cube face index.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the source rectangle.
+         * @param y Top edge of the source rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Destination for texels in the target's declared format.
+         * @param dataLength Available destination bytes.
+         * @return True once the complete region has been returned in top-row-first order.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override;
 
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
@@ -415,7 +503,20 @@ namespace CNA::Internal::Renderers::EasyGL
         }
 
     private:
+        friend class EasyGLRenderer;
+
         void CreateResources();
+        /** @brief Attaches one selected cube face as an MRT colour destination. */
+        void AttachColorToMRT(
+            ::easygl::Framebuffer& framebuffer,
+            ::metagl::FramebufferAttachment attachment,
+            int face) const;
+        /** @brief Attaches this cube target's depth/stencil storage to an MRT framebuffer. */
+        void AttachDepthToMRT(::easygl::Framebuffer& framebuffer) const;
+        /** @brief Resolves and mip-finalizes one face after an MRT binding ends. */
+        void UnbindMRTFace(int face);
+        /** @brief Resolves one multisampled face into the public cube texture. */
+        void ResolveFaceEXT(int face, const char* traceEvent);
         /// REMED-GFX-168: this cube's own native identities, for `CNA_EASYGL_TARGET_TRACE`.
         [[nodiscard]] std::string TraceNativeDetailEXT() const;
         /// REMED-GFX-168: clears the shared binding record if it still names this cube.
@@ -473,6 +574,40 @@ namespace CNA::Internal::Renderers::EasyGL
                                    int w, int h, int depth,
                                    void* data, int dataLength) const override;
 
+        /**
+         * @brief Stores exact declared-format voxels and mirrors them for typed readback.
+         * @param level Mip level.
+         * @param x Left edge.
+         * @param y Top edge.
+         * @param z Front edge.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Source bytes.
+         * @param dataLength Available source bytes.
+         * @return True when the complete box was stored.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            const void* data, int dataLength) override;
+
+        /**
+         * @brief Returns exact declared-format voxels from the CPU mirror.
+         * @param level Mip level.
+         * @param x Left edge.
+         * @param y Top edge.
+         * @param z Front edge.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Destination bytes.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete box was returned.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            void* data, int dataLength) const override;
+
         /// Binds this volume texture to the requested GL texture unit.
         void BindGL(int unit) const override;
 
@@ -483,6 +618,8 @@ namespace CNA::Internal::Renderers::EasyGL
         int depth_  = 0;
         /// Mip levels this texture really allocated storage for (REMED-GFX-135).
         int levelCount_ = 1;
+        int surfaceFormat_ = 0;
+        std::vector<std::vector<std::uint8_t>> rawLevels_;
     };
 
     /// EasyGL cube map texture renderer.
@@ -508,11 +645,50 @@ namespace CNA::Internal::Renderers::EasyGL
             int face, int level, int x, int y, int w, int h,
             const void* data, int dataLength) override;
 
+        /** @brief Reads exact DXT blocks retained for a cube face or block-aligned region. */
+        [[nodiscard]] bool GetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override;
+
+        /**
+         * @brief Uploads exact uncompressed declared-format texels into one cube face.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Destination x coordinate in texels.
+         * @param y Destination y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Tightly packed declared-format source texels.
+         * @param dataLength Available source bytes.
+         * @return True when GL and the exact restoration shadow received the complete region.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
+
         /// REMED-GFX-130: true only once the requested face/mip rectangle has been read back
         /// through the temporary FBO below; false for an out-of-range face or an incomplete
         /// framebuffer, so the shared layer rejects the read instead of fabricating a face.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+
+        /**
+         * @brief Reads exact uncompressed declared-format texels from one cube face.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Source x coordinate in texels.
+         * @param y Source y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Destination for tightly packed declared-format texels.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete exact region was copied from the restoration shadow.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override;
 
         /// Binds this cube map to the requested GL texture unit.
         void BindGL(int unit) const override;
@@ -523,6 +699,13 @@ namespace CNA::Internal::Renderers::EasyGL
 
         /** @brief Returns the cube edge length in texels. */
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
+
+        /**
+         * @brief Returns the declared SurfaceFormat ordinal retained by this cube.
+         * @return The raw SurfaceFormat ordinal supplied at construction.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override
+        { return surfaceFormat_; }
 
         /** @brief Forgets the cube's GL name after its context is lost. */
         void release_gl_handle_only() override;
@@ -540,8 +723,8 @@ namespace CNA::Internal::Renderers::EasyGL
         int levelCount_ = 1;
         /// Exact face-major DXT blocks, retained because compressed GL images are not FBO-readable.
         std::vector<std::vector<std::uint8_t>> compressedLevels_;
-        /// Face-major uncompressed mip data retained only when context recovery is enabled.
-        std::vector<std::vector<std::uint8_t>> rgbaLevels_;
+        /// Exact face-major uncompressed declared-format data for readback and restoration.
+        std::vector<std::vector<std::uint8_t>> rawLevels_;
         std::array<std::shared_ptr<std::vector<uint8_t>>, 6> cpuPixels_{};
         std::weak_ptr<::easygl::ResourceRegistry> registry_;
     };
@@ -778,9 +961,15 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLSpriteBatchRenderer : public ISpriteBatchRenderer, public ::easygl::RecoverableResource
     {
     public:
-        struct Vertex { float x, y, u, v, r, g, b, a; };
+        struct Vertex { float x, y, z, u, v, r, g, b, a; };
 
     private:
+        // Microsoft XNA and FNA both keep the native UInt16-indexed SpriteBatch buffers at 2,048
+        // sprites. The public queue may be larger, but each renderer submission must not be.
+        static constexpr std::size_t kMaxSpritesPerBatch = 2048;
+        static constexpr std::size_t kMaxVerticesPerBatch = kMaxSpritesPerBatch * 4;
+        static constexpr std::size_t kMaxIndicesPerBatch = kMaxSpritesPerBatch * 6;
+
         ::easygl::Device& device_;
         ::easygl::Program program_;
         ::easygl::VertexArray vao_;
@@ -794,6 +983,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // flushed in one draw call. A flush also occurs when the texture changes.
         std::vector<Vertex>   pending_vertices_;
         std::vector<uint16_t> pending_indices_;
+        bool immediateMode_ = false;
         /**
          * Writes the Direct3D 9 channel expansion for a surface format into the bound program.
          *
@@ -836,14 +1026,14 @@ namespace CNA::Internal::Renderers::EasyGL
         int pendingFilter_    = 0; // TextureFilter::Linear
         int pendingAddressU_  = 1; // TextureAddressMode::Clamp
         int pendingAddressV_  = 1; // TextureAddressMode::Clamp
+        int pendingMaxAnisotropy_ = 4; // SamplerState default
+        int pendingMaxMipLevel_ = 0; // SamplerState default
+        float pendingLodBias_ = 0.0f; // SamplerState default
         // plans/plan_vulkan.md VULKAN-167: -1 means "the batch supplied no W", which keeps
         // ApplySamplerState's W-follows-U default for any caller that flushes sprites without
         // going through SetSamplerState. SpriteBatch always supplies one, so the sentinel only
         // survives for those other callers.
         int pendingAddressW_ = -1;
-        int pendingMaxAnisotropy_ = 4;
-        int pendingMaxMipLevel_ = 0;
-        float pendingLodBias_ = 0.0f;
 
     public:
         explicit EasyGLSpriteBatchRenderer(::easygl::Device& device, std::shared_ptr<::easygl::ResourceRegistry> registry,
@@ -855,6 +1045,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetTransformMatrix(const Matrix& m) override;
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
+        void SetSamplerMaxAnisotropy(int maxAnisotropy) override;
+        void SetSamplerMipState(int maxMipLevel, float lodBias) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
         /**
          * @brief Captures every sampler property supplied to `SpriteBatch::Begin`.
@@ -873,6 +1065,12 @@ namespace CNA::Internal::Renderers::EasyGL
          */
         void SetSamplerState(int textureFilter, int addressU, int addressV, int addressW,
                              int maxAnisotropy, int maxMipLevel, float lodBias) override;
+        /**
+         * @brief Selects whether each Draw call must submit before returning.
+         *
+         * @param immediate True for SpriteSortMode::Immediate; false for renderer batching.
+         */
+        void SetImmediateMode(bool immediate) override { immediateMode_ = immediate; }
         void Draw(const ITextureRenderer& texture, float x, float y) override;
         void Draw(const ITextureRenderer& texture,
                   const Rectangle& destinationRectangle,
@@ -1038,6 +1236,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // platform context is still current and alive.
         std::shared_ptr<EasyGLPlatformContext> platformContext_;
         std::shared_ptr<EasyGLThreadContextLeaseControl> threadContextLeaseControl_;
+        friend class EasyGLSpriteBatchRenderer;
         // The viewport's own depth range. SetViewport() writes it unconditionally, so it cannot
         // live behind CNA_EASYGL_COMPILED_EFFECTS -- a build without compiled effects, which is
         // the default, would not compile. Compiled-effect draws narrow it and put it back
@@ -1071,6 +1270,9 @@ namespace CNA::Internal::Renderers::EasyGL
         // lazily on first CreateCompiledEffect() call (see GetMojoShaderContextEXT() in
         // EasyGLCompiledEffect.cpp).
         MOJOSHADER_glContext* mojoShaderContext_ = nullptr;
+        /// Device-wide legacy D3D9 texture-stage values consumed by TEXBEM/L and BEM uniforms.
+        std::array<CompiledEffectLegacyBumpMapEnvState, 16>
+            compiledLegacyBumpMapEnvs_{};
         /// plans/plan_fx.md FX-108: the meta-gl context generation `mojoShaderContext_` (and every
         /// program MojoShader linked inside it) belongs to. A recreated context bumps the counter,
         /// and every one of those programs is then a dead GL name -- see
@@ -1101,7 +1303,7 @@ namespace CNA::Internal::Renderers::EasyGL
             /** @brief Whether the GL objects above exist. */
             bool created = false;
         };
-        std::array<CompiledEffectFlippedSourceEXT, 16> compiledFlippedSources_;
+        std::array<CompiledEffectFlippedSourceEXT, 20> compiledFlippedSources_;
         /// Read framebuffer the source render target's colour texture is attached to per blit, so
         /// the source's own framebuffers -- including a multisample one -- are never touched.
         ::easygl::Framebuffer compiledFlipReadFbo_;
@@ -1137,8 +1339,13 @@ namespace CNA::Internal::Renderers::EasyGL
         void ApplyCurrentColorWriteMasks();
         void ForceAllColorWriteMasks();
         [[nodiscard]] bool HasRestrictedActiveColorWriteMask() const;
+        [[nodiscard]] bool DisableScissorForClear();
+        void RestoreScissorAfterClear(bool wasEnabled);
 
-        static constexpr int kMaxSamplerSlots = 16;
+        // XNA maps its four vertex samplers to the native units immediately after the sixteen
+        // pixel samplers. MojoShader uses the same 16-slot offset when built with
+        // MOJOSHADER_XNA4_VERTEX_TEXTURES.
+        static constexpr int kMaxSamplerSlots = 20;
         ::easygl::Sampler samplers_[kMaxSamplerSlots];
         bool contextRecoveryEnabled_ = true;
         int swapInterval_ = 1;
@@ -1149,6 +1356,8 @@ namespace CNA::Internal::Renderers::EasyGL
 
         // MSAA — multisampled render buffer resolved to FBO 0 on Present().
         int sampleCount_ = 1;
+        int backBufferDepthFormat_ = 3;
+        int msaaStorageDepthFormat_ = -1;
         int msaaW_       = 0;
         int msaaH_       = 0;
         ::easygl::Framebuffer  msaaFbo_;
@@ -1158,6 +1367,12 @@ namespace CNA::Internal::Renderers::EasyGL
         void CreateMsaaBuffers(int w, int h);
         void BindDefaultFramebuffer();
         void ResolveMsaa();
+        /** @brief Enables only the depth/stencil planes selected for the active destination. */
+        void ApplyCurrentDepthStencilAvailability();
+        /** @brief Installs XNA's topology-dependent ordinary or two-sided stencil tuple. */
+        void ApplyStencilPrimitiveTopology(PrimitiveType primitive);
+        /** @brief Reapplies XNA's normalized constant depth bias for the active depth format. */
+        void ApplyCurrentDepthBias();
         void EnsureCallingThreadContext();
 
         /// Returns the shared registry when context recovery is enabled, an empty pointer
@@ -1297,6 +1512,10 @@ namespace CNA::Internal::Renderers::EasyGL
 
         ::easygl::Texture default_white_texture_;
         bool default_white_texture_ready_ = false;
+        ::easygl::Texture default_black_texture_;      ///< XNA null classic 2D sampler
+        bool default_black_texture_ready_ = false;
+        ::easygl::Texture default_black_cube_texture_; ///< XNA null EnvironmentMapEffect sampler
+        bool default_black_cube_texture_ready_ = false;
         ::easygl::Texture default_flat_normal_texture_;      ///< PbrEffect NormalMap fallback (CNB-58)
         bool default_flat_normal_texture_ready_ = false;
 
@@ -1316,18 +1535,19 @@ namespace CNA::Internal::Renderers::EasyGL
         // leaving a dangling pointer for the next transition to dispatch through. See
         // EasyGLBoundTargetEXT for why the record is shared rather than owned outright, and why it
         // holds identity and extent but no GL handles.
-        /// Depth precision of the BACKBUFFER, kept because a depth bias has to be converted into
-        /// GL's units and GL's units are multiples of 2^-bits. Updated by
-        /// UpdatePresentationFormatEXT(); 24 until a game asks for something else, which is what
-        /// GraphicsDeviceManager's own DepthFormat::Depth24 default produces.
-        int backBufferDepthBits_ = 24;
-
         std::shared_ptr<EasyGLBoundTargetEXT> bound_ = std::make_shared<EasyGLBoundTargetEXT>();
 
         /// Task 870/319: what ApplyDepthStencilState last installed, so SetReferenceStencil can
         /// reissue `glStencilFunc` with a new reference. GL binds function, reference and mask in
         /// one call, so the other two have to be remembered to change the one.
         bool stencilEnabled_ = false;
+        bool depthEnabled_ = false;
+
+        /// XNA's constant bias is normalized depth, while GL's `units` argument is expressed in
+        /// implementation-defined minimum depth increments. Keep the public value so target binds
+        /// can rescale it for the destination's Depth16 or Depth24 storage.
+        float depthBias_ = 0.0f;
+        float slopeScaleDepthBias_ = 0.0f;
 
         /// REMED-GFX-237: the WRITE masks a clear has to force and then put back. XNA's Clear
         /// ignores both, `glClear` obeys both, so each clear overrides them -- and the next draw
@@ -1336,14 +1556,17 @@ namespace CNA::Internal::Renderers::EasyGL
         bool depthWriteEnabled_ = true;
         int  stencilWriteMask_ = static_cast<int>(0xFFFFFFFF);
         bool stencilTwoSided_ = false;
+        bool stencilPrimitiveUsesTwoSided_ = false;
         int  stencilFunc_ = 0;
+        int  stencilPass_ = 0;
+        int  stencilFail_ = 0;
+        int  stencilDepthFail_ = 0;
         int  stencilCcwFunc_ = 0;
+        int  stencilCcwPass_ = 0;
+        int  stencilCcwFail_ = 0;
+        int  stencilCcwDepthFail_ = 0;
         int  stencilReadMask_ = 0;
         int  referenceStencil_ = 0;
-
-        float normalizedDepthBias_ = 0.0f;
-        float slopeScaleDepthBias_ = 0.0f;
-        void ApplyDepthBiasForCurrentTargetEXT();
 
         /// REMED-GFX-168: the binding record as pointer VALUES only, for `CNA_EASYGL_TARGET_TRACE`.
         /// Never dereferences a recorded target -- one of them may already be destroyed storage,
@@ -1355,26 +1578,60 @@ namespace CNA::Internal::Renderers::EasyGL
         /// Restores the previously bound framebuffer and drains the error queue before returning.
         [[nodiscard]] bool ProbeFloatRenderTargetSupportEXT(bool fullFloat) const;
 
+        /**
+         * @brief Probes one normalized or packed render-target attachment for completeness.
+         *
+         * @param surfaceFormat Raw SurfaceFormat ordinal for Rgba1010102, Rg32 or Rgba64.
+         * @return True when this context can render to the exact requested format.
+         */
+        [[nodiscard]] bool ProbeNormalizedRenderTargetSupportEXT(int surfaceFormat) const;
+
         /// Cached results of that probe. Mutable because the query is const and a caller may make
         /// it per frame; the answer cannot change without a new GL context, and a new context means
         /// a new renderer.
         mutable std::optional<bool> probedFullFloatRenderable_;
         mutable std::optional<bool> probedHalfFloatRenderable_;
+        mutable std::array<std::optional<bool>, 3> probedNormalizedRenderTargets_{};
 
-        // FillMode::WireFrame emulation (OpenGL ES has no glPolygonMode):
-        // when active, triangle draws are re-expanded into GL_LINES.
-        bool wireframe_ = false;
-        ::easygl::Buffer wireframeIbo_;        ///< scratch element buffer of line indices
-        bool wireframeIboCreated_ = false;
-        std::vector<std::uint32_t> wireframeScratch_;  ///< CPU build buffer (32-bit line indices)
+        // SOFTWARE-178: polygon mode must stay a polygon operation. Re-expanding triangles as
+        // GL_LINES loses post-transform culling, polygon depth bias and topology-wide rasterizer
+        // state, and it cannot cover SpriteBatch, compiled-effect, multi-stream and instanced paths
+        // uniformly. Desktop GL is native; GLES/WebGL use their optional native polygon-mode
+        // extensions. A context with neither reports false and refuses triangle draws.
+        enum class NativeWireframeApi
+        {
+            None,
+            Desktop,
+            NvPolygonMode,
+            WebGlPolygonMode
+        };
+        NativeWireframeApi nativeWireframeApi_ = NativeWireframeApi::None;
+        bool fillModeWireframe_ = false;
 
-        // Draw the given triangle geometry as a wireframe (GL_LINES). Returns false when the
-        // primitive is not a triangle list/strip (caller should fall back to a normal draw).
-        // ib == nullptr means a non-indexed draw (sequential vertices from firstVertex).
-        bool DrawWireframe(const EasyGLVertexBufferRenderer& vb,
-                           const EasyGLIndexBufferRenderer* ib,
-                           PrimitiveType primitive, int primitiveCount,
-                           int startIndex, int baseVertex, int firstVertex);
+        // A compensated negative base can require an attribute address before buffer start on
+        // GLES/WebGL and is driver-sensitive even where a native desktop entry point exists.
+        // Rebase just the selected index slice into this scratch buffer on every GL profile.
+        ::easygl::Buffer negativeBaseVertexIbo_;
+        bool negativeBaseVertexIboCreated_ = false;
+        std::vector<std::uint8_t> negativeBaseVertexScratch_;
+
+        void BindNegativeBaseVertexIndices(
+            const EasyGLIndexBufferRenderer& ib, int startIndex, int indexCount, int baseVertex);
+
+        void DrawIndexedWithBaseVertexFallback(
+            const EasyGLIndexBufferRenderer& ib,
+            ::easygl::PrimitiveType primitive,
+            int indexCount,
+            ::easygl::DataType indexType,
+            const void* indexOffset,
+            int startIndex,
+            int baseVertex,
+            bool instanced,
+            int instanceCount);
+
+        void DetectNativeWireframeApi();
+        void SetNativePolygonMode(bool wireframe);
+        void RequireSupportedFillModeEXT(PrimitiveType primitive) const;
 
         void EnsureColored3DProgram();
         void EnsureTextured3DProgram();
@@ -1389,25 +1646,23 @@ namespace CNA::Internal::Renderers::EasyGL
         void EnsurePbrProgram(bool dualUv);
         void EnsurePbrSkinnedProgram(bool dualUv);
         void EnsureDefaultWhiteTexture();
+        void EnsureDefaultBlackTexture();
+        void EnsureDefaultBlackCubeTexture();
         void EnsureDefaultFlatNormalTexture();
-        /// REMED-GFX-218: which stock program a draw gets. SelectProgram() and
-        /// RequireDeclarationFitsStockProgramEXT() both read this single cascade, so the program a
-        /// draw is bound to and the input shape it is checked against cannot drift apart.
+        /// REMED-GFX-218: which stock program a draw gets. SelectProgram(), declaration
+        /// conversion validation and semantic attribute binding all read this single cascade.
         enum class StockProgramShape
         {
             PbrSkinned, Pbr, SkinnedVertexLit, Skinned, EnvMapped,
             DualTexturedColored, DualTextured, Textured, ColoredTextured,
-            LitVertexLitUntextured, LitUntextured, LitVertexLit, Lit, Colored
+            LitVertexLit, Lit, Colored
         };
-        static StockProgramShape SelectStockProgramShape(std::size_t stride,
-                                                          const GpuDrawParams& params,
-                                                          const std::vector<VertexElement>& declaredElements);
-        Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params,
-                              const std::vector<VertexElement>& declaredElements);
-        /// REMED-GFX-DECL-GUARD: throws `System::NotSupportedException` when @p declaredElements
-        /// would bind an element to a stock attribute location that means something else. Runs
-        /// before any program is selected, bound or drawn, and never touches a custom
-        /// `ShaderEffect` draw -- those keep their own documented element-index convention.
+        static StockProgramShape SelectStockProgramShape(const GpuDrawParams& params);
+        Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params);
+        /// SOFTWARE-130: throws `System::NotSupportedException` when a consumed semantic in
+        /// @p declaredElements uses an unknown, non-convertible storage format. Every defined XNA
+        /// `VertexElementFormat` is accepted and converted by native vertex fetch. Runs before any
+        /// draw and never touches custom `ShaderEffect` input reflection.
         static void RequireDeclarationFitsStockProgramEXT(
             const std::vector<VertexElement>& declaredElements, std::size_t stride,
             const GpuDrawParams& params);
@@ -1450,6 +1705,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param multiSampleCount Requested MSAA sample count.
          * @param swapInterval Swap interval (0 immediate, 1 VSync, 2 half-rate).
          * @param profile Which GL profile to create the context and shaders for.
+         * @param depthStencilFormat Raw XNA DepthFormat ordinal selected for the backbuffer.
          */
 
         /**
@@ -1463,8 +1719,16 @@ namespace CNA::Internal::Renderers::EasyGL
             int virtualWidth = 0, int virtualHeight = 0,
             CnaPresentationMode mode = CnaPresentationMode::FixedHeightDynamicWidth,
             bool contextRecoveryEnabled = true, int multiSampleCount = 1,
-            int swapInterval = 1, GlProfile profile = kCompileTimeGlProfile);
+            int swapInterval = 1, GlProfile profile = kCompileTimeGlProfile,
+            int depthStencilFormat = 3);
         ~EasyGLRenderer() override;
+
+        /**
+         * @brief Reports that EasyGL forwards buffered draw ranges directly to GL.
+         * @return False so GraphicsDevice preserves XNA's native range-forwarding behavior.
+         */
+        [[nodiscard]] bool RequiresManagedBufferedDrawRangeValidationEXT() const noexcept override
+        { return false; }
 
         /**
          * @brief Serializes a complete operation while owning this renderer's GL context.
@@ -1543,6 +1807,11 @@ namespace CNA::Internal::Renderers::EasyGL
             std::size_t baseByteOffset = 0;
             /** @brief `InstanceFrequency`; 0 means the stream advances once per vertex. */
             unsigned int instanceFrequency = 0;
+            /**
+             * @brief Renderer-neutral binding metadata containing XNA/FNA's effective usage-index
+             *        remap, or null for an internal single-stream draw with no collisions.
+             */
+            const GpuVertexStreamBinding* binding = nullptr;
         };
 
         /**
@@ -1567,44 +1836,28 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param spriteBatchSlotZeroTexture When non-null, the texture that takes sampler slot 0
          *        regardless of what the effect assigned -- SpriteBatch's own rule (FNA sets
          *        `GraphicsDevice.Textures[0]` after the pass applies). Null for ordinary draws.
-         * @param spriteBatchTextures When non-null, the SpriteBatch effect's owning device texture
-         *        slots used for pixel samplers the pass itself did not assign.
+         * @param deviceTextures When non-null, the effect's owning device texture slots. These are
+         *        authoritative after pass application, including application overrides.
+         * @param deviceSamplerStates When non-null, the matching authoritative sampler states.
+         * @param deviceVertexTextures When non-null, the effect's four public vertex texture slots.
+         * @param deviceVertexSamplerStates The matching authoritative vertex sampler states.
          * @throws std::runtime_error if the applied pass bound no shader pair, or @p runtime was
          *         not created by this renderer.
          * @throws System::NotSupportedException if no stream supplies an input the vertex shader
-         *         consumes, the vertex shader itself samples a texture, or a reflected pixel-stage
-         *         sampler has no 2D texture bound.
+         *         consumes, or a reflected shader-stage sampler has an incompatible texture bound.
          */
-        /**
-         * @brief CNAEXT. Narrows the GL depth range for the duration of a compiled-effect draw.
-         *
-         * plans/plan_fx.md: MojoShader's generated GLSL ends every vertex shader with Direct3D 9's
-         * clip-space depth conversion, `gl_Position.z = gl_Position.z * 2.0 - gl_Position.w`,
-         * because OpenGL's clip volume is z in [-w, w] where Direct3D's is [0, w]. EasyGL's own
-         * stock shaders do NOT do that: they emit the XNA projection's Direct3D-style z unchanged,
-         * so all ordinary geometry lands in the upper half of the depth range.
-         *
-         * The two conventions therefore disagree, and geometry from a compiled effect is depth-
-         * tested against everything else on a different scale. Measured on
-         * ColorReplacementSample_4_0: the car body (a compiled effect) swallowed the headlight
-         * lens and thin window edges drawn by ordinary BasicEffect parts, which the XNA original
-         * renders in front of it.
-         *
-         * Setting the GL depth range to [(min+max)/2, max] while a compiled effect draws makes
-         * the two encodings produce identical window-space depth:
-         *   stock   d = min + (max-min)/2 + z*(max-min)/2
-         *   compiled d = min' + z*(max'-min'), with min' = (min+max)/2 and max' = max
-         *
-         * @param begin True to narrow the range, false to restore the viewport's own.
-         */
-        CNAEXT void SetCompiledEffectDepthRangeEXT(bool begin);
-
         CNAEXT void BindCompiledEffectForDrawEXT(
             const CompiledEffectStreamEXT* streams, std::size_t streamCount,
             ICompiledEffectRuntime& runtime,
             const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr,
             const Microsoft::Xna::Framework::Graphics::TextureCollection*
-                spriteBatchTextures = nullptr);
+                deviceTextures = nullptr,
+            const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
+                deviceSamplerStates = nullptr,
+            const Microsoft::Xna::Framework::Graphics::TextureCollection*
+                deviceVertexTextures = nullptr,
+            const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
+                deviceVertexSamplerStates = nullptr);
 
         /**
          * @brief CNAEXT. The one vertex array object every compiled-effect draw binds.
@@ -1679,10 +1932,10 @@ namespace CNA::Internal::Renderers::EasyGL
 #endif
         // AnisotropicFiltering/MultiSampleAntiAliasing re-query the same live GL state the
         // startup capability dump (EnsureGL()) already prints, since they're cheap, idempotent GL
-        // queries -- no need to cache them. WireFrame is implemented through measured triangle
-        // edge re-expansion because GLES3 has no polygon-mode wireframe. Everything else
-        // CNA::GraphicsCapability currently enumerates is genuinely supported here, so falls
-        // through to the shared default (true).
+        // queries -- no need to cache them. WireFrame is true only when the active context exposes
+        // a native polygon-mode API; otherwise triangle draws are refused instead of approximated.
+        // Everything else CNA::GraphicsCapability currently enumerates is genuinely supported
+        // here, so falls through to the shared default (true).
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
@@ -1703,6 +1956,26 @@ namespace CNA::Internal::Renderers::EasyGL
          * @return The interval last passed to SetSwapInterval, or the renderer's default if none.
          */
         CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
+
+        /**
+         * @brief Applies the selected semantic depth/stencil format to the GL backbuffer path.
+         * @param backBufferFormat Ignored because EasyGL's backbuffer is fixed RGBA8.
+         * @param depthStencilFormat Raw XNA DepthFormat ordinal.
+         * @param isFullScreen Ignored because fullscreen is owned by the platform window.
+         */
+        void UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
+                                         bool isFullScreen) override;
+
+        /**
+         * @brief Reports the fixed RGBA8 Color format requested for the GL default framebuffer.
+         * @param requestedFormat Requested SurfaceFormat ordinal.
+         * @return SurfaceFormat::Color's ordinal.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override
+        {
+            (void)requestedFormat;
+            return 0;
+        }
 
         /**
          * @brief Whether SetData hands this renderer raw block-compressed data for a format.
@@ -1736,17 +2009,15 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         /**
-         * @brief Reallocates the default-framebuffer MSAA attachments with a supported sample count.
-         * @param requestedMultiSampleCount Preferred number of samples; zero or one disables MSAA.
-         * @return The sample count actually applied, or zero when multisampling is disabled.
+         * @brief Reconfigures the renderer-owned backbuffer multisample attachments.
+         * @param requestedMultiSampleCount Requested sample count; values below two disable MSAA.
+         * @return The driver-clamped count actually allocated, or zero when disabled.
          */
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
-        /** @brief Returns the sample count actually used by the default render surface. */
-        [[nodiscard]] int GetMultiSampleCount() const override { return sampleCount_ > 1 ? sampleCount_ : 0; }
         /**
-         * @brief Reports the sample count currently applied to the default render surface.
-         * @param requestedMultiSampleCount The caller's requested count.
-         * @return The current clamped sample count.
+         * @brief Maps any request to the count currently backed by renderer storage.
+         * @param requestedMultiSampleCount Ignored raw request.
+         * @return The current applied sample count.
          */
         [[nodiscard]] int GetAppliedMultiSampleCountEXT(
             int requestedMultiSampleCount) const override
@@ -1754,6 +2025,8 @@ namespace CNA::Internal::Renderers::EasyGL
             (void) requestedMultiSampleCount;
             return GetMultiSampleCount();
         }
+        /** @brief Returns the actual backbuffer sample count, or zero for single-sample storage. */
+        [[nodiscard]] int GetMultiSampleCount() const override { return sampleCount_ > 1 ? sampleCount_ : 0; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
@@ -1772,8 +2045,22 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
          * @return `Supported` for Color and ES 3-class `NormalizedByte4`, `Unsupported` for
          *         `NormalizedByte4` on ES 2-class profiles, or `Defer` for other formats.
-         */
+        */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports formats whose EasyGL cube allocation and face transfer path is complete.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+         * @return Supported for Color and DXT1/3/5, Unsupported for known unfinished cube formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+        /**
+         * @brief Reports formats whose EasyGL volume allocation and transfer path is complete.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+         * @return The active GL profile's volume-specific support verdict.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
+            int surfaceFormat) const override;
         /**
          * @brief Reports whether Color transfers preserve the requested texture's texel meaning.
          *
@@ -1908,6 +2195,7 @@ namespace CNA::Internal::Renderers::EasyGL
                                     int ccwStencilFail, int ccwStencilDepthFail) override;
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias, float slopeScaleDepthBias) override;
+        void ApplyRasterizerMultiSampleState(bool enabled) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                int maxAnisotropy) override;
         /**
@@ -1961,11 +2249,6 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param value The new reference value.
          */
         void SetReferenceStencil(int value) override;
-        void UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
-                                         bool isFullScreen) override;
-
-        /** @brief Depth precision of whatever depth buffer is bound right now, in bits. */
-        [[nodiscard]] int CurrentDepthBufferBits() const;
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 

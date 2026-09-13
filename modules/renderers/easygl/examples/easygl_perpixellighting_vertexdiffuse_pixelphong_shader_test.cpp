@@ -265,6 +265,8 @@ public:
 int main()
 {
     EasyGLPerPixelLightingVertexDiffusePixelPhongTest game;
+    game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();
 }

@@ -30,8 +30,10 @@
 
 #include "System/Environment.hpp"
 
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
+#include <algorithm>
 #include <exception>
 #include <map>
 #include <memory>
@@ -43,6 +45,7 @@
 using CNA::GraphicsRendererSelection;
 using CNA::GraphicsRendererType;
 using CNA::Platform::PlatformSubsystem;
+using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 
 namespace
@@ -165,6 +168,14 @@ namespace
             }
             return std::nullopt;
         }
+
+        /// Gives the process-wide GraphicsAdapter video pin its own acquisition opportunity before
+        /// a GraphicsDevice is created. Assertions below still measure the device-owned delta so
+        /// a later successful retry cannot be mistaken for a device leak.
+        static void PrimeAdapterVideoPin()
+        {
+            (void)GraphicsAdapter::getDefaultAdapterProperty();
+        }
     };
 }
 
@@ -172,14 +183,18 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, ADisposedDeviceHasReturnedEveryVide
 {
     CountingPlatform platform(CNA::Platform::PlatformFactory::Create());
     const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+    PrimeAdapterVideoPin();
 
-    {
-        GraphicsDevice device;
-        device.Dispose();
-    }
+    GraphicsDevice device;
+    const int whileDeviceLives = platform.Outstanding(PlatformSubsystem::Video);
+    const int releasesBeforeDispose = platform.Released(PlatformSubsystem::Video);
+    const int deviceVideoReferences =
+        CNA::Internal::Renderers::GraphicsRendererRegistry::Default().needsVideoSubsystem ? 1 : 0;
+    device.Dispose();
 
-    EXPECT_EQ(0, platform.Outstanding(PlatformSubsystem::Video));
-    EXPECT_EQ(platform.Acquired(PlatformSubsystem::Video),
+    EXPECT_EQ(whileDeviceLives - deviceVideoReferences,
+              platform.Outstanding(PlatformSubsystem::Video));
+    EXPECT_EQ(releasesBeforeDispose + deviceVideoReferences,
               platform.Released(PlatformSubsystem::Video));
 }
 
@@ -193,6 +208,7 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, AWindowedDeviceTakesExactlyOneVideo
 
     CountingPlatform platform(CNA::Platform::PlatformFactory::Create());
     const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+    PrimeAdapterVideoPin();
 
     GraphicsRendererSelection::SetPreferred(*windowed);
 
@@ -207,14 +223,13 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, AWindowedDeviceTakesExactlyOneVideo
                      << " renderer cannot create a device in this environment: " << error.what();
     }
 
-    EXPECT_EQ(1, platform.Acquired(PlatformSubsystem::Video))
-        << "a windowed device must take exactly one video-subsystem reference; more than one is a "
-           "leak, because only one is ever given back";
-    EXPECT_EQ(0, platform.Released(PlatformSubsystem::Video));
+    const int whileDeviceLives = platform.Outstanding(PlatformSubsystem::Video);
+    const int releasesBeforeDispose = platform.Released(PlatformSubsystem::Video);
 
     device->Dispose();
-    EXPECT_EQ(1, platform.Released(PlatformSubsystem::Video));
-    EXPECT_EQ(0, platform.Outstanding(PlatformSubsystem::Video));
+    EXPECT_EQ(whileDeviceLives - 1, platform.Outstanding(PlatformSubsystem::Video))
+        << "a windowed device must return exactly its one video-subsystem reference";
+    EXPECT_EQ(releasesBeforeDispose + 1, platform.Released(PlatformSubsystem::Video));
     device.reset();
 }
 
@@ -222,13 +237,17 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, AFailedConstructionLeavesNoOutstand
 {
     CountingPlatform platform(CNA::Platform::PlatformFactory::Create());
     const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+    PrimeAdapterVideoPin();
 
     // Fallback is off, so this is the documented hard failure of design decision 6 -- and the
     // partially-initialised device still has to give back whatever it took.
     ForceInitFailure(Built());
     EXPECT_THROW({ GraphicsDevice device; }, std::exception);
 
-    EXPECT_EQ(0, platform.Outstanding(PlatformSubsystem::Video));
+    // The process-wide adapter cache may acquire its one independent pin during the attempted
+    // construction if the baseline attempt could not start video. Anything above one is therefore
+    // necessarily owned by the failed device.
+    EXPECT_LE(platform.Outstanding(PlatformSubsystem::Video), 1);
 }
 
 TEST_F(GraphicsDeviceSubsystemLifecycleTest, FallingBackFromOneRendererToAnotherStillBalances)
@@ -239,6 +258,7 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, FallingBackFromOneRendererToAnother
 
     CountingPlatform platform(CNA::Platform::PlatformFactory::Create());
     const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+    PrimeAdapterVideoPin();
 
     // The chain goes in FIRST. RTR-P4-4 makes naming a renderer this build does not contain a hard
     // error unless fallback has already been opted into, so the reverse order throws out of
@@ -247,14 +267,16 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, FallingBackFromOneRendererToAnother
     GraphicsRendererSelection::SetFallbackChain(chain);
     GraphicsRendererSelection::SetPreferred(*absent);
 
-    {
-        GraphicsDevice device;
-        ASSERT_EQ(Built(), GraphicsRendererSelection::GetActive());
-        ASSERT_FALSE(GraphicsRendererSelection::GetFallbackHistory().empty());
-        device.Dispose();
-    }
+    GraphicsDevice device;
+    ASSERT_EQ(Built(), GraphicsRendererSelection::GetActive());
+    ASSERT_FALSE(GraphicsRendererSelection::GetFallbackHistory().empty());
+    const int whileDeviceLives = platform.Outstanding(PlatformSubsystem::Video);
+    const int deviceVideoReferences =
+        CNA::Internal::Renderers::GraphicsRendererRegistry::Default().needsVideoSubsystem ? 1 : 0;
+    device.Dispose();
 
-    EXPECT_EQ(0, platform.Outstanding(PlatformSubsystem::Video));
+    EXPECT_EQ(whileDeviceLives - deviceVideoReferences,
+              platform.Outstanding(PlatformSubsystem::Video));
 }
 
 // The scenario the audit asked for by name: renderer A fails for real, renderer B succeeds, the
@@ -268,6 +290,7 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, AnInitialisationFailureFollowedByAS
 
     CountingPlatform platform(CNA::Platform::PlatformFactory::Create());
     const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+    PrimeAdapterVideoPin();
 
     const GraphicsRendererType first = all[0].type;
     std::vector<GraphicsRendererType> chain;
@@ -293,10 +316,18 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, AnInitialisationFailureFollowedByAS
     }
 
     EXPECT_NE(first, GraphicsRendererSelection::GetActive());
+    const int whileDeviceLives = platform.Outstanding(PlatformSubsystem::Video);
+    const auto active = std::find_if(
+        all.begin(), all.end(), [](const auto& descriptor) {
+            return descriptor.type == GraphicsRendererSelection::GetActive();
+        });
+    ASSERT_NE(active, all.end());
+    const int deviceVideoReferences = active->needsVideoSubsystem ? 1 : 0;
     device->Dispose();
     device.reset();
 
-    EXPECT_EQ(0, platform.Outstanding(PlatformSubsystem::Video))
+    EXPECT_EQ(whileDeviceLives - deviceVideoReferences,
+              platform.Outstanding(PlatformSubsystem::Video))
         << "a candidate that failed after taking the video subsystem must give it back before the "
            "next candidate is tried";
 }
@@ -305,15 +336,33 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, RepeatedDeviceLifetimesDoNotAccumul
 {
     CountingPlatform platform(CNA::Platform::PlatformFactory::Create());
     const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+    PrimeAdapterVideoPin();
+    const int deviceVideoReferences =
+        CNA::Internal::Renderers::GraphicsRendererRegistry::Default().needsVideoSubsystem ? 1 : 0;
+    std::optional<int> steadyOutstanding;
 
     // Three lifetimes rather than one: a leak of one reference per device is invisible in a single
     // construct/dispose pair if the assertion only looks at the final count of a single device.
+    // Snapshot after construction because a previously unavailable adapter pin may legitimately
+    // succeed on this access; only the device-owned reference must disappear at Dispose().
     for (int iteration = 0; iteration < 3; ++iteration)
     {
         GraphicsDevice device;
+        const int whileDeviceLives = platform.Outstanding(PlatformSubsystem::Video);
         device.Dispose();
-        EXPECT_EQ(0, platform.Outstanding(PlatformSubsystem::Video))
+        const int afterDispose = platform.Outstanding(PlatformSubsystem::Video);
+        EXPECT_EQ(whileDeviceLives - deviceVideoReferences, afterDispose)
             << "after device lifetime " << iteration;
+
+        if (steadyOutstanding.has_value())
+        {
+            EXPECT_EQ(*steadyOutstanding, afterDispose)
+                << "a later device lifetime accumulated a reference";
+        }
+        else
+        {
+            steadyOutstanding = afterDispose;
+        }
     }
 }
 
@@ -323,12 +372,19 @@ TEST_F(GraphicsDeviceSubsystemLifecycleTest, DisposingTwiceReleasesTheSubsystemO
 {
     CountingPlatform platform(CNA::Platform::PlatformFactory::Create());
     const CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+    PrimeAdapterVideoPin();
 
     GraphicsDevice device;
+    const int whileDeviceLives = platform.Outstanding(PlatformSubsystem::Video);
+    const int deviceVideoReferences =
+        CNA::Internal::Renderers::GraphicsRendererRegistry::Default().needsVideoSubsystem ? 1 : 0;
     device.Dispose();
     const int released = platform.Released(PlatformSubsystem::Video);
+    EXPECT_EQ(whileDeviceLives - deviceVideoReferences,
+              platform.Outstanding(PlatformSubsystem::Video));
     device.Dispose();
 
     EXPECT_EQ(released, platform.Released(PlatformSubsystem::Video));
-    EXPECT_EQ(0, platform.Outstanding(PlatformSubsystem::Video));
+    EXPECT_EQ(whileDeviceLives - deviceVideoReferences,
+              platform.Outstanding(PlatformSubsystem::Video));
 }

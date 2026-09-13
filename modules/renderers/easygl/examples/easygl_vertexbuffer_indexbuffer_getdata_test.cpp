@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <array>
@@ -74,9 +75,9 @@ protected:
                   "VertexPositionColor: GetData(count) round-trips SetData");
 
             VertexPositionColor dstSlice[2]{};
-            vb.GetData(dstSlice, 1, 2);
+            vb.GetData(16, dstSlice, 0, 2, 16);
             check(dstSlice[0] == src[1] && dstSlice[1] == src[2],
-                  "VertexPositionColor: GetData(startIndex, count) round-trips slice");
+                  "VertexPositionColor: GetData(offset, startIndex, count, stride) round-trips window");
         }
 
         // --- VertexPositionColorTexture ---
@@ -96,9 +97,9 @@ protected:
                   "VertexPositionColorTexture: GetData(count) round-trips SetData");
 
             VertexPositionColorTexture dstSlice[2] = {zero, zero};
-            vb.GetData(dstSlice, 1, 2);
+            vb.GetData(24, dstSlice, 0, 2, 24);
             check(dstSlice[0] == src[1] && dstSlice[1] == src[2],
-                  "VertexPositionColorTexture: GetData(startIndex, count) round-trips slice");
+                  "VertexPositionColorTexture: GetData(offset, startIndex, count, stride) round-trips window");
         }
 
         // --- VertexPositionNormalTexture ---
@@ -117,9 +118,9 @@ protected:
                   "VertexPositionNormalTexture: GetData(count) round-trips SetData");
 
             VertexPositionNormalTexture dstSlice[2]{};
-            vb.GetData(dstSlice, 1, 2);
+            vb.GetData(32, dstSlice, 0, 2, 32);
             check(dstSlice[0] == src[1] && dstSlice[1] == src[2],
-                  "VertexPositionNormalTexture: GetData(startIndex, count) round-trips slice");
+                  "VertexPositionNormalTexture: GetData(offset, startIndex, count, stride) round-trips window");
         }
 
         // --- VertexPositionTexture ---
@@ -138,9 +139,9 @@ protected:
                   "VertexPositionTexture: GetData(count) round-trips SetData");
 
             VertexPositionTexture dstSlice[2]{};
-            vb.GetData(dstSlice, 1, 2);
+            vb.GetData(20, dstSlice, 0, 2, 20);
             check(dstSlice[0] == src[1] && dstSlice[1] == src[2],
-                  "VertexPositionTexture: GetData(startIndex, count) round-trips slice");
+                  "VertexPositionTexture: GetData(offset, startIndex, count, stride) round-trips window");
         }
 
         // --- VertexPositionNormalTextureSkinned (CNAEXT) ---
@@ -184,8 +185,8 @@ protected:
             VertexBuffer vb(dev, VertexPositionColor::getVertexDeclarationStatic(), 3, BufferUsage::None);
             vb.SetData(src, 3);
             VertexPositionColor dstOver[5]{};
-            check(throwsType<System::ArgumentOutOfRangeException>([&]{ vb.GetData(dstOver, 0, 5); }),
-                  "VertexBuffer: out-of-range GetData throws ArgumentOutOfRangeException");
+            check(throwsType<System::InvalidOperationException>([&]{ vb.GetData(dstOver, 0, 5); }),
+                  "VertexBuffer: oversized GetData throws InvalidOperationException");
         }
 
         // --- IndexBuffer: 16-bit ---
@@ -200,9 +201,9 @@ protected:
                   "IndexBuffer u16: GetData(count) round-trips SetData");
 
             std::uint16_t dstSlice[2]{};
-            ib.GetData(dstSlice, 1, 2);
+            ib.GetData(static_cast<int>(sizeof(std::uint16_t)), dstSlice, 0, 2);
             check(dstSlice[0] == 10 && dstSlice[1] == 15,
-                  "IndexBuffer u16: GetData(startIndex, count) round-trips slice");
+                  "IndexBuffer u16: GetData(offset, startIndex, count) round-trips slice");
 
             IndexBuffer ibWriteOnly(dev, IndexElementSize::SixteenBits, 4, BufferUsage::WriteOnly);
             ibWriteOnly.SetData(src, 4);
@@ -211,8 +212,8 @@ protected:
                   "IndexBuffer u16: GetData on WriteOnly buffer throws NotSupportedException");
 
             std::uint16_t dstOver[6]{};
-            check(throwsType<System::ArgumentOutOfRangeException>([&]{ ib.GetData(dstOver, 0, 6); }),
-                  "IndexBuffer u16: out-of-range GetData throws ArgumentOutOfRangeException");
+            check(throwsType<System::InvalidOperationException>([&]{ ib.GetData(dstOver, 0, 6); }),
+                  "IndexBuffer u16: oversized GetData throws InvalidOperationException");
         }
 
         // --- IndexBuffer: 32-bit ---
@@ -227,9 +228,9 @@ protected:
                   "IndexBuffer u32: GetData(count) round-trips SetData");
 
             std::uint32_t dstSlice[2]{};
-            ib.GetData(dstSlice, 1, 2);
+            ib.GetData(static_cast<int>(sizeof(std::uint32_t)), dstSlice, 0, 2);
             check(dstSlice[0] == 1000 && dstSlice[1] == 1500,
-                  "IndexBuffer u32: GetData(startIndex, count) round-trips slice");
+                  "IndexBuffer u32: GetData(offset, startIndex, count) round-trips slice");
 
             IndexBuffer ibWriteOnly(dev, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::WriteOnly);
             ibWriteOnly.SetData(src, 4);
@@ -238,8 +239,8 @@ protected:
                   "IndexBuffer u32: GetData on WriteOnly buffer throws NotSupportedException");
 
             std::uint32_t dstOver[6]{};
-            check(throwsType<System::ArgumentOutOfRangeException>([&]{ ib.GetData(dstOver, 0, 6); }),
-                  "IndexBuffer u32: out-of-range GetData throws ArgumentOutOfRangeException");
+            check(throwsType<System::InvalidOperationException>([&]{ ib.GetData(dstOver, 0, 6); }),
+                  "IndexBuffer u32: oversized GetData throws InvalidOperationException");
         }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
@@ -252,6 +253,7 @@ public:
     VertexIndexGetDataTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
     }
 
     int getResult() const { return fail_ > 0 ? 1 : 0; }

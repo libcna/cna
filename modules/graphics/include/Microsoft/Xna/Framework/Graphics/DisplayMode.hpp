@@ -4,6 +4,7 @@
 #include <string>
 
 #include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/Object.hpp"
@@ -15,7 +16,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     public:
         /** @brief Constructs a default DisplayMode with zero dimensions and Color format. */
-        DisplayMode();
+        CNAEXT DisplayMode();
 
         /**
          * @brief Constructs a DisplayMode with the given dimensions and pixel format.
@@ -23,7 +24,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param height Display height in pixels.
          * @param format The surface format of the display mode.
          */
-        DisplayMode(SharpRuntime::intcs width, SharpRuntime::intcs height, SurfaceFormat format);
+        CNAEXT DisplayMode(SharpRuntime::intcs width, SharpRuntime::intcs height, SurfaceFormat format);
 
         /** @brief Returns the display width in pixels. */
         [[nodiscard]] SharpRuntime::intcs getWidthProperty() const;
@@ -38,18 +39,30 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] SurfaceFormat getFormatProperty() const;
 
         /**
+         * @brief Returns the subset of this display mode guaranteed to be visible.
+         * @return A rectangle covering the full display mode.
+         */
+        [[nodiscard]] Microsoft::Xna::Framework::Rectangle getTitleSafeAreaProperty() const;
+
+        /**
+         * @brief Retrieves a string representation of this display mode.
+         * @return Width, height, format, and aspect ratio in XNA field order.
+         */
+        [[nodiscard]] std::string ToString() const;
+
+        /**
          * @brief Returns true if both display modes have the same width, height, and format.
          * @param other The display mode to compare with.
          * @return True if equal.
          */
-        [[nodiscard]] bool operator==(const DisplayMode& other) const;
+        CNAEXT [[nodiscard]] bool operator==(const DisplayMode& other) const;
 
         /**
          * @brief Returns true if the display modes differ.
          * @param other The display mode to compare with.
          * @return True if not equal.
          */
-        [[nodiscard]] bool operator!=(const DisplayMode& other) const;
+        CNAEXT [[nodiscard]] bool operator!=(const DisplayMode& other) const;
 
         /** @brief Returns the fully qualified .NET type name of this class. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;

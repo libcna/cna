@@ -200,16 +200,16 @@ protected:
         sb.Draw(sourceRt, Rectangle(0, 0, kSize, kSize), Color::White);
         sb.End();
 
-        // Read back while destRt is still the bound FBO.
+        // XNA rejects transfers from an active render target. Unbind to resolve it, then read
+        // the texture itself rather than treating GetBackBufferData as an FBO read helper.
+        device.SetRenderTarget(nullptr);
         const Rectangle onLineReg(16, kSize / 2, 1, 1);
         const Rectangle adjacentReg(17, kSize / 2, 1, 1);
         const Rectangle farReg(40, kSize / 2, 1, 1);
         Color onLinePx(0, 0, 0, 0), adjacentPx(0, 0, 0, 0), farPx(0, 0, 0, 0);
-        device.GetBackBufferData(&onLineReg,   &onLinePx,   0, 1);
-        device.GetBackBufferData(&adjacentReg, &adjacentPx, 0, 1);
-        device.GetBackBufferData(&farReg,      &farPx,      0, 1);
-
-        device.SetRenderTarget(nullptr);
+        destRt.GetData(0, &onLineReg,   &onLinePx,   0, 1);
+        destRt.GetData(0, &adjacentReg, &adjacentPx, 0, 1);
+        destRt.GetData(0, &farReg,      &farPx,      0, 1);
 
         const bool onLineOk   = onLinePx.getRProperty() > 20 && onLinePx.getRProperty() < 250;
         const bool adjacentOk = adjacentPx.getRProperty() > 0;
@@ -234,6 +234,7 @@ public:
     EasyGLBloomGaussianBlurTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

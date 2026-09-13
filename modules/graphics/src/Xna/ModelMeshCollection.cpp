@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-#include <stdexcept>
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/Collections/Generic/KeyNotFoundException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -20,7 +21,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ModelMesh* value = nullptr;
         if (TryGetValue(name, value))
             return value;
-        throw std::out_of_range("ModelMeshCollection: mesh not found: " + name);
+        throw System::Collections::Generic::KeyNotFoundException();
     }
 
     int ModelMeshCollection::getCountProperty() const
@@ -30,6 +31,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool ModelMeshCollection::TryGetValue(const std::string& meshName, ModelMesh*& value) const
     {
+        if (meshName.empty())
+            throw System::ArgumentNullException("meshName");
+
         for (ModelMesh* mesh : meshes_)
         {
             if (mesh && mesh->getNameProperty() == meshName)

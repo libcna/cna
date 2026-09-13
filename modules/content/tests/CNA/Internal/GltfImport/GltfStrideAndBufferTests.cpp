@@ -30,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
@@ -46,6 +47,7 @@ using CNA::Internal::Graphics::InferredVertexLayout;
 using CNA::Internal::Graphics::UnlistedStrideLayout;
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::Model;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
@@ -635,6 +637,7 @@ TEST(GltfStrideAndBuffer, TheIndexBufferElementSizeFollowsTheVertexCountOnBothSi
         SCOPED_TRACE(std::to_string(c.vertexCount) + " vertices");
         const ScratchDir dir;
         GraphicsDevice gd;
+        gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
         ContentManager cm(nullptr, dir.path().string());
         cm.setGraphicsDevice(gd);
         std::ofstream(dir.path() / "big.gltf", std::ios::binary)

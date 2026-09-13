@@ -33,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
@@ -45,6 +46,7 @@
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
@@ -168,6 +170,7 @@ TEST(NpotTexture, ASubRectangleOfAnOddTextureReadsTheRightTexels)
 TEST(NpotTexture, MipLevelCountsFollowXnasFlooringRule)
 {
     GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     const struct { int width; int height; } kSizes[] = {
         {13, 7}, {17, 11}, {1, 5}, {64, 3}, {3, 3}, {1, 1},
     };
@@ -186,6 +189,7 @@ TEST(NpotTexture, MipLevelCountsFollowXnasFlooringRule)
 TEST(NpotTexture, AMipMappedOddTextureRoundTripsItsBaseLevel)
 {
     GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     constexpr int kWidth = 13;
     constexpr int kHeight = 7;
     Texture2D texture(device, kWidth, kHeight, true, SurfaceFormat::Color);
@@ -244,6 +248,8 @@ namespace
 
 TEST(NpotTexture, AnOddWidthRenderTargetReadsBackThroughTheRenderer)
 {
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
+        GTEST_SKIP() << "HEADLESS has no render-target pixel storage to read back";
     GraphicsDevice device;
     // 13 * 4 = 52 bytes: on WebGPU the staging row is padded to 256 and 204 bytes must be stripped.
     ExpectTargetReadback(device, 13, 7, "an odd width whose staging row needs padding");
@@ -251,6 +257,8 @@ TEST(NpotTexture, AnOddWidthRenderTargetReadsBackThroughTheRenderer)
 
 TEST(NpotTexture, AnAlreadyAlignedRenderTargetReadsBackThroughTheRenderer)
 {
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
+        GTEST_SKIP() << "HEADLESS has no render-target pixel storage to read back";
     GraphicsDevice device;
     // 64 * 4 = 256 bytes exactly: no padding at all, so this passes even for a renderer that never
     // strips it. It is the control that gives the previous test its meaning.
@@ -259,6 +267,8 @@ TEST(NpotTexture, AnAlreadyAlignedRenderTargetReadsBackThroughTheRenderer)
 
 TEST(NpotTexture, ASingleTexelWideRenderTargetReadsBackThroughTheRenderer)
 {
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
+        GTEST_SKIP() << "HEADLESS has no render-target pixel storage to read back";
     GraphicsDevice device;
     // The extreme: a 4-byte row against a 256-byte alignment, 98% padding.
     ExpectTargetReadback(device, 1, 5, "a single-texel-wide render target");

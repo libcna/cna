@@ -10059,7 +10059,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool mipMap, int surfaceFormat)
         : owner_(&owner), state_(std::make_shared<SdlGpuSampledTextureState>())
         , width_(width), height_(height), depth_(depth)
-        , levelCount_(mipMap ? CalculateMipLevels(width, height) : 1)
+        , levelCount_(mipMap ? CalculateMipLevels(std::max(width, depth), height) : 1)
         , surfaceFormat_(surfaceFormat)
     {
         state_->owner = &owner;
@@ -10081,9 +10081,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         createInfo.width = static_cast<Uint32>(width);
         createInfo.height = static_cast<Uint32>(height);
         createInfo.layer_count_or_depth = static_cast<Uint32>(depth);
-        // Mirrors FNA's Texture3D constructor: LevelCount = mipMap ? CalculateMipLevels(width, height)
-        // : 1 -- depth does not participate in the mip-level count.
-        createInfo.num_levels = mipMap ? static_cast<Uint32>(CalculateMipLevels(width, height)) : 1;
+        // XNA asks D3D9 for the complete volume chain; pass SDL the same depth-aware count so the
+        // public LevelCount and native allocation cannot disagree.
+        createInfo.num_levels = mipMap
+            ? static_cast<Uint32>(CalculateMipLevels(std::max(width, depth), height)) : 1;
         createInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
         state_->texture = SDL_CreateGPUTexture(owner_->Device(), &createInfo);
@@ -11760,7 +11761,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             }
             for (int pass = 0; pass < passCount; ++pass)
             {
-                technique->getPassesProperty()[pass].Apply();
+                technique->getPassesProperty()[pass]->Apply();
                 for (std::size_t i = runStart; i < runEnd; ++i)
                 {
                     const PendingSpriteEXT& sprite = pendingSprites_[i];
@@ -11858,7 +11859,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             // and applying the passes around it here is the same order XNA produces.
             for (int pass = 0; pass < passCount; ++pass)
             {
-                technique->getPassesProperty()[pass].Apply();
+                technique->getPassesProperty()[pass]->Apply();
                 owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle,
                                     color, rotation, origin, effects, layerDepth, transform_,
                                     textureFilter_, addressU_, addressV_, addressW_, maxAnisotropy_,

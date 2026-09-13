@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <type_traits>
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "System/ArgumentNullException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
+using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 
 // --- Default constructor ---
 
@@ -28,11 +33,21 @@ TEST(RenderTargetBindingTest, DefaultCubeMapFacePositiveX)
     EXPECT_EQ(rb.getCubeMapFaceProperty(), CubeMapFace::PositiveX);
 }
 
+TEST(RenderTargetBindingTest, RenderTarget2DPointerConvertsImplicitly)
+{
+    EXPECT_TRUE((std::is_convertible_v<RenderTarget2D*, RenderTargetBinding>));
+
+    auto* target = reinterpret_cast<RenderTarget2D*>(0x1234);
+    const RenderTargetBinding binding = target;
+    EXPECT_EQ(binding.getRenderTargetProperty(), target);
+}
+
 // --- Texture* constructor ---
 
 TEST(RenderTargetBindingTest, CtorTextureNullThrowsArgumentNullException)
 {
-    EXPECT_THROW(RenderTargetBinding(nullptr), System::ArgumentNullException);
+    EXPECT_THROW(RenderTargetBinding(static_cast<RenderTarget2D*>(nullptr)),
+                 System::ArgumentNullException);
 }
 
 TEST(RenderTargetBindingTest, CtorTextureStoresPointer)
@@ -62,7 +77,7 @@ TEST(RenderTargetBindingTest, CtorTextureExplicitArraySlice)
 TEST(RenderTargetBindingTest, CtorCubeMapFaceNullThrowsArgumentNullException)
 {
     EXPECT_THROW(
-        RenderTargetBinding(nullptr, CubeMapFace::NegativeZ),
+        RenderTargetBinding(static_cast<RenderTargetCube*>(nullptr), CubeMapFace::NegativeZ),
         System::ArgumentNullException);
 }
 

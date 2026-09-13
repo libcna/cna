@@ -4,21 +4,15 @@
 // Every `SurfaceFormat` against every resource kind -- `Texture2D`, `TextureCube`, `Texture3D`,
 // `RenderTarget2D`, `RenderTargetCube` -- with one rule and no per-renderer expectation table:
 //
-//   a resource either CONSTRUCTS, and then reports the format it was asked for,
-//   or it REFUSES BY NAME, throwing System::NotSupportedException or std::runtime_error.
+//   a texture either constructs with the requested format or refuses by name; a render target
+//   preserves an exactly supported preferred format and otherwise applies XNA's Color fallback.
 //
 // There is deliberately no list of which formats a renderer must accept. A list would have to be
 // rewritten every time a renderer gains one -- `WEBGPU-198`..`202` added eight render-target
 // formats to WebGPU alone since this row was written, and `WEBGPU-206` added the compressed cube --
 // and a test that needs editing to stay true is not locking anything down. What is invariant, and
-// what this test asserts, is the SHAPE of the answer: never a silent substitution, never an
-// unnamed exception, never a resource that says it is one format while holding another.
-//
-// The silent-substitution half is the one with teeth, and it is not hypothetical: `WEBGPU-163` was
-// exactly a format query promising something the resource did not hold, and XNA's own
-// `RenderTarget2D` substitutes `Color` for an unsupported format rather than throwing (recorded in
-// `plans/plan_graphics.md`; CNA deliberately diverges and refuses instead). A renderer drifting
-// back toward substitution is what this catches.
+// what this test asserts, is the SHAPE of the answer: never an unnamed exception, never an
+// unreported substitution, and never a resource that disagrees with the exact-format query.
 //
 // The test also PRINTS the surface it found, so the diff `WEBGPU-184` produces when it adds a
 // format is visible in the log rather than only in a pass/fail bit.
@@ -29,6 +23,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
@@ -47,6 +42,7 @@
 
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
@@ -132,17 +128,28 @@ namespace
         return outcome;
     }
 
-    void ExpectAcceptOrNamedRefusal(const Outcome& outcome, const char* kind, const char* formatName,
-                                    SurfaceFormat requested)
+    void ExpectAcceptOrNamedRefusal(
+        const Outcome& outcome, const char* kind, const char* formatName, SurfaceFormat requested,
+        const std::optional<bool> exactRenderTargetSupport)
     {
         if (outcome.constructed)
         {
             ASSERT_TRUE(outcome.reported.has_value());
-            EXPECT_EQ(static_cast<int>(*outcome.reported), static_cast<int>(requested))
+            const SurfaceFormat expected =
+                exactRenderTargetSupport.has_value() && !*exactRenderTargetSupport
+                ? SurfaceFormat::Color
+                : requested;
+            EXPECT_EQ(static_cast<int>(*outcome.reported), static_cast<int>(expected))
                 << kind << " accepted " << formatName << " but reports format ordinal "
                 << static_cast<int>(*outcome.reported)
-                << " -- a resource must hold the format it was asked for, or refuse. A silent "
-                   "substitution is the defect WEBGPU-163 was";
+                << " instead of the exact requested format or its reported XNA Color fallback";
+            return;
+        }
+        if (exactRenderTargetSupport.has_value() && !*exactRenderTargetSupport)
+        {
+            ADD_FAILURE() << kind << " refused the preferred " << formatName
+                          << " format instead of selecting Color: "
+                          << outcome.message;
             return;
         }
         EXPECT_NE(outcome.refusalKind, nullptr)
@@ -154,16 +161,19 @@ namespace
 }
 
 // One test per resource kind, so a failure names the kind without needing the message parsed.
-#define CNA_FORMAT_SURFACE_TEST(TestName, KindLabel, Construct)                                    \
+#define CNA_FORMAT_SURFACE_TEST(TestName, KindLabel, ExactRenderTargetQuery, Construct)            \
     TEST(SurfaceFormatRefusalSurface, TestName)                                                    \
     {                                                                                              \
         GraphicsDevice device;                                                                     \
+        device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);                                      \
         std::string accepted;                                                                      \
         for (const NamedFormat& entry : kAllFormats)                                               \
         {                                                                                          \
             const SurfaceFormat format = entry.format;                                             \
+            const std::optional<bool> exactRenderTargetSupport = ExactRenderTargetQuery;           \
             const Outcome outcome = Attempt([&]() -> SurfaceFormat Construct);                     \
-            ExpectAcceptOrNamedRefusal(outcome, KindLabel, entry.name, format);                    \
+            ExpectAcceptOrNamedRefusal(                                                            \
+                outcome, KindLabel, entry.name, format, exactRenderTargetSupport);                 \
             if (outcome.constructed) accepted += std::string(accepted.empty() ? "" : ", ")          \
                                               + entry.name;                                        \
         }                                                                                          \
@@ -171,24 +181,28 @@ namespace
                     accepted.empty() ? "(nothing)" : accepted.c_str());                            \
     }
 
-CNA_FORMAT_SURFACE_TEST(Texture2DAcceptsOrRefusesByName, "Texture2D",
+CNA_FORMAT_SURFACE_TEST(Texture2DAcceptsOrRefusesByName, "Texture2D", std::nullopt,
                         { Texture2D resource(device, 4, 4, false, format);
                           return resource.getFormatProperty(); })
 
-CNA_FORMAT_SURFACE_TEST(TextureCubeAcceptsOrRefusesByName, "TextureCube",
+CNA_FORMAT_SURFACE_TEST(TextureCubeAcceptsOrRefusesByName, "TextureCube", std::nullopt,
                         { TextureCube resource(device, 4, false, format);
                           return resource.getFormatProperty(); })
 
-CNA_FORMAT_SURFACE_TEST(Texture3DAcceptsOrRefusesByName, "Texture3D",
+CNA_FORMAT_SURFACE_TEST(Texture3DAcceptsOrRefusesByName, "Texture3D", std::nullopt,
                         { Texture3D resource(device, 4, 4, 2, false, format);
                           return resource.getFormatProperty(); })
 
-CNA_FORMAT_SURFACE_TEST(RenderTarget2DAcceptsOrRefusesByName, "RenderTarget2D",
+CNA_FORMAT_SURFACE_TEST(
+    RenderTarget2DAcceptsOrRefusesByName, "RenderTarget2D",
+    device.SupportsSurfaceFormatAsRenderTargetEXT(format),
                         { RenderTarget2D resource(device, 4, 4, false, format, DepthFormat::None, 0,
                                                   RenderTargetUsage::DiscardContents);
                           return resource.getFormatProperty(); })
 
-CNA_FORMAT_SURFACE_TEST(RenderTargetCubeAcceptsOrRefusesByName, "RenderTargetCube",
+CNA_FORMAT_SURFACE_TEST(
+    RenderTargetCubeAcceptsOrRefusesByName, "RenderTargetCube",
+    device.SupportsSurfaceFormatAsRenderTargetEXT(format),
                         { RenderTargetCube resource(device, 4, false, format, DepthFormat::None, 0,
                                                     RenderTargetUsage::DiscardContents);
                           return resource.getFormatProperty(); })

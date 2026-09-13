@@ -145,4 +145,3 @@ would delete that regression guard without closing anything a game can reach.
 delivery and address handoff, for native and browser. That is the scope `SAMPLES-DEC-004` and
 `SAMPLES-DEC-006` put to the owner, and it is why SAMPLE-096 is a non-port rather than a blocked
 port.
-

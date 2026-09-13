@@ -115,8 +115,9 @@ protected:
         // (bright) -- a large, unambiguous brightness gap either way.
         {
             Texture2D tex = MakeStrip(dev, 220, 20);
-            dev.getSamplerStatesProperty()[0].setFilterProperty(TextureFilter::Point);
-            dev.getSamplerStatesProperty()[0].setAddressUProperty(TextureAddressMode::Clamp);
+            SamplerState sampler = SamplerState::PointClamp;
+            sampler.setAddressUProperty(TextureAddressMode::Clamp);
+            dev.getSamplerStatesProperty()[0] = sampler;
 
             const VertexPositionTexture q[6] = {
                 { Vector3(0.0f, 0.0f, 0.0f), Vector2(1.25f, 0.5f) },
@@ -154,10 +155,10 @@ protected:
         {
             Texture2D texA = MakeStrip(dev, 100, 10); // slot 0 -- Wrap should select texel0=100
             Texture2D texB = MakeStrip(dev, 10, 100); // slot 1 -- Clamp should select texel1=100
-            dev.getSamplerStatesProperty()[0].setFilterProperty(TextureFilter::Point);
-            dev.getSamplerStatesProperty()[0].setAddressUProperty(TextureAddressMode::Wrap);
-            dev.getSamplerStatesProperty()[1].setFilterProperty(TextureFilter::Point);
-            dev.getSamplerStatesProperty()[1].setAddressUProperty(TextureAddressMode::Clamp);
+            SamplerState samplerA = SamplerState::PointWrap;
+            SamplerState samplerB = SamplerState::PointClamp;
+            dev.getSamplerStatesProperty()[0] = samplerA;
+            dev.getSamplerStatesProperty()[1] = samplerB;
 
             const Color white(255, 255, 255, 255);
             const VertexPositionColorTexture q[6] = {

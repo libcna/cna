@@ -559,10 +559,8 @@ namespace CNA::Internal::Renderers::Sokol
          * @param width  Level-0 width in texels.
          * @param height Level-0 height in texels.
          * @param depth  Level-0 depth in texels.
-         * @param mipMap Allocate the full mip chain down to 1x1x1 as well as level 0. Matches
-         *               Texture3D.cpp's own `CalculateMipLevels(width, height)` -- depth does not
-         *               participate in the level COUNT, even though it still halves per level like
-         *               width/height do (real volume-texture mip convention).
+         * @param mipMap Allocate the complete three-dimensional mip chain down to 1x1x1 as well
+         *               as level 0, matching Texture3D.cpp.
          */
         SokolTexture3DRenderer(int width, int height, int depth, bool mipMap);
 
@@ -1123,27 +1121,21 @@ namespace CNA::Internal::Renderers::Sokol
         /**
          * @brief Starts recording samples that pass the depth/stencil test for subsequent draws.
          *
-         * FNA's own OcclusionQuery.Begin()/End() are pure one-line forwards to FNA3D with no call-
-         * sequence validation at all (plans/plan_sokol.md SOKOL-29's own audit), so a repeated Begin()
-         * with no intervening End() must not throw here either -- but raw GL, unlike FNA3D's
-         * drivers, raises GL_INVALID_OPERATION for exactly that (double Begin, or End with no
-         * active Begin), and an unconsumed GL error left pending trips sokol_gfx's own internal
-         * `glGetError()==0` assertions the next time IT touches GL, at a completely unrelated call
-         * site. `active_` tracks the real GL query state so this class only ever issues a
-         * glBeginQuery/glEndQuery pair GL itself considers legal, silently absorbing everything
-         * else -- matching FNA's "no exception" contract without corrupting sokol's error state.
+         * The public XNA wrapper validates repeated Begin/End sequences. This renderer retains a
+         * defensive `active_` guard because raw GL raises GL_INVALID_OPERATION for an illegal
+         * pair, and a pending GL error trips sokol_gfx assertions at a later unrelated call site.
          *
          * plans/plan_sokol.md SOKOL-43: OpenGL permits only one active `GL_SAMPLES_PASSED` query per
          * context at a time, not per query object -- `active_` alone cannot see a DIFFERENT
          * object's outstanding Begin(). When `owner` was supplied, this also coordinates through
          * `owner`'s single shared "which query owns the context's one active slot" tracking, so a
-         * second object's overlapping Begin() is silently absorbed exactly like a repeated Begin()
-         * on the same object, instead of reaching a second real `glBeginQuery` call.
+         * second object's overlapping native Begin() is absorbed instead of reaching a second real
+         * `glBeginQuery` call. The public object must still balance and observe that attempted cycle
+         * before it can be reused.
          */
         void Begin() override;
 
-        /** @brief Stops recording; the result becomes available some time after this call. See
-         *         Begin()'s own comment for why an unmatched End() is silently absorbed. */
+        /** @brief Stops recording; the result becomes available some time after this call. */
         void End() override;
 
         /**

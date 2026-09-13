@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// Task 204: Verify indexed draw calls throw std::runtime_error when no index buffer is bound.
+// Task 204 / SOFTWARE-253: Verify indexed draw calls throw InvalidOperationException when no index
+// buffer is bound.
 //
 // With a vertex buffer bound (so the VB-null guard passes), both
 // DrawIndexedPrimitives and DrawInstancedPrimitives must throw before
@@ -7,9 +8,11 @@
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -42,23 +45,25 @@ protected:
 
         // Ensure no index buffer is bound (default after init).
         device.SetIndexBuffer(nullptr);
+        BasicEffect effect(device);
+        effect.Apply();
 
-        // 1. DrawIndexedPrimitives with no IB bound must throw std::runtime_error.
+        // 1. DrawIndexedPrimitives with no IB bound must throw InvalidOperationException.
         {
             bool threw = false;
-            try { device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 0, 0, 1); }
-            catch (const std::runtime_error&) { threw = true; }
+            try { device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1); }
+            catch (const System::InvalidOperationException&) { threw = true; }
             catch (...) {}
-            check(threw, "DrawIndexedPrimitives throws runtime_error when no IB bound");
+            check(threw, "DrawIndexedPrimitives throws InvalidOperationException when no IB bound");
         }
 
-        // 2. DrawInstancedPrimitives with no IB bound must throw std::runtime_error.
+        // 2. DrawInstancedPrimitives with no IB bound must throw InvalidOperationException.
         {
             bool threw = false;
-            try { device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 0, 0, 1, 1); }
-            catch (const std::runtime_error&) { threw = true; }
+            try { device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1, 1); }
+            catch (const System::InvalidOperationException&) { threw = true; }
             catch (...) {}
-            check(threw, "DrawInstancedPrimitives throws runtime_error when no IB bound");
+            check(threw, "DrawInstancedPrimitives throws InvalidOperationException when no IB bound");
         }
 
         // Clean up

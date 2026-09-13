@@ -1,0 +1,34 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1709,6 +1709,12 @@ static void state_POW(Context *ctx)
+         fail(ctx, "POW src1 must have replicate swizzle");
+ } // state_POW
+ 
++static void state_EXP(Context *ctx)
++{
++    if (!replicate_swizzle(ctx->source_args[0].swizzle))
++        fail(ctx, "EXP src0 must have replicate swizzle");
++} // state_EXP
++
+ static void state_LOG(Context *ctx)
+ {
+     if (!replicate_swizzle(ctx->source_args[0].swizzle))
+diff --git a/mojoshader_internal.h b/mojoshader_internal.h
+--- a/mojoshader_internal.h
++++ b/mojoshader_internal.h
+@@ -686,10 +686,10 @@ INSTRUCTION_STATE(DP4, "DP4", 1, DSS, MOJOSHADER_TYPE_ANY, 0xF)
+ INSTRUCTION(MIN, "MIN", 1, DSS, MOJOSHADER_TYPE_ANY, 0xF)
+ INSTRUCTION(MAX, "MAX", 1, DSS, MOJOSHADER_TYPE_ANY, 0xF)
+-INSTRUCTION(SLT, "SLT", 1, DSS, MOJOSHADER_TYPE_ANY, 0xF)
+-INSTRUCTION(SGE, "SGE", 1, DSS, MOJOSHADER_TYPE_ANY, 0xF)
+-INSTRUCTION(EXP, "EXP", 1, DS, MOJOSHADER_TYPE_ANY, 0xF)
++INSTRUCTION(SLT, "SLT", 1, DSS, MOJOSHADER_TYPE_VERTEX, 0xF)
++INSTRUCTION(SGE, "SGE", 1, DSS, MOJOSHADER_TYPE_VERTEX, 0xF)
++INSTRUCTION_STATE(EXP, "EXP", 1, DS, MOJOSHADER_TYPE_ANY, 0xF)
+ INSTRUCTION_STATE(LOG, "LOG", 1, DS, MOJOSHADER_TYPE_ANY, 0xF)
+-INSTRUCTION(LIT, "LIT", 3, DS, MOJOSHADER_TYPE_ANY, 0xF)
++INSTRUCTION(LIT, "LIT", 3, DS, MOJOSHADER_TYPE_VERTEX, 0xF)
+ INSTRUCTION(DST, "DST", 1, DSS, MOJOSHADER_TYPE_VERTEX, 0xF)
+ INSTRUCTION(LRP, "LRP", 2, DSSS, MOJOSHADER_TYPE_ANY, 0xF)
+ INSTRUCTION_STATE(FRC, "FRC", 1, DS, MOJOSHADER_TYPE_ANY, 0xF)

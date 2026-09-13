@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-103: public regression for CNA's zero-element vertex-buffer contract.
+// REMED-GFX-103 / SOFTWARE-204 / SOFTWARE-290: public vertex-buffer copy contract.
 //
-// A logical zero-capacity VertexBuffer is valid.  Once the public arguments have been
-// validated, an empty upload is a true no-op: it must not reach pointer arithmetic, packing,
-// shadow copies, or a graphics renderer, and must not replace the most recent real upload.
+// XNA requires both a positive logical capacity and a positive classic-copy element count. A null
+// array is rejected even for count zero; a non-null zero-element classic copy is rejected as an
+// out-of-range elementCount. Raw CNAEXT transfers retain their explicit zero-count no-op contract.
 
 #include <algorithm>
 #include <array>
@@ -23,8 +23,10 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -44,6 +46,7 @@ using namespace CNA::Testing::Renderers;
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 // plans/plan_runtimerenderer.md RTR-P9-9: this file's EasyGL block needs that renderer's own headers, so
@@ -77,8 +80,10 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
+using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
@@ -129,10 +134,10 @@ namespace
             });
     }
 
-    VertexDeclaration OddStrideDeclaration()
+    VertexDeclaration PaddedStrideDeclaration()
     {
         return VertexDeclaration(
-            13,
+            16,
             {
                 VertexElement(
                     0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
@@ -213,6 +218,7 @@ namespace
         // which is where GTEST_SKIP() genuinely prevents the test body from executing.
         void SetUp() override
         {
+            device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
                 GTEST_SKIP() << "Renderer explicitly does not support vertex buffers";
         }
@@ -272,40 +278,76 @@ namespace
 #endif
 }
 
-TEST_F(VertexBufferEmptyDataTest, ZeroCapacityConstructionPreservesLogicalCapacity)
+TEST_F(VertexBufferEmptyDataTest, ZeroCapacityConstructionThrowsForStaticAndDynamicBuffers)
 {
     RequireVertexBuffers();
 
-    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 0, BufferUsage::None);
-    DynamicVertexBuffer dynamicBuffer(
-        device, PositionColorDeclaration(), 0, BufferUsage::None);
-
-    EXPECT_EQ(0, staticBuffer.getVertexCountProperty());
-    EXPECT_EQ(0, dynamicBuffer.getVertexCountProperty());
-    EXPECT_EQ(0, staticBuffer.GetRenderer().GetVertexCount());
-    EXPECT_EQ(0, dynamicBuffer.GetRenderer().GetVertexCount());
+    EXPECT_THROW((VertexBuffer(
+                     device, PositionColorDeclaration(), 0, BufferUsage::None)),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((DynamicVertexBuffer(
+                     device, PositionColorDeclaration(), 0, BufferUsage::None)),
+                 System::ArgumentOutOfRangeException);
 }
 
-TEST_F(VertexBufferEmptyDataTest, ZeroCountAcceptsNullForStaticAndDynamicBuffers)
+TEST_F(VertexBufferEmptyDataTest, FreshBuffersExposeTheirAllocatedStorageBeforeFirstUpload)
+{
+    // SOFTWARE-294: XNA and FNA allocate the complete fixed-size native resource in the
+    // constructor. GetData therefore reads that allocated (content-undefined) storage rather than
+    // rejecting the buffer as "empty", and a draw is range-valid before the first SetData call.
+    VertexBuffer staticVertices(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    DynamicVertexBuffer dynamicVertices(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    IndexBuffer staticIndices(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    DynamicIndexBuffer dynamicIndices(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+
+    std::array<VertexPositionColor, 3> staticVertexReadback{};
+    std::array<VertexPositionColor, 3> dynamicVertexReadback{};
+    std::array<std::uint16_t, 3> staticIndexReadback{};
+    std::array<std::uint16_t, 3> dynamicIndexReadback{};
+    EXPECT_NO_THROW(staticVertices.GetData(staticVertexReadback.data(), 3));
+    EXPECT_NO_THROW(dynamicVertices.GetData(dynamicVertexReadback.data(), 3));
+    EXPECT_NO_THROW(staticIndices.GetData(staticIndexReadback.data(), 3));
+    EXPECT_NO_THROW(dynamicIndices.GetData(dynamicIndexReadback.data(), 3));
+
+    EXPECT_EQ(3, staticVertices.GetRenderer().GetVertexCount());
+    EXPECT_EQ(3, dynamicVertices.GetRenderer().GetVertexCount());
+    EXPECT_EQ(3, staticIndices.GetRenderer().GetIndexCount());
+    EXPECT_EQ(3, dynamicIndices.GetRenderer().GetIndexCount());
+
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    effect.Apply();
+    device.SetVertexBuffer(&staticVertices);
+    device.SetIndexBuffer(&staticIndices);
+    EXPECT_NO_THROW(device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, 3, 0, 1));
+}
+
+TEST_F(VertexBufferEmptyDataTest, ClassicCopiesRejectNullEvenWhenCountIsZero)
 {
     RequireVertexBuffers();
 
-    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 0, BufferUsage::None);
+    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 1, BufferUsage::None);
     DynamicVertexBuffer dynamicBuffer(
-        device, PositionColorDeclaration(), 0, BufferUsage::None);
+        device, PositionColorDeclaration(), 1, BufferUsage::None);
 
-    EXPECT_NO_THROW(
-        staticBuffer.SetData(static_cast<const VertexPositionColor*>(nullptr), 0));
-    EXPECT_NO_THROW(staticBuffer.SetData(
-        static_cast<const VertexPositionColor*>(nullptr), 0, 0));
-    EXPECT_NO_THROW(dynamicBuffer.SetData(
-        static_cast<const VertexPositionColor*>(nullptr),
-        0,
-        0,
-        SetDataOptions::Discard));
+    EXPECT_THROW(staticBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(staticBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0, 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0, 0,
+                     SetDataOptions::Discard),
+                 System::ArgumentNullException);
 }
 
-TEST_F(VertexBufferEmptyDataTest, EmptyVectorAndSourceEndSlicesAreTrueNoOps)
+TEST_F(VertexBufferEmptyDataTest, ClassicEmptyCopiesRejectAndRawEmptyCopyRemainsANoOp)
 {
     RequireVertexBuffers();
 
@@ -318,13 +360,16 @@ TEST_F(VertexBufferEmptyDataTest, EmptyVectorAndSourceEndSlicesAreTrueNoOps)
     VertexBuffer typedBuffer(device, PositionColorDeclaration(), 2, BufferUsage::None);
     DynamicVertexBuffer dynamicBuffer(
         device, PositionColorDeclaration(), 2, BufferUsage::None);
-    VertexBuffer rawBuffer(device, OddStrideDeclaration(), 2, BufferUsage::None);
+    VertexBuffer rawBuffer(device, PaddedStrideDeclaration(), 2, BufferUsage::None);
 
-    EXPECT_NO_THROW(typedBuffer.SetData(emptyTyped.data(), 0));
-    EXPECT_NO_THROW(typedBuffer.SetData(emptyTyped.data(), 0, 0));
-    EXPECT_NO_THROW(dynamicBuffer.SetData(
-        emptyTyped.data(), 0, 0, SetDataOptions::Discard));
-    EXPECT_NO_THROW(rawBuffer.SetDataRaw(emptyRaw.data(), 0, 13));
+    EXPECT_THROW(typedBuffer.SetData(emptyTyped.data(), 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(typedBuffer.SetData(emptyTyped.data(), 0, 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     emptyTyped.data(), 0, 0, SetDataOptions::Discard),
+                 System::ArgumentNullException);
+    EXPECT_NO_THROW(rawBuffer.SetDataRaw(emptyRaw.data(), 0, 16));
 
     typedBuffer.SetData(source.data(), static_cast<int>(source.size()));
     dynamicBuffer.SetData(
@@ -332,13 +377,16 @@ TEST_F(VertexBufferEmptyDataTest, EmptyVectorAndSourceEndSlicesAreTrueNoOps)
     ASSERT_EQ(2, typedBuffer.GetRenderer().GetVertexCount());
     ASSERT_EQ(2, dynamicBuffer.GetRenderer().GetVertexCount());
 
-    // A zero-length slice whose source start is exactly one-past-the-source end is valid.
-    EXPECT_NO_THROW(typedBuffer.SetData(
-        source.data(), static_cast<int>(source.size()), 0));
-    EXPECT_NO_THROW(dynamicBuffer.SetData(
-        source.data(), static_cast<int>(source.size()), 0,
-        SetDataOptions::NoOverwrite));
-    EXPECT_NO_THROW(typedBuffer.SetData(static_cast<const VertexPositionColor*>(nullptr), 0));
+    EXPECT_THROW(typedBuffer.SetData(
+                     source.data(), static_cast<int>(source.size()), 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     source.data(), static_cast<int>(source.size()), 0,
+                     SetDataOptions::NoOverwrite),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(typedBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0),
+                 System::ArgumentNullException);
     EXPECT_EQ(2, typedBuffer.GetRenderer().GetVertexCount());
     EXPECT_EQ(2, dynamicBuffer.GetRenderer().GetVertexCount());
 
@@ -350,7 +398,7 @@ TEST_F(VertexBufferEmptyDataTest, EmptyVectorAndSourceEndSlicesAreTrueNoOps)
     EXPECT_EQ(source, dynamicResult);
 }
 
-TEST_F(VertexBufferEmptyDataTest, EmptyUploadBetweenAAndBDoesNotClearEitherBufferKind)
+TEST_F(VertexBufferEmptyDataTest, RejectedEmptyUploadDoesNotClearEitherBufferKind)
 {
     RequireVertexBuffers();
 
@@ -374,10 +422,12 @@ TEST_F(VertexBufferEmptyDataTest, EmptyUploadBetweenAAndBDoesNotClearEitherBuffe
 
     staticBuffer.SetData(uploadA.data(), 3);
     dynamicBuffer.SetData(uploadA.data(), 0, 3, SetDataOptions::Discard);
-    staticBuffer.SetData(uploadA.data(), 3, 0);
-    dynamicBuffer.SetData(
-        static_cast<const VertexPositionColor*>(nullptr), 0, 0,
-        SetDataOptions::NoOverwrite);
+    EXPECT_THROW(staticBuffer.SetData(uploadA.data(), 3, 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0, 0,
+                     SetDataOptions::NoOverwrite),
+                 System::ArgumentNullException);
 
     std::array<VertexPositionColor, 3> result{};
     staticBuffer.GetData(result.data(), 3);
@@ -397,7 +447,7 @@ TEST_F(VertexBufferEmptyDataTest, EmptyUploadBetweenAAndBDoesNotClearEitherBuffe
     EXPECT_EQ(3, dynamicBuffer.GetRenderer().GetVertexCount());
 }
 
-TEST_F(VertexBufferEmptyDataTest, NullIsLegalOnlyForEmptyUploads)
+TEST_F(VertexBufferEmptyDataTest, ClassicNullAndZeroCountsRejectButRawZeroIsANoOp)
 {
     RequireVertexBuffers();
 
@@ -405,7 +455,7 @@ TEST_F(VertexBufferEmptyDataTest, NullIsLegalOnlyForEmptyUploads)
     VertexBuffer staticBuffer(device, PositionColorDeclaration(), 1, BufferUsage::None);
     DynamicVertexBuffer dynamicBuffer(
         device, PositionColorDeclaration(), 1, BufferUsage::None);
-    VertexBuffer rawBuffer(device, OddStrideDeclaration(), 1, BufferUsage::None);
+    VertexBuffer rawBuffer(device, PaddedStrideDeclaration(), 1, BufferUsage::None);
 
     EXPECT_THROW(
         staticBuffer.SetData(static_cast<const VertexPositionColor*>(nullptr), 1),
@@ -416,50 +466,52 @@ TEST_F(VertexBufferEmptyDataTest, NullIsLegalOnlyForEmptyUploads)
             SetDataOptions::NoOverwrite),
         System::ArgumentNullException);
     EXPECT_THROW(
-        rawBuffer.SetDataRaw(nullptr, 1, 13),
+        rawBuffer.SetDataRaw(nullptr, 1, 16),
         System::ArgumentNullException);
 
-    EXPECT_NO_THROW(staticBuffer.SetData(&vertex, 0));
-    EXPECT_NO_THROW(dynamicBuffer.SetData(
-        static_cast<const VertexPositionColor*>(nullptr), 1, 0,
-        SetDataOptions::Discard));
-    EXPECT_NO_THROW(rawBuffer.SetDataRaw(nullptr, 0, 13));
+    EXPECT_THROW(staticBuffer.SetData(&vertex, 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 1, 0,
+                     SetDataOptions::Discard),
+                 System::ArgumentNullException);
+    EXPECT_NO_THROW(rawBuffer.SetDataRaw(nullptr, 0, 16));
 }
 
-TEST_F(VertexBufferEmptyDataTest, LogicalEndAndBeyondCapacityRemainDistinct)
+TEST_F(VertexBufferEmptyDataTest, InvalidClassicCopyAndBeyondCapacityRemainDistinct)
 {
     RequireVertexBuffers();
 
     const VertexPositionColor vertex(Vector3(1.0f, 2.0f, 3.0f), Color(4, 5, 6, 7));
-    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 0, BufferUsage::None);
+    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 1, BufferUsage::None);
     DynamicVertexBuffer dynamicBuffer(
-        device, PositionColorDeclaration(), 0, BufferUsage::None);
-    VertexBuffer rawBuffer(device, OddStrideDeclaration(), 0, BufferUsage::None);
+        device, PositionColorDeclaration(), 1, BufferUsage::None);
+    VertexBuffer rawBuffer(device, PaddedStrideDeclaration(), 1, BufferUsage::None);
 
-    // These overloads have an implicit destination byte offset of zero. For a zero-capacity
-    // buffer that offset is exactly the logical end, where an empty range is valid.
-    EXPECT_NO_THROW(staticBuffer.SetData(
-        static_cast<const VertexPositionColor*>(nullptr), 0));
-    EXPECT_NO_THROW(dynamicBuffer.SetData(
-        static_cast<const VertexPositionColor*>(nullptr), 0, 0,
-        SetDataOptions::Discard));
-    EXPECT_NO_THROW(rawBuffer.SetDataRaw(nullptr, 0, 13));
+    EXPECT_THROW(staticBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0, 0,
+                     SetDataOptions::Discard),
+                 System::ArgumentNullException);
+    EXPECT_NO_THROW(rawBuffer.SetDataRaw(nullptr, 0, 16));
 
     // A real range extends beyond that logical end even if a native renderer pads its allocation.
-    EXPECT_THROW(staticBuffer.SetData(&vertex, 1),
-                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(staticBuffer.SetData(&vertex, 2),
+                 System::InvalidOperationException);
     EXPECT_THROW(dynamicBuffer.SetData(
-                     &vertex, 0, 1, SetDataOptions::NoOverwrite),
-                 System::ArgumentOutOfRangeException);
-    const std::array<std::uint8_t, 13> raw{};
-    EXPECT_THROW(rawBuffer.SetDataRaw(raw.data(), 1, 13),
-                 System::ArgumentOutOfRangeException);
-    EXPECT_EQ(0, staticBuffer.getVertexCountProperty());
-    EXPECT_EQ(0, dynamicBuffer.getVertexCountProperty());
-    EXPECT_EQ(0, rawBuffer.getVertexCountProperty());
+                     &vertex, 0, 2, SetDataOptions::NoOverwrite),
+                 System::InvalidOperationException);
+    const std::array<std::uint8_t, 32> raw{};
+    EXPECT_THROW(rawBuffer.SetDataRaw(raw.data(), 2, 16),
+                 System::InvalidOperationException);
+    EXPECT_EQ(1, staticBuffer.getVertexCountProperty());
+    EXPECT_EQ(1, dynamicBuffer.getVertexCountProperty());
+    EXPECT_EQ(1, rawBuffer.getVertexCountProperty());
 }
 
-TEST_F(VertexBufferEmptyDataTest, EmptyRangePreservesPublicValidationOrdering)
+TEST_F(VertexBufferEmptyDataTest, ZeroCountPreservesPublicValidationOrdering)
 {
     RequireVertexBuffers();
 
@@ -468,7 +520,7 @@ TEST_F(VertexBufferEmptyDataTest, EmptyRangePreservesPublicValidationOrdering)
     DynamicVertexBuffer dynamicBuffer(
         device, PositionColorDeclaration(), 1, BufferUsage::None);
 
-    // Source ranges and declarations are checked before the empty return.
+    // dataIndex is checked before elementCount, matching XNA's shared copy validator.
     EXPECT_THROW(buffer.SetData(&vertex, -1, 0),
                  System::ArgumentOutOfRangeException);
     EXPECT_THROW(buffer.SetData(&vertex, -1),
@@ -480,32 +532,32 @@ TEST_F(VertexBufferEmptyDataTest, EmptyRangePreservesPublicValidationOrdering)
                      device, PositionColorDeclaration(), -1, BufferUsage::None)),
                  System::ArgumentOutOfRangeException);
 
-    VertexBuffer rawBuffer(device, OddStrideDeclaration(), 1, BufferUsage::None);
+    VertexBuffer rawBuffer(device, PaddedStrideDeclaration(), 1, BufferUsage::None);
     EXPECT_THROW(rawBuffer.SetDataRaw(nullptr, 0, 0),
                  System::ArgumentOutOfRangeException);
-    EXPECT_THROW(rawBuffer.SetDataRaw(nullptr, 0, 16),
+    EXPECT_THROW(rawBuffer.SetDataRaw(nullptr, 0, 20),
                  System::ArgumentException);
 
     const VertexDeclaration incompatible(
         16,
         {
             VertexElement(
-                12, VertexElementFormat::Vector2,
-                VertexElementUsage::TextureCoordinate, 0),
+                0, static_cast<VertexElementFormat>(12),
+                VertexElementUsage::Position, 0),
         });
-    VertexBuffer incompatibleBuffer(device, incompatible, 1, BufferUsage::None);
-    EXPECT_THROW(incompatibleBuffer.SetData(
-                     static_cast<const VertexPositionColor*>(nullptr), 0),
-                 System::ArgumentException);
+    // Profile-dependent declaration compatibility is a bind-time rule in XNA. It therefore
+    // wins before either allocation or the later empty SetData range validation can occur.
+    EXPECT_THROW((VertexBuffer(device, incompatible, 1, BufferUsage::None)),
+                 System::NotSupportedException);
 }
 
-TEST_F(VertexBufferEmptyDataTest, DisposedBuffersRejectEmptyUploadsBeforeNoOp)
+TEST_F(VertexBufferEmptyDataTest, DisposedBuffersRejectCopiesBeforeArgumentValidation)
 {
     RequireVertexBuffers();
 
-    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 0, BufferUsage::None);
+    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 1, BufferUsage::None);
     DynamicVertexBuffer dynamicBuffer(
-        device, PositionColorDeclaration(), 0, BufferUsage::None);
+        device, PositionColorDeclaration(), 1, BufferUsage::None);
     staticBuffer.Dispose();
     staticBuffer.Dispose();
     dynamicBuffer.Dispose();
@@ -611,39 +663,39 @@ TEST_F(VertexBufferEmptyDataTest, DynamicPartialUploadKeepsExactCompactShadow)
     EXPECT_EQ(2, buffer.GetRenderer().GetVertexCount());
 }
 
-TEST_F(VertexBufferEmptyDataTest, RawDeclarationsAcceptOddAndAlignedStrides)
+TEST_F(VertexBufferEmptyDataTest, RawDeclarationsAcceptPaddedAndFullLayouts)
 {
     RequireVertexBuffers();
 
-    const std::array<std::uint8_t, 13> odd{
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-    const std::array<std::uint8_t, 16> aligned{
+    const std::array<std::uint8_t, 16> padded{
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+    const std::array<std::uint8_t, 16> full{
         16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
-    VertexBuffer oddBuffer(device, OddStrideDeclaration(), 1, BufferUsage::None);
-    VertexBuffer alignedBuffer(
+    VertexBuffer paddedBuffer(device, PaddedStrideDeclaration(), 1, BufferUsage::None);
+    VertexBuffer fullBuffer(
         device, PositionColorDeclaration(), 1, BufferUsage::None);
-    EXPECT_NO_THROW(oddBuffer.SetDataRaw(odd.data(), 1, 13));
-    EXPECT_NO_THROW(alignedBuffer.SetDataRaw(aligned.data(), 1, 16));
-    EXPECT_EQ(1, oddBuffer.GetRenderer().GetVertexCount());
-    EXPECT_EQ(1, alignedBuffer.GetRenderer().GetVertexCount());
+    EXPECT_NO_THROW(paddedBuffer.SetDataRaw(padded.data(), 1, 16));
+    EXPECT_NO_THROW(fullBuffer.SetDataRaw(full.data(), 1, 16));
+    EXPECT_EQ(1, paddedBuffer.GetRenderer().GetVertexCount());
+    EXPECT_EQ(1, fullBuffer.GetRenderer().GetVertexCount());
 
 #ifdef CNA_TEST_EASYGL_AVAILABLE
     // Compiled whenever EasyGL is in the build; asserted only when it is the ACTIVE renderer --
     // otherwise the dynamic_cast below is a null check against a different renderer's object.
     if (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2))
     {
-    auto* oddEasy =
+    auto* paddedEasy =
         dynamic_cast<CNA::Internal::Renderers::EasyGL::EasyGLVertexBufferRenderer*>(
-            &oddBuffer.GetRenderer());
-    auto* alignedEasy =
+            &paddedBuffer.GetRenderer());
+    auto* fullEasy =
         dynamic_cast<CNA::Internal::Renderers::EasyGL::EasyGLVertexBufferRenderer*>(
-            &alignedBuffer.GetRenderer());
-    ASSERT_NE(nullptr, oddEasy);
-    ASSERT_NE(nullptr, alignedEasy);
-    EXPECT_EQ(OddStrideDeclaration().GetVertexElements(),
-              oddEasy->GetDeclarationElements());
+            &fullBuffer.GetRenderer());
+    ASSERT_NE(nullptr, paddedEasy);
+    ASSERT_NE(nullptr, fullEasy);
+    EXPECT_EQ(PaddedStrideDeclaration().GetVertexElements(),
+              paddedEasy->GetDeclarationElements());
     EXPECT_EQ(PositionColorDeclaration().GetVertexElements(),
-              alignedEasy->GetDeclarationElements());
+              fullEasy->GetDeclarationElements());
     }
 #endif
 }
@@ -679,7 +731,7 @@ TEST_F(VertexBufferEmptyDataTest, UploadedVerticesSupportNormalAndIndexedDrawing
 }
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
-TEST_F(VertexBufferEmptyDataTest, WebGpuNativeScopesCoverEmptyOddAndAlignedUploads)
+TEST_F(VertexBufferEmptyDataTest, WebGpuNativeScopesCoverEmptyPaddedAndFullUploads)
 {
     // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever WebGPU is in the build, run only when it
     // is the active renderer.
@@ -694,49 +746,49 @@ TEST_F(VertexBufferEmptyDataTest, WebGpuNativeScopesCoverEmptyOddAndAlignedUploa
     wgpuDevicePushErrorScope(graphicsRenderer->Device(), WGPUErrorFilter_Validation);
 
     VertexBuffer emptyBuffer(
-        device, OddStrideDeclaration(), 0, BufferUsage::None);
+        device, PaddedStrideDeclaration(), 1, BufferUsage::None);
     auto* emptyRenderer =
         dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPUVertexBufferRenderer*>(
             &emptyBuffer.GetRenderer());
     ASSERT_NE(nullptr, emptyRenderer);
-    ASSERT_EQ(nullptr, emptyRenderer->Buffer());
-    ASSERT_TRUE(emptyRenderer->ShadowData().empty());
-    emptyBuffer.SetDataRaw(nullptr, 0, 13);
-    EXPECT_EQ(nullptr, emptyRenderer->Buffer());
-    EXPECT_TRUE(emptyRenderer->ShadowData().empty());
-    EXPECT_EQ(0, emptyRenderer->GetVertexCount());
-    EXPECT_EQ(0u, emptyRenderer->Stride());
+    ASSERT_NE(nullptr, emptyRenderer->Buffer());
+    ASSERT_EQ(16u, emptyRenderer->ShadowData().size());
+    emptyBuffer.SetDataRaw(nullptr, 0, 16);
+    EXPECT_NE(nullptr, emptyRenderer->Buffer());
+    EXPECT_EQ(16u, emptyRenderer->ShadowData().size());
+    EXPECT_EQ(1, emptyRenderer->GetVertexCount());
+    EXPECT_EQ(16u, emptyRenderer->Stride());
 
-    const std::array<std::uint8_t, 13> odd{
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-    VertexBuffer oddBuffer(device, OddStrideDeclaration(), 1, BufferUsage::None);
-    oddBuffer.SetDataRaw(odd.data(), 1, 13);
-    auto* oddRenderer =
+    const std::array<std::uint8_t, 16> padded{
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+    VertexBuffer paddedBuffer(device, PaddedStrideDeclaration(), 1, BufferUsage::None);
+    paddedBuffer.SetDataRaw(padded.data(), 1, 16);
+    auto* paddedRenderer =
         dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPUVertexBufferRenderer*>(
-            &oddBuffer.GetRenderer());
-    ASSERT_NE(nullptr, oddRenderer);
-    ASSERT_NE(nullptr, oddRenderer->Buffer());
-    EXPECT_EQ(1, oddRenderer->GetVertexCount());
-    EXPECT_EQ(13u, oddRenderer->Stride());
-    EXPECT_EQ(std::vector<std::uint8_t>(odd.begin(), odd.end()),
-              oddRenderer->ShadowData());
-    const auto oddShadow = oddRenderer->ShadowData();
-    oddBuffer.SetDataRaw(nullptr, 0, 13);
-    EXPECT_EQ(oddShadow, oddRenderer->ShadowData());
-    EXPECT_EQ(1, oddRenderer->GetVertexCount());
+            &paddedBuffer.GetRenderer());
+    ASSERT_NE(nullptr, paddedRenderer);
+    ASSERT_NE(nullptr, paddedRenderer->Buffer());
+    EXPECT_EQ(1, paddedRenderer->GetVertexCount());
+    EXPECT_EQ(16u, paddedRenderer->Stride());
+    EXPECT_EQ(std::vector<std::uint8_t>(padded.begin(), padded.end()),
+              paddedRenderer->ShadowData());
+    const auto paddedShadow = paddedRenderer->ShadowData();
+    paddedBuffer.SetDataRaw(nullptr, 0, 16);
+    EXPECT_EQ(paddedShadow, paddedRenderer->ShadowData());
+    EXPECT_EQ(1, paddedRenderer->GetVertexCount());
 
-    const std::array<std::uint8_t, 16> aligned{};
-    VertexBuffer alignedBuffer(
+    const std::array<std::uint8_t, 16> full{};
+    VertexBuffer fullBuffer(
         device, PositionColorDeclaration(), 1, BufferUsage::None);
-    alignedBuffer.SetDataRaw(aligned.data(), 1, 16);
-    auto* alignedRenderer =
+    fullBuffer.SetDataRaw(full.data(), 1, 16);
+    auto* fullRenderer =
         dynamic_cast<CNA::Internal::Renderers::WebGPU::WebGPUVertexBufferRenderer*>(
-            &alignedBuffer.GetRenderer());
-    ASSERT_NE(nullptr, alignedRenderer);
-    ASSERT_NE(nullptr, alignedRenderer->Buffer());
-    EXPECT_EQ(1, alignedRenderer->GetVertexCount());
-    EXPECT_EQ(16u, alignedRenderer->Stride());
-    EXPECT_EQ(16u, alignedRenderer->ShadowData().size());
+            &fullBuffer.GetRenderer());
+    ASSERT_NE(nullptr, fullRenderer);
+    ASSERT_NE(nullptr, fullRenderer->Buffer());
+    EXPECT_EQ(1, fullRenderer->GetVertexCount());
+    EXPECT_EQ(16u, fullRenderer->Stride());
+    EXPECT_EQ(16u, fullRenderer->ShadowData().size());
 
     const VertexPositionColor typed(
         Vector3(1, 2, 3), Color(4, 5, 6, 7));
@@ -768,27 +820,27 @@ TEST_F(VertexBufferEmptyDataTest, RawReadbackAnswersExactlyWhatTheRawUploadWrote
 {
     RequireVertexBuffers();
 
-    const std::array<std::uint8_t, 26> source{
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-        13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25};
-    VertexBuffer buffer(device, OddStrideDeclaration(), 2, BufferUsage::None);
-    buffer.SetDataRaw(source.data(), 2, 13);
+    const std::array<std::uint8_t, 32> source{
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+    VertexBuffer buffer(device, PaddedStrideDeclaration(), 2, BufferUsage::None);
+    buffer.SetDataRaw(source.data(), 2, 16);
 
-    std::array<std::uint8_t, 26> readBack{};
-    EXPECT_NO_THROW(buffer.GetDataRawEXT(0, readBack.data(), 2, 13));
+    std::array<std::uint8_t, 32> readBack{};
+    EXPECT_NO_THROW(buffer.GetDataRawEXT(0, readBack.data(), 2, 16));
     EXPECT_EQ(source, readBack);
 
     // A window of the readback, from a buffer-side offset.
-    std::array<std::uint8_t, 13> second{};
-    EXPECT_NO_THROW(buffer.GetDataRawEXT(13, second.data(), 1, 13));
-    EXPECT_TRUE(std::equal(second.begin(), second.end(), source.begin() + 13));
+    std::array<std::uint8_t, 16> second{};
+    EXPECT_NO_THROW(buffer.GetDataRawEXT(16, second.data(), 1, 16));
+    EXPECT_TRUE(std::equal(second.begin(), second.end(), source.begin() + 16));
 
-    EXPECT_THROW(buffer.GetDataRawEXT(0, readBack.data(), 3, 13),
+    EXPECT_THROW(buffer.GetDataRawEXT(0, readBack.data(), 3, 16),
                  System::ArgumentOutOfRangeException);
     EXPECT_THROW(buffer.GetDataRawEXT(0, readBack.data(), 1, 0), System::ArgumentException);
-    EXPECT_THROW(buffer.GetDataRawEXT(-1, readBack.data(), 1, 13),
+    EXPECT_THROW(buffer.GetDataRawEXT(-1, readBack.data(), 1, 16),
                  System::ArgumentOutOfRangeException);
-    EXPECT_NO_THROW(buffer.GetDataRawEXT(0, nullptr, 0, 13));
+    EXPECT_NO_THROW(buffer.GetDataRawEXT(0, nullptr, 0, 16));
 }
 
 TEST_F(VertexBufferEmptyDataTest, GenericSetDataUploadsAnApplicationDefinedVertexType)
@@ -816,20 +868,20 @@ TEST_F(VertexBufferEmptyDataTest, WindowedRawUploadLeavesTheRestOfTheBufferAlone
 {
     RequireVertexBuffers();
 
-    const std::array<std::uint8_t, 26> source{
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-        13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25};
-    const std::array<std::uint8_t, 13> replacement{
-        90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102};
-    VertexBuffer buffer(device, OddStrideDeclaration(), 2, BufferUsage::None);
-    buffer.SetDataRaw(source.data(), 2, 13);
+    const std::array<std::uint8_t, 32> source{
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+    const std::array<std::uint8_t, 16> replacement{
+        90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105};
+    VertexBuffer buffer(device, PaddedStrideDeclaration(), 2, BufferUsage::None);
+    buffer.SetDataRaw(source.data(), 2, 16);
 
-    EXPECT_NO_THROW(buffer.SetDataRawAtEXT(13, replacement.data(), 1, 13));
+    EXPECT_NO_THROW(buffer.SetDataRawAtEXT(16, replacement.data(), 1, 16));
 
-    std::array<std::uint8_t, 26> readBack{};
-    ASSERT_NO_THROW(buffer.GetDataRawEXT(0, readBack.data(), 2, 13));
-    EXPECT_TRUE(std::equal(source.begin(), source.begin() + 13, readBack.begin()));
-    EXPECT_TRUE(std::equal(replacement.begin(), replacement.end(), readBack.begin() + 13));
+    std::array<std::uint8_t, 32> readBack{};
+    ASSERT_NO_THROW(buffer.GetDataRawEXT(0, readBack.data(), 2, 16));
+    EXPECT_TRUE(std::equal(source.begin(), source.begin() + 16, readBack.begin()));
+    EXPECT_TRUE(std::equal(replacement.begin(), replacement.end(), readBack.begin() + 16));
     // The whole buffer is still what the renderer holds, not just the window.
     EXPECT_EQ(2, buffer.GetRenderer().GetVertexCount());
 }
@@ -840,39 +892,39 @@ TEST_F(VertexBufferEmptyDataTest, WindowedRawUploadIntoNeverWrittenBytesReadsZer
 
     // Nothing has been uploaded at all, so the shadow starts empty: the window still lands where
     // it was asked to, and everything it did not name reads as zero rather than as absent.
-    const std::array<std::uint8_t, 13> window{
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
-    VertexBuffer buffer(device, OddStrideDeclaration(), 2, BufferUsage::None);
+    const std::array<std::uint8_t, 16> window{
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    VertexBuffer buffer(device, PaddedStrideDeclaration(), 2, BufferUsage::None);
 
-    EXPECT_NO_THROW(buffer.SetDataRawAtEXT(13, window.data(), 1, 13));
+    EXPECT_NO_THROW(buffer.SetDataRawAtEXT(16, window.data(), 1, 16));
 
-    std::array<std::uint8_t, 26> readBack{};
+    std::array<std::uint8_t, 32> readBack{};
     std::fill(readBack.begin(), readBack.end(), std::uint8_t{0xEE});
-    ASSERT_NO_THROW(buffer.GetDataRawEXT(0, readBack.data(), 2, 13));
-    EXPECT_TRUE(std::all_of(readBack.begin(), readBack.begin() + 13,
+    ASSERT_NO_THROW(buffer.GetDataRawEXT(0, readBack.data(), 2, 16));
+    EXPECT_TRUE(std::all_of(readBack.begin(), readBack.begin() + 16,
                             [](std::uint8_t value) { return value == 0; }));
-    EXPECT_TRUE(std::equal(window.begin(), window.end(), readBack.begin() + 13));
+    EXPECT_TRUE(std::equal(window.begin(), window.end(), readBack.begin() + 16));
 }
 
 TEST_F(VertexBufferEmptyDataTest, WindowedRawUploadRejectsAnUnusableWindow)
 {
     RequireVertexBuffers();
 
-    const std::array<std::uint8_t, 13> window{
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
-    VertexBuffer buffer(device, OddStrideDeclaration(), 2, BufferUsage::None);
+    const std::array<std::uint8_t, 16> window{
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    VertexBuffer buffer(device, PaddedStrideDeclaration(), 2, BufferUsage::None);
 
-    EXPECT_THROW(buffer.SetDataRawAtEXT(26, window.data(), 1, 13),
+    EXPECT_THROW(buffer.SetDataRawAtEXT(32, window.data(), 1, 16),
                  System::ArgumentOutOfRangeException);
     // Not on a vertex boundary.
-    EXPECT_THROW(buffer.SetDataRawAtEXT(5, window.data(), 1, 13), System::ArgumentException);
+    EXPECT_THROW(buffer.SetDataRawAtEXT(5, window.data(), 1, 16), System::ArgumentException);
     // Not this buffer's declared stride.
-    EXPECT_THROW(buffer.SetDataRawAtEXT(0, window.data(), 1, 16), System::ArgumentException);
-    EXPECT_THROW(buffer.SetDataRawAtEXT(-1, window.data(), 1, 13),
+    EXPECT_THROW(buffer.SetDataRawAtEXT(0, window.data(), 1, 20), System::ArgumentException);
+    EXPECT_THROW(buffer.SetDataRawAtEXT(-1, window.data(), 1, 16),
                  System::ArgumentOutOfRangeException);
-    EXPECT_THROW(buffer.SetDataRawAtEXT(0, nullptr, 1, 13), System::ArgumentNullException);
+    EXPECT_THROW(buffer.SetDataRawAtEXT(0, nullptr, 1, 16), System::ArgumentNullException);
     // Zero vertices is a no-op wherever a zero-length transfer is.
-    EXPECT_NO_THROW(buffer.SetDataRawAtEXT(0, nullptr, 0, 13));
+    EXPECT_NO_THROW(buffer.SetDataRawAtEXT(0, nullptr, 0, 16));
 }
 
 TEST_F(VertexBufferEmptyDataTest, WindowedIndexUploadLeavesTheRestOfTheBufferAlone)
@@ -902,7 +954,7 @@ TEST_F(VertexBufferEmptyDataTest, WindowedIndexUploadRejectsAnUnusableWindow)
     IndexBuffer buffer(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
 
     EXPECT_THROW(buffer.SetDataAtEXT(6, window.data(), 0, 1),
-                 System::ArgumentOutOfRangeException);
+                 System::InvalidOperationException);
     // Not on an index boundary.
     EXPECT_THROW(buffer.SetDataAtEXT(1, window.data(), 0, 1), System::ArgumentException);
     // Not this buffer's element width.
@@ -911,5 +963,7 @@ TEST_F(VertexBufferEmptyDataTest, WindowedIndexUploadRejectsAnUnusableWindow)
                  System::ArgumentOutOfRangeException);
     EXPECT_THROW(buffer.SetDataAtEXT(0, static_cast<const std::uint16_t*>(nullptr), 0, 1),
                  System::ArgumentNullException);
-    EXPECT_NO_THROW(buffer.SetDataAtEXT(0, static_cast<const std::uint16_t*>(nullptr), 0, 0));
+    EXPECT_THROW(buffer.SetDataAtEXT(
+                     0, static_cast<const std::uint16_t*>(nullptr), 0, 0),
+                 System::ArgumentNullException);
 }

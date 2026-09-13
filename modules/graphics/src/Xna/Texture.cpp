@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "System/InvalidOperationException.hpp"
 #include <algorithm>
 #include <stdexcept>
 #include <string>
@@ -163,6 +164,34 @@ namespace Microsoft::Xna::Framework::Graphics
         return fmt != SurfaceFormat::NormalizedByte2 && fmt != SurfaceFormat::NormalizedByte4;
     }
 
+    bool Texture::IsVolumeFormatAllowedByProfileEXT(
+        GraphicsProfile profile, SurfaceFormat fmt) noexcept
+    {
+        if (profile != GraphicsProfile::HiDef)
+            return false;
+        switch (fmt)
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     bool Texture::IsRenderTargetFormatAllowedByProfileEXT(GraphicsProfile profile,
                                                           SurfaceFormat fmt) noexcept
     {
@@ -189,6 +218,41 @@ namespace Microsoft::Xna::Framework::Graphics
     int Texture::getLevelCountProperty() const
     {
         return levelCount_;
+    }
+
+    void Texture::ThrowIfDataTransferResourceInUseEXT(bool isSetting) const
+    {
+        if (graphicsDevice_ == nullptr)
+            return;
+
+        for (const RenderTargetBinding& binding : graphicsDevice_->GetRenderTargets())
+        {
+            if (binding.getRenderTargetProperty() == this)
+            {
+                throw System::InvalidOperationException(
+                    "The render target must be resolved before its data can be transferred.");
+            }
+        }
+
+        if (!isSetting)
+            return;
+
+        TextureCollection& pixelTextures = graphicsDevice_->getTexturesProperty();
+        for (int slot = 0; slot < TextureCollection::MaxTextures; ++slot)
+        {
+            if (pixelTextures[slot] == this)
+                throw System::InvalidOperationException("The texture resource is in use.");
+        }
+
+        if (graphicsDevice_->getGraphicsProfileProperty() == GraphicsProfile::HiDef)
+        {
+            TextureCollection& vertexTextures = graphicsDevice_->getVertexTexturesProperty();
+            for (int slot = 0; slot < 4; ++slot)
+            {
+                if (vertexTextures[slot] == this)
+                    throw System::InvalidOperationException("The texture resource is in use.");
+            }
+        }
     }
 
     void Texture::Dispose(bool disposing)

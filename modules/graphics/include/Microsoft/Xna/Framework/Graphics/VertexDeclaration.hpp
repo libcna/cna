@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
@@ -16,8 +17,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class VertexDeclaration : public GraphicsResource
     {
     public:
-        /** @brief Constructs an empty VertexDeclaration with zero stride. */
-        VertexDeclaration() = default;
+        /** @brief Constructs CNA's empty declaration used by legacy extension buffer paths. */
+        CNAEXT VertexDeclaration() = default;
 
         /** @brief Returns the fully-qualified .NET type name of this object. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
@@ -30,6 +31,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param elements Initializer list of vertex attribute descriptors.
          * @throws System::ArgumentNullException if @p elements is empty.
+         * @throws System::ArgumentException if the resulting layout is malformed.
          */
         explicit VertexDeclaration(std::initializer_list<VertexElement> elements);
 
@@ -43,8 +45,21 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param elements Vector of vertex attribute descriptors (moved).
          * @throws System::ArgumentNullException if @p elements is empty.
+         * @throws System::ArgumentException if the resulting layout is malformed.
          */
         explicit VertexDeclaration(std::vector<VertexElement> elements);
+
+        /** @brief Copy-constructs another wrapper for the same XNA declaration resource. */
+        CNAEXT VertexDeclaration(const VertexDeclaration& other);
+
+        /** @brief Copy-assigns another wrapper for the same XNA declaration resource. */
+        CNAEXT VertexDeclaration& operator=(const VertexDeclaration& other);
+
+        /** @brief Move-constructs a declaration wrapper. */
+        CNAEXT VertexDeclaration(VertexDeclaration&& other) noexcept = default;
+
+        /** @brief Move-assigns a declaration wrapper. */
+        CNAEXT VertexDeclaration& operator=(VertexDeclaration&& other) noexcept = default;
 
         /**
          * @brief Constructs a VertexDeclaration with an explicit stride and element list.
@@ -52,6 +67,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elements     Initializer list of vertex attribute descriptors.
          * @throws System::ArgumentNullException if @p elements is empty.
          * @throws System::ArgumentOutOfRangeException if @p vertexStride is not positive.
+         * @throws System::ArgumentException if the stride or element layout is malformed.
          */
         VertexDeclaration(int vertexStride,
                           std::initializer_list<VertexElement> elements);
@@ -62,6 +78,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elements     Vector of vertex attribute descriptors (moved).
          * @throws System::ArgumentNullException if @p elements is empty.
          * @throws System::ArgumentOutOfRangeException if @p vertexStride is not positive.
+         * @throws System::ArgumentException if the stride or element layout is malformed.
          */
         VertexDeclaration(int vertexStride,
                           std::vector<VertexElement> elements);
@@ -82,6 +99,12 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
     private:
+        friend class GraphicsDevice;
+        friend class VertexBuffer;
+
+        void ValidateForProfile(GraphicsProfile graphicsProfile) const;
+        void BindToDevice(GraphicsDevice& device);
+
         int vertexStride_ = 0;
         std::vector<VertexElement> elements_;
     };

@@ -56,8 +56,7 @@
 //   * slot 2's VertexOffset dropped     -> the horizontal decoy shift of five columns
 //   * slot 3 never bound                -> the band axis collapses to band 0
 //   * slot 3's VertexOffset dropped     -> band 3 for the first instance pair
-//   * slot 3's frequency read as 1      -> a fourth instance record that does not exist: the
-//                                          per-instance range gate rejects the draw
+//   * slot 3's frequency read as 1      -> a fourth instance record that does not exist
 //   * baseVertex applied to an instance -> every band and column moves together
 //     stream
 //
@@ -66,8 +65,8 @@
 //
 // Renderer scope. Three groups, each with its own declared boundary rather than a silent skip:
 //
-//   1. the PUBLIC TRANSPORT group -- validation, slot identity, capability rejection. Runs on
-//      EVERY renderer, needs no rasterizer, and is where the red-first reproduction lives: before
+//   1. the PUBLIC TRANSPORT group -- native forwarding, slot identity, capability rejection. Runs
+//      on EVERY renderer, needs no rasterizer, and is where the red-first reproduction lives: before
 //      this task a secondary per-vertex stream and every per-instance stream past the first
 //      reached no validation and no renderer at all.
 //   2. the PRESERVATION group -- the classic one-per-vertex + one-per-instance shape every
@@ -88,6 +87,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 // Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced.
 using namespace CNA::Testing::Renderers;
@@ -103,6 +103,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -131,6 +132,7 @@ using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
@@ -148,18 +150,18 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // The renderers whose stock instanced path actually rasterizes and whose RenderTarget2D::GetData
 // reads the result back -- REMED-GFX-118's own permanent suite set. A renderer outside it has no
 // instanced draw implementation at all (`IGraphicsRenderer::DrawInstancedPrimitivesEx`'s default
-// throws), which is a pre-existing capability boundary this task neither creates nor closes; the
-// public transport group below still runs there and still asserts the shared validation contract.
+// throws), which remains a capability boundary for any renderer outside this set. SOFTWARE-129
+// adds Software only after its independent CPU route passes the complete shared oracle.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool MultiStreamOracle()
 {
     return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
-                           DirectX9, DirectX11, DirectX12, Magnum, SdlGpu);
+                           DirectX9, DirectX11, DirectX12, Magnum, SdlGpu, Software);
 }
 
 // The renderers whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
 // InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123), Vulkan, bgfx and
-// WebGPU (REMED-GFX-211/213). InstancedDrawRangeTests.cpp uses exactly this set for the same
+// WebGPU (REMED-GFX-211/213), and Software (SOFTWARE-129). InstancedDrawRangeTests.cpp uses this set for the same
 // reason.
 //
 // This is now every renderer that rasterizes an instanced draw at all EXCEPT D3D9, so the triage
@@ -173,8 +175,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// plans/plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool BindingOffsetOracle()
 {
-    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11,
-                           DirectX12, Vulkan, Bgfx, WebGPU, Magnum, SdlGpu);
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12,
+                           Vulkan, Bgfx, WebGPU, Magnum, SdlGpu, Software);
 }
 
 namespace
@@ -700,6 +702,7 @@ namespace
         /// docs/opengles2-renderer.md) each skip every leg here up front.
         void SetUp() override
         {
+            device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
                 GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
             if (!device.SupportsCapability(GraphicsCapability::Instancing))
@@ -1201,12 +1204,12 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedDrawsUnderDifferentBindingSetsKeepThe
 }
 
 // ---------------------------------------------------------------------------
-// Coverage item 6 (non-contiguous ACTIVE slots) and the REMED-GFX-201 semantic-composition rule on
-// the instanced route. Slots 1 and 3 repeat an earlier per-vertex stream's complete (usage,
-// usageIndex) set, so XNA drops them -- "Stream not in use!" -- and the ACTIVE stream slots become
-// 0, 2, 4, 5 rather than 0, 1, 2, 3. Every active stream must keep its OWN public slot number.
+// Coverage item 6 and the REMED-GFX-201/SOFTWARE-320 semantic-composition rule on the instanced
+// route. Slots 1 and 3 repeat an earlier per-vertex stream's complete (usage, usageIndex) set, so
+// FNA remaps them to the next free indices. BasicEffect does not consume those remapped inputs, but
+// the later instance streams must still keep their own public slots and rates.
 // ---------------------------------------------------------------------------
-TEST_F(InstancedDrawMultiStreamTest, DuplicateSemanticStreamsAreDroppedAndSlotsStayNonContiguous)
+TEST_F(InstancedDrawMultiStreamTest, DuplicateSemanticStreamsRemapToUnusedIndices)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
     // group, so on every other renderer these tests did not exist at all.
@@ -1272,7 +1275,7 @@ TEST_F(InstancedDrawMultiStreamTest, DuplicateSemanticStreamsAreDroppedAndSlotsS
     const FrameSnapshot snapshot = CaptureTarget(target);
     ExpectExactlyTheseCells(
         snapshot, layout, CanonicalCells(0),
-        "a repeated (usage, usageIndex) set contributes nothing and does not renumber the rest");
+        "a repeated usage/index remaps away from BasicEffect inputs without disturbing later streams");
 }
 
 // ---------------------------------------------------------------------------
@@ -2266,18 +2269,16 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
 
 
 // ===========================================================================
-// The PUBLIC TRANSPORT group. No rasterizer, no capability: every one of these runs on EVERY
-// renderer, because a range that leaves a bound buffer is wrong everywhere and must report the same
-// public exception everywhere. This is where REMED-GFX-202's red-first reproduction lives.
+// The PUBLIC TRANSPORT group. Microsoft XNA forwards these buffered ranges to D3D without managed
+// capacity validation. Software and EasyGL make that path safe/forwarded; renderers with unchecked
+// host-side staging retain the explicit compatibility guard.
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
 // Coverage item 19: a SHORT SECONDARY PER-VERTEX stream. The position stream is long enough for
-// the requested window and the colour stream is not. Before REMED-GFX-202 the instanced route
-// validated only the buffer named by `currentVertexBuffer_` and the first per-instance binding, so
-// this request was ACCEPTED and every renderer was free to read past the colour buffer's end.
+// the requested window and the colour stream is not.
 // ---------------------------------------------------------------------------
-TEST_F(InstancedDrawMultiStreamTest, ShortSecondaryPerVertexStreamIsRejected)
+TEST_F(InstancedDrawMultiStreamTest, ShortSecondaryPerVertexStreamMatchesRangeContract)
 {
     const GridLayout layout = TargetLayout();
     const MixedStreamFixture fixture = BuildMixedStreamFixture(layout);
@@ -2307,23 +2308,27 @@ TEST_F(InstancedDrawMultiStreamTest, ShortSecondaryPerVertexStreamIsRejected)
         VertexBufferBinding(&columnBuffer, 1, kColumnStreamFrequency),
     });
     device.SetIndexBuffer(&indexBuffer);
-    effect.Apply();
+    // SOFTWARE-321: this is an ACTIVE short-stream guard. BasicEffect's XNA default leaves
+    // vertex colour disabled, in which case the Color0 stream is not a shader input and must not
+    // bound the draw at all.
+    ApplyMeshEffect(effect);
 
     // The declared window is two groups: the position stream holds it, the colour stream does not.
-    EXPECT_THROW(
+    const auto draw = [&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 2 * kVerticesPerSlot, 0, 1, kInstanceCount),
-        System::ArgumentOutOfRangeException)
-        << "a per-vertex stream too short for the declared window must be rejected on the "
-           "instanced route too, even when stream 0 is long enough";
+            PrimitiveType::TriangleList, 0, 0, 2 * kVerticesPerSlot, 0, 1, kInstanceCount);
+    };
+    if (device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT())
+        EXPECT_THROW(draw(), System::ArgumentOutOfRangeException);
+    else
+        EXPECT_NO_THROW(draw());
 }
 
 // ---------------------------------------------------------------------------
 // Coverage item 20: a SHORT SECOND PER-INSTANCE stream. The first instance stream holds every
-// record the draw needs and the second does not. Before REMED-GFX-202 only the FIRST per-instance
-// binding was located at all -- the loop `break`s on it -- so this request was ACCEPTED.
+// record the draw needs and the second does not.
 // ---------------------------------------------------------------------------
-TEST_F(InstancedDrawMultiStreamTest, ShortSecondPerInstanceStreamIsRejected)
+TEST_F(InstancedDrawMultiStreamTest, ShortSecondPerInstanceStreamMatchesRangeContract)
 {
     const GridLayout layout = TargetLayout();
     const MixedStreamFixture fixture = BuildMixedStreamFixture(layout);
@@ -2359,19 +2364,19 @@ TEST_F(InstancedDrawMultiStreamTest, ShortSecondPerInstanceStreamIsRejected)
     device.SetIndexBuffer(&indexBuffer);
     effect.Apply();
 
-    EXPECT_THROW(
+    const auto draw = [&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstanceCount),
-        System::ArgumentOutOfRangeException)
-        << "a per-instance stream past the first must be range-validated too";
+            PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstanceCount);
+    };
+    if (device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT())
+        EXPECT_THROW(draw(), System::ArgumentOutOfRangeException);
+    else
+        EXPECT_NO_THROW(draw());
 }
 
 // ---------------------------------------------------------------------------
-// The instance-frequency arithmetic, asserted without a rasterizer. `instanceCount` instances at
-// frequency `f` consume exactly `1 + (instanceCount - 1) / f` records, starting at the binding's
-// own VertexOffset. One record fewer must be rejected and exactly enough must be accepted, for
-// both frequencies -- so a renderer that reads the frequency as a byte stride, ignores it, or
-// treats it as one cannot satisfy both halves.
+// The instance-frequency arithmetic still determines which record native code fetches. One record
+// fewer is forwarded by XNA; exactly enough remains the positive behavioral boundary.
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, InstanceFrequencyFixesTheExactConsumedRecordCount)
 {
@@ -2407,22 +2412,22 @@ TEST_F(InstancedDrawMultiStreamTest, InstanceFrequencyFixesTheExactConsumedRecor
         VertexBufferBinding(&shortBuffer, kOffset, kFrequency),
     });
     effect.Apply();
-    EXPECT_THROW(
+    const auto shortDraw = [&] {
         device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstances),
-        System::ArgumentOutOfRangeException)
-        << "one record short of `VertexOffset + 1 + (instanceCount - 1) / frequency` must be "
-           "rejected";
+            PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstances);
+    };
+    if (device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT())
+        EXPECT_THROW(shortDraw(), System::ArgumentOutOfRangeException);
+    else
+        EXPECT_NO_THROW(shortDraw());
 
     device.SetVertexBuffers({
         VertexBufferBinding(&positionBuffer, kPositionPrefix, 0),
         VertexBufferBinding(&exactBuffer, kOffset, kFrequency),
     });
     effect.Apply();
-    // Exactly enough: the SHARED layer must accept it. A renderer may still reject afterwards -- it
-    // may implement no instanced path at all, or bound its own staging copy more tightly. Those are
-    // native capability limits, not verdicts on the public range, so they are told apart by the
-    // shared gate's own wording: only it names the offending slot.
+    // Exactly enough remains accepted by the shared layer. A renderer may still reject afterwards
+    // when it has no instanced implementation; that is a capability limit, not a range verdict.
     try
     {
         device.DrawInstancedPrimitives(

@@ -1,0 +1,35 @@
+diff --git a/mojoshader.c b/mojoshader.c
+index b919c04..604310f 100644
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -450,6 +450,22 @@ static void validate_pixel_shader_model_one_destination_mask(
+     } // else if
+ } // validate_pixel_shader_model_one_destination_mask
+ 
++static void validate_pixel_shader_model_one_coissue_opcode(
++    Context *ctx, const uint32 opcode)
++{
++    if (!shader_is_pixel(ctx) || (ctx->major_ver != 1) || !ctx->coissue)
++        return;
++
++    if (pixel_shader_model_one_texture_opcode(opcode))
++    {
++        fail(ctx, "pixel Shader Model 1.x texture instructions cannot be co-issued");
++    } // if
++    else if (opcode == 9)  // DP4 occupies both the RGB and alpha pipelines.
++    {
++        fail(ctx, "pixel Shader Model 1.x DP4 cannot be co-issued");
++    } // else if
++} // validate_pixel_shader_model_one_coissue_opcode
++
+ static int temporary_register_count(const Context *ctx)
+ {
+     if (shader_is_vertex(ctx))
+@@ -2781,6 +2797,7 @@ static int parse_instruction_token(Context *ctx)
+     if (instruction->state != NULL)
+         instruction->state(ctx);
+     validate_pixel_shader_model_one_destination_mask(ctx, opcode);
++    validate_pixel_shader_model_one_coissue_opcode(ctx, opcode);
+ 
+     ctx->instruction_count += instruction->slots;
+     validate_vertex_instruction_slot_count(ctx);

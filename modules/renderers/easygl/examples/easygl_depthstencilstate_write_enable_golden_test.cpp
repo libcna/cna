@@ -23,9 +23,12 @@
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+
+#include <memory>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -50,6 +53,13 @@ namespace
 
 class DepthStencilStateWriteEnableGoldenTest : public CNA::Examples::PixelTestGame
 {
+public:
+    DepthStencilStateWriteEnableGoldenTest()
+    {
+        graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24);
+    }
+
 protected:
     void RunTest() override
     {
@@ -111,6 +121,9 @@ protected:
         ExpectPixel("clear-ignores-and-restores-depth-write-mask",
                     Rectangle(W * 3 / 4, sampleY, 1, 1), kBlue, /*tolerance=*/60);
     }
+
+private:
+    std::unique_ptr<GraphicsDeviceManager> graphics_;
 };
 
 int main()

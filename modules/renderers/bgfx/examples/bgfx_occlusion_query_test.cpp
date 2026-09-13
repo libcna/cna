@@ -41,6 +41,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -156,8 +157,9 @@ protected:
             return;
         }
 
-        complete_   = query_->getIsCompleteProperty();
-        pixelCount_ = query_->getPixelCountProperty();
+        complete_ = query_->getIsCompleteProperty();
+        if (complete_)
+            pixelCount_ = query_->getPixelCountProperty();
         centre_     = readCentre(dev);
         ++frame_;
     }
@@ -166,6 +168,7 @@ public:
     BgfxOcclusionQueryTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

@@ -21,10 +21,8 @@
 //   (REMED-CONTENT-004: the constructor queries SupportsCapability(Texture3D) before creating
 //   any renderer resource); TextureCube/RenderTargetCube construction still does NOT throw
 //   (their factories return nullptr; both classes degrade gracefully).
-// Check G (DX3-66) -- OcclusionQuery construction does NOT throw; IsComplete()/PixelCount()
-//   degrade to false/0 (a real fix in this phase: the Phase X1/X2 skeleton had this throwing,
-//   inconsistent with the plan's own "-> nullptr" spec and with OcclusionQuery's own null-safe
-//   design -- corrected here).
+// Check G (DX3-66 + SOFTWARE-199) -- OcclusionQuery construction rejects the unsupported
+//   Reach/renderer combination instead of returning a permanently incomplete null object.
 // Check H (DX3-67) -- ShaderEffect construction does NOT throw; IsEffectValid() is false.
 // Check I (DX3-69) -- DebugSimulateContextLoss()/DebugRestoreContext() (direct renderer calls)
 //   are confirmed no-ops (inherited default, matching free-direct's own inert IsLost/Restore
@@ -156,20 +154,15 @@ protected:
             check(!cubesThrew, "TextureCube/RenderTargetCube construction does not throw (DX3-64)");
         }
 
-        // Check G (DX3-66): OcclusionQuery degrades gracefully (a real fix in this phase -- see
-        // this file's header comment).
+        // Check G (DX3-66 + SOFTWARE-199): recovered XNA rejects an unsupported profile.
         {
-            bool threw = false;
-            bool degradedOk = false;
+            bool rejected = false;
             try
             {
                 OcclusionQuery oq(dev);
-                oq.Begin();
-                oq.End();
-                degradedOk = !oq.getIsCompleteProperty() && oq.getPixelCountProperty() == 0;
             }
-            catch (const std::exception&) { threw = true; }
-            check(!threw && degradedOk, "OcclusionQuery degrades gracefully to nullptr (DX3-66)");
+            catch (const System::NotSupportedException&) { rejected = true; }
+            check(rejected, "OcclusionQuery rejects the unsupported profile/renderer (DX3-66)");
         }
 
         // Check H (DX3-67): ShaderEffect degrades gracefully.

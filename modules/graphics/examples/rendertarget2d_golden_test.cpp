@@ -65,6 +65,7 @@ public:
     RenderTarget2DGoldenTest()
     {
         graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphics_->setPreferredBackBufferWidthProperty(kBackbufferSize);
         graphics_->setPreferredBackBufferHeightProperty(kBackbufferSize);
         graphics_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);
@@ -101,11 +102,12 @@ protected:
         DrawQuadrant(2, 2, Color(255, 255, 0, 255));
         spriteBatch_->End();
 
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
         std::vector<Color> targetReadback(kTargetSize * kTargetSize, Color(0, 0, 0, 0));
         target.GetData(targetReadback.data(), 0, static_cast<int>(targetReadback.size()));
         CheckMatches(targetReadback, false, "RenderTarget2D level-0 readback matches the checked-in oracle");
 
-        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         device.Clear(Color(0, 0, 0, 255));
         BeginPointOpaque();
         spriteBatch_->Draw(target, Rectangle(0, 0, kBackbufferSize, kBackbufferSize),

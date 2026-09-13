@@ -1,0 +1,17 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1384,7 +1384,13 @@ static void state_DCL(Context *ctx)
+     else if (shader_is_vertex(ctx) || shader_is_pixel(ctx))
+     {
+         if (regtype == REG_TYPE_SAMPLER)
++        {
++            if (shader_is_vertex(ctx) && (regnum >= 4))
++                fail(ctx, "vertex sampler register must be s0 through s3");
++            else if (shader_is_pixel(ctx) && (regnum >= 16))
++                fail(ctx, "pixel sampler register must be s0 through s15");
+             add_sampler(ctx, regnum, (TextureType) ctx->dwords[0], 0);
++        } // if
+         else
+         {
+             const MOJOSHADER_usage usage = (const MOJOSHADER_usage) ctx->dwords[0];

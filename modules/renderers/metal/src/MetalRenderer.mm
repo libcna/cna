@@ -1282,7 +1282,8 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         MetalTexture3D(id<MTLDevice> dev, id<MTLCommandQueue> queue, int w,int h,int depth,bool mipMap,
                        std::shared_ptr<MetalResourceHealth> resourceHealth,
                        std::function<void()> ownerHealthCheck)
-            : w_(w), h_(h), depth_(depth), levelCount_(MetalMipLevelCount(w,h,mipMap)),
+            : w_(w), h_(h), depth_(depth),
+              levelCount_(MetalVolumeMipLevelCount(w,h,depth,mipMap)),
               resourceHealth_(std::move(resourceHealth)),
               ownerHealthCheck_(std::move(ownerHealthCheck))
         {

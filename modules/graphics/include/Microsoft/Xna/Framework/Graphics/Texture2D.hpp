@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
@@ -52,7 +53,7 @@ namespace Microsoft::Xna::Framework::Graphics
         using Texture::Dispose;
 
         /** @brief Constructs a default, uninitialized Texture2D. */
-        Texture2D();
+        CNAEXT Texture2D();
 
         /**
          * @brief Loads a Texture2D from a file asset by name.
@@ -71,8 +72,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param graphicsDevice The device to create the texture on.
          * @param width          Width in pixels.
          * @param height         Height in pixels.
-         * @throws System::NotSupportedException if @p width or @p height exceeds the active
-         *         renderer's maximum texture dimension (see GraphicsDevice::GetMaxTextureDimension()).
+         * @throws System::NotSupportedException if either dimension or their aspect ratio exceeds
+         *         the active graphics profile or renderer limit.
          */
         Texture2D(GraphicsDevice& graphicsDevice, int width, int height);
 
@@ -83,8 +84,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param height         Height in pixels.
          * @param mipMap         True to generate a full mipmap chain.
          * @param format         The desired surface format.
-         * @throws System::NotSupportedException if @p width or @p height exceeds the active
-         *         renderer's maximum texture dimension (see GraphicsDevice::GetMaxTextureDimension()).
+         * @throws System::NotSupportedException if either dimension or their aspect ratio exceeds
+         *         the active graphics profile or renderer limit.
          */
         Texture2D(GraphicsDevice& graphicsDevice, int width, int height,
                   bool mipMap, SurfaceFormat format);
@@ -92,10 +93,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Destructor. */
         CNAEXT ~Texture2D() override;
 
-        Texture2D(const Texture2D&) = default;
-        Texture2D& operator=(const Texture2D&) = default;
-        Texture2D(Texture2D&&) noexcept = default;
-        Texture2D& operator=(Texture2D&&) noexcept = default;
+        /** @brief Copy-constructs a value wrapper that shares the underlying texture resource. */
+        CNAEXT Texture2D(const Texture2D&) = default;
+        /** @brief Copy-assigns a value wrapper that shares the underlying texture resource. */
+        CNAEXT Texture2D& operator=(const Texture2D&) = default;
+        /** @brief Move-constructs a wrapper and transfers ownership of its renderer resource. */
+        CNAEXT Texture2D(Texture2D&& other) noexcept;
+        /** @brief Move-assigns a wrapper and transfers ownership of its renderer resource. */
+        CNAEXT Texture2D& operator=(Texture2D&& other) noexcept;
 
         /** @brief Returns the fully qualified .NET type name of this class. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
@@ -210,26 +215,82 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Uploads exact packed RGBA binary16 values to a mip level or rectangle. */
         void SetData(int level, const Rectangle* rect, const PackedVector::HalfVector4* data,
                      int startIndex, int elementCount);
-        /** @brief Uploads exact unsigned bytes to a ByteEXT texture, or compressed blocks to a Dxt1/Dxt3/Dxt5 texture. */
-        CNAEXT void SetData(const std::uint8_t* data, int elementCount);
+        /** @brief Uploads exact bytes to any classic texture format or compressed block payload. */
+        void SetData(const std::uint8_t* data, int elementCount);
         /**
-         * @brief Uploads exact unsigned bytes to a ByteEXT texture, or exact compressed blocks
-         * to a Dxt1/Dxt3/Dxt5 texture. For a compressed format, level/rect coordinates are texel
-         * space and must be block-aligned or reach the level's edge; elementCount is the exact
-         * padded block byte count for the requested region.
+         * @brief Uploads exact bytes to a mip level or rectangle. For a compressed format,
+         * level/rect coordinates are texel space and must be block-aligned or reach the level's
+         * edge; elementCount is the exact padded block byte count for the requested region.
          */
-        CNAEXT void SetData(int level, const Rectangle* rect, const std::uint8_t* data,
-                           int startIndex, int elementCount);
-        /** @brief Uploads exact unsigned 16-bit values to a UShortEXT texture. */
-        CNAEXT void SetData(const std::uint16_t* data, int elementCount);
-        /** @brief Uploads exact unsigned 16-bit values to a UShortEXT mip level or rectangle. */
-        CNAEXT void SetData(int level, const Rectangle* rect, const std::uint16_t* data,
-                           int startIndex, int elementCount);
+        void SetData(int level, const Rectangle* rect, const std::uint8_t* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads unsigned 16-bit elements through the generic texture-transfer contract. */
+        void SetData(const std::uint16_t* data, int elementCount);
+        /** @brief Uploads unsigned 16-bit elements to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const std::uint16_t* data,
+                     int startIndex, int elementCount);
+
+        /**
+         * @brief Uploads an arbitrary XNA-compatible value-type representation.
+         *
+         * The element's native byte width must not exceed and must evenly divide the texture
+         * format width. The selected element window must contain exactly the requested region.
+         *
+         * @tparam T Trivially copyable value type whose object representation is the transfer data.
+         * @param data Source elements.
+         * @param elementCount Exact number of elements required for the complete level.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void SetData(const T* data, int elementCount)
+        {
+            SetData(0, nullptr, data, 0, elementCount);
+        }
+
+        /**
+         * @brief Uploads an arbitrary XNA-compatible value-type representation to a region.
+         *
+         * @tparam T Trivially copyable value type whose object representation is the transfer data.
+         * @param level Mip level beginning at zero.
+         * @param rect Destination rectangle, or null for the complete level.
+         * @param data Source elements.
+         * @param startIndex First source element.
+         * @param elementCount Exact number of elements required for the region.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void SetData(int level, const Rectangle* rect, const T* data,
+                     int startIndex, int elementCount)
+        {
+            SetTrivialDataEXT(level, rect, data, startIndex, elementCount,
+                              static_cast<int>(sizeof(T)));
+        }
+
+        /**
+         * @brief Uploads a complete level from a window of XNA-compatible value types.
+         *
+         * This is the C++ pointer/count mapping of XNA's
+         * `SetData&lt;T&gt;(T[] data, int startIndex, int elementCount)` overload. The selected
+         * source elements must contain exactly the complete level-zero payload.
+         *
+         * @tparam T A supported logical packed/vector type or a trivially-copyable raw value type.
+         * @param data Source elements.
+         * @param startIndex First source element to upload.
+         * @param elementCount Exact number of elements required for the complete level.
+         */
+        template<typename T>
+        void SetData(const T* data, int startIndex, int elementCount)
+        {
+            SetData(0, nullptr, data, startIndex, elementCount);
+        }
 
         /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
         void SetData(std::nullptr_t, int elementCount)
         {
             SetData(static_cast<const Color*>(nullptr), elementCount);
+        }
+        /** @brief Preserves null-pointer overload resolution for the source-window overload. */
+        void SetData(std::nullptr_t, int startIndex, int elementCount)
+        {
+            SetData(static_cast<const Color*>(nullptr), startIndex, elementCount);
         }
         /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
         void SetData(int level, const Rectangle* rect, std::nullptr_t,
@@ -368,25 +429,69 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Reads exact packed RGBA binary16 values from a mip level or rectangle. */
         void GetData(int level, const Rectangle* rect, PackedVector::HalfVector4* data,
                      int startIndex, int elementCount) const;
-        /** @brief Reads exact unsigned bytes from a ByteEXT texture. */
-        CNAEXT void GetData(std::uint8_t* data, int startIndex, int elementCount) const;
-        /** @brief Reads all exact unsigned bytes from a ByteEXT texture, or compressed blocks from a Dxt1/Dxt3/Dxt5 texture. */
-        CNAEXT void GetData(std::uint8_t* data, int elementCount) const;
+        /** @brief Reads exact bytes from any classic texture format into a destination window. */
+        void GetData(std::uint8_t* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact texture bytes, including compressed block payloads. */
+        void GetData(std::uint8_t* data, int elementCount) const;
         /**
-         * @brief Reads exact unsigned bytes from a ByteEXT mip level or rectangle, or exact
-         * compressed blocks from a Dxt1/Dxt3/Dxt5 mip level or rectangle. For a compressed
-         * format, rect coordinates are texel space and must be block-aligned or reach the
-         * level's edge; elementCount is the exact padded block byte count for the region.
+         * @brief Reads exact bytes from a mip level or rectangle. For a compressed format, rect
+         * coordinates are texel space and must be block-aligned or reach the level's edge;
+         * elementCount is the exact padded block byte count for the region.
          */
-        CNAEXT void GetData(int level, const Rectangle* rect, std::uint8_t* data,
-                           int startIndex, int elementCount) const;
-        /** @brief Reads exact unsigned 16-bit values from a UShortEXT texture. */
-        CNAEXT void GetData(std::uint16_t* data, int startIndex, int elementCount) const;
-        /** @brief Reads all exact unsigned 16-bit values from a UShortEXT texture. */
-        CNAEXT void GetData(std::uint16_t* data, int elementCount) const;
-        /** @brief Reads exact unsigned 16-bit values from a UShortEXT mip level or rectangle. */
-        CNAEXT void GetData(int level, const Rectangle* rect, std::uint16_t* data,
-                           int startIndex, int elementCount) const;
+        void GetData(int level, const Rectangle* rect, std::uint8_t* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads unsigned 16-bit elements through the generic texture-transfer contract. */
+        void GetData(std::uint16_t* data, int startIndex, int elementCount) const;
+        /** @brief Reads all unsigned 16-bit elements from the complete level. */
+        void GetData(std::uint16_t* data, int elementCount) const;
+        /** @brief Reads unsigned 16-bit elements from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, std::uint16_t* data,
+                     int startIndex, int elementCount) const;
+
+        /**
+         * @brief Reads a complete level through an arbitrary XNA-compatible value type.
+         *
+         * @tparam T Trivially copyable value type whose object representation receives the data.
+         * @param data Destination elements.
+         * @param elementCount Exact number of elements required for the complete level.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void GetData(T* data, int elementCount) const
+        {
+            GetData(data, 0, elementCount);
+        }
+
+        /**
+         * @brief Reads a complete level into a window of arbitrary XNA-compatible values.
+         *
+         * @tparam T Trivially copyable value type whose object representation receives the data.
+         * @param data Destination elements.
+         * @param startIndex First destination element.
+         * @param elementCount Exact number of elements required for the complete level.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void GetData(T* data, int startIndex, int elementCount) const
+        {
+            GetData(0, nullptr, data, startIndex, elementCount);
+        }
+
+        /**
+         * @brief Reads a region through an arbitrary XNA-compatible value type.
+         *
+         * @tparam T Trivially copyable value type whose object representation receives the data.
+         * @param level Mip level beginning at zero.
+         * @param rect Source rectangle, or null for the complete level.
+         * @param data Destination elements.
+         * @param startIndex First destination element.
+         * @param elementCount Exact number of elements required for the region.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void GetData(int level, const Rectangle* rect, T* data,
+                     int startIndex, int elementCount) const
+        {
+            GetTrivialDataEXT(level, rect, data, startIndex, elementCount,
+                              static_cast<int>(sizeof(T)));
+        }
 
         /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
         void GetData(std::nullptr_t, int elementCount) const
@@ -407,6 +512,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Creates a Texture2D by decoding image data from a stream.
+         *
+         * The classic XNA-compatible path accepts PNG, JPEG, and GIF containers.
+         *
          * @param graphicsDevice The device to create the texture on.
          * @param stream         The input stream containing encoded image data.
          * @return The decoded Texture2D.
@@ -416,6 +524,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Creates a Texture2D by decoding image data from a stream, resized or cropped
          *        to a requested size.
+         *
+         * The classic XNA-compatible path accepts PNG, JPEG, and GIF containers.
          *
          * When @p zoom is false, the decoded image is scaled down to fit within a
          * @p width x @p height box while preserving its aspect ratio (the resulting texture may
@@ -433,6 +543,33 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         static Texture2D FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream,
                                     int width, int height, bool zoom);
+
+        /**
+         * @brief Creates a Texture2D by decoding a DXT-compressed DDS stream.
+         *
+         * This explicit extension preserves DDS loading without changing the classic XNA
+         * `FromStream` image-format contract.
+         *
+         * @param graphicsDevice The device to create the texture on.
+         * @param stream The input stream containing DDS data.
+         * @return The decoded Texture2D, retaining compressed storage when supported.
+         */
+        CNAEXT static Texture2D DDSFromStreamEXT(
+            GraphicsDevice& graphicsDevice, System::IO::Stream& stream);
+
+        /**
+         * @brief Creates a resized or cropped Texture2D from a DXT-compressed DDS stream.
+         *
+         * @param graphicsDevice The device to create the texture on.
+         * @param stream The input stream containing DDS data.
+         * @param width Requested width in pixels.
+         * @param height Requested height in pixels.
+         * @param zoom False to fit while preserving aspect ratio; true to crop and fill.
+         * @return The decoded and resized Color texture.
+         */
+        CNAEXT static Texture2D DDSFromStreamEXT(
+            GraphicsDevice& graphicsDevice, System::IO::Stream& stream,
+            int width, int height, bool zoom);
 
         /**
          * @brief Saves the texture as a PNG image to the given stream.
@@ -586,11 +723,6 @@ namespace Microsoft::Xna::Framework::Graphics
         std::shared_ptr<ITextureRenderer> renderer_;
         int width  = 0;
         int height = 0;
-        /// plan_vulkan.md VULKAN-169 (F-32): the pixels the four save routines encode --
-        /// the renderer's readback for a render target, the CPU shadow otherwise, and
-        /// nullptr when there is neither. @p scratch owns the readback if one happened.
-        [[nodiscard]] const std::uint8_t* gatherPixelsForEncode(
-            std::vector<std::uint8_t>& scratch) const;
         std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
         std::shared_ptr<std::vector<std::vector<uint8_t>>> extraMipLevels_;
 
@@ -627,14 +759,27 @@ namespace Microsoft::Xna::Framework::Graphics
             GraphicsDevice& device, int w, int h, SurfaceFormat format,
             std::vector<std::vector<std::uint8_t>>&& blockLevels);
 
+        /// Returns encoder-ready RGBA8 pixels converted from authoritative level-zero storage.
+        [[nodiscard]] std::vector<std::uint8_t> GetPixelsForSave(const char* api) const;
         void storeCpuPixels(const uint8_t* rgba, int pixelCount);
         std::vector<uint8_t>& getMipBuffer(int level);
         const std::vector<uint8_t>* getMipBufferConst(int level) const;
         [[nodiscard]] int getBytesPerTexel() const;
+        void ValidateCopyArgumentsEXT(int level, const void* data, int startIndex,
+                                      int elementCount);
+        void ValidateCopyArgumentsEXT(int level, const void* data, int startIndex,
+                                      int elementCount) const;
+        void ValidateCopyArgumentsEXT(const char* api, bool setting, int level,
+                                      const void* data, int startIndex,
+                                      int elementCount) const;
         void SetDataBytes(int level, const Rectangle* rect, const std::uint8_t* data,
                           int startIndex, int elementCount, int elementBytes);
         void GetDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
                           int startIndex, int elementCount, int elementBytes) const;
+        void SetTrivialDataEXT(int level, const Rectangle* rect, const void* data,
+                               int startIndex, int elementCount, int elementBytes);
+        void GetTrivialDataEXT(int level, const Rectangle* rect, void* data,
+                               int startIndex, int elementCount, int elementBytes) const;
 
         /// Raw block-compressed byte upload for Dxt1/Dxt3/Dxt5 (SKIA-140). Unlike SetDataBytes,
         /// there is no CPU-side mirror: each call reads back, patches, and re-uploads through

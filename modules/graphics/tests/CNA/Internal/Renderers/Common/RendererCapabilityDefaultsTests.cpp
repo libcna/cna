@@ -27,7 +27,7 @@ namespace
     /// The interface's own defaults, with nothing overridden. Every one of the 23 pure virtuals is
     /// given an inert body; every method under test deliberately keeps its base implementation, so
     /// what this fixture measures is exactly what a renderer inherits by writing nothing.
-    class DefaultsOnlyRenderer final : public CNA::Internal::Renderers::IGraphicsRenderer
+    class DefaultsOnlyRenderer : public CNA::Internal::Renderers::IGraphicsRenderer
     {
     public:
         void Clear(float, float, float, float) override {}
@@ -70,6 +70,22 @@ namespace
             const Microsoft::Xna::Framework::Matrix&,
             const Microsoft::Xna::Framework::Matrix&,
             Microsoft::Xna::Framework::Graphics::PrimitiveType, int) override {}
+    };
+
+    class StandaloneDepthRenderer final : public DefaultsOnlyRenderer
+    {
+    public:
+        [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
+        [[nodiscard]] bool SupportsDepthBuffer() const override { return true; }
+        [[nodiscard]] bool SupportsStencilBuffer() const override { return false; }
+    };
+
+    class StandaloneStencilRenderer final : public DefaultsOnlyRenderer
+    {
+    public:
+        [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
+        [[nodiscard]] bool SupportsDepthBuffer() const override { return false; }
+        [[nodiscard]] bool SupportsStencilBuffer() const override { return true; }
     };
 
     class DefaultsOnlyTexture2DArrayRenderer final
@@ -125,28 +141,30 @@ namespace
     };
 }
 
-TEST(RendererCapabilityDefaultsTest, ProfileCeilingsDefaultToNoCeiling)
+TEST(RendererCapabilityDefaultsTest, ProfileCeilingsDefaultToClassicXnaLimits)
 {
-    // The behaviour every renderer except D3D9 had: no GraphicsProfile ceiling is enforced at all.
-    // Reporting a finite number here would impose a limit on renderers that never had one.
+    // SOFTWARE-179: these are profile rules, not renderer hardware capabilities. Leaving the
+    // interface defaults unlimited made every non-D3D9 renderer bypass public XNA restrictions.
     DefaultsOnlyRenderer renderer;
-    const int unlimited = (std::numeric_limits<int>::max)();
 
-    for (const int profile : {0, 1})
-    {
-        EXPECT_EQ(renderer.GetMaxTextureSizeForProfileEXT(profile), unlimited);
-        EXPECT_EQ(renderer.GetMaxCubeSizeForProfileEXT(profile), unlimited);
-        EXPECT_EQ(renderer.GetMaxVolumeExtentForProfileEXT(profile), unlimited);
-        EXPECT_EQ(renderer.GetMaxRenderTargetsForProfileEXT(profile), unlimited);
-    }
+    EXPECT_EQ(renderer.GetMaxTextureSizeForProfileEXT(0), 2048);
+    EXPECT_EQ(renderer.GetMaxCubeSizeForProfileEXT(0), 512);
+    EXPECT_EQ(renderer.GetMaxVolumeExtentForProfileEXT(0), 0);
+    EXPECT_EQ(renderer.GetMaxRenderTargetsForProfileEXT(0), 1);
+
+    EXPECT_EQ(renderer.GetMaxTextureSizeForProfileEXT(1), 4096);
+    EXPECT_EQ(renderer.GetMaxCubeSizeForProfileEXT(1), 4096);
+    EXPECT_EQ(renderer.GetMaxVolumeExtentForProfileEXT(1), 256);
+    EXPECT_EQ(renderer.GetMaxRenderTargetsForProfileEXT(1), 4);
 }
 
 TEST(RendererCapabilityDefaultsTest, VolumeExtentZeroIsDistinctFromNoCeiling)
 {
-    // 0 means "this profile has no volume textures at all" (genuinely true for Reach on D3D9), not
-    // "no ceiling". The default must never be 0, or every renderer would refuse Texture3D outright.
+    // 0 means "this profile has no volume textures at all", while HiDef's finite extent permits
+    // them. This distinction belongs to the profile and therefore applies to every renderer.
     DefaultsOnlyRenderer renderer;
-    EXPECT_NE(renderer.GetMaxVolumeExtentForProfileEXT(0), 0);
+    EXPECT_EQ(renderer.GetMaxVolumeExtentForProfileEXT(0), 0);
+    EXPECT_GT(renderer.GetMaxVolumeExtentForProfileEXT(1), 0);
 }
 
 TEST(RendererCapabilityDefaultsTest, FormatClassifiersDefaultToDefer)
@@ -158,6 +176,8 @@ TEST(RendererCapabilityDefaultsTest, FormatClassifiersDefaultToDefer)
     for (int format = 0; format < 32; ++format)
     {
         EXPECT_EQ(renderer.ClassifySurfaceFormatEXT(format), RendererFormatVerdict::Defer)
+            << "format ordinal " << format;
+        EXPECT_EQ(renderer.ClassifyTextureCubeFormatEXT(format), RendererFormatVerdict::Defer)
             << "format ordinal " << format;
         EXPECT_EQ(renderer.ClassifyRenderTargetFormatEXT(format), RendererFormatVerdict::Defer)
             << "format ordinal " << format;
@@ -368,4 +388,21 @@ TEST(RendererCapabilityDefaultsTest, AppliedFormatAccessorsEchoTheRequest)
         EXPECT_EQ(renderer.GetAppliedDepthStencilFormatEXT(requested), requested);
         EXPECT_EQ(cubeTarget.GetAppliedDepthStencilFormatEXT(requested), requested);
     }
+}
+
+TEST(RendererCapabilityDefaultsTest, ActiveBackBufferPlanesDistinguishRequestsAndStandaloneStorage)
+{
+    DefaultsOnlyRenderer combined;
+    EXPECT_FALSE(combined.HasRealBackBufferDepthBuffer(false));
+    EXPECT_TRUE(combined.HasRealBackBufferDepthBuffer(true));
+    EXPECT_FALSE(combined.HasRealBackBufferStencilBuffer(false));
+    EXPECT_TRUE(combined.HasRealBackBufferStencilBuffer(true));
+
+    StandaloneDepthRenderer depthOnly;
+    EXPECT_TRUE(depthOnly.HasRealBackBufferDepthBuffer(false));
+    EXPECT_FALSE(depthOnly.HasRealBackBufferStencilBuffer(true));
+
+    StandaloneStencilRenderer stencilOnly;
+    EXPECT_FALSE(stencilOnly.HasRealBackBufferDepthBuffer(true));
+    EXPECT_TRUE(stencilOnly.HasRealBackBufferStencilBuffer(false));
 }

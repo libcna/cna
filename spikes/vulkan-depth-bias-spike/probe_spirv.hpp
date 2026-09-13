@@ -82,4 +82,3 @@ static const uint32_t kProbeFragSpv[] = {
     0x00000007u, 0x00000011u, 0x00000010u, 0x0003003eu, 0x00000009u, 0x00000011u, 0x000100fdu, 0x00010038u
 };
 static const size_t kProbeFragSpv_size = sizeof(kProbeFragSpv);
-

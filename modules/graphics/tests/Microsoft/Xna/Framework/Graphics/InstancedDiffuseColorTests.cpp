@@ -138,13 +138,14 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool InstancedDiffuse()
 {
-    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU,
-                           Vulkan, DirectX9, DirectX11, DirectX12, SdlGpu);
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
+                           DirectX9, DirectX11, DirectX12, SdlGpu, Software);
 }
 
 // The renderers whose instanced route this file has MEASURED on a GPU-backed display. D3D11 and
 // D3D12 are covered through Wine on the private headless Mutter/Xwayland compositor; D3D9 remains
-// outside the asserted set until equivalent runtime evidence exists.
+// outside the asserted set until equivalent runtime evidence exists. Software is measured through
+// deterministic CPU readback.
 //
 // UNLIKE InstancedVertexColorTests.cpp, this file grants NO renderer an exemption: every measured
 // renderer is asserted against the CONTRACT above, never against its own measured behaviour. That is
@@ -153,7 +154,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool InstancedDiffuseMeasured()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU,
-                           DirectX11, DirectX12, SdlGpu);
+                           DirectX11, DirectX12, SdlGpu, Software);
 }
 
 
@@ -789,7 +790,9 @@ protected:
             device.DrawIndexedPrimitives(
                 PrimitiveType::TriangleList, 0, 0, kMeshVertexCount, 0, kMeshPrimitiveCount);
         device.SetRenderTarget(nullptr);
-        return CaptureTarget(target);
+        FrameSnapshot result = CaptureTarget(target);
+        device.SetVertexBuffers({});
+        return result;
     }
 };
 

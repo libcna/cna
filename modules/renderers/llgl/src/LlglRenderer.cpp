@@ -4309,17 +4309,17 @@ namespace CNA::Internal::Renderers::Llgl
         if (w <= 0 || h <= 0 || depth <= 0)
             throw std::runtime_error(std::string(kRendererName) + " renderer: volume texture has no voxels");
 
-        // Depth does not participate in the level count, matching FNA's own Texture3D
-        // constructor (and the Vulkan renderer's identical CalculateVulkanTexture3DMipLevels).
+        // XNA's D3D9 volume allocation requests the complete chain, so depth participates too.
         int mipLevels = 1;
         if (mipMap)
         {
-            int mw = w, mh = h;
+            int mw = w, mh = h, md = depth;
             mipLevels = 1;
-            while (mw > 1 || mh > 1)
+            while (mw > 1 || mh > 1 || md > 1)
             {
                 mw = std::max(1, mw / 2);
                 mh = std::max(1, mh / 2);
+                md = std::max(1, md / 2);
                 ++mipLevels;
             }
         }

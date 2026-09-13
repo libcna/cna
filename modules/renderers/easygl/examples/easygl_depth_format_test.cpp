@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// Task 228: Verify DepthStencilFormat changes store correctly and do not crash.
+// Task 228/SOFTWARE-181: Verify DepthStencilFormat changes store correctly and do not crash.
 //
-// The EasyGL renderer does not recreate the depth buffer at runtime; the window-system
-// framebuffer has a fixed depth allocation. The important invariants are:
-//   1. The PP field always stores the requested format (field round-trip).
-//   2. Neither GDM::ApplyChanges() nor SetPresentationParameters() throws.
+// GraphicsDeviceManager::ApplyChanges() reaches Reset and now changes EasyGL's semantic
+// depth/stencil availability (and its multisample attachment when present). The dedicated shared
+// behavioral contract proves fragment acceptance. This older fixture retains the complete enum
+// round-trip matrix, including CNAEXT SetPresentationParameters()'s documented store-only path.
 //
 // Both the GDM path (setPreferredDepthStencilFormat + ApplyChanges) and the
 // direct path (GraphicsDevice::SetPresentationParameters) are tested for all

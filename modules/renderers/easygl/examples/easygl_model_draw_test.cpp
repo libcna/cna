@@ -13,6 +13,7 @@
 // Exit code 0 = PASS, 1 = FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -128,6 +129,8 @@ public:
 int main()
 {
     ModelDrawTest game;
+    GraphicsDeviceManager testGraphicsDeviceManager(&game);
+    testGraphicsDeviceManager.setGraphicsProfileProperty(GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();
 }

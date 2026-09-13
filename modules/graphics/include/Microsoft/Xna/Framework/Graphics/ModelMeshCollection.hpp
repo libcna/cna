@@ -25,9 +25,11 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] ModelMesh* operator[](int index) const;
 
         /**
-         * @brief Retrieves a ModelMesh by name. Throws if not found.
+         * @brief Retrieves a ModelMesh by name.
          * @param name The name of the mesh to retrieve.
          * @return Pointer to the ModelMesh with the given name.
+         * @throws System::ArgumentNullException if @p name is empty.
+         * @throws System::Collections::Generic::KeyNotFoundException if no mesh has that name.
          */
         [[nodiscard]] ModelMesh* operator[](const std::string& name) const;
 
@@ -42,6 +44,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param meshName The name of the mesh to find.
          * @param value Receives the mesh named @p meshName, if found.
          * @return true if the mesh was found; otherwise false.
+         * @throws System::ArgumentNullException if @p meshName is empty.
          */
         bool TryGetValue(const std::string& meshName, ModelMesh*& value) const;
 

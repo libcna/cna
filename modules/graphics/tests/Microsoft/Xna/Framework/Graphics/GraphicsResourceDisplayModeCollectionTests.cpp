@@ -21,13 +21,22 @@
 
 #include "Microsoft/Xna/Framework/Graphics/DisplayMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DisplayModeCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::DisplayMode;
 using Microsoft::Xna::Framework::Graphics::DisplayModeCollection;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::IndexBuffer;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 
 // -----------------------------------------------------------------------
 // DisplayMode — GetTypeName (gap from DisplayModeTests.cpp)
@@ -232,4 +241,67 @@ TEST(GraphicsResourceTest, DisposeTwiceIsNoOp)
     tex.Dispose();
     EXPECT_NO_THROW(tex.Dispose());
     EXPECT_TRUE(tex.getIsDisposedProperty());
+}
+
+TEST(GraphicsResourceTest, CrossDeviceMoveAssignmentTransfersTrackingAndDetachesOldBindings)
+{
+    GraphicsDevice first;
+    GraphicsDevice second;
+    const std::size_t firstBaseline = first.GetTrackedResourceCount();
+    const std::size_t secondBaseline = second.GetTrackedResourceCount();
+
+    {
+        VertexBuffer destination(first, 3);
+        VertexBuffer source(second, 4);
+        first.SetVertexBuffer(&destination);
+        second.SetVertexBuffer(&source);
+        destination = std::move(source);
+        EXPECT_EQ(first.GetVertexBuffer(), nullptr);
+        EXPECT_EQ(second.GetVertexBuffer(), &destination);
+        EXPECT_EQ(first.GetTrackedResourceCount(), firstBaseline);
+        EXPECT_EQ(second.GetTrackedResourceCount(), secondBaseline + 1);
+    }
+
+    {
+        IndexBuffer destination(first, 3);
+        IndexBuffer source(second, 4);
+        first.SetIndexBuffer(&destination);
+        second.SetIndexBuffer(&source);
+        destination = std::move(source);
+        EXPECT_EQ(first.GetIndexBuffer(), nullptr);
+        EXPECT_EQ(second.GetIndexBuffer(), &destination);
+        EXPECT_EQ(first.GetTrackedResourceCount(), firstBaseline);
+        EXPECT_EQ(second.GetTrackedResourceCount(), secondBaseline + 1);
+    }
+
+    {
+        Texture2D destination(first, 1, 1);
+        Texture2D source(second, 2, 2);
+        first.getTexturesProperty()(0, &destination);
+        second.getTexturesProperty()(0, &source);
+        destination = std::move(source);
+        EXPECT_EQ(first.getTexturesProperty()[0], nullptr);
+        EXPECT_EQ(second.getTexturesProperty()[0], &destination);
+        EXPECT_EQ(first.GetTrackedResourceCount(), firstBaseline);
+        EXPECT_EQ(second.GetTrackedResourceCount(), secondBaseline + 1);
+    }
+
+    EXPECT_EQ(first.GetTrackedResourceCount(), firstBaseline);
+    EXPECT_EQ(second.GetTrackedResourceCount(), secondBaseline);
+}
+
+TEST(GraphicsResourceTest, MoveAssignmentRefusesToOverwriteABoundRenderTarget)
+{
+    GraphicsDevice device;
+    RenderTarget2D destination(device, 2, 2);
+    RenderTarget2D source(device, 4, 4);
+    device.SetRenderTarget(&destination);
+
+    EXPECT_THROW(destination = std::move(source), System::InvalidOperationException);
+    ASSERT_EQ(device.GetRenderTargets().size(), 1u);
+    EXPECT_EQ(device.GetRenderTargets()[0].getRenderTargetProperty(), &destination);
+    EXPECT_EQ(destination.getWidthProperty(), 2);
+    EXPECT_EQ(source.getWidthProperty(), 4);
+
+    device.SetRenderTarget(nullptr);
 }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
+
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
@@ -17,6 +19,8 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
@@ -55,6 +59,7 @@
 #include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <filesystem>
@@ -115,6 +120,7 @@ namespace CNA::TestSupport
     using Microsoft::Xna::Framework::Graphics::EffectParameterType;
     using Microsoft::Xna::Framework::Graphics::FillMode;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
     using Microsoft::Xna::Framework::Graphics::RasterizerState;
     using Microsoft::Xna::Framework::Graphics::SamplerState;
     using Microsoft::Xna::Framework::Graphics::CubeMapFace;
@@ -184,13 +190,17 @@ namespace CNA::TestSupport
 
         auto& parameters = effect.getParametersProperty();
         ASSERT_EQ(parameters.getCountProperty(), 5);
-        EXPECT_EQ(parameters[0].getNameProperty(), "Gain");
-        EXPECT_EQ(parameters[1].getNameProperty(), "Tint");
-        EXPECT_EQ(parameters[2].getNameProperty(), "Lighting");
-        EXPECT_EQ(parameters[3].getNameProperty(), "Transform");
-        EXPECT_EQ(parameters[4].getNameProperty(), "Weights");
+        EXPECT_EQ(parameters[-1], nullptr);
+        EXPECT_EQ(parameters[5], nullptr);
+        EXPECT_EQ(parameters[0]->getNameProperty(), "Gain");
+        EXPECT_EQ(parameters[1]->getNameProperty(), "Tint");
+        EXPECT_EQ(parameters[2]->getNameProperty(), "Lighting");
+        EXPECT_EQ(parameters[3]->getNameProperty(), "Transform");
+        EXPECT_EQ(parameters[4]->getNameProperty(), "Weights");
 
         ASSERT_NE(parameters["Gain"], nullptr);
+        EXPECT_EQ(parameters.GetParameterBySemantic("scalar"), parameters["Gain"])
+            << "Microsoft XNA resolves Effect semantics with OrdinalIgnoreCase";
         EXPECT_EQ(parameters["Gain"]->getSemanticProperty(), "SCALAR");
         EXPECT_EQ(parameters["Gain"]->getParameterClassProperty(), EffectParameterClass::Scalar);
         EXPECT_EQ(parameters["Gain"]->getParameterTypeProperty(), EffectParameterType::Single);
@@ -216,13 +226,20 @@ namespace CNA::TestSupport
                   EffectParameterClass::Struct);
         const auto& members = parameters["Lighting"]->getStructureMembersProperty();
         ASSERT_EQ(members.getCountProperty(), 3);
-        EXPECT_EQ(members[0].getNameProperty(), "Intensity");
-        EXPECT_EQ(members[1].getNameProperty(), "Direction");
-        EXPECT_EQ(members[2].getNameProperty(), "Thresholds");
+        EXPECT_EQ(members[-1], nullptr);
+        EXPECT_EQ(members[3], nullptr);
+        EXPECT_EQ(members[0]->getNameProperty(), "Intensity");
+        EXPECT_EQ(members[1]->getNameProperty(), "Direction");
+        EXPECT_EQ(members[2]->getNameProperty(), "Thresholds");
+        EXPECT_EQ(members[0]->getElementsProperty().getCountProperty(), 0);
+        EXPECT_EQ(members[1]->getElementsProperty().getCountProperty(), 0);
+        EXPECT_EQ(members[2]->getElementsProperty().getCountProperty(), 2);
 
         const auto& annotations = parameters["Gain"]->getAnnotationsProperty();
         ASSERT_EQ(annotations.getCountProperty(), 1);
-        EXPECT_EQ(annotations[0].getNameProperty(), "Visible");
+        EXPECT_EQ(annotations[-1], nullptr);
+        EXPECT_EQ(annotations[1], nullptr);
+        EXPECT_EQ(annotations[0]->getNameProperty(), "Visible");
     }
 
     /**
@@ -234,25 +251,29 @@ namespace CNA::TestSupport
 
         auto& techniques = effect.getTechniquesProperty();
         ASSERT_EQ(techniques.getCountProperty(), 2);
-        EXPECT_EQ(techniques[0].getNameProperty(), "FirstTechnique");
-        EXPECT_EQ(techniques[1].getNameProperty(), "SecondTechnique");
-        EXPECT_EQ(effect.getCurrentTechniqueProperty(), &techniques[0])
+        EXPECT_EQ(techniques[-1], nullptr);
+        EXPECT_EQ(techniques[2], nullptr);
+        EXPECT_EQ(techniques[0]->getNameProperty(), "FirstTechnique");
+        EXPECT_EQ(techniques[1]->getNameProperty(), "SecondTechnique");
+        EXPECT_EQ(effect.getCurrentTechniqueProperty(), techniques[0])
             << "construction must select the first reflected technique";
 
-        ASSERT_EQ(techniques[0].getAnnotationsProperty().getCountProperty(), 1);
-        EXPECT_EQ(techniques[0].getAnnotationsProperty()[0].getNameProperty(), "Quality");
+        ASSERT_EQ(techniques[0]->getAnnotationsProperty().getCountProperty(), 1);
+        EXPECT_EQ(techniques[0]->getAnnotationsProperty()[0]->getNameProperty(), "Quality");
 
-        auto& passes = techniques[0].getPassesProperty();
+        auto& passes = techniques[0]->getPassesProperty();
         ASSERT_EQ(passes.getCountProperty(), 2);
-        EXPECT_EQ(passes[0].getNameProperty(), "P0");
-        EXPECT_EQ(passes[1].getNameProperty(), "StatePass");
-        ASSERT_EQ(techniques[1].getPassesProperty().getCountProperty(), 1);
-        EXPECT_EQ(techniques[1].getPassesProperty()[0].getNameProperty(), "P1");
+        EXPECT_EQ(passes[-1], nullptr);
+        EXPECT_EQ(passes[2], nullptr);
+        EXPECT_EQ(passes[0]->getNameProperty(), "P0");
+        EXPECT_EQ(passes[1]->getNameProperty(), "StatePass");
+        ASSERT_EQ(techniques[1]->getPassesProperty().getCountProperty(), 1);
+        EXPECT_EQ(techniques[1]->getPassesProperty()[0]->getNameProperty(), "P1");
 
         // Each pass applies itself, not pass zero, and selecting the second technique works.
-        EXPECT_NO_THROW(passes[1].Apply());
-        effect.setCurrentTechniqueProperty(&techniques[1]);
-        EXPECT_NO_THROW(techniques[1].getPassesProperty()[0].Apply());
+        EXPECT_NO_THROW(passes[1]->Apply());
+        effect.setCurrentTechniqueProperty(techniques[1]);
+        EXPECT_NO_THROW(techniques[1]->getPassesProperty()[0]->Apply());
     }
 
     /**
@@ -280,7 +301,7 @@ namespace CNA::TestSupport
         };
 
         Effect effect(device, BuildSyntheticConformanceEffect(states));
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
 
         const DepthStencilState& depth = device.getDepthStencilStateProperty();
         EXPECT_FALSE(depth.getDepthBufferEnableProperty());
@@ -322,7 +343,7 @@ namespace CNA::TestSupport
 
         Effect rasterizerOnly(device, BuildSyntheticConformanceEffect(
             {{Fx::RsFillMode, Fx::FillWireframe}}));
-        rasterizerOnly.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        rasterizerOnly.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
 
         EXPECT_EQ(device.getBlendStateProperty().getColorSourceBlendProperty(),
                   BlendState::NonPremultiplied.getColorSourceBlendProperty());
@@ -351,7 +372,7 @@ namespace CNA::TestSupport
             options.samplerStates = states;
             options.samplerRegister = samplerRegister;
             Effect effect(device, BuildSyntheticEffect(options));
-            effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             return device.getSamplerStatesProperty()[static_cast<int>(samplerRegister)];
         };
 
@@ -463,7 +484,7 @@ namespace CNA::TestSupport
         const Color pixels[4] = {Color::Red, Color::Red, Color::Red, Color::Red};
         texture.SetData(pixels, 4);
         parameters["FxTexture"]->SetValue(&texture);
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         EXPECT_EQ(device.getTexturesProperty()[0], &texture);
 
         // A pass that assigns no texture leaves the slot the game selected alone.
@@ -474,7 +495,7 @@ namespace CNA::TestSupport
         withoutTexture.includeSampler = true;
         withoutTexture.samplerStates = {{Fx::SampAddressV, Fx::AddressMirror}};
         Effect other(device, BuildSyntheticEffect(withoutTexture));
-        other.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        other.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         EXPECT_EQ(device.getTexturesProperty()[0], &selected);
     }
 
@@ -485,7 +506,7 @@ namespace CNA::TestSupport
     {
         Effect effect(device, BuildSyntheticConformanceEffect({}));
         effect.getParametersProperty()["Gain"]->SetValue(0.75f);
-        effect.setCurrentTechniqueProperty(&effect.getTechniquesProperty()[1]);
+        effect.setCurrentTechniqueProperty(effect.getTechniquesProperty()[1]);
 
         std::unique_ptr<Effect> clone(effect.Clone());
         ASSERT_NE(clone, nullptr);
@@ -501,9 +522,9 @@ namespace CNA::TestSupport
         EXPECT_FLOAT_EQ(effect.getParametersProperty()["Gain"]->GetValueSingle(), 0.75f)
             << "mutating a clone must not reach its source";
 
-        EXPECT_NO_THROW(clone->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+        EXPECT_NO_THROW(clone->getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
         clone.reset();
-        EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply())
+        EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply())
             << "disposing a clone must leave its source usable";
     }
 
@@ -518,23 +539,23 @@ namespace CNA::TestSupport
         {
             SCOPED_TRACE("cycle " + std::to_string(cycle));
             Effect effect(device, bytes);
-            effect.getTechniquesProperty()[0].getPassesProperty()[0].Apply();
+            effect.getTechniquesProperty()[0]->getPassesProperty()[0]->Apply();
             std::unique_ptr<Effect> clone(effect.Clone());
-            clone->getTechniquesProperty()[0].getPassesProperty()[0].Apply();
+            clone->getTechniquesProperty()[0]->getPassesProperty()[0]->Apply();
             if ((cycle & 1) == 0) clone.reset();
             effect.Dispose();
         }
 
         Effect disposed(device, bytes);
-        disposed.getTechniquesProperty()[0].getPassesProperty()[0].Apply();
+        disposed.getTechniquesProperty()[0]->getPassesProperty()[0]->Apply();
         disposed.Dispose();
         EXPECT_THROW(disposed.Apply(), System::ObjectDisposedException);
-        EXPECT_THROW(disposed.getTechniquesProperty()[0].getPassesProperty()[0].Apply(),
+        EXPECT_THROW(disposed.getTechniquesProperty()[0]->getPassesProperty()[0]->Apply(),
                      System::ObjectDisposedException);
         EXPECT_NO_THROW(disposed.Dispose()) << "disposal must be idempotent";
 
         Effect replacement(device, bytes);
-        EXPECT_NO_THROW(replacement.getTechniquesProperty()[0].getPassesProperty()[0].Apply())
+        EXPECT_NO_THROW(replacement.getTechniquesProperty()[0]->getPassesProperty()[0]->Apply())
             << "the device must still build a fresh effect after a disposal";
     }
 
@@ -573,8 +594,10 @@ namespace CNA::TestSupport
         const std::vector<float> tintCells = parameters["Tint"]->GetValueSingleArray(4);
         ASSERT_EQ(tintCells.size(), 4u);
         EXPECT_FLOAT_EQ(tintCells[2], 3.0f);
-        EXPECT_FLOAT_EQ(parameters["Tint"]->GetValueVector2().Y, 2.0f);
-        EXPECT_FLOAT_EQ(parameters["Tint"]->GetValueVector3().Z, 3.0f);
+        EXPECT_THROW((void) parameters["Tint"]->GetValueVector2(),
+                     System::InvalidCastException);
+        EXPECT_THROW((void) parameters["Tint"]->GetValueVector3(),
+                     System::InvalidCastException);
 
         // Matrix. The transpose variants must round-trip through their own storage order, which is
         // the one place a packing mistake is invisible to the non-transposed getter.
@@ -603,8 +626,8 @@ namespace CNA::TestSupport
         EXPECT_FLOAT_EQ(weights[1], 0.625f);
         auto& elements = parameters["Weights"]->getElementsProperty();
         ASSERT_EQ(elements.getCountProperty(), 2);
-        EXPECT_FLOAT_EQ(elements[1].GetValueSingle(), 0.625f);
-        elements[1].SetValue(0.875f);
+        EXPECT_FLOAT_EQ(elements[1]->GetValueSingle(), 0.625f);
+        elements[1]->SetValue(0.875f);
         EXPECT_FLOAT_EQ(parameters["Weights"]->GetValueSingleArray(2)[1], 0.875f)
             << "an element view writes into its parent's own storage, not a copy";
 
@@ -612,13 +635,13 @@ namespace CNA::TestSupport
         ASSERT_NE(parameters["Lighting"], nullptr);
         auto& members = parameters["Lighting"]->getStructureMembersProperty();
         ASSERT_EQ(members.getCountProperty(), 3);
-        members[0].SetValue(0.5f);
-        EXPECT_FLOAT_EQ(members[0].GetValueSingle(), 0.5f);
-        members[1].SetValue(Vector3(0.1f, 0.2f, 0.3f));
-        EXPECT_FLOAT_EQ(members[1].GetValueVector3().Y, 0.2f);
-        ASSERT_EQ(members[2].getElementsProperty().getCountProperty(), 2);
-        members[2].getElementsProperty()[1].SetValue(0.9f);
-        EXPECT_FLOAT_EQ(members[2].GetValueSingleArray(2)[1], 0.9f);
+        members[0]->SetValue(0.5f);
+        EXPECT_FLOAT_EQ(members[0]->GetValueSingle(), 0.5f);
+        members[1]->SetValue(Vector3(0.1f, 0.2f, 0.3f));
+        EXPECT_FLOAT_EQ(members[1]->GetValueVector3().Y, 0.2f);
+        ASSERT_EQ(members[2]->getElementsProperty().getCountProperty(), 2);
+        members[2]->getElementsProperty()[1]->SetValue(0.9f);
+        EXPECT_FLOAT_EQ(members[2]->GetValueSingleArray(2)[1], 0.9f);
 
         // Strings follow XNA 4.0's own EffectParameter.SetValue(string)/GetValueString(), which
         // reject a parameter whose reflected type is not String rather than silently succeeding.
@@ -685,12 +708,12 @@ namespace CNA::TestSupport
         EXPECT_NO_THROW((void) parameters["Gain"]->GetValueSingle());
         EXPECT_NO_THROW((void) parameters["Transform"]->GetValueMatrix());
         EXPECT_NO_THROW((void) parameters["Lighting"]->getStructureMembersProperty()[0]
-                                   .GetValueSingle())
+                                   ->GetValueSingle())
             << "a Struct parameter has real numeric storage and must not be caught by this guard";
 
         // Applying an effect that carries a string parameter must not try to upload it: a string
         // object's value storage is its object-table index, not text.
-        EXPECT_NO_THROW(stringEffect.getTechniquesProperty()[0].getPassesProperty()[0].Apply());
+        EXPECT_NO_THROW(stringEffect.getTechniquesProperty()[0]->getPassesProperty()[0]->Apply());
     }
 
     /**
@@ -710,7 +733,7 @@ namespace CNA::TestSupport
         ASSERT_NE(parameters["Tint"], nullptr);
         ASSERT_NE(parameters["Transform"], nullptr);
         parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
-        EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+        EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
 
         // A quad already in clip space, so the identity Transform passes it straight through.
         struct ClipVertex { float x, y, z; };
@@ -887,6 +910,1944 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Proves that D3D9 `LOOP` executes its declared count for a non-unit `aL` step.
+     *
+     * Microsoft's instruction contract makes `i#.x` the iteration count and `i#.z` only the
+     * loop-address step. Three iterations therefore add 0.25 red three times even when `aL`
+     * advances by two. An address-bound translation instead produces only 0.5 red.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLoopContract(GraphicsDevice& device)
+    {
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+            {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+        };
+
+        for (const std::int32_t step : {2, -2, 0})
+        {
+            SCOPED_TRACE("aL step " + std::to_string(step));
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderUsesLoop = true;
+            options.pixelLoopCount = 3;
+            options.pixelLoopInitial = 10;
+            options.pixelLoopStep = step;
+            Effect effect(device, BuildSyntheticEffect(options));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect.getParametersProperty()["Tint"]->SetValue(Vector4(0.0f, 0.0f, 0.0f, 1.0f));
+
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            EXPECT_NEAR(centre.getRProperty(), 191, 2);
+            EXPECT_EQ(centre.getGProperty(), 0);
+            EXPECT_EQ(centre.getBProperty(), 0);
+            EXPECT_EQ(centre.getAProperty(), 255);
+        }
+    }
+
+    /**
+     * @brief Draws the signed/zero D3D9 LOG discriminator through an already parsed Effect.
+     *
+     * @param device Device used for the draw.
+     * @param effect Effect whose pixel shader executes the LOG sequence.
+     * @return Centre target pixel; correct D3D9 behavior is opaque yellow.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectSignedLog(GraphicsDevice& device,
+                                                            Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(-2.0f, 0.0f, 0.0f, 1.0f));
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        return centre;
+    }
+
+    /**
+     * @brief Contract: D3D9 LOG ignores sign and maps zero to finite negative FLT_MAX.
+     *
+     * The red channel evaluates LOG(-2), which must equal one. The green channel evaluates
+     * LOG(0), multiplies it by zero, then compares it with zero: the specified finite result
+     * produces true, whereas a host `log2(0)` infinity produces NaN and false.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectSignedLogContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesSignedLog = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        EXPECT_EQ(DrawCompiledEffectSignedLog(device, effect), Color::Yellow);
+    }
+
+    /**
+     * @brief Contract: D3D9 NRM always derives its reciprocal length from source XYZ.
+     *
+     * A two-channel destination mask must not turn the operation into a two-dimensional
+     * normalization. Correct XYZ normalization puts both written components below one half; a
+     * second W-only operation with zero XYZ must use the finite FLT_MAX factor. The shader emits
+     * opaque white only when both rules hold; write-mask-driven normalization emits black.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectNrmWriteMaskContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesNrmWriteMask = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(3.0f, 4.0f, 12.0f, 26.0f));
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        EXPECT_EQ(centre, Color::White);
+    }
+
+    /**
+     * @brief Contract: composite arithmetic results honor non-contiguous destination masks.
+     *
+     * The vertex program initializes a temporary to one, writes only X/Z with `DST` or `CRS`,
+     * and multiplies clip position by all four components. Both instructions deliberately
+     * produce one in the written channels, so a conforming masked write preserves a full-target
+     * white quad. This also catches translators that assign a vec4/vec3 result directly to the
+     * two-component lvalue instead of selecting the masked result components.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     * @param probe Composite-result instruction to execute.
+     */
+    inline void RunCompiledEffectCompositeWriteMaskContract(
+        GraphicsDevice& device, SyntheticCompositeWriteMaskProbe probe)
+    {
+        ASSERT_NE(probe, SyntheticCompositeWriteMaskProbe::None);
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexShaderCompositeWriteMaskProbe = probe;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4::One);
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle sample(2, 2, 1, 1);
+        target.GetData(0, &sample, &centre, 0, 1);
+        EXPECT_EQ(centre, Color::White);
+    }
+
+    /**
+     * @brief Draws a Shader Model 1.1 vertex-input or legacy-EXPP discriminator.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     * @param legacyExpp Whether the vertex program also gates coverage on the legacy EXPP tuple.
+     * @return Centre target pixel.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectShaderModel11Vertex(
+        GraphicsDevice& device, bool legacyExpp)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexShaderUsesShaderModel11Input = !legacyExpp;
+        options.vertexShaderUsesLegacyExpp = legacyExpp;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(1.0f));
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        return centre;
+    }
+
+    /**
+     * @brief Contract: Shader Model 1.1 implicit `v#` inputs use the fixed D3D9 semantic map.
+     *
+     * The shader has no `dcl` instruction, as required by its profile, but consumes v0 as
+     * POSITION0 and transforms a full-target quad. Leaving the implicit register unbound retains
+     * its default `(0,0,0,1)` and renders no white pixels.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectShaderModel11InputContract(GraphicsDevice& device)
+    {
+        EXPECT_EQ(DrawCompiledEffectShaderModel11Vertex(device, false), Color::White);
+    }
+
+    /**
+     * @brief Contract: Shader Model 1.1 v5/v14 map to COLOR0/TEXCOORD7.
+     *
+     * The declaration-free program multiplies its transformed position by both inputs. The
+     * extreme texture-coordinate usage index distinguishes the fixed v7..v14 range from an
+     * incorrectly zero-based range, while COLOR0 proves that v5 is not a texture coordinate.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectShaderModel11ExtendedInputContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexShaderUsesShaderModel11ExtendedInputs = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(1.0f));
+
+        struct ClipVertex
+        {
+            float x, y, z;
+            float color[4];
+            float texCoord7[2];
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4, VertexElementUsage::Color, 0),
+            VertexElement(28, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate,
+                          7),
+        });
+        const ClipVertex quad[6] = {
+            {-1,  1, 0, {1, 1, 1, 1}, {1, 1}},
+            {-1, -1, 0, {1, 1, 1, 1}, {1, 1}},
+            { 1, -1, 0, {1, 1, 1, 1}, {1, 1}},
+            {-1,  1, 0, {1, 1, 1, 1}, {1, 1}},
+            { 1, -1, 0, {1, 1, 1, 1}, {1, 1}},
+            { 1,  1, 0, {1, 1, 1, 1}, {1, 1}},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        EXPECT_EQ(centre, Color::White);
+    }
+
+    /**
+     * @brief Contract: Shader Model 1.1 `EXPP` emits its legacy four-part approximation tuple.
+     *
+     * The vertex program compares `EXPP(3.25)` with `(9,.5,10,2)` and preserves the submitted
+     * quad only when the result is `(8,.25,2^3.25,1)`. Treating the instruction like its Shader
+     * Model 2+ replicated form collapses every clip-space position and leaves the clear colour.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyExppContract(GraphicsDevice& device)
+    {
+        EXPECT_EQ(DrawCompiledEffectShaderModel11Vertex(device, true), Color::White);
+    }
+
+    /**
+     * @brief Draws an SM3 texture load whose coordinate is the relatively addressed `v0[aL]`.
+     *
+     * `aL` is zero for the fixture's single loop iteration, so the lookup must use interpolated
+     * TEXCOORD0. It spans eight repeats across four pixels and therefore selects the blue mip;
+     * treating the relative input as a uniform or fixed zero coordinate selects green instead.
+     *
+     * @param device Device used for the draw.
+     * @param effect Parsed fixture effect, allowing Software's opt-in test path to bypass its
+     *        deliberately false aggregate capability flag.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectRelativeInputTextureCoordinate(
+        GraphicsDevice& device, Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(0.5f, 0.5f, 0.0f, 0.0f));
+
+        Texture2D texture(device, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        const std::vector<Color> base(64, Color::Green);
+        const Rectangle baseRectangle(0, 0, 8, 8);
+        texture.SetData(0, &baseRectangle, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            const std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const Vertex quad[6] = {
+            {-1,  1, 0, 0, 0}, {-1, -1, 0, 0, 8}, { 1, -1, 0, 8, 8},
+            {-1,  1, 0, 0, 0}, { 1, -1, 0, 8, 8}, { 1,  1, 0, 8, 0},
+        };
+
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        return centre;
+    }
+
+    /**
+     * @brief Builds and runs the SM3 relative texture-coordinate contract.
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectRelativeInputTextureCoordinateContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderUsesRelativeTextureCoordinate = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        const Color centre = DrawCompiledEffectRelativeInputTextureCoordinate(device, effect);
+        EXPECT_NEAR(centre.getRProperty(), 0, 3);
+        EXPECT_NEAR(centre.getGProperty(), 0, 3);
+        EXPECT_NEAR(centre.getBProperty(), Color::Blue.getBProperty(), 3)
+            << "relative v0[aL] must retain the interpolated input footprint";
+        EXPECT_NEAR(centre.getAProperty(), 255, 3);
+    }
+
+    /**
+     * @brief Draws an SM3 sample whose temporary coordinate is eight times TEXCOORD0.
+     *
+     * The source TEXCOORD spans only one quarter repeat, which is a magnifying base-level
+     * footprint on the 4x4 target. The executed temporary spans two repeats and must therefore
+     * select a blue minified mip instead of the red base level.
+     *
+     * @param device Device used for the draw.
+     * @param effect Parsed fixture effect, allowing Software's opt-in test path to bypass its
+     *        deliberately false aggregate capability flag.
+     * @return Centre target pixel after the compiled draw.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectDependentTemporaryTextureCoordinate(
+        GraphicsDevice& device, Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        Texture2D texture(device, 4, 4, /*mipMap=*/true, SurfaceFormat::Color);
+        const std::vector<Color> base(16, Color::Red);
+        const Rectangle baseRectangle(0, 0, 4, 4);
+        texture.SetData(0, &baseRectangle, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 4 >> level);
+            const std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const Vertex quad[6] = {
+            {-1,  1, 0, 0, 0},       {-1, -1, 0, 0, 0.25f},
+            { 1, -1, 0, 0.25f, 0.25f}, {-1,  1, 0, 0, 0},
+            { 1, -1, 0, 0.25f, 0.25f}, { 1,  1, 0, 0.25f, 0},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        return centre;
+    }
+
+    /**
+     * @brief Proves implicit LOD follows an executed dependent temporary expression.
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectDependentTemporaryTextureCoordinateContract(
+        GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderUsesDependentTemporaryTextureCoordinate = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        const Color centre =
+            DrawCompiledEffectDependentTemporaryTextureCoordinate(device, effect);
+        EXPECT_NEAR(centre.getRProperty(), 0, 3);
+        EXPECT_NEAR(centre.getGProperty(), 0, 3);
+        EXPECT_NEAR(centre.getBProperty(), 255, 3)
+            << "implicit LOD must include the temporary coordinate expression";
+        EXPECT_NEAR(centre.getAProperty(), 255, 3);
+    }
+
+    /**
+     * @brief Draws the dependent temporary-coordinate fixture through a cube or volume sampler.
+     * @param device Device used for the draw.
+     * @param effect Parsed fixture effect.
+     * @param samplerKind Cube or volume sampler kind to bind.
+     * @return Centre target pixel after the compiled draw.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectDependentTemporaryTextureCoordinate3D(
+        GraphicsDevice& device, Effect& effect, SyntheticSamplerKind samplerKind)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto draw = [&](const Vertex (&vertices)[6])
+        {
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle probe(2, 2, 1, 1);
+            target.GetData(0, &probe, &centre, 0, 1);
+            return centre;
+        };
+
+        if (samplerKind == SyntheticSamplerKind::SamplerCube)
+        {
+            TextureCube cube(device, 8, /*mipMap=*/true, SurfaceFormat::Color);
+            for (int face = 0; face < 6; ++face)
+            {
+                const std::vector<Color> base(64, Color::Red);
+                cube.SetData(static_cast<CubeMapFace>(face), base.data(),
+                             static_cast<int>(base.size()));
+                for (int level = 1; level < cube.getLevelCountProperty(); ++level)
+                {
+                    const int extent = std::max(1, 8 >> level);
+                    const std::vector<Color> mip(
+                        static_cast<std::size_t>(extent * extent), Color::Blue);
+                    cube.SetData(static_cast<CubeMapFace>(face), level, nullptr,
+                                 mip.data(), 0, static_cast<int>(mip.size()));
+                }
+            }
+            effect.getParametersProperty()["FxTexture"]->SetValue(&cube);
+            const Vertex vertices[6] = {
+                {-1,  1, 0, -.125f, -.125f, 1},
+                {-1, -1, 0, -.125f,  .125f, 1},
+                { 1, -1, 0,  .125f,  .125f, 1},
+                {-1,  1, 0, -.125f, -.125f, 1},
+                { 1, -1, 0,  .125f,  .125f, 1},
+                { 1,  1, 0,  .125f, -.125f, 1},
+            };
+            return draw(vertices);
+        }
+
+        Texture3D volume(device, 8, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        const std::vector<Color> base(512, Color::Red);
+        volume.SetData(base.data(), static_cast<int>(base.size()));
+        for (int level = 1; level < volume.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            const std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent * extent), Color::Blue);
+            volume.SetData(level, 0, 0, extent, extent, 0, extent,
+                           mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect.getParametersProperty()["FxTexture"]->SetValue(&volume);
+        const Vertex vertices[6] = {
+            {-1,  1, 0, 0, 0, .5f},       {-1, -1, 0, 0, .25f, .5f},
+            { 1, -1, 0, .25f, .25f, .5f}, {-1,  1, 0, 0, 0, .5f},
+            { 1, -1, 0, .25f, .25f, .5f}, { 1,  1, 0, .25f, 0, .5f},
+        };
+        return draw(vertices);
+    }
+
+    /**
+     * @brief Proves temporary-coordinate implicit LOD for cube and volume samplers.
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectDependentTemporaryTextureCoordinate3DContract(
+        GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        for (const SyntheticSamplerKind kind : {
+                 SyntheticSamplerKind::SamplerCube, SyntheticSamplerKind::Sampler3D})
+        {
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.samplerKind = kind;
+            options.pixelShaderUsesDependentTemporaryTextureCoordinate = true;
+            options.samplerStates = {
+                {Fx::SampMagFilter, Fx::FilterPoint},
+                {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+                {Fx::SampAddressU, Fx::AddressClamp},
+                {Fx::SampAddressV, Fx::AddressClamp},
+                {Fx::SampAddressW, Fx::AddressClamp},
+            };
+            Effect effect(device, BuildSyntheticEffect(options));
+            const Color centre =
+                DrawCompiledEffectDependentTemporaryTextureCoordinate3D(
+                    device, effect, kind);
+            EXPECT_EQ(centre, Color::Blue)
+                << (kind == SyntheticSamplerKind::SamplerCube ? "cube" : "volume")
+                << " implicit LOD must include the temporary coordinate expression";
+        }
+    }
+
+    /**
+     * @brief Proves that parsed D3D9 subroutines execute and return to the main pixel program.
+     *
+     * The fixture uses an unconditional call whose body nests a second forward call, followed by
+     * a true Boolean `CALLNZ`. Each subroutine adds one quarter to a distinct colour channel.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectSubroutineContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesSubroutine = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(0.0f, 0.0f, 0.0f, 1.0f));
+
+        struct ClipVertex { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const ClipVertex quad[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+            {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre;
+        const Rectangle centreRectangle(2, 2, 1, 1);
+        target.GetData(0, &centreRectangle, &centre, 0, 1);
+        EXPECT_NEAR(centre.getRProperty(), 64, 2);
+        EXPECT_NEAR(centre.getGProperty(), 64, 2);
+        EXPECT_NEAR(centre.getBProperty(), 64, 2);
+        EXPECT_EQ(centre.getAProperty(), 255);
+    }
+
+    /**
+     * @brief Proves that D3D9 `DSX`/`DSY` observe adjacent lock-step register contents.
+     *
+     * The shader squares its interpolated texture coordinate before taking each derivative, so
+     * the two aligned 2x2 quads have different rates. This rejects both scalar execution and a
+     * shortcut that differentiates only the original interpolator.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     * @param effect Prepared derivative fixture owned by the caller.
+     */
+    inline void RunCompiledEffectDerivativeDrawContract(GraphicsDevice& device, Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4::One);
+        struct PositionUv
+        {
+            float x, y, z;
+            float u, v;
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(PositionUv)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const PositionUv quad[6] = {
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+            {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+            { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+            { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+            { 1.0f,  1.0f, 0.0f, 1.0f, 0.0f},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        std::array<Color, 16> pixels{};
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        const auto expect = [&](int x, int y, int red, int green)
+        {
+            const Color& pixel = pixels[static_cast<std::size_t>(y * 4 + x)];
+            EXPECT_NEAR(pixel.getRProperty(), red, 2) << "at " << x << ',' << y;
+            EXPECT_NEAR(pixel.getGProperty(), green, 2) << "at " << x << ',' << y;
+            EXPECT_EQ(pixel.getBProperty(), 0) << "at " << x << ',' << y;
+            EXPECT_EQ(pixel.getAProperty(), 255) << "at " << x << ',' << y;
+        };
+        // XNA/D3D9 evaluates ordinary 3D geometry at integer pixel centres. CNA's
+        // corner-origin rasterizers express that as the established 63/128-pixel correction,
+        // producing u/v values 0, .25, .5 and .75 here. The adjacent squared differences are
+        // therefore 1/16 and 5/16, quantized to 16 and 80 in the Color target.
+        expect(0, 0, 16, 16);
+        expect(1, 1, 16, 16);
+        expect(2, 0, 80, 16);
+        expect(0, 2, 16, 80);
+        expect(3, 3, 80, 80);
+    }
+
+    /**
+     * @brief Builds and runs the shared D3D9 derivative fixture.
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectDerivativeContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesDerivatives = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        RunCompiledEffectDerivativeDrawContract(device, effect);
+    }
+
+    /**
+     * @brief Proves `ps_3_0` receives D3D9 integer `vPos` and clockwise-positive `vFace`.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     * @param effect Prepared raster-input fixture owned by the caller.
+     */
+    inline void RunCompiledEffectRasterInputDrawContract(GraphicsDevice& device, Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4::Zero);
+        struct Position
+        {
+            float x, y, z;
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Position)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const Position front[6] = {
+            {-1.0f,  1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f},
+            { 1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f},
+        };
+        const Position back[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+            { 1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+        };
+
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](const Position* vertices)
+        {
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            std::array<Color, 16> pixels{};
+            target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+            return pixels;
+        };
+        const auto frontPixels = drawAndRead(front);
+        const auto backPixels = drawAndRead(back);
+
+        for (int y = 0; y < 4; ++y)
+        {
+            for (int x = 0; x < 4; ++x)
+            {
+                const Color& frontPixel =
+                    frontPixels[static_cast<std::size_t>(y * 4 + x)];
+                const Color& backPixel =
+                    backPixels[static_cast<std::size_t>(y * 4 + x)];
+                const int expectedX = static_cast<int>(std::lround(x * 0.25f * 255.0f));
+                const int expectedY = static_cast<int>(std::lround(y * 0.25f * 255.0f));
+                EXPECT_NEAR(frontPixel.getRProperty(), expectedX, 1) << "at " << x << ',' << y;
+                EXPECT_NEAR(frontPixel.getGProperty(), expectedY, 1) << "at " << x << ',' << y;
+                EXPECT_EQ(frontPixel.getBProperty(), 255) << "front at " << x << ',' << y;
+                EXPECT_EQ(frontPixel.getAProperty(), 255) << "front at " << x << ',' << y;
+                EXPECT_NEAR(backPixel.getRProperty(), expectedX, 1) << "at " << x << ',' << y;
+                EXPECT_NEAR(backPixel.getGProperty(), expectedY, 1) << "at " << x << ',' << y;
+                EXPECT_EQ(backPixel.getBProperty(), 0) << "back at " << x << ',' << y;
+                EXPECT_EQ(backPixel.getAProperty(), 255) << "back at " << x << ',' << y;
+            }
+        }
+    }
+
+    /**
+     * @brief Builds and runs the shared D3D9 raster-input fixture.
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectRasterInputContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesRasterInputs = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        RunCompiledEffectRasterInputDrawContract(device, effect);
+    }
+
+    /**
+     * @brief Proves SM3 instruction predication masks destination components in both stages.
+     *
+     * The vertex program's `p0 = (true,false,true,false)` first selects x/z from one local
+     * constant, then `(!p0.y)` replaces y. The pixel program independently adds one eighth only
+     * to x/z and uses the same negated replicate to replace alpha. Every final channel therefore
+     * identifies a different part of the predicate contract.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectPredicationContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.shadersUsePredication = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        struct Position { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Position)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const Position quad[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+            {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre;
+        const Rectangle centreRectangle(2, 2, 1, 1);
+        target.GetData(0, &centreRectangle, &centre, 0, 1);
+        EXPECT_NEAR(centre.getRProperty(), 223, 2);
+        EXPECT_NEAR(centre.getGProperty(), 159, 2);
+        EXPECT_NEAR(centre.getBProperty(), 159, 2);
+        EXPECT_NEAR(centre.getAProperty(), 32, 2);
+    }
+
+    /**
+     * @brief Proves a Shader Model 3 predicate gates `TEXKILL` instead of being ignored.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectPredicatedTexkillContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesPredicatedTexkill = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        struct Position { float x, y, z; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Position)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        const Position quad[6] = {
+            {-1.0f,  1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f},
+            {-1.0f,  1.0f, 0.0f}, { 1.0f, -1.0f, 0.0f}, { 1.0f,  1.0f, 0.0f},
+        };
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](const Vector4& tint)
+        {
+            effect.getParametersProperty()["Tint"]->SetValue(tint);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(drawAndRead(Vector4::Zero), Color::Lime);
+        EXPECT_EQ(drawAndRead(Vector4::One), Color::Magenta);
+    }
+
+    /**
+     * @brief Proves ps_1_4 `TEXCRD r#.xy, t#_dw.xyw` performs projective coordinate output.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectShaderModel14TexcrdDwContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderUsesShaderModel14TexcrdDw = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(0.0f, 0.0f, 0.25f, 1.0f));
+
+        struct Vertex { float x, y, z, u, v, q, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](float divisor)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .2f, .5f, 1, divisor},
+                {-1, -1, 0, .2f, .5f, 1, divisor},
+                { 1, -1, 0, .2f, .5f, 1, divisor},
+                {-1,  1, 0, .2f, .5f, 1, divisor},
+                { 1, -1, 0, .2f, .5f, 1, divisor},
+                { 1,  1, 0, .2f, .5f, 1, divisor},
+            };
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle probe(2, 2, 1, 1);
+            target.GetData(0, &probe, &centre, 0, 1);
+            return centre;
+        };
+
+        const Color projected = drawAndRead(0.5f);
+        EXPECT_NEAR(projected.getRProperty(), 102, 1);
+        EXPECT_EQ(projected.getGProperty(), 255);
+        EXPECT_NEAR(projected.getBProperty(), 64, 1);
+        EXPECT_EQ(projected.getAProperty(), 255);
+        const Color zeroDivisor = drawAndRead(0.0f);
+        EXPECT_EQ(zeroDivisor.getRProperty(), 255);
+        EXPECT_EQ(zeroDivisor.getGProperty(), 255);
+        EXPECT_NEAR(zeroDivisor.getBProperty(), 64, 1);
+        EXPECT_EQ(zeroDivisor.getAProperty(), 255);
+    }
+
+    /**
+     * @brief Proves ps_1_4 `TEXLD r#, r#_dz.xyz` performs a projected texture lookup.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectShaderModel14TexldDzContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderUsesShaderModel14TexldDz = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        Texture2D texture(device, 4, 1);
+        const Color texels[4] = {Color::Red, Color::Green, Color::Blue, Color::White};
+        texture.SetData(texels, 4);
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v, q, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](float divisor)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .2f, .5f, divisor, 1},
+                {-1, -1, 0, .2f, .5f, divisor, 1},
+                { 1, -1, 0, .2f, .5f, divisor, 1},
+                {-1,  1, 0, .2f, .5f, divisor, 1},
+                { 1, -1, 0, .2f, .5f, divisor, 1},
+                { 1,  1, 0, .2f, .5f, divisor, 1},
+            };
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle probe(2, 2, 1, 1);
+            target.GetData(0, &probe, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(drawAndRead(0.5f), Color::Green);
+        EXPECT_EQ(drawAndRead(0.0f), Color::White);
+    }
+
+    /**
+     * @brief Proves ps_1_4 `TEXLD r#, t#_dw.xyw` performs a projected texture lookup.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectShaderModel14TexldDwContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderUsesShaderModel14TexldDw = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        Texture2D texture(device, 4, 1);
+        const Color texels[4] = {Color::Red, Color::Green, Color::Blue, Color::White};
+        texture.SetData(texels, 4);
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v, q, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](float divisor)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .2f, .5f, 1, divisor},
+                {-1, -1, 0, .2f, .5f, 1, divisor},
+                { 1, -1, 0, .2f, .5f, 1, divisor},
+                {-1,  1, 0, .2f, .5f, 1, divisor},
+                { 1, -1, 0, .2f, .5f, 1, divisor},
+                { 1,  1, 0, .2f, .5f, 1, divisor},
+            };
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle probe(2, 2, 1, 1);
+            target.GetData(0, &probe, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(drawAndRead(0.5f), Color::Green);
+        EXPECT_EQ(drawAndRead(0.0f), Color::White);
+    }
+
+    /**
+     * @brief Proves Shader Model 1.4 `TEXLD` selects its stage from dst and coordinates from src.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectShaderModel14TextureLoadContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.samplerRegister = 1;
+        options.pixelShaderUsesShaderModel14TextureLoad = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        Texture2D texture(device, 4, 1);
+        const Color texels[4] = {Color::Red, Color::Green, Color::Blue, Color::White};
+        texture.SetData(texels, 4);
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, w;
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        const auto drawAndRead = [&](float divisorW)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .2f, .5f, .5f, divisorW},
+                {-1, -1, 0, .2f, .5f, .5f, divisorW},
+                { 1, -1, 0, .2f, .5f, .5f, divisorW},
+                {-1,  1, 0, .2f, .5f, .5f, divisorW},
+                { 1, -1, 0, .2f, .5f, .5f, divisorW},
+                { 1,  1, 0, .2f, .5f, .5f, divisorW},
+            };
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(drawAndRead(0.5f), Color::Green)
+            << "ps_1_4 must sample stage r1 from projected TEXCOORD0";
+        EXPECT_EQ(drawAndRead(0.0f), Color::White)
+            << "ps_1_4 TEXLD _dw must map a zero divisor to x/y=1";
+
+        Texture2D mipTexture(device, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        const std::vector<Color> base(64, Color::Red);
+        const Rectangle baseRectangle(0, 0, 8, 8);
+        mipTexture.SetData(0, &baseRectangle, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < mipTexture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            const std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            mipTexture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect.getParametersProperty()["FxTexture"]->SetValue(&mipTexture);
+        const Vertex projectedQuad[6] = {
+            {-1,  1, 0, .25f, .25f, .5f, 1.0f},
+            {-1, -1, 0, .25f, .25f, .5f, 1.0f},
+            { 1, -1, 0, .25f, .25f, .5f, .125f},
+            {-1,  1, 0, .25f, .25f, .5f, 1.0f},
+            { 1, -1, 0, .25f, .25f, .5f, .125f},
+            { 1,  1, 0, .25f, .25f, .5f, .125f},
+        };
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(projectedQuad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color projectedMip;
+        const Rectangle centreRectangle(2, 2, 1, 1);
+        target.GetData(0, &centreRectangle, &projectedMip, 0, 1);
+        EXPECT_EQ(projectedMip, Color::Blue)
+            << "ps_1_4 TEXLD implicit LOD must use post-projection coordinates";
+    }
+
+    /**
+     * @brief Proves a Shader Model 1.4 phase marker executes and preserves temporary RGB.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectShaderModel14PhaseContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = false;
+        options.pixelShaderUsesShaderModel14Phase = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(0.0f, 0.0f, 0.25f, 1.0f));
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, w;
+        };
+        const Vertex quad[6] = {
+            {-1,  1, 0, .25f, .5f, 0, 1},
+            {-1, -1, 0, .25f, .5f, 0, 1},
+            { 1, -1, 0, .25f, .5f, 0, 1},
+            {-1,  1, 0, .25f, .5f, 0, 1},
+            { 1, -1, 0, .25f, .5f, 0, 1},
+            { 1,  1, 0, .25f, .5f, 0, 1},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre;
+        const Rectangle centreRectangle(2, 2, 1, 1);
+        target.GetData(0, &centreRectangle, &centre, 0, 1);
+        EXPECT_EQ(centre, Color(64, 128, 64, 255));
+    }
+
+    /**
+     * @brief Proves the legacy stateful three-row texture-matrix instruction sequence.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyTextureMatrixContract(GraphicsDevice& device)
+    {
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = false;
+        options.pixelShaderUsesLegacyTextureMatrix = true;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        struct Vertex { float x, y, z; };
+        const Vertex vertices[6] = {
+            {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+            {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(vertices), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre;
+        const Rectangle centreRectangle(2, 2, 1, 1);
+        target.GetData(0, &centreRectangle, &centre, 0, 1);
+        EXPECT_EQ(centre, Color(64, 128, 64, 255));
+    }
+
+    /**
+     * @brief Proves the sampled legacy `TEXM3X2PAD`/`TEXM3X2TEX` sequence.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyTextureMatrix2Contract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.samplerRegister = 2;
+        options.pixelShaderUsesLegacyTextureMatrix2 = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        Texture2D texture(device, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> base(64, Color::Red);
+        for (int y = 4; y < 8; ++y)
+            for (int x = 0; x < 4; ++x)
+                base[static_cast<std::size_t>(y * 8 + x)] = Color::Green;
+        const Rectangle wholeBase(0, 0, 8, 8);
+        texture.SetData(0, &wholeBase, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](bool minify)
+        {
+            const float left = minify ? 0.0f : 1.0f;
+            const float right = minify ? 8.0f : 1.0f;
+            const Vertex vertices[6] = {
+                {-1,  1, 0, 0, 0, left}, {-1, -1, 0, 0, 0, left},
+                { 1, -1, 0, 0, 0, right}, {-1,  1, 0, 0, 0, left},
+                { 1, -1, 0, 0, 0, right}, { 1,  1, 0, 0, 0, right},
+            };
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(render(/*minify=*/false), Color::Green)
+            << "constant rows must sample stage 2 at (u,v)=(.25,.75)";
+        EXPECT_EQ(render(/*minify=*/true), Color::Blue)
+            << "implicit LOD must use the TEXM3X2-transformed coordinate footprint";
+    }
+
+    /**
+     * @brief Proves sampled legacy `TEXM3X3PAD`/`TEXM3X3TEX` execution and implicit LOD.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyTextureMatrix3SampleContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.samplerRegister = 3;
+        options.samplerKind = SyntheticSamplerKind::Sampler3D;
+        options.pixelShaderUsesLegacyTextureMatrix3Sample = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+            {Fx::SampAddressW, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        Texture3D texture(device, 8, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> base(512, Color::Red);
+        for (int z = 4; z < 8; ++z)
+            for (int y = 4; y < 8; ++y)
+                for (int x = 0; x < 4; ++x)
+                    base[static_cast<std::size_t>(z * 64 + y * 8 + x)] = Color::Green;
+        texture.SetData(base.data(), static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent * extent), Color::Blue);
+            texture.SetData(level, 0, 0, extent, extent, 0, extent,
+                            mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](Effect& selectedEffect, bool minify)
+        {
+            const float left = minify ? 0.0f : 0.125f;
+            const float right = minify ? 0.5f : 0.125f;
+            const Vertex vertices[6] = {
+                {-1,  1, 0, 0, 0, left}, {-1, -1, 0, 0, 0, left},
+                { 1, -1, 0, 0, 0, right}, {-1,  1, 0, 0, 0, left},
+                { 1, -1, 0, 0, 0, right}, { 1,  1, 0, 0, 0, right},
+            };
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            selectedEffect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(render(effect, /*minify=*/false), Color::Green)
+            << "constant rows must sample stage 3 at (u,v,w)=(.25,.75,.5)";
+        EXPECT_EQ(render(effect, /*minify=*/true), Color::Blue)
+            << "implicit volume LOD must use the TEXM3X3-transformed footprint";
+
+        options.samplerKind = SyntheticSamplerKind::SamplerCube;
+        Effect cubeEffect(device, BuildSyntheticEffect(options));
+        cubeEffect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        TextureCube cube(device, 2, /*mipMap=*/false, SurfaceFormat::Color);
+        for (int face = 0; face < 6; ++face)
+        {
+            const Color color = face == 2 ? Color::Yellow : Color::Red;
+            const Color texels[4] = {color, color, color, color};
+            cube.SetData(static_cast<CubeMapFace>(face), texels, 4);
+        }
+        cubeEffect.getParametersProperty()["FxTexture"]->SetValue(&cube);
+        EXPECT_EQ(render(cubeEffect, /*minify=*/false), Color::Yellow)
+            << "the transformed direction must also sample the allowed cube texture";
+    }
+
+    /**
+     * @brief Proves the constant-eye and varying-eye legacy matrix reflection instructions.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyTextureMatrix3SpecularContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.samplerRegister = 3;
+        options.samplerKind = SyntheticSamplerKind::SamplerCube;
+        options.pixelShaderUsesLegacyTextureMatrix3Specular = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+            {Fx::SampAddressW, Fx::AddressClamp},
+        };
+        Effect constantEye(device, BuildSyntheticEffect(options));
+        constantEye.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        options.pixelShaderUsesLegacyTextureMatrix3Specular = false;
+        options.pixelShaderUsesLegacyTextureMatrix3VertexSpecular = true;
+        Effect varyingEye(device, BuildSyntheticEffect(options));
+        varyingEye.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+
+        constexpr int cubeSize = 256;
+        TextureCube cube(device, cubeSize, /*mipMap=*/true, SurfaceFormat::Color);
+        const Color faceColors[6] = {
+            Color::Red, Color::Green, Color::Blue, Color::Cyan, Color::Magenta, Color::Yellow};
+        for (int face = 0; face < 6; ++face)
+        {
+            std::vector<Color> texels(
+                static_cast<std::size_t>(cubeSize * cubeSize), faceColors[face]);
+            cube.SetData(static_cast<CubeMapFace>(face), texels.data(),
+                         static_cast<int>(texels.size()));
+            for (int level = 1; level < cube.getLevelCountProperty(); ++level)
+            {
+                const int extent = std::max(1, cubeSize >> level);
+                std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Black);
+                cube.SetData(static_cast<CubeMapFace>(face), level, nullptr,
+                             mip.data(), 0, static_cast<int>(mip.size()));
+            }
+        }
+        constantEye.getParametersProperty()["FxTexture"]->SetValue(&cube);
+        varyingEye.getParametersProperty()["FxTexture"]->SetValue(&cube);
+
+        struct Vertex { float x, y, z, nx, ny, nz, eyeZ; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](Effect& effect, bool minifyEye)
+        {
+            const float leftEye = minifyEye ? .4f : 1.0f;
+            const float rightEye = minifyEye ? 2.0f : 1.0f;
+            const Vertex vertices[6] = {
+                {-1,  1, 0, .1f, 1, .1f, leftEye},
+                {-1, -1, 0, .1f, 1, .1f, leftEye},
+                { 1, -1, 0, .1f, 1, .1f, rightEye},
+                {-1,  1, 0, .1f, 1, .1f, leftEye},
+                { 1, -1, 0, .1f, 1, .1f, rightEye},
+                { 1,  1, 0, .1f, 1, .1f, rightEye},
+            };
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::White);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(render(constantEye, /*minifyEye=*/false), Color::Green)
+            << "TEXM3X3SPEC must reflect constant E=(1,.2,.1) around N=(.1,1,.1) to -X";
+        EXPECT_EQ(render(varyingEye, /*minifyEye=*/false), Color::Yellow)
+            << "TEXM3X3VSPEC must take E=(.1,.2,1) from the three matrix-row w components";
+        EXPECT_EQ(render(varyingEye, /*minifyEye=*/true), Color::Black)
+            << "TEXM3X3VSPEC implicit LOD must include variation in the row-w eye ray";
+    }
+
+    /**
+     * @brief Proves the ps_1_3 matrix and ps_1_4 register forms of legacy pixel-depth output.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyDepthOutputContract(GraphicsDevice& device)
+    {
+        const auto render = [&](SyntheticLegacyDepthOutput instruction, bool zeroDivisor)
+        {
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.pixelShaderLegacyDepthOutput = instruction;
+            options.pixelShaderLegacyDepthZeroDivisor = zeroDivisor;
+            Effect effect(device, BuildSyntheticEffect(options));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect.getParametersProperty()["Tint"]->SetValue(
+                Vector4(0.0f, 1.0f, 0.0f, 1.0f));
+
+            struct Vertex { float x, y, z, u, v, w; };
+            const Vertex vertices[6] = {
+                {-1,  1, .75f, 0, 0, 1}, {-1, -1, .75f, 0, 0, 1},
+                { 1, -1, .75f, 0, 0, 1}, {-1,  1, .75f, 0, 0, 1},
+                { 1, -1, .75f, 0, 0, 1}, { 1,  1, .75f, 0, 0, 1},
+            };
+            const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+                VertexElement(0, VertexElementFormat::Vector3,
+                              VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Vector3,
+                              VertexElementUsage::TextureCoordinate, 0),
+            });
+            RenderTarget2D target(
+                device, 4, 4, false, SurfaceFormat::Color,
+                Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24);
+            device.SetRenderTarget(&target);
+            device.Clear(Microsoft::Xna::Framework::Graphics::ClearOptions::Target |
+                             Microsoft::Xna::Framework::Graphics::ClearOptions::DepthBuffer,
+                         Color::Red, .5f, 0);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::Default);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        for (const SyntheticLegacyDepthOutput instruction : {
+                 SyntheticLegacyDepthOutput::TextureMatrix2,
+                 SyntheticLegacyDepthOutput::Register})
+        {
+            EXPECT_EQ(render(instruction, /*zeroDivisor=*/false), Color::Lime)
+                << "the shader depth below .5 must replace raster depth .75 and pass";
+            EXPECT_EQ(render(instruction, /*zeroDivisor=*/true), Color::Red)
+                << "a zero divisor must write depth one and fail against the cleared .5";
+        }
+    }
+
+    /**
+     * @brief Proves legacy `TEXREG2AR`/`TEXREG2GB` component selection and implicit LOD.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyTextureRemapContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        Texture2D texture(device, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> base(64, Color::Yellow);
+        for (int y = 0; y < 4; ++y)
+            for (int x = 4; x < 8; ++x)
+                base[static_cast<std::size_t>(y * 8 + x)] = Color::Red;
+        for (int y = 4; y < 8; ++y)
+            for (int x = 0; x < 4; ++x)
+                base[static_cast<std::size_t>(y * 8 + x)] = Color::Green;
+        const Rectangle wholeBase(0, 0, 8, 8);
+        texture.SetData(0, &wholeBase, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+
+        struct Vertex { float x, y, z, r, g, b, a; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](SyntheticLegacyTextureRemap remap)
+        {
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.samplerRegister = 1;
+            options.pixelShaderLegacyTextureRemap = remap;
+            options.samplerStates = {
+                {Fx::SampMagFilter, Fx::FilterPoint},
+                {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+                {Fx::SampAddressU, Fx::AddressClamp},
+                {Fx::SampAddressV, Fx::AddressClamp},
+            };
+            Effect effect(device, BuildSyntheticEffect(options));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+            // AR uses constant (a,r)=(.75,.25) while ignored g varies rapidly; GB uses constant
+            // (g,b)=(.25,.75) while ignored r varies. Computing LOD from raw xy would therefore
+            // select a blue smaller mip instead of the required red/green base-level quadrant.
+            const bool alphaRed = remap == SyntheticLegacyTextureRemap::AlphaRed;
+            const auto makeVertex = [alphaRed](float x, float y, float ignored)
+            {
+                return alphaRed ? Vertex{x, y, 0, .25f, ignored, .75f, .75f}
+                                : Vertex{x, y, 0, ignored, .25f, .75f, .75f};
+            };
+            const Vertex quad[6] = {
+                makeVertex(-1,  1, 0), makeVertex(-1, -1, 32),
+                makeVertex( 1, -1, 32), makeVertex(-1,  1, 0),
+                makeVertex( 1, -1, 32), makeVertex( 1,  1, 0),
+            };
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        EXPECT_EQ(render(SyntheticLegacyTextureRemap::AlphaRed), Color::Red);
+        EXPECT_EQ(render(SyntheticLegacyTextureRemap::GreenBlue), Color::Green);
+    }
+
+    /**
+     * @brief Proves the Shader Model 1.2 dependent RGB and texture-coordinate dot operations.
+     *
+     * @param device HiDef device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyDependentTextureContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        using Operation = SyntheticLegacyDependentTexture;
+
+        const auto makeEffect = [&](Operation operation, SyntheticSamplerKind samplerKind,
+                                    bool samplesTexture)
+        {
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = samplesTexture;
+            options.samplerRegister = 1;
+            options.samplerKind = samplerKind;
+            options.pixelShaderLegacyDependentTexture = operation;
+            if (samplesTexture)
+            {
+                options.samplerStates = {
+                    {Fx::SampMagFilter, Fx::FilterPoint},
+                    {Fx::SampMinFilter, Fx::FilterPoint},
+                    {Fx::SampMipFilter, Fx::FilterPoint},
+                    {Fx::SampAddressU, Fx::AddressClamp},
+                    {Fx::SampAddressV, Fx::AddressClamp},
+                    {Fx::SampAddressW, Fx::AddressClamp},
+                };
+            }
+            auto effect = std::make_unique<Effect>(device, BuildSyntheticEffect(options));
+            effect->getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            return effect;
+        };
+
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](Effect& effect, const Vector3& left, const Vector3& right)
+        {
+            const Vertex vertices[6] = {
+                {-1,  1, 0, left.X, left.Y, left.Z},
+                {-1, -1, 0, left.X, left.Y, left.Z},
+                { 1, -1, 0, right.X, right.Y, right.Z},
+                {-1,  1, 0, left.X, left.Y, left.Z},
+                { 1, -1, 0, right.X, right.Y, right.Z},
+                { 1,  1, 0, right.X, right.Y, right.Z},
+            };
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle centreRectangle(2, 2, 1, 1);
+            target.GetData(0, &centreRectangle, &centre, 0, 1);
+            return centre;
+        };
+
+        Texture3D volume(device, 8, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> volumeBase(512, Color::Red);
+        for (int z = 4; z < 8; ++z)
+            for (int y = 4; y < 8; ++y)
+                for (int x = 0; x < 4; ++x)
+                    volumeBase[static_cast<std::size_t>(z * 64 + y * 8 + x)] = Color::Green;
+        volume.SetData(volumeBase.data(), static_cast<int>(volumeBase.size()));
+        for (int level = 1; level < volume.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent * extent), Color::Blue);
+            volume.SetData(level, 0, 0, extent, extent, 0, extent,
+                           mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        auto registerRgb = makeEffect(Operation::RegisterRgb,
+                                      SyntheticSamplerKind::Sampler3D, true);
+        registerRgb->getParametersProperty()["FxTexture"]->SetValue(&volume);
+        EXPECT_EQ(render(*registerRgb, Vector3(.625f, .875f, .875f),
+                                       Vector3(.625f, .875f, .875f)), Color::Green)
+            << "TEXREG2RGB must use all three source colour components for a volume lookup";
+        EXPECT_EQ(render(*registerRgb, Vector3(.625f, .875f, .5f),
+                                       Vector3(.625f, .875f, 4.5f)), Color::Blue)
+            << "TEXREG2RGB implicit LOD must include the _bx2 dependent blue coordinate";
+
+        Texture2D texture(device, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> base(64, Color::Red);
+        for (int y = 0; y < 8; ++y)
+            for (int x = 0; x < 4; ++x)
+                base[static_cast<std::size_t>(y * 8 + x)] = Color::Green;
+        const Rectangle wholeBase(0, 0, 8, 8);
+        texture.SetData(0, &wholeBase, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        auto dotSample = makeEffect(Operation::DotSample,
+                                    SyntheticSamplerKind::Sampler2D, true);
+        dotSample->getParametersProperty()["FxTexture"]->SetValue(&texture);
+        EXPECT_EQ(render(*dotSample, Vector3(.25f, 1.0f, 1.0f),
+                                     Vector3(.25f, 1.0f, 1.0f)), Color::Green)
+            << "TEXDP3TEX must sample stage 1 at (dot(t1,t0),0)";
+        EXPECT_EQ(render(*dotSample, Vector3(0.0f, 1.0f, 1.0f),
+                                     Vector3(8.0f, 1.0f, 1.0f)), Color::Blue)
+            << "TEXDP3TEX implicit LOD must use the dot-product coordinate";
+
+        auto dot = makeEffect(Operation::Dot, SyntheticSamplerKind::Sampler2D, false);
+        EXPECT_EQ(render(*dot, Vector3(.5f, 1.0f, 1.0f),
+                              Vector3(.5f, 1.0f, 1.0f)), Color(128, 128, 128, 128))
+            << "TEXDP3 must replicate the three-component dot product to RGBA";
+    }
+
+    /**
+     * @brief Proves Effect pass-state plumbing and execution for legacy bump-environment opcodes.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectLegacyBumpEnvironmentContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        using Operation = SyntheticLegacyBumpEnvironment;
+
+        Texture2D texture(device, 8, 8, true, SurfaceFormat::Color);
+        std::vector<Color> texels(64, Color::Red);
+        for (int y = 0; y < 4; ++y)
+            for (int x = 4; x < 8; ++x)
+                texels[static_cast<std::size_t>(y * 8 + x)] = Color::Green;
+        for (int y = 4; y < 8; ++y)
+            for (int x = 0; x < 4; ++x)
+                texels[static_cast<std::size_t>(y * 8 + x)] = Color::Blue;
+        for (int y = 4; y < 8; ++y)
+            for (int x = 4; x < 8; ++x)
+                texels[static_cast<std::size_t>(y * 8 + x)] = Color::Yellow;
+        texture.SetData(texels.data(), static_cast<int>(texels.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Blue);
+            const Rectangle whole(0, 0, extent, extent);
+            texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+
+        struct Vertex { float x, y, z, u, v, w; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const auto render = [&](Operation operation,
+                                const std::vector<SyntheticRenderState>& states,
+                                float rightU = .75f)
+        {
+            const Vertex quad[6] = {
+                {-1,  1, 0, .75f, .25f, .75f}, {-1, -1, 0, .75f, .25f, .75f},
+                { 1, -1, 0, rightU, .25f, .75f}, {-1,  1, 0, .75f, .25f, .75f},
+                { 1, -1, 0, rightU, .25f, .75f}, { 1,  1, 0, rightU, .25f, .75f},
+            };
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = operation != Operation::Arithmetic;
+            options.samplerRegister = 1;
+            options.pixelShaderLegacyBumpEnvironment = operation;
+            options.renderStates = states;
+            if (options.includeSampler)
+            {
+                options.samplerStates = {
+                    {Fx::SampMagFilter, Fx::FilterPoint},
+                    {Fx::SampMinFilter, Fx::FilterPoint},
+                    {Fx::SampMipFilter, Fx::FilterNone},
+                    {Fx::SampAddressU, Fx::AddressClamp},
+                    {Fx::SampAddressV, Fx::AddressClamp},
+                };
+            }
+            Effect effect(device, BuildSyntheticEffect(options));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            if (options.includeSampler)
+                effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+            RenderTarget2D target(device, 4, 4);
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color centre;
+            const Rectangle probe(2, 2, 1, 1);
+            target.GetData(0, &probe, &centre, 0, 1);
+            return centre;
+        };
+
+        const auto textureStates = [](float m00, float m01, float m10, float m11)
+        {
+            return std::vector<SyntheticRenderState>{
+                {Fx::RsBumpEnvMat00, FloatBits(m00), true, 1},
+                {Fx::RsBumpEnvMat01, FloatBits(m01), true, 1},
+                {Fx::RsBumpEnvMat10, FloatBits(m10), true, 1},
+                {Fx::RsBumpEnvMat11, FloatBits(m11), true, 1},
+            };
+        };
+        EXPECT_EQ(render(Operation::Texture, textureStates(1, 0, 0, 0)), Color::Green)
+            << "TEXBEM must apply BUMPENVMAT00 to source red";
+        EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 1, 0)), Color::Green)
+            << "TEXBEM must apply BUMPENVMAT10 to source green";
+        EXPECT_EQ(render(Operation::Texture, textureStates(0, 1, 0, 0)), Color::Blue)
+            << "TEXBEM must apply BUMPENVMAT01 to source red";
+        EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 0, 2)), Color::Blue)
+            << "TEXBEM must apply BUMPENVMAT11 to source green";
+        EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 0, 0), 8.75f), Color::Red)
+            << "TEXBEM implicit LOD must ignore source derivatives removed by a zero matrix";
+        EXPECT_EQ(render(Operation::Texture, textureStates(1, 0, 0, 0), 8.75f), Color::Blue)
+            << "TEXBEM implicit LOD must include matrix-transformed source derivatives";
+        EXPECT_EQ(render(Operation::Texture, {}), Color::Green)
+            << "an unassigned pass must retain device texture-stage bump state";
+
+        auto luminanceStates = textureStates(0, 0, 0, 0);
+        luminanceStates.push_back({Fx::RsBumpEnvLScale, FloatBits(1.0f / 3.0f), true, 1});
+        luminanceStates.push_back({Fx::RsBumpEnvLOffset, FloatBits(.25f), true, 1});
+        const Color luminance = render(Operation::TextureLuminance, luminanceStates);
+        EXPECT_NEAR(luminance.getRProperty(), 128, 1);
+        EXPECT_EQ(luminance.getGProperty(), 0);
+        EXPECT_EQ(luminance.getBProperty(), 0);
+        EXPECT_NEAR(luminance.getAProperty(), 128, 1)
+            << "TEXBEML must multiply the lookup by blue*luminanceScale+luminanceOffset";
+
+        const std::vector<SyntheticRenderState> arithmeticStates = {
+            {Fx::RsBumpEnvMat00, FloatBits(.4f), true, 0},
+            {Fx::RsBumpEnvMat01, FloatBits(.8f), true, 0},
+            {Fx::RsBumpEnvMat10, FloatBits(.2f), true, 0},
+            {Fx::RsBumpEnvMat11, FloatBits(.6f), true, 0},
+        };
+        const Color arithmetic = render(Operation::Arithmetic, arithmeticStates);
+        EXPECT_NEAR(arithmetic.getRProperty(), 89, 1);
+        EXPECT_NEAR(arithmetic.getGProperty(), 191, 1);
+        EXPECT_NEAR(arithmetic.getBProperty(), 77, 1);
+        EXPECT_NEAR(arithmetic.getAProperty(), 102, 1)
+            << "ps_1_4 BEM must use the destination-numbered texture-stage matrix";
+    }
+
+    /**
      * @brief Contract: a compiled effect reads attributes from more than one bound stream.
      *
      * plans/plan_fx.md FX-082. Only for backends reporting `MultiStreamVertexInput`. The fixture's
@@ -908,7 +2869,7 @@ namespace CNA::TestSupport
             << "the multi-stream fixture declares the parameter its vertex shader scales by";
         parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
         parameters["Tint"]->SetValue(Vector4(0.5f, 0.25f, 0.75f, 1.0f));
-        EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+        EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
 
         struct PositionVertex { float x, y, z; };
         struct OffsetVertex { float x, y, z, w; };
@@ -1061,7 +3022,7 @@ namespace CNA::TestSupport
         parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
         parameters["Tint"]->SetValue(Vector4(0.5f, 0.25f, 0.75f, 1.0f));
         parameters["StreamMix"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-        EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+        EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
 
         struct PositionVertex { float x, y, z; };
         struct OffsetVertex { float x, y, z, w; };
@@ -1336,7 +3297,7 @@ namespace CNA::TestSupport
         parameters["Tint"]->SetValue(Vector4(1.0f, 0.0f, 0.0f, 0.5f));
         parameters["Transform"]->SetValue(Matrix::CreateOrthographicOffCenter(
             0.0f, static_cast<float>(kSize), static_cast<float>(kSize), 0.0f, -1.0f, 1.0f));
-        ASSERT_EQ(effect.getTechniquesProperty()[0].getPassesProperty().getCountProperty(), 2)
+        ASSERT_EQ(effect.getTechniquesProperty()[0]->getPassesProperty().getCountProperty(), 2)
             << "this contract needs a fixture whose current technique has two distinguishable passes";
 
         Texture2D sprite(device, 1, 1);
@@ -1739,7 +3700,7 @@ namespace CNA::TestSupport
         Effect effect(device, BuildSyntheticDrawableEffect());
         auto& parameters = effect.getParametersProperty();
         parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
-        EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+        EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
 
         struct ClipVertex { float x, y, z; };
         const VertexDeclaration declaration(static_cast<int>(sizeof(ClipVertex)), {
@@ -1837,7 +3798,7 @@ namespace CNA::TestSupport
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
-            effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(quad), 0, 2, declaration);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -1987,7 +3948,7 @@ namespace CNA::TestSupport
         for (int i = 0; i < 6; ++i)
             compiledQuad[i] = ClipVertex{corners[i].X, corners[i].Y, corners[i].Z};
         const int compiledRow = paintedRow([&] {
-            compiled.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            compiled.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(compiledQuad), 0, 2, declaration);
         });
@@ -2079,6 +4040,183 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Draws a sampled SM3 texel whose sampler operand uses `.bgra`.
+     *
+     * @param device Device used for the draw.
+     * @param effect Parsed fixture effect.
+     * @return Centre pixel after sampling and sampler-result swizzling.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectSamplerResultSwizzle(
+        GraphicsDevice& device, Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4::One);
+
+        Texture2D texture(device, 1, 1);
+        const Color source(32, 64, 128, 255);
+        texture.SetData(&source, 1);
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        SamplingQuadVertex quad[6];
+        FillSamplingQuad(quad, 0.5f, 0.5f);
+        const VertexDeclaration declaration = SamplingQuadDeclaration();
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        return centre;
+    }
+
+    /**
+     * @brief Draws a projective cube lookup whose negative divisor flips the selected face.
+     *
+     * @param device Device used for the draw.
+     * @param effect Parsed fixture effect containing a Shader Model 3 cube TEXLDP.
+     * @return Centre pixel after the projective cube lookup.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectProjectedCubeSampler(
+        GraphicsDevice& device, Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4::One);
+
+        TextureCube cube(device, 1, false, SurfaceFormat::Color);
+        for (int face = 0; face < 6; ++face)
+        {
+            const Color source = face == static_cast<int>(CubeMapFace::NegativeX)
+                                     ? Color::Green
+                                     : Color::Red;
+            cube.SetData(static_cast<CubeMapFace>(face), &source, 1);
+        }
+        effect.getParametersProperty()["FxTexture"]->SetValue(&cube);
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, w;
+        };
+        const Vertex quad[6] = {
+            {-1, 1, 0, 1, 0, 0, -1}, {-1, -1, 0, 1, 0, 0, -1},
+            {1, -1, 0, 1, 0, 0, -1}, {-1, 1, 0, 1, 0, 0, -1},
+            {1, -1, 0, 1, 0, 0, -1}, {1, 1, 0, 1, 0, 0, -1},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        return centre;
+    }
+
+    /**
+     * @brief Draws a projective 2D lookup whose mip footprint exists only after division by W.
+     *
+     * @param device Device used for the draw.
+     * @param effect Parsed fixture effect containing a Shader Model 3 TEXLDP.
+     * @return Centre pixel after projected-coordinate mip selection.
+     */
+    [[nodiscard]] inline Color DrawCompiledEffectProjected2DLod(
+        GraphicsDevice& device, Effect& effect)
+    {
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4::One);
+        Texture2D texture(device, 8, 8, true, SurfaceFormat::Color);
+        const std::vector<Color> base(64, Color::Red);
+        texture.SetData(0, nullptr, base.data(), 0, static_cast<int>(base.size()));
+        for (int level = 1; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int extent = std::max(1, 8 >> level);
+            const std::vector<Color> mip(
+                static_cast<std::size_t>(extent * extent), Color::Blue);
+            texture.SetData(level, nullptr, mip.data(), 0, static_cast<int>(mip.size()));
+        }
+        effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, w;
+        };
+        const Vertex quad[6] = {
+            {-1, 1, 0, .25f, .25f, 0, .125f},
+            {-1, -1, 0, .25f, .25f, 0, .125f},
+            {1, -1, 0, .25f, .25f, 0, .5f},
+            {-1, 1, 0, .25f, .25f, 0, .125f},
+            {1, -1, 0, .25f, .25f, 0, .5f},
+            {1, 1, 0, .25f, .25f, 0, .5f},
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, 4, 4);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        Color centre;
+        const Rectangle probe(2, 2, 1, 1);
+        target.GetData(0, &probe, &centre, 0, 1);
+        return centre;
+    }
+
+    /**
+     * @brief Proves a Shader Model 3 sampler source swizzle applies to the sampled result.
+     *
+     * @param device Device whose renderer executes classic compiled Effects.
+     */
+    inline void RunCompiledEffectSamplerResultSwizzleContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.pixelShaderSamplesTexture = true;
+        options.pixelShaderSwizzlesSampleResult = true;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticEffect(options));
+        EXPECT_EQ(DrawCompiledEffectSamplerResultSwizzle(device, effect),
+                  Color(128, 64, 32, 255));
+    }
+
+    /**
      * @brief What a backend can represent of XNA's sampler state, for the GPU-visible contract.
      *
      * plans/plan_fx.md FX-093. Some sampler properties have no expression on some backends -- OpenGL ES
@@ -2167,7 +4305,7 @@ namespace CNA::TestSupport
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
-            effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(quad), 0, 2, declaration);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -2222,7 +4360,7 @@ namespace CNA::TestSupport
             parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
             parameters["Tint"]->SetValue(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
             parameters["FxTexture"]->SetValue(&red);
-            EffectPass& pass = effect.getTechniquesProperty()[0].getPassesProperty()[1];
+            EffectPass& pass = *effect.getTechniquesProperty()[0]->getPassesProperty()[1];
 
             SamplingQuadVertex quad[6];
             FillSamplingQuad(quad, 0.5f, 0.5f);
@@ -2443,7 +4581,7 @@ namespace CNA::TestSupport
                 device.setRasterizerStateProperty(RasterizerState::CullNone);
                 device.setDepthStencilStateProperty(DepthStencilState::None);
                 device.setBlendStateProperty(BlendState::Opaque);
-                effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+                effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
                 device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                           static_cast<const void*>(ramp), 0, 2, declaration);
                 device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -2456,6 +4594,348 @@ namespace CNA::TestSupport
                         "a zero LOD bias leaves the base level selected");
             expectColor(sampleRamp(1.0f), levelColors[1],
                         "a +1 LOD bias must select the next smaller level");
+        }
+    }
+
+    /**
+     * @brief Contract: XNA HiDef vertex texture/sampler slots drive compiled TEXLDL output.
+     *
+     * The fixture's vertex shader publishes four sampled Vector4 texels as a quad's clip-space
+     * positions. The pass first assigns an off-screen texture and MaxMipLevel 1; the application
+     * then replaces both public vertex-stage slots after Apply. Rendering, changing only the
+     * public mip clamp, restoring it, and finally unbinding the texture proves stage isolation,
+     * application override authority, sampler-state transitions and null/unbind behavior.
+     *
+     * @param device HiDef device whose renderer executes compiled Effects.
+     */
+    inline void RunCompiledEffectVertexSamplerContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        ASSERT_EQ(device.getGraphicsProfileProperty(), GraphicsProfile::HiDef);
+        constexpr int kSlot = 2;
+        constexpr int kSize = 8;
+        const Color background(9, 19, 29, 255);
+        const std::vector<SyntheticSamplerState> passStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+            {Fx::SampAddressW, Fx::AddressMirror},
+            {Fx::SampMaxAnisotropy, 7},
+            {Fx::SampMaxMipLevel, 1},
+            {Fx::SampMipMapLodBias, FloatBits(0.0f), true},
+        };
+        Effect effect(device, BuildSyntheticVertexSamplingEffect(passStates, kSlot));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(
+            Vector4(1.0f, 0.0f, 0.0f, 1.0f));
+
+        Texture2D passTexture(device, 4, 4, true, SurfaceFormat::Vector4);
+        std::array<Vector4, 16> offscreenBase{};
+        offscreenBase.fill(Vector4(3.0f, 3.0f, 0.0f, 1.0f));
+        passTexture.SetData(offscreenBase.data(), static_cast<int>(offscreenBase.size()));
+        const std::array<Vector4, 4> offscreenMip1 = {
+            Vector4(3.0f, 3.0f, 0.0f, 1.0f), Vector4(3.0f, 3.0f, 0.0f, 1.0f),
+            Vector4(3.0f, 3.0f, 0.0f, 1.0f), Vector4(3.0f, 3.0f, 0.0f, 1.0f)};
+        passTexture.SetData(1, nullptr, offscreenMip1.data(), 0,
+                            static_cast<int>(offscreenMip1.size()));
+        const Vector4 offscreenMip2(3.0f, 3.0f, 0.0f, 1.0f);
+        passTexture.SetData(2, nullptr, &offscreenMip2, 0, 1);
+
+        Texture2D positions(device, 4, 4, true, SurfaceFormat::Vector4);
+        std::array<Vector4, 16> base{};
+        base.fill(Vector4(3.0f, 3.0f, 0.0f, 1.0f));
+        base[0] = Vector4(-1.0f, 1.0f, 0.0f, 1.0f);
+        base[12] = Vector4(-1.0f, -1.0f, 0.0f, 1.0f);
+        base[15] = Vector4(1.0f, -1.0f, 0.0f, 1.0f);
+        base[3] = Vector4(1.0f, 1.0f, 0.0f, 1.0f);
+        positions.SetData(base.data(), static_cast<int>(base.size()));
+        positions.SetData(1, nullptr, offscreenMip1.data(), 0,
+                          static_cast<int>(offscreenMip1.size()));
+        positions.SetData(2, nullptr, &offscreenMip2, 0, 1);
+
+        Texture2D pixelSentinel(device, 1, 1, false, SurfaceFormat::Color);
+        const Color blue = Color::Blue;
+        pixelSentinel.SetData(&blue, 1);
+        device.getTexturesProperty()(kSlot, &pixelSentinel);
+        effect.getParametersProperty()["FxTexture"]->SetValue(&passTexture);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+
+        EXPECT_EQ(device.getTexturesProperty()[kSlot], &pixelSentinel);
+        EXPECT_EQ(device.getVertexTexturesProperty()[kSlot], &passTexture);
+        const SamplerState& applied = device.getVertexSamplerStatesProperty()[kSlot];
+        EXPECT_EQ(applied.getFilterProperty(), TextureFilter::Point);
+        EXPECT_EQ(applied.getAddressUProperty(), TextureAddressMode::Clamp);
+        EXPECT_EQ(applied.getAddressVProperty(), TextureAddressMode::Clamp);
+        EXPECT_EQ(applied.getAddressWProperty(), TextureAddressMode::Mirror);
+        EXPECT_EQ(applied.getMaxAnisotropyProperty(), 7);
+        EXPECT_EQ(applied.getMaxMipLevelProperty(), 1);
+        EXPECT_FLOAT_EQ(applied.getMipMapLevelOfDetailBiasProperty(), 0.0f);
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, lod;
+        };
+        const Vertex quad[6] = {
+            {0, 0, 0, 0.125f, 0.125f, 0, 0},
+            {0, 0, 0, 0.125f, 0.875f, 0, 0},
+            {0, 0, 0, 0.875f, 0.875f, 0, 0},
+            {0, 0, 0, 0.125f, 0.125f, 0, 0},
+            {0, 0, 0, 0.875f, 0.875f, 0, 0},
+            {0, 0, 0, 0.875f, 0.125f, 0, 0},
+        };
+        const VertexDeclaration declaration(sizeof(Vertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, kSize, kSize);
+        const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+        const auto draw = [&]()
+        {
+            device.SetRenderTarget(&target);
+            device.Clear(background);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color pixel = Color::Transparent;
+            target.GetData(0, &centre, &pixel, 0, 1);
+            return pixel;
+        };
+
+        device.getVertexTexturesProperty()(kSlot, &positions);
+        device.getVertexSamplerStatesProperty()[kSlot] = SamplerState::LinearClamp;
+        device.SetRenderTarget(&target);
+        device.Clear(background);
+        EXPECT_THROW(
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration),
+            System::NotSupportedException)
+            << "Vector4 vertex texture filtering used the pixel sampler collection";
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        device.getVertexSamplerStatesProperty()[kSlot] = SamplerState::PointClamp;
+        EXPECT_NEAR(draw().getRProperty(), 255, 3)
+            << "application vertex texture/sampler overrides did not drive TEXLDL";
+
+        SamplerState biasOne = SamplerState::PointClamp;
+        biasOne.setMipMapLevelOfDetailBiasProperty(1.0f);
+        device.getVertexSamplerStatesProperty()[kSlot] = biasOne;
+        EXPECT_EQ(draw(), background) << "vertex LOD-bias transition did not select mip one";
+
+        SamplerState mipOne = SamplerState::PointClamp;
+        mipOne.setMaxMipLevelProperty(1);
+        device.getVertexSamplerStatesProperty()[kSlot] = mipOne;
+        EXPECT_EQ(draw(), background) << "vertex MaxMipLevel transition did not select mip one";
+
+        device.getVertexSamplerStatesProperty()[kSlot] = SamplerState::PointClamp;
+        EXPECT_NEAR(draw().getRProperty(), 255, 3)
+            << "vertex sampler state did not recover without reapplying the pass";
+
+        device.getVertexTexturesProperty()(kSlot, nullptr);
+        EXPECT_EQ(draw(), background) << "null vertex texture did not unbind the native slot";
+
+        device.getVertexTexturesProperty()(kSlot, &positions);
+        positions.Dispose();
+        EXPECT_EQ(device.getVertexTexturesProperty()[kSlot], nullptr);
+        EXPECT_EQ(draw(), background)
+            << "disposing a bound vertex texture did not remove the native binding";
+    }
+
+    /**
+     * @brief Contract: a vertex TEXLDL sampler source swizzle applies to the sampled value.
+     *
+     * Four Vector4 texels encode a full-target quad only after the sampler operand's BGRA
+     * swizzle. Ignoring it leaves every clip-space x coordinate at zero and produces no covered
+     * pixels, distinguishing result swizzling from coordinate swizzling and destination masking.
+     *
+     * @param device HiDef device whose renderer executes compiled Effects.
+     */
+    inline void RunCompiledEffectVertexSamplerResultSwizzleContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        ASSERT_EQ(device.getGraphicsProfileProperty(), GraphicsProfile::HiDef);
+        constexpr int kSize = 8;
+        const Color background(9, 19, 29, 255);
+        const std::vector<SyntheticSamplerState> states = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, BuildSyntheticVertexSamplingEffect(
+                                  states, 0, SyntheticSamplerKind::Sampler2D,
+                                  /*swizzlesSampleResult=*/true));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(Vector4(1, 0, 0, 1));
+
+        Texture2D positions(device, 4, 4, false, SurfaceFormat::Vector4);
+        std::array<Vector4, 16> encoded{};
+        encoded.fill(Vector4(0, 3, 3, 1));
+        encoded[0] = Vector4(0, 1, -1, 1);
+        encoded[12] = Vector4(0, -1, -1, 1);
+        encoded[15] = Vector4(0, -1, 1, 1);
+        encoded[3] = Vector4(0, 1, 1, 1);
+        positions.SetData(encoded.data(), static_cast<int>(encoded.size()));
+        effect.getParametersProperty()["FxTexture"]->SetValue(&positions);
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, lod;
+        };
+        const Vertex quad[6] = {
+            {0, 0, 0, .125f, .125f, 0, 0}, {0, 0, 0, .125f, .875f, 0, 0},
+            {0, 0, 0, .875f, .875f, 0, 0}, {0, 0, 0, .125f, .125f, 0, 0},
+            {0, 0, 0, .875f, .875f, 0, 0}, {0, 0, 0, .875f, .125f, 0, 0},
+        };
+        const VertexDeclaration declaration(sizeof(Vertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, kSize, kSize);
+        device.SetRenderTarget(&target);
+        device.Clear(background);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(quad), 0, 2, declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color centre = Color::Transparent;
+        const Rectangle sample(kSize / 2, kSize / 2, 1, 1);
+        target.GetData(0, &sample, &centre, 0, 1);
+        EXPECT_NEAR(centre.getRProperty(), 255, 3)
+            << "vertex TEXLDL ignored the sampler source swizzle";
+        EXPECT_NEAR(centre.getGProperty(), 0, 3);
+        EXPECT_NEAR(centre.getBProperty(), 0, 3);
+    }
+
+    /**
+     * @brief Contract: compiled vertex TEXLDL supports classic cube and volume samplers.
+     *
+     * The cube leg fetches four clip positions from one face. The volume leg stores the quad in
+     * slice zero and off-screen positions in slice one, then changes only AddressW from Wrap to
+     * Clamp for a z coordinate above one. This makes all three texture dimensions and AddressW's
+     * actual vertex-stage effect observable.
+     *
+     * @param device HiDef device whose renderer executes compiled Effects.
+     */
+    inline void RunCompiledEffectVertexSamplerDimensionsContract(GraphicsDevice& device)
+    {
+        namespace Fx = EffectFormat;
+        constexpr int kSize = 8;
+        constexpr int kSlot = 1;
+        const Color background(9, 19, 29, 255);
+        const auto states = [](std::uint32_t addressW)
+        {
+            return std::vector<SyntheticSamplerState>{
+                {Fx::SampMagFilter, Fx::FilterPoint},
+                {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+                {Fx::SampAddressU, Fx::AddressClamp},
+                {Fx::SampAddressV, Fx::AddressClamp},
+                {Fx::SampAddressW, addressW},
+                {Fx::SampMaxMipLevel, 0},
+                {Fx::SampMipMapLodBias, FloatBits(0.0f), true},
+            };
+        };
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, q, lod;
+        };
+        const VertexDeclaration declaration(sizeof(Vertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        RenderTarget2D target(device, kSize, kSize);
+        const Rectangle centre(kSize / 2, kSize / 2, 1, 1);
+        const auto draw = [&](const Vertex (&vertices)[6])
+        {
+            device.SetRenderTarget(&target);
+            device.Clear(background);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(vertices), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color pixel = Color::Transparent;
+            target.GetData(0, &centre, &pixel, 0, 1);
+            return pixel;
+        };
+        const Vector4 outside(3, 3, 0, 1);
+        std::array<Vector4, 16> positions{};
+        positions.fill(outside);
+        positions[0] = Vector4(-1, 1, 0, 1);
+        positions[12] = Vector4(-1, -1, 0, 1);
+        positions[15] = Vector4(1, -1, 0, 1);
+        positions[3] = Vector4(1, 1, 0, 1);
+
+        {
+            Effect effect(device, BuildSyntheticVertexSamplingEffect(
+                states(Fx::AddressClamp), kSlot, SyntheticSamplerKind::SamplerCube));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect.getParametersProperty()["Tint"]->SetValue(Vector4(0, 1, 0, 1));
+            TextureCube cube(device, 4, false, SurfaceFormat::Vector4);
+            std::array<Vector4, 16> face{};
+            face.fill(outside);
+            for (int cubeFace = 0; cubeFace < 6; ++cubeFace)
+                cube.SetData(static_cast<CubeMapFace>(cubeFace), face.data(),
+                             static_cast<int>(face.size()));
+            cube.SetData(CubeMapFace::PositiveZ, positions.data(),
+                         static_cast<int>(positions.size()));
+            effect.getParametersProperty()["FxTexture"]->SetValue(&cube);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            const Vertex quad[6] = {
+                {0, 0, 0, -.75f, .75f, 1, 0}, {0, 0, 0, -.75f, -.75f, 1, 0},
+                {0, 0, 0, .75f, -.75f, 1, 0}, {0, 0, 0, -.75f, .75f, 1, 0},
+                {0, 0, 0, .75f, -.75f, 1, 0}, {0, 0, 0, .75f, .75f, 1, 0},
+            };
+            EXPECT_NEAR(draw(quad).getGProperty(), 255, 3)
+                << "compiled vertex samplerCUBE did not produce clip positions";
+        }
+
+        {
+            Effect effect(device, BuildSyntheticVertexSamplingEffect(
+                states(Fx::AddressClamp), kSlot, SyntheticSamplerKind::Sampler3D));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            effect.getParametersProperty()["Tint"]->SetValue(Vector4(0, 0, 1, 1));
+            Texture3D volume(device, 4, 4, 2, false, SurfaceFormat::Vector4);
+            std::array<Vector4, 32> texels{};
+            texels.fill(outside);
+            std::copy(positions.begin(), positions.end(), texels.begin());
+            volume.SetData(texels.data(), static_cast<int>(texels.size()));
+            effect.getParametersProperty()["FxTexture"]->SetValue(&volume);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            const Vertex quad[6] = {
+                {0, 0, 0, .125f, .125f, 1.125f, 0},
+                {0, 0, 0, .125f, .875f, 1.125f, 0},
+                {0, 0, 0, .875f, .875f, 1.125f, 0},
+                {0, 0, 0, .125f, .125f, 1.125f, 0},
+                {0, 0, 0, .875f, .875f, 1.125f, 0},
+                {0, 0, 0, .875f, .125f, 1.125f, 0},
+            };
+            EXPECT_EQ(draw(quad), background)
+                << "vertex sampler3D did not begin with pass-assigned AddressW.Clamp";
+            SamplerState wrap = SamplerState::PointClamp;
+            wrap.setAddressWProperty(TextureAddressMode::Wrap);
+            device.getVertexSamplerStatesProperty()[kSlot] = wrap;
+            EXPECT_NEAR(draw(quad).getBProperty(), 255, 3)
+                << "vertex sampler3D ignored AddressW.Wrap";
+            device.getVertexSamplerStatesProperty()[kSlot] = SamplerState::PointClamp;
+            EXPECT_EQ(draw(quad), background)
+                << "vertex sampler3D ignored AddressW.Clamp transition";
         }
     }
 
@@ -2567,7 +5047,7 @@ namespace CNA::TestSupport
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
-            effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(texturedQuad), 0, 2, declaration);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -2674,7 +5154,7 @@ namespace CNA::TestSupport
             device.setRasterizerStateProperty(RasterizerState::CullNone);
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
-            effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(quad), 0, 2, declaration);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -2791,7 +5271,7 @@ namespace CNA::TestSupport
             device.setBlendStateProperty(BlendState::Opaque);
             try
             {
-                effect->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+                effect->getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
                 device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                           static_cast<const void*>(quad), 0, 2, declaration);
             }
@@ -2965,21 +5445,22 @@ namespace CNA::TestSupport
             EXPECT_NEAR(actual.getBProperty(), expected.getBProperty(), 3);
         };
 
-        auto& firstTechnique = effect.getTechniquesProperty()[0];
-        ASSERT_EQ(firstTechnique.getPassesProperty().getCountProperty(), 2);
-        expectColor(drawWithPass(firstTechnique.getPassesProperty()[0]), rotated,
+        auto* firstTechnique = effect.getTechniquesProperty()[0];
+        ASSERT_NE(firstTechnique, nullptr);
+        ASSERT_EQ(firstTechnique->getPassesProperty().getCountProperty(), 2);
+        expectColor(drawWithPass(*firstTechnique->getPassesProperty()[0]), rotated,
                     "pass 0 must draw with pass 0's own program");
-        expectColor(drawWithPass(firstTechnique.getPassesProperty()[1]), straight,
+        expectColor(drawWithPass(*firstTechnique->getPassesProperty()[1]), straight,
                     "pass 1 must draw with pass 1's own program");
         // Back again: a backend that cached the first pass it ever saw fails here.
-        expectColor(drawWithPass(firstTechnique.getPassesProperty()[0]), rotated,
+        expectColor(drawWithPass(*firstTechnique->getPassesProperty()[0]), rotated,
                     "re-selecting pass 0 must go back to pass 0's program");
 
         // Another technique's pass is a third selection, resolved by name rather than by ordinal.
-        effect.setCurrentTechniqueProperty(&effect.getTechniquesProperty()[1]);
+        effect.setCurrentTechniqueProperty(effect.getTechniquesProperty()[1]);
         auto& secondTechnique = *effect.getCurrentTechniqueProperty();
         ASSERT_EQ(secondTechnique.getNameProperty(), "SecondTechnique");
-        expectColor(drawWithPass(secondTechnique.getPassesProperty()[0]), straight,
+        expectColor(drawWithPass(*secondTechnique.getPassesProperty()[0]), straight,
                     "SecondTechnique's only pass carries the unrotated program");
     }
 
@@ -3005,12 +5486,30 @@ namespace CNA::TestSupport
      * claiming `CompiledEffects` must run all of them:
      *
      * - `RunCompiledEffectDrawContract` -- the XNA draw matrix, every result read back
+     * - `RunCompiledEffectLoopContract` -- non-unit D3D9 loop steps retain the declared count
+     * - `RunCompiledEffectSubroutineContract` -- forward, nested and conditional calls return
+     * - `RunCompiledEffectPredicationContract` -- SM3 predicates mask vertex/pixel components
+     * - `RunCompiledEffectPredicatedTexkillContract` -- a false predicate suppresses pixel kill
+     * - `RunCompiledEffectShaderModel14TexcrdDwContract` -- ps_1_4 `TEXCRD` `_dw.xyw`
+     * - `RunCompiledEffectShaderModel14TexldDzContract` -- ps_1_4 temporary `_dz.xyz`
+     * - `RunCompiledEffectShaderModel14TexldDwContract` -- ps_1_4 texture `_dw.xyw`
+     * - `RunCompiledEffectShaderModel14TextureLoadContract` -- ps_1_4 destination-selected stage
+     * - `RunCompiledEffectShaderModel14PhaseContract` -- ps_1_4 two-phase execution
+     * - `RunCompiledEffectLegacyTextureMatrixContract` -- ps_1_2 stateful matrix operations
+     * - `RunCompiledEffectLegacyTextureMatrix2Contract` -- sampled ps_1_2 matrix + implicit LOD
+     * - `RunCompiledEffectLegacyTextureMatrix3SampleContract` -- sampled 3x3 + volume LOD
+     * - `RunCompiledEffectLegacyTextureMatrix3SpecularContract` -- reflected cube lookups
+     * - `RunCompiledEffectLegacyDepthOutputContract` -- ps_1_3/1_4 depth replacement and zero divide
+     * - `RunCompiledEffectLegacyTextureRemapContract` -- ps_1_2 AR/GB sampling and implicit LOD
+     * - `RunCompiledEffectLegacyDependentTextureContract` -- ps_1_2 RGB/dot dependent sampling
+     * - `RunCompiledEffectLegacyBumpEnvironmentContract` -- TEXBEM/L/BEM and pass-stage state
      * - `RunCompiledEffectMultiStreamDrawContract` -- several streams, and their own offsets
      * - `RunCompiledEffectInstancingDrawContract` -- instanced draws, offsets and divisor reset
      * - `RunCompiledEffectSpriteBatchContract` -- SpriteBatch runs the effect, or refuses by name
      * - `RunCompiledEffectSpriteBatchMultiPassContract` -- XNA's own batch/pass granularity
      * - `RunCompiledEffectSpriteBatchTextureSlotContract` -- the sprite's texture wins slot 0
      * - `RunCompiledEffectSamplerPixelContract` -- the sampler state reaches the GPU
+     * - `RunCompiledEffectSamplerResultSwizzleContract` -- SM3 sampler operands reorder texels
      * - `RunCompiledEffectPassSelectionContract` -- the applied pass is the pass that draws
      * - `RunCompiledEffectRenderTargetSourceContract` -- a rendered source is sampled right way up
      * - `RunCompiledEffectSpriteBatchRenderTargetSourceContract` -- and through SpriteBatch too
@@ -3025,6 +5524,8 @@ namespace CNA::TestSupport
      */
     inline void RunCompiledEffectContract(GraphicsDevice& device)
     {
+        ASSERT_EQ(device.getGraphicsProfileProperty(), GraphicsProfile::HiDef)
+            << "the render-state section deliberately exercises separate alpha blending";
         RunCompiledEffectFormatContract(device);
         RunCompiledEffectReflectionContract(device);
         RunCompiledEffectParameterApiContract(device);

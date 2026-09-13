@@ -17,6 +17,7 @@
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -34,7 +35,12 @@
 #include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
 
-namespace Microsoft::Xna::Framework::Graphics { class Effect; }
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class Effect;
+    class SamplerStateCollection;
+    class TextureCollection;
+}
 namespace CNA::Platform
 {
     class IPlatformGlContext;
@@ -183,7 +189,7 @@ namespace CNA::Internal::Renderers
     };
 
     /**
-     * @brief Renderer handle for a GPU occlusion query.
+     * @brief Renderer handle for an occlusion query answered by the active rasterizer.
      *
      * On OpenGL ES 3.0 (EasyGL), uses GL_ANY_SAMPLES_PASSED — so PixelCount()
      * returns 0 (no visible samples) or 1 (at least one visible sample), not an
@@ -533,6 +539,57 @@ namespace CNA::Internal::Renderers
             return false;
         }
         /**
+         * @brief Reads exact block-compressed bytes from a cube face.
+         *
+         * Coordinates remain in texel space and must describe a block-aligned region, except that
+         * its right and bottom edges may coincide with an NPOT mip edge. The destination receives
+         * tightly packed block rows for only the requested region. The default refuses because a
+         * converted RGBA8 readback is not an exact compressed transfer.
+         *
+         * @param face       Cube face index.
+         * @param level      Mip level.
+         * @param x          Left edge in texels, block aligned.
+         * @param y          Top edge in texels, block aligned.
+         * @param w          Width in texels, block aligned or reaching the mip edge.
+         * @param h          Height in texels, block aligned or reaching the mip edge.
+         * @param data       Destination for the exact compressed block payload.
+         * @param dataLength Available destination bytes.
+         * @return True only when the complete requested payload was copied.
+         */
+        [[nodiscard]] virtual bool GetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const
+        {
+            (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
+            (void)data; (void)dataLength;
+            return false;
+        }
+        /**
+         * @brief Uploads exact uncompressed declared-format texels into one cube face.
+         *
+         * Unlike @ref SetData, this route does not imply RGBA8. The concrete cube resource knows
+         * its SurfaceFormat and must interpret each tightly packed row in that exact layout. The
+         * default refuses so existing renderers cannot silently claim typed cube transfers.
+         *
+         * @param face Cube face index.
+         * @param level Mip level beginning at zero.
+         * @param x Destination x coordinate in texels.
+         * @param y Destination y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Exact declared-format texels, tightly packed by row.
+         * @param dataLength Available source bytes.
+         * @return True only when the complete region was stored.
+         */
+        [[nodiscard]] virtual bool SetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength)
+        {
+            (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
+            (void)data; (void)dataLength;
+            return false;
+        }
+        /**
          * @brief Reads back format-native texels from a sub-rectangle of a single cube face.
          *
          * REMED-GFX-130, extending REMED-GFX-127's contract to this interface. Returns **true only
@@ -564,6 +621,30 @@ namespace CNA::Internal::Renderers
          */
         [[nodiscard]] virtual bool GetData(int face, int level, int x, int y, int w, int h,
                                            void* data, int dataLength) const
+        {
+            (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
+            (void)data; (void)dataLength;
+            return false;
+        }
+        /**
+         * @brief Reads exact uncompressed declared-format texels from one cube face.
+         *
+         * The destination layout is the cube resource's actual SurfaceFormat, not RGBA8. The
+         * default refuses so callers never receive converted or fabricated bytes.
+         *
+         * @param face Cube face index.
+         * @param level Mip level beginning at zero.
+         * @param x Source x coordinate in texels.
+         * @param y Source y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Destination for tightly packed declared-format texels.
+         * @param dataLength Available destination bytes.
+         * @return True only when the complete region was copied.
+         */
+        [[nodiscard]] virtual bool GetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const
         {
             (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
             (void)data; (void)dataLength;
@@ -621,6 +702,31 @@ namespace CNA::Internal::Renderers
                                            int w, int h, int depth,
                                            const void* data, int dataLength) = 0;
         /**
+         * @brief Uploads exact uncompressed declared-format voxels into a sub-volume.
+         *
+         * Unlike @ref SetData, this route does not imply RGBA8. The concrete resource interprets
+         * each tightly packed voxel in the SurfaceFormat used at construction.
+         *
+         * @param level Mip level to write.
+         * @param x Left edge of the box.
+         * @param y Top edge of the box.
+         * @param z Front edge of the box.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Tightly packed declared-format source voxels.
+         * @param dataLength Available source bytes.
+         * @return True only when the complete requested box was stored.
+         */
+        [[nodiscard]] virtual bool SetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            const void* data, int dataLength)
+        {
+            (void)level; (void)x; (void)y; (void)z; (void)w; (void)h; (void)depth;
+            (void)data; (void)dataLength;
+            return false;
+        }
+        /**
          * @brief Reads back format-native voxels from a sub-volume of the given mip level.
          *
          * REMED-GFX-130. Identical contract to `ITextureCubeRenderer::GetData` above -- see its
@@ -644,6 +750,28 @@ namespace CNA::Internal::Renderers
         [[nodiscard]] virtual bool GetData(int level, int x, int y, int z,
                                            int w, int h, int depth,
                                            void* data, int dataLength) const
+        {
+            (void)level; (void)x; (void)y; (void)z; (void)w; (void)h; (void)depth;
+            (void)data; (void)dataLength;
+            return false;
+        }
+        /**
+         * @brief Reads exact uncompressed declared-format voxels from a sub-volume.
+         *
+         * @param level Mip level to read.
+         * @param x Left edge of the box.
+         * @param y Top edge of the box.
+         * @param z Front edge of the box.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Destination for tightly packed declared-format voxels.
+         * @param dataLength Available destination bytes.
+         * @return True only when the complete requested box was copied.
+         */
+        [[nodiscard]] virtual bool GetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            void* data, int dataLength) const
         {
             (void)level; (void)x; (void)y; (void)z; (void)w; (void)h; (void)depth;
             (void)data; (void)dataLength;
@@ -810,9 +938,10 @@ namespace CNA::Internal::Renderers
          * only on `true` and raises `System::NotSupportedException` on `false`, so the one thing an
          * unimplemented renderer can never do is answer with content it never read.
          *
-         * `Texture2D::GetData` only calls this when its own CPU-side pixel shadow is unavailable
-         * (i.e. for a RenderTarget2D, whose content comes from GPU rendering rather than SetData())
-         * -- plain, SetData()-populated textures never reach this path.
+         * Uncompressed `Texture2D::GetData` calls this when its own CPU-side pixel shadow is
+         * unavailable (for example RenderTarget2D content). Block-compressed textures also use it
+         * as the authoritative exact-block store because their partial update path must preserve
+         * untouched blocks.
          *
          * @param level      Mip level to read.
          * @param x          Left edge of the requested region, in pixels.
@@ -975,7 +1104,7 @@ namespace CNA::Internal::Renderers
         // is the one `RenderTarget2D::GetData` already established: top row first.
         //
         // Headless keeps the inherited refusal because it rasterizes nothing, and the renderers
-        // that create no cube render target at all (Software, native 2D, ASCII, Canvas, DIRECTX3, GDI)
+        // that create no cube render target at all (native 2D, ASCII, Canvas, DIRECTX3, GDI)
         // never reach this class -- `GraphicsDevice::SetRenderTargets` refuses to bind one and
         // `TextureCube::GetData` refuses a null renderer one step earlier. Every remaining boundary
         // (a multisampled or mipped cube target on bgfx, a mip level D3D9 never allocated, WebGPU's
@@ -1257,6 +1386,19 @@ namespace CNA::Internal::Renderers
         /// Passes the raw TextureFilter int value; 0=Linear, 1=Point/Nearest, others map to nearest.
         virtual void SetSamplerFilter(int /*textureFilter*/) {}
         /**
+         * @brief Sets the maximum anisotropy applied when the filter is Anisotropic.
+         *
+         * @param maxAnisotropy Requested maximum anisotropy from the batch SamplerState.
+         */
+        virtual void SetSamplerMaxAnisotropy(int /*maxAnisotropy*/) {}
+        /**
+         * @brief Sets explicit mip-level controls for the batch sampler.
+         *
+         * @param maxMipLevel Most detailed mip level the sampler may select.
+         * @param lodBias Bias added to the computed mip level of detail.
+         */
+        virtual void SetSamplerMipState(int /*maxMipLevel*/, float /*lodBias*/) {}
+        /**
          * @brief Sets the texture address (wrap/clamp/mirror) mode applied to each Draw call.
          *
          * Default: no-op (renderer keeps whatever wrap mode the texture was created with, i.e.
@@ -1298,24 +1440,15 @@ namespace CNA::Internal::Renderers
          * @param lodBias Mipmap level-of-detail bias.
          */
         virtual void SetSamplerState(int textureFilter, int addressU, int addressV, int addressW,
-                                     int /*maxAnisotropy*/, int maxMipLevel, float lodBias)
+                                     int maxAnisotropy, int maxMipLevel, float lodBias)
         {
             SetSamplerFilter(textureFilter);
+            SetSamplerMaxAnisotropy(maxAnisotropy);
             SetSamplerAddressMode(addressU, addressV);
             SetSamplerMipState(maxMipLevel, lodBias);
             SetSamplerAddressW(addressW);
             SetSamplerAddressModeWEXT(addressW);
         }
-
-        /**
-         * @brief Sets the mip-level clamp and bias applied to each Draw call.
-         *
-         * Reached through `SetSamplerState`'s default fan-out; see there.
-         *
-         * @param maxMipLevel Most detailed mip level the sampler may select.
-         * @param lodBias Bias added to the computed mip level.
-         */
-        virtual void SetSamplerMipState(int /*maxMipLevel*/, float /*lodBias*/) {}
         /**
          * @brief Sets the volume-texture W address mode applied to each Draw call.
          *
@@ -1412,9 +1545,18 @@ namespace CNA::Internal::Renderers
                           SpriteEffects effects,
                           float layerDepth)
         {
+            const auto quantise = [](float value) noexcept
+            {
+                if (!std::isfinite(value)) return 0;
+                if (value >= static_cast<float>(std::numeric_limits<int>::max()))
+                    return std::numeric_limits<int>::max();
+                if (value <= static_cast<float>(std::numeric_limits<int>::lowest()))
+                    return std::numeric_limits<int>::lowest();
+                return static_cast<int>(value);
+            };
             Draw(texture,
-                 Rectangle(static_cast<int>(destinationX), static_cast<int>(destinationY),
-                           static_cast<int>(destinationWidth), static_cast<int>(destinationHeight)),
+                 Rectangle(quantise(destinationX), quantise(destinationY),
+                           quantise(destinationWidth), quantise(destinationHeight)),
                  sourceRectangle, color, rotation, origin, effects, layerDepth);
         }
 
@@ -1491,6 +1633,34 @@ namespace CNA::Internal::Renderers
 
         /// Vertex elements the stream's buffer holds, for renderers that must bound a native range.
         int vertexCount = 0;
+
+        /// SOFTWARE-321: whether the active vertex shader consumes at least one element from this
+        /// stream. XNA/FNA bind every public stream but native input reflection fetches only the
+        /// semantics declared by the current shader. An entirely unused stream therefore neither
+        /// bounds a draw nor permits a CPU renderer to form pointers past its storage.
+        bool vertexShaderInputUsed = true;
+
+        /// SOFTWARE-320: effective usage index for each declaration element after XNA/FNA's
+        /// binding-order collision remap. A repeated usage/index takes the first free index of the
+        /// same usage; zero count means the declaration's own indices are already authoritative.
+        std::array<int, 16> effectiveUsageIndices{};
+        int effectiveUsageIndexCount = 0;
+
+        /**
+         * @brief Returns one declaration element's binding-time usage index.
+         *
+         * @param elementOrdinal Zero-based ordinal in this stream's vertex declaration.
+         * @param declaredUsageIndex The usage index stored in that declaration element.
+         * @return The collision-remapped index, or @p declaredUsageIndex when no remap metadata
+         *         accompanies this internal stream tuple.
+         */
+        [[nodiscard]] int EffectiveUsageIndex(
+            std::size_t elementOrdinal, int declaredUsageIndex) const noexcept
+        {
+            if (elementOrdinal < static_cast<std::size_t>(effectiveUsageIndexCount))
+                return effectiveUsageIndices[elementOrdinal];
+            return declaredUsageIndex;
+        }
     };
 
     /// XNA 4.0 HiDef's `SetVertexBuffers` limit, and therefore the fixed capacity of a draw's
@@ -1739,6 +1909,34 @@ namespace CNA::Internal::Renderers
         /// from customEffectRenderer: ShaderEffect is a source pair, while a compiled effect owns
         /// reflection, techniques, passes, samplers, and state assignments.
         ICompiledEffectRuntime* compiledEffectRuntime = nullptr;
+        /// Optional runtime that owns the vertex stage retained across an Effect pass boundary.
+        /// Null means @ref compiledEffectRuntime owns the vertex stage. SpriteBatch uses this to
+        /// preserve XNA's internal SpriteEffect vertex shader when a custom pass changes only the
+        /// pixel shader.
+        ICompiledEffectRuntime* compiledVertexEffectRuntime = nullptr;
+        /// Optional runtime that owns the retained pixel stage. Null means
+        /// @ref compiledEffectRuntime owns it. This is the symmetric SpriteEffect fallback for a
+        /// custom SpriteBatch pass that changes only the vertex shader (or neither stage).
+        ICompiledEffectRuntime* compiledPixelEffectRuntime = nullptr;
+        /// Current public pixel texture slots for a compiled Effect draw. EffectPass.Apply writes
+        /// its assignments here and an application may legally replace them before drawing.
+        const Microsoft::Xna::Framework::Graphics::TextureCollection*
+            compiledDeviceTextures = nullptr;
+        /// Current public pixel sampler slots paired with @ref compiledDeviceTextures.
+        const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
+            compiledDeviceSamplerStates = nullptr;
+        /// Current public vertex texture slots for a compiled Effect draw. XNA exposes four
+        /// HiDef vertex-stage slots independently from the sixteen pixel-stage slots.
+        const Microsoft::Xna::Framework::Graphics::TextureCollection*
+            compiledDeviceVertexTextures = nullptr;
+        /// Current public vertex sampler slots paired with @ref compiledDeviceVertexTextures.
+        const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
+            compiledDeviceVertexSamplerStates = nullptr;
+        /// SpriteBatch's current source texture for compiled pixel sampler slot zero. FNA writes
+        /// this binding after applying each custom-effect pass, so it overrides a Texture
+        /// parameter assigned to sampler zero without mutating the public texture collection.
+        /// Null on ordinary compiled draws.
+        const ITextureRenderer* compiledSpriteTexture0 = nullptr;
         /// True whenever the active effect is ShaderEffect, even when this renderer returned no
         /// IEffectRenderer. Backends without custom shaders use this to refuse the draw instead of
         /// mistaking a null renderer for an ordinary fixed-function stock effect.
@@ -1852,6 +2050,50 @@ namespace CNA::Internal::Renderers
         /// environment brighter than 1.0 carries its brightness here instead of in its texels.
         float iblIntensity = 1.0f;
     };
+
+    /**
+     * @brief Reports whether a classic stock effect consumes one vertex semantic.
+     *
+     * @param params The active draw parameters filled by the effect.
+     * @param usage The declaration semantic to test.
+     * @param usageIndex The collision-remapped semantic index to test.
+     * @return True when the active classic stock vertex shader declares the semantic. Unknown,
+     *         compiled, source-shader, and CNAEXT PBR effects conservatively return true.
+     */
+    [[nodiscard]] inline bool StockEffectUsesVertexSemantic(
+        const GpuDrawParams& params,
+        Microsoft::Xna::Framework::Graphics::VertexElementUsage usage,
+        int usageIndex) noexcept
+    {
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        if (params.compiledEffectRuntime != nullptr ||
+            params.customEffectRenderer != nullptr || params.customEffectRequested || params.pbr)
+            return true;
+        if (usageIndex < 0)
+            return false;
+
+        switch (usage)
+        {
+            case VertexElementUsage::Position:
+                return usageIndex == 0;
+            case VertexElementUsage::Color:
+                return usageIndex == 0 && params.vertexColorEnabled;
+            case VertexElementUsage::Normal:
+                return usageIndex == 0 &&
+                    (params.lightingEnabled || params.envMapping || params.skinned);
+            case VertexElementUsage::TextureCoordinate:
+                if (usageIndex == 0)
+                    return params.textureEnabled || params.dualTexture ||
+                        params.envMapping || params.skinned;
+                return usageIndex == 1 && params.dualTexture;
+            case VertexElementUsage::BlendWeight:
+            case VertexElementUsage::BlendIndices:
+                return usageIndex == 0 && params.skinned;
+            default:
+                return false;
+        }
+    }
 
     /**
      * @brief REMED-GFX-201: where one element of the combined vertex layout actually lives.
@@ -2316,12 +2558,9 @@ namespace CNA::Internal::Renderers
 
         // --- GraphicsProfile ceilings (plans/plan_runtimerenderer.md design decision 9) -------------
         //
-        // XNA's GraphicsProfile.Reach/HiDef carry real, enforced-at-creation-time ceilings. Only a
-        // renderer with a genuine capability structure to consult (D3D9's D3DCAPS9) can answer them
-        // honestly; the other 45 have no such structure, and this project refuses to substitute a
-        // hardcoded table pretending to be a capability query. The defaults below are therefore
-        // "no ceiling" -- exactly the behaviour every non-D3D9 renderer had when these lived as
-        // #ifdef CNA_RENDERER_DIRECTX9 blocks inside the XNA layer.
+        // XNA's GraphicsProfile.Reach/HiDef carry renderer-independent, enforced-at-creation-time
+        // ceilings. These are profile rules rather than hardware queries, so every renderer must
+        // expose the same values here. A renderer may impose a lower hardware limit separately.
 
         /**
          * @brief Largest texture edge length the given GraphicsProfile permits.
@@ -2331,24 +2570,22 @@ namespace CNA::Internal::Renderers
          * guarantee means.
          *
          * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
-         * @return The maximum edge length, or std::numeric_limits<int>::max() for no ceiling.
+         * @return The maximum edge length (2048 for Reach, 4096 for HiDef).
          */
         [[nodiscard]] virtual int GetMaxTextureSizeForProfileEXT(int graphicsProfile) const
         {
-            (void)graphicsProfile;
-            return (std::numeric_limits<int>::max)();
+            return graphicsProfile == 1 /* GraphicsProfile::HiDef */ ? 4096 : 2048;
         }
 
         /**
          * @brief Largest cube-map edge length the given GraphicsProfile permits.
          *
          * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
-         * @return The maximum edge length, or std::numeric_limits<int>::max() for no ceiling.
+         * @return The maximum edge length (512 for Reach, 4096 for HiDef).
          */
         [[nodiscard]] virtual int GetMaxCubeSizeForProfileEXT(int graphicsProfile) const
         {
-            (void)graphicsProfile;
-            return (std::numeric_limits<int>::max)();
+            return graphicsProfile == 1 /* GraphicsProfile::HiDef */ ? 4096 : 512;
         }
 
         /**
@@ -2359,13 +2596,11 @@ namespace CNA::Internal::Renderers
          * size ceiling.
          *
          * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
-         * @return The maximum extent, 0 for "no volume textures at all", or
-         *         std::numeric_limits<int>::max() for no ceiling.
+         * @return The maximum extent (0 for Reach, meaning unsupported; 256 for HiDef).
          */
         [[nodiscard]] virtual int GetMaxVolumeExtentForProfileEXT(int graphicsProfile) const
         {
-            (void)graphicsProfile;
-            return (std::numeric_limits<int>::max)();
+            return graphicsProfile == 1 /* GraphicsProfile::HiDef */ ? 256 : 0;
         }
 
         /**
@@ -2375,12 +2610,11 @@ namespace CNA::Internal::Renderers
          * renderer) and from any hardware cap the renderer enforces separately.
          *
          * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
-         * @return The maximum count, or std::numeric_limits<int>::max() for no ceiling.
+         * @return The maximum count (1 for Reach, 4 for HiDef).
          */
         [[nodiscard]] virtual int GetMaxRenderTargetsForProfileEXT(int graphicsProfile) const
         {
-            (void)graphicsProfile;
-            return (std::numeric_limits<int>::max)();
+            return graphicsProfile == 1 /* GraphicsProfile::HiDef */ ? 4 : 1;
         }
 
         // --- Surface-format boundaries (plans/plan_runtimerenderer.md design decision 9) -------------
@@ -2581,7 +2815,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Whether the content loaders should keep block-compressed content compressed.
          *
-         * WEBGPU-144 Phase 2 / XNB-24: `Texture2D::FromStream` (DDS) and the `.xnb` Texture2D reader
+         * WEBGPU-144 Phase 2 / XNB-24: `Texture2D::DDSFromStreamEXT` and the `.xnb` Texture2D reader
          * force-decode DXT/BC to `Color` by default. A renderer that both stores compressed textures
          * natively and prefers to receive loaded content that way returns true here; the loaders
          * then keep the raw blocks and upload them through the compressed `SetData` path (guarded, in
@@ -2626,7 +2860,7 @@ namespace CNA::Internal::Renderers
         }
 
         /// Creates a renderer occlusion query object. Returns nullptr on
-        /// renderers that do not support hardware occlusion queries.
+        /// renderers that do not support raster-sample occlusion queries.
         virtual std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() { return nullptr; }
         virtual std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) { return nullptr; }
         virtual std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) { return nullptr; }
@@ -3070,6 +3304,17 @@ namespace CNA::Internal::Renderers
                                           float depthBias = 0.0f,
                                           float slopeScaleDepthBias = 0.0f) {}
 
+        /**
+         * @brief Applies multisample rasterization enablement independently of target storage.
+         *
+         * A disabled state still targets every stored sample, but evaluates triangle coverage at
+         * one pixel center and replicates the result instead of evaluating independent sample
+         * locations. Defaults to no-op for backends that have not adopted this classic state.
+         *
+         * @param enabled Whether independent multisample rasterization is enabled.
+         */
+        virtual void ApplyRasterizerMultiSampleState(bool /*enabled*/) {}
+
         /// Applies a SamplerState to the given texture slot. Default: no-op.
         /// @param slot         Texture unit index (0–15).
         /// @param filter       Raw TextureFilter int value.
@@ -3120,9 +3365,7 @@ namespace CNA::Internal::Renderers
          * Most renderers are 3D-capable and honor whatever depth/stencil format the presentation
          * parameters request, so the default is `true`. A renderer that is entirely 2D-only
          * (the native 2D renderer) never has a depth/stencil buffer regardless of what was requested and
-         * overrides this to `false` — used by GraphicsDevice::Clear(ClearOptions, ...) to mask
-         * DepthBuffer/Stencil out of a clear request instead of forwarding it to a
-         * ClearColorDepthAndStencil()-style method this renderer cannot honor.
+         * overrides this to `false`.
          */
         [[nodiscard]] virtual bool SupportsDepthStencil() const { return true; }
 
@@ -3135,6 +3378,41 @@ namespace CNA::Internal::Renderers
         /// stencil; GraphicsDevice::Clear must then retain a requested depth clear and discard
         /// only the impossible stencil portion.
         [[nodiscard]] virtual bool SupportsStencilBuffer() const { return SupportsDepthStencil(); }
+
+        /**
+         * @brief Returns whether the active default back buffer has a usable depth plane.
+         *
+         * A normal combined depth/stencil renderer owns the plane only when the applied
+         * presentation format requested one. A split renderer whose aggregate
+         * SupportsDepthStencil() answer is false but whose SupportsDepthBuffer() answer is true
+         * (for example Glide) exposes an always-present standalone plane.
+         *
+         * @param depthFormatWasRequested Whether the applied back-buffer format includes depth.
+         * @return True when a public depth clear can reach real active storage.
+         */
+        [[nodiscard]] virtual bool HasRealBackBufferDepthBuffer(
+            bool depthFormatWasRequested) const
+        {
+            return SupportsDepthBuffer() &&
+                   (depthFormatWasRequested || !SupportsDepthStencil());
+        }
+
+        /**
+         * @brief Returns whether the active default back buffer has a usable stencil plane.
+         *
+         * The standalone-plane rule mirrors HasRealBackBufferDepthBuffer() and preserves
+         * renderers such as GDI whose real CPU stencil storage is independent of an XNA combined
+         * depth/stencil presentation format.
+         *
+         * @param stencilFormatWasRequested Whether the applied format is Depth24Stencil8.
+         * @return True when a public stencil clear can reach real active storage.
+         */
+        [[nodiscard]] virtual bool HasRealBackBufferStencilBuffer(
+            bool stencilFormatWasRequested) const
+        {
+            return SupportsStencilBuffer() &&
+                   (stencilFormatWasRequested || !SupportsDepthStencil());
+        }
 
         /**
          * Renderer boundary used by common public draw/model entry points before they inspect,
@@ -3240,6 +3518,24 @@ namespace CNA::Internal::Renderers
                                                   const Matrix& projection,
                                                   PrimitiveType primitive,
                                                   int primitiveCount) = 0;
+
+        /**
+         * @brief Whether GraphicsDevice must protect this renderer from native buffered-draw
+         *        ranges that leave the bound buffers. CNAEXT.
+         *
+         * XNA forwards `vertexStart`, `startIndex`, `baseVertex`, `minVertexIndex`, and declared
+         * buffer extents to the native graphics API without managed range validation. A renderer
+         * that returns false promises that the same inputs cannot make it read outside host
+         * memory; GPU-native undefined output and a safe CPU default/no-op are both acceptable.
+         * The conservative default retains CNA's historical guard for renderers that stage draw
+         * input through unchecked CPU copies.
+         *
+         * @return True when GraphicsDevice must retain its compatibility range guard.
+         */
+        [[nodiscard]] virtual bool RequiresManagedBufferedDrawRangeValidationEXT() const noexcept
+        {
+            return true;
+        }
 
         /**
          * @brief Effect-aware draw — selects the shader variant based on

@@ -169,26 +169,24 @@ protected:
                 try
                 {
                     // 10 primitives needs 30 indices; the buffer only holds 3 -- out of range.
-                    dev.SetVertexBuffer(&smallVb);
-                    dev.SetIndexBuffer(&ib);
-                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 10);
+                    renderer.DrawIndexedColoredPrimitives(
+                        smallVb.GetRenderer(), ib.GetRenderer(), Matrix::getIdentityProperty(),
+                        Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                        PrimitiveType::TriangleList, 10);
                 }
                 catch (const HeadlessValidationException&) { validationThrew = true; }
-                dev.SetVertexBuffer(nullptr);
-                dev.SetIndexBuffer(nullptr);
                 check(validationThrew, "HeadlessValidation mode rejects an out-of-range DrawIndexedPrimitives call");
 
                 renderer.SetMode(HeadlessMode::Fast);
                 bool fastThrew = false;
                 try
                 {
-                    dev.SetVertexBuffer(&smallVb);
-                    dev.SetIndexBuffer(&ib);
-                    dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 10);
+                    renderer.DrawIndexedColoredPrimitives(
+                        smallVb.GetRenderer(), ib.GetRenderer(), Matrix::getIdentityProperty(),
+                        Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                        PrimitiveType::TriangleList, 10);
                 }
                 catch (const HeadlessValidationException&) { fastThrew = true; }
-                dev.SetVertexBuffer(nullptr);
-                dev.SetIndexBuffer(nullptr);
                 check(!fastThrew, "HeadlessFast mode accepts the same out-of-range call without throwing");
                 renderer.SetMode(HeadlessMode::Validation);
             }

@@ -423,7 +423,7 @@ class Texture2DGetDataContractTest : public Game
             const int count = rect.Width * rect.Height;
             const int start = 7;
             std::vector<Color> got(static_cast<std::size_t>(count + start + 9), SentinelA5());
-            tex.GetData(0, &rect, got.data(), start, static_cast<int>(got.size()) - start);
+            tex.GetData(0, &rect, got.data(), start, count);
 
             bool leading = true;
             for (int i = 0; i < start; ++i)
@@ -460,7 +460,7 @@ class Texture2DGetDataContractTest : public Game
             const int spare = 9;
             std::vector<Color> got(static_cast<std::size_t>(start) + pattern.size() + spare,
                                    SentinelA5());
-            tex.GetData(got.data(), start, static_cast<int>(got.size()) - start);
+            tex.GetData(got.data(), start, static_cast<int>(pattern.size()));
 
             bool leading = true;
             for (int i = 0; i < start; ++i)
@@ -592,7 +592,7 @@ class Texture2DGetDataContractTest : public Game
             std::string what;
             try
             {
-                target.GetData(0, &rect, got.data(), start, static_cast<int>(got.size()) - start);
+                target.GetData(0, &rect, got.data(), start, count);
             }
             catch (const System::NotSupportedException&) { threwNotSupported = true; }
             catch (const std::exception& e) { threwOther = true; what = e.what(); }

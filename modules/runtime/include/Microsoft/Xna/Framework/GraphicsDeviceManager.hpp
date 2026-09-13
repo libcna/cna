@@ -335,6 +335,9 @@ namespace Microsoft::Xna::Framework
         Graphics::GraphicsDevice* graphicsDevice_;
         bool ownsGraphicsDevice_;
         bool deviceEventsSubscribed_;
+        std::size_t deviceDisposingToken_;
+        std::size_t deviceResettingToken_;
+        std::size_t deviceResetToken_;
         bool drawBegun_;
         std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease> frameContextLease_;
         bool disposed_;
@@ -360,6 +363,7 @@ namespace Microsoft::Xna::Framework
         void markPreferencesChanged();
         void registerServices();
         void unregisterServices();
+        void unsubscribeDeviceEvents();
         void applyToExistingRenderer(GraphicsDeviceInformation& gdi);
     };
 }

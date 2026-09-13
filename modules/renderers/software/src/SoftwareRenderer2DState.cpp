@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 namespace CNA::Internal::Renderers::Software
 {
@@ -23,17 +25,34 @@ namespace CNA::Internal::Renderers::Software
 
     SoftwareFramebuffer& SoftwareRenderer::CurrentFramebuffer()
     {
-        return currentRenderTarget_ != nullptr ? currentRenderTarget_->Framebuffer() : backbuffer_;
+        if (currentMrtCount_ > 0)
+            return *currentMrtFramebuffers_[0];
+        if (currentRenderTarget_ != nullptr)
+            return currentRenderTarget_->Framebuffer();
+#ifndef CNA_SOFTWARE_2D_ONLY
+        if (currentCubeRenderTarget_ != nullptr)
+            return currentCubeRenderTarget_->Framebuffer();
+#endif
+        return backbuffer_;
     }
 
     const SoftwareFramebuffer& SoftwareRenderer::CurrentFramebuffer() const
     {
-        return currentRenderTarget_ != nullptr ? currentRenderTarget_->Framebuffer() : backbuffer_;
+        if (currentMrtCount_ > 0)
+            return *currentMrtFramebuffers_[0];
+        if (currentRenderTarget_ != nullptr)
+            return currentRenderTarget_->Framebuffer();
+#ifndef CNA_SOFTWARE_2D_ONLY
+        if (currentCubeRenderTarget_ != nullptr)
+            return currentCubeRenderTarget_->Framebuffer();
+#endif
+        return backbuffer_;
     }
 
     void SoftwareRenderer::Clear(float r, float g, float b, float a)
     {
-        CurrentFramebuffer().ClearColor(r, g, b, a);
+        ForEachActiveColorTarget(
+            [=](SoftwareFramebuffer& framebuffer) { framebuffer.ClearColor(r, g, b, a); });
     }
 
     void SoftwareRenderer::Present() {}
@@ -47,13 +66,46 @@ namespace CNA::Internal::Renderers::Software
 
     void SoftwareRenderer::SetVirtualResolution(int width, int height)
     {
-        if (currentRenderTarget_ == nullptr)
+        if (currentRenderTarget_ == nullptr && currentCubeRenderTarget_ == nullptr &&
+            currentMrtCount_ == 0)
             backbuffer_.Resize(width, height);
         virtualWidth_ = width;
         virtualHeight_ = height;
     }
 
     void SoftwareRenderer::SetPresentationMode(int) {}
+
+    int SoftwareRenderer::GetAppliedMultiSampleCountEXT(int) const
+    {
+        return backbuffer_.multiSampleCount;
+    }
+
+    int SoftwareRenderer::GetAppliedBackBufferFormatEXT(int) const
+    {
+        return static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
+    }
+
+    int SoftwareRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        backbuffer_.SetMultiSampleCount(requestedMultiSampleCount);
+        return backbuffer_.multiSampleCount;
+    }
+
+    void SoftwareRenderer::UpdatePresentationFormatEXT(
+        int, int depthStencilFormat, bool)
+    {
+        const bool allocateDepth = depthStencilFormat != 0;
+        const bool allocateStencil = depthStencilFormat == 3;
+        if (backbuffer_.allocateDepthStorage == allocateDepth &&
+            backbuffer_.allocateStencilStorage == allocateStencil)
+        {
+            return;
+        }
+
+        backbuffer_.allocateDepthStorage = allocateDepth;
+        backbuffer_.allocateStencilStorage = allocateStencil;
+        backbuffer_.Resize(backbuffer_.width, backbuffer_.height);
+    }
 
     void SoftwareRenderer::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
@@ -93,16 +145,220 @@ namespace CNA::Internal::Renderers::Software
     {
         return std::make_unique<SoftwareTextureRenderer>(data);
     }
+
+    RendererFormatVerdict SoftwareRenderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return RendererFormatVerdict::Supported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
+    RendererFormatVerdict SoftwareRenderer::ClassifyTextureCubeFormatEXT(
+        int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return RendererFormatVerdict::Supported;
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
+    RendererFormatVerdict SoftwareRenderer::ClassifyTexture3DFormatEXT(
+        int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return RendererFormatVerdict::Supported;
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
+    RendererFormatVerdict SoftwareRenderer::ClassifyRenderTargetFormatEXT(
+        int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return RendererFormatVerdict::Supported;
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Alpha8:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
+    RendererFormatVerdict SoftwareRenderer::ClassifyColorTransferFormatEXT(
+        int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+            case SurfaceFormat::Rgba1010102:
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+            case SurfaceFormat::Alpha8:
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
+    bool SoftwareRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const auto format = static_cast<SurfaceFormat>(surfaceFormat);
+        return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+               format == SurfaceFormat::Dxt5;
+    }
+
+    bool SoftwareRenderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
+    {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)surfaceFormat;
+        return false;
+#else
+        return IsCompressedTransferFormatEXT(surfaceFormat);
+#endif
+    }
+
+    bool SoftwareRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const
+    {
+        return true;
+    }
+
+    bool SoftwareRenderer::SupportsCompiledEffects() const
+    {
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS) && !defined(CNA_SOFTWARE_2D_ONLY)
+        return true;
+#else
+        return false;
+#endif
+    }
+
     bool SoftwareRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         switch (capability)
         {
-            // REMED-CONTENT-004: Texture3D remains an explicit, documented v1 scope boundary for
-            // this renderer (see this header's own "Boundaries" comment) -- CreateTexture3D() keeps
-            // IGraphicsRenderer's shared default (returns nullptr). Reported here so Texture3D's own
-            // constructor can fail cleanly instead of silently discarding every SetData()/GetData()
-            // call.
             case CNA::GraphicsCapability::Texture3D:
+                // SOFTWARE-118: every declared RGBA8 mip owns exact CPU volume storage, including
+                // partial box upload/readback. This flag intentionally promises storage only.
+                return true;
+            case CNA::GraphicsCapability::AnisotropicFiltering:
+                // SOFTWARE-117: the CPU sampler resolves the full directional texel footprint,
+                // selects LOD from its minor axis and averages up to 16 taps along its major axis.
+                return true;
+            case CNA::GraphicsCapability::OcclusionQuery:
+                // SOFTWARE-122: the CPU query counts the exact samples surviving coverage,
+                // MultiSampleMask, alpha, depth and stencil through the shared fragment path.
+                return true;
+            case CNA::GraphicsCapability::CustomEffects:
+                // SoftwareEffectRenderer accepts source for resource compatibility, but the CPU
+                // rasterizer never executes that source. Its fixed stock-effect path is not custom
+                // shader support.
                 return false;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 // REMED-GFX-201: implemented -- the vertex reader resolves each combined-layout
@@ -111,16 +367,20 @@ namespace CNA::Internal::Renderers::Software
                 // temporary and no per-vertex allocation.
                 return true;
             case CNA::GraphicsCapability::MultipleRenderTargets:
-                // SetRenderTargets() throws for count > 1 and ApplyBlendState() notes the same
-                // limit: this renderer has ONE active colour buffer. Reported honestly instead of
-                // inherited as the blanket true below -- a capability is a promise, and this one
-                // was being made and then broken.
-                return false;
+                // SOFTWARE-120: up to four ordered CPU colour attachments bind simultaneously.
+                // The first owns depth/stencil and classic stock effects emit COLOR0 only, while
+                // Clear and resolve/mip finalization visit every attachment.
+                return true;
+            case CNA::GraphicsCapability::FloatRenderTargets:
+            case CNA::GraphicsCapability::HalfFloatRenderTargets:
+                // SOFTWARE-146: all classic float/half target layouts retain their shader-domain
+                // values through draw, blend, resolve, mip generation and typed readback.
+                return true;
             case CNA::GraphicsCapability::Instancing:
-                // Not implemented: this renderer does not override DrawInstancedPrimitivesEx, so
-                // an instanced draw is the shared base-class refusal -- reported honestly instead
-                // of inherited as the blanket true below.
-                return false;
+                // SOFTWARE-129: every instance is rasterized on the CPU from its independently
+                // frequency-stepped matrix record, through the same declaration/effect path as an
+                // ordinary indexed draw.
+                return true;
             default:
                 return true;
         }
@@ -134,16 +394,52 @@ namespace CNA::Internal::Renderers::Software
     std::unique_ptr<IRenderTargetRenderer> SoftwareRenderer::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool, bool mipMap, int multiSampleCount)
     {
-        return std::make_unique<SoftwareRenderTargetRenderer>(w, h, depthFormat, mipMap, multiSampleCount);
+        return std::make_unique<SoftwareRenderTargetRenderer>(
+            w, h, depthFormat, mipMap, multiSampleCount, depthFormat != 0, false);
+    }
+
+    std::unique_ptr<IRenderTargetRenderer> SoftwareRenderer::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+            throw std::runtime_error(
+                "SoftwareRenderer::CreateRenderTarget2DEXT: unsupported SurfaceFormat ordinal " +
+                std::to_string(surfaceFormat));
+        return std::make_unique<SoftwareRenderTargetRenderer>(
+            w, h, depthFormat, mipMap, multiSampleCount, depthFormat != 0, false,
+            surfaceFormat);
     }
 
     void SoftwareRenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
     {
-        if (currentRenderTarget_ != nullptr)
-            currentRenderTarget_->UnbindAsRenderTarget();
-        currentRenderTarget_ = static_cast<SoftwareRenderTargetRenderer*>(rt);
+        auto* next = dynamic_cast<SoftwareRenderTargetRenderer*>(rt);
+        if (rt != nullptr && next == nullptr)
+            throw std::runtime_error(
+                "SoftwareRenderer::SetRenderTarget2D: incompatible renderer resource.");
+        UnbindCurrentTargets();
+        currentRenderTarget_ = next;
         if (currentRenderTarget_ != nullptr)
             currentRenderTarget_->BindAsRenderTarget();
+    }
+
+    void SoftwareRenderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
+    {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)rt;
+        (void)face;
+        throw std::runtime_error(
+            "Software's GDI 2D compilation unit does not support RenderTargetCube.");
+#else
+        auto* next = dynamic_cast<SoftwareRenderTargetCubeRenderer*>(rt);
+        if (rt != nullptr && next == nullptr)
+            throw std::runtime_error(
+                "SoftwareRenderer::SetRenderTargetCubeFace: incompatible renderer resource.");
+        UnbindCurrentTargets();
+        currentCubeRenderTarget_ = next;
+        if (currentCubeRenderTarget_ != nullptr)
+            currentCubeRenderTarget_->BindAsRenderTargetFace(face);
+#endif
     }
 
     void SoftwareRenderer::SetRenderTargets(
@@ -154,13 +450,115 @@ namespace CNA::Internal::Renderers::Software
             SetRenderTarget2D(nullptr);
             return;
         }
-        if (count > 1)
-            throw std::runtime_error(
-                "SoftwareRenderer does not support multiple simultaneous render targets.");
-        if (renderTargets[0].IsRenderTargetCubeFace())
-            throw std::runtime_error(
-                "SoftwareRenderer does not support RenderTargetCube face bindings.");
-        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+        if (count == 1)
+        {
+            if (renderTargets[0].IsRenderTargetCubeFace())
+                SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
+                                        renderTargets[0].GetCubeFace());
+            else
+                SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+            return;
+        }
+        if (count > 4)
+            throw std::invalid_argument(
+                "SoftwareRenderer::SetRenderTargets supports at most four targets.");
+
+        std::array<SoftwareRenderTargetRenderer*, 4> next2D{};
+        std::array<SoftwareRenderTargetCubeRenderer*, 4> nextCube{};
+        std::array<int, 4> nextFaces{};
+        for (int slot = 0; slot < count; ++slot)
+        {
+            if (renderTargets[slot].IsRenderTargetCubeFace())
+            {
+                nextCube[static_cast<std::size_t>(slot)] =
+                    dynamic_cast<SoftwareRenderTargetCubeRenderer*>(
+                        renderTargets[slot].GetRenderTargetCube());
+                nextFaces[static_cast<std::size_t>(slot)] = renderTargets[slot].GetCubeFace();
+                if (nextCube[static_cast<std::size_t>(slot)] == nullptr)
+                    throw std::runtime_error(
+                        "SoftwareRenderer::SetRenderTargets: incompatible cube target.");
+            }
+            else
+            {
+                next2D[static_cast<std::size_t>(slot)] =
+                    dynamic_cast<SoftwareRenderTargetRenderer*>(
+                        renderTargets[slot].GetRenderTarget2D());
+                if (next2D[static_cast<std::size_t>(slot)] == nullptr)
+                    throw std::runtime_error(
+                        "SoftwareRenderer::SetRenderTargets: incompatible 2D target.");
+            }
+        }
+
+        UnbindCurrentTargets();
+        try
+        {
+            for (int slot = 0; slot < count; ++slot)
+            {
+                const std::size_t index = static_cast<std::size_t>(slot);
+                currentMrt2DTargets_[index] = next2D[index];
+                currentMrtCubeTargets_[index] = nextCube[index];
+                currentMrtCubeFaces_[index] = nextFaces[index];
+                if (next2D[index] != nullptr)
+                {
+                    next2D[index]->BindAsRenderTarget();
+                    currentMrtFramebuffers_[index] = &next2D[index]->Framebuffer();
+                }
+                else
+                {
+                    currentMrtFramebuffers_[index] =
+                        &nextCube[index]->BindForMrt(nextFaces[index], slot == 0);
+                }
+                ++currentMrtCount_;
+            }
+        }
+        catch (...)
+        {
+            UnbindCurrentTargets();
+            throw;
+        }
+    }
+
+    void SoftwareRenderer::UnbindCurrentTargets()
+    {
+        if (currentMrtCount_ > 0)
+        {
+            for (int slot = 0; slot < currentMrtCount_; ++slot)
+            {
+                const std::size_t index = static_cast<std::size_t>(slot);
+                if (currentMrt2DTargets_[index] != nullptr)
+                    currentMrt2DTargets_[index]->UnbindAsRenderTarget();
+#ifndef CNA_SOFTWARE_2D_ONLY
+                else if (currentMrtCubeTargets_[index] != nullptr)
+                    currentMrtCubeTargets_[index]->UnbindForMrt(
+                        currentMrtCubeFaces_[index], slot == 0);
+#endif
+                currentMrtFramebuffers_[index] = nullptr;
+                currentMrt2DTargets_[index] = nullptr;
+                currentMrtCubeTargets_[index] = nullptr;
+                currentMrtCubeFaces_[index] = 0;
+            }
+            currentMrtCount_ = 0;
+        }
+        if (currentRenderTarget_ != nullptr)
+            currentRenderTarget_->UnbindAsRenderTarget();
+#ifndef CNA_SOFTWARE_2D_ONLY
+        if (currentCubeRenderTarget_ != nullptr)
+            currentCubeRenderTarget_->UnbindAsRenderTarget();
+#endif
+        currentRenderTarget_ = nullptr;
+        currentCubeRenderTarget_ = nullptr;
+    }
+
+    void SoftwareRenderer::ForEachActiveColorTarget(
+        const std::function<void(SoftwareFramebuffer&)>& operation)
+    {
+        if (currentMrtCount_ > 0)
+        {
+            for (int slot = 0; slot < currentMrtCount_; ++slot)
+                operation(*currentMrtFramebuffers_[static_cast<std::size_t>(slot)]);
+            return;
+        }
+        operation(CurrentFramebuffer());
     }
     void SoftwareRenderer::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                   int colorDstBlend, int alphaDstBlend,
@@ -182,11 +580,12 @@ namespace CNA::Internal::Renderers::Software
         blendState_ = SoftwareBlendState{colorSrcBlend, alphaSrcBlend,
                                          colorDstBlend, alphaDstBlend,
                                          colorBlendFunc, alphaBlendFunc};
-        // REMED-GFX-077: Software has one active colour buffer (no MRT), so only slot-0's write mask
-        // applies; the CPU fragment writers (WriteColoredFragment/WriteShadedFragment) gate each
-        // channel by it. Single-sample surfaces use MultiSampleMask bit 0; the optional four-sample
-        // colour plane uses bits 0..3 (GDI-073).
-        colorWriteMask_  = writeState.colorWriteChannels[0];
+        // SOFTWARE-120: retain all four slot masks. Classic XNA stock effects emit COLOR0 only,
+        // so the current fixed CPU fragment paths consume slot 0 and leave higher attachments at
+        // their explicit clear/preserved contents. Single-sample surfaces use MultiSampleMask bit
+        // 0; the optional four-sample colour plane uses bits 0..3 (GDI-073).
+        std::copy_n(writeState.colorWriteChannels, colorWriteMasks_.size(),
+                    colorWriteMasks_.begin());
         multiSampleMask_ = writeState.multiSampleMask;
     }
 
@@ -199,8 +598,10 @@ namespace CNA::Internal::Renderers::Software
     void SoftwareRenderer::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
                                                          bool stencilEnable, int stencilFunc, int stencilPass,
                                                          int stencilFail, int stencilDepthFail, int stencilMask,
-                                                         int stencilWriteMask, int referenceStencil, bool,
-                                                         int, int, int, int)
+                                                         int stencilWriteMask, int referenceStencil,
+                                                         bool twoSidedStencilMode,
+                                                         int ccwStencilFunc, int ccwStencilPass,
+                                                         int ccwStencilFail, int ccwStencilDepthFail)
     {
         // REMED-GFX-030: every public CompareFunction has ordinal 0..7. Reject an invalid value at
         // state application rather than carrying it into the hot fragment path or approximating it.
@@ -221,6 +622,12 @@ namespace CNA::Internal::Renderers::Software
         validateStencilOperation(stencilPass);
         validateStencilOperation(stencilFail);
         validateStencilOperation(stencilDepthFail);
+        if (ccwStencilFunc < 0 || ccwStencilFunc > 7)
+            throw std::runtime_error(
+                "SoftwareRenderer::ApplyDepthStencilState: unsupported counter-clockwise stencil CompareFunction ordinal");
+        validateStencilOperation(ccwStencilPass);
+        validateStencilOperation(ccwStencilFail);
+        validateStencilOperation(ccwStencilDepthFail);
         stencilTestEnabled_ = stencilEnable;
         stencilCompareFunction_ = stencilFunc;
         stencilPassOperation_ = stencilPass;
@@ -229,6 +636,11 @@ namespace CNA::Internal::Renderers::Software
         stencilReadMask_ = stencilMask & 0xFF;
         stencilWriteMask_ = stencilWriteMask & 0xFF;
         referenceStencil_ = referenceStencil & 0xFF;
+        twoSidedStencilMode_ = twoSidedStencilMode;
+        counterClockwiseStencilCompareFunction_ = ccwStencilFunc;
+        counterClockwiseStencilPassOperation_ = ccwStencilPass;
+        counterClockwiseStencilFailOperation_ = ccwStencilFail;
+        counterClockwiseStencilDepthFailOperation_ = ccwStencilDepthFail;
     }
 
     void SoftwareRenderer::SetReferenceStencil(int value)
@@ -253,12 +665,17 @@ namespace CNA::Internal::Renderers::Software
         slopeScaleDepthBias_ = slopeScaleDepthBias;
     }
 
+    void SoftwareRenderer::ApplyRasterizerMultiSampleState(bool enabled)
+    {
+        multiSampleAntiAlias_ = enabled;
+    }
+
     // REMED-GFX-150: store the SamplerState so the rasterizer's sampler can honor it. Previously
     // every parameter but `slot` was unnamed and discarded, so TextureFilter and TextureAddressMode
-    // never reached a single textured fragment and every draw filtered LinearClamp. maxAnisotropy is
-    // still not consumed: this renderer has no anisotropic filter, and TextureFilter::Anisotropic
-    // already resolves to Linear through the same min/mag table the other ordinals use.
-    void SoftwareRenderer::ApplySamplerState(int slot, int filter, int addressU, int addressV, int)
+    // never reached a single textured fragment and every draw filtered LinearClamp. SOFTWARE-117
+    // additionally retains MaxAnisotropy for the directional CPU footprint sampler.
+    void SoftwareRenderer::ApplySamplerState(int slot, int filter, int addressU, int addressV,
+                                             int maxAnisotropy)
     {
         if (slot < 0 || slot >= kMaxSamplerSlots)
             throw std::runtime_error("SoftwareRenderer::ApplySamplerState: slot must be 0..15");
@@ -266,6 +683,23 @@ namespace CNA::Internal::Renderers::Software
         s.filter = filter;
         s.addressU = addressU;
         s.addressV = addressV;
+        s.maxAnisotropy = maxAnisotropy;
+    }
+
+    void SoftwareRenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        if (slot < 0 || slot >= kMaxSamplerSlots)
+            throw std::runtime_error("SoftwareRenderer::ApplySamplerMipState: slot must be 0..15");
+        SoftwareSamplerState& s = samplerSlots_[static_cast<std::size_t>(slot)];
+        s.maxMipLevel = maxMipLevel;
+        s.lodBias = lodBias;
+    }
+
+    void SoftwareRenderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        if (slot < 0 || slot >= kMaxSamplerSlots)
+            throw std::runtime_error("SoftwareRenderer::ApplySamplerAddressW: slot must be 0..15");
+        samplerSlots_[static_cast<std::size_t>(slot)].addressW = addressW;
     }
 
     // REMED-GFX-080: store the ScissorRectangle so the raster paths can intersect it into their
@@ -350,9 +784,9 @@ namespace CNA::Internal::Renderers::Software
 
     void SoftwareRenderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
-        SoftwareFramebuffer& fb = CurrentFramebuffer();
-        fb.ClearColor(r, g, b, a);
-        fb.ClearDepthValue(depth);
+        ForEachActiveColorTarget(
+            [=](SoftwareFramebuffer& framebuffer) { framebuffer.ClearColor(r, g, b, a); });
+        CurrentFramebuffer().ClearDepthValue(depth);
     }
 
     void SoftwareRenderer::ClearDepth(float depth) { CurrentFramebuffer().ClearDepthValue(depth); }
@@ -365,7 +799,8 @@ namespace CNA::Internal::Renderers::Software
     }
     void SoftwareRenderer::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
     {
-        CurrentFramebuffer().ClearColor(r, g, b, a);
+        ForEachActiveColorTarget(
+            [=](SoftwareFramebuffer& framebuffer) { framebuffer.ClearColor(r, g, b, a); });
         CurrentFramebuffer().ClearStencilValue(stencil);
     }
     void SoftwareRenderer::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)

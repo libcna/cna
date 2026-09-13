@@ -10,6 +10,7 @@
 // Verification: each target is unbound, then read through RenderTarget2D::GetData.
 // This is the public XNA target-readback path and does not depend on a renderer redirecting
 // GetBackBufferData to the currently bound target.
+// XNA rejects both GetData and SetData while a render target is active.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -121,6 +122,7 @@ public:
     RenderTargetUsageTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

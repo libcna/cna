@@ -63,7 +63,8 @@ constraint), **diverges** (differs from XNA/FNA, but may be intentional).
 | `EasyGLRenderer.cpp:233–236` | **missing** | `EasyGLEffectRenderer::Unbind()` is a no-op. Subsequent operations that rely on a specific program being unbound after effect teardown silently see the previously active effect. |
 | blend state | **missing** | `ApplyBlendState` does not call `glColorMask`. XNA `BlendState.ColorWriteChannels` (restricting R/G/B/A writes) is silently ignored — CNA always writes all four channels. |
 | stencil state | **missing** | Two-sided stencil mode uses the front-face stencil read mask for the back-face stencil function. XNA supports separate front/back stencil read masks; only the write mask is per-face here. |
-| `EasyGLEffectRenderer` | **missing** | `SpriteBatch` has a 65 535-index limit (`uint16_t pending_indices_`). Batches larger than 16 383 quads silently wrap/corrupt indices. XNA `SpriteBatch` supports larger batches. |
+| `EasyGLSpriteBatchRenderer` | **completed 2026-09-09 (`SOFTWARE-251`)** | The public queue may exceed one native draw, but EasyGL now matches Microsoft XNA/FNA by flushing its `uint16_t` quad indices every 2,048 sprites. The exact 16,385-sprite regression passes on Software, OpenGL ES EasyGL and compiled-effect desktop EasyGL. |
+| `EasyGLSpriteBatchRenderer` | **completed 2026-09-09 (`SOFTWARE-252`)** | `SpriteSortMode::Immediate` now consumes the shared `SetImmediateMode` signal and flushes from each renderer `Draw` call. A public render-target-switch discriminator previously proved EasyGL moved the sprite from the target active at `Draw` to the target active at `End`; all three audited configurations now retain it in the first target. |
 | `EasyGLRenderer.cpp:975–982` | **limit** | `MultiSampleCount` is applied only at renderer construction via `GraphicsRendererCreateArgs::multiSampleCount`. There is no `IGraphicsRenderer::SetMultiSampleCount()`. Changing `GDM::PreferMultiSampling` or `PresentationParameters::MultiSampleCount` after the device is created updates the PP field but does NOT change the active MSAA sample count — that would require recreating the renderer. |
 
 ---
@@ -72,10 +73,10 @@ constraint), **diverges** (differs from XNA/FNA, but may be intentional).
 
 | | Status | Description |
 |---|---|---|
-| `VertexBuffer::GetData<T>` | **missing** | Not declared or implemented in CNA. FNA exposes three overloads that read vertex data back from the GPU via `FNA3D_GetVertexBufferData`. In CNA neither `IVertexBufferRenderer` nor `IIndexBufferRenderer` has a readback method, so `GetData` cannot be added without an `IGraphicsRenderer` interface change. |
-| `IndexBuffer::GetData<T>` | **missing** | Same as above — no `FNA3D_GetIndexBufferData` equivalent in the renderer interface. |
-| `VertexBuffer::SetData` GPU offsetInBytes | **missing** | The `(int offsetInBytes, T[], int startIndex, int elementCount, int vertexStride)` overload (and the `DynamicVertexBuffer` variant with `SetDataOptions`) writes to a specific byte offset inside the GPU buffer. `IVertexBufferRenderer::SetData` only supports writing at offset 0. Implementing this correctly requires adding an `offsetInBytes` parameter to the renderer interface. |
-| `IndexBuffer::SetData` GPU offsetInBytes | **missing** | Same — `IIndexBufferRenderer` has no offsetInBytes variant. |
+| `VertexBuffer::GetData<T>` | **completed 2026-09-09 (`SOFTWARE-249`)** | The complete generic whole/slice/buffer-offset surface is served from the renderer-neutral CPU shadow. Application-defined elements honor explicit buffer stride while remaining tightly packed in the destination array; classic built-in values are unpacked from compact streams rather than their larger polymorphic C++ objects. |
+| `IndexBuffer::GetData<T>` | **completed 2026-09-09 (`SOFTWARE-248`)** | The complete generic whole/slice/buffer-offset surface is served from the renderer-neutral CPU shadow. `startIndex` correctly selects the destination array, while `offsetInBytes` selects the buffer. |
+| `VertexBuffer::SetData` GPU offsetInBytes | **completed 2026-09-09 (`SOFTWARE-249`)** | Static and dynamic classic generic windows compose element-wise in the shared CPU shadow and re-upload the native buffer. `vertexStride` separates buffer slots rather than source-array elements; built-in vertex values are packed first, and dynamic `Discard`/`NoOverwrite` retain their resource-use exemptions. The whole-buffer native upload is a cost-only deviation. |
+| `IndexBuffer::SetData` GPU offsetInBytes | **completed 2026-09-09 (`SOFTWARE-248`)** | The classic generic overload composes byte-accurate windows in the shared CPU shadow and re-uploads the native buffer. `DynamicIndexBuffer` also exposes the offset/options form; this preserves XNA-visible results while costing a whole-buffer transfer. |
 
 ---
 

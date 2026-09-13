@@ -47,6 +47,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "System/NotSupportedException.hpp"
@@ -71,6 +72,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include <metagl/ContextEvents.hpp>
 #include <metagl/EnumNames.hpp>
 #include <metagl/Functions.hpp>
+#include <metagl/Loader.hpp>
 
 // Verbose 3D rendering trace. Define `CNA_DEBUG_RENDERING` (e.g. via
 // -DCNA_DEBUG_RENDERING) to enable. By default these logs are silent so the
@@ -119,6 +121,19 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
     if (!ext) { console.error('[CNA] WEBGL_lose_context extension not available'); return; }
     console.warn('[CNA] Simulating WebGL context restore');
     ext.restoreContext();
+});
+
+EM_JS(int, CNA_HasWebGLPolygonMode, (), {
+    if (typeof GLctx === 'undefined' || !GLctx) return 0;
+    return GLctx.getExtension('WEBGL_polygon_mode') ? 1 : 0;
+});
+
+EM_JS(void, CNA_SetWebGLPolygonMode, (int wireframe), {
+    if (typeof GLctx === 'undefined' || !GLctx) return;
+    const ext = GLctx.getExtension('WEBGL_polygon_mode');
+    if (!ext) return;
+    ext.polygonModeWEBGL(GLctx.FRONT_AND_BACK,
+                         wireframe ? ext.LINE_WEBGL : ext.FILL_WEBGL);
 });
 #endif
 
@@ -1339,20 +1354,21 @@ if (ProfileIsDesktopCore())
         // shader compile failure (Mesa's desktop compiler accepts "#version 300 es" leniently
         // even under a core-profile context, confirmed empirically), a real missing GL state
         // toggle. Not exposed by meta-gl's typed Capability enum (GLES/WebGL have no equivalent
-        // constant at all, so meta-gl never needed to expose it), so loaded and called directly
-        // via a runtime function pointer, matching this project's own "no static libGL linkage"
-        // convention (meta-gl itself loads every GL entry point the same way). Every stock vertex
+        // constant at all, so meta-gl never needed to expose it), so resolve the entry point for
+        // the current context. Every stock vertex
         // shader below therefore writes gl_PointSize explicitly: once this state is enabled, its
         // value is undefined when a shader omits the write, and real desktop drivers may rasterize
-        // no point at all while llvmpipe happens to retain the 1-pixel default.
+        // no point at all while llvmpipe happens to retain the 1-pixel default. The raw function
+        // pointer belongs to this context and must not be cached across its teardown.
         void EnableVertexProgramPointSize()
         {
             using GlEnableFn = void (*)(unsigned int);
-            static const auto glEnableFn =
+            const auto glEnableFn =
                 reinterpret_cast<GlEnableFn>(LoadEasyGlProcAddress("glEnable"));
             constexpr unsigned int kGlVertexProgramPointSize = 0x8642;
             if (glEnableFn) glEnableFn(kGlVertexProgramPointSize);
         }
+
     }
 
     // --- EasyGLTexture3DRenderer ---
@@ -1414,6 +1430,38 @@ if (ProfileIsDesktopCore())
             : ::metagl::InternalFormat::Rgba8;
     }
 
+    /// GL_EXT_texture_norm16 promotes normalized RG16/RGBA16 storage to GLES/WebGL; desktop core
+    /// has it without an extension. Otherwise XNA's sixteen-bit channels must be refused rather
+    /// than silently narrowed to RGBA8.
+    [[nodiscard]] inline bool ContextHasTextureNorm16EXT()
+    {
+        return ProfileIsDesktopCore() || ::metagl::HasExtension("GL_EXT_texture_norm16");
+    }
+
+    /// GL_RG16 is supplied by desktop GL and GL_EXT_texture_norm16, but the GLES-generated
+    /// metagl enum intentionally names only core formats. Keep the extension token local to the
+    /// capability-gated path that uses it.
+    [[nodiscard]] inline ::metagl::InternalFormat Rg16InternalFormatEXT()
+    {
+        return static_cast<::metagl::InternalFormat>(0x822C);
+    }
+
+    static void SetOrdinaryTextureDefaults(::easygl::Texture& texture)
+    {
+        texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                              ::easygl::TextureParameterSetter::MinFilter,
+                              static_cast<int>(::easygl::TextureMinFilter::Linear));
+        texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                              ::easygl::TextureParameterSetter::MagFilter,
+                              static_cast<int>(::easygl::TextureMagFilter::Linear));
+        texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                              ::easygl::TextureParameterSetter::WrapS,
+                              static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
+        texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                              ::easygl::TextureParameterSetter::WrapT,
+                              static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
+    }
+
     /// Attaches a render target's depth (or packed depth+stencil) renderbuffer to the bound FBO.
     /// GLES 2.0 has no GL_DEPTH_STENCIL_ATTACHMENT (the combined point is ES 3.0) -- a packed
     /// GL_DEPTH24_STENCIL8 renderbuffer (GL_OES_packed_depth_stencil) is attached to the DEPTH
@@ -1450,7 +1498,9 @@ if (ProfileIsEs2ApiGeneration())
             int maxAnisotropy = 4;  ///< SamplerState default MaxAnisotropy
         };
 
-        constexpr int kEs2MaxSamplerSlots = 16;  ///< mirrors EasyGLRenderer::kMaxSamplerSlots
+        // Reach/ES2 has no XNA vertex texture slots, so only the sixteen pixel units participate
+        // in this profile-specific texture-object fallback.
+        constexpr int kEs2MaxSamplerSlots = 16;
 
         /// Last sampler state requested per slot. GL texture-unit count and sampler slots share
         /// the same indexing here, exactly like the sampler-object path's samplers_[slot].
@@ -1589,7 +1639,9 @@ if (ProfileIsEs2ApiGeneration())
             {
                 GLfloat maxAnisoCap = 1.0f;
                 metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
-                const float requested = static_cast<float>(desc.maxAnisotropy);
+                // XNA converts the signed property to UInt32 before applying the device cap.
+                const float requested = static_cast<float>(
+                    static_cast<std::uint32_t>(desc.maxAnisotropy));
                 anisoValue = (maxAnisoCap > 0.0f && requested > maxAnisoCap) ? maxAnisoCap : requested;
                 if (anisoValue < 1.0f) anisoValue = 1.0f;
             }
@@ -1732,20 +1784,194 @@ if (ProfileIsEs2ApiGeneration())
         }
     }
 
-    // Mirrors Texture3D.cpp's CalculateMipLevels(w,h) — depth does not participate in the level
-    // count, matching FNA's Texture3D constructor, but each level's own GPU storage still halves
-    // in all 3 dimensions (standard volume-mip behavior).
-    static int CalculateTexture3DMipLevels(int w, int h)
+    // XNA requests D3D9's complete volume chain, so the largest of all three dimensions controls
+    // the level count. FNA's width/height-only calculation truncates depth-dominant volumes.
+    static int CalculateTexture3DMipLevels(int w, int h, int d)
     {
         int levels = 1;
-        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        while (w > 1 || h > 1 || d > 1)
+        {
+            w = std::max(1, w / 2);
+            h = std::max(1, h / 2);
+            d = std::max(1, d / 2);
+            ++levels;
+        }
         return levels;
     }
 
-    EasyGLTexture3DRenderer::EasyGLTexture3DRenderer(int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
-        : width_(w), height_(h), depth_(depth)
-        , levelCount_(mipMap ? CalculateTexture3DMipLevels(w, h) : 1)
+    static void UploadUncompressedVolumeTexelsEXT(
+        ::easygl::Texture& texture, int level, int x, int y, int z,
+        int width, int height, int depth,
+        Microsoft::Xna::Framework::Graphics::SurfaceFormat format,
+        const void* pixels, bool wholeLevel)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        ::easygl::InternalFormat internalFormat = RgbaTexImageInternalFormat();
+        ::easygl::PixelFormat pixelFormat = ::easygl::PixelFormat::Rgba;
+        ::easygl::PixelType pixelType = ::easygl::PixelType::UnsignedByte;
+        int unpackAlignment = 4;
+        const void* upload = pixels;
+        std::vector<float> expandedFloat;
+        std::vector<std::uint16_t> expanded16;
+        std::vector<std::uint8_t> expanded8;
+        const std::size_t texels = static_cast<std::size_t>(width) *
+            static_cast<std::size_t>(height) * static_cast<std::size_t>(depth);
+
+        switch (format)
+        {
+            case SurfaceFormat::Color:
+                break;
+            case SurfaceFormat::Bgr565:
+                internalFormat = ::easygl::InternalFormat::Rgb565;
+                pixelFormat = ::easygl::PixelFormat::Rgb;
+                pixelType = ::easygl::PixelType::UnsignedShort565;
+                unpackAlignment = 2;
+                break;
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            {
+                internalFormat = format == SurfaceFormat::Bgra5551
+                    ? ::easygl::InternalFormat::Rgb5A1
+                    : ::easygl::InternalFormat::Rgba4;
+                pixelType = format == SurfaceFormat::Bgra5551
+                    ? ::easygl::PixelType::UnsignedShort5551
+                    : ::easygl::PixelType::UnsignedShort4444;
+                unpackAlignment = 2;
+                if (pixels != nullptr)
+                {
+                    const int rotate = format == SurfaceFormat::Bgra5551 ? 1 : 4;
+                    const auto* source = static_cast<const std::uint8_t*>(pixels);
+                    expanded16.resize(texels);
+                    for (std::size_t index = 0; index < texels; ++index)
+                    {
+                        std::uint16_t value = 0;
+                        std::memcpy(&value, source + index * 2u, 2u);
+                        expanded16[index] = static_cast<std::uint16_t>(
+                            (value << rotate) | (value >> (16 - rotate)));
+                    }
+                    upload = expanded16.data();
+                }
+                break;
+            }
+            case SurfaceFormat::Rgba1010102:
+                internalFormat = ::easygl::InternalFormat::Rgb10A2;
+                pixelType = ::easygl::PixelType::UnsignedInt2101010Rev;
+                break;
+            case SurfaceFormat::Rg32:
+                internalFormat = ::easygl::InternalFormat::Rgba16;
+                pixelType = ::easygl::PixelType::UnsignedShort;
+                unpackAlignment = 8;
+                if (pixels != nullptr)
+                {
+                    const auto* source = static_cast<const std::uint8_t*>(pixels);
+                    expanded16.assign(texels * 4u, 65535u);
+                    for (std::size_t index = 0; index < texels; ++index)
+                    {
+                        std::memcpy(&expanded16[index * 4u], source + index * 4u, 4u);
+                    }
+                    upload = expanded16.data();
+                }
+                break;
+            case SurfaceFormat::Rgba64:
+                internalFormat = ::easygl::InternalFormat::Rgba16;
+                pixelType = ::easygl::PixelType::UnsignedShort;
+                unpackAlignment = 8;
+                break;
+            case SurfaceFormat::Alpha8:
+                if (pixels != nullptr)
+                {
+                    const auto* source = static_cast<const std::uint8_t*>(pixels);
+                    expanded8.assign(texels * 4u, 0u);
+                    for (std::size_t index = 0; index < texels; ++index)
+                        expanded8[index * 4u + 3u] = source[index];
+                    upload = expanded8.data();
+                }
+                break;
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            {
+                const int channels = format == SurfaceFormat::Single ? 1 : 2;
+                internalFormat = ::easygl::InternalFormat::Rgba32F;
+                pixelType = ::easygl::PixelType::Float;
+                unpackAlignment = 8;
+                if (pixels != nullptr)
+                {
+                    const auto* source = static_cast<const std::uint8_t*>(pixels);
+                    expandedFloat.assign(texels * 4u, 1.0f);
+                    for (std::size_t index = 0; index < texels; ++index)
+                    {
+                        std::memcpy(&expandedFloat[index * 4u],
+                                    source + index * static_cast<std::size_t>(channels) * 4u,
+                                    static_cast<std::size_t>(channels) * 4u);
+                    }
+                    upload = expandedFloat.data();
+                }
+                break;
+            }
+            case SurfaceFormat::Vector4:
+                internalFormat = ::easygl::InternalFormat::Rgba32F;
+                pixelType = ::easygl::PixelType::Float;
+                unpackAlignment = 8;
+                break;
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            {
+                const int channels = format == SurfaceFormat::HalfSingle ? 1 : 2;
+                internalFormat = ::easygl::InternalFormat::Rgba16F;
+                pixelType = ::easygl::PixelType::HalfFloat;
+                unpackAlignment = 8;
+                if (pixels != nullptr)
+                {
+                    const auto* source = static_cast<const std::uint8_t*>(pixels);
+                    expanded16.assign(texels * 4u, 0x3c00u);
+                    for (std::size_t index = 0; index < texels; ++index)
+                    {
+                        std::memcpy(&expanded16[index * 4u],
+                                    source + index * static_cast<std::size_t>(channels) * 2u,
+                                    static_cast<std::size_t>(channels) * 2u);
+                    }
+                    upload = expanded16.data();
+                }
+                break;
+            }
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                internalFormat = ::easygl::InternalFormat::Rgba16F;
+                pixelType = ::easygl::PixelType::HalfFloat;
+                unpackAlignment = 8;
+                break;
+            default:
+                throw std::runtime_error("EasyGL: unsupported uncompressed volume SurfaceFormat");
+        }
+
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, unpackAlignment);
+        texture.bind(::easygl::TextureTarget::Texture3D);
+        if (wholeLevel)
+        {
+            texture.set_image_3d(::easygl::TextureTarget::Texture3D, level,
+                                 internalFormat, width, height, depth,
+                                 pixelFormat, pixelType, upload);
+        }
+        else
+        {
+            texture.set_sub_image_3d(::easygl::TextureTarget::Texture3D, level,
+                                     x, y, z, width, height, depth,
+                                     pixelFormat, pixelType, upload);
+        }
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+    }
+
+    EasyGLTexture3DRenderer::EasyGLTexture3DRenderer(
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
+        : width_(w), height_(h), depth_(depth)
+        , levelCount_(mipMap ? CalculateTexture3DMipLevels(w, h, depth) : 1)
+        , surfaceFormat_(surfaceFormat)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        const int bytesPerTexel =
+            Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format);
+        rawLevels_.resize(static_cast<std::size_t>(levelCount_));
         tex_.create();
         tex_.bind(::easygl::TextureTarget::Texture3D);
         // Pre-allocate GPU storage for every mip level (not just level 0): SetData's box writes
@@ -1756,12 +1982,10 @@ if (ProfileIsEs2ApiGeneration())
         int levelW = w, levelH = h, levelD = depth;
         for (int level = 0; level < levelCount; ++level)
         {
-            tex_.set_image_3d(::easygl::TextureTarget::Texture3D, level,
-                              ::metagl::InternalFormat::Rgba8,
-                              levelW, levelH, levelD,
-                              ::metagl::PixelFormat::Rgba,
-                              ::metagl::PixelType::UnsignedByte,
-                              nullptr);
+            rawLevels_[static_cast<std::size_t>(level)].assign(
+                static_cast<std::size_t>(levelW) * levelH * levelD * bytesPerTexel, 0u);
+            UploadUncompressedVolumeTexelsEXT(
+                tex_, level, 0, 0, 0, levelW, levelH, levelD, format, nullptr, true);
             levelW = std::max(1, levelW / 2);
             levelH = std::max(1, levelH / 2);
             levelD = std::max(1, levelD / 2);
@@ -1796,6 +2020,16 @@ if (ProfileIsEs2ApiGeneration())
                                           int w, int h, int depth,
                                           const void* data, int dataLength)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+            return false;
+        return SetDataBytesEXT(level, x, y, z, w, h, depth, data, dataLength);
+    }
+
+    bool EasyGLTexture3DRenderer::SetDataBytesEXT(
+        int level, int x, int y, int z, int w, int h, int depth,
+        const void* data, int dataLength)
+    {
         if (data == nullptr || w <= 0 || h <= 0 || depth <= 0) return false;
         if (level < 0 || level >= levelCount_) return false;
         const int levelW = std::max(1, width_ >> level);
@@ -1803,16 +2037,35 @@ if (ProfileIsEs2ApiGeneration())
         const int levelD = std::max(1, depth_ >> level);
         if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
             return false;
-        if (dataLength < w * h * depth * 4) return false;
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        const int bytesPerTexel =
+            Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format);
+        if (dataLength < w * h * depth * bytesPerTexel) return false;
 
         DrainGlErrors();
-        tex_.bind(::easygl::TextureTarget::Texture3D);
-        tex_.set_sub_image_3d(::easygl::TextureTarget::Texture3D, level,
-                              x, y, z, w, h, depth,
-                              ::metagl::PixelFormat::Rgba,
-                              ::metagl::PixelType::UnsignedByte,
-                              data);
-        return GlUploadSucceeded();
+        UploadUncompressedVolumeTexelsEXT(
+            tex_, level, x, y, z, w, h, depth, format, data, false);
+        if (!GlUploadSucceeded()) return false;
+
+        auto& saved = rawLevels_[static_cast<std::size_t>(level)];
+        const auto* source = static_cast<const std::uint8_t*>(data);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel;
+        const std::size_t sourceSliceBytes = rowBytes * static_cast<std::size_t>(h);
+        for (int slice = 0; slice < depth; ++slice)
+        {
+            for (int row = 0; row < h; ++row)
+            {
+                const std::size_t destinationOffset =
+                    ((static_cast<std::size_t>(z + slice) * levelH + (y + row)) * levelW + x) *
+                    static_cast<std::size_t>(bytesPerTexel);
+                const std::size_t sourceOffset =
+                    static_cast<std::size_t>(slice) * sourceSliceBytes +
+                    static_cast<std::size_t>(row) * rowBytes;
+                std::memcpy(saved.data() + destinationOffset, source + sourceOffset, rowBytes);
+            }
+        }
+        return true;
     }
 
     void EasyGLTexture3DRenderer::BindGL(int unit) const
@@ -1870,6 +2123,172 @@ if (ProfileIsEs2ApiGeneration())
                    : ::metagl::CompressedInternalFormat::RgbaS3tcDxt5);
     }
 
+    static int CubeBytesPerTexelEXT(
+        Microsoft::Xna::Framework::Graphics::SurfaceFormat format)
+    {
+        return Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format);
+    }
+
+    static void UploadUncompressedCubeTexelsEXT(
+        ::easygl::Texture& texture, ::easygl::TextureTarget target, int level,
+        int x, int y, int width, int height,
+        Microsoft::Xna::Framework::Graphics::SurfaceFormat format,
+        const void* pixels, bool wholeLevel)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        ::easygl::InternalFormat internalFormat = RgbaTexImageInternalFormat();
+        ::easygl::PixelFormat pixelFormat = ::easygl::PixelFormat::Rgba;
+        ::easygl::PixelType pixelType = ::easygl::PixelType::UnsignedByte;
+        int unpackAlignment = 4;
+        const void* upload = pixels;
+        std::vector<float> expandedFloat;
+        std::vector<std::uint16_t> expanded16;
+        std::vector<std::uint8_t> expanded8;
+
+        switch (format)
+        {
+        case SurfaceFormat::Color:
+            break;
+        case SurfaceFormat::Bgr565:
+            internalFormat = ::easygl::InternalFormat::Rgb565;
+            pixelFormat = ::easygl::PixelFormat::Rgb;
+            pixelType = ::easygl::PixelType::UnsignedShort565;
+            unpackAlignment = 2;
+            break;
+        case SurfaceFormat::Bgra5551:
+        case SurfaceFormat::Bgra4444:
+            internalFormat = format == SurfaceFormat::Bgra5551
+                ? ::easygl::InternalFormat::Rgb5A1
+                : ::easygl::InternalFormat::Rgba4;
+            pixelType = format == SurfaceFormat::Bgra5551
+                ? ::easygl::PixelType::UnsignedShort5551
+                : ::easygl::PixelType::UnsignedShort4444;
+            unpackAlignment = 2;
+            if (pixels != nullptr)
+            {
+                const int rotate = format == SurfaceFormat::Bgra5551 ? 1 : 4;
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                expanded16.resize(static_cast<std::size_t>(width) * height);
+                for (std::size_t index = 0; index < expanded16.size(); ++index)
+                {
+                    std::uint16_t value = 0;
+                    std::memcpy(&value, source + index * 2u, 2u);
+                    expanded16[index] = static_cast<std::uint16_t>(
+                        (value << rotate) | (value >> (16 - rotate)));
+                }
+                upload = expanded16.data();
+            }
+            break;
+        case SurfaceFormat::Rgba1010102:
+            internalFormat = ::easygl::InternalFormat::Rgb10A2;
+            pixelType = ::easygl::PixelType::UnsignedInt2101010Rev;
+            break;
+        case SurfaceFormat::Rg32:
+            internalFormat = ::easygl::InternalFormat::Rgba16;
+            pixelType = ::easygl::PixelType::UnsignedShort;
+            unpackAlignment = 8;
+            if (pixels != nullptr)
+            {
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                const std::size_t texels = static_cast<std::size_t>(width) * height;
+                expanded16.assign(texels * 4u, 65535u);
+                for (std::size_t index = 0; index < texels; ++index)
+                {
+                    std::memcpy(&expanded16[index * 4u + 0], source + index * 4u + 0u, 2u);
+                    std::memcpy(&expanded16[index * 4u + 1], source + index * 4u + 2u, 2u);
+                }
+                upload = expanded16.data();
+            }
+            break;
+        case SurfaceFormat::Rgba64:
+            internalFormat = ::easygl::InternalFormat::Rgba16;
+            pixelType = ::easygl::PixelType::UnsignedShort;
+            unpackAlignment = 8;
+            break;
+        case SurfaceFormat::Alpha8:
+            if (pixels != nullptr)
+            {
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                const std::size_t texels = static_cast<std::size_t>(width) * height;
+                expanded8.assign(texels * 4u, 0u);
+                for (std::size_t index = 0; index < texels; ++index)
+                    expanded8[index * 4u + 3] = source[index];
+                upload = expanded8.data();
+            }
+            break;
+        case SurfaceFormat::Single:
+        case SurfaceFormat::Vector2:
+        {
+            const int sourceChannels = format == SurfaceFormat::Single ? 1 : 2;
+            internalFormat = ::easygl::InternalFormat::Rgba32F;
+            pixelType = ::easygl::PixelType::Float;
+            unpackAlignment = 8;
+            if (pixels != nullptr)
+            {
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                const std::size_t texels = static_cast<std::size_t>(width) * height;
+                expandedFloat.assign(texels * 4u, 1.0f);
+                for (std::size_t index = 0; index < texels; ++index)
+                {
+                    std::memcpy(&expandedFloat[index * 4u],
+                                source + index * static_cast<std::size_t>(sourceChannels) * 4u,
+                                static_cast<std::size_t>(sourceChannels) * 4u);
+                }
+                upload = expandedFloat.data();
+            }
+            break;
+        }
+        case SurfaceFormat::Vector4:
+            internalFormat = ::easygl::InternalFormat::Rgba32F;
+            pixelType = ::easygl::PixelType::Float;
+            unpackAlignment = 8;
+            break;
+        case SurfaceFormat::HalfSingle:
+        case SurfaceFormat::HalfVector2:
+        {
+            const int sourceChannels = format == SurfaceFormat::HalfSingle ? 1 : 2;
+            internalFormat = ::easygl::InternalFormat::Rgba16F;
+            pixelType = ::easygl::PixelType::HalfFloat;
+            unpackAlignment = 8;
+            if (pixels != nullptr)
+            {
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                const std::size_t texels = static_cast<std::size_t>(width) * height;
+                expanded16.assign(texels * 4u, 0x3c00u);
+                for (std::size_t index = 0; index < texels; ++index)
+                {
+                    std::memcpy(&expanded16[index * 4u],
+                                source + index * static_cast<std::size_t>(sourceChannels) * 2u,
+                                static_cast<std::size_t>(sourceChannels) * 2u);
+                }
+                upload = expanded16.data();
+            }
+            break;
+        }
+        case SurfaceFormat::HalfVector4:
+        case SurfaceFormat::HdrBlendable:
+            internalFormat = ::easygl::InternalFormat::Rgba16F;
+            pixelType = ::easygl::PixelType::HalfFloat;
+            unpackAlignment = 8;
+            break;
+        default:
+            throw std::runtime_error("EasyGL: unsupported uncompressed cube SurfaceFormat");
+        }
+
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, unpackAlignment);
+        if (wholeLevel)
+        {
+            texture.set_image_2d(target, level, internalFormat, width, height,
+                                 pixelFormat, pixelType, upload);
+        }
+        else
+        {
+            texture.set_sub_image_2d(target, level, x, y, width, height,
+                                     pixelFormat, pixelType, upload);
+        }
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+    }
+
     EasyGLTextureCubeRenderer::EasyGLTextureCubeRenderer(
         int size, bool mipMap, int surfaceFormat,
         std::shared_ptr<::easygl::ResourceRegistry> registry)
@@ -1884,8 +2303,21 @@ if (ProfileIsEs2ApiGeneration())
                          format == SurfaceFormat::Dxt5;
         if (dxt)
             compressedLevels_.resize(static_cast<std::size_t>(6 * levelCount_));
-        else if (registry != nullptr)
-            rgbaLevels_.resize(static_cast<std::size_t>(6 * levelCount_));
+        else
+        {
+            rawLevels_.resize(static_cast<std::size_t>(6 * levelCount_));
+            for (int face = 0; face < 6; ++face)
+            {
+                for (int level = 0; level < levelCount_; ++level)
+                {
+                    const int levelSize = std::max(1, size_ >> level);
+                    rawLevels_[static_cast<std::size_t>(face * levelCount_ + level)].assign(
+                        static_cast<std::size_t>(levelSize) * levelSize *
+                            CubeBytesPerTexelEXT(format),
+                        0u);
+                }
+            }
+        }
         CreateResources();
         if (registry != nullptr) registry->add(this);
     }
@@ -1935,16 +2367,12 @@ if (ProfileIsEs2ApiGeneration())
                     const std::size_t index =
                         static_cast<std::size_t>(face * levelCount_ + level);
                     const std::vector<std::uint8_t>* saved = nullptr;
-                    if (!dxt && index < rgbaLevels_.size() && !rgbaLevels_[index].empty())
-                        saved = &rgbaLevels_[index];
-                    if (!dxt && level == 0 && cpuPixels_[face] && !cpuPixels_[face]->empty())
-                        saved = cpuPixels_[face].get();
-                    tex_.set_image_2d(faceTarget, level,
-                                      RgbaTexImageInternalFormat(),
-                                      levelSize, levelSize,
-                                      ::metagl::PixelFormat::Rgba,
-                                      ::metagl::PixelType::UnsignedByte,
-                                      saved != nullptr ? saved->data() : nullptr);
+                    if (!dxt && index < rawLevels_.size() && !rawLevels_[index].empty())
+                        saved = &rawLevels_[index];
+                    UploadUncompressedCubeTexelsEXT(
+                        tex_, faceTarget, level, 0, 0, levelSize, levelSize,
+                        dxt ? SurfaceFormat::Color : format,
+                        saved != nullptr ? saved->data() : nullptr, true);
                     if (dxt)
                     {
                         const auto& blocks = compressedLevels_[index];
@@ -1989,40 +2417,51 @@ else
                                           int w, int h, int depth,
                                           void* data, int dataLength) const
     {
-        // REMED-GFX-130: every early-out below used to be impossible to express -- this method
-        // returned void, so the shared layer converted its own zeroed scratch buffer into a
-        // complete transparent-black volume whenever nothing was actually read.
-        if (data == nullptr || level < 0 || w <= 0 || h <= 0 || depth <= 0) return false;
-        if (dataLength < w * h * depth * 4) return false;
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+            return false;
+        return GetDataBytesEXT(level, x, y, z, w, h, depth, data, dataLength);
+    }
 
-        // GLES3 does not have glGetTexImage. Use a temporary FBO per Z-slice
-        // with glReadPixels to read back the pixel data.
-        const int bytesPerPixel = 4; // RGBA8
-        auto* dest = static_cast<uint8_t*>(data);
+    bool EasyGLTexture3DRenderer::GetDataBytesEXT(
+        int level, int x, int y, int z, int w, int h, int depth,
+        void* data, int dataLength) const
+    {
+        if (data == nullptr || level < 0 || level >= levelCount_ ||
+            w <= 0 || h <= 0 || depth <= 0)
+            return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        const int levelD = std::max(1, depth_ >> level);
+        if (x < 0 || y < 0 || z < 0 || w > levelW || h > levelH || depth > levelD ||
+            x > levelW - w || y > levelH - h || z > levelD - depth)
+            return false;
 
-        ::easygl::Framebuffer fbo;
-        fbo.create();
-        fbo.bind(::easygl::FramebufferTarget::Framebuffer);
-        fbo.set_read_buffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+        const int bytesPerTexel =
+            Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+                static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat_));
+        if (dataLength < w * h * depth * bytesPerTexel) return false;
+        const auto& source = rawLevels_[static_cast<std::size_t>(level)];
+        if (source.size() < static_cast<std::size_t>(levelW) * levelH * levelD * bytesPerTexel)
+            return false;
 
-        bool complete = true;
-        for (int slice = z; slice < z + depth; ++slice)
+        auto* destination = static_cast<std::uint8_t*>(data);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel;
+        const std::size_t destinationSliceBytes = rowBytes * static_cast<std::size_t>(h);
+        for (int slice = 0; slice < depth; ++slice)
         {
-            fbo.attach_texture_layer(::easygl::FramebufferTarget::Framebuffer,
-                                     ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
-                                     tex_, level, slice);
-            // A slice whose attachment is not framebuffer-complete reads back nothing at all, so
-            // the requested box would only be partly written -- report that, never half-succeed.
-            if (!fbo.is_complete(::easygl::FramebufferTarget::Framebuffer)) { complete = false; break; }
-            ::metagl::glReadPixels(x, y, w, h,
-                                   ::metagl::PixelFormat::Rgba,
-                                   ::metagl::PixelType::UnsignedByte,
-                                   dest);
-            dest += w * h * bytesPerPixel;
+            for (int row = 0; row < h; ++row)
+            {
+                const std::size_t sourceOffset =
+                    ((static_cast<std::size_t>(z + slice) * levelH + (y + row)) * levelW + x) *
+                    static_cast<std::size_t>(bytesPerTexel);
+                const std::size_t destinationOffset =
+                    static_cast<std::size_t>(slice) * destinationSliceBytes +
+                    static_cast<std::size_t>(row) * rowBytes;
+                std::memcpy(destination + destinationOffset, source.data() + sourceOffset, rowBytes);
+            }
         }
-
-        ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
-        return complete;
+        return true;
     }
 
     EasyGLTextureCubeRenderer::~EasyGLTextureCubeRenderer()
@@ -2040,8 +2479,6 @@ if (ProfileIsEs2ApiGeneration())
     {
         if (face < 0 || face >= static_cast<int>(cpuPixels_.size())) return;
         cpuPixels_[static_cast<std::size_t>(face)] = std::move(pixels);
-        const std::size_t levelZero = static_cast<std::size_t>(face * levelCount_);
-        if (levelZero < rgbaLevels_.size()) rgbaLevels_[levelZero].clear();
     }
 
     void EasyGLTextureCubeRenderer::release_gl_handle_only()
@@ -2062,38 +2499,52 @@ if (ProfileIsEs2ApiGeneration())
     bool EasyGLTextureCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                             const void* data, int dataLength)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+            return false;
+        return SetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool EasyGLTextureCubeRenderer::SetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h,
+        const void* data, int dataLength)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5)
+            return false;
         // REMED-GFX-135: the face guard used to be a silent `return`, which the shared layer could
         // not tell apart from a completed upload.
         if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0) return false;
         if (level < 0 || level >= levelCount_) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        if (dataLength < w * h * 4) return false;
+        const int bytesPerTexel = CubeBytesPerTexelEXT(format);
+        if (dataLength < w * h * bytesPerTexel) return false;
 
         DrainGlErrors();
         tex_.bind(::easygl::TextureTarget::TextureCubeMap);
-        tex_.set_sub_image_2d(kCubeFaceTargets[face], level, x, y, w, h,
-                              ::metagl::PixelFormat::Rgba,
-                              ::metagl::PixelType::UnsignedByte,
-                              data);
+        UploadUncompressedCubeTexelsEXT(
+            tex_, kCubeFaceTargets[face], level, x, y, w, h, format, data, false);
         if (!GlUploadSucceeded()) return false;
         const std::size_t index = static_cast<std::size_t>(face * levelCount_ + level);
-        if (index < rgbaLevels_.size())
+        if (index < rawLevels_.size())
         {
             const int rowPixels = levelSize;
-            auto& saved = rgbaLevels_[index];
+            auto& saved = rawLevels_[index];
             if (saved.empty())
             {
-                saved.resize(static_cast<std::size_t>(levelSize) * levelSize * 4, 0u);
+                saved.resize(static_cast<std::size_t>(levelSize) * levelSize * bytesPerTexel, 0u);
             }
             for (int row = 0; row < h; ++row)
             {
                 std::memcpy(
                     saved.data() +
-                        (static_cast<std::size_t>(y + row) * rowPixels + x) * 4,
+                        (static_cast<std::size_t>(y + row) * rowPixels + x) * bytesPerTexel,
                     static_cast<const std::uint8_t*>(data) +
-                        static_cast<std::size_t>(row) * w * 4,
-                    static_cast<std::size_t>(w) * 4);
+                        static_cast<std::size_t>(row) * w * bytesPerTexel,
+                    static_cast<std::size_t>(w) * bytesPerTexel);
             }
         }
         return true;
@@ -2168,6 +2619,53 @@ if (ProfileIsEs2ApiGeneration())
         return true;
     }
 
+    bool EasyGLTextureCubeRenderer::GetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if ((format != SurfaceFormat::Dxt1 && format != SurfaceFormat::Dxt3 &&
+             format != SurfaceFormat::Dxt5) ||
+            face < 0 || face >= 6 || data == nullptr || level < 0 || level >= levelCount_ ||
+            w <= 0 || h <= 0)
+            return false;
+
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || w > levelSize || h > levelSize ||
+            x > levelSize - w || y > levelSize - h ||
+            (x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && x + w != levelSize) ||
+            ((h % 4) != 0 && y + h != levelSize))
+            return false;
+
+        const std::size_t blockBytes = DxtBlockBytesEXT(format);
+        const int levelBlockColumns = (levelSize + 3) / 4;
+        const int regionBlockColumns = (w + 3) / 4;
+        const int regionBlockRows = (h + 3) / 4;
+        const std::size_t required = static_cast<std::size_t>(regionBlockColumns) *
+                                     static_cast<std::size_t>(regionBlockRows) * blockBytes;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        const auto& blocks =
+            compressedLevels_[static_cast<std::size_t>(face * levelCount_ + level)];
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < regionBlockRows; ++row)
+        {
+            const std::size_t sourceOffset =
+                (static_cast<std::size_t>(y / 4 + row) *
+                     static_cast<std::size_t>(levelBlockColumns) +
+                 static_cast<std::size_t>(x / 4)) * blockBytes;
+            const std::size_t destinationOffset =
+                static_cast<std::size_t>(row) *
+                static_cast<std::size_t>(regionBlockColumns) * blockBytes;
+            std::memcpy(destination + destinationOffset, blocks.data() + sourceOffset,
+                        static_cast<std::size_t>(regionBlockColumns) * blockBytes);
+        }
+        return true;
+    }
+
     bool EasyGLTextureCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
@@ -2203,31 +2701,42 @@ if (ProfileIsEs2ApiGeneration())
             return true;
         }
 
-        ::easygl::Framebuffer fbo;
-        fbo.create();
-        fbo.bind(::easygl::FramebufferTarget::Framebuffer);
-        fbo.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
-                              ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
-                              kCubeFaceTargets[face],
-                              tex_, level);
-if (!ProfileIsEs2ApiGeneration())
-{
-        // GLES 2.0 has no glReadBuffer; the bound framebuffer's single color attachment is the
-        // implicit read source there, so the explicit selection exists only for the ES 3.0 profiles.
-        fbo.set_read_buffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
-}
+        if (format != SurfaceFormat::Color)
+            return false;
+        // Plain TextureCube content is authored only through SetData. Exact raw shadows service
+        // Color and typed readback, avoiding framebuffer conversion and preserving packed bits.
+        return GetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
+    }
 
-        const bool complete = fbo.is_complete(::easygl::FramebufferTarget::Framebuffer);
-        if (complete)
+    bool EasyGLTextureCubeRenderer::GetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5 || face < 0 || face >= 6 || data == nullptr ||
+            level < 0 || level >= levelCount_ || w <= 0 || h <= 0)
+            return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || w > levelSize || h > levelSize ||
+            x > levelSize - w || y > levelSize - h)
+            return false;
+        const int bytesPerTexel = CubeBytesPerTexelEXT(format);
+        if (dataLength < w * h * bytesPerTexel) return false;
+        const auto& source = rawLevels_[static_cast<std::size_t>(face * levelCount_ + level)];
+        if (source.size() < static_cast<std::size_t>(levelSize) * levelSize * bytesPerTexel)
+            return false;
+        auto* destination = static_cast<std::uint8_t*>(data);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel;
+        for (int row = 0; row < h; ++row)
         {
-            ::metagl::glReadPixels(x, y, w, h,
-                                   ::metagl::PixelFormat::Rgba,
-                                   ::metagl::PixelType::UnsignedByte,
-                                   data);
+            const std::size_t sourceOffset =
+                (static_cast<std::size_t>(y + row) * levelSize + x) * bytesPerTexel;
+            std::memcpy(destination + static_cast<std::size_t>(row) * rowBytes,
+                        source.data() + sourceOffset, rowBytes);
         }
-
-        ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
-        return complete;
+        return true;
     }
 
     // --- EasyGLEffectRenderer ---
@@ -2882,10 +3391,25 @@ if (!ProfileIsEs2ApiGeneration())
         : registry_(registry), surfaceFormat_(data.surfaceFormat),
           mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        const bool dxt = format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+                         format == SurfaceFormat::Dxt5;
         width = data.width;
         height = data.height;
+        if (dxt)
+        {
+            compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
+            const std::size_t levelBytes = static_cast<std::size_t>((width + 3) / 4)
+                * static_cast<std::size_t>((height + 3) / 4) * DxtBlockBytesEXT(format);
+            if (data.pixels.size() < levelBytes)
+                throw std::invalid_argument("EasyGL DXT texture level 0 has too few block bytes");
+            compressedLevels_[0].assign(data.pixels.begin(), data.pixels.begin() +
+                static_cast<std::ptrdiff_t>(levelBytes));
+        }
         texture.create();
-        UploadLevel(0, width, height, data.pixels.data());
+        UploadLevel(0, width, height,
+                    dxt ? compressedLevels_[0].data() : data.pixels.data());
         AllocateDeclaredLevels();
 if (ProfileIsEs2ApiGeneration())
 {
@@ -2928,9 +3452,26 @@ else
             const std::size_t blockCols = (static_cast<std::size_t>(levelWidth) + 3u) / 4u;
             const std::size_t blockRows = (static_cast<std::size_t>(levelHeight) + 3u) / 4u;
             const std::size_t imageBytes = blockCols * blockRows * blockBytes;
+            const void* levelPixels = pixels;
+            std::vector<std::uint8_t> uninitializedStorage;
+            if (levelPixels == nullptr && level >= 0 &&
+                level < static_cast<int>(compressedLevels_.size()))
+            {
+                const auto& stored = compressedLevels_[static_cast<std::size_t>(level)];
+                if (!stored.empty())
+                    levelPixels = stored.data();
+                else
+                {
+                    // GL requires actual bytes for the compressed allocation path. Keep these
+                    // deterministic allocation bytes transient so HasDefinedMipLevel still means
+                    // caller/content-authored data, just like the uncompressed path.
+                    uninitializedStorage.assign(imageBytes, 0u);
+                    levelPixels = uninitializedStorage.data();
+                }
+            }
 
             texture.bind(::easygl::TextureTarget::Texture2D);
-            if (pixels != nullptr && ContextHasS3tcEXT())
+            if (levelPixels != nullptr && ContextHasS3tcEXT())
             {
                 ::metagl::glCompressedTexImage2D(
                     ::metagl::TextureTarget::Texture2D, level,
@@ -2940,16 +3481,16 @@ else
                                ? ::metagl::CompressedInternalFormat::RgbaS3tcDxt3
                                : ::metagl::CompressedInternalFormat::RgbaS3tcDxt5),
                     levelWidth, levelHeight, 0,
-                    static_cast<GLsizei>(imageBytes), pixels);
+                    static_cast<GLsizei>(imageBytes), levelPixels);
             }
             else
             {
                 // Storage still has to exist when there are no pixels yet (a declared mip chain),
                 // so the decode path also covers the null case with an empty RGBA8 level.
                 std::vector<std::uint8_t> rgba;
-                if (pixels != nullptr)
+                if (levelPixels != nullptr)
                 {
-                    const auto* blocks = static_cast<const std::uint8_t*>(pixels);
+                    const auto* blocks = static_cast<const std::uint8_t*>(levelPixels);
                     using CNA::Internal::Graphics::DxtUtil;
                     rgba = uploadFormat == SurfaceFormat::Dxt1
                                ? DxtUtil::DecompressDxt1(blocks, imageBytes, levelWidth, levelHeight)
@@ -3039,27 +3580,182 @@ else
             uploadFormat == SurfaceFormat::NormalizedByte2)
         {
             const bool twoChannel = uploadFormat == SurfaceFormat::NormalizedByte2;
+            std::vector<std::int8_t> expanded;
+            const void* upload = pixels;
+            if (twoChannel && pixels != nullptr)
+            {
+                const std::size_t texels = static_cast<std::size_t>(levelWidth)
+                    * static_cast<std::size_t>(levelHeight);
+                const auto* source = static_cast<const std::int8_t*>(pixels);
+                expanded.resize(texels * 4u);
+                for (std::size_t i = 0; i < texels; ++i)
+                {
+                    expanded[i * 4u + 0] = source[i * 2u + 0];
+                    expanded[i * 4u + 1] = source[i * 2u + 1];
+                    expanded[i * 4u + 2] = 127;
+                    expanded[i * 4u + 3] = 127;
+                }
+                upload = expanded.data();
+            }
             texture.bind(::easygl::TextureTarget::Texture2D);
             ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 1);
             texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
-                                 twoChannel ? ::easygl::InternalFormat::Rg8Snorm
-                                            : ::easygl::InternalFormat::Rgba8Snorm,
+                                 ::easygl::InternalFormat::Rgba8Snorm,
                                  levelWidth, levelHeight,
-                                 twoChannel ? ::easygl::PixelFormat::Rg
-                                            : ::easygl::PixelFormat::Rgba,
-                                 ::easygl::PixelType::Byte, pixels);
-            texture.set_parameter(::easygl::TextureTarget::Texture2D,
-                                  ::easygl::TextureParameterSetter::MinFilter,
-                                  static_cast<int>(::easygl::TextureMinFilter::Linear));
-            texture.set_parameter(::easygl::TextureTarget::Texture2D,
-                                  ::easygl::TextureParameterSetter::MagFilter,
-                                  static_cast<int>(::easygl::TextureMagFilter::Linear));
-            texture.set_parameter(::easygl::TextureTarget::Texture2D,
-                                  ::easygl::TextureParameterSetter::WrapS,
-                                  static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
-            texture.set_parameter(::easygl::TextureTarget::Texture2D,
-                                  ::easygl::TextureParameterSetter::WrapT,
-                                  static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
+                                 ::easygl::PixelFormat::Rgba,
+                                 ::easygl::PixelType::Byte, upload);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+            SetOrdinaryTextureDefaults(texture);
+            return;
+        }
+        if (uploadFormat == SurfaceFormat::Alpha8)
+        {
+            std::vector<std::uint8_t> expanded;
+            const void* upload = nullptr;
+            if (pixels != nullptr)
+            {
+                const std::size_t texels = static_cast<std::size_t>(levelWidth)
+                    * static_cast<std::size_t>(levelHeight);
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                expanded.assign(texels * 4u, 0u);
+                for (std::size_t i = 0; i < texels; ++i)
+                    expanded[i * 4u + 3] = source[i];
+                upload = expanded.data();
+            }
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                 RgbaTexImageInternalFormat(), levelWidth, levelHeight,
+                                 ::easygl::PixelFormat::Rgba,
+                                 ::easygl::PixelType::UnsignedByte, upload);
+            SetOrdinaryTextureDefaults(texture);
+            return;
+        }
+        if (uploadFormat == SurfaceFormat::Single || uploadFormat == SurfaceFormat::Vector2)
+        {
+            const int sourceChannels = uploadFormat == SurfaceFormat::Single ? 1 : 2;
+            std::vector<float> expanded;
+            const void* upload = nullptr;
+            if (pixels != nullptr)
+            {
+                const std::size_t texels = static_cast<std::size_t>(levelWidth)
+                    * static_cast<std::size_t>(levelHeight);
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                expanded.assign(texels * 4u, 1.0f);
+                for (std::size_t i = 0; i < texels; ++i)
+                {
+                    std::memcpy(&expanded[i * 4u + 0],
+                                source + i * static_cast<std::size_t>(sourceChannels) * 4u, 4u);
+                    if (sourceChannels == 2)
+                        std::memcpy(&expanded[i * 4u + 1], source + (i * 2u + 1u) * 4u, 4u);
+                }
+                upload = expanded.data();
+            }
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                 ::easygl::InternalFormat::Rgba32F, levelWidth, levelHeight,
+                                 ::easygl::PixelFormat::Rgba,
+                                 ::easygl::PixelType::Float, upload);
+            SetOrdinaryTextureDefaults(texture);
+            return;
+        }
+        if (uploadFormat == SurfaceFormat::HalfSingle ||
+            uploadFormat == SurfaceFormat::HalfVector2)
+        {
+            const int sourceChannels = uploadFormat == SurfaceFormat::HalfSingle ? 1 : 2;
+            std::vector<std::uint16_t> expanded;
+            const void* upload = nullptr;
+            if (pixels != nullptr)
+            {
+                const std::size_t texels = static_cast<std::size_t>(levelWidth)
+                    * static_cast<std::size_t>(levelHeight);
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                expanded.assign(texels * 4u, 0x3c00u);
+                for (std::size_t i = 0; i < texels; ++i)
+                {
+                    std::memcpy(&expanded[i * 4u + 0],
+                                source + i * static_cast<std::size_t>(sourceChannels) * 2u, 2u);
+                    if (sourceChannels == 2)
+                        std::memcpy(&expanded[i * 4u + 1], source + (i * 2u + 1u) * 2u, 2u);
+                }
+                upload = expanded.data();
+            }
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 2);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                 ::easygl::InternalFormat::Rgba16F, levelWidth, levelHeight,
+                                 ::easygl::PixelFormat::Rgba,
+                                 ::easygl::PixelType::HalfFloat, upload);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+            SetOrdinaryTextureDefaults(texture);
+            return;
+        }
+        if (uploadFormat == SurfaceFormat::Rg32)
+        {
+            std::vector<std::uint16_t> expanded;
+            const void* upload = nullptr;
+            if (pixels != nullptr)
+            {
+                const std::size_t texels = static_cast<std::size_t>(levelWidth)
+                    * static_cast<std::size_t>(levelHeight);
+                const auto* source = static_cast<const std::uint8_t*>(pixels);
+                expanded.assign(texels * 4u, 65535u);
+                for (std::size_t i = 0; i < texels; ++i)
+                {
+                    std::memcpy(&expanded[i * 4u + 0], source + (i * 2u + 0u) * 2u, 2u);
+                    std::memcpy(&expanded[i * 4u + 1], source + (i * 2u + 1u) * 2u, 2u);
+                }
+                upload = expanded.data();
+            }
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 2);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                 ::easygl::InternalFormat::Rgba16,
+                                 levelWidth, levelHeight, ::easygl::PixelFormat::Rgba,
+                                 ::easygl::PixelType::UnsignedShort, upload);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+            SetOrdinaryTextureDefaults(texture);
+            return;
+        }
+
+        ::easygl::InternalFormat internalFormat{};
+        ::easygl::PixelType pixelType{};
+        int unpackAlignment = 4;
+        bool mapped = true;
+        switch (uploadFormat)
+        {
+        case SurfaceFormat::Rgba1010102:
+            internalFormat = ::easygl::InternalFormat::Rgb10A2;
+            pixelType = ::easygl::PixelType::UnsignedInt2101010Rev;
+            break;
+        case SurfaceFormat::Rgba64:
+            internalFormat = ::easygl::InternalFormat::Rgba16;
+            pixelType = ::easygl::PixelType::UnsignedShort;
+            unpackAlignment = 8;
+            break;
+        case SurfaceFormat::Vector4:
+            internalFormat = ::easygl::InternalFormat::Rgba32F;
+            pixelType = ::easygl::PixelType::Float;
+            unpackAlignment = 8;
+            break;
+        case SurfaceFormat::HalfVector4:
+        case SurfaceFormat::HdrBlendable:
+            internalFormat = ::easygl::InternalFormat::Rgba16F;
+            pixelType = ::easygl::PixelType::HalfFloat;
+            unpackAlignment = 8;
+            break;
+        default:
+            mapped = false;
+            break;
+        }
+        if (mapped)
+        {
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, unpackAlignment);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                 internalFormat, levelWidth, levelHeight,
+                                 ::easygl::PixelFormat::Rgba, pixelType, pixels);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+            SetOrdinaryTextureDefaults(texture);
             return;
         }
         texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
@@ -3113,13 +3809,26 @@ if (ProfileIsEs2ApiGeneration())
     void EasyGLTextureRenderer::recreate_gl_resource()
     {
         texture.create();
-        if (pixels_ && !pixels_->empty())
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        const bool dxt = format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+                         format == SurfaceFormat::Dxt5;
+        if (dxt)
+        {
+            UploadLevel(0, width, height, nullptr);
+        }
+        else if (pixels_ && !pixels_->empty())
         {
             UploadLevel(0, width, height, pixels_->data());
         }
         else
         {
-            const std::vector<uint8_t> blank(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4, 0);
+            const std::size_t bytesPerTexel = static_cast<std::size_t>(
+                Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format));
+            const std::vector<uint8_t> blank(
+                static_cast<std::size_t>(width) * static_cast<std::size_t>(height)
+                    * bytesPerTexel,
+                0);
             UploadLevel(0, width, height, blank.data());
         }
         // REMED-GFX-175: the fresh GL texture object has storage for level 0 only, so a declared
@@ -3152,6 +3861,19 @@ else
 
     void EasyGLTextureRenderer::UpdatePixels(const uint8_t* rgba, int /*stride*/)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+            format == SurfaceFormat::Dxt5)
+        {
+            const std::size_t byteCount = static_cast<std::size_t>((width + 3) / 4)
+                * static_cast<std::size_t>((height + 3) / 4) * DxtBlockBytesEXT(format);
+            if (compressedLevels_.empty())
+                compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
+            compressedLevels_[0].assign(rgba, rgba + byteCount);
+            UploadLevel(0, width, height, compressedLevels_[0].data());
+            return;
+        }
         // pixels_ (shared with Texture2D::cpuPixels_) is already updated by the caller
         // before this method is invoked — no need to update it here.
         UploadLevel(0, width, height, rgba);
@@ -3159,7 +3881,76 @@ else
 
     void EasyGLTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
     {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if ((format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+             format == SurfaceFormat::Dxt5) &&
+            level >= 0 && level < mipLevels_ && rgba != nullptr)
+        {
+            const std::size_t byteCount = static_cast<std::size_t>((levelW + 3) / 4)
+                * static_cast<std::size_t>((levelH + 3) / 4) * DxtBlockBytesEXT(format);
+            if (compressedLevels_.empty())
+                compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
+            auto& stored = compressedLevels_[static_cast<std::size_t>(level)];
+            stored.assign(rgba, rgba + byteCount);
+            UploadLevel(level, levelW, levelH, stored.data());
+            return;
+        }
         UploadLevel(level, levelW, levelH, rgba);
+    }
+
+    bool EasyGLTextureRenderer::HasDefinedMipLevel(int level) const noexcept
+    {
+        return level >= 0 && level < static_cast<int>(compressedLevels_.size()) &&
+               !compressedLevels_[static_cast<std::size_t>(level)].empty();
+    }
+
+    bool EasyGLTextureRenderer::GetData(int level, int x, int y, int w, int h,
+                                        void* data, int dataLength) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
+        if (format != SurfaceFormat::Dxt1 && format != SurfaceFormat::Dxt3 &&
+            format != SurfaceFormat::Dxt5)
+            return false;
+        if (data == nullptr || level < 0 || level >= mipLevels_ ||
+            x < 0 || y < 0 || w <= 0 || h <= 0)
+            return false;
+
+        const int levelWidth = std::max(1, width >> level);
+        const int levelHeight = std::max(1, height >> level);
+        if (w > levelWidth || h > levelHeight || x > levelWidth - w || y > levelHeight - h)
+            return false;
+        const bool touchesRightEdge = x + w == levelWidth;
+        const bool touchesBottomEdge = y + h == levelHeight;
+        if ((x % 4) != 0 || (y % 4) != 0 ||
+            ((w % 4) != 0 && !touchesRightEdge) ||
+            ((h % 4) != 0 && !touchesBottomEdge))
+            return false;
+
+        if (level >= static_cast<int>(compressedLevels_.size())) return false;
+        const auto& source = compressedLevels_[static_cast<std::size_t>(level)];
+        const std::size_t blockBytes = DxtBlockBytesEXT(format);
+        const std::size_t fullBlockColumns = static_cast<std::size_t>((levelWidth + 3) / 4);
+        const std::size_t fullBlockRows = static_cast<std::size_t>((levelHeight + 3) / 4);
+        const std::size_t copyBlockColumns = static_cast<std::size_t>((w + 3) / 4);
+        const std::size_t copyBlockRows = static_cast<std::size_t>((h + 3) / 4);
+        const std::size_t required = copyBlockColumns * copyBlockRows * blockBytes;
+        if (source.size() < fullBlockColumns * fullBlockRows * blockBytes || dataLength < 0 ||
+            static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        const std::size_t blockX = static_cast<std::size_t>(x / 4);
+        const std::size_t blockY = static_cast<std::size_t>(y / 4);
+        const std::size_t copyBytes = copyBlockColumns * blockBytes;
+        auto* destination = static_cast<std::uint8_t*>(data);
+        for (std::size_t row = 0; row < copyBlockRows; ++row)
+        {
+            const std::size_t sourceOffset =
+                ((blockY + row) * fullBlockColumns + blockX) * blockBytes;
+            std::memcpy(destination + row * copyBytes, source.data() + sourceOffset, copyBytes);
+        }
+        return true;
     }
 
     // --- EasyGLRenderTargetRenderer ---
@@ -3207,8 +3998,8 @@ else
     // this GL context can render to the format at all.
     //
     // The formats CNA actually allocates are listed. Everything else is deliberately absent and
-    // refused rather than silently substituted. Rgba64 is desktop-only RGBA16 UNORM storage: FNA's
-    // adapter query promises it and the original Racing Game Kit uses the exact selected format.
+    // refused rather than silently substituted. The two 16-bit normalized layouts are selected
+    // only after the runtime texture-norm16/completeness checks below.
     struct RenderTargetColorStorage
     {
         ::metagl::InternalFormat internalFormat;
@@ -3227,6 +4018,14 @@ else
         case SurfaceFormat::Color:
             out = {RgbaTexImageInternalFormat(), ::metagl::PixelFormat::Rgba,
                    ::metagl::PixelType::UnsignedByte, false, false, 4};
+            return true;
+        case SurfaceFormat::Rgba1010102:
+            out = {::metagl::InternalFormat::Rgb10A2, ::metagl::PixelFormat::Rgba,
+                   ::metagl::PixelType::UnsignedInt2101010Rev, false, false, 4};
+            return true;
+        case SurfaceFormat::Rg32:
+            out = {Rg16InternalFormatEXT(), ::metagl::PixelFormat::Rg,
+                   ::metagl::PixelType::UnsignedShort, false, false, 4};
             return true;
         case SurfaceFormat::Rgba64:
             out = {::metagl::InternalFormat::Rgba16, ::metagl::PixelFormat::Rgba,
@@ -3262,6 +4061,187 @@ else
         default:
             return false;
         }
+    }
+
+    static void ApplyRenderTargetChannelSwizzle(
+        ::easygl::Texture& texture, ::easygl::TextureTarget target, int surfaceFormat)
+    {
+        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        const bool oneChannel = format == SurfaceFormat::Single ||
+                                format == SurfaceFormat::HalfSingle;
+        const bool twoChannel = format == SurfaceFormat::Vector2 ||
+                                format == SurfaceFormat::HalfVector2 ||
+                                format == SurfaceFormat::Rg32;
+        if (!oneChannel && !twoChannel)
+            return;
+
+        const int one = static_cast<int>(::metagl::TextureSwizzle::One);
+        if (oneChannel)
+            texture.set_parameter(target, ::easygl::TextureParameterSetter::SwizzleG, one);
+        texture.set_parameter(target, ::easygl::TextureParameterSetter::SwizzleB, one);
+        texture.set_parameter(target, ::easygl::TextureParameterSetter::SwizzleA, one);
+    }
+
+    [[nodiscard]] static bool ProbeNormalized16MsaaResolve(
+        const RenderTargetColorStorage& storage, int samples, bool cubeTarget)
+    {
+        GLint previousReadFbo = 0;
+        GLint previousDrawFbo = 0;
+        GLboolean previousMask[4]{};
+        ::metagl::glGetIntegerv(::metagl::GetParameter::ReadFramebufferBinding,
+                                &previousReadFbo);
+        ::metagl::glGetIntegerv(::metagl::GetParameter::DrawFramebufferBinding,
+                                &previousDrawFbo);
+        ::metagl::glGetBooleanv(::metagl::GetParameter::ColorWritemask, previousMask);
+        const bool scissorWasEnabled =
+            ::metagl::glIsEnabled(::metagl::Capability::ScissorTest) != 0;
+
+        ::easygl::Texture resolveTexture;
+        ::easygl::Renderbuffer multisampleColor;
+        ::easygl::Framebuffer multisampleFbo;
+        ::easygl::Framebuffer resolveFbo;
+        resolveTexture.create();
+        const ::easygl::TextureTarget resolveTarget = cubeTarget
+            ? ::easygl::TextureTarget::TextureCubeMap
+            : ::easygl::TextureTarget::Texture2D;
+        resolveTexture.bind(resolveTarget);
+        if (cubeTarget)
+        {
+            for (int face = 0; face < 6; ++face)
+            {
+                resolveTexture.set_image_2d(kCubeFaceTargets[face], 0,
+                                            storage.internalFormat, 4, 4,
+                                            storage.pixelFormat, storage.pixelType, nullptr);
+            }
+        }
+        else
+        {
+            resolveTexture.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
+                                        storage.internalFormat, 4, 4,
+                                        storage.pixelFormat, storage.pixelType, nullptr);
+        }
+        multisampleColor.create();
+        multisampleColor.bind();
+        multisampleColor.set_storage_multisample(samples, storage.internalFormat, 4, 4);
+        multisampleFbo.create();
+        multisampleFbo.bind(::easygl::FramebufferTarget::Framebuffer);
+        multisampleFbo.attach_renderbuffer(
+            ::easygl::FramebufferTarget::Framebuffer,
+            ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+            multisampleColor);
+        resolveFbo.create();
+        resolveFbo.bind(::easygl::FramebufferTarget::Framebuffer);
+        resolveFbo.attach_texture_2d(
+            ::easygl::FramebufferTarget::Framebuffer,
+            ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+            cubeTarget ? kCubeFaceTargets[0] : ::easygl::TextureTarget::Texture2D,
+            resolveTexture, 0);
+
+        bool succeeded = multisampleFbo.is_complete() && resolveFbo.is_complete();
+        std::array<std::uint8_t, 4> pixel{};
+        if (succeeded)
+        {
+            if (scissorWasEnabled)
+                ::metagl::glDisable(::metagl::Capability::ScissorTest);
+            ::metagl::glColorMask(true, true, true, true);
+            multisampleFbo.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+            const GLfloat clear[4]{0.25f, 0.5f, 0.75f, 1.0f};
+            ::metagl::glClearBufferfv(::metagl::FloatClearBuffer::Color, 0, clear);
+            multisampleFbo.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+            resolveFbo.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+            ::easygl::Framebuffer::blit(0, 0, 4, 4, 0, 0, 4, 4,
+                                        ::metagl::ClearBufferBit::Color,
+                                        ::metagl::BlitFilter::Nearest);
+            resolveFbo.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+            ::metagl::glReadBuffer(
+                ::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+            ::metagl::glReadPixels(0, 0, 1, 1, ::metagl::PixelFormat::Rgba,
+                                   ::metagl::PixelType::UnsignedByte, pixel.data());
+            succeeded = GlUploadSucceeded() && pixel[0] > 32u && pixel[1] > 96u;
+        }
+
+        ::metagl::glColorMask(previousMask[0], previousMask[1],
+                              previousMask[2], previousMask[3]);
+        if (scissorWasEnabled)
+            ::metagl::glEnable(::metagl::Capability::ScissorTest);
+        ::metagl::glBindFramebuffer(
+            ::metagl::FramebufferTarget::ReadFramebuffer,
+            ::metagl::FramebufferId{static_cast<unsigned int>(previousReadFbo)});
+        ::metagl::glBindFramebuffer(
+            ::metagl::FramebufferTarget::DrawFramebuffer,
+            ::metagl::FramebufferId{static_cast<unsigned int>(previousDrawFbo)});
+        DrainGlErrors();
+        return succeeded;
+    }
+
+    [[nodiscard]] static int ClampRenderTargetSamples(
+        const RenderTargetColorStorage& storage, int requested, bool cubeTarget)
+    {
+        if (requested <= 1 || ProfileIsEs2ApiGeneration())
+            return 0;
+        std::array<GLint, 16> supported{};
+        ::metagl::glGetInternalformativ(
+            ::metagl::InternalFormatTarget::Renderbuffer, storage.internalFormat,
+            ::metagl::InternalFormatParameter::Samples,
+            static_cast<GLsizei>(supported.size()), supported.data());
+        int applied = 0;
+        for (const GLint count : supported)
+        {
+            if (count > 1 && count <= requested)
+                applied = std::max(applied, static_cast<int>(count));
+        }
+        DrainGlErrors();
+        const bool normalized16 = !storage.isFloat &&
+            (storage.internalFormat == Rg16InternalFormatEXT() ||
+             storage.internalFormat == ::metagl::InternalFormat::Rgba16);
+        if (normalized16 && applied > 0)
+        {
+            if (!ProbeNormalized16MsaaResolve(storage, applied, cubeTarget))
+                return 0;
+        }
+        return applied;
+    }
+
+    [[nodiscard]] static bool ReadRenderTargetPixels(
+        int surfaceFormat, const RenderTargetColorStorage& storage,
+        int x, int y, int width, int height, void* data)
+    {
+        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        DrainGlErrors();
+        if (static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Rg32)
+        {
+            // GLES permits RG16 attachments through EXT_texture_norm16, but its core ReadPixels
+            // table still requires the RGBA format. Read the four normalized channels and retain
+            // the two channels XNA's Rg32 actually stores, without narrowing either to 8 bits.
+            std::vector<std::uint16_t> expanded(
+                static_cast<std::size_t>(width) * height * 4u);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::PackAlignment, 8);
+            ::metagl::glReadPixels(x, y, width, height,
+                                   ::metagl::PixelFormat::Rgba,
+                                   ::metagl::PixelType::UnsignedShort,
+                                   expanded.data());
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::PackAlignment, 4);
+            if (!GlUploadSucceeded())
+                return false;
+            auto* destination = static_cast<std::uint8_t*>(data);
+            const std::size_t texels = static_cast<std::size_t>(width) * height;
+            for (std::size_t index = 0; index < texels; ++index)
+            {
+                std::memcpy(destination + index * 4u,
+                            &expanded[index * 4u], 2u);
+                std::memcpy(destination + index * 4u + 2u,
+                            &expanded[index * 4u + 1u], 2u);
+            }
+            return true;
+        }
+
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::PackAlignment,
+                                std::min(8, storage.bytesPerPixel));
+        ::metagl::glReadPixels(x, y, width, height,
+                               storage.pixelFormat, storage.pixelType, data);
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::PackAlignment, 4);
+        return GlUploadSucceeded();
     }
 
     EasyGLRenderTargetRenderer::EasyGLRenderTargetRenderer(int w, int h, int depthFormat,
@@ -3323,12 +4303,12 @@ if (ProfileIsEs2ApiGeneration())
         bool anySlotLeft = false;
         for (int i = 0; i < binding->mrtCount; ++i)
         {
-            if (binding->mrt[static_cast<std::size_t>(i)] == this)
+            if (binding->mrt[static_cast<std::size_t>(i)].rt2D == this)
             {
                 TargetTrace("mrt.detach", this, "slot " + std::to_string(i));
-                binding->mrt[static_cast<std::size_t>(i)] = nullptr;
+                binding->mrt[static_cast<std::size_t>(i)] = {};
             }
-            else if (binding->mrt[static_cast<std::size_t>(i)] != nullptr)
+            else if (!binding->mrt[static_cast<std::size_t>(i)].IsEmpty())
             {
                 anySlotLeft = true;
             }
@@ -3397,6 +4377,8 @@ if (ProfileIsEs2ApiGeneration())
                 levelH = std::max(1, levelH / 2);
             }
         }
+        ApplyRenderTargetChannelSwizzle(
+            colorTex_, ::easygl::TextureTarget::Texture2D, surfaceFormat_);
 if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- the same completeness problem REMED-GFX-174
@@ -3449,6 +4431,8 @@ else
             metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
             if (maxSamples > 0 && multiSampleCount_ > static_cast<int>(maxSamples))
                 multiSampleCount_ = static_cast<int>(maxSamples);
+            multiSampleCount_ = ClampRenderTargetSamples(
+                colorStorage, multiSampleCount_, false);
         }
 
         fbo_.create();
@@ -3603,7 +4587,8 @@ else
             bool activeMrt = false;
             if (binding)
                 for (int i = 0; i < binding->mrtCount; ++i)
-                    activeMrt = activeMrt || binding->mrt[static_cast<std::size_t>(i)] == this;
+                    activeMrt = activeMrt ||
+                        binding->mrt[static_cast<std::size_t>(i)].rt2D == this;
             if (activeSingle || activeMrt)
             {
                 ResolveColorEXT("rt2d.resolve.readback");
@@ -3652,10 +4637,10 @@ if (!ProfileIsEs2ApiGeneration())
         ::metagl::glReadBuffer(
             ::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
 }
-        ::metagl::glReadPixels(
-            x, levelHeight - y - h, w, h,
-            colorStorage.pixelFormat,
-            colorStorage.pixelType, data);
+        if (!ReadRenderTargetPixels(surfaceFormat_, colorStorage,
+                                    x, levelHeight - y - h, w, h, data))
+            throw std::runtime_error(
+                "EasyGLRenderTargetRenderer::GetData: GL rejected the exact-format readback.");
 
         const int rowBytes = w * colorStorage.bytesPerPixel;
         auto* pixels = static_cast<std::uint8_t*>(data);
@@ -3711,6 +4696,66 @@ else
                 ::easygl::FramebufferTarget::Framebuffer,
                 attachment, depthRbo_);
         }
+    }
+
+    void EasyGLRenderTargetRenderer::UploadPixelsLevel(
+        int level, const uint8_t* data, int levelW, int levelH, int stride)
+    {
+        if (data == nullptr || level < 0 || level >= levelCount_ ||
+            levelW != std::max(1, width_ >> level) ||
+            levelH != std::max(1, height_ >> level))
+            throw std::invalid_argument(
+                "EasyGLRenderTargetRenderer::UpdatePixelsLevel: invalid mip upload.");
+
+        RenderTargetColorStorage storage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, storage))
+            throw std::runtime_error(
+                "EasyGLRenderTargetRenderer::UpdatePixelsLevel: unsupported SurfaceFormat.");
+        const int rowBytes = levelW * storage.bytesPerPixel;
+        if (stride > 0 && stride < rowBytes)
+            throw std::invalid_argument(
+                "EasyGLRenderTargetRenderer::UpdatePixelsLevel: stride is smaller than one row.");
+        const int sourceStride = stride > 0 ? stride : rowBytes;
+
+        // A rendered GL attachment is exposed as top-row-first by reversing readback rows and by
+        // flipping its sampling coordinate. Store a public SetData image in that same bottom-up
+        // texel orientation, so upload, rendering, sampling and GetData all agree.
+        std::vector<std::uint8_t> bottomUp(
+            static_cast<std::size_t>(rowBytes) * levelH);
+        for (int row = 0; row < levelH; ++row)
+        {
+            std::copy_n(data + static_cast<std::size_t>(row) * sourceStride, rowBytes,
+                        bottomUp.data() +
+                            static_cast<std::size_t>(levelH - 1 - row) * rowBytes);
+        }
+        DrainGlErrors();
+        colorTex_.bind(::easygl::TextureTarget::Texture2D);
+        ::metagl::glPixelStorei(
+            ::metagl::PixelStoreParam::UnpackAlignment,
+            std::min(8, storage.bytesPerPixel));
+        colorTex_.set_sub_image_2d(
+            ::easygl::TextureTarget::Texture2D, level, 0, 0, levelW, levelH,
+            storage.pixelFormat, storage.pixelType, bottomUp.data());
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
+        if (!GlUploadSucceeded())
+            throw std::runtime_error(
+                "EasyGLRenderTargetRenderer::UpdatePixelsLevel: GL rejected the upload.");
+    }
+
+    void EasyGLRenderTargetRenderer::UpdatePixels(const uint8_t* data, int stride)
+    {
+        UploadPixelsLevel(0, data, width_, height_, stride);
+    }
+
+    void EasyGLRenderTargetRenderer::UpdatePixelsLevel(
+        int level, const uint8_t* data, int levelW, int levelH)
+    {
+        RenderTargetColorStorage storage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, storage))
+            throw std::runtime_error(
+                "EasyGLRenderTargetRenderer::UpdatePixelsLevel: unsupported SurfaceFormat.");
+        UploadPixelsLevel(level, data, levelW, levelH,
+                          levelW * storage.bytesPerPixel);
     }
 
     void EasyGLRenderTargetRenderer::BindGL(int unit) const
@@ -3774,8 +4819,9 @@ if (ProfileIsEs2ApiGeneration())
      *
      * A cube is recorded as ONE binding whatever face is active -- the face index lives in the cube's
      * own `lastFace_` -- so detaching the resource detaches every face of it at once, and a face
-     * binding cannot outlive its parent. A cube is never a member of a multi-target set (EasyGL's
-     * `SetRenderTargets` refuses cube faces in one), so there are no slots to walk.
+     * binding cannot outlive its parent. In an MRT set the same cube may occupy several slots as
+     * distinct faces; all of those slots are cleared together while unrelated live attachments
+     * remain available for finalization.
      *
      * Its pending finalization -- resolving `msaaColorRbos_[lastFace_]` into `cubeTex_` and
      * regenerating that face's mip chain -- writes into members this destructor destroys, exactly as
@@ -3789,6 +4835,26 @@ if (ProfileIsEs2ApiGeneration())
         {
             TargetTrace("cube.detach", this, "was the bound cube, face " + std::to_string(lastFace_));
             binding->cube = nullptr;
+            binding->width = 0;
+            binding->height = 0;
+        }
+        bool anySlotLeft = false;
+        for (int i = 0; i < binding->mrtCount; ++i)
+        {
+            if (binding->mrt[static_cast<std::size_t>(i)].cube == this)
+            {
+                TargetTrace("mrt.detach.cube", this, "slot " + std::to_string(i));
+                binding->mrt[static_cast<std::size_t>(i)] = {};
+            }
+            else if (!binding->mrt[static_cast<std::size_t>(i)].IsEmpty())
+            {
+                anySlotLeft = true;
+            }
+        }
+        if (binding->mrtCount > 0 && !anySlotLeft)
+        {
+            binding->mrtCount = 0;
+            binding->mrtFramebuffer = 0;
             binding->width = 0;
             binding->height = 0;
         }
@@ -3846,6 +4912,8 @@ if (ProfileIsEs2ApiGeneration())
                 levelSize = std::max(1, levelSize / 2);
             }
         }
+        ApplyRenderTargetChannelSwizzle(
+            cubeTex_, ::easygl::TextureTarget::TextureCubeMap, surfaceFormat_);
 if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- see EasyGLRenderTargetRenderer::CreateResources.
@@ -3878,6 +4946,8 @@ else
             metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamples);
             if (maxSamples > 0 && multiSampleCount_ > static_cast<int>(maxSamples))
                 multiSampleCount_ = static_cast<int>(maxSamples);
+            multiSampleCount_ = ClampRenderTargetSamples(
+                cubeStorage, multiSampleCount_, true);
         }
 
         fbo_.create();
@@ -3958,25 +5028,82 @@ else
         }
     }
 
-    void EasyGLRenderTargetCubeRenderer::UnbindAsRenderTarget()
+    void EasyGLRenderTargetCubeRenderer::AttachColorToMRT(
+        ::easygl::Framebuffer& framebuffer,
+        ::metagl::FramebufferAttachment attachment,
+        int face) const
     {
-        TargetTrace("cube.unbind", this, TraceNativeDetailEXT());
         if (multiSampleCount_ > 0)
         {
-            TargetTrace("cube.resolve", this, TraceNativeDetailEXT());
+            framebuffer.attach_renderbuffer(
+                ::easygl::FramebufferTarget::Framebuffer,
+                attachment, msaaColorRbos_[static_cast<std::size_t>(face)]);
+        }
+        else
+        {
             const auto faceTarget = static_cast<::easygl::TextureTarget>(
-                static_cast<unsigned int>(::easygl::TextureTarget::TextureCubeMapPositiveX) + lastFace_);
-            resolveFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
-            resolveFbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
-                                          ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
-                                          faceTarget,
-                                          cubeTex_, 0);
-            fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
-            resolveFbo_.bind(::easygl::FramebufferTarget::DrawFramebuffer);
-            ::easygl::Framebuffer::blit(0, 0, size_, size_,
-                                        0, 0, size_, size_,
-                                        ::metagl::ClearBufferBit::Color,
-                                        ::metagl::BlitFilter::Linear);
+                static_cast<unsigned int>(::easygl::TextureTarget::TextureCubeMapPositiveX)
+                + static_cast<unsigned int>(face));
+            framebuffer.attach_texture_2d(
+                ::easygl::FramebufferTarget::Framebuffer,
+                attachment, faceTarget, cubeTex_, 0);
+        }
+    }
+
+    void EasyGLRenderTargetCubeRenderer::AttachDepthToMRT(
+        ::easygl::Framebuffer& framebuffer) const
+    {
+        ::metagl::InternalFormat ignoredFormat;
+        ::metagl::FramebufferAttachment attachment;
+        if (MapDepthFormat(depthFormat_, ignoredFormat, attachment))
+        {
+            framebuffer.attach_renderbuffer(
+                ::easygl::FramebufferTarget::Framebuffer,
+                attachment, depthRbo_);
+        }
+    }
+
+    void EasyGLRenderTargetCubeRenderer::ResolveFaceEXT(
+        int face, const char* traceEvent)
+    {
+        if (multiSampleCount_ <= 0) return;
+        TargetTrace(traceEvent, this, TraceNativeDetailEXT());
+        const auto faceTarget = static_cast<::easygl::TextureTarget>(
+            static_cast<unsigned int>(::easygl::TextureTarget::TextureCubeMapPositiveX)
+            + static_cast<unsigned int>(face));
+
+        // The transient MRT FBO owns the live colour attachment while an MRT set is bound. Rebind
+        // this cube's private source FBO to the requested face's sample plane before resolving it.
+        fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+        fbo_.attach_renderbuffer(
+            ::easygl::FramebufferTarget::Framebuffer,
+            ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+            msaaColorRbos_[static_cast<std::size_t>(face)]);
+        resolveFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+        resolveFbo_.attach_texture_2d(
+            ::easygl::FramebufferTarget::Framebuffer,
+            ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+            faceTarget, cubeTex_, 0);
+        fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+        resolveFbo_.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+        ::easygl::Framebuffer::blit(0, 0, size_, size_,
+                                    0, 0, size_, size_,
+                                    ::metagl::ClearBufferBit::Color,
+                                    ::metagl::BlitFilter::Nearest);
+    }
+
+    void EasyGLRenderTargetCubeRenderer::UnbindMRTFace(int face)
+    {
+        TargetTrace("cube.unbind.mrt", this,
+                    TraceNativeDetailEXT() + " mrtFace=" + std::to_string(face));
+        if (multiSampleCount_ > 0)
+        {
+            ResolveFaceEXT(face, "cube.resolve.mrt");
+            // The resolve leaves this cube face attached to the current DRAW framebuffer. Detach
+            // it before generating its mip chain: keeping a texture simultaneously attached and
+            // used as glGenerateMipmap's source is a feedback hazard, and Mesa GLES left RGBA16
+            // cube levels unchanged even though the preceding resolve itself succeeded.
+            ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
         }
         // Regenerate the mip chain for all 6 faces from their just-rendered (and possibly
         // just-resolved) level-0 content.
@@ -3986,6 +5113,12 @@ else
             cubeTex_.generate_mipmap(::easygl::TextureTarget::TextureCubeMap);
         }
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+    }
+
+    void EasyGLRenderTargetCubeRenderer::UnbindAsRenderTarget()
+    {
+        TargetTrace("cube.unbind", this, TraceNativeDetailEXT());
+        UnbindMRTFace(lastFace_);
     }
 
     unsigned int EasyGLRenderTargetCubeRenderer::GetGLHandle() const
@@ -4001,36 +5134,63 @@ else
     bool EasyGLRenderTargetCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
                                                  const void* data, int dataLength)
     {
-        // REMED-GFX-135: same completion contract as EasyGLTextureCubeRenderer::SetData -- this is
-        // the one render-target cube that really stores CPU pixels rather than inheriting
-        // IRenderTargetCubeRenderer::SetData's refusal.
+        return SetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool EasyGLRenderTargetCubeRenderer::SetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h,
+        const void* data, int dataLength)
+    {
         if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0) return false;
         if (level < 0 || level >= levelCount_) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        if (dataLength < w * h * 4) return false;
+        RenderTargetColorStorage storage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, storage)) return false;
+        const int rowBytes = w * storage.bytesPerPixel;
+        if (dataLength < rowBytes * h) return false;
+
+        // A render-target face uses the same bottom-up logical storage convention as a 2D target.
+        // Map both the row order and a partial rectangle's Y coordinate before the GL upload, so
+        // SetData/GetData remain exact even after the same face has also been rasterized.
+        const auto* source = static_cast<const std::uint8_t*>(data);
+        std::vector<std::uint8_t> bottomUp(static_cast<std::size_t>(rowBytes) * h);
+        for (int row = 0; row < h; ++row)
+        {
+            std::copy_n(source + static_cast<std::size_t>(row) * rowBytes, rowBytes,
+                        bottomUp.data() + static_cast<std::size_t>(h - 1 - row) * rowBytes);
+        }
 
         DrainGlErrors();
         cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
-        cubeTex_.set_sub_image_2d(kCubeFaceTargets[face], level, x, y, w, h,
-                                   ::metagl::PixelFormat::Rgba,
-                                   ::metagl::PixelType::UnsignedByte,
-                                   data);
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment,
+                                std::min(8, storage.bytesPerPixel));
+        cubeTex_.set_sub_image_2d(kCubeFaceTargets[face], level, x,
+                                  levelSize - y - h, w, h,
+                                  storage.pixelFormat, storage.pixelType,
+                                  bottomUp.data());
+        ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 4);
         return GlUploadSucceeded();
     }
 
     bool EasyGLRenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                                  void* data, int dataLength) const
     {
-        // REMED-GFX-134: closes the refusal this class inherited from
-        // IRenderTargetCubeRenderer/ITextureCubeRenderer. Same temporary-FBO mechanism
-        // EasyGLTextureCubeRenderer::GetData already uses, plus the bottom-up correction a
-        // RENDERED attachment needs (EasyGLRenderTargetRenderer::GetData's own).
+        return GetDataBytesEXT(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool EasyGLRenderTargetCubeRenderer::GetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h,
+        void* data, int dataLength) const
+    {
         if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0) return false;
         if (level < 0 || level >= levelCount_) return false;
         const int levelSize = std::max(1, size_ >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        if (dataLength < w * h * 4) return false;
+        RenderTargetColorStorage storage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, storage)) return false;
+        const int rowBytes = w * storage.bytesPerPixel;
+        if (dataLength < rowBytes * h) return false;
 
 GLint previousFramebuffer = 0;  // plans/plan_runtimerenderer.md P11: hoisted -- read by a separate runtime-gated block below
 if (ProfileIsEs2ApiGeneration())
@@ -4054,21 +5214,22 @@ if (!ProfileIsEs2ApiGeneration())
 }
 
         const bool complete = fbo.is_complete(ReadbackFramebufferTarget());
-        if (complete)
+        bool readSucceeded = complete;
+        if (readSucceeded)
         {
-            ::metagl::glReadPixels(x, levelSize - y - h, w, h,
-                                   ::metagl::PixelFormat::Rgba,
-                                   ::metagl::PixelType::UnsignedByte,
-                                   data);
-            const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+            readSucceeded = ReadRenderTargetPixels(
+                surfaceFormat_, storage, x, levelSize - y - h, w, h, data);
+        }
+        if (readSucceeded)
+        {
             auto* pixels = static_cast<std::uint8_t*>(data);
-            std::vector<std::uint8_t> row(rowBytes);
+            std::vector<std::uint8_t> row(static_cast<std::size_t>(rowBytes));
             for (int topRow = 0; topRow < h / 2; ++topRow)
             {
-                auto* top    = pixels + static_cast<std::size_t>(topRow) * rowBytes;
+                auto* top = pixels + static_cast<std::size_t>(topRow) * rowBytes;
                 auto* bottom = pixels + static_cast<std::size_t>(h - 1 - topRow) * rowBytes;
-                std::copy(top, top + rowBytes, row.data());
-                std::copy(bottom, bottom + rowBytes, top);
+                std::copy_n(top, rowBytes, row.data());
+                std::copy_n(bottom, rowBytes, top);
                 std::copy(row.begin(), row.end(), bottom);
             }
         }
@@ -4082,7 +5243,7 @@ else
 {
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::ReadFramebuffer);
 }
-        return complete;
+        return readSucceeded;
     }
 
     void EasyGLRenderTargetCubeRenderer::release_gl_handle_only()
@@ -4185,6 +5346,7 @@ if (ProfileIsEs2ApiGeneration())
         case SurfaceFormat::Vector2:
         case SurfaceFormat::HalfVector2:
         case SurfaceFormat::NormalizedByte2:
+        case SurfaceFormat::Rg32:
             mask[2] = mask[3] = 0.0f;
             fill[2] = fill[3] = 1.0f;
             break;
@@ -4200,7 +5362,7 @@ if (ProfileIsEs2ApiGeneration())
         const char* vertexShaderSource = R"(#version 300 es
 precision highp float;
 
-layout(location = 0) in vec2 aPos;
+layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec2 aTexCoord;
 layout(location = 2) in vec4 aColor;
 
@@ -4211,7 +5373,8 @@ uniform mat4 projection;
 
 void main()
 {
-    gl_Position = projection * vec4(aPos, 0.0, 1.0);
+    gl_Position = projection * vec4(aPos, 1.0);
+    gl_Position.z = gl_Position.z * 2.0 - gl_Position.w;
     TexCoord = aTexCoord;
     Color = aColor;
 }
@@ -4309,16 +5472,16 @@ if (ProfileUsesGlslEs100())
             // Position (0), TexCoord (1), Color (2). WebGL 1 / GLES 2 has no core VAO;
             // that path reapplies the same default-array attributes immediately before drawing.
             vao_.enable_attribute(0);
-            vao_.set_attribute_pointer(0, 2, ::easygl::DataType::Float, false,
-                                       8 * sizeof(float), (void*)0);
+            vao_.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false,
+                                       9 * sizeof(float), (void*)0);
 
             vao_.enable_attribute(1);
             vao_.set_attribute_pointer(1, 2, ::easygl::DataType::Float, false,
-                                       8 * sizeof(float), (void*)(2 * sizeof(float)));
+                                       9 * sizeof(float), (void*)(3 * sizeof(float)));
 
             vao_.enable_attribute(2);
             vao_.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false,
-                                       8 * sizeof(float), (void*)(4 * sizeof(float)));
+                                       9 * sizeof(float), (void*)(5 * sizeof(float)));
 
             ibo_.bind(::easygl::BufferTarget::ElementArray);
             vao_.unbind();
@@ -4383,6 +5546,17 @@ if (ProfileUsesGlslEs100())
     void EasyGLSpriteBatchRenderer::SetSamplerFilter(int textureFilter)
     {
         pendingFilter_ = textureFilter;
+    }
+
+    void EasyGLSpriteBatchRenderer::SetSamplerMaxAnisotropy(int maxAnisotropy)
+    {
+        pendingMaxAnisotropy_ = maxAnisotropy;
+    }
+
+    void EasyGLSpriteBatchRenderer::SetSamplerMipState(int maxMipLevel, float lodBias)
+    {
+        pendingMaxMipLevel_ = maxMipLevel;
+        pendingLodBias_ = lodBias;
     }
 
     void EasyGLSpriteBatchRenderer::SetSamplerAddressMode(int addressU, int addressV)
@@ -4536,6 +5710,9 @@ if (ProfileUsesGlslEs100())
             logH = vh;
         }
 
+        // FNA's inlined SpriteBatch matrix preserves POSITION.Z as layerDepth. The equivalent
+        // XNA matrix uses near=0/far=-1; the built-in shader then performs the D3D-to-GL clip-depth
+        // conversion, while a CNAEXT custom GLSL effect remains responsible for its native output.
         if (std::getenv("CNA_EASYGL_SPRITE_VIEWPORT_DEBUG") != nullptr)
         {
             int gx = 0, gy = 0, gw = 0, gh = 0;
@@ -4546,11 +5723,10 @@ if (ProfileUsesGlslEs100())
                 curVx, curVy, curVw, curVh, defX, defY, defW, defH, defGlY,
                 customVp ? 1 : 0, fullW, fullH, logW, logH, gx, gy, gw, gh, haveRt ? 1 : 0);
         }
-
         const Matrix orthoM = Matrix::CreateOrthographicOffCenter(
             0.0f, static_cast<float>(logW),
             static_cast<float>(logH), 0.0f,
-            -1.0f, 1.0f);
+            0.0f, -1.0f);
         const Matrix combined = transform_ * orthoM;
         float ortho[16];
         combined.ToColumnMajor(ortho);
@@ -4581,19 +5757,19 @@ if (ProfileUsesGlslEs100())
             // have changed it since the previous batch, so restore SpriteBatch's complete layout
             // after binding this batch's VBO instead of pretending a core VAO exists.
             metagl::glEnableVertexAttribArray(metagl::AttribLocation{0});
-            metagl::glVertexAttribPointer(metagl::AttribLocation{0}, 2,
+            metagl::glVertexAttribPointer(metagl::AttribLocation{0}, 3,
                                           metagl::DataType::Float, 0,
-                                          static_cast<metagl::GLsizei>(8 * sizeof(float)), (void*)0);
+                                          static_cast<metagl::GLsizei>(9 * sizeof(float)), (void*)0);
             metagl::glEnableVertexAttribArray(metagl::AttribLocation{1});
             metagl::glVertexAttribPointer(metagl::AttribLocation{1}, 2,
                                           metagl::DataType::Float, 0,
-                                          static_cast<metagl::GLsizei>(8 * sizeof(float)),
-                                          (void*)(2 * sizeof(float)));
+                                          static_cast<metagl::GLsizei>(9 * sizeof(float)),
+                                          (void*)(3 * sizeof(float)));
             metagl::glEnableVertexAttribArray(metagl::AttribLocation{2});
             metagl::glVertexAttribPointer(metagl::AttribLocation{2}, 4,
                                           metagl::DataType::Float, 0,
-                                          static_cast<metagl::GLsizei>(8 * sizeof(float)),
-                                          (void*)(4 * sizeof(float)));
+                                          static_cast<metagl::GLsizei>(9 * sizeof(float)),
+                                          (void*)(5 * sizeof(float)));
         }
         else
         {
@@ -4605,6 +5781,8 @@ if (ProfileUsesGlslEs100())
                       pending_indices_.data(),
                       pending_indices_.size() * sizeof(uint16_t));
 
+        if (graphicsRenderer_)
+            graphicsRenderer_->ApplyStencilPrimitiveTopology(PrimitiveType::TriangleList);
         device_.draw_elements(
             ::easygl::PrimitiveType::Triangles,
             static_cast<int>(pending_indices_.size()),
@@ -4671,13 +5849,14 @@ if (ProfileUsesGlslEs100())
             return;
         }
 
-        // The sprite vertex is the one this renderer builds above: two floats of position, two of
-        // texture coordinate and four of colour, tightly packed.
+        // FNA's private sprite vertex is POSITION0 Vector3, COLOR0 and TEXCOORD0. EasyGL stores
+        // colour expanded as four floats, but retains the same three-component position so the
+        // stock vertex shader and caller-selected depth state can observe layerDepth.
         static const VertexDeclaration kSpriteDeclaration(
             static_cast<int>(sizeof(Vertex)),
             {
                 VertexElement(static_cast<int>(offsetof(Vertex, x)),
-                              VertexElementFormat::Vector2, VertexElementUsage::Position, 0),
+                              VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
                 VertexElement(static_cast<int>(offsetof(Vertex, u)),
                               VertexElementFormat::Vector2,
                               VertexElementUsage::TextureCoordinate, 0),
@@ -4702,12 +5881,14 @@ if (ProfileUsesGlslEs100())
         // flush of every compiled-effect sprite batch.
         if (compiledSpriteVertexBuffer_ == nullptr)
         {
-            compiledSpriteVertexBuffer_ = graphicsRenderer_->CreateVertexBuffer(vertexCount);
+            compiledSpriteVertexBuffer_ = graphicsRenderer_->CreateVertexBuffer(
+                static_cast<int>(kMaxVerticesPerBatch));
             compiledSpriteVertexBuffer_->SetVertexDeclaration(kSpriteDeclaration);
         }
         if (compiledSpriteIndexBuffer_ == nullptr)
         {
-            compiledSpriteIndexBuffer_ = graphicsRenderer_->CreateIndexBuffer16(indexCount);
+            compiledSpriteIndexBuffer_ = graphicsRenderer_->CreateIndexBuffer16(
+                static_cast<int>(kMaxIndicesPerBatch));
         }
         compiledSpriteVertexBuffer_->SetData(pending_vertices_.data(), vertexCount,
                                              sizeof(Vertex));
@@ -4761,12 +5942,22 @@ if (ProfileUsesGlslEs100())
         ::easygl::VertexArray& vao = graphicsRenderer_->EnsureCompiledEffectVaoEXT();
         const TextureCollection& deviceTextures =
             customEffect_->getGraphicsDeviceInternal().getTexturesProperty();
+        const SamplerStateCollection& deviceSamplerStates =
+            customEffect_->getGraphicsDeviceInternal().getSamplerStatesProperty();
+        const TextureCollection& deviceVertexTextures =
+            customEffect_->getGraphicsDeviceInternal().getVertexTexturesProperty();
+        const SamplerStateCollection& deviceVertexSamplerStates =
+            customEffect_->getGraphicsDeviceInternal().getVertexSamplerStatesProperty();
         for (int pass = 0; pass < passCount; ++pass)
         {
-            technique->getPassesProperty()[pass].Apply();
+            technique->getPassesProperty()[pass]->Apply();
+            graphicsRenderer_->ApplyStencilPrimitiveTopology(PrimitiveType::TriangleList);
             vao.bind();
             graphicsRenderer_->BindCompiledEffectForDrawEXT(&stream, 1, *runtime,
-                                                            current_texture_, &deviceTextures);
+                                                            current_texture_, &deviceTextures,
+                                                            &deviceSamplerStates,
+                                                            &deviceVertexTextures,
+                                                            &deviceVertexSamplerStates);
             easyIndexBuffer->ibo.bind(::easygl::BufferTarget::ElementArray);
             device_.draw_elements(::easygl::PrimitiveType::Triangles, indexCount,
                                   ::easygl::DataType::UnsignedShort, nullptr);
@@ -4840,6 +6031,19 @@ if (ProfileUsesGlslEs100())
             ResolveCurrentTextureRowOrder();
         }
 
+        // XNA's queue is unbounded from the caller's point of view, but its native dynamic
+        // buffers are deliberately limited to 2,048 sprites per submission. EasyGL previously
+        // accumulated every same-texture sprite until End() and narrowed pending_vertices_.size()
+        // to UInt16 below. The 16,385th quad therefore wrapped its base from 65,536 to zero and
+        // silently redrew the first quad. Chunk at XNA's real boundary, then restore the source
+        // FlushBatch cleared so this call can append the first quad of the next submission.
+        if (pending_vertices_.size() >= kMaxVerticesPerBatch)
+        {
+            FlushBatch();
+            current_texture_ = &texture;
+            ResolveCurrentTextureRowOrder();
+        }
+
         const float texW = static_cast<float>(texture.GetWidth());
         const float texH = static_cast<float>(texture.GetHeight());
 
@@ -4850,8 +6054,28 @@ if (ProfileUsesGlslEs100())
         // govern edge sampling — the classic XNA scrolling/tiling-background technique.
         float u1 = (float)sourceRectangle.X / texW;
         float v1 = (float)sourceRectangle.Y / texH;
-        float u2 = (float)(sourceRectangle.X + sourceRectangle.Width)  / texW;
-        float v2 = (float)(sourceRectangle.Y + sourceRectangle.Height) / texH;
+        float u2 = u1 + (float)sourceRectangle.Width / texW;
+        float v2 = v1 + (float)sourceRectangle.Height / texH;
+
+        // A float cannot preserve the final texel-sized increment once a signed source origin is
+        // sufficiently large. If the resulting constant coordinate is wholly beyond a clamped
+        // axis, reduce it to the equivalent edge before handing it to GL: some GLES samplers
+        // resolve very large positive coordinates to the opposite edge. Restricting
+        // this to an already-constant coordinate preserves the derivatives used for mip choice,
+        // and restricting it to the stock SpriteEffect avoids changing coordinates visible to an
+        // arbitrary user effect.
+        if (customEffect_ == nullptr &&
+            pendingAddressU_ == static_cast<int>(TextureAddressMode::Clamp) && u1 == u2)
+        {
+            if (u1 < 0.0f) u1 = u2 = 0.0f;
+            else if (u1 > 1.0f) u1 = u2 = 1.0f;
+        }
+        if (customEffect_ == nullptr &&
+            pendingAddressV_ == static_cast<int>(TextureAddressMode::Clamp) && v1 == v2)
+        {
+            if (v1 < 0.0f) v1 = v2 = 0.0f;
+            else if (v1 > 1.0f) v1 = v2 = 1.0f;
+        }
 
         if ((int)effects & (int)SpriteEffects::FlipHorizontally) std::swap(u1, u2);
         if ((int)effects & (int)SpriteEffects::FlipVertically) std::swap(v1, v2);
@@ -4914,10 +6138,10 @@ if (ProfileUsesGlslEs100())
 
         const auto base = static_cast<uint16_t>(pending_vertices_.size());
 
-        pending_vertices_.push_back({v0x, v0y, u1, v1, r, g, b, a});
-        pending_vertices_.push_back({v1x, v1y, u2, v1, r, g, b, a});
-        pending_vertices_.push_back({v2x, v2y, u2, v2, r, g, b, a});
-        pending_vertices_.push_back({v3x, v3y, u1, v2, r, g, b, a});
+        pending_vertices_.push_back({v0x, v0y, layerDepth, u1, v1, r, g, b, a});
+        pending_vertices_.push_back({v1x, v1y, layerDepth, u2, v1, r, g, b, a});
+        pending_vertices_.push_back({v2x, v2y, layerDepth, u2, v2, r, g, b, a});
+        pending_vertices_.push_back({v3x, v3y, layerDepth, u1, v2, r, g, b, a});
 
         pending_indices_.push_back(base + 0);
         pending_indices_.push_back(base + 1);
@@ -4925,6 +6149,13 @@ if (ProfileUsesGlslEs100())
         pending_indices_.push_back(base + 2);
         pending_indices_.push_back(base + 3);
         pending_indices_.push_back(base + 0);
+
+        // The shared SpriteBatch front end already calls this renderer once per public Draw in
+        // Immediate mode. Do not turn that immediate call back into a private deferred batch:
+        // target, viewport and device state are allowed to change before End(), and XNA binds them
+        // at Draw time. In the other sort modes, retain the texture/coalescing batch above.
+        if (immediateMode_)
+            FlushBatch();
     }
 
     // --- EasyGLRenderer ---
@@ -4936,7 +6167,7 @@ if (ProfileUsesGlslEs100())
         const RendererSurfaceInfo& surface, CNA::Platform::IPlatformGlContext& glContext,
         const int virtualWidth, const int virtualHeight, const CnaPresentationMode mode,
         const bool contextRecoveryEnabled, const int multiSampleCount, const int swapInterval,
-        const GlProfile profile)
+        const GlProfile profile, const int depthStencilFormat)
         : platformContext_(std::make_shared<EasyGLPlatformContext>(
               glContext, RequireEasyGlWindowId(surface), RequestedGlContext(profile)))
         , threadContextLeaseControl_(
@@ -4944,12 +6175,14 @@ if (ProfileUsesGlslEs100())
         , surfaceState_(surface, virtualWidth, virtualHeight, mode)
         , contextRecoveryEnabled_(contextRecoveryEnabled)
         , sampleCount_(multiSampleCount > 1 ? multiSampleCount : 1)
+        , backBufferDepthFormat_(depthStencilFormat)
     {
         // plans/plan_runtimerenderer.md P11: publish the profile before anything else runs -- the context
         // attributes, the shader adaptation and the API-generation checks all read it, and they run
         // from free helpers that have no other way to reach this instance.
         profile_ = profile;
         ActiveGlProfile() = profile;
+        bound_->depthFormat = backBufferDepthFormat_;
 
         // MERGE: next guarded the blocks below with #if defined(CNA_GL_PROFILE_<X>). P11 made the
         // profile a RUNTIME value so all five identities can be compiled in at once, so each guard
@@ -4981,6 +6214,7 @@ if (ProfileUsesGlslEs100())
         }
 
         device.initialize(glProcAddressLoader);
+        DetectNativeWireframeApi();
         // WebGL commonly exposes only four rasterizer subpixel bits. Wine's usual 63/128-pixel
         // displacement rounds back to exactly half a pixel at that precision, putting XNA's 1x1
         // right triangles on an excluded fill edge again. Use the closest representable value
@@ -5069,16 +6303,30 @@ if (ProfileUsesGlslEs100())
                                    : std::string("NOT supported (falls back to trilinear)"))
                       << "; texture SurfaceFormat: Color"
                       << (ProfileIsEs2ApiGeneration()
-                              ? " only"
-                              : " + NormalizedByte4 (RGBA8_SNORM) + NormalizedByte2 (RG8_SNORM)"
-                                " + Bgr565 (RGB565) + Bgra5551 (RGB5_A1) + Bgra4444 (RGBA4)")
+                              ? " + Alpha8"
+                              : " + NormalizedByte4/2 (RGBA8_SNORM)"
+                                " + Bgr565/Bgra5551/Bgra4444"
+                                " + Rgba1010102 + Alpha8"
+                                " + Single/Vector2/Vector4"
+                                " + HalfSingle/HalfVector2/HalfVector4/HdrBlendable")
+                      << (ContextHasTextureNorm16EXT() ? " + Rg32/Rgba64" : "")
                       << (ContextHasS3tcEXT()
                               ? " + Dxt1/Dxt3/Dxt5 (S3TC blocks)"
                               : " + Dxt1/Dxt3/Dxt5 (decoded, no S3TC extension)")
                       // plans/plan_modern.md MOD-117: render targets are no longer Color-only, and the
                       // answer is driver-dependent, so it is probed rather than asserted.
                       << "; render-target SurfaceFormat: Color"
-                      << (ProfileIsDesktopCore() ? " + Rgba64 (RGBA16 UNORM)" : "")
+                      << (ProbeNormalizedRenderTargetSupportEXT(static_cast<int>(
+                              Microsoft::Xna::Framework::Graphics::SurfaceFormat::Rgba1010102))
+                              ? " + Rgba1010102 (RGB10_A2)" : "")
+                      << (ContextHasTextureNorm16EXT() &&
+                          ProbeNormalizedRenderTargetSupportEXT(static_cast<int>(
+                              Microsoft::Xna::Framework::Graphics::SurfaceFormat::Rg32))
+                              ? " + Rg32 (RG16 UNORM)" : "")
+                      << (ContextHasTextureNorm16EXT() &&
+                          ProbeNormalizedRenderTargetSupportEXT(static_cast<int>(
+                              Microsoft::Xna::Framework::Graphics::SurfaceFormat::Rgba64))
+                              ? " + Rgba64 (RGBA16 UNORM)" : "")
                       << (ProbeFloatRenderTargetSupportEXT(false) ? " + half-float (RGBA16F)" : "")
                       << (ProbeFloatRenderTargetSupportEXT(true) ? " + float (RGBA32F)" : "");
             CNA::Logger::Info(capabilityMessage.str(), CNA::LogCategory::RENDER);
@@ -5119,30 +6367,49 @@ if (ProfileUsesGlslEs100())
         if (maxSamples > 0 && sampleCount_ > static_cast<int>(maxSamples))
             sampleCount_ = static_cast<int>(maxSamples);
 
-        msaaW_ = w; msaaH_ = h;
-        if (!msaaFbo_.is_created()) msaaFbo_.create();
-        if (!msaaColorRbo_.is_created()) msaaColorRbo_.create();
-        if (!msaaDepthRbo_.is_created()) msaaDepthRbo_.create();
+        // SOFTWARE-181: the old FBO always carried Depth24 and never stencil, regardless of the
+        // selected XNA DepthFormat. Rebuild the small renderer-owned attachment set atomically so
+        // a reset can add/remove stencil or depth without leaving a stale attachment behind.
+        msaaFbo_.destroy();
+        msaaColorRbo_.destroy();
+        msaaDepthRbo_.destroy();
+        msaaFbo_.create();
+        msaaColorRbo_.create();
 
         msaaColorRbo_.bind();
         msaaColorRbo_.set_storage_multisample(sampleCount_,
                                                ::metagl::InternalFormat::Rgba8, w, h);
-        msaaDepthRbo_.bind();
-        msaaDepthRbo_.set_storage_multisample(sampleCount_,
-                                               ::metagl::InternalFormat::DepthComponent24, w, h);
 
         msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
         msaaFbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
                                       ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
                                       msaaColorRbo_);
-        msaaFbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
-                                      ::metagl::FramebufferAttachment::Depth,
-                                      msaaDepthRbo_);
+
+        ::metagl::InternalFormat depthStorage{};
+        ::metagl::FramebufferAttachment depthAttachment{};
+        if (MapDepthFormat(backBufferDepthFormat_, depthStorage, depthAttachment))
+        {
+            msaaDepthRbo_.create();
+            msaaDepthRbo_.bind();
+            msaaDepthRbo_.set_storage_multisample(sampleCount_, depthStorage, w, h);
+            msaaFbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
+                                          depthAttachment, msaaDepthRbo_);
+        }
+
+        if (!msaaFbo_.is_complete())
+            throw std::runtime_error(
+                "EasyGL: multisample backbuffer is incomplete for DepthFormat ordinal "
+                + std::to_string(backBufferDepthFormat_));
+
+        msaaW_ = w;
+        msaaH_ = h;
+        msaaStorageDepthFormat_ = backBufferDepthFormat_;
     }
 
     int EasyGLRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
     {
         EnsureCallingThreadContext();
+        if (metagl::IsContextLost()) return GetMultiSampleCount();
 
         int newSampleCount = 1;
         if (!ProfileIsEs2ApiGeneration() && requestedMultiSampleCount > 1)
@@ -5156,18 +6423,36 @@ if (ProfileUsesGlslEs100())
         }
 
         if (newSampleCount == sampleCount_)
+        {
+            if (bound_->height == 0) BindDefaultFramebuffer();
             return GetMultiSampleCount();
+        }
 
         sampleCount_ = newSampleCount;
-        if (sampleCount_ > 1)
-        {
-            int physW = 0;
-            int physH = 0;
-            surfaceState_.GetDrawableSize(physW, physH);
-            CreateMsaaBuffers(physW, physH);
-        }
+        msaaFbo_.destroy();
+        msaaColorRbo_.destroy();
+        msaaDepthRbo_.destroy();
+        msaaW_ = 0;
+        msaaH_ = 0;
+        msaaStorageDepthFormat_ = -1;
+
         if (bound_->height == 0)
-            BindDefaultFramebuffer();
+        {
+            if (sampleCount_ > 1)
+            {
+                int physW = 0;
+                int physH = 0;
+                surfaceState_.GetDrawableSize(physW, physH);
+                CreateMsaaBuffers(physW, physH);
+                msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
+            }
+            else
+            {
+                ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+            }
+        }
+
+        ApplyCurrentDepthStencilAvailability();
         return GetMultiSampleCount();
     }
 
@@ -5178,7 +6463,9 @@ if (ProfileUsesGlslEs100())
             // Recreate MSAA FBO if the window was resized.
             int physW, physH;
             surfaceState_.GetDrawableSize(physW, physH);
-            if (physW != msaaW_ || physH != msaaH_)
+            if (!msaaFbo_.is_created()
+                || physW != msaaW_ || physH != msaaH_
+                || msaaStorageDepthFormat_ != backBufferDepthFormat_)
                 CreateMsaaBuffers(physW, physH);
 
             msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
@@ -5268,6 +6555,10 @@ if (ProfileUsesGlslEs100())
 
         default_white_texture_.reset_handle_no_gl();
         default_white_texture_ready_ = false;
+        default_black_texture_.reset_handle_no_gl();
+        default_black_texture_ready_ = false;
+        default_black_cube_texture_.reset_handle_no_gl();
+        default_black_cube_texture_ready_ = false;
         default_flat_normal_texture_.reset_handle_no_gl();
         default_flat_normal_texture_ready_ = false;
         for (auto& sampler : samplers_)
@@ -5280,10 +6571,11 @@ if (ProfileUsesGlslEs100())
         msaaH_ = 0;
         mrtFbo_.reset_handle_no_gl();
         bound_->mrtFramebuffer = 0;
-        wireframeIbo_.reset_handle_no_gl();
-        wireframeIboCreated_ = false;
+        negativeBaseVertexIbo_.reset_handle_no_gl();
+        negativeBaseVertexIboCreated_ = false;
         probedFullFloatRenderable_.reset();
         probedHalfFloatRenderable_.reset();
+        probedNormalizedRenderTargets_.fill(std::nullopt);
 
         if (ProfileIsEs2ApiGeneration())
             Es2TextureLevelCounts().clear();
@@ -5329,22 +6621,10 @@ else
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
             case CNA::GraphicsCapability::WireFrame:
-                // REMED-GFX-219 resolved: this renderer's GL_LINES re-expansion renders a genuinely
-                // correct wireframe (shared pixel oracle: interior 0/1089, all three triangle edges
-                // present), so the previous `false` under-stated the implementation. The emulation
-                // draws line primitives and depends on no polygon-mode API, so it holds for every
-                // GL profile (OPENGLES3/OPENGL33/WEBGL1/WEBGL2) alike.
-if (ProfileIsEs2ApiGeneration())
-{
-                // ...with one ES 2.0 nuance: the re-expanded line indices are 32-bit, and
-                // GL_UNSIGNED_INT element indices are an extension there (core in ES 3.0), so the
-                // report is conditional on the runtime genuinely providing it.
-                return metagl::HasExtension("GL_OES_element_index_uint");
-}
-else
-{
-                return true;
-}
+                // SOFTWARE-178: a true answer means the context exposes a real polygon mode,
+                // which preserves culling, clipping, polygon depth bias, MSAA and stencil across
+                // every triangle route. GL_LINES expansion cannot make that promise.
+                return nativeWireframeApi_ != NativeWireframeApi::None;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 // REMED-GFX-201: implemented -- Draw*PrimitivesEx binds every per-vertex stream
                 // into the VAO at locations continuing after the previous stream's, each with its
@@ -5443,6 +6723,9 @@ else
         }
         if (ProfileIsDesktopCore())
             EnableVertexProgramPointSize();
+        DetectNativeWireframeApi();
+        SetNativePolygonMode(fillModeWireframe_);
+        ApplyCurrentDepthBias();
 
         // 4. Notify listeners that context is restored. ResourceRegistry calls
         //    recreate_gl_resource() on every tracked resource (shaders, textures, buffers, VAOs).
@@ -5534,10 +6817,9 @@ if (!ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::Clear(float r, float g, float b, float a)
     {
         if (metagl::IsContextLost()) return;
-        // Task 880: glClear() is viewport-independent (only the scissor rect, if enabled, can
-        // narrow it) -- no longer hardcodes the viewport to the full window here, so a
-        // previously-set custom Viewport (Task 880) survives across Clear() instead of being
-        // silently reset to full size as a side effect.
+        // SOFTWARE-311: XNA Clear covers the complete target. glClear is already independent of
+        // the viewport, but it is clipped by GL_SCISSOR_TEST, so neutralise only that state.
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_color(r, g, b, a);
         // REMED-GFX-077: XNA Clear() clears all channels regardless of BlendState.ColorWriteChannels,
         // but glClear respects glColorMask — so neutralise a non-default mask across the clear, then
@@ -5553,6 +6835,7 @@ if (!ProfileIsEs2ApiGeneration())
         // Target | DepthBuffer | Stencil precisely so this one does not have to guess.
         device.clear(::easygl::ClearFlags::Color);
         if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     void EasyGLRenderer::Present()
@@ -5582,6 +6865,24 @@ if (!ProfileIsEs2ApiGeneration())
         // this renderer's, and is the half a test can check anywhere. REMED-GFX-243.
         swapInterval_ = interval;
         platformContext_->SetSwapInterval(interval);
+    }
+
+    void EasyGLRenderer::UpdatePresentationFormatEXT(
+        int backBufferFormat, int depthStencilFormat, bool isFullScreen)
+    {
+        (void) backBufferFormat;
+        (void) isFullScreen;
+        if (depthStencilFormat < 0 || depthStencilFormat > 3)
+            throw std::out_of_range("EasyGL: invalid DepthFormat ordinal");
+
+        backBufferDepthFormat_ = depthStencilFormat;
+        if (bound_->height == 0)
+        {
+            bound_->depthFormat = backBufferDepthFormat_;
+            BindDefaultFramebuffer();
+            ApplyCurrentDepthStencilAvailability();
+            ApplyCurrentDepthBias();
+        }
     }
 
     void EasyGLRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
@@ -5765,6 +7066,8 @@ if (!ProfileIsEs2ApiGeneration())
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
         if (format == SurfaceFormat::Color)
             return RendererFormatVerdict::Supported;
+        if (format == SurfaceFormat::Alpha8)
+            return RendererFormatVerdict::Supported;
         // Both signed-normalized byte formats need the ES 3 sized-internal-format set.
         if (format == SurfaceFormat::NormalizedByte4 || format == SurfaceFormat::NormalizedByte2)
         {
@@ -5790,7 +7093,109 @@ if (!ProfileIsEs2ApiGeneration())
         {
             return RendererFormatVerdict::Supported;
         }
+        if (format == SurfaceFormat::Rg32 || format == SurfaceFormat::Rgba64)
+        {
+            return ContextHasTextureNorm16EXT()
+                ? RendererFormatVerdict::Supported
+                : RendererFormatVerdict::Unsupported;
+        }
+        if (format == SurfaceFormat::Rgba1010102 ||
+            format == SurfaceFormat::Single || format == SurfaceFormat::Vector2 ||
+            format == SurfaceFormat::Vector4 || format == SurfaceFormat::HalfSingle ||
+            format == SurfaceFormat::HalfVector2 || format == SurfaceFormat::HalfVector4 ||
+            format == SurfaceFormat::HdrBlendable)
+        {
+            return ProfileIsEs2ApiGeneration()
+                ? RendererFormatVerdict::Unsupported
+                : RendererFormatVerdict::Supported;
+        }
         return RendererFormatVerdict::Defer;
+    }
+
+    RendererFormatVerdict EasyGLRenderer::ClassifyTextureCubeFormatEXT(
+        int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        switch (format)
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::Alpha8:
+                return RendererFormatVerdict::Supported;
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Rgba1010102:
+                return ProfileIsEs2ApiGeneration()
+                    ? RendererFormatVerdict::Unsupported
+                    : RendererFormatVerdict::Supported;
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+                return ContextHasTextureNorm16EXT()
+                    ? RendererFormatVerdict::Supported
+                    : RendererFormatVerdict::Unsupported;
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+                return RendererFormatVerdict::Unsupported;
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return ProfileIsEs2ApiGeneration()
+                    ? RendererFormatVerdict::Unsupported
+                    : RendererFormatVerdict::Supported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
+    }
+
+    RendererFormatVerdict EasyGLRenderer::ClassifyTexture3DFormatEXT(
+        int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        switch (format)
+        {
+            case SurfaceFormat::Color:
+            case SurfaceFormat::Alpha8:
+                return RendererFormatVerdict::Supported;
+            case SurfaceFormat::Bgr565:
+            case SurfaceFormat::Bgra5551:
+            case SurfaceFormat::Bgra4444:
+            case SurfaceFormat::Rgba1010102:
+                return ProfileIsEs2ApiGeneration()
+                    ? RendererFormatVerdict::Unsupported
+                    : RendererFormatVerdict::Supported;
+            case SurfaceFormat::Rg32:
+            case SurfaceFormat::Rgba64:
+                return ContextHasTextureNorm16EXT()
+                    ? RendererFormatVerdict::Supported
+                    : RendererFormatVerdict::Unsupported;
+            case SurfaceFormat::Single:
+            case SurfaceFormat::Vector2:
+            case SurfaceFormat::Vector4:
+            case SurfaceFormat::HalfSingle:
+            case SurfaceFormat::HalfVector2:
+            case SurfaceFormat::HalfVector4:
+            case SurfaceFormat::HdrBlendable:
+                return ProfileIsEs2ApiGeneration()
+                    ? RendererFormatVerdict::Unsupported
+                    : RendererFormatVerdict::Supported;
+            case SurfaceFormat::Dxt1:
+            case SurfaceFormat::Dxt3:
+            case SurfaceFormat::Dxt5:
+            case SurfaceFormat::NormalizedByte2:
+            case SurfaceFormat::NormalizedByte4:
+                return RendererFormatVerdict::Unsupported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
     }
 
     bool EasyGLRenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
@@ -5813,25 +7218,35 @@ if (!ProfileIsEs2ApiGeneration())
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
-        if (format == SurfaceFormat::NormalizedByte4 || format == SurfaceFormat::NormalizedByte2)
+        if (format != SurfaceFormat::Color &&
+            static_cast<int>(format) >= static_cast<int>(SurfaceFormat::Bgr565) &&
+            static_cast<int>(format) <= static_cast<int>(SurfaceFormat::HdrBlendable))
             return RendererFormatVerdict::Unsupported;
         return RendererFormatVerdict::Defer;
     }
 
     RendererFormatVerdict EasyGLRenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
     {
-        // plans/plan_modern.md MOD-104/MOD-117. Color and the float formats are this renderer's own
-        // answer; everything else defers to the framework rule, exactly as before this change --
-        // widening the verdict beyond what CreateResources can actually allocate would put the
-        // caller back in the "asked for one format, silently got another" position.
+        // Color, the three classic normalized/packed targets and the float formats are this
+        // renderer's own answer. Every non-Color attachment is runtime-probed so capability
+        // reporting cannot outrun the exact resource CreateResources will allocate.
         RenderTargetColorStorage storage{};
         if (!MapRenderTargetColorFormat(surfaceFormat, storage))
             return RendererFormatVerdict::Defer;
-        if (static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Rgba64 &&
-            !ProfileIsDesktopCore())
-            return RendererFormatVerdict::Unsupported;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        if (format == SurfaceFormat::Color)
+            return RendererFormatVerdict::Supported;
         if (!storage.isFloat)
-            return RendererFormatVerdict::Supported;   // Color: every profile, always.
+        {
+            if (ProfileIsEs2ApiGeneration())
+                return RendererFormatVerdict::Unsupported;
+            if ((format == SurfaceFormat::Rg32 || format == SurfaceFormat::Rgba64) &&
+                !ContextHasTextureNorm16EXT())
+                return RendererFormatVerdict::Unsupported;
+            return ProbeNormalizedRenderTargetSupportEXT(surfaceFormat)
+                ? RendererFormatVerdict::Supported
+                : RendererFormatVerdict::Unsupported;
+        }
         return ProbeFloatRenderTargetSupportEXT(storage.isFullFloat)
             ? RendererFormatVerdict::Supported
             : RendererFormatVerdict::Unsupported;
@@ -6151,6 +7566,62 @@ if (!ProfileIsEs2ApiGeneration())
         return complete;
     }
 
+    bool EasyGLRenderer::ProbeNormalizedRenderTargetSupportEXT(int surfaceFormat) const
+    {
+        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        std::size_t cacheIndex = 0;
+        switch (format)
+        {
+            case SurfaceFormat::Rgba1010102: cacheIndex = 0; break;
+            case SurfaceFormat::Rg32: cacheIndex = 1; break;
+            case SurfaceFormat::Rgba64: cacheIndex = 2; break;
+            default: return false;
+        }
+        auto& cache = probedNormalizedRenderTargets_[cacheIndex];
+        if (cache.has_value())
+            return *cache;
+        if (ProfileIsEs2ApiGeneration() ||
+            ((format == SurfaceFormat::Rg32 || format == SurfaceFormat::Rgba64) &&
+             !ContextHasTextureNorm16EXT()))
+        {
+            cache = false;
+            return false;
+        }
+
+        RenderTargetColorStorage storage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat, storage))
+        {
+            cache = false;
+            return false;
+        }
+
+        int previousFbo = 0;
+        metagl::glGetIntegerv(::metagl::GetParameter::FramebufferBinding, &previousFbo);
+        ::easygl::Texture probeTex;
+        ::easygl::Framebuffer probeFbo;
+        probeTex.create();
+        probeTex.bind(::easygl::TextureTarget::Texture2D);
+        probeTex.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
+                              storage.internalFormat, 1, 1,
+                              storage.pixelFormat, storage.pixelType, nullptr);
+        probeFbo.create();
+        probeFbo.bind(::easygl::FramebufferTarget::Framebuffer);
+        probeFbo.attach_texture_2d(
+            ::easygl::FramebufferTarget::Framebuffer,
+            ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+            ::easygl::TextureTarget::Texture2D, probeTex, 0);
+        const bool complete =
+            probeFbo.check_status(::easygl::FramebufferTarget::Framebuffer) ==
+            ::metagl::FramebufferStatus::Complete;
+        metagl::glBindFramebuffer(
+            ::metagl::FramebufferTarget::Framebuffer,
+            ::metagl::FramebufferId{static_cast<unsigned int>(previousFbo)});
+        DrainGlErrors();
+        cache = complete;
+        return complete;
+    }
+
     std::unique_ptr<IRenderTargetCubeRenderer> EasyGLRenderer::CreateRenderTargetCube(int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         EnsureCallingThreadContext();
@@ -6224,7 +7695,12 @@ if (!ProfileIsEs2ApiGeneration())
            << " mrtCount=" << bound_->mrtCount
            << " curDim=" << bound_->width << 'x' << bound_->height;
         for (int i = 0; i < bound_->mrtCount; ++i)
-            os << " mrt" << i << '=' << static_cast<const void*>(bound_->mrt[i]);
+        {
+            const EasyGLMrtBindingEXT& slot = bound_->mrt[static_cast<std::size_t>(i)];
+            os << " mrt" << i << "=2d:" << static_cast<const void*>(slot.rt2D)
+               << ",cube:" << static_cast<const void*>(slot.cube)
+               << ",face:" << slot.cubeFace;
+        }
         return os.str();
     }
 
@@ -6242,15 +7718,21 @@ if (!ProfileIsEs2ApiGeneration())
         {
             bound_->width = rt->GetWidth();
             bound_->height = rt->GetHeight();
+            if (const auto* easyRt = dynamic_cast<const EasyGLRenderTargetRenderer*>(rt))
+                bound_->depthFormat = easyRt->depthFormat_;
+            else
+                bound_->depthFormat = 0;
             rt->BindAsRenderTarget();
         }
         else
         {
             bound_->width = 0;
             bound_->height = 0;
+            bound_->depthFormat = backBufferDepthFormat_;
             BindDefaultFramebuffer();
         }
-        ApplyDepthBiasForCurrentTargetEXT();
+        ApplyCurrentDepthStencilAvailability();
+        ApplyCurrentDepthBias();
         TargetTrace("set2d.exit", rt, TraceBindingDetailEXT());
     }
 
@@ -6260,13 +7742,22 @@ if (!ProfileIsEs2ApiGeneration())
         if (!rt) { SetRenderTarget2D(nullptr); return; }
         FinalizeCurrentMRT();
         if (bound_->rt2D) bound_->rt2D->UnbindAsRenderTarget();
-        if (bound_->cube && bound_->cube != rt) bound_->cube->UnbindAsRenderTarget();
+        // A different face of the same cube is a different render-target subresource. Finalize
+        // the currently bound face before BindAsRenderTargetFace overwrites its lastFace_ record;
+        // comparing only the owning cube pointer loses every intermediate MSAA resolve and mip
+        // generation in a face-to-face sequence.
+        if (bound_->cube) bound_->cube->UnbindAsRenderTarget();
         bound_->rt2D   = nullptr;
         bound_->cube = rt;
         bound_->width = rt->GetSize();
         bound_->height = rt->GetSize();
+        if (const auto* easyRt = dynamic_cast<const EasyGLRenderTargetCubeRenderer*>(rt))
+            bound_->depthFormat = easyRt->depthFormat_;
+        else
+            bound_->depthFormat = 0;
         rt->BindAsRenderTargetFace(face);
-        ApplyDepthBiasForCurrentTargetEXT();
+        ApplyCurrentDepthStencilAvailability();
+        ApplyCurrentDepthBias();
         TargetTrace("setcube.exit", rt, TraceBindingDetailEXT());
     }
 
@@ -6281,9 +7772,12 @@ if (!ProfileIsEs2ApiGeneration())
         bound_->height = 0;
         for (int i = 0; i < count; ++i)
         {
-            EasyGLRenderTargetRenderer* target = bound_->mrt[i];
-            bound_->mrt[i] = nullptr;
-            if (target) target->UnbindAsRenderTarget();
+            const EasyGLMrtBindingEXT target = bound_->mrt[static_cast<std::size_t>(i)];
+            bound_->mrt[static_cast<std::size_t>(i)] = {};
+            if (target.rt2D)
+                target.rt2D->UnbindAsRenderTarget();
+            else if (target.cube)
+                target.cube->UnbindMRTFace(target.cubeFace);
         }
     }
 
@@ -6337,32 +7831,41 @@ if (!ProfileIsEs2ApiGeneration())
                 + " targets, but the active GL profile supports "
                 + std::to_string(maxMrtTargets_) + ".");
 
-        std::array<EasyGLRenderTargetRenderer*, 4> targets{};
+        std::array<EasyGLMrtBindingEXT, 4> targets{};
         for (int i = 0; i < count; ++i)
         {
             if (renderTargets[i].IsRenderTargetCubeFace())
-                throw std::runtime_error(
-                    "EasyGL SetRenderTargets: cube faces in a multi-target set are not "
-                    "implemented by this CNA renderer.");
-            targets[i] = dynamic_cast<EasyGLRenderTargetRenderer*>(
-                renderTargets[i].GetRenderTarget2D());
-            if (!targets[i])
-                throw std::runtime_error(
-                    "EasyGL SetRenderTargets: binding " + std::to_string(i)
-                    + " is not an EasyGL RenderTarget2D.");
-            if (targets[i]->GetWidth() != renderTargets[0].GetWidth()
-                || targets[i]->GetHeight() != renderTargets[0].GetHeight())
+            {
+                targets[i].cube = dynamic_cast<EasyGLRenderTargetCubeRenderer*>(
+                    renderTargets[i].GetRenderTargetCube());
+                targets[i].cubeFace = renderTargets[i].GetCubeFace();
+                if (!targets[i].cube)
+                    throw std::runtime_error(
+                        "EasyGL SetRenderTargets: binding " + std::to_string(i)
+                        + " is not an EasyGL RenderTargetCube face.");
+            }
+            else
+            {
+                targets[i].rt2D = dynamic_cast<EasyGLRenderTargetRenderer*>(
+                    renderTargets[i].GetRenderTarget2D());
+                if (!targets[i].rt2D)
+                    throw std::runtime_error(
+                        "EasyGL SetRenderTargets: binding " + std::to_string(i)
+                        + " is not an EasyGL RenderTarget2D.");
+            }
+            if (renderTargets[i].GetWidth() != renderTargets[0].GetWidth()
+                || renderTargets[i].GetHeight() != renderTargets[0].GetHeight())
                 throw std::runtime_error(
                     "EasyGL SetRenderTargets: render targets must have matching dimensions.");
-            if (targets[i]->GetMultiSampleCount()
+            if (renderTargets[i].GetAppliedMultiSampleCount()
                 != renderTargets[0].GetAppliedMultiSampleCount())
                 throw std::runtime_error(
                     "EasyGL SetRenderTargets: render targets must have matching applied "
                     "sample counts.");
             for (int previous = 0; previous < i; ++previous)
-                if (targets[i] == targets[previous])
+                if (renderTargets[i].IsSameSubresource(renderTargets[previous]))
                     throw std::runtime_error(
-                        "EasyGL SetRenderTargets: the same render target cannot occupy "
+                        "EasyGL SetRenderTargets: the same render-target subresource cannot occupy "
                         "multiple slots.");
         }
         if (!supportsIndexedColorMasks_)
@@ -6422,10 +7925,17 @@ if (!ProfileIsEs2ApiGeneration())
                 static_cast<GLenum>(::metagl::ColorAttachment::Color0)
                 + static_cast<GLenum>(i));
             const auto attachment = ::metagl::to_framebuffer_attachment(color);
-            targets[i]->AttachColorToMRT(mrtFbo_, attachment);
+            if (targets[i].rt2D)
+                targets[i].rt2D->AttachColorToMRT(mrtFbo_, attachment);
+            else
+                targets[i].cube->AttachColorToMRT(
+                    mrtFbo_, attachment, targets[i].cubeFace);
             drawBuffers[i] = ::metagl::to_draw_buffer(color);
         }
-        targets[0]->AttachDepthToMRT(mrtFbo_);
+        if (targets[0].rt2D)
+            targets[0].rt2D->AttachDepthToMRT(mrtFbo_);
+        else
+            targets[0].cube->AttachDepthToMRT(mrtFbo_);
         mrtFbo_.set_draw_buffers(
             std::span<const ::easygl::DrawBuffer>(
                 drawBuffers.data(), static_cast<std::size_t>(count)));
@@ -6453,8 +7963,12 @@ if (!ProfileIsEs2ApiGeneration())
         bound_->mrtFramebuffer = mrtFbo_.native_handle();
         bound_->width = renderTargets[0].GetWidth();
         bound_->height = renderTargets[0].GetHeight();
+        bound_->depthFormat = targets[0].rt2D
+            ? targets[0].rt2D->depthFormat_
+            : targets[0].cube->depthFormat_;
         ApplyCurrentColorWriteMasks();
-        ApplyDepthBiasForCurrentTargetEXT();
+        ApplyCurrentDepthStencilAvailability();
+        ApplyCurrentDepthBias();
         TargetTrace("mrt.set", this,
                     TraceBindingDetailEXT() + " mrtFbo=" + std::to_string(mrtFbo_.native_handle()));
     }
@@ -6604,6 +8118,19 @@ if (!ProfileIsEs2ApiGeneration())
         return false;
     }
 
+    bool EasyGLRenderer::DisableScissorForClear()
+    {
+        const bool wasEnabled =
+            metagl::glIsEnabled(::metagl::Capability::ScissorTest) != 0;
+        if (wasEnabled) device.set_scissor_test_enabled(false);
+        return wasEnabled;
+    }
+
+    void EasyGLRenderer::RestoreScissorAfterClear(bool wasEnabled)
+    {
+        if (wasEnabled) device.set_scissor_test_enabled(true);
+    }
+
     void EasyGLRenderer::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                  int colorDstBlend, int alphaDstBlend,
                                                  int colorBlendFunc, int alphaBlendFunc,
@@ -6635,11 +8162,21 @@ if (!ProfileIsEs2ApiGeneration())
         for (int i = 0; i < 4; ++i)
             currentColorWriteMasks_[i] = writeState.colorWriteChannels[i];
         ApplyCurrentColorWriteMasks();
-        // BlendState.MultiSampleMask: EasyGL could express a coverage mask via glSampleMaski
-        // (GL ES 3.1+, requires GL_SAMPLE_MASK enable). It is left at the all-ones default here —
-        // a non-default coverage mask on the GL/GLES profile is a documented capability gap, not
-        // silently dropped: the value reaches the renderer and only the (rare) non-default path is
-        // unimplemented.
+        // SOFTWARE-110: XNA/FNA applies this 32-bit mask to sample coverage. Desktop GL 3.2+ and
+        // GLES 3.1+ expose the exact operation; enable it even for all-ones so a later state change
+        // cannot inherit an external/default mask. Older ES/WebGL profiles reject the
+        // inexpressible non-default state instead of silently rendering every sample.
+        if (metagl::IsFunctionAvailable("glSampleMaski"))
+        {
+            metagl::glEnable(metagl::Capability::SampleMask);
+            metagl::glSampleMaski(
+                0u, static_cast<metagl::SampleMaskValue>(writeState.multiSampleMask));
+        }
+        else if (writeState.multiSampleMask != 0xFFFFFFFFu)
+        {
+            throw System::NotSupportedException(
+                "EasyGL: BlendState.MultiSampleMask requires desktop GL 3.2 or OpenGL ES 3.1.");
+        }
     }
 
     void EasyGLRenderer::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
@@ -6653,8 +8190,10 @@ if (!ProfileIsEs2ApiGeneration())
     {
         if (metagl::IsContextLost()) return;
 
-        device.set_depth_test_enabled(depthEnable);
-        device.set_depth_mask(depthWriteEnable);
+        depthEnabled_ = depthEnable;
+        depthWriteEnabled_ = depthWriteEnable;
+        device.set_depth_test_enabled(depthEnable && bound_->depthFormat != 0);
+        device.set_depth_mask(depthWriteEnable && bound_->depthFormat != 0);
         if (depthEnable)
             device.set_depth_func(ToEasyGLCompareFunc(depthFunc));
 
@@ -6662,15 +8201,21 @@ if (!ProfileIsEs2ApiGeneration())
         // function call with a new reference. Recorded even when the stencil test is off, because
         // the reference survives a disabled state and applies again when one re-enables it.
         stencilEnabled_   = stencilEnable;
-        depthWriteEnabled_ = depthWriteEnable;   // REMED-GFX-237
         stencilWriteMask_  = stencilWriteMask;   // REMED-GFX-237
         stencilTwoSided_  = twoSidedStencilMode;
         stencilFunc_      = stencilFunc;
+        stencilPass_      = stencilPass;
+        stencilFail_      = stencilFail;
+        stencilDepthFail_ = stencilDepthFail;
         stencilCcwFunc_   = ccwStencilFunc;
+        stencilCcwPass_   = ccwStencilPass;
+        stencilCcwFail_   = ccwStencilFail;
+        stencilCcwDepthFail_ = ccwStencilDepthFail;
         stencilReadMask_  = stencilMask;
         referenceStencil_ = referenceStencil;
+        stencilPrimitiveUsesTwoSided_ = twoSidedStencilMode;
 
-        device.set_stencil_test_enabled(stencilEnable);
+        device.set_stencil_test_enabled(stencilEnable && bound_->depthFormat == 3);
         if (stencilEnable)
         {
             const auto eglSFail  = ToEasyGLStencilOp(stencilFail);
@@ -6678,22 +8223,25 @@ if (!ProfileIsEs2ApiGeneration())
             const auto eglPass   = ToEasyGLStencilOp(stencilPass);
             if (twoSidedStencilMode)
             {
-                device.set_stencil_func_separate(::easygl::CullFace::Front,
+                // EasyGL leaves OpenGL's GL_CCW front-face convention unchanged. XNA's
+                // CounterClockwiseStencil* tuple therefore belongs to GL_FRONT, while the
+                // ordinary clockwise/front-in-XNA tuple belongs to GL_BACK.
+                device.set_stencil_func_separate(::easygl::CullFace::Back,
                     ToEasyGLCompareFunc(stencilFunc),
                     referenceStencil, static_cast<unsigned int>(stencilMask));
-                device.set_stencil_op_separate(::easygl::CullFace::Front,
+                device.set_stencil_op_separate(::easygl::CullFace::Back,
                     eglSFail, eglDFail, eglPass);
-                device.set_stencil_mask_separate(::easygl::CullFace::Front,
+                device.set_stencil_mask_separate(::easygl::CullFace::Back,
                     static_cast<unsigned int>(stencilWriteMask));
 
-                device.set_stencil_func_separate(::easygl::CullFace::Back,
+                device.set_stencil_func_separate(::easygl::CullFace::Front,
                     ToEasyGLCompareFunc(ccwStencilFunc),
                     referenceStencil, static_cast<unsigned int>(stencilMask));
-                device.set_stencil_op_separate(::easygl::CullFace::Back,
+                device.set_stencil_op_separate(::easygl::CullFace::Front,
                     ToEasyGLStencilOp(ccwStencilFail),
                     ToEasyGLStencilOp(ccwStencilDepthFail),
                     ToEasyGLStencilOp(ccwStencilPass));
-                device.set_stencil_mask_separate(::easygl::CullFace::Back,
+                device.set_stencil_mask_separate(::easygl::CullFace::Front,
                     static_cast<unsigned int>(stencilWriteMask));
             }
             else
@@ -6706,24 +8254,60 @@ if (!ProfileIsEs2ApiGeneration())
         }
     }
 
-    int EasyGLRenderer::CurrentDepthBufferBits() const
+    void EasyGLRenderer::ApplyStencilPrimitiveTopology(PrimitiveType primitive)
     {
-        // Whatever is bound right now owns the depth precision: a render target has its own
-        // DepthFormat, and only with nothing bound does the backbuffer's apply.
-        if (bound_->rt2D != nullptr) return bound_->rt2D->DepthBufferBitsEXT();
-        if (bound_->cube != nullptr) return bound_->cube->DepthBufferBitsEXT();
-        if (bound_->mrtCount > 0 && bound_->mrt[0] != nullptr)
-            return bound_->mrt[0]->DepthBufferBitsEXT();
-        return backBufferDepthBits_;
+        if (metagl::IsContextLost()) return;
+        RequireSupportedFillModeEXT(primitive);
+        if (!stencilEnabled_ || !stencilTwoSided_) return;
+
+        // Direct3D 9 applies the CCW tuple only to counter-clockwise triangles. Two-sided stencil
+        // is ignored for lines and points, which instead use the ordinary tuple. GL's separate
+        // face state still affects line rasterization (as GL_FRONT), so install the ordinary
+        // tuple on both faces for every non-triangle draw and restore the split before the next
+        // triangle draw even when the public DepthStencilState object did not change.
+        const bool useTwoSided = primitive == PrimitiveType::TriangleList ||
+                                 primitive == PrimitiveType::TriangleStrip;
+        if (stencilPrimitiveUsesTwoSided_ == useTwoSided) return;
+        stencilPrimitiveUsesTwoSided_ = useTwoSided;
+
+        if (!useTwoSided)
+        {
+            device.set_stencil_func(ToEasyGLCompareFunc(stencilFunc_), referenceStencil_,
+                                    static_cast<unsigned int>(stencilReadMask_));
+            device.set_stencil_op(ToEasyGLStencilOp(stencilFail_),
+                                  ToEasyGLStencilOp(stencilDepthFail_),
+                                  ToEasyGLStencilOp(stencilPass_));
+            device.set_stencil_mask(static_cast<unsigned int>(stencilWriteMask_));
+            return;
+        }
+
+        device.set_stencil_func_separate(::easygl::CullFace::Back,
+            ToEasyGLCompareFunc(stencilFunc_), referenceStencil_,
+            static_cast<unsigned int>(stencilReadMask_));
+        device.set_stencil_op_separate(::easygl::CullFace::Back,
+            ToEasyGLStencilOp(stencilFail_), ToEasyGLStencilOp(stencilDepthFail_),
+            ToEasyGLStencilOp(stencilPass_));
+        device.set_stencil_mask_separate(::easygl::CullFace::Back,
+            static_cast<unsigned int>(stencilWriteMask_));
+
+        device.set_stencil_func_separate(::easygl::CullFace::Front,
+            ToEasyGLCompareFunc(stencilCcwFunc_), referenceStencil_,
+            static_cast<unsigned int>(stencilReadMask_));
+        device.set_stencil_op_separate(::easygl::CullFace::Front,
+            ToEasyGLStencilOp(stencilCcwFail_), ToEasyGLStencilOp(stencilCcwDepthFail_),
+            ToEasyGLStencilOp(stencilCcwPass_));
+        device.set_stencil_mask_separate(::easygl::CullFace::Front,
+            static_cast<unsigned int>(stencilWriteMask_));
     }
 
-    void EasyGLRenderer::UpdatePresentationFormatEXT(const int /*backBufferFormat*/,
-                                                     const int depthStencilFormat,
-                                                     const bool /*isFullScreen*/)
+    void EasyGLRenderer::ApplyCurrentDepthStencilAvailability()
     {
-        // Only the depth precision is consumed here, and only to convert DepthBias into GL's
-        // units. EasyGL does not otherwise reconfigure itself for a requested format.
-        backBufferDepthBits_ = EasyGLDepthBufferBits(depthStencilFormat);
+        if (metagl::IsContextLost()) return;
+        const bool hasDepth = bound_->depthFormat != 0;
+        const bool hasStencil = bound_->depthFormat == 3;
+        device.set_depth_test_enabled(depthEnabled_ && hasDepth);
+        device.set_depth_mask(depthWriteEnabled_ && hasDepth);
+        device.set_stencil_test_enabled(stencilEnabled_ && hasStencil);
     }
 
     void EasyGLRenderer::ApplyRasterizerState(int cullMode, int fillMode,
@@ -6745,60 +8329,138 @@ if (!ProfileIsEs2ApiGeneration())
                                                 : ::easygl::CullFace::Front);
         }
         device.set_scissor_test_enabled(scissorTestEnable);
-        // OpenGL ES has no glPolygonMode; FillMode::WireFrame (1) is emulated at draw
-        // time by re-expanding triangles into GL_LINES (see DrawWireframe).
-        wireframe_ = (fillMode == 1);
-        normalizedDepthBias_ = depthBias;
+        // SOFTWARE-178: native polygon mode is the only representation that keeps the operation
+        // after clipping and culling and gives it polygon offset, MSAA and two-sided stencil.
+        // Unsupported contexts remember the legal XNA state selection and refuse only a later
+        // triangle draw; line/point topologies remain unaffected by FillMode.
+        fillModeWireframe_ = (fillMode == 1);
+        SetNativePolygonMode(fillModeWireframe_);
+        // FNA exposes constant DepthBias in normalized depth coordinates. GL instead defines the
+        // polygon-offset `units` argument in minimum-resolvable depth increments, so the active
+        // depth format determines the conversion. Preserve the public state and apply it through
+        // the same 16/24-bit scale table as FNA3D's GL and D3D11 backends.
+        depthBias_ = depthBias;
         slopeScaleDepthBias_ = slopeScaleDepthBias;
-        ApplyDepthBiasForCurrentTargetEXT();
+        ApplyCurrentDepthBias();
     }
 
-    void EasyGLRenderer::ApplyDepthBiasForCurrentTargetEXT()
+    void EasyGLRenderer::ApplyCurrentDepthBias()
     {
         if (metagl::IsContextLost()) return;
 
-        int depthFormat = static_cast<int>(DepthFormat::Depth24Stencil8);
-        if (bound_->rt2D)
+        float depthScale = 0.0f;
+        switch (bound_->depthFormat)
         {
-            const auto* target = dynamic_cast<const EasyGLRenderTargetRenderer*>(bound_->rt2D);
-            depthFormat = target ? target->GetDepthFormatEXT()
-                                 : static_cast<int>(DepthFormat::None);
-        }
-        else if (bound_->cube)
-        {
-            const auto* target = dynamic_cast<const EasyGLRenderTargetCubeRenderer*>(bound_->cube);
-            depthFormat = target ? target->GetDepthFormatEXT()
-                                 : static_cast<int>(DepthFormat::None);
-        }
-        else if (bound_->mrtCount > 0)
-        {
-            depthFormat = bound_->mrt[0]->GetDepthFormatEXT();
+        case 1: depthScale = 65535.0f; break;      // Depth16
+        case 2:                                   // Depth24
+        case 3: depthScale = 16777215.0f; break;  // Depth24Stencil8
+        default: break;                           // None / unknown
         }
 
-        float scale = 0.0f;
-        switch (static_cast<DepthFormat>(depthFormat))
+        const bool enabled = slopeScaleDepthBias_ != 0.0f || depthBias_ != 0.0f;
+        device.set_polygon_offset_fill_enabled(enabled);
+        if (nativeWireframeApi_ != NativeWireframeApi::None)
         {
-        case DepthFormat::Depth16:
-            scale = static_cast<float>((1u << 16u) - 1u);
-            break;
-        case DepthFormat::Depth24:
-        case DepthFormat::Depth24Stencil8:
-            scale = static_cast<float>((1u << 24u) - 1u);
-            break;
-        case DepthFormat::None:
-            break;
+            constexpr auto polygonOffsetLine = static_cast<metagl::Capability>(0x2A02);
+            if (enabled)
+                metagl::glEnable(polygonOffsetLine);
+            else
+                metagl::glDisable(polygonOffsetLine);
         }
-        const float nativeUnits = normalizedDepthBias_ * scale;
+        device.set_polygon_offset(slopeScaleDepthBias_, depthBias_ * depthScale);
+    }
 
-        // Always enabled: factor=0/units=0 is a genuine no-op in GL.
-        device.set_polygon_offset_fill_enabled(true);
-        device.set_polygon_offset(slopeScaleDepthBias_, nativeUnits);
+    void EasyGLRenderer::DetectNativeWireframeApi()
+    {
+        nativeWireframeApi_ = NativeWireframeApi::None;
+        if (ProfileIsDesktopCore())
+        {
+            if (LoadEasyGlProcAddress("glPolygonMode") != nullptr)
+                nativeWireframeApi_ = NativeWireframeApi::Desktop;
+            return;
+        }
+
+        if (device.capabilities().is_webgl())
+        {
+#if defined(__EMSCRIPTEN__)
+            if (CNA_HasWebGLPolygonMode() != 0)
+                nativeWireframeApi_ = NativeWireframeApi::WebGlPolygonMode;
+#endif
+            return;
+        }
+
+        if (metagl::HasExtension("GL_NV_polygon_mode") &&
+            LoadEasyGlProcAddress("glPolygonModeNV") != nullptr)
+        {
+            nativeWireframeApi_ = NativeWireframeApi::NvPolygonMode;
+        }
+    }
+
+    void EasyGLRenderer::SetNativePolygonMode(bool wireframe)
+    {
+        if (nativeWireframeApi_ == NativeWireframeApi::None || metagl::IsContextLost())
+            return;
+
+        if (nativeWireframeApi_ == NativeWireframeApi::WebGlPolygonMode)
+        {
+#if defined(__EMSCRIPTEN__)
+            CNA_SetWebGLPolygonMode(wireframe ? 1 : 0);
+#endif
+            return;
+        }
+
+        using GlPolygonModeFn = void (*)(unsigned int, unsigned int);
+        const char* entryPoint = nativeWireframeApi_ == NativeWireframeApi::NvPolygonMode
+            ? "glPolygonModeNV" : "glPolygonMode";
+        const auto polygonMode =
+            reinterpret_cast<GlPolygonModeFn>(LoadEasyGlProcAddress(entryPoint));
+        if (polygonMode == nullptr)
+            throw std::runtime_error(std::string("EasyGL context lost its ") + entryPoint +
+                                     " polygon-mode entry point");
+        constexpr unsigned int kGlFrontAndBack = 0x0408;
+        constexpr unsigned int kGlLine = 0x1B01;
+        constexpr unsigned int kGlFill = 0x1B02;
+        polygonMode(kGlFrontAndBack, wireframe ? kGlLine : kGlFill);
+    }
+
+    void EasyGLRenderer::RequireSupportedFillModeEXT(PrimitiveType primitive) const
+    {
+        if (!fillModeWireframe_ || nativeWireframeApi_ != NativeWireframeApi::None)
+            return;
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip)
+            return;
+
+        throw System::NotSupportedException(
+            "EasyGL: FillMode::WireFrame is not supported by this GLES/WebGL context, so the "
+            "triangle draw is refused instead of being approximated with GL_LINES. The context "
+            "exposes neither GL_NV_polygon_mode nor WEBGL_polygon_mode. Query GraphicsDevice::"
+            "SupportsCapability(GraphicsCapability::WireFrame) and select FillMode::Solid when "
+            "it reports false.");
+    }
+
+    void EasyGLRenderer::ApplyRasterizerMultiSampleState(bool enabled)
+    {
+        if (metagl::IsContextLost()) return;
+#if defined(CNA_GL_PROFILE_OPENGL33)
+        // GL_MULTISAMPLE is intentionally absent from OpenGL ES. FNA3D makes the same desktop-only
+        // state transition; its ES path cannot represent RasterizerState.MultiSampleAntiAlias.
+        constexpr auto multisample = static_cast<metagl::Capability>(0x809D);
+        if (enabled)
+            metagl::glEnable(multisample);
+        else
+            metagl::glDisable(multisample);
+#else
+        (void) enabled;
+#endif
     }
 
     void EasyGLRenderer::SetScissorRect(int x, int y, int w, int h)
     {
         if (metagl::IsContextLost()) return;
-        if (w <= 0 || h <= 0) return; // invalid rect — leave scissor state unchanged
+        // SOFTWARE-310: zero width or height is a valid XNA scissor and must reach glScissor;
+        // its empty box rejects every fragment. GraphicsDevice already rejects negatives, so this
+        // is only a defensive guard for renderer-internal callers.
+        if (w < 0 || h < 0) return;
         // OpenGL scissor origin is bottom-left; convert from top-left XNA coordinates.
         // Use the render target's own height for the Y-flip when an RT is bound (mirrors
         // ReadBackbuffer's identical fbH pattern); fall back to the window's physical
@@ -6815,47 +8477,6 @@ if (!ProfileIsEs2ApiGeneration())
         // Do NOT enable/disable scissor test here — that is controlled exclusively
         // by ApplyRasterizerState via RasterizerState.ScissorTestEnable.
     }
-
-#if defined(CNA_EASYGL_COMPILED_EFFECTS)
-    void EasyGLRenderer::SetCompiledEffectDepthRangeEXT(bool begin)
-    {
-        if (metagl::IsContextLost()) return;
-        if (begin)
-        {
-            const float midpoint =
-                0.5f * (viewportMinDepth_ + viewportMaxDepth_);
-            device.set_depth_range(midpoint, viewportMaxDepth_);
-        }
-        else
-        {
-            device.set_depth_range(viewportMinDepth_, viewportMaxDepth_);
-        }
-    }
-
-    namespace
-    {
-        // Scope guard so every early return and every throw out of a compiled-effect draw still
-        // restores the viewport's own depth range.
-        class CompiledEffectDepthRangeScope
-        {
-        public:
-            explicit CompiledEffectDepthRangeScope(EasyGLRenderer& renderer)
-                : renderer_(renderer)
-            {
-                renderer_.SetCompiledEffectDepthRangeEXT(true);
-            }
-            ~CompiledEffectDepthRangeScope()
-            {
-                renderer_.SetCompiledEffectDepthRangeEXT(false);
-            }
-            CompiledEffectDepthRangeScope(const CompiledEffectDepthRangeScope&) = delete;
-            CompiledEffectDepthRangeScope& operator=(const CompiledEffectDepthRangeScope&) = delete;
-
-        private:
-            EasyGLRenderer& renderer_;
-        };
-    }
-#endif
 
     void EasyGLRenderer::SetBlendFactor(float r, float g, float b, float a)
     {
@@ -6874,12 +8495,12 @@ if (!ProfileIsEs2ApiGeneration())
         // Nothing to reissue while the stencil test is off -- the value is kept, and whichever
         // ApplyDepthStencilState re-enables the test carries its own reference anyway.
         if (!stencilEnabled_) return;
-        if (stencilTwoSided_)
+        if (stencilPrimitiveUsesTwoSided_)
         {
-            device.set_stencil_func_separate(::easygl::CullFace::Front,
+            device.set_stencil_func_separate(::easygl::CullFace::Back,
                 ToEasyGLCompareFunc(stencilFunc_),
                 referenceStencil_, static_cast<unsigned int>(stencilReadMask_));
-            device.set_stencil_func_separate(::easygl::CullFace::Back,
+            device.set_stencil_func_separate(::easygl::CullFace::Front,
                 ToEasyGLCompareFunc(stencilCcwFunc_),
                 referenceStencil_, static_cast<unsigned int>(stencilReadMask_));
         }
@@ -7033,7 +8654,9 @@ else
             {
                 GLfloat maxAnisoCap = 1.0f;
                 metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
-                const float requested = static_cast<float>(maxAnisotropy);
+                // XNA converts the signed property to UInt32 before applying the device cap.
+                const float requested = static_cast<float>(
+                    static_cast<std::uint32_t>(maxAnisotropy));
                 clamped = (maxAnisoCap > 0.0f && requested > maxAnisoCap) ? maxAnisoCap : requested;
                 if (clamped < 1.0f) clamped = 1.0f;
             }
@@ -7130,9 +8753,17 @@ else
         if (!s.is_created()) s.create();
         // XNA's MaxMipLevel is the most detailed level the sampler may use, which is a lower bound
         // on the computed level of detail -- GL_TEXTURE_MIN_LOD, the same mapping FNA3D's SDL_GPU
-        // driver makes with min_lod.
-        s.set_parameter(::easygl::SamplerParameter::MinLod,
-                        static_cast<float>(std::max(maxMipLevel, 0)));
+        // driver makes with min_lod. Microsoft writes the signed property through D3D9's DWORD
+        // sampler-state channel, so negative values first convert to UInt32 and clamp to the
+        // resource's least-detailed available level rather than becoming zero.
+        // GL's default upper LOD is 1000, already far beyond XNA's largest possible mip index.
+        // Keeping the unsigned request inside that range avoids driver-dependent handling of
+        // uint32_t(-1) after its lossy conversion to a roughly 4.29-billion float.
+        constexpr std::uint32_t kGlDefaultMaxLod = 1000u;
+        const std::uint32_t requested = static_cast<std::uint32_t>(maxMipLevel);
+        s.set_parameter(
+            ::easygl::SamplerParameter::MinLod,
+            static_cast<float>(std::min(requested, kGlDefaultMaxLod)));
         if (ProfileIsDesktopCore())
         {
             // Desktop-only: GL_TEXTURE_LOD_BIAS (0x8501) does not exist in OpenGL ES at all, which
@@ -7172,7 +8803,7 @@ else
         for (int i = 0; i < bound_->mrtCount; ++i)
         {
             sourceIsCurrentTarget = sourceIsCurrentTarget ||
-                bound_->mrt[static_cast<std::size_t>(i)] == &source;
+                bound_->mrt[static_cast<std::size_t>(i)].rt2D == &source;
         }
         if (sourceIsCurrentTarget)
         {
@@ -7361,13 +8992,10 @@ else
             bool isInteger;
         };
 
-        // Task 1080: maps XNA's VertexElementFormat to the GL attribute shape needed to bind it
-        // -- component count, GL scalar type, whether values are normalized to [0,1]/[-1,1], and
-        // whether the attribute must be read as a true integer (glVertexAttribIPointer) rather
-        // than converted to float (glVertexAttribPointer). Byte4 is the one format needing the
-        // integer path -- XNA's own format for BLENDINDICES-style semantics (read as int4 in
-        // HLSL), matching the existing skinned-vertex BlendIndices precedent below (offset 48,
-        // case 52) that this table generalizes to arbitrary declarations.
+        // Task 1080 / SOFTWARE-130: maps XNA's VertexElementFormat to the GL attribute shape needed
+        // to bind it -- component count, GL scalar type, and whether values are normalized to
+        // [0,1]/[-1,1]. Stock inputs are floating-point shader registers, including Byte4-backed
+        // blend indices, so all XNA formats use GL's converting float attribute path.
         VertexAttribFormat DescribeVertexElementFormat(VertexElementFormat format)
         {
             switch (format)
@@ -7396,7 +9024,8 @@ else
             case VertexElementFormat::HalfVector2:     return { 2, ::easygl::DataType::HalfFloat,    false, false };
             case VertexElementFormat::HalfVector4:     return { 4, ::easygl::DataType::HalfFloat,    false, false };
             }
-            return { 3, ::easygl::DataType::Float, false, false };
+            throw System::NotSupportedException(
+                "EasyGL: the VertexDeclaration contains an unknown VertexElementFormat.");
         }
 
         /// Binds a BLENDINDICES-style Byte4 bone-index attribute for ApplyLayout's fixed-stride
@@ -8105,26 +9734,33 @@ else
 
     namespace
     {
-        [[nodiscard]] std::string DefineStockPointSize(const char* source)
+        [[nodiscard]] std::string AdaptStockVertexShaderForOpenGL(const char* source)
         {
             std::string result(source);
-            if (result.find("gl_PointSize") != std::string::npos)
-                return result;
-
             const std::size_t position = result.find("gl_Position");
             if (position == std::string::npos)
                 return result;
 
             const std::size_t terminator = result.find(';', position);
             if (terminator != std::string::npos)
-                result.insert(terminator + 1, "\n    gl_PointSize=1.0;");
+            {
+                // SOFTWARE-336: every matrix exposed by XNA produces Direct3D clip depth in
+                // [0,w], while OpenGL accepts [-w,w]. MojoShader applies this same conversion to
+                // classic compiled Effects. Applying it to all renderer-owned 3D programs makes
+                // the near plane, viewport depth range, and mixed stock/compiled draws agree.
+                std::string additions =
+                    "\n    gl_Position.z=gl_Position.z*2.0-gl_Position.w;";
+                if (result.find("gl_PointSize") == std::string::npos)
+                    additions += "\n    gl_PointSize=1.0;";
+                result.insert(terminator + 1, additions);
+            }
             return result;
         }
 
         void CompileAndLink(::easygl::Program& prog, const char* vsrc, const char* fsrc,
                             const char* label)
         {
-            const std::string definedVsrc = DefineStockPointSize(vsrc);
+            const std::string definedVsrc = AdaptStockVertexShaderForOpenGL(vsrc);
             const std::string adaptedVsrc =
                 AdaptGlslEs300ForActiveProfile(definedVsrc.c_str(), GlShaderStageKind::Vertex);
             const std::string adaptedFsrc = AdaptGlslEs300ForActiveProfile(fsrc, GlShaderStageKind::Fragment);
@@ -8174,16 +9810,20 @@ if (ProfileUsesGlslEs100())
 CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform vec4 uFogVector;\n"
+"uniform vec4 uDiffuseColor;\n"
+"uniform float uVertexColorEnabled;\n"
 "out vec4 vColor;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
 "    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
 "    gl_Position=uWVP*cnaPos;\n"
-"    vColor=aColor;\n"
+// SOFTWARE-153: XNA's stock Common.fxh writes material*vertex colour to D3D9 COLOR0. That
+// semantic is saturated at the vertex boundary, before interpolation and texture sampling.
+"    vColor=clamp(((uVertexColorEnabled>0.5)?aColor:vec4(1.0))*uDiffuseColor,0.0,1.0);\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8193,17 +9833,14 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "precision mediump float;\n"
 "in vec4 vColor;\n"
 "in float vFogFactor;\n"
-"uniform vec4 uDiffuseColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
-"uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
-"    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
-"    FragColor=vc*uDiffuseColor;\n"
+"    FragColor=vColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_colored_.prog, vsrc, fsrc, "colored");
@@ -8230,16 +9867,19 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform vec4 uFogVector;\n"
+"uniform vec4 uDiffuseColor;\n"
 "out vec2 vUV;\n"
+"out vec4 vDiffuse;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
 "    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
 "    gl_Position=uWVP*cnaPos;\n"
 "    vUV=aUV;\n"
+"    vDiffuse=clamp(uDiffuseColor,0.0,1.0);\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8248,18 +9888,18 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "#version 300 es\n"
 "precision mediump float;\n"
 "in vec2 vUV;\n"
+"in vec4 vDiffuse;\n"
 "in float vFogFactor;\n"
 "uniform sampler2D uTexture;\n"
-"uniform vec4 uDiffuseColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*uDiffuseColor;\n"
+"    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vDiffuse;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_textured_.prog, vsrc, fsrc, "textured");
@@ -8287,18 +9927,20 @@ CNA_GL_RT_SAMPLE_UV_DECL
 CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform vec4 uFogVector;\n"
+"uniform vec4 uDiffuseColor;\n"
+"uniform float uVertexColorEnabled;\n"
 "out vec4 vColor;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
 "    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
 "    gl_Position=uWVP*cnaPos;\n"
-"    vColor=aColor;\n"
+"    vColor=clamp(((uVertexColorEnabled>0.5)?aColor:vec4(1.0))*uDiffuseColor,0.0,1.0);\n"
 "    vUV=aUV;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8310,18 +9952,15 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
 "uniform sampler2D uTexture;\n"
-"uniform vec4 uDiffuseColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
-"uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
-"    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vc*uDiffuseColor;\n"
+"    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_col_textured_.prog, vsrc, fsrc, "col+textured");
@@ -8377,7 +10016,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8458,7 +10097,7 @@ CNA_GL_PUNCTUAL_DECL
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_lit_textured_.prog, vsrc, fsrc, "lit+textured");
@@ -8578,7 +10217,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8635,7 +10274,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    FragColor.rgb+=vSpecularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_lit_textured_vertexlit_.prog, vsrc, fsrc, "lit+textured (vertex-lit)");
@@ -8680,18 +10319,21 @@ CNA_GL_RT_SAMPLE_UV_DECL
 CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform vec4 uFogVector;\n"
+"uniform vec4 uDiffuseColor;\n"
 "out vec2 vUV;\n"
 "out vec2 vUV1;\n"
+"out vec4 vDiffuse;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
 "    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
 "    gl_Position=uWVP*cnaPos;\n"
 "    vUV=aUV;\n"
 "    vUV1=aUV1;\n"
+"    vDiffuse=clamp(uDiffuseColor,0.0,1.0);\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8701,10 +10343,10 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "precision mediump float;\n"
 "in vec2 vUV;\n"
 "in vec2 vUV1;\n"
+"in vec4 vDiffuse;\n"
 "in float vFogFactor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform sampler2D uTexture2;\n"
-"uniform vec4 uDiffuseColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
@@ -8712,10 +10354,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
 "    vec4 base=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    base.rgb*=2.0;\n"
-"    FragColor=base*texture(uTexture2,cnaSampleUV(vUV1,uRtFlipV.y))*uDiffuseColor;\n"
+"    FragColor=base*texture(uTexture2,cnaSampleUV(vUV1,uRtFlipV.y))*vDiffuse;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_dual_textured_.prog, vsrc, fsrc, "dual+textured");
@@ -8748,6 +10390,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
 CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform vec4 uFogVector;\n"
+"uniform vec4 uDiffuseColor;\n"
+"uniform float uVertexColorEnabled;\n"
 "out vec4 vColor;\n"
 "out vec2 vUV;\n"
 "out vec2 vUV1;\n"
@@ -8755,13 +10399,13 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "void main(){\n"
 "    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
 "    gl_Position=uWVP*cnaPos;\n"
-"    vColor=aColor;\n"
+"    vColor=clamp(((uVertexColorEnabled>0.5)?aColor:vec4(1.0))*uDiffuseColor,0.0,1.0);\n"
 "    vUV=aUV;\n"
 "    vUV1=aUV1;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8775,20 +10419,17 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "in float vFogFactor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform sampler2D uTexture2;\n"
-"uniform vec4 uDiffuseColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
-"uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
 "    vec4 base=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    base.rgb*=2.0;\n"
-"    FragColor=base*texture(uTexture2,cnaSampleUV(vUV1,uRtFlipV.y))*vc*uDiffuseColor;\n"
+"    FragColor=base*texture(uTexture2,cnaSampleUV(vUV1,uRtFlipV.y))*vColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_dual_textured_colored_.prog, vsrc, fsrc, "dual+textured+colored");
@@ -8861,7 +10502,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -8910,7 +10551,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    FragColor=vec4(rgb,combinedAlpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_env_mapped_.prog, vsrc, fsrc, "env+mapped");
@@ -8987,16 +10628,19 @@ CNA_GL_SKIN_NORMAL_DECL
 // normal for just that vertex rather than propagating NaN; XNA/FNA's own Skin() was
 // never validated against this degenerate case, so this is a numerical-safety guard,
 // not a deviation from its intended per-vertex transform.
-"    vec3 skinnedNormal=cnaSkinNormal(mat3(skinMat),aNormal);\n"
+// FNA/XNA SkinnedEffect.fx transforms normals directly by the weighted bone 3x3. Bone palettes
+// are assumed to contain rigid/uniform transforms; only the outer World uses inverse-transpose.
+// Keep this classic stock-effect path exact even though the CNAEXT PBR skinning path deliberately
+// supports non-uniform glTF joint scale via cnaSkinNormal().
+"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
 // (uNormalMatrix = transpose(inverse(World3x3)), CPU-precomputed in BindDrawParams() exactly as
 // every non-skinned lit program here already receives it). FNA's SkinnedEffect.fx establishes the
-// composition order; GLTF-264 strengthens its direct bone 3x3 to inverse-transpose because glTF
-// joints may carry non-uniform scale. This shader also used to drop the outer world factor entirely
-// (audit Variant A), so any rotated or non-uniformly-scaled skinned model was lit as if World were
-// identity. The fragment stage re-normalizes vNormal.
+// direct-bone then inverse-transpose-World composition order. This shader also used to drop the
+// outer world factor entirely (audit Variant A), so any rotated or non-uniformly-scaled skinned
+// model was lit as if World were identity. The fragment stage re-normalizes vNormal.
 "    vNormal=uNormalMatrix*cnaInstanceDirection(boneNormal);\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
@@ -9004,7 +10648,7 @@ CNA_GL_SKIN_NORMAL_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 // Skinned: dot the POST-skin position (FNA Skin() mutates vin.Position before ComputeFogFactor).
@@ -9092,7 +10736,7 @@ CNA_GL_PUNCTUAL_DECL
 "    FragColor.rgb*=vc.rgb;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_skinned_.prog, vsrc, fsrc, "skinned");
@@ -9199,7 +10843,7 @@ CNA_GL_SKIN_NORMAL_DECL
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
-// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// "keep" (mix(uFogColor*alpha,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
@@ -9207,7 +10851,8 @@ CNA_GL_SKIN_NORMAL_DECL
 // Same degenerate-blend-normal guard as EnsureSkinnedProgram() above (see its own
 // comment for the root cause) -- this vertex-lit sibling does the identical skinning
 // and normal transform, just with lighting evaluated per-vertex instead of per-pixel.
-"    vec3 skinnedNormal=cnaSkinNormal(mat3(skinMat),aNormal);\n"
+// Match FNA/XNA Skin(): normal * weighted bone 3x3. See the per-pixel sibling above.
+"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
 "    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix (uNormalMatrix =
@@ -9264,7 +10909,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    FragColor.rgb*=vc.rgb;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
-"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"    FragColor.rgb=mix(uFogColor*FragColor.a,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_skinned_vertexlit_.prog, vsrc, fsrc, "skinned (vertex-lit)");
@@ -9917,6 +11562,38 @@ CNA_GL_PUNCTUAL_DECL
         default_white_texture_ready_ = true;
     }
 
+    void EasyGLRenderer::EnsureDefaultBlackTexture()
+    {
+        if (default_black_texture_ready_) return;
+        static const uint8_t black[4] = {0, 0, 0, 255};
+        default_black_texture_.create();
+        default_black_texture_.set_image_2d(::easygl::TextureTarget::Texture2D, 0, 1, 1, black);
+        default_black_texture_ready_ = true;
+    }
+
+    void EasyGLRenderer::EnsureDefaultBlackCubeTexture()
+    {
+        if (default_black_cube_texture_ready_) return;
+        static const uint8_t black[4] = {0, 0, 0, 255};
+        default_black_cube_texture_.create();
+        default_black_cube_texture_.bind(::easygl::TextureTarget::TextureCubeMap);
+        for (const auto face : kCubeFaceTargets)
+            default_black_cube_texture_.set_image_2d(face, 0, 1, 1, black);
+        default_black_cube_texture_.set_parameter(
+            ::easygl::TextureTarget::TextureCubeMap,
+            ::easygl::TextureParameterSetter::MinFilter, kTexLinear);
+        default_black_cube_texture_.set_parameter(
+            ::easygl::TextureTarget::TextureCubeMap,
+            ::easygl::TextureParameterSetter::MagFilter, kTexLinear);
+        default_black_cube_texture_.set_parameter(
+            ::easygl::TextureTarget::TextureCubeMap,
+            ::easygl::TextureParameterSetter::WrapS, kTexClampToEdge);
+        default_black_cube_texture_.set_parameter(
+            ::easygl::TextureTarget::TextureCubeMap,
+            ::easygl::TextureParameterSetter::WrapT, kTexClampToEdge);
+        default_black_cube_texture_ready_ = true;
+    }
+
     // plans/plan_cnj.md CNB-58 (Phase 13A): fallback for PbrEffect::NormalMap when unbound -- a "flat"
     // tangent-space normal (0,0,1) encoded as RGB (128,128,255), so the sampled/decoded (rgb*2-1)
     // normal is exactly the geometric normal (no perturbation). The other 3 PBR map fallbacks
@@ -9932,29 +11609,14 @@ CNA_GL_PUNCTUAL_DECL
         default_flat_normal_texture_ready_ = true;
     }
 
-    /// REMED-GFX-234: does the declaration name this usage at all?
-    ///
-    /// The stock program a draw gets is still chosen by byte stride (REMED-GFX-217 is open), while
-    /// its attributes are bound from the declaration's own offsets (REMED-GFX-218 landed). Where a
-    /// stride is ambiguous, that pair silently drops whatever the chosen program has no input for,
-    /// so the stride cases that can be ambiguous ask the declaration first.
-    [[nodiscard]] bool DeclarationNamesUsage(
-        const std::vector<VertexElement>& declaredElements,
-        Microsoft::Xna::Framework::Graphics::VertexElementUsage usage)
-    {
-        for (const VertexElement& element : declaredElements)
-        {
-            if (element.getVertexElementUsageProperty() == usage) { return true; }
-        }
-        return false;
-    }
-
-    // REMED-GFX-218 / REMED-GFX-DECL-GUARD: the ONE place that decides which stock program a draw
-    // gets. SelectProgram() below and StockProgramInputsEXT() both read this, so the program a
-    // draw is bound to and the input shape it is checked against can never drift apart.
+    // REMED-GFX-218 / SOFTWARE-130: the ONE place that decides which stock program a draw gets.
+    // XNA's stock effects select shader variants from effect properties; the declaration only
+    // tells the device how to convert bytes into those shader inputs. In particular, an arbitrary
+    // Color0 format can have the same byte stride as VertexPositionTexture without turning a
+    // vertex-colour BasicEffect into a textured one. PBR remains CNAEXT and retains its existing
+    // record variants in SelectProgram().
     EasyGLRenderer::StockProgramShape EasyGLRenderer::SelectStockProgramShape(
-        std::size_t stride, const GpuDrawParams& params,
-        const std::vector<VertexElement>& declaredElements)
+        const GpuDrawParams& params)
     {
         if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;
         if (params.pbr) return StockProgramShape::Pbr;
@@ -9978,75 +11640,27 @@ CNA_GL_PUNCTUAL_DECL
         if (params.envMapping) return StockProgramShape::EnvMapped;
         if (params.dualTexture)
         {
-            // Task 889: stride 24 (VertexPositionColorTexture) gets its own vertex-color-aware
-            // program; stride 20 (VertexPositionTexture) keeps the original color-less shader.
-            return stride == 24 ? StockProgramShape::DualTexturedColored
-                                : StockProgramShape::DualTextured;
+            return params.vertexColorEnabled ? StockProgramShape::DualTexturedColored
+                                             : StockProgramShape::DualTextured;
         }
-        // SAMPLE-002: XNA application-defined vertices are selected by their declaration, not
-        // merely by stride. Position+Normal is 24 bytes just like VertexPositionColorTexture,
-        // but BasicEffect must light it and must not reinterpret the normal as color/UV data.
-        const bool positionNormal =
-            stride == 24 && declaredElements.size() == 2 &&
-            declaredElements[0] == VertexElement(
-                0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0) &&
-            declaredElements[1] == VertexElement(
-                12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0);
-        if (positionNormal)
-        {
-            return (params.lightingEnabled && !params.preferPerPixelLighting && !receivesShadow)
-                       ? StockProgramShape::LitVertexLitUntextured
-                       : StockProgramShape::LitUntextured;
-        }
-        // plans/plan_fx.md FX-125: Position+Normal+Color+TextureCoordinate is 36 bytes, which is
-        // what the stock ModelProcessor emits for a mesh that carries a colour channel -- and it
-        // then sets BasicEffect.VertexColorEnabled, exactly as XNA does. No case matched 36, so
-        // such a mesh fell through to the unlit prog_colored_ below and lost all its lighting:
-        // SAMPLE-047's Sphere01 rendered as a flat green disc where the original has a shaded
-        // sphere with a specular highlight. The lit programs now carry the colour attribute, so
-        // this routes to the same family a stride-32 lit vertex takes.
-        if (stride == 36 && params.lightingEnabled)
+        if (params.lightingEnabled)
         {
             return (!params.preferPerPixelLighting && !receivesShadow)
                        ? StockProgramShape::LitVertexLit
                        : StockProgramShape::Lit;
         }
-        switch (stride)
+        if (params.textureEnabled)
         {
-        case 20: return StockProgramShape::Textured;
-        case 24: return StockProgramShape::ColoredTextured;
-        case 32:
-            // REMED-GFX-234: stride 32 is VertexPositionNormalTexture's, and this branch assumed
-            // that was the only way to reach it. A Position+Colour vertex padded to 32 reaches it
-            // too, and the lit programs take {aPos, aNormal, aUV} -- no colour input -- so the
-            // declared Colour element had nothing to bind to and the draw rendered correct
-            // geometry with its colour silently dropped. A declaration that names no normal cannot
-            // be a lit vertex whatever its stride, so ask it. An absent declaration keeps the
-            // stride's answer, which is the only thing there is to go on.
-            if (!declaredElements.empty() &&
-                !DeclarationNamesUsage(declaredElements, VertexElementUsage::Normal))
-            {
-                return StockProgramShape::Colored;
-            }
-            // Task 1102 (plans/plan_dx9.md Divergence 1): real XNA's BasicEffect defaults
-            // PreferPerPixelLighting=false (per-vertex/Gouraud-shaded lighting), the opposite of
-            // what this renderer rendered unconditionally before this task. Only meaningfully
-            // distinct while lighting is actually on -- with lighting disabled, both programs
-            // degenerate to the identical trivial ambient=(1,1,1) case (see BindDrawParams()'s
-            // own else-branch), so the existing pixel-lit program stays selected there to avoid
-            // an unnecessary program switch.
-            return (params.lightingEnabled && !params.preferPerPixelLighting && !receivesShadow)
-                       ? StockProgramShape::LitVertexLit
-                       : StockProgramShape::Lit;
-        default: return StockProgramShape::Colored;
+            return params.vertexColorEnabled ? StockProgramShape::ColoredTextured
+                                             : StockProgramShape::Textured;
         }
+        return StockProgramShape::Colored;
     }
 
     EasyGLRenderer::Prog3D& EasyGLRenderer::SelectProgram(
-        std::size_t stride, const GpuDrawParams& params,
-        const std::vector<VertexElement>& declaredElements)
+        std::size_t stride, const GpuDrawParams& params)
     {
-        switch (SelectStockProgramShape(stride, params, declaredElements))
+        switch (SelectStockProgramShape(params))
         {
         case StockProgramShape::PbrSkinned:
             // GLTF-463: stride 80 is stride 76 with a colour appended, so it takes the same
@@ -10071,10 +11685,8 @@ CNA_GL_PUNCTUAL_DECL
             EnsureTextured3DProgram();          return prog_textured_;
         case StockProgramShape::ColoredTextured:
             EnsureColoredTextured3DProgram();   return prog_col_textured_;
-        case StockProgramShape::LitVertexLitUntextured:
         case StockProgramShape::LitVertexLit:
             EnsureLit3DVertexLitProgram();      return prog_lit_textured_vertexlit_;
-        case StockProgramShape::LitUntextured:
         case StockProgramShape::Lit:
             EnsureLit3DProgram();               return prog_lit_textured_;
         case StockProgramShape::Colored:
@@ -10084,10 +11696,12 @@ CNA_GL_PUNCTUAL_DECL
         return prog_colored_;
     }
 
-    // REMED-GFX-218 / SAMPLE-005: what each stock program declares, in attribute-location order.
-    // The same location means different things in different programs, so validation and binding
-    // select this per-program table, then locate each input by XNA usage/index in the caller's
-    // declaration. Custom effects keep their separate declaration-order convention.
+    // REMED-GFX-218 / SAMPLE-005 / SOFTWARE-130: what each stock program declares, in
+    // attribute-location order. The same location means different things in different programs,
+    // so validation and binding select this per-program table, then locate each input by XNA
+    // usage/index in the caller's declaration. Every recognized XNA storage format is convertible
+    // to these floating-point inputs; only unknown formats are rejected. Custom effects keep their
+    // separate declaration-order convention.
     void EasyGLRenderer::RequireDeclarationFitsStockProgramEXT(
         const std::vector<VertexElement>& declaredElements, std::size_t stride,
         const GpuDrawParams& params)
@@ -10110,9 +11724,6 @@ CNA_GL_PUNCTUAL_DECL
             VertexElementUsage::Tangent, 0, VertexElementFormat::Vector4, "aTangent"};
         static constexpr StockProgramInput kWeights{
             VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
-        // FX-127: Vector4 is as legal a spelling of BLENDINDICES as Byte4 -- the format describes
-        // the bytes, the shader register is a float4 either way -- and a content processor may
-        // write either. CustomModelAnimation's own SkinnedModelProcessor writes Vector4.
         static constexpr StockProgramInput kIndices{
             VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices",
             VertexElementFormat::Vector4};
@@ -10123,7 +11734,6 @@ CNA_GL_PUNCTUAL_DECL
         static constexpr StockProgramInput kDualTextured[]   = {kPos, kUv, kUv1};
         static constexpr StockProgramInput kDualTexturedColored[] = {
             kPos, kColor, kUv, kUv1};
-        static constexpr StockProgramInput kLitUntextured[]  = {kPos, kNormal};
         static constexpr StockProgramInput kLit[]            = {kPos, kNormal, kUv};
         static constexpr StockProgramInput kLitColor[]            = {kPos, kNormal, kUv, kColor};
         static constexpr StockProgramInput kSkinned[]        = {kPos, kNormal, kUv, kWeights,
@@ -10141,7 +11751,7 @@ CNA_GL_PUNCTUAL_DECL
         const StockProgramInput* inputs = kColored;
         std::size_t count = std::size(kColored);
         const char* name = "colored3d";
-        switch (SelectStockProgramShape(stride, params, declaredElements))
+        switch (SelectStockProgramShape(params))
         {
         case StockProgramShape::PbrSkinned:
             if (stride == 80)
@@ -10185,26 +11795,27 @@ CNA_GL_PUNCTUAL_DECL
         case StockProgramShape::ColoredTextured:
             inputs = kColTextured; count = std::size(kColTextured);
             name = "colored_textured3d"; break;
-        case StockProgramShape::LitVertexLitUntextured:
-            inputs = kLitUntextured; count = std::size(kLitUntextured);
-            name = "lit_untextured3d_vertexlit"; break;
-        case StockProgramShape::LitUntextured:
-            inputs = kLitUntextured; count = std::size(kLitUntextured);
-            name = "lit_untextured3d"; break;
         case StockProgramShape::LitVertexLit:
-            // FX-125: a stride-36 lit vertex carries a colour element as well.
-            if (stride == 36) { inputs = kLitColor; count = std::size(kLitColor); }
-            else              { inputs = kLit;      count = std::size(kLit); }
+            inputs = kLitColor; count = std::size(kLitColor);
             name = "lit_textured3d_vertexlit"; break;
         case StockProgramShape::Lit:
-            if (stride == 36) { inputs = kLitColor; count = std::size(kLitColor); }
-            else              { inputs = kLit;      count = std::size(kLit); }
+            inputs = kLitColor; count = std::size(kLitColor);
             name = "lit_textured3d"; break;
         case StockProgramShape::Colored:
             break;
         }
+        std::array<StockProgramInput, 8> activeInputs{};
+        std::size_t activeCount = 0;
+        for (std::size_t inputIndex = 0; inputIndex < count; ++inputIndex)
+        {
+            if (StockEffectUsesVertexSemantic(
+                    params, inputs[inputIndex].usage, inputs[inputIndex].usageIndex))
+            {
+                activeInputs[activeCount++] = inputs[inputIndex];
+            }
+        }
         CNA::Internal::Graphics::RequireDeclarationMatchesStockProgram(
-            declaredElements, inputs, count, "EasyGL", name);
+            declaredElements, activeInputs.data(), activeCount, "EasyGL", name);
     }
 
     bool EasyGLRenderer::ConfigureDeclarationForStockProgramEXT(
@@ -10232,9 +11843,6 @@ CNA_GL_PUNCTUAL_DECL
             VertexElementUsage::Tangent, 0, VertexElementFormat::Vector4, "aTangent"};
         static constexpr StockProgramInput kWeights{
             VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
-        // FX-127: Vector4 is as legal a spelling of BLENDINDICES as Byte4 -- the format describes
-        // the bytes, the shader register is a float4 either way -- and a content processor may
-        // write either. CustomModelAnimation's own SkinnedModelProcessor writes Vector4.
         static constexpr StockProgramInput kIndices{
             VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices",
             VertexElementFormat::Vector4};
@@ -10245,7 +11853,6 @@ CNA_GL_PUNCTUAL_DECL
         static constexpr StockProgramInput kDualTextured[] = {kPos, kUv, kUv1};
         static constexpr StockProgramInput kDualTexturedColored[] = {
             kPos, kColor, kUv, kUv1};
-        static constexpr StockProgramInput kLitUntextured[] = {kPos, kNormal};
         static constexpr StockProgramInput kLit[] = {kPos, kNormal, kUv};
         static constexpr StockProgramInput kLitColor[] = {kPos, kNormal, kUv, kColor};
         static constexpr StockProgramInput kSkinned[] = {
@@ -10262,7 +11869,7 @@ CNA_GL_PUNCTUAL_DECL
 
         const StockProgramInput* inputs = kColored;
         std::size_t count = std::size(kColored);
-        switch (SelectStockProgramShape(stride, params, primaryDeclaration))
+        switch (SelectStockProgramShape(params))
         {
         case StockProgramShape::PbrSkinned:
             if (stride == 80)
@@ -10297,12 +11904,10 @@ CNA_GL_PUNCTUAL_DECL
         case StockProgramShape::Skinned:
             inputs = kSkinned; count = std::size(kSkinned); break;
         case StockProgramShape::EnvMapped:
+            inputs = kLit; count = std::size(kLit); break;
         case StockProgramShape::LitVertexLit:
         case StockProgramShape::Lit:
-            // FX-125: a stride-36 lit vertex carries a colour element as well.
-            if (stride == 36) { inputs = kLitColor; count = std::size(kLitColor); }
-            else              { inputs = kLit;      count = std::size(kLit); }
-            break;
+            inputs = kLitColor; count = std::size(kLitColor); break;
         case StockProgramShape::DualTexturedColored:
             inputs = kDualTexturedColored; count = std::size(kDualTexturedColored); break;
         case StockProgramShape::DualTextured:
@@ -10311,9 +11916,6 @@ CNA_GL_PUNCTUAL_DECL
             inputs = kTextured; count = std::size(kTextured); break;
         case StockProgramShape::ColoredTextured:
             inputs = kColTextured; count = std::size(kColTextured); break;
-        case StockProgramShape::LitVertexLitUntextured:
-        case StockProgramShape::LitUntextured:
-            inputs = kLitUntextured; count = std::size(kLitUntextured); break;
         case StockProgramShape::Colored:
             break;
         }
@@ -10325,6 +11927,8 @@ CNA_GL_PUNCTUAL_DECL
             buffer.vao.set_attribute_divisor(static_cast<unsigned int>(location), 0);
 
             const StockProgramInput& input = inputs[location];
+            if (!StockEffectUsesVertexSemantic(params, input.usage, input.usageIndex))
+                continue;
             const EasyGLVertexBufferRenderer* sourceBuffer = nullptr;
             const VertexElement* sourceElement = nullptr;
             std::size_t sourceStride = buffer.GetStride();
@@ -10334,19 +11938,29 @@ CNA_GL_PUNCTUAL_DECL
                 [&input, &sourceBuffer, &sourceElement, &sourceStride, &sourceBaseOffset](
                     const EasyGLVertexBufferRenderer& candidateBuffer,
                     std::size_t candidateStride,
-                    int vertexOffset)
+                    int vertexOffset,
+                    const GpuVertexStreamBinding* stream)
                 {
                     const auto& candidateDeclaration = candidateBuffer.GetDeclarationElements();
-                    const auto element = std::find_if(
-                        candidateDeclaration.begin(), candidateDeclaration.end(),
-                        [&input](const VertexElement& candidate)
+                    const VertexElement* element = nullptr;
+                    for (std::size_t elementIndex = 0;
+                         elementIndex < candidateDeclaration.size(); ++elementIndex)
+                    {
+                        const VertexElement& candidate = candidateDeclaration[elementIndex];
+                        const int effectiveUsageIndex = stream != nullptr
+                            ? stream->EffectiveUsageIndex(
+                                elementIndex, candidate.getUsageIndexProperty())
+                            : candidate.getUsageIndexProperty();
+                        if (candidate.getVertexElementUsageProperty() == input.usage &&
+                            effectiveUsageIndex == input.usageIndex)
                         {
-                            return candidate.getVertexElementUsageProperty() == input.usage &&
-                                   candidate.getUsageIndexProperty() == input.usageIndex;
-                        });
-                    if (element == candidateDeclaration.end()) return false;
+                            element = &candidate;
+                            break;
+                        }
+                    }
+                    if (element == nullptr) return false;
                     sourceBuffer = &candidateBuffer;
-                    sourceElement = &*element;
+                    sourceElement = element;
                     sourceStride = candidateStride;
                     sourceBaseOffset = static_cast<std::size_t>(std::max(vertexOffset, 0)) *
                                        candidateStride;
@@ -10365,19 +11979,11 @@ CNA_GL_PUNCTUAL_DECL
                 const std::size_t candidateStride = stream.strideInBytes > 0
                     ? static_cast<std::size_t>(stream.strideInBytes)
                     : candidateBuffer.GetStride();
-                findInStream(candidateBuffer, candidateStride, stream.vertexOffset);
+                findInStream(candidateBuffer, candidateStride, stream.vertexOffset, &stream);
             }
             if (sourceElement == nullptr)
-                findInStream(buffer, buffer.GetStride(), 0);
+                findInStream(buffer, buffer.GetStride(), 0, nullptr);
             if (sourceElement == nullptr) continue;
-
-            if (sourceElement->getVertexElementFormatProperty() != input.format &&
-                sourceElement->getVertexElementFormatProperty() != input.alternateFormat)
-            {
-                throw System::NotSupportedException(
-                    std::string("EasyGL: vertex semantic '") + input.name +
-                    "' has a format incompatible with the selected stock program.");
-            }
 
             const VertexAttribFormat desc =
                 DescribeVertexElementFormat(sourceElement->getVertexElementFormatProperty());
@@ -10507,9 +12113,13 @@ CNA_GL_PUNCTUAL_DECL
             if (bound_->cube != nullptr && bound_->cube->GetMultiSampleCount() > 0)
                 multisampledDestination = true;
             for (int slot = 0; slot < bound_->mrtCount; ++slot)
-                if (bound_->mrt[static_cast<std::size_t>(slot)] != nullptr &&
-                    bound_->mrt[static_cast<std::size_t>(slot)]->GetMultiSampleCount() > 0)
+            {
+                const EasyGLMrtBindingEXT& target =
+                    bound_->mrt[static_cast<std::size_t>(slot)];
+                if ((target.rt2D != nullptr && target.rt2D->GetMultiSampleCount() > 0) ||
+                    (target.cube != nullptr && target.cube->GetMultiSampleCount() > 0))
                     multisampledDestination = true;
+            }
         }
         Matrix xnaPixelCenter = Matrix::getIdentityProperty();
         if (viewportWidth > 0 && viewportHeight > 0 && !multisampledDestination)
@@ -10696,27 +12306,32 @@ CNA_GL_PUNCTUAL_DECL
         // Cube map (unit 1 — bind before texture0 to leave unit 0 active)
         if (p.loc_envmap >= 0)
         {
-            EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_envmap, 1);
             if (params.envMap)
                 params.envMap->BindGL(1);
             else
-                default_white_texture_.active_bind(::easygl::TextureUnit::Texture1,
-                                                   ::easygl::TextureTarget::Texture2D);
+            {
+                EnsureDefaultBlackCubeTexture();
+                default_black_cube_texture_.active_bind(
+                    ::easygl::TextureUnit::Texture1,
+                    ::easygl::TextureTarget::TextureCubeMap);
+            }
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
 
         // Second texture (DualTextureEffect — bind before unit 0 to leave unit 0 active)
         if (p.loc_texture2 >= 0)
         {
-            EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_texture2, 1);
             rtFlipV[1] = SampledRowOrderIsBottomUp(params.texture1) ? 1.0f : 0.0f;
             if (params.texture1)
                 params.texture1->BindGL(1);
             else
-                default_white_texture_.active_bind(::easygl::TextureUnit::Texture1,
+            {
+                EnsureDefaultBlackTexture();
+                default_black_texture_.active_bind(::easygl::TextureUnit::Texture1,
                                                    ::easygl::TextureTarget::Texture2D);
+            }
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
 
@@ -10875,14 +12490,22 @@ CNA_GL_PUNCTUAL_DECL
         // Texture (unit 0)
         if (p.loc_texture >= 0)
         {
-            EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_texture, 0);
             rtFlipV[0] = SampledRowOrderIsBottomUp(params.texture0) ? 1.0f : 0.0f;
             if (params.texture0)
                 params.texture0->BindGL(0);
+            else if (!params.pbr)
+            {
+                EnsureDefaultBlackTexture();
+                default_black_texture_.active_bind(::easygl::TextureUnit::Texture0,
+                                                   ::easygl::TextureTarget::Texture2D);
+            }
             else
+            {
+                EnsureDefaultWhiteTexture();
                 default_white_texture_.active_bind(::easygl::TextureUnit::Texture0,
                                                    ::easygl::TextureTarget::Texture2D);
+            }
             TraceBoundTextureUnit("stock3d-texture0", 0);
         }
 
@@ -11113,7 +12736,8 @@ if (ProfileIsEs2ApiGeneration())
     /// ApplyDepthStencilState, which does not install one otherwise.
     void EasyGLRenderer::RestoreWriteMasksAfterClear(bool depth, bool stencil)
     {
-        if (depth && !depthWriteEnabled_) device.set_depth_mask(false);
+        if (depth)
+            device.set_depth_mask(depthWriteEnabled_ && bound_->depthFormat != 0);
         if (stencil && stencilEnabled_)
         {
             const auto mask = static_cast<unsigned int>(stencilWriteMask_);
@@ -11132,7 +12756,7 @@ if (ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
         if (metagl::IsContextLost()) return;
-        // Task 880: see Clear()'s identical comment -- glClear() is viewport-independent.
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_color(r, g, b, a);
         device.set_clear_depth(depth);
         device.set_depth_mask(true);
@@ -11144,6 +12768,7 @@ if (ProfileIsEs2ApiGeneration())
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
         if (maskActive) ApplyCurrentColorWriteMasks();
         RestoreWriteMasksAfterClear(true, false);
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     // Task 871: glClear(GL_STENCIL_BUFFER_BIT) is itself masked by the currently-active
@@ -11154,26 +12779,31 @@ if (ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::ClearStencil(int stencil)
     {
         if (metagl::IsContextLost()) return;
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_stencil(stencil);
         device.set_stencil_mask(0xFFFFFFFFu);
         device.clear(::easygl::ClearFlags::Stencil);
         RestoreWriteMasksAfterClear(false, true);
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     void EasyGLRenderer::ClearDepthAndStencil(float depth, int stencil)
     {
         if (metagl::IsContextLost()) return;
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_depth(depth);
         device.set_clear_stencil(stencil);
         device.set_depth_mask(true);
         device.set_stencil_mask(0xFFFFFFFFu);
         device.clear(::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
         RestoreWriteMasksAfterClear(true, true);
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     void EasyGLRenderer::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
     {
         if (metagl::IsContextLost()) return;
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_color(r, g, b, a);
         device.set_clear_stencil(stencil);
         device.set_stencil_mask(0xFFFFFFFFu);
@@ -11182,11 +12812,13 @@ if (ProfileIsEs2ApiGeneration())
         if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Stencil);
         if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     void EasyGLRenderer::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
     {
         if (metagl::IsContextLost()) return;
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_color(r, g, b, a);
         device.set_clear_depth(depth);
         device.set_clear_stencil(stencil);
@@ -11199,20 +12831,24 @@ if (ProfileIsEs2ApiGeneration())
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
         RestoreWriteMasksAfterClear(true, true);
         if (maskActive) ApplyCurrentColorWriteMasks();
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     void EasyGLRenderer::ClearDepth(float depth)
     {
         if (metagl::IsContextLost()) return;
+        const bool scissorWasEnabled = DisableScissorForClear();
         device.set_clear_depth(depth);
         device.set_depth_mask(true);
         device.clear(::easygl::ClearFlags::Depth);
         RestoreWriteMasksAfterClear(true, false);
+        RestoreScissorAfterClear(scissorWasEnabled);
     }
 
     void EasyGLRenderer::SetDepthTestEnabled(bool enabled)
     {
-        device.set_depth_test_enabled(enabled);
+        depthEnabled_ = enabled;
+        device.set_depth_test_enabled(enabled && bound_->depthFormat != 0);
         if (enabled)
         {
             device.set_depth_func(::easygl::CompareFunc::Lequal);
@@ -11232,7 +12868,7 @@ if (ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::SetDepthWriteEnabled(bool enabled)
     {
         depthWriteEnabled_ = enabled;   // REMED-GFX-237: what a clear must put back.
-        device.set_depth_mask(enabled);
+        device.set_depth_mask(enabled && bound_->depthFormat != 0);
     }
 
     std::unique_ptr<IVertexBufferRenderer> EasyGLRenderer::CreateVertexBuffer(int vertex_capacity)
@@ -11253,80 +12889,126 @@ if (ProfileIsEs2ApiGeneration())
         return std::make_unique<EasyGLIndexBufferRenderer>(index_capacity, true, RegistryPtr());
     }
 
-    bool EasyGLRenderer::DrawWireframe(const EasyGLVertexBufferRenderer& vb,
-                                              const EasyGLIndexBufferRenderer* ib,
-                                              PrimitiveType primitive, int primitiveCount,
-                                              int startIndex, int baseVertex, int firstVertex)
+    void EasyGLRenderer::BindNegativeBaseVertexIndices(
+        const EasyGLIndexBufferRenderer& ib, int startIndex, int indexCount, int baseVertex)
     {
-        // Only triangle geometry needs expanding; line/point primitives are already "wireframe".
-        if (primitive != PrimitiveType::TriangleList &&
-            primitive != PrimitiveType::TriangleStrip)
-            return false;
-        if (primitiveCount <= 0) return true;
+        if (baseVertex >= 0)
+        {
+            throw System::InvalidOperationException(
+                "EasyGL negative-base fallback requires a negative baseVertex");
+        }
 
-        // Source vertex index at sequence position `pos` within this draw.
-        auto readSrc = [&](int pos) -> std::uint32_t {
-            if (!ib) return static_cast<std::uint32_t>(firstVertex + pos);
-            const auto& bytes = ib->GetCpuBytes();
-            if (ib->IsThirtyTwoBit()) {
-                std::uint32_t v;
-                std::memcpy(&v, bytes.data() + static_cast<std::size_t>(startIndex + pos) * 4, 4);
-                return v;
+        const std::size_t indexSize = ib.thirtyTwoBit
+            ? sizeof(std::uint32_t) : sizeof(std::uint16_t);
+        const std::size_t byteCount =
+            static_cast<std::size_t>(indexCount) * indexSize;
+        const auto& source = ib.GetCpuBytes();
+        negativeBaseVertexScratch_.assign(byteCount, 0);
+        for (int i = 0; i < indexCount; ++i)
+        {
+            const std::int64_t sourceElement =
+                static_cast<std::int64_t>(startIndex) + i;
+            if (sourceElement < 0 || sourceElement >= ib.GetIndexCount())
+                continue;   // SOFTWARE-322: undefined native fetch, safe zero in CPU fallback
+            const std::size_t sourceOffset =
+                static_cast<std::size_t>(sourceElement) * indexSize;
+            if (sourceOffset > source.size() || indexSize > source.size() - sourceOffset)
+                continue;
+            const std::size_t targetOffset = static_cast<std::size_t>(i) * indexSize;
+            if (ib.thirtyTwoBit)
+            {
+                std::uint32_t sourceIndex = 0;
+                std::memcpy(&sourceIndex, source.data() + sourceOffset, indexSize);
+                const std::int64_t effective =
+                    static_cast<std::int64_t>(sourceIndex) + baseVertex;
+                if (effective < 0 || effective > (std::numeric_limits<std::uint32_t>::max)())
+                    continue;
+                const auto rebased = static_cast<std::uint32_t>(effective);
+                std::memcpy(negativeBaseVertexScratch_.data() + targetOffset,
+                            &rebased, indexSize);
             }
-            std::uint16_t v;
-            std::memcpy(&v, bytes.data() + static_cast<std::size_t>(startIndex + pos) * 2, 2);
-            return static_cast<std::uint32_t>(v);
-        };
-
-        wireframeScratch_.clear();
-        auto edge = [&](std::uint32_t a, std::uint32_t b) {
-            wireframeScratch_.push_back(a);
-            wireframeScratch_.push_back(b);
-        };
-        if (primitive == PrimitiveType::TriangleList) {
-            for (int t = 0; t < primitiveCount; ++t) {
-                const std::uint32_t a = readSrc(3 * t);
-                const std::uint32_t b = readSrc(3 * t + 1);
-                const std::uint32_t c = readSrc(3 * t + 2);
-                edge(a, b); edge(b, c); edge(c, a);
-            }
-        } else { // TriangleStrip: primitiveCount triangles over primitiveCount+2 vertices
-            for (int t = 0; t < primitiveCount; ++t) {
-                const std::uint32_t a = readSrc(t);
-                const std::uint32_t b = readSrc(t + 1);
-                const std::uint32_t c = readSrc(t + 2);
-                edge(a, b); edge(b, c); edge(c, a);
+            else
+            {
+                std::uint16_t sourceIndex = 0;
+                std::memcpy(&sourceIndex, source.data() + sourceOffset, indexSize);
+                const std::int64_t effective =
+                    static_cast<std::int64_t>(sourceIndex) + baseVertex;
+                if (effective < 0 || effective > (std::numeric_limits<std::uint16_t>::max)())
+                    continue;
+                const auto rebased = static_cast<std::uint16_t>(effective);
+                std::memcpy(negativeBaseVertexScratch_.data() + targetOffset,
+                            &rebased, indexSize);
             }
         }
 
-        if (!wireframeIboCreated_) { wireframeIbo_.create(); wireframeIboCreated_ = true; }
-        vb.BindForDraw();
-        wireframeIbo_.bind(::easygl::BufferTarget::ElementArray);
-        wireframeIbo_.set_data(::easygl::BufferTarget::ElementArray,
-                               wireframeScratch_.data(),
-                               wireframeScratch_.size() * sizeof(std::uint32_t),
-                               ::easygl::BufferUsage::DynamicDraw);
-        const int lineIndexCount = static_cast<int>(wireframeScratch_.size());
-        if (baseVertex == 0) {
-            device.draw_elements(::easygl::PrimitiveType::Lines, lineIndexCount,
-                                 ::easygl::DataType::UnsignedInt, nullptr);
-        } else {
-if (ProfileRequiresBaseVertexPointerRebase())
-{
-            // GLES/WebGL profiles cannot assume glDrawElementsBaseVertex (ES 3.2).
-            ShiftEnabledPerVertexAttribPointers(baseVertex, +1);
-            device.draw_elements(::easygl::PrimitiveType::Lines, lineIndexCount,
-                                 ::easygl::DataType::UnsignedInt, nullptr);
-            ShiftEnabledPerVertexAttribPointers(baseVertex, -1);
-}
-else
-{
-            ::metagl::glDrawElementsBaseVertex(::easygl::PrimitiveType::Lines, lineIndexCount,
-                                               ::easygl::DataType::UnsignedInt, nullptr, baseVertex);
-}
+        if (!negativeBaseVertexIboCreated_)
+        {
+            negativeBaseVertexIbo_.create();
+            negativeBaseVertexIboCreated_ = true;
         }
-        vb.UnbindAfterDraw();
-        return true;
+        negativeBaseVertexIbo_.bind(::easygl::BufferTarget::ElementArray);
+        negativeBaseVertexIbo_.set_data(
+            ::easygl::BufferTarget::ElementArray,
+            negativeBaseVertexScratch_.data(),
+            negativeBaseVertexScratch_.size(),
+            ::easygl::BufferUsage::DynamicDraw);
+    }
+
+    void EasyGLRenderer::DrawIndexedWithBaseVertexFallback(
+        const EasyGLIndexBufferRenderer& ib,
+        ::easygl::PrimitiveType primitive,
+        int indexCount,
+        ::easygl::DataType indexType,
+        const void* indexOffset,
+        int startIndex,
+        int baseVertex,
+        bool instanced,
+        int instanceCount)
+    {
+        // A negative base is valid in XNA when the stored indices compensate it. Folding it into
+        // the selected index slice avoids both an impossible GLES/WebGL attribute offset before
+        // buffer start and driver-dependent desktop handling of negative native base vertices.
+        const bool foldNegativeIndices = baseVertex < 0;
+        if (foldNegativeIndices)
+            BindNegativeBaseVertexIndices(ib, startIndex, indexCount, baseVertex);
+        else
+            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
+
+        const void* effectiveOffset = foldNegativeIndices ? nullptr : indexOffset;
+        const int effectiveBaseVertex = foldNegativeIndices ? 0 : baseVertex;
+        const auto draw = [&]() {
+            if (instanced)
+            {
+                device.draw_elements_instanced(
+                    primitive, indexCount, indexType, effectiveOffset, instanceCount);
+            }
+            else
+            {
+                device.draw_elements(primitive, indexCount, indexType, effectiveOffset);
+            }
+        };
+
+        if (effectiveBaseVertex == 0)
+        {
+            draw();
+        }
+        else if (ProfileRequiresBaseVertexPointerRebase())
+        {
+            ShiftEnabledPerVertexAttribPointers(effectiveBaseVertex, +1);
+            draw();
+            ShiftEnabledPerVertexAttribPointers(effectiveBaseVertex, -1);
+        }
+        else if (instanced)
+        {
+            ::metagl::glDrawElementsInstancedBaseVertex(
+                primitive, indexCount, indexType, effectiveOffset,
+                instanceCount, effectiveBaseVertex);
+        }
+        else
+        {
+            ::metagl::glDrawElementsBaseVertex(
+                primitive, indexCount, indexType, effectiveOffset, effectiveBaseVertex);
+        }
     }
 
     void EasyGLRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb_in,
@@ -11336,6 +13018,7 @@ else
                                                       PrimitiveType primitive,
                                                       int primitiveCount)
     {
+        ApplyStencilPrimitiveTopology(primitive);
         EnsureColored3DProgram();
         const auto& vb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
 
@@ -11359,9 +13042,6 @@ else
         CNA_RENDER_LOG("DrawColoredPrimitives: prim=" << static_cast<int>(primitive)
             << " count=" << primitiveCount << " verts=" << vertex_count);
 
-        if (wireframe_ && DrawWireframe(vb, nullptr, primitive, primitiveCount, 0, 0, 0))
-            return;
-
         vb.BindForDraw();
         device.draw_arrays(ToEasyGl(primitive), 0, vertex_count);
         vb.UnbindAfterDraw();
@@ -11375,6 +13055,7 @@ else
                                                              PrimitiveType primitive,
                                                              int primitiveCount)
     {
+        ApplyStencilPrimitiveTopology(primitive);
         EnsureColored3DProgram();
         const auto& vb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
         const auto& ib = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
@@ -11398,9 +13079,6 @@ else
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawIndexedColoredPrimitives: prim=" << static_cast<int>(primitive)
             << " count=" << primitiveCount << " indices=" << index_count);
-
-        if (wireframe_ && DrawWireframe(vb, &ib, primitive, primitiveCount, 0, 0, 0))
-            return;
 
         vb.BindForDraw();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
@@ -11457,6 +13135,7 @@ else
                     static_cast<std::size_t>(std::max(stream.vertexOffset, 0)) * stride;
                 entry.instanceFrequency = stream.instanceFrequency > 0
                     ? static_cast<unsigned int>(stream.instanceFrequency) : 0u;
+                entry.binding = &stream;
                 streams.push_back(entry);
             }
             if (streams.empty())
@@ -11524,6 +13203,7 @@ else
                                                  const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+        ApplyStencilPrimitiveTopology(primitive);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-062: a compiled effect's vertex layout is arbitrary and validated against
         // the applied pass's own shader reflection (BindCompiledEffectForDrawEXT), not against the
@@ -11536,9 +13216,12 @@ else
             RequireCompiledEffectDeclarations(compiledStreams);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
-            const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
-                                         *params.compiledEffectRuntime);
+                                         *params.compiledEffectRuntime, nullptr,
+                                         params.compiledDeviceTextures,
+                                         params.compiledDeviceSamplerStates,
+                                         params.compiledDeviceVertexTextures,
+                                         params.compiledDeviceVertexSamplerStates);
             const int compiledVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
             // glDrawArrays' `first` advances every bound stream by that many of its own records,
             // which is the same rule the stock multi-stream route relies on.
@@ -11588,16 +13271,12 @@ else
         }
 
         const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
-        Prog3D& p = SelectProgram(layoutStride, params, vb.GetDeclarationElements());
+        Prog3D& p = SelectProgram(layoutStride, params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
         const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawPrimitivesEx: stride=" << layoutStride
             << " prim=" << static_cast<int>(primitive) << " verts=" << vertex_count);
-
-        if (!multiStream && wireframe_ &&
-            DrawWireframe(vb, nullptr, primitive, primitiveCount, 0, 0, params.vertexStart))
-            return;
 
         vb.BindForDraw();
         const bool semanticLayout = ConfigureDeclarationForStockProgramEXT(
@@ -11620,6 +13299,7 @@ else
                                                         const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+        ApplyStencilPrimitiveTopology(primitive);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-062: see DrawPrimitivesEx's own compiled-effect branch for why this
         // dispatches before RequireDeclarationFitsStockProgramEXT runs.
@@ -11629,16 +13309,18 @@ else
             const auto& compiledIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
             auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
             RequireCompiledEffectDeclarations(compiledStreams);
-            const bool rebasePointers = params.baseVertex != 0 &&
+            const bool rebasePointers = params.baseVertex > 0 &&
                 ProfileRequiresBaseVertexPointerRebase();
             if (rebasePointers)
                 ApplyCompiledEffectBaseVertex(compiledStreams, params.baseVertex);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
-            const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
-                                         *params.compiledEffectRuntime);
-            compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);
+                                         *params.compiledEffectRuntime, nullptr,
+                                         params.compiledDeviceTextures,
+                                         params.compiledDeviceSamplerStates,
+                                         params.compiledDeviceVertexTextures,
+                                         params.compiledDeviceVertexSamplerStates);
             const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto compiledIdxType = compiledIb.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                                   : ::easygl::DataType::UnsignedShort;
@@ -11646,17 +13328,10 @@ else
             const void* compiledIndexOffset = reinterpret_cast<const void*>(
                 static_cast<std::uintptr_t>(params.startIndex) *
                 static_cast<std::uintptr_t>(compiledIndexSize));
-            if (params.baseVertex == 0 || rebasePointers)
-            {
-                device.draw_elements(ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
-                                     compiledIndexOffset);
-            }
-            else
-            {
-                ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), compiledIndexCount,
-                                                   compiledIdxType, compiledIndexOffset,
-                                                   params.baseVertex);
-            }
+            DrawIndexedWithBaseVertexFallback(
+                compiledIb, ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
+                compiledIndexOffset, params.startIndex,
+                rebasePointers ? 0 : params.baseVertex, false, 0);
             compiledVao.unbind();
             return;
         }
@@ -11695,71 +13370,38 @@ else
             BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
             const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
             vb.BindForDraw();
-            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
             const auto idxTypeCustom = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                         : ::easygl::DataType::UnsignedShort;
             const int indexSizeCustom = ib.thirtyTwoBit ? 4 : 2;
             const void* indexOffsetCustom = reinterpret_cast<const void*>(
                 static_cast<std::uintptr_t>(params.startIndex) * static_cast<std::uintptr_t>(indexSizeCustom));
-            if (params.baseVertex == 0) {
-                device.draw_elements(ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom);
-            } else {
-if (ProfileRequiresBaseVertexPointerRebase())
-{
-                // GLES/WebGL profiles cannot assume glDrawElementsBaseVertex (ES 3.2).
-                ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
-                device.draw_elements(ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom);
-                ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
-}
-else
-{
-                ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), index_count, idxTypeCustom,
-                                                   indexOffsetCustom, params.baseVertex);
-}
-            }
+            DrawIndexedWithBaseVertexFallback(
+                ib, ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom,
+                params.startIndex, params.baseVertex, false, 0);
             if (multiStream) RestoreSingleStreamAttributes(vao, params);
             vb.UnbindAfterDraw();
             return;
         }
 
         const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
-        Prog3D& p = SelectProgram(layoutStride, params, vb.GetDeclarationElements());
+        Prog3D& p = SelectProgram(layoutStride, params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawIndexedPrimitivesEx: stride=" << layoutStride
             << " prim=" << static_cast<int>(primitive) << " indices=" << index_count);
 
-        if (!multiStream && wireframe_ &&
-            DrawWireframe(vb, &ib, primitive, primitiveCount,
-                          params.startIndex, params.baseVertex, 0))
-            return;
-
         vb.BindForDraw();
         const bool semanticLayout = ConfigureDeclarationForStockProgramEXT(
             const_cast<EasyGLVertexBufferRenderer&>(vb), layoutStride, params);
-        ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         const auto idxType2 = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                : ::easygl::DataType::UnsignedShort;
         const int indexSize = ib.thirtyTwoBit ? 4 : 2;
         const void* indexOffset = reinterpret_cast<const void*>(
             static_cast<std::uintptr_t>(params.startIndex) * static_cast<std::uintptr_t>(indexSize));
-        if (params.baseVertex == 0) {
-            device.draw_elements(ToEasyGl(primitive), index_count, idxType2, indexOffset);
-        } else {
-if (ProfileRequiresBaseVertexPointerRebase())
-{
-            // GLES/WebGL profiles cannot assume glDrawElementsBaseVertex (ES 3.2).
-            ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
-            device.draw_elements(ToEasyGl(primitive), index_count, idxType2, indexOffset);
-            ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
-}
-else
-{
-            ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), index_count, idxType2,
-                                               indexOffset, params.baseVertex);
-}
-        }
+        DrawIndexedWithBaseVertexFallback(
+            ib, ToEasyGl(primitive), index_count, idxType2, indexOffset,
+            params.startIndex, params.baseVertex, false, 0);
         if (multiStream) RestoreSingleStreamAttributes(vao, params);
         vb.UnbindAfterDraw();
         if (semanticLayout)
@@ -11777,6 +13419,7 @@ else
                                                           const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+        ApplyStencilPrimitiveTopology(primitive);
 if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 core has no glDrawElementsInstanced/glVertexAttribDivisor, and this profile
@@ -11804,16 +13447,18 @@ else
             const auto& compiledIb = static_cast<const EasyGLIndexBufferRenderer&>(ib_in);
             auto compiledStreams = CollectCompiledEffectStreams(compiledVb, params);
             RequireCompiledEffectDeclarations(compiledStreams);
-            const bool rebasePointers = params.baseVertex != 0 &&
+            const bool rebasePointers = params.baseVertex > 0 &&
                 ProfileRequiresBaseVertexPointerRebase();
             if (rebasePointers)
                 ApplyCompiledEffectBaseVertex(compiledStreams, params.baseVertex);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
-            const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
-                                         *params.compiledEffectRuntime);
-            compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);
+                                         *params.compiledEffectRuntime, nullptr,
+                                         params.compiledDeviceTextures,
+                                         params.compiledDeviceSamplerStates,
+                                         params.compiledDeviceVertexTextures,
+                                         params.compiledDeviceVertexSamplerStates);
             const int compiledIndexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto compiledIdxType = compiledIb.thirtyTwoBit
                 ? ::easygl::DataType::UnsignedInt : ::easygl::DataType::UnsignedShort;
@@ -11821,18 +13466,10 @@ else
             const void* compiledIndexOffset = reinterpret_cast<const void*>(
                 static_cast<std::uintptr_t>(params.startIndex) *
                 static_cast<std::uintptr_t>(compiledIndexSize));
-            if (params.baseVertex == 0 || rebasePointers)
-            {
-                device.draw_elements_instanced(ToEasyGl(primitive), compiledIndexCount,
-                                               compiledIdxType, compiledIndexOffset,
-                                               instanceCount);
-            }
-            else
-            {
-                ::metagl::glDrawElementsInstancedBaseVertex(
-                    ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
-                    compiledIndexOffset, instanceCount, params.baseVertex);
-            }
+            DrawIndexedWithBaseVertexFallback(
+                compiledIb, ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
+                compiledIndexOffset, params.startIndex,
+                rebasePointers ? 0 : params.baseVertex, true, instanceCount);
             compiledVao.unbind();
             return;
         }
@@ -11937,41 +13574,20 @@ else
         if (params.customEffectRenderer)
         {
             BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
-            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         }
         else
         {
             // REMED-GFX-201: the shader sees the CONCATENATION of the per-vertex streams, so the
             // program is selected by the combined stride -- which equals the one stream's own
             // stride whenever a single per-vertex buffer is bound.
-            Prog3D& p = SelectProgram(
-                CombinedVertexStrideOr(params, vb.GetStride()), params, meshDecl);
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
             p.prog.use();
             BindDrawParams(p, world, view, projection, params);
-            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         }
 
-        if (params.baseVertex == 0)
-        {
-            device.draw_elements_instanced(
-                ToEasyGl(primitive), index_count, idxType, indexOffset, instanceCount);
-        }
-        else
-        {
-if (ProfileRequiresBaseVertexPointerRebase())
-{
-            ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
-            device.draw_elements_instanced(
-                ToEasyGl(primitive), index_count, idxType, indexOffset, instanceCount);
-            ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
-}
-else
-{
-            ::metagl::glDrawElementsInstancedBaseVertex(
-                ToEasyGl(primitive), index_count, idxType, indexOffset,
-                instanceCount, params.baseVertex);
-}
-        }
+        DrawIndexedWithBaseVertexFallback(
+            ib, ToEasyGl(primitive), index_count, idxType, indexOffset,
+            params.startIndex, params.baseVertex, true, instanceCount);
 
         // REMED-GFX-202: every location this draw claimed is released again, in reverse, so a later
         // draw through the same VAO never inherits a stale divisor or a pointer into a foreign VBO.
@@ -11988,8 +13604,7 @@ else
         }
         if (params.customEffectRenderer == nullptr)
         {
-            Prog3D& p = SelectProgram(
-                CombinedVertexStrideOr(params, vb.GetStride()), params, meshDecl);
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
             if (p.loc_instanced >= 0)
                 p.prog.set_uniform(p.loc_instanced, 0.0f);
         }
@@ -12010,6 +13625,7 @@ else
                                               const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
+        ApplyStencilPrimitiveTopology(primitive);
         if (!SupportsIndirectDrawEXT())
             throw System::NotSupportedException(
                 "CNA EasyGL: this GL context has no indirect draw (GL ES 3.1 / desktop GL 4.0 and "
@@ -12098,8 +13714,7 @@ else
         }
         else
         {
-            Prog3D& p = SelectProgram(
-                CombinedVertexStrideOr(params, vb.GetStride()), params, meshDecl);
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
             p.prog.use();
             BindDrawParams(p, world, view, projection, params);
         }
@@ -12139,8 +13754,7 @@ else
             RestoreSingleStreamAttributes(vao, params);
         if (params.customEffectRenderer == nullptr)
         {
-            Prog3D& p = SelectProgram(
-                CombinedVertexStrideOr(params, vb.GetStride()), params, meshDecl);
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
             if (p.loc_instanced >= 0)
                 p.prog.set_uniform(p.loc_instanced, 0.0f);
         }
@@ -12202,7 +13816,8 @@ namespace CNA::Internal::Renderers
             args.surface, *args.glContext,
             args.virtualWidth, args.virtualHeight,
             args.presentationMode, args.contextRecoveryEnabled,
-            args.multiSampleCount, args.swapInterval, profile);
+            args.multiSampleCount, args.swapInterval, profile,
+            args.depthStencilFormat);
     }
 
     std::unique_ptr<IGraphicsRenderer> EasyGL::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)

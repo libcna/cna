@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
 // Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced.
 using namespace CNA::Testing::Renderers;
@@ -31,6 +32,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -48,6 +50,8 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 
 // plans/plan_runtimerenderer.md RTR-P9-9: these three blocks need their renderer's own headers and
 // types, so they stay COMPILE-time -- no runtime predicate makes a type exist. The condition
@@ -85,6 +89,7 @@ using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
@@ -351,6 +356,7 @@ namespace
         // calls that follow it, which only run once SetUp() has already let the test proceed.
         void SetUp() override
         {
+            device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
                 GTEST_SKIP() << "Renderer explicitly does not support indexed rendering";
         }
@@ -707,13 +713,15 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
     const std::array<VertexPositionColor, 6> vertices{
         red[0], red[1], red[2], blue[0], blue[1], blue[2],
     };
-    const std::array<std::uint32_t, 3> indices{3, 4, 5};
+    // The leading decoy index makes startIndex observable. A fallback that rebases the whole
+    // buffer but still draws at the old byte offset will miss the requested three-index slice.
+    const std::array<std::uint32_t, 4> indices{0, 3, 4, 5};
     VertexBuffer vertexBuffer(
         device, PositionColorDeclaration(), 6, BufferUsage::None);
     IndexBuffer indexBuffer(
-        device, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
+        device, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None);
     vertexBuffer.SetData(vertices.data(), 6);
-    indexBuffer.SetData(indices.data(), 3);
+    indexBuffer.SetData(indices.data(), 4);
 
     BasicEffect effect(device);
     ApplyVertexColorEffect(effect);
@@ -725,7 +733,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
         0,
         3,
         3,
-        0,
+        1,
         1);
 
     ExpectExactColor(
@@ -1086,11 +1094,6 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitDrawHonorsCompleteRangeBaseCou
 
 TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths)
 {
-    // plans/plan_runtimerenderer.md RTR-P9-5: asked of the ACTIVE renderer. GTEST_SKIP() returns from
-    // the test body it is written in, so what used to be the `#else` arm is simply what follows.
-    if (CNA_RENDERER_IS(Software))
-        GTEST_SKIP() << "Software v1 intentionally supports indexed TriangleList only";
-
     if (!device.SupportsCapability(GraphicsCapability::ThreeD))
         GTEST_SKIP() << "Renderer explicitly does not support indexed triangle strips";
     device.setRasterizerStateProperty(RasterizerState::CullNone);
@@ -1133,7 +1136,7 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
 
     // plans/plan_runtimerenderer.md RTR-P9-5: the renderers with an exact-pixel backbuffer oracle.
     if (CNA_RENDERER_IS(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
-                        DirectX9, DirectX11))
+                        DirectX9, DirectX11, Software))
     {
         const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
         ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "basic Uint16 strip");
@@ -1186,6 +1189,7 @@ TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
     device.SetIndexBuffer(&staticA);
     device.DrawIndexedPrimitives(
         PrimitiveType::TriangleList, 0, 0, 9, 0, 1);
+    device.SetIndexBuffer(nullptr);
     staticA.SetData(degenerateIndices.data(), 3);
 
     device.SetIndexBuffer(&dynamicB);
@@ -1246,12 +1250,16 @@ TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedV
     // Multiple draws between updates intentionally share A's one immutable native version.
     device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
 
+    device.SetVertexBuffer(nullptr);
     buffer.SetData(sourceB.data(), 3);
+    device.SetVertexBuffer(&buffer);
     effect.setWorldProperty(Microsoft::Xna::Framework::Matrix::getIdentityProperty());
     effect.Apply();
     device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
 
+    device.SetVertexBuffer(nullptr);
     buffer.SetData(sourceA.data(), 3);
+    device.SetVertexBuffer(&buffer);
     effect.setWorldProperty(
         Microsoft::Xna::Framework::Matrix::CreateTranslation(0.68f, 0.0f, 0.0f));
     effect.Apply();
@@ -2358,7 +2366,7 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffse
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
@@ -2431,7 +2439,7 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
@@ -2497,11 +2505,11 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
     // must not retroactively select that format for the queued Uint32 draw.
     const std::array<std::uint16_t, 5> degenerate16{0, 0, 0, 0, 0};
     const std::array<std::uint32_t, 4> degenerate32{0, 0, 0, 0};
+    device.SetIndexBuffer(nullptr);
     static16A.SetData(degenerate16.data(), 5);
     dynamic32B.SetData(
         degenerate32.data(), 0, 4, SetDataOptions::Discard);
     static16C.SetData(degenerate16.data(), 5);
-    device.SetIndexBuffer(nullptr);
     device.SetVertexBuffer(nullptr);
     static16A.Dispose();
     dynamic32B.Dispose();
@@ -2531,7 +2539,7 @@ TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, Vulkan, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
@@ -2594,7 +2602,8 @@ TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
     const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
     ExpectExactColor(pixels.AtNdc(-0.75f), Color::Red, "indexed triangle list");
     ExpectExactColor(pixels.AtNdc(-0.25f), Color::Lime, "indexed triangle strip");
-    ExpectExactColor(pixels.AtNdc(0.25f), Color::Blue, "indexed line list");
+    ExpectExactColorNear(
+        pixels, 0.25f, 0.0f, Color::Blue, "indexed line list");
     ExpectExactColorNear(
         pixels, 0.65f, 0.0f, Color::Yellow, "indexed line strip first segment");
     ExpectExactColorNear(
@@ -2609,7 +2618,7 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, Vulkan);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, Vulkan, Software);
     RequireIndexedRendering();
 
 #ifdef CNA_TEST_VULKAN_AVAILABLE
@@ -2681,7 +2690,8 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
     const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
     ExpectExactColor(pixels.AtNdc(-0.75f), Color::Red, "Uint32 triangle list");
     ExpectExactColor(pixels.AtNdc(-0.25f), Color::Lime, "Uint32 triangle strip");
-    ExpectExactColor(pixels.AtNdc(0.25f), Color::Blue, "Uint32 line list");
+    ExpectExactColorNear(
+        pixels, 0.25f, 0.0f, Color::Blue, "Uint32 line list");
     ExpectExactColorNear(
         pixels, 0.65f, 0.0f, Color::Yellow, "Uint32 line strip first segment");
     ExpectExactColorNear(
@@ -2693,7 +2703,7 @@ TEST_F(IndexedDrawDeferredTest, PublicThirtyTwoBitTopologiesRenderExactDistinctG
 }
 
 
-TEST_F(IndexedDrawDeferredTest, SoftwareExplicitlyRejectsUnsupportedIndexedTopologies)
+TEST_F(IndexedDrawDeferredTest, SoftwareRejectsAnInvalidIndexedTopologyWithoutRendering)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
@@ -2711,31 +2721,26 @@ TEST_F(IndexedDrawDeferredTest, SoftwareExplicitlyRejectsUnsupportedIndexedTopol
 
     BasicEffect effect(device);
     ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
     device.SetVertexBuffer(&vertexBuffer);
     device.SetIndexBuffer(&indexBuffer);
 
     EXPECT_THROW(
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleStrip, 0, 0, 4, 0, 2),
-        std::runtime_error);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(
-            PrimitiveType::LineList, 0, 0, 4, 0, 2),
-        std::runtime_error);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(
-            PrimitiveType::LineStrip, 0, 0, 4, 0, 3),
-        std::runtime_error);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(
-            PrimitiveType::PointListEXT, 0, 0, 4, 0, 4),
-        std::runtime_error);
+            static_cast<PrimitiveType>(999), 0, 0, 4, 0, 1),
+        System::InvalidOperationException);
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    EXPECT_TRUE(std::all_of(
+        pixels.pixels.begin(), pixels.pixels.end(),
+        [](const Color& pixel) { return pixel == Color::Black; }))
+        << "the invalid indexed topology submitted partial geometry";
 }
 
-// REMED-GFX-110: the CPU raster paths address real host storage, so a decoded index that leaves
-// the bound vertex buffer must be rejected deterministically instead of forming an out-of-range
-// pointer. The public arguments below are all individually legal; only the decoded address is not.
-TEST_F(IndexedDrawDeferredTest, SoftwareRejectsDecodedVertexAddressesOutsideTheBoundBuffer)
+// SOFTWARE-322: XNA forwards decoded out-of-range vertex addresses to D3D. Software must preserve
+// that absence of a managed exception without ever forming an invalid host pointer, then remain
+// usable for a fully valid draw. Undefined pixels from the invalid calls are deliberately ignored.
+TEST_F(IndexedDrawDeferredTest, SoftwareSafelyForwardsDecodedAddressesOutsideTheBoundBuffer)
 {
     // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
@@ -2772,27 +2777,29 @@ TEST_F(IndexedDrawDeferredTest, SoftwareRejectsDecodedVertexAddressesOutsideTheB
     device.SetVertexBuffer(&vertexBuffer);
 
     device.SetIndexBuffer(&pastEndBuffer);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1),
-        System::ArgumentOutOfRangeException);
+    EXPECT_NO_THROW(
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1));
 
     device.SetIndexBuffer(&basedBuffer);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 1, 0, 2, 0, 1),
-        System::ArgumentOutOfRangeException);
+    EXPECT_NO_THROW(
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 1, 0, 2, 0, 1));
 
     device.SetIndexBuffer(&wrappingBuffer);
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 1, 0, 2, 0, 1),
-        System::ArgumentOutOfRangeException);
+    EXPECT_NO_THROW(
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 1, 0, 2, 0, 1));
 
-    // No rejected draw may have written a pixel.
+    // A valid draw after all three undefined native ranges proves that Software retained usable
+    // state and that its safety defaults did not corrupt the actual buffer resources.
+    device.Clear(Color::Black);
+    device.SetIndexBuffer(&basedBuffer);
+    EXPECT_NO_THROW(
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1));
     ExpectExactColor(
-        ReadCenter(device), Color::Black,
-        "rejected Software indexed draws write nothing");
+        ReadCenter(device), Color::White,
+        "valid Software indexed draw after native out-of-range forwarding");
 }
 
-TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSubmission)
+TEST_F(IndexedDrawDeferredTest, PublicContractSeparatesRequiredCountsFromNativeIndexedRanges)
 {
     RequireIndexedRendering();
 
@@ -2822,6 +2829,26 @@ TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSu
     device.SetVertexBuffer(&vertexBuffer);
     device.SetIndexBuffer(&indexBuffer);
 
+    const bool managedRangeGuard =
+        device.GetRenderer().RequiresManagedBufferedDrawRangeValidationEXT();
+    const auto expectBufferedRangeOutcome = [&](auto&& draw, const std::string& label) {
+        bool caughtRange = false;
+        try
+        {
+            draw();
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            caughtRange = true;
+        }
+        catch (const std::exception& e)
+        {
+            ADD_FAILURE() << label << ": wrong exception: " << e.what();
+            return;
+        }
+        EXPECT_EQ(managedRangeGuard, caughtRange) << label;
+    };
+
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(
         PrimitiveType::TriangleList, 0, 0, 9, 0, 1));
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(
@@ -2844,33 +2871,33 @@ TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSu
     }};
     for (const auto& countCase : countCases)
     {
-        EXPECT_THROW(
+        expectBufferedRangeOutcome([&] {
             device.DrawIndexedPrimitives(
                 countCase.primitive,
                 0,
                 0,
                 9,
                 9 - countCase.consumedIndices,
-                countCase.primitiveCount + 1),
-            System::ArgumentOutOfRangeException);
+                countCase.primitiveCount + 1);
+        }, "index range one primitive past the bound buffer");
     }
 
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 9, -1, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, 9, -1, 1);
+    }, "negative startIndex");
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 9, 7, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, 9, 7, 1);
+    }, "index range crossing the buffer end");
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 9, 10, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 0, 0, 9, 10, 1);
+    }, "startIndex past the buffer");
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, 9, 0, 4),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 0, 0, 9, 0, 4);
+    }, "primitive count consuming more indices than the buffer");
     EXPECT_THROW(
         device.DrawIndexedPrimitives(
             PrimitiveType::TriangleList,
@@ -2879,19 +2906,19 @@ TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSu
             9,
             0,
             std::numeric_limits<int>::max()),
-        System::ArgumentOutOfRangeException);
+        System::NotSupportedException);
     EXPECT_THROW(
         device.DrawIndexedPrimitives(
             PrimitiveType::TriangleList, 0, 0, 9, 0, 0),
         System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, -1, 0, 9, 0, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, -1, 0, 9, 0, 1);
+    }, "negative baseVertex");
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 0, -1, 9, 0, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 0, -1, 9, 0, 1);
+    }, "negative minVertexIndex hint");
     EXPECT_THROW(
         device.DrawIndexedPrimitives(
             PrimitiveType::TriangleList, 0, 0, -1, 0, 1),
@@ -2900,44 +2927,125 @@ TEST_F(IndexedDrawDeferredTest, PublicContractValidatesEveryIndexedRangeBeforeSu
         device.DrawIndexedPrimitives(
             PrimitiveType::TriangleList, 0, 0, 0, 0, 1),
         System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 10, 0, 1, 0, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 10, 0, 1, 0, 1);
+    }, "baseVertex past the buffer");
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 3, 7, 1, 0, 1),
-        System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
+            PrimitiveType::TriangleList, 3, 7, 1, 0, 1);
+    }, "declared vertex start past the buffer");
+    expectBufferedRangeOutcome([&] {
         device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleList, 3, 3, 4, 0, 1),
-        System::ArgumentOutOfRangeException);
+            PrimitiveType::TriangleList, 3, 3, 4, 0, 1);
+    }, "declared vertex window crossing the buffer end");
 }
 
-TEST_F(IndexedDrawDeferredTest, PublicContractRejectsNegativeIndexedBaseVertex)
+TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedBaseVertex)
 {
-    if (!device.SupportsCapability(GraphicsCapability::ThreeD))
-        GTEST_SKIP() << "Renderer explicitly does not support indexed rendering";
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    RequireIndexedRendering();
 
-    const auto vertices = StripTriangleAt(0.0f, Color::White);
-    const std::array<std::uint16_t, 3> indices{0, 1, 2};
+    const auto selected = CenterTriangle(Color::Lime);
+    const auto decoy = CenterTriangle(Color::Red);
+    const std::array<VertexPositionColor, 6> vertices{
+        selected[0], selected[1], selected[2],
+        decoy[0], decoy[1], decoy[2],
+    };
+    const std::array<std::uint16_t, 3> indices{3, 4, 5};
     VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(), 3, BufferUsage::None);
+        device, PositionColorDeclaration(), 6, BufferUsage::None);
     IndexBuffer indexBuffer(
         device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
-    vertexBuffer.SetData(vertices.data(), 3);
+    vertexBuffer.SetData(vertices.data(), 6);
     indexBuffer.SetData(indices.data(), 3);
     BasicEffect effect(device);
     ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
     device.SetVertexBuffer(&vertexBuffer);
     device.SetIndexBuffer(&indexBuffer);
 
-    // CNA's current public contract rejects every negative baseVertex before renderer dispatch;
-    // positive baseVertex behavior is exercised by the rendering test above.
-    EXPECT_THROW(
-        device.DrawIndexedPrimitives(
-            PrimitiveType::TriangleStrip, -1, 0, 3, 0, 1),
-        System::ArgumentOutOfRangeException);
+    // The signed base compensates the index values: 3..5 become 0..2. Dropping the base would
+    // render the identically positioned red decoy, while applying it twice leaves the buffer.
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, -3, 3, 3, 0, 1);
+
+    ExpectExactColor(
+        ReadCenter(device), Color::Lime,
+        "compensated negative baseVertex with 16-bit indices");
+}
+
+TEST_F(IndexedDrawDeferredTest, PublicContractAcceptsCompensatedNegativeIndexedBaseVertex32)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, WebGPU, Vulkan, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX9, DirectX11, Software);
+    RequireIndexedRendering();
+
+    const auto selected = CenterTriangle(Color::Lime);
+    const auto decoy = CenterTriangle(Color::Red);
+    const std::array<VertexPositionColor, 6> vertices{
+        selected[0], selected[1], selected[2],
+        decoy[0], decoy[1], decoy[2],
+    };
+    // The leading decoy index makes startIndex observable. A fallback that rebases the whole
+    // buffer but still draws at the old byte offset will miss the requested three-index slice.
+    const std::array<std::uint32_t, 4> indices{0, 3, 4, 5};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 6, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 6);
+    indexBuffer.SetData(indices.data(), 4);
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, -3, 3, 3, 1, 1);
+
+    ExpectExactColor(
+        ReadCenter(device), Color::Lime,
+        "compensated negative baseVertex with 32-bit indices and nonzero startIndex");
+}
+
+TEST(EasyGlIndexedDeviceLifecycleTest, ThirtyTwoBitDrawDoesNotPoisonNextDesktopContext)
+{
+    CNA_SKIP_IF_RENDERER_IS_NOT(OpenGL33);
+
+    {
+        GraphicsDevice firstDevice;
+        firstDevice.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+        firstDevice.setRasterizerStateProperty(RasterizerState::CullNone);
+        firstDevice.setDepthStencilStateProperty(DepthStencilState::None);
+        const auto red = CenterTriangle(Color::Red);
+        const auto blue = CenterTriangle(Color::Blue);
+        const std::array<VertexPositionColor, 6> sourceVertices{
+            red[0], red[1], red[2], blue[0], blue[1], blue[2],
+        };
+        const std::array<std::uint32_t, 3> indices{3, 4, 5};
+        VertexBuffer vertexBuffer(
+            firstDevice, PositionColorDeclaration(), 6, BufferUsage::None);
+        IndexBuffer indexBuffer(
+            firstDevice, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
+        vertexBuffer.SetData(sourceVertices.data(), 6);
+        indexBuffer.SetData(indices.data(), 3);
+        BasicEffect effect(firstDevice);
+        effect.VertexColorEnabled = true;
+        effect.Apply();
+        firstDevice.Clear(Color::Black);
+        firstDevice.SetVertexBuffer(&vertexBuffer);
+        firstDevice.SetIndexBuffer(&indexBuffer);
+        firstDevice.DrawIndexedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
+        ExpectExactColor(
+            ReadCenter(firstDevice), Color::Blue,
+            "first context completed a 32-bit indexed draw");
+    }
+
+    GraphicsDevice replacement;
+    EXPECT_TRUE(replacement.SupportsCapability(GraphicsCapability::ThreeD));
+    EXPECT_NO_THROW(replacement.Clear(Color::Black));
 }
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE

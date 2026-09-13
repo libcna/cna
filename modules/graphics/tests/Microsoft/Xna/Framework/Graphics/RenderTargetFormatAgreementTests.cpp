@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plans/plan_webgpu.md WEBGPU-198 -- the render-target format query and the `RenderTarget2D`
-// constructor must agree, for every `SurfaceFormat`, on the adapter actually in front of us.
+// constructor's preferred-format selection must agree, for every `SurfaceFormat`, on the adapter
+// actually in front of us.
 //
 // `GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT` is what a game asks before choosing a
-// target format; the constructor is what it then calls. A renderer where those two disagree is
-// useless in both directions -- a `true` that throws is a promise it cannot keep, and a `false`
-// that would have worked hides a capability the caller could have used. This is the same invariant
+// target format; the constructor is what it then calls. XNA preserves a supported preference and
+// substitutes Color for an unsupported one. This is the same invariant
 // `TextureCubeCompressedFormatAgreementTests` asserts for cube storage, applied to renderability,
 // and it is renderer-neutral for the same reason: it does not say WHICH formats a renderer must
 // support, only that it must answer the question the same way twice.
@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -36,6 +37,7 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
@@ -50,6 +52,7 @@ namespace
 {
     using Microsoft::Xna::Framework::Graphics::DepthFormat;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
     using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
     using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
     using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
@@ -100,9 +103,10 @@ namespace
 TEST(RenderTargetFormatAgreement, TheQueryAndTheConstructorAgreeForEveryFormat)
 {
     GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
 
     int supported = 0;
-    int refused = 0;
+    int unsupported = 0;
     for (const NamedFormat& candidate : kAllFormats)
     {
         SCOPED_TRACE(candidate.name);
@@ -113,46 +117,32 @@ TEST(RenderTargetFormatAgreement, TheQueryAndTheConstructorAgreeForEveryFormat)
         {
             RenderTarget2D target(device, 4, 4, false, candidate.format, DepthFormat::None, 0,
                                   RenderTargetUsage::DiscardContents);
-            // A target that constructs must also report back the format it was asked for. A
-            // renderer that quietly substituted Color would otherwise pass the agreement check
-            // while handing the caller a different resource than it requested -- which is exactly
-            // what MOD-115 refused to let RenderTarget2D do.
-            EXPECT_EQ(candidate.format, target.getFormatProperty())
+            const SurfaceFormat selected = claims ? candidate.format : SurfaceFormat::Color;
+            EXPECT_EQ(selected, target.getFormatProperty())
                 << RendererName() << " built a " << candidate.name
-                << " render target that reports a different format";
+                << " preferred render target with the wrong selected format";
         }
         catch (const std::exception& e)
         {
             refusal = e.what();
         }
 
-        if (claims) ++supported; else ++refused;
+        if (claims) ++supported; else ++unsupported;
         std::cout << "[WEBGPU-198] " << RendererName() << ' ' << candidate.name << ": query="
                   << (claims ? "supported" : "unsupported") << ", construction="
                   << (refusal.empty() ? std::string("accepted") : '"' + refusal + '"') << std::endl;
 
-        // THE INVARIANT, both directions.
-        if (claims)
-        {
-            EXPECT_TRUE(refusal.empty())
-                << RendererName() << " reports " << candidate.name
-                << " renderable and then refuses to build it: \"" << refusal << '"';
-        }
-        else
-        {
-            EXPECT_FALSE(refusal.empty())
-                << RendererName() << " reports " << candidate.name
-                << " NOT renderable and then builds it anyway -- a capability the caller was told "
-                   "it did not have";
-        }
+        EXPECT_TRUE(refusal.empty())
+            << RendererName() << " refused the preferred " << candidate.name
+            << " format instead of preserving it or selecting Color: \"" << refusal << '"';
     }
 
     // Not an assertion about which formats: an assertion that the answer is not degenerate. A
     // renderer that answered the same way for all 27 would satisfy the agreement above vacuously.
     std::cout << "[WEBGPU-198] " << RendererName() << ": " << supported << " renderable, "
-              << refused << " refused, of " << kAllFormats.size() << std::endl;
+              << unsupported << " substituted, of " << kAllFormats.size() << std::endl;
     EXPECT_GT(supported, 0) << RendererName() << " reports no renderable format at all";
-    EXPECT_GT(refused, 0)
+    EXPECT_GT(unsupported, 0)
         << RendererName() << " reports EVERY SurfaceFormat renderable, including the "
            "block-compressed ones, which no renderer can genuinely do";
 }
@@ -164,6 +154,7 @@ TEST(RenderTargetFormatAgreement, EveryRenderableFormatCanBeBoundAndCleared)
 {
     using Microsoft::Xna::Framework::Color;
     GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
 
     int bound = 0;
     for (const NamedFormat& candidate : kAllFormats)
@@ -211,6 +202,7 @@ TEST(RenderTargetFormatAgreement, EveryRenderableFormatTakesAStock3DDraw)
     using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
     GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "this renderer rasterizes no 3D triangles";
 
@@ -278,8 +270,12 @@ TEST(RenderTargetFormatAgreement, ASixteenBitFloatTargetsContentIsSamplableBack)
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Rectangle;
     using Microsoft::Xna::Framework::Graphics::SpriteBatch;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
 
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
+        GTEST_SKIP() << "HEADLESS has no render-target pixel storage to sample";
     GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "this renderer rasterizes no 3D triangles";
 
@@ -317,7 +313,10 @@ TEST(RenderTargetFormatAgreement, ASixteenBitFloatTargetsContentIsSamplableBack)
         device.Clear(Color(0, 0, 0, 255));
         {
             SpriteBatch batch(device);
-            batch.Begin();
+            const SamplerState sampler = SamplerState::PointClamp;
+            batch.Begin(Microsoft::Xna::Framework::Graphics::SpriteSortMode::Deferred,
+                        Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend,
+                        &sampler, nullptr, nullptr);
             batch.Draw(floatTarget, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 8, 8), Color::White);
             batch.End();
         }
@@ -354,10 +353,13 @@ TEST(RenderTargetFormatAgreement, EveryRenderableClassicNumericFormatReadsBackEx
     using Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4;
     using Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64;
 
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
+        GTEST_SKIP() << "HEADLESS has no render-target pixel storage to read back";
     constexpr int width = 6;
     constexpr int height = 3;
     constexpr int texelCount = width * height;
     GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     int measured = 0;
 
     const auto clear = [&device](RenderTarget2D& target, float r, float g, float b, float a) {
@@ -495,6 +497,7 @@ TEST(RenderTargetFormatAgreement, AnMrtSetKeyedOnEverySlotsFormat)
     using Microsoft::Xna::Framework::Graphics::RasterizerState;
     using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
     GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!device.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets))
         GTEST_SKIP() << "this renderer binds no multi-target set";
     if (!device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
@@ -557,7 +560,8 @@ TEST(RenderTargetFormatAgreement, AnMrtSetKeyedOnEverySlotsFormat)
     // clean exception.
     if (!mixed.empty())
     {
-        EXPECT_NE(std::string::npos, mixed.find("format"))
+        EXPECT_TRUE(mixed.find("format") != std::string::npos ||
+                    mixed.find("pixel size") != std::string::npos)
             << RendererName() << " refused a mixed-format MRT set without saying it was about the "
                "formats: \"" << mixed << '"';
     }
@@ -568,6 +572,7 @@ TEST(RenderTargetFormatAgreement, AFloatTargetReadsBackExactlyAtNonPowerOfTwoSiz
     using Microsoft::Xna::Framework::Vector4;
 
     GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))
         GTEST_SKIP() << "this renderer has no RGBA32F render target to read back";
 

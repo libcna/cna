@@ -465,7 +465,7 @@ protected:
 
         const Color expectedA(163, 207, 246, 255);
         const Color expectedB(32, 48, 64, 255);
-        CheckColor("A indexed draw resolves named values, arrays and t2/t4/t6", 
+        CheckColor("A indexed draw resolves named values, arrays and t2/t4/t6",
                    DrawQuad(true, true, 0), expectedA);
         CheckColor("B non-indexed draw replaces every reflected value and texture",
                    DrawQuad(false, false, 0), expectedB);

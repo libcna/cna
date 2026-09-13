@@ -4,15 +4,59 @@
 
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
+#include "CNA/Platform/PlatformTestDecorator.hpp"
 
 #include <gtest/gtest.h>
 
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 
 using namespace CNA::Platform;
+
+class CountingPlatform final : public Testing::PlatformTestDecorator
+{
+public:
+    CountingPlatform(std::string label, std::vector<std::string>& trace)
+        : PlatformTestDecorator(PlatformFactory::Create("Headless")),
+          label_(std::move(label)), trace_(trace)
+    {
+    }
+
+    void AcquireSubsystem(const PlatformSubsystem subsystem) override
+    {
+        ++acquired_;
+        ++outstanding_;
+        trace_.push_back(label_ + ":acquire:" + ToString(subsystem));
+    }
+
+    void ReleaseSubsystem(const PlatformSubsystem subsystem) override
+    {
+        ++released_;
+        if (outstanding_ > 0)
+            --outstanding_;
+        trace_.push_back(label_ + ":release:" + ToString(subsystem));
+    }
+
+    [[nodiscard]] bool IsSubsystemInitialized(PlatformSubsystem) const override
+    {
+        return outstanding_ > 0;
+    }
+
+    [[nodiscard]] int Acquired() const { return acquired_; }
+    [[nodiscard]] int Released() const { return released_; }
+    [[nodiscard]] int Outstanding() const { return outstanding_; }
+
+private:
+    std::string label_;
+    std::vector<std::string>& trace_;
+    int acquired_ = 0;
+    int released_ = 0;
+    int outstanding_ = 0;
+};
 
 class CurrentPlatformTest : public ::testing::Test
 {
@@ -75,6 +119,50 @@ TEST_F(CurrentPlatformTest, HasCurrentDoesNotItselfCreateAPlatform)
     const bool before = HasCurrentPlatform();
     EXPECT_FALSE(before);
     EXPECT_FALSE(HasCurrentPlatform()) << "querying must not have created one";
+}
+
+TEST_F(CurrentPlatformTest, AmbientSubsystemPinTransfersBeforeReleasingPreviousPlatform)
+{
+    std::vector<std::string> trace;
+    CountingPlatform first("first", trace);
+    CountingPlatform second("second", trace);
+    const int ownerToken = 0;
+
+    SetCurrentPlatform(&first);
+    Detail::PinCurrentPlatformSubsystem(&ownerToken, PlatformSubsystem::Video);
+    Detail::PinCurrentPlatformSubsystem(&ownerToken, PlatformSubsystem::Video);
+
+    EXPECT_EQ(first.Acquired(), 1) << "pinning the same owner twice must be idempotent";
+    EXPECT_EQ(first.Outstanding(), 1);
+
+    SetCurrentPlatform(&second);
+
+    ASSERT_EQ(trace.size(), 3u);
+    EXPECT_EQ(trace[0], "first:acquire:Video");
+    EXPECT_EQ(trace[1], "second:acquire:Video");
+    EXPECT_EQ(trace[2], "first:release:Video");
+    EXPECT_EQ(first.Outstanding(), 0);
+    EXPECT_EQ(second.Outstanding(), 1);
+
+    Detail::UnpinCurrentPlatformSubsystem(&ownerToken);
+    EXPECT_EQ(second.Acquired(), 1);
+    EXPECT_EQ(second.Released(), 1);
+    EXPECT_EQ(second.Outstanding(), 0);
+}
+
+TEST_F(CurrentPlatformTest, ResetReleasesAmbientSubsystemPinBeforeDestroyingPlatform)
+{
+    std::vector<std::string> trace;
+    CountingPlatform platform("platform", trace);
+    const int ownerToken = 0;
+
+    SetCurrentPlatform(&platform);
+    Detail::PinCurrentPlatformSubsystem(&ownerToken, PlatformSubsystem::Video);
+    ResetCurrentPlatform();
+
+    EXPECT_EQ(platform.Acquired(), 1);
+    EXPECT_EQ(platform.Released(), 1);
+    EXPECT_EQ(platform.Outstanding(), 0);
 }
 
 } // namespace

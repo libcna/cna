@@ -1,0 +1,61 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -359,6 +359,41 @@ static void validate_temporary_register(Context *ctx, const RegisterType regtype,
+         failf(ctx, "temporary register r%d is out of range for this shader profile", regnum);
+ } // validate_temporary_register
+ 
++static void validate_input_register(Context *ctx, const RegisterType regtype,
++                                    const int regnum)
++{
++    if (shader_is_vertex(ctx))
++    {
++        if ((regtype == REG_TYPE_INPUT) && (regnum >= 16))
++            failf(ctx, "vertex input register v%d is out of range", regnum);
++        return;
++    } // if
++
++    if (!shader_is_pixel(ctx))
++        return;
++
++    if (shader_version_atleast(ctx, 3, 0))
++    {
++        if ((regtype == REG_TYPE_INPUT) && (regnum >= 10))
++            failf(ctx, "pixel input register v%d is out of range", regnum);
++    } // if
++    else if (shader_version_atleast(ctx, 2, 0))
++    {
++        if ((regtype == REG_TYPE_INPUT) && (regnum >= 2))
++            failf(ctx, "pixel color input register v%d is out of range", regnum);
++        else if ((regtype == REG_TYPE_TEXTURE) && (regnum >= 8))
++            failf(ctx, "pixel texture-coordinate register t%d is out of range", regnum);
++    } // else if
++    else
++    {
++        const int texture_count = (ctx->minor_ver >= 4) ? 6 : 4;
++        if ((regtype == REG_TYPE_INPUT) && (regnum >= 2))
++            failf(ctx, "pixel color input register v%d is out of range", regnum);
++        else if ((regtype == REG_TYPE_TEXTURE) && (regnum >= texture_count))
++            failf(ctx, "pixel texture register t%d is out of range", regnum);
++    } // else
++} // validate_input_register
++
+ #undef DEFINE_PROFILE
+ 
+ // This is for profiles that extend other profiles...
+@@ -436,6 +471,7 @@ static int parse_destination_token(Context *ctx, DestArgInfo *info)
+     } // else if
+ 
+     validate_temporary_register(ctx, info->regtype, info->regnum);
++    validate_input_register(ctx, info->regtype, info->regnum);
+ 
+     // swallow token for now, for multiple calls in a row.
+     adjust_token_position(ctx, 1);
+@@ -709,6 +745,7 @@ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+     } // else if
+ 
+     validate_temporary_register(ctx, info->regtype, info->regnum);
++    validate_input_register(ctx, info->regtype, info->regnum);
+ 
+     info->swizzle = adjust_swizzle(ctx, info->regtype, info->regnum, swizzle);
+     info->swizzle_x = ((info->swizzle >> 0) & 0x3);

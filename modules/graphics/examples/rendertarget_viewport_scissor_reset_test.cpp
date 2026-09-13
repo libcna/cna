@@ -2,13 +2,12 @@
 // Task 338: verify SetRenderTarget(nullptr)/SetRenderTargets({}) resets Viewport/ScissorRectangle
 // to the backbuffer, and that binding a render target resets them to the new target's size.
 //
-// FNA's GraphicsDevice.SetRenderTargets ALWAYS resets Viewport and ScissorRectangle to
+// A real GraphicsDevice.SetRenderTargets transition resets Viewport and ScissorRectangle to
 // (0, 0, newWidth, newHeight) — the new render target's size when binding, or the backbuffer's
-// size when unbinding (see GraphicsDevice.cs: "Set the viewport/scissor to the size of the
-// backbuffer" / "...of the first render target"). CNA's SetRenderTarget/SetRenderTargets never
-// touched Viewport or ScissorRectangle at all before this task (confirmed by code reading) — a
-// game's previously-set Viewport/ScissorRectangle would incorrectly survive a render target
-// switch, unlike real XNA/FNA.
+// size when unbinding. An identical binding set is a no-op in Microsoft XNA and is covered by the
+// separate SOFTWARE-222 unit contract. CNA's SetRenderTarget/SetRenderTargets never touched
+// Viewport or ScissorRectangle at all before Task 338 — a game's previously-set values would
+// incorrectly survive a real render target switch.
 //
 // This test proves both the property-level fix AND a real GPU-level effect (ScissorRectangle is
 // wired to the renderer's actual scissor test, unlike Viewport which has no renderer wiring yet on
@@ -156,6 +155,7 @@ public:
     RenderTargetViewportScissorResetTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
     }
 
     int getResult() const { return fail_ > 0 ? 1 : 0; }

@@ -10,7 +10,7 @@
 
 using namespace CNA::Internal::Renderers::Metal;
 
-TEST(MetalTextureTransfer, MipCountUsesWidthAndHeightButNotTexture3DDepth)
+TEST(MetalTextureTransfer, MipCountsIncludeEveryRelevantDimension)
 {
     EXPECT_EQ(MetalMipLevelCount(1, 1, false), 1);
     EXPECT_EQ(MetalMipLevelCount(1, 1, true), 1);
@@ -20,12 +20,20 @@ TEST(MetalTextureTransfer, MipCountUsesWidthAndHeightButNotTexture3DDepth)
 
     std::vector<std::uint8_t> volumeBytes(32);
     MetalTextureTransferLayout layout{};
-    const int levelsForOneByOneByEight = MetalMipLevelCount(1, 1, true);
+    EXPECT_EQ(MetalVolumeMipLevelCount(1, 1, 8, true), 4);
+    EXPECT_EQ(MetalVolumeMipLevelCount(1, 2, 7, true), 3);
+    EXPECT_EQ(MetalVolumeMipLevelCount(8, 1, 1, false), 1);
+    EXPECT_EQ(MetalVolumeMipLevelCount(1, 1, 0, true), 0);
+
+    const int levelsForOneByOneByEight = MetalVolumeMipLevelCount(1, 1, 8, true);
     EXPECT_TRUE(TryPrepareMetalTextureTransfer(
         1, 1, 8, levelsForOneByOneByEight, 0, 0, 0, 0, 1, 1, 8,
         volumeBytes.data(), 32, MetalTransferLengthRule::AtLeastTightBytes, 1, layout));
+    EXPECT_TRUE(TryPrepareMetalTextureTransfer(
+        1, 1, 8, levelsForOneByOneByEight, 3, 0, 0, 0, 1, 1, 1,
+        volumeBytes.data(), 4, MetalTransferLengthRule::AtLeastTightBytes, 1, layout));
     EXPECT_FALSE(TryPrepareMetalTextureTransfer(
-        1, 1, 8, levelsForOneByOneByEight, 1, 0, 0, 0, 1, 1, 1,
+        1, 1, 8, levelsForOneByOneByEight, 4, 0, 0, 0, 1, 1, 1,
         volumeBytes.data(), 4, MetalTransferLengthRule::AtLeastTightBytes, 1, layout));
 }
 

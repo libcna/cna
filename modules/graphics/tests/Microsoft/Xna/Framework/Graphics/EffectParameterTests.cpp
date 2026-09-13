@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -327,19 +328,45 @@ TEST(EffectParameterTest, GetValueInt32ArrayPartialCount)
     EXPECT_EQ(got[1], 2);
 }
 
-TEST(EffectParameterTest, NegativeScalarArrayCountsReturnEmpty)
+TEST(EffectParameterTest, NonPositiveArrayCountsThrowBeforeParameterTypeValidation)
 {
-    EffectParameter integers("i", "", 1, 1,
-                             EffectParameterClass::Scalar,
-                             EffectParameterType::Int32);
-    integers.SetValue(std::vector<int>{1, 2});
-    EffectParameter singles("f", "", 1, 1,
-                            EffectParameterClass::Scalar,
-                            EffectParameterType::Single);
-    singles.SetValue(std::vector<float>{1.0f, 2.0f});
+    EffectParameter scalar("s", "", 1, 1,
+                           EffectParameterClass::Scalar,
+                           EffectParameterType::Single);
+    EffectParameter matrix("m", "", 4, 4,
+                           EffectParameterClass::Matrix,
+                           EffectParameterType::Single);
+    EffectParameter vector("v", "", 1, 4,
+                           EffectParameterClass::Vector,
+                           EffectParameterType::Single);
 
-    EXPECT_TRUE(integers.GetValueInt32Array(-1).empty());
-    EXPECT_TRUE(singles.GetValueSingleArray(-1).empty());
+    for (const int count : {0, -1})
+    {
+        EXPECT_THROW((void)scalar.GetValueBooleanArray(count),
+                     System::ArgumentOutOfRangeException);
+        EXPECT_THROW((void)scalar.GetValueInt32Array(count),
+                     System::ArgumentOutOfRangeException);
+        EXPECT_THROW((void)scalar.GetValueSingleArray(count),
+                     System::ArgumentOutOfRangeException);
+        EXPECT_THROW((void)matrix.GetValueMatrixArray(count),
+                     System::ArgumentOutOfRangeException);
+        EXPECT_THROW((void)matrix.GetValueMatrixTransposeArray(count),
+                     System::ArgumentOutOfRangeException);
+        EXPECT_THROW((void)vector.GetValueQuaternionArray(count),
+                     System::ArgumentOutOfRangeException);
+        EXPECT_THROW((void)vector.GetValueVector2Array(count),
+                     System::ArgumentOutOfRangeException);
+        EXPECT_THROW((void)vector.GetValueVector3Array(count),
+                     System::ArgumentOutOfRangeException);
+        EXPECT_THROW((void)vector.GetValueVector4Array(count),
+                     System::ArgumentOutOfRangeException);
+    }
+
+    EffectParameter texture("t", "", 1, 1,
+                            EffectParameterClass::Object,
+                            EffectParameterType::Texture2D);
+    EXPECT_THROW((void)texture.GetValueSingleArray(0),
+                 System::ArgumentOutOfRangeException);
 }
 
 // --- GetValueVector2Array / SetValue(vector<Vector2>) ---

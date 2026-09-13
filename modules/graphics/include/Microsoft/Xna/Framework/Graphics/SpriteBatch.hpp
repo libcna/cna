@@ -62,9 +62,12 @@ namespace Microsoft::Xna::Framework::Graphics
         SpriteSortMode sortMode_    = SpriteSortMode::Deferred;
         Matrix transformMatrix_     = Matrix::getIdentityProperty();
         Effect* customEffect_       = nullptr;
-        // plan_vulkan.md VULKAN-194: the batch's resolved sampler, retained because XNA publishes
-        // it into GraphicsDevice.SamplerStates[0] at the flush rather than at Begin().
-        SamplerState effectiveSampler_;
+        BlendState blendState_;
+        // The batch's resolved sampler is retained because XNA publishes it into
+        // GraphicsDevice.SamplerStates[0] at the flush rather than at deferred Begin().
+        SamplerState samplerState_;
+        DepthStencilState depthStencilState_;
+        RasterizerState rasterizerState_;
         std::vector<SpriteInfo> spriteQueue_;
 
         void pushSprite(const Texture2D& texture,
@@ -78,8 +81,21 @@ namespace Microsoft::Xna::Framework::Graphics
                         SpriteEffects effects, float layerDepth);
         void flushBatch();
         void flushSingle(const SpriteInfo& s);
+        void applyRenderState();
+        void throwIfDisposed() const;
+
+    protected:
+        /**
+         * @brief Releases the renderer-side SpriteBatch resources.
+         *
+         * @param disposing True when called from Dispose(); false during finalization.
+         */
+        void Dispose(bool disposing) override;
 
     public:
+        /** @brief Exposes GraphicsResource::Dispose() alongside the protected lifecycle hook. */
+        using GraphicsResource::Dispose;
+
         /**
          * @brief Creates a sprite batch bound to a graphics device.
          *
@@ -230,9 +246,6 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param texture Texture to draw.
          * @param x X coordinate in pixels.
          * @param y Y coordinate in pixels.
-         * @throws System::ArgumentOutOfRangeException if @p x or @p y cannot be represented by
-         *         SpriteBatch's Int32 destination rectangle. Non-finite values are accepted and
-         *         carried into the vertex path, as XNA does.
          */
         CNAEXT void Draw(const Texture2D& texture, float x, float y);
 
@@ -276,9 +289,6 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param texture  Texture to draw.
          * @param position Position in screen space.
          * @param color    Tint color.
-         * @throws System::ArgumentOutOfRangeException if @p position cannot be represented by
-         *         SpriteBatch's Int32 destination rectangle. Non-finite values are accepted and
-         *         carried into the vertex path, as XNA does.
          */
         void Draw(const Texture2D& texture, Vector2 position, Color color);
         /**
@@ -288,9 +298,6 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param position        Position in screen space.
          * @param sourceRectangle Optional source rectangle; draws the whole texture if empty.
          * @param color           Tint color.
-         * @throws System::ArgumentOutOfRangeException if @p position cannot be represented by
-         *         SpriteBatch's Int32 destination rectangle. Non-finite values are accepted and
-         *         carried into the vertex path, as XNA does.
          */
         void Draw(const Texture2D& texture, Vector2 position,
                   std::optional<Rectangle> sourceRectangle, Color color);
@@ -306,8 +313,6 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale           Uniform scale factor.
          * @param effects         Sprite flipping flags.
          * @param layerDepth      Depth value for sort ordering.
-         * @throws System::ArgumentOutOfRangeException if the calculated Int32 destination
-         *         rectangle is out of range. Non-finite values are accepted, as XNA does.
          */
         void Draw(const Texture2D& texture, Vector2 position,
                   std::optional<Rectangle> sourceRectangle, Color color,
@@ -325,8 +330,6 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale           Non-uniform scale vector.
          * @param effects         Sprite flipping flags.
          * @param layerDepth      Depth value for sort ordering.
-         * @throws System::ArgumentOutOfRangeException if the calculated Int32 destination
-         *         rectangle is out of range. Non-finite values are accepted, as XNA does.
          */
         void Draw(const Texture2D& texture, Vector2 position,
                   std::optional<Rectangle> sourceRectangle, Color color,
@@ -381,10 +384,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param text       Text to render.
          * @param position   Top-left position, in pixels.
          * @param color      Tint color.
-         * @throws std::invalid_argument if @p text contains a character @p spriteFont cannot
-         *         render and no defaultCharacter is set.
-         * @throws System::ArgumentOutOfRangeException if the calculated Int32 glyph destination
-         *         is out of range. Non-finite values are accepted, as XNA does.
+         * @throws System::ArgumentException if @p text contains a character @p spriteFont cannot
+         *         resolve through either its glyph table or its default character.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const std::string& text,
@@ -403,10 +404,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale      Uniform scale factor.
          * @param effects    Sprite flipping flags.
          * @param layerDepth Depth value for sort ordering.
-         * @throws std::invalid_argument if @p text contains a character @p spriteFont cannot
-         *         render and no defaultCharacter is set.
-         * @throws System::ArgumentOutOfRangeException if a calculated Int32 glyph destination
-         *         is out of range. Non-finite values are accepted, as XNA does.
+         * @throws System::ArgumentException if @p text contains a character @p spriteFont cannot
+         *         resolve through either its glyph table or its default character.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const std::string& text,
@@ -430,10 +429,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale      Non-uniform scale vector.
          * @param effects    Sprite flipping flags.
          * @param layerDepth Depth value for sort ordering.
-         * @throws std::invalid_argument if @p text contains a character @p spriteFont cannot
-         *         render and no defaultCharacter is set.
-         * @throws System::ArgumentOutOfRangeException if a calculated Int32 glyph destination
-         *         is out of range. Non-finite values are accepted, as XNA does.
+         * @throws System::ArgumentException if @p text contains a character @p spriteFont cannot
+         *         resolve through either its glyph table or its default character.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const std::string& text,
@@ -452,8 +449,6 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param text       Text to render.
          * @param position   Top-left position, in pixels.
          * @param color      Tint color.
-         * @throws System::ArgumentOutOfRangeException if the calculated Int32 glyph destination
-         *         is out of range. Non-finite values are accepted, as XNA does.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const System::Text::StringBuilder& text,
@@ -471,8 +466,6 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale      Uniform scale factor.
          * @param effects    Sprite flipping flags.
          * @param layerDepth Depth value for sort ordering.
-         * @throws System::ArgumentOutOfRangeException if a calculated Int32 glyph destination
-         *         is out of range. Non-finite values are accepted, as XNA does.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const System::Text::StringBuilder& text,
@@ -495,8 +488,6 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale      Non-uniform scale vector.
          * @param effects    Sprite flipping flags.
          * @param layerDepth Depth value for sort ordering.
-         * @throws System::ArgumentOutOfRangeException if a calculated Int32 glyph destination
-         *         is out of range. Non-finite values are accepted, as XNA does.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const System::Text::StringBuilder& text,

@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
@@ -23,6 +24,8 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -114,7 +117,8 @@ TEST(ModelTest, CopyAbsoluteBoneTransformsToThrowsWhenDestinationTooSmall)
 {
     KnownHierarchy h;
     std::vector<Matrix> dest(2); // fewer than the 3 bones in this hierarchy
-    EXPECT_THROW(h.model.CopyAbsoluteBoneTransformsTo(dest), std::out_of_range);
+    EXPECT_THROW(
+        h.model.CopyAbsoluteBoneTransformsTo(dest), System::ArgumentOutOfRangeException);
 }
 
 // --- Task 436: Model::CopyBoneTransformsFrom ---
@@ -151,7 +155,7 @@ TEST(ModelTest, CopyBoneTransformsFromThrowsWhenSourceTooSmall)
 {
     KnownHierarchy h;
     std::vector<Matrix> src(2); // fewer than the 3 bones in this hierarchy
-    EXPECT_THROW(h.model.CopyBoneTransformsFrom(src), std::out_of_range);
+    EXPECT_THROW(h.model.CopyBoneTransformsFrom(src), System::ArgumentOutOfRangeException);
 }
 
 TEST(ModelTest, CopyBoneTransformsFromAcceptsALargerSourceIgnoringExtraElements)
@@ -194,7 +198,25 @@ TEST(ModelTest, CopyBoneTransformsToThrowsWhenDestinationTooSmall)
 {
     KnownHierarchy h;
     std::vector<Matrix> dest(2); // fewer than the 3 bones in this hierarchy
-    EXPECT_THROW(h.model.CopyBoneTransformsTo(dest), std::out_of_range);
+    EXPECT_THROW(
+        h.model.CopyBoneTransformsTo(dest), System::ArgumentOutOfRangeException);
+}
+
+TEST(ModelTest, DrawRejectsAnEffectWithoutIEffectMatricesWithXnaException)
+{
+    GraphicsDevice device;
+    Effect effect(device);
+    ModelBone root{0, "Root"};
+    ModelMeshPart part(nullptr, nullptr, 0, 0, 0, 0);
+    ModelMesh mesh(nullptr, {&part});
+    mesh.setParentBoneProperty(&root);
+    part.setEffectProperty(&effect);
+    Model model(nullptr, {&root}, {&mesh});
+
+    EXPECT_THROW(
+        model.Draw(Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                   Matrix::getIdentityProperty()),
+        System::InvalidOperationException);
 }
 
 TEST(ModelTest, CopyBoneTransformsToAcceptsALargerDestinationIgnoringExtraElements)

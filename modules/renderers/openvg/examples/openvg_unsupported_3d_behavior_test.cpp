@@ -148,10 +148,11 @@ protected:
               }),
               "cube render target null object can be bound and unbound");
 
-        OcclusionQuery query(device);
-        Check(DoesNotThrow([&] { query.Begin(); query.End(); }) &&
-                  query.getIsCompleteProperty() && query.getPixelCountProperty() == 0,
-              "occlusion query null object completes with zero pixels");
+        bool queryRejected = false;
+        try { OcclusionQuery query(device); }
+        catch (const System::NotSupportedException&) { queryRejected = true; }
+        Check(queryRejected,
+              "Reach/unsupported renderer rejects an occlusion query instead of returning a null object");
 
         device.SetUnsupported3DGraphicsCallBehavior(Unsupported3DGraphicsCallBehavior::Throw);
         Check(ThrowsRuntimeError([&] { device.SetDepthTestEnabled(true); }),

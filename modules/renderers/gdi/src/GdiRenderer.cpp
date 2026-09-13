@@ -254,6 +254,10 @@ namespace CNA::Internal::Renderers::Gdi
                 inner_->SetCustomEffect(effect);
             }
             void SetSamplerFilter(int textureFilter) override { inner_->SetSamplerFilter(textureFilter); }
+            void SetSamplerMaxAnisotropy(int maxAnisotropy) override
+            {
+                inner_->SetSamplerMaxAnisotropy(maxAnisotropy);
+            }
             void SetSamplerAddressMode(int addressU, int addressV) override
             {
                 inner_->SetSamplerAddressMode(addressU, addressV);
@@ -786,6 +790,8 @@ namespace CNA::Internal::Renderers::Gdi
             framebuffer.depthBuffer.size() * sizeof(float),
             framebuffer.stencilBuffer.size(),
             framebuffer.multiSampleColor.size(),
+            framebuffer.multiSampleDepthBuffer.size() * sizeof(float),
+            framebuffer.multiSampleStencilBuffer.size(),
         };
     }
 

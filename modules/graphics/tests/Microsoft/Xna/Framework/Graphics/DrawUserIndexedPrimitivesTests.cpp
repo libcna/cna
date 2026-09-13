@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 252: DrawUserIndexedPrimitives audit — FNA API conformance tests.
+// SOFTWARE-197: pointer/offset/count/overflow validation parity.
 //
 // Tests cover:
 //   • Index count formula (identical to PrimitiveVerts — verified via the public static).
@@ -19,6 +20,7 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -32,6 +34,8 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -82,15 +86,21 @@ TEST(DrawUserIndexedPrimitivesIndexCountTest, PointListEXT_SevenPoints)
 // =============================================================================
 // Missing-effect throws — all typed + VertexDeclaration overloads
 //
-// The default GraphicsDevice() constructor initializes an EasyGL renderer, so
-// renderer_ is non-null. With no effect applied, every typed overload must throw
-// std::runtime_error instead of silently returning (the pre-Task-252 bug).
+// With a real renderer and HiDef profile, every typed overload must report XNA's concrete
+// InvalidOperationException when no effect has been applied. HiDef is explicit because XNA's
+// public 32-bit-index profile gate precedes its missing-shader check.
 // =============================================================================
 
 class DrawUserIndexedPrimitivesNoEffectTest : public ::testing::Test
 {
 protected:
     GraphicsDevice gd; // default ctor → real EasyGL renderer, but no currentEffect_
+
+    DrawUserIndexedPrimitivesNoEffectTest()
+    {
+        gd.SetGraphicsProfileEXT(
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
+    }
 
     const Color red   { 255, 0,   0,   255 };
     const Color green { 0,   255, 0,   255 };
@@ -127,28 +137,28 @@ TEST_F(DrawUserIndexedPrimitivesNoEffectTest, VPC_16bit_NoEffect_Throws)
 {
     EXPECT_THROW(gd.DrawUserIndexedPrimitives(
         PrimitiveType::TriangleList, vpc.data(), 0, 3, idx16.data(), 0, 1),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST_F(DrawUserIndexedPrimitivesNoEffectTest, VPCT_16bit_NoEffect_Throws)
 {
     EXPECT_THROW(gd.DrawUserIndexedPrimitives(
         PrimitiveType::TriangleList, vpct.data(), 0, 3, idx16.data(), 0, 1),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST_F(DrawUserIndexedPrimitivesNoEffectTest, VPT_16bit_NoEffect_Throws)
 {
     EXPECT_THROW(gd.DrawUserIndexedPrimitives(
         PrimitiveType::TriangleList, vpt.data(), 0, 3, idx16.data(), 0, 1),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST_F(DrawUserIndexedPrimitivesNoEffectTest, VPNT_16bit_NoEffect_Throws)
 {
     EXPECT_THROW(gd.DrawUserIndexedPrimitives(
         PrimitiveType::TriangleList, vpnt.data(), 0, 3, idx16.data(), 0, 1),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 // --- 32-bit typed overloads ---
@@ -157,28 +167,28 @@ TEST_F(DrawUserIndexedPrimitivesNoEffectTest, VPC_32bit_NoEffect_Throws)
 {
     EXPECT_THROW(gd.DrawUserIndexedPrimitives(
         PrimitiveType::TriangleList, vpc.data(), 0, 3, idx32.data(), 0, 1),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST_F(DrawUserIndexedPrimitivesNoEffectTest, VPCT_32bit_NoEffect_Throws)
 {
     EXPECT_THROW(gd.DrawUserIndexedPrimitives(
         PrimitiveType::TriangleList, vpct.data(), 0, 3, idx32.data(), 0, 1),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST_F(DrawUserIndexedPrimitivesNoEffectTest, VPT_32bit_NoEffect_Throws)
 {
     EXPECT_THROW(gd.DrawUserIndexedPrimitives(
         PrimitiveType::TriangleList, vpt.data(), 0, 3, idx32.data(), 0, 1),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST_F(DrawUserIndexedPrimitivesNoEffectTest, VPNT_32bit_NoEffect_Throws)
 {
     EXPECT_THROW(gd.DrawUserIndexedPrimitives(
         PrimitiveType::TriangleList, vpnt.data(), 0, 3, idx32.data(), 0, 1),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 // --- VertexDeclaration overloads ---
@@ -191,7 +201,7 @@ TEST_F(DrawUserIndexedPrimitivesNoEffectTest, VD_16bit_NoEffect_Throws)
     };
     EXPECT_THROW(gd.DrawUserIndexedPrimitives(
         PrimitiveType::TriangleList, vpc.data(), 0, 3, idx16.data(), 0, 1, vd),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST_F(DrawUserIndexedPrimitivesNoEffectTest, VD_32bit_NoEffect_Throws)
@@ -202,7 +212,7 @@ TEST_F(DrawUserIndexedPrimitivesNoEffectTest, VD_32bit_NoEffect_Throws)
     };
     EXPECT_THROW(gd.DrawUserIndexedPrimitives(
         PrimitiveType::TriangleList, vpc.data(), 0, 3, idx32.data(), 0, 1, vd),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 // =============================================================================
@@ -256,6 +266,10 @@ protected:
         // left for these tests to observe on such a renderer.
         if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
             GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+        // The public UInt32 overload rejects Reach before reaching primitiveCount validation.
+        // Select HiDef so all ten overload tests exercise the guard named by this fixture.
+        gd.SetGraphicsProfileEXT(
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
         fx.Apply();
     }
 };
@@ -447,4 +461,27 @@ TEST_F(DrawUserIndexedPrimitivesArgumentGuardTest, Raw_NegativeCount_Throws)
         static_cast<const void*>(vpc.data()), 0, 3,
         static_cast<const void*>(idx16.data()), 0, -1),
         System::ArgumentOutOfRangeException);
+}
+
+TEST_F(DrawUserIndexedPrimitivesArgumentGuardTest, TypedOffsetsAndVertexCountAreValidated)
+{
+    EXPECT_THROW(gd.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, vpc.data() + 3, -3, 3, idx16.data(), 0, 1),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(gd.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, vpc.data(), 0, 3, idx16.data() + 3, -3, 1),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(gd.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, vpc.data(), 0, 0, idx16.data(), 0, 1),
+        System::ArgumentOutOfRangeException);
+}
+
+TEST_F(DrawUserIndexedPrimitivesArgumentGuardTest, NullVertexAndIndexDataThrowArgumentNullException)
+{
+    EXPECT_THROW(gd.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, static_cast<const VertexPositionColor*>(nullptr), 0, 3,
+        idx16.data(), 0, 1), System::ArgumentNullException);
+    EXPECT_THROW(gd.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, vpc.data(), 0, 3,
+        static_cast<const std::uint16_t*>(nullptr), 0, 1), System::ArgumentNullException);
 }

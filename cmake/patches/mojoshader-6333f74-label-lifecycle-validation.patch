@@ -1,0 +1,35 @@
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2171,7 +2171,10 @@
+     if (ctx->previous_opcode != OPCODE_RET)
+         fail(ctx, "LABEL not followed by a RET");
+     check_label_register(ctx, 0, "LABEL");
+-    set_defined_register(ctx, REG_TYPE_LABEL, ctx->source_args[0].regnum);
++    if (get_defined_register(ctx, REG_TYPE_LABEL, ctx->source_args[0].regnum))
++        fail(ctx, "LABEL register has already been defined");
++    else
++        set_defined_register(ctx, REG_TYPE_LABEL, ctx->source_args[0].regnum);
+     ctx->current_label_register_plus_one =
+         ctx->source_args[0].regnum + 1;
+ } // state_LABEL
+@@ -2233,6 +2236,11 @@
+     const CallGraphEdge *edge = ctx->call_graph_edges;
+     while (edge != NULL)
+     {
++        if (!get_defined_register(ctx, REG_TYPE_LABEL, edge->callee_label))
++        {
++            fail(ctx, "CALL target is not defined");
++            return;
++        } // if
+         if ((edge->caller_label_plus_one != 0) &&
+             call_depth_exceeds(ctx, edge->caller_label_plus_one, max_depth))
+         {
+@@ -5219,6 +5227,8 @@
+     {
+         fail(ctx, "Static flow-control count exceeds the Shader Model 2 limit");
+     } // if
++    if (ctx->current_label_register_plus_one != 0)
++        fail(ctx, "Subroutine reached shader end without RET");
+     validate_call_graph(ctx);
+ 
+     // for ps_1_*, the output color is written to r0...throw an

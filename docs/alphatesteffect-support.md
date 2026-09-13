@@ -104,18 +104,20 @@ effects/pipelines" row for current status.
 
 **Real bug found and fixed on Bgfx — general, not `AlphaTestEffect`-specific.** FNA's
 `AlphaTestEffect` has no `TextureEnabled` flag; every shader variant unconditionally samples
-`Texture`, and FNA itself leaves a null-texture draw undefined. CNA's own established, cross-effect
-convention is to fall back to a 1×1 opaque white texture. **EasyGL and Vulkan: already correct.**
-**Bgfx: real bug** — all 7 texture-binding call sites in `DrawPrimitivesEx` only bound a texture
-when one was present, with no fallback at all; a null-texture draw left whatever the *previous*
+`Texture`. Task 379 treated the null result as undefined and invented opaque white. SOFTWARE-303
+instead measured Microsoft XNA 4.0: the sampler returns opaque black. **EasyGL and Software now
+match that result.** Bgfx's historical bug was separate — all 7 texture-binding call sites in
+`DrawPrimitivesEx` only bound a texture when one was present, with no fallback at all; a
+null-texture draw left whatever the *previous*
 draw had bound (confirmed empirically: black, not the previous texture nor the correct fallback).
 
-**Fixed** by adding a `defaultWhiteTexture3D_` and an `else` branch to all 7 call sites uniformly —
-the bug affected every texture-sampling dispatch branch (`dualTexture`, `skinned`, `envMap`,
+Task 379 added a `defaultWhiteTexture3D_` and an `else` branch to all 7 call sites uniformly. The
+change affected every texture-sampling dispatch branch (`dualTexture`, `skinned`, `envMap`,
 `alphaTest`, `lighting`, `textureEnabled`, `textureEnabled+vertexColorEnabled`), not just the one
 `AlphaTestEffect` happens to exercise. One pixel test per renderer, 3/3 PASS on all 3 renderers,
-verified discriminating via `git stash`. **Noted, not fixed**: Bgfx's second texture slot
-(`texColor3DSampler2_`, used only by `DualTextureEffect`) has the identical gap, deliberately left
+verified discriminating via `git stash`, but its white value was not XNA-conformant. **Noted**:
+Bgfx's second texture slot (`texColor3DSampler2_`, used only by `DualTextureEffect`) had the
+identical gap, deliberately left
 for whoever next touches `DualTextureEffect` in Phase 44 — `DualTextureEffect` always requires both
 textures by design, unlike `AlphaTestEffect`, so the impact is much narrower.
 
@@ -128,7 +130,7 @@ textures by design, unlike `AlphaTestEffect`, so the impact is much narrower.
 | `ReferenceAlpha` 0–255 scaling, boundary + out-of-range | ✅ Task 376 | ✅ (shared C++) | ✅ (shared C++) |
 | `VertexColorEnabled` × `DiffuseColor` × alpha-test | ✅ Task 377 | ❌ Task 887 | ❌ Task 887 |
 | Fog (`FogEnabled`/`FogColor`/`FogStart`/`FogEnd`) | ✅ fixed Task 378 | ✅ fixed Task 899 (2026-07-07) | ✅ fixed Task 899 (2026-07-07) |
-| Null-texture fallback to opaque white | ✅ Task 379 | ✅ Task 379 | ✅ fixed Task 379 |
+| Null texture samples opaque black | ✅ SOFTWARE-303 | ❌ retains old white convention | ❌ retains old white convention |
 
 Legend: ✅ verified working · ❌ confirmed not implemented.
 

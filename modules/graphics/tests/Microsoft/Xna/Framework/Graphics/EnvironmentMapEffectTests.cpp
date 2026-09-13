@@ -8,7 +8,6 @@
 #include <gtest/gtest.h>
 
 #include <memory>
-#include <stdexcept>
 
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
@@ -18,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
@@ -91,7 +91,7 @@ TEST_F(EnvironmentMapEffectDefaultsTest, LightingEnabledIsAlwaysTrue)
 
 TEST_F(EnvironmentMapEffectDefaultsTest, SetLightingEnabledFalseThrows)
 {
-    EXPECT_THROW(fx.setLightingEnabledProperty(false), std::runtime_error);
+    EXPECT_THROW(fx.setLightingEnabledProperty(false), System::NotSupportedException);
 }
 
 TEST_F(EnvironmentMapEffectDefaultsTest, SetLightingEnabledTrueDoesNotThrow)

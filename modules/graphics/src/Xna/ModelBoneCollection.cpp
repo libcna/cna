@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-#include <stdexcept>
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/Collections/Generic/KeyNotFoundException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -20,7 +21,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ModelBone* value = nullptr;
         if (TryGetValue(name, value))
             return value;
-        throw std::out_of_range("ModelBoneCollection: bone not found: " + name);
+        throw System::Collections::Generic::KeyNotFoundException();
     }
 
     int ModelBoneCollection::getCountProperty() const
@@ -30,6 +31,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool ModelBoneCollection::TryGetValue(const std::string& boneName, ModelBone*& value) const
     {
+        if (boneName.empty())
+            throw System::ArgumentNullException("boneName");
+
         for (ModelBone* bone : bones_)
         {
             if (bone && bone->getNameProperty() == boneName)

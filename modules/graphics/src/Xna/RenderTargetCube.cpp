@@ -2,13 +2,17 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <bit>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     using CNA::Internal::Renderers::IRenderTargetCubeRenderer;
+    using CNA::Internal::Renderers::IGraphicsRenderer;
     using CNA::Internal::Renderers::ITextureCubeRenderer;
 
     // Mirrors TextureCube.cpp's CalculateMipLevels(size,size) — cube faces are square.
@@ -36,29 +40,65 @@ namespace Microsoft::Xna::Framework::Graphics
         return static_cast<int>(result >> 1);
     }
 
+    static SurfaceFormat SelectRenderTargetFormatEXT(
+        GraphicsDevice& device, SurfaceFormat preferredFormat)
+    {
+        if (!Texture::IsRenderTargetFormatAllowedByProfileEXT(
+                device.getGraphicsProfileProperty(), preferredFormat))
+            return SurfaceFormat::Color;
+
+        switch (device.GetRenderer().ClassifyRenderTargetFormatEXT(
+            static_cast<int>(preferredFormat)))
+        {
+            case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
+                return preferredFormat;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
+            case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
+                return SurfaceFormat::Color;
+        }
+        return SurfaceFormat::Color;
+    }
+
+    static std::unique_ptr<IRenderTargetCubeRenderer> CreateValidatedRenderTargetCubeRenderer(
+        GraphicsDevice& device, int size, DepthFormat depthFormat, RenderTargetUsage usage,
+        bool mipMap, int preferredMultiSampleCount, SurfaceFormat format)
+    {
+        // Constructor arguments are evaluated before TextureCube can validate its base state.
+        // Keep invalid dimensions out of the renderer and preserve XNA's public exception type.
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(size, "size");
+        const int profile = static_cast<int>(device.getGraphicsProfileProperty());
+        const int maxSize = device.GetRenderer().GetMaxCubeSizeForProfileEXT(profile);
+        if (size > maxSize)
+        {
+            throw System::NotSupportedException(
+                "RenderTargetCube exceeds the active graphics profile's maximum cube size.");
+        }
+        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach &&
+            !std::has_single_bit(static_cast<unsigned int>(size)))
+        {
+            throw System::NotSupportedException(
+                "Non-power-of-two RenderTargetCube resources are not supported by the Reach "
+                "graphics profile.");
+        }
+        return device.GetRenderer().CreateRenderTargetCubeEXT(
+            size, static_cast<int>(depthFormat),
+            RenderTargetUsagePreservesContentsEXT(usage), mipMap,
+            ClosestMSAAPower(preferredMultiSampleCount), static_cast<int>(format));
+    }
+
     RenderTargetCube::RenderTargetCube(GraphicsDevice& device, int size,
                                        bool mipMap, SurfaceFormat preferredFormat,
                                        DepthFormat preferredDepthFormat,
                                        int preferredMultiSampleCount,
                                        RenderTargetUsage usage)
-        : TextureCube(device, size, preferredFormat,
+        : TextureCube(device, size, SelectRenderTargetFormatEXT(device, preferredFormat),
                       // IRenderTargetCubeRenderer : ITextureCubeRenderer — pass single renderer
                       // to TextureCube so sampling and rendering share the same GPU image.
                       std::shared_ptr<ITextureCubeRenderer>(
-                          device.renderer_ ? device.renderer_->CreateRenderTargetCubeEXT(
-                                                 size, static_cast<int>(preferredDepthFormat),
-                                                 // REMED-GFX-136: `usage` used to stop here. The
-                                                 // renderer had to invent its own answer, and both
-                                                 // renderers that had to (Vulkan, WebGPU) invented
-                                                 // "always discard".
-                                                 RenderTargetUsagePreservesContentsEXT(usage), mipMap,
-                                                 ClosestMSAAPower(preferredMultiSampleCount),
-                                                 // plans/plan_modern.md MOD-107: the format stops being
-                                                 // dropped here, the way RenderTarget2D's already
-                                                 // is. TextureCube's own constructor checks it
-                                                 // against the renderer's verdict.
-                                                 static_cast<int>(preferredFormat)).release()
-                                          : nullptr),
+                          CreateValidatedRenderTargetCubeRenderer(
+                              device, size, preferredDepthFormat, usage, mipMap,
+                              preferredMultiSampleCount,
+                              SelectRenderTargetFormatEXT(device, preferredFormat)).release()),
                       mipMap ? CalculateMipLevels(size) : 1)
         , size_(size)
         , depthFormat_(preferredDepthFormat)
@@ -96,7 +136,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void RenderTargetCube::Dispose(bool disposing)
     {
-        if (!isDisposed_ && graphicsDevice_ != nullptr)
+        if (!isDisposed_ && graphicsDevice_ != nullptr &&
+            !graphicsDevice_->getIsDisposedProperty())
         {
             for (const auto& binding : graphicsDevice_->GetRenderTargets())
             {

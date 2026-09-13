@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <optional>
@@ -14,8 +15,10 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
-#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
@@ -37,9 +40,72 @@ using Microsoft::Xna::Framework::Graphics::SpriteEffects;
 using Microsoft::Xna::Framework::Graphics::SpriteFont;
 using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::SamplerState;
 using CNA::Internal::Renderers::DummyTextureRenderer;
 using CNA::Internal::Renderers::RecordingSpriteBatchRenderer;
-using System::ArgumentOutOfRangeException;
+
+namespace
+{
+    class DestructionTrackingSpriteBatchRenderer final : public RecordingSpriteBatchRenderer
+    {
+    public:
+        explicit DestructionTrackingSpriteBatchRenderer(bool& destroyed)
+            : destroyed_(destroyed)
+        {
+        }
+
+        ~DestructionTrackingSpriteBatchRenderer() override
+        {
+            destroyed_ = true;
+        }
+
+    private:
+        bool& destroyed_;
+    };
+
+    class ThrowOnceEndSpriteBatchRenderer final : public RecordingSpriteBatchRenderer
+    {
+    public:
+        void End() override
+        {
+            if (!thrown_)
+            {
+                thrown_ = true;
+                throw std::runtime_error("synthetic renderer End failure");
+            }
+            RecordingSpriteBatchRenderer::End();
+        }
+
+    private:
+        bool thrown_ = false;
+    };
+
+    class RecordingSamplerSpriteBatchRenderer final : public RecordingSpriteBatchRenderer
+    {
+    public:
+        void SetSamplerFilter(int value) override { filter = value; }
+        void SetSamplerMaxAnisotropy(int value) override { maxAnisotropy = value; }
+        void SetSamplerMipState(int maxMip, float bias) override
+        {
+            maxMipLevel = maxMip;
+            lodBias = bias;
+        }
+        void SetSamplerAddressMode(int u, int v) override
+        {
+            addressU = u;
+            addressV = v;
+        }
+
+        int filter = -1;
+        int addressU = -1;
+        int addressV = -1;
+        int maxAnisotropy = -1;
+        int maxMipLevel = -1;
+        float lodBias = 0.0f;
+    };
+}
 
 // -----------------------------------------------------------------------
 // SpriteSortMode — enum values (XNA 4.0 specifies the underlying integers)
@@ -115,7 +181,7 @@ TEST(SpriteBatchTest, DefaultConstructorDoesNotThrow)
 TEST(SpriteBatchTest, EndWithoutBeginThrows)
 {
     SpriteBatch batch;
-    EXPECT_THROW(batch.End(), std::runtime_error);
+    EXPECT_THROW(batch.End(), System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, BeginWithoutRendererDoesNotThrow)
@@ -215,10 +281,10 @@ TEST(SpriteBatchTest, BeginFiveParameterNullBlendUsesAlphaBlend)
 
     batch.Begin(SpriteSortMode::Deferred, static_cast<const BlendState*>(nullptr),
                 nullptr, nullptr, nullptr);
+    batch.End();
 
     EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
               BlendState::AlphaBlend.getColorDestinationBlendProperty());
-    batch.End();
 }
 
 TEST(SpriteBatchTest, BeginSixParameterNullBlendUsesAlphaBlend)
@@ -231,10 +297,10 @@ TEST(SpriteBatchTest, BeginSixParameterNullBlendUsesAlphaBlend)
 
     batch.Begin(SpriteSortMode::Deferred, static_cast<const BlendState*>(nullptr),
                 nullptr, nullptr, nullptr, nullptr);
+    batch.End();
 
     EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
               BlendState::AlphaBlend.getColorDestinationBlendProperty());
-    batch.End();
 }
 
 TEST(SpriteBatchTest, BeginSevenParameterNullBlendUsesAlphaBlend)
@@ -248,10 +314,316 @@ TEST(SpriteBatchTest, BeginSevenParameterNullBlendUsesAlphaBlend)
 
     batch.Begin(SpriteSortMode::Deferred, static_cast<const BlendState*>(nullptr),
                 nullptr, nullptr, nullptr, nullptr, Matrix::getIdentityProperty());
+    batch.End();
 
     EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
               BlendState::AlphaBlend.getColorDestinationBlendProperty());
+}
+
+TEST(SpriteBatchTest, DeferredBeginAppliesRenderStatesOnlyWhenEndFlushes)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::CullMode;
+    using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::RasterizerState;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+
+    GraphicsDevice device;
+    device.setBlendStateProperty(BlendState::Opaque);
+    device.getSamplerStatesProperty()[0] = SamplerState::PointWrap;
+    device.setDepthStencilStateProperty(DepthStencilState::Default);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    SpriteBatch batch(device);
+
+    batch.Begin(SpriteSortMode::Deferred, BlendState::Additive, &SamplerState::PointClamp,
+                &DepthStencilState::None, &RasterizerState::CullClockwise);
+
+    EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
+              BlendState::Opaque.getColorDestinationBlendProperty());
+    EXPECT_EQ(device.getSamplerStatesProperty()[0].getAddressUProperty(),
+              SamplerState::PointWrap.getAddressUProperty());
+    EXPECT_TRUE(device.getDepthStencilStateProperty().getDepthBufferEnableProperty());
+    EXPECT_EQ(device.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
+
     batch.End();
+
+    EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
+              BlendState::Additive.getColorDestinationBlendProperty());
+    EXPECT_EQ(device.getSamplerStatesProperty()[0].getAddressUProperty(),
+              SamplerState::PointClamp.getAddressUProperty());
+    EXPECT_FALSE(device.getDepthStencilStateProperty().getDepthBufferEnableProperty());
+    EXPECT_EQ(device.getRasterizerStateProperty().getCullModeProperty(), CullMode::CullClockwiseFace);
+}
+
+TEST(SpriteBatchTest, DeferredSamplerReadsEveryPropertyAtEndBoundary)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+    using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
+    using Microsoft::Xna::Framework::Graphics::TextureFilter;
+
+    auto renderer = std::make_unique<RecordingSamplerSpriteBatchRenderer>();
+    RecordingSamplerSpriteBatchRenderer* const recording = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+    SamplerState sampler = SamplerState::PointClamp;
+
+    batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &sampler, nullptr, nullptr);
+    sampler.setFilterProperty(TextureFilter::MinLinearMagPointMipLinear);
+    sampler.setAddressUProperty(TextureAddressMode::Wrap);
+    sampler.setAddressVProperty(TextureAddressMode::Mirror);
+    sampler.setMaxAnisotropyProperty(11);
+    sampler.setMaxMipLevelProperty(3);
+    sampler.setMipMapLevelOfDetailBiasProperty(-0.75f);
+    batch.End();
+
+    EXPECT_EQ(recording->filter,
+              static_cast<int>(TextureFilter::MinLinearMagPointMipLinear));
+    EXPECT_EQ(recording->addressU, static_cast<int>(TextureAddressMode::Wrap));
+    EXPECT_EQ(recording->addressV, static_cast<int>(TextureAddressMode::Mirror));
+    EXPECT_EQ(recording->maxAnisotropy, 11);
+    EXPECT_EQ(recording->maxMipLevel, 3);
+    EXPECT_FLOAT_EQ(recording->lodBias, -0.75f);
+}
+
+TEST(SpriteBatchTest, InvalidSamplerEnumsUseXnaFallbacksOnPrivateRendererChannel)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+    using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
+    using Microsoft::Xna::Framework::Graphics::TextureFilter;
+
+    auto renderer = std::make_unique<RecordingSamplerSpriteBatchRenderer>();
+    RecordingSamplerSpriteBatchRenderer* const recording = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+    SamplerState sampler;
+    sampler.setFilterProperty(static_cast<TextureFilter>(12345));
+    sampler.setAddressUProperty(static_cast<TextureAddressMode>(12345));
+    sampler.setAddressVProperty(static_cast<TextureAddressMode>(12345));
+
+    batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &sampler, nullptr, nullptr);
+    EXPECT_EQ(recording->filter, static_cast<int>(TextureFilter::Linear));
+    EXPECT_EQ(recording->addressU, static_cast<int>(TextureAddressMode::Wrap));
+    EXPECT_EQ(recording->addressV, static_cast<int>(TextureAddressMode::Wrap));
+    batch.End();
+
+    EXPECT_EQ(recording->filter, static_cast<int>(TextureFilter::Linear));
+    EXPECT_EQ(recording->addressU, static_cast<int>(TextureAddressMode::Wrap));
+    EXPECT_EQ(recording->addressV, static_cast<int>(TextureAddressMode::Wrap));
+}
+
+TEST(SpriteBatchTest, DeferredEndReadsLateMutationsFromEveryStatePayload)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::ColorWriteChannels;
+    using Microsoft::Xna::Framework::Graphics::CullMode;
+    using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::RasterizerState;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+    using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
+
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+    BlendState blend;
+    SamplerState sampler;
+    DepthStencilState depth;
+    RasterizerState rasterizer;
+
+    batch.Begin(SpriteSortMode::Deferred, &blend, &sampler, &depth, &rasterizer);
+    blend.setColorWriteChannelsProperty(ColorWriteChannels::None);
+    sampler.setAddressUProperty(TextureAddressMode::Mirror);
+    depth.setDepthBufferEnableProperty(false);
+    rasterizer.setCullModeProperty(CullMode::None);
+    batch.End();
+
+    EXPECT_EQ(device.getBlendStateProperty().getColorWriteChannelsProperty(),
+              ColorWriteChannels::None);
+    EXPECT_EQ(device.getSamplerStatesProperty()[0].getAddressUProperty(),
+              TextureAddressMode::Mirror);
+    EXPECT_FALSE(device.getDepthStencilStateProperty().getDepthBufferEnableProperty());
+    EXPECT_EQ(device.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
+
+    EXPECT_THROW(blend.setColorWriteChannelsProperty(ColorWriteChannels::All),
+                 System::InvalidOperationException);
+    EXPECT_THROW(sampler.setAddressUProperty(TextureAddressMode::Clamp),
+                 System::InvalidOperationException);
+    EXPECT_THROW(depth.setDepthBufferEnableProperty(true), System::InvalidOperationException);
+    EXPECT_THROW(rasterizer.setCullModeProperty(CullMode::CullClockwiseFace),
+                 System::InvalidOperationException);
+}
+
+TEST(SpriteBatchTest, ImmediateBeginRejectsEveryDisposedStateFamily)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::RasterizerState;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+
+    GraphicsDevice device;
+    {
+        SpriteBatch batch(device);
+        BlendState blend;
+        blend.Dispose();
+        EXPECT_THROW(batch.Begin(SpriteSortMode::Immediate, &blend, nullptr, nullptr, nullptr),
+                     System::ObjectDisposedException);
+    }
+    {
+        SpriteBatch batch(device);
+        SamplerState sampler;
+        sampler.Dispose();
+        EXPECT_THROW(batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, &sampler,
+                                 nullptr, nullptr),
+                     System::ObjectDisposedException);
+        // XNA has not incremented either device counter or published the Begin/End pair when
+        // Immediate SetRenderState fails, so this same object remains usable.
+        EXPECT_NO_THROW(batch.Begin());
+        EXPECT_NO_THROW(batch.End());
+    }
+    {
+        SpriteBatch batch(device);
+        DepthStencilState depth;
+        depth.Dispose();
+        EXPECT_THROW(batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, nullptr,
+                                 &depth, nullptr),
+                     System::ObjectDisposedException);
+    }
+    {
+        SpriteBatch batch(device);
+        RasterizerState rasterizer;
+        rasterizer.Dispose();
+        EXPECT_THROW(batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, nullptr,
+                                 nullptr, &rasterizer),
+                     System::ObjectDisposedException);
+    }
+    {
+        SpriteBatch batch(device);
+        ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque,
+                                    nullptr, nullptr, nullptr));
+        EXPECT_NO_THROW(batch.End());
+    }
+}
+
+TEST(SpriteBatchTest, DeferredEndRejectsDisposedStateAtBeginOrBeforeFlush)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::SamplerState;
+
+    {
+        GraphicsDevice device;
+        SpriteBatch batch(device);
+        SamplerState alreadyDisposed;
+        alreadyDisposed.Dispose();
+        ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque,
+                                    &alreadyDisposed, nullptr, nullptr));
+        EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+        EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+        EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+    }
+
+    {
+        GraphicsDevice device;
+        SpriteBatch batch(device);
+        SamplerState disposedAfterBegin = SamplerState::PointClamp;
+        ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque,
+                                    &disposedAfterBegin, nullptr, nullptr));
+        disposedAfterBegin.Dispose();
+        EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+        EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+        EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+    }
+
+    {
+        GraphicsDevice device;
+        SpriteBatch batch(device);
+        ASSERT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque,
+                                    nullptr, nullptr, nullptr));
+        EXPECT_NO_THROW(batch.End());
+    }
+}
+
+// SOFTWARE-351: recovered Microsoft XNA tracks active SpriteBatch pairs on GraphicsDevice. Any
+// number of non-Immediate batches may coexist, but Immediate is mutually exclusive with every
+// other active batch. A rejected cross-mode Begin must not itself become active.
+TEST(SpriteBatchTest, GraphicsDeviceCoordinatesImmediateAcrossBatchInstances)
+{
+    GraphicsDevice device;
+    SpriteBatch deferredA(device);
+    SpriteBatch deferredB(device);
+    SpriteBatch immediate(device);
+
+    deferredA.Begin();
+    deferredB.Begin();
+    bool immediateRejected = false;
+    try
+    {
+        immediate.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
+    }
+    catch (const System::InvalidOperationException&)
+    {
+        immediateRejected = true;
+    }
+    EXPECT_TRUE(immediateRejected);
+    if (!immediateRejected)
+        immediate.End();
+    deferredB.End();
+    deferredA.End();
+
+    immediate.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
+    bool deferredRejected = false;
+    try
+    {
+        deferredA.Begin();
+    }
+    catch (const System::InvalidOperationException&)
+    {
+        deferredRejected = true;
+    }
+    EXPECT_TRUE(deferredRejected);
+    if (!deferredRejected)
+        deferredA.End();
+
+    SpriteBatch secondImmediate(device);
+    bool secondImmediateRejected = false;
+    try
+    {
+        secondImmediate.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend);
+    }
+    catch (const System::InvalidOperationException&)
+    {
+        secondImmediateRejected = true;
+    }
+    EXPECT_TRUE(secondImmediateRejected);
+    if (!secondImmediateRejected)
+        secondImmediate.End();
+    immediate.End();
+
+    EXPECT_NO_THROW(deferredA.Begin());
+    EXPECT_NO_THROW(deferredA.End());
+}
+
+TEST(SpriteBatchTest, FailedDeferredEndRetainsDeviceBatchAccountingEvenAfterDispose)
+{
+    GraphicsDevice device;
+    SamplerState disposed;
+    disposed.Dispose();
+    SpriteBatch poisoned(device);
+    poisoned.Begin(SpriteSortMode::Deferred, &BlendState::AlphaBlend,
+                   &disposed, nullptr, nullptr);
+    EXPECT_THROW(poisoned.End(), System::ObjectDisposedException);
+
+    SpriteBatch parallelDeferred(device);
+    EXPECT_NO_THROW(parallelDeferred.Begin());
+    EXPECT_NO_THROW(parallelDeferred.End());
+
+    SpriteBatch immediate(device);
+    EXPECT_THROW(immediate.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend),
+                 System::InvalidOperationException);
+    poisoned.Dispose();
+    EXPECT_THROW(immediate.Begin(SpriteSortMode::Immediate, BlendState::AlphaBlend),
+                 System::InvalidOperationException);
 }
 
 // --- Draw guard: throws when called before Begin (no-renderer batch) ---
@@ -260,7 +632,7 @@ TEST(SpriteBatchTest, DrawXYBeforeBeginThrows)
 {
     SpriteBatch batch;
     Texture2D tex;
-    EXPECT_THROW(batch.Draw(tex, 0.0f, 0.0f), std::runtime_error);
+    EXPECT_THROW(batch.Draw(tex, 0.0f, 0.0f), System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawRectRectColorBeforeBeginThrows)
@@ -269,7 +641,7 @@ TEST(SpriteBatchTest, DrawRectRectColorBeforeBeginThrows)
     Texture2D tex;
     Rectangle dest{0, 0, 32, 32};
     Rectangle src{0, 0, 32, 32};
-    EXPECT_THROW(batch.Draw(tex, dest, src, Color::White), std::runtime_error);
+    EXPECT_THROW(batch.Draw(tex, dest, src, Color::White), System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawRectRectColorRotOriEffLayerBeforeBeginThrows)
@@ -281,7 +653,7 @@ TEST(SpriteBatchTest, DrawRectRectColorRotOriEffLayerBeforeBeginThrows)
     EXPECT_THROW(
         batch.Draw(tex, dest, src, Color::White, 0.0f, Vector2::Zero,
                    SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 // --- DrawString guard: throws when called before Begin ---
@@ -305,7 +677,7 @@ TEST(SpriteBatchTest, DrawStringStdStringBeforeBeginThrows)
     SpriteFont font = makeEmptyFont();
     EXPECT_THROW(
         batch.DrawString(font, std::string("hi"), Vector2::Zero, Color::White),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawStringScalarScaleBeforeBeginThrows)
@@ -315,7 +687,7 @@ TEST(SpriteBatchTest, DrawStringScalarScaleBeforeBeginThrows)
     EXPECT_THROW(
         batch.DrawString(font, std::string("hi"), Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawStringVec2ScaleBeforeBeginThrows)
@@ -326,7 +698,7 @@ TEST(SpriteBatchTest, DrawStringVec2ScaleBeforeBeginThrows)
         batch.DrawString(font, std::string("hi"), Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, Vector2(1.0f, 1.0f),
                          SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 // -----------------------------------------------------------------------
@@ -337,7 +709,7 @@ TEST(SpriteBatchTest, DrawVec2ColorBeforeBeginThrows)
 {
     SpriteBatch batch;
     Texture2D tex;
-    EXPECT_THROW(batch.Draw(tex, Vector2::Zero, Color::White), std::runtime_error);
+    EXPECT_THROW(batch.Draw(tex, Vector2::Zero, Color::White), System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawVec2OptSrcColorBeforeBeginThrows)
@@ -345,7 +717,7 @@ TEST(SpriteBatchTest, DrawVec2OptSrcColorBeforeBeginThrows)
     SpriteBatch batch;
     Texture2D tex;
     EXPECT_THROW(batch.Draw(tex, Vector2::Zero, std::optional<Rectangle>{}, Color::White),
-                 std::runtime_error);
+                 System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawVec2OptSrcColorRotOriScaleEffLayerBeforeBeginThrows)
@@ -355,7 +727,7 @@ TEST(SpriteBatchTest, DrawVec2OptSrcColorRotOriScaleEffLayerBeforeBeginThrows)
     EXPECT_THROW(
         batch.Draw(tex, Vector2::Zero, std::optional<Rectangle>{}, Color::White,
                    0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawVec2OptSrcColorRotOriVec2ScaleEffLayerBeforeBeginThrows)
@@ -365,14 +737,15 @@ TEST(SpriteBatchTest, DrawVec2OptSrcColorRotOriVec2ScaleEffLayerBeforeBeginThrow
     EXPECT_THROW(
         batch.Draw(tex, Vector2::Zero, std::optional<Rectangle>{}, Color::White,
                    0.0f, Vector2::Zero, Vector2(1.0f, 1.0f), SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawRectColorBeforeBeginThrows)
 {
     SpriteBatch batch;
     Texture2D tex;
-    EXPECT_THROW(batch.Draw(tex, Rectangle(0, 0, 32, 32), Color::White), std::runtime_error);
+    EXPECT_THROW(batch.Draw(tex, Rectangle(0, 0, 32, 32), Color::White),
+                 System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawRectOptSrcColorBeforeBeginThrows)
@@ -381,7 +754,7 @@ TEST(SpriteBatchTest, DrawRectOptSrcColorBeforeBeginThrows)
     Texture2D tex;
     EXPECT_THROW(
         batch.Draw(tex, Rectangle(0, 0, 32, 32), std::optional<Rectangle>{}, Color::White),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawRectOptSrcColorRotOriEffLayerBeforeBeginThrows)
@@ -391,7 +764,7 @@ TEST(SpriteBatchTest, DrawRectOptSrcColorRotOriEffLayerBeforeBeginThrows)
     EXPECT_THROW(
         batch.Draw(tex, Rectangle(0, 0, 32, 32), std::optional<Rectangle>{}, Color::White,
                    0.0f, Vector2::Zero, SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 // -----------------------------------------------------------------------
@@ -405,7 +778,7 @@ TEST(SpriteBatchTest, DrawStringStringBuilderBeforeBeginThrows)
     System::Text::StringBuilder sb;
     sb.Append("hi");
     EXPECT_THROW(batch.DrawString(font, sb, Vector2::Zero, Color::White),
-                 std::runtime_error);
+                 System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawStringStringBuilderScalarScaleBeforeBeginThrows)
@@ -417,7 +790,7 @@ TEST(SpriteBatchTest, DrawStringStringBuilderScalarScaleBeforeBeginThrows)
     EXPECT_THROW(
         batch.DrawString(font, sb, Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 TEST(SpriteBatchTest, DrawStringStringBuilderVec2ScaleBeforeBeginThrows)
@@ -429,7 +802,7 @@ TEST(SpriteBatchTest, DrawStringStringBuilderVec2ScaleBeforeBeginThrows)
     EXPECT_THROW(
         batch.DrawString(font, sb, Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, Vector2(1.0f, 1.0f), SpriteEffects::None, 0.0f),
-        std::runtime_error);
+        System::InvalidOperationException);
 }
 
 // -----------------------------------------------------------------------
@@ -440,7 +813,21 @@ TEST(SpriteBatchTest, BeginTwiceWithoutEndThrows)
 {
     SpriteBatch batch;
     batch.Begin();
-    EXPECT_THROW(batch.Begin(), std::runtime_error);
+    EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+}
+
+TEST(SpriteBatchTest, OrderingErrorsUseXnaInvalidOperationException)
+{
+    SpriteBatch batch;
+    Texture2D texture;
+
+    EXPECT_THROW(batch.End(), System::InvalidOperationException);
+    EXPECT_THROW(batch.Draw(texture, Vector2::Zero, Color::White),
+                 System::InvalidOperationException);
+
+    batch.Begin();
+    EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+    batch.End();
 }
 
 TEST(SpriteBatchTest, BeginEndBeginEndDoesNotThrow)
@@ -452,6 +839,49 @@ TEST(SpriteBatchTest, BeginEndBeginEndDoesNotThrow)
         batch.Begin();
         batch.End();
     });
+}
+
+TEST(SpriteBatchTest, EndExceptionDoesNotLeaveBatchActive)
+{
+    auto renderer = std::make_unique<ThrowOnceEndSpriteBatchRenderer>();
+    SpriteBatch batch(std::move(renderer));
+
+    batch.Begin();
+    EXPECT_THROW(batch.End(), std::runtime_error);
+    EXPECT_NO_THROW(batch.Begin());
+    EXPECT_NO_THROW(batch.End());
+}
+
+TEST(SpriteBatchLifecycleTest, DisposeReleasesRendererAndIsIdempotent)
+{
+    bool rendererDestroyed = false;
+    int disposingEvents = 0;
+    SpriteBatch batch(
+        std::make_unique<DestructionTrackingSpriteBatchRenderer>(rendererDestroyed));
+    batch.Disposing += [&disposingEvents](System::Object*, const System::EventArgs&) {
+        ++disposingEvents;
+    };
+
+    batch.Begin();
+    batch.Dispose();
+
+    EXPECT_TRUE(batch.getIsDisposedProperty());
+    EXPECT_TRUE(rendererDestroyed);
+    EXPECT_EQ(disposingEvents, 1);
+
+    EXPECT_NO_THROW(batch.Dispose());
+    EXPECT_EQ(disposingEvents, 1);
+}
+
+TEST(SpriteBatchLifecycleTest, EveryRenderEntryRejectsDisposedBatch)
+{
+    SpriteBatch batch;
+    Texture2D texture;
+    batch.Dispose();
+
+    EXPECT_THROW(batch.Begin(), System::ObjectDisposedException);
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+    EXPECT_THROW(batch.Draw(texture, 0.0f, 0.0f), System::ObjectDisposedException);
 }
 
 // -----------------------------------------------------------------------
@@ -731,7 +1161,7 @@ TEST(SpriteBatchSortModeTest, DeferredRetainsTextureRendererThroughEnd)
 //
 // FNA/XNA's contract for the default SpriteSortMode::Deferred is: no sort at all, sprites are
 // delivered to the renderer in exactly their original Draw() submission order. flushBatch() only
-// applies std::stable_sort for BackToFront/FrontToBack/Texture -- Deferred deliberately skips
+// applies XNA's Array.Sort-equivalent path for BackToFront/FrontToBack/Texture -- Deferred skips
 // straight to iterating spriteQueue_ in insertion order. Task 412's DeferredDoesNotFlushBeforeEnd
 // already covers the "not flushed before End()" half of Deferred's contract; this covers the
 // "preserves submission order" half.
@@ -769,17 +1199,12 @@ TEST(SpriteBatchSortModeTest, DeferredPreservesSubmissionOrder)
 // -----------------------------------------------------------------------
 // Task 414: complete tests for SpriteSortMode::Texture (Task 163 dependency)
 //
-// FNA/XNA's contract for SpriteSortMode::Texture is: sprites are grouped by texture (to minimize
-// GPU texture-bind state changes), sorted by raw texture reference. flushBatch() implements this
-// as std::stable_sort(..., [](a,b){ return a.texture < b.texture; }) -- a *pointer* comparison,
-// so which texture ends up "first" depends on runtime addresses, not something a test can predict
-// in advance. The test below only asserts the 2 properties that are actually part of the
-// contract and don't depend on address ordering: (1) all draws sharing a texture end up adjacent
-// (grouped, no interleaving with the other texture), and (2) draws sharing the same texture keep
-// their original relative submission order (stable_sort's stability, not a plain sort).
+// Microsoft XNA sorts an index array with .NET Framework 4's Array.Sort<T>. That implementation
+// is deliberately not stable: for three entries it reverses the two outer equal keys while still
+// grouping them. Which texture group comes first remains pointer-identity dependent.
 // -----------------------------------------------------------------------
 
-TEST(SpriteBatchSortModeTest, TextureGroupsDrawsByTextureAndPreservesGroupOrder)
+TEST(SpriteBatchSortModeTest, TextureGroupsDrawsAndMatchesXnaEqualKeyOrdering)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -815,18 +1240,17 @@ TEST(SpriteBatchSortModeTest, TextureGroupsDrawsByTextureAndPreservesGroupOrder)
     // (that depends on runtime pointer addresses, not something this test can or should assume).
     EXPECT_EQ(aIndices[1], aIndices[0] + 1);
 
-    // Stable within the group: the draw submitted first (dest X=1) must still precede the draw
-    // submitted second (dest X=3) among the 2 A entries.
-    EXPECT_EQ(rec->drawCalls[aIndices[0]].destinationRectangle.X, 1);
-    EXPECT_EQ(rec->drawCalls[aIndices[1]].destinationRectangle.X, 3);
+    // Array.Sort's three-element quicksort reverses the two equal A entries. This exact behavior
+    // is visible in Microsoft XNA when overlapping equal-key sprites use distinct colors.
+    EXPECT_EQ(rec->drawCalls[aIndices[0]].destinationRectangle.X, 3);
+    EXPECT_EQ(rec->drawCalls[aIndices[1]].destinationRectangle.X, 1);
 }
 
 // -----------------------------------------------------------------------
 // Task 415: complete tests for SpriteSortMode::FrontToBack (Task 164 dependency)
 //
-// FNA/XNA's contract for SpriteSortMode::FrontToBack is: sprites are sorted by ASCENDING
-// layerDepth (smaller depth == closer to the camera == drawn first). flushBatch() implements
-// this as std::stable_sort(..., [](a,b){ return a.layerDepth < b.layerDepth; }).
+// XNA's contract for SpriteSortMode::FrontToBack is: sprites are sorted by ASCENDING layerDepth
+// (smaller depth == closer to the camera == drawn first). Equal/unordered cases are pinned below.
 // -----------------------------------------------------------------------
 
 TEST(SpriteBatchSortModeTest, FrontToBackSortsByAscendingLayerDepth)
@@ -865,13 +1289,10 @@ TEST(SpriteBatchSortModeTest, FrontToBackSortsByAscendingLayerDepth)
 // -----------------------------------------------------------------------
 // Task 416: complete tests for SpriteSortMode::BackToFront (Task 165 dependency)
 //
-// FNA/XNA's contract for SpriteSortMode::BackToFront is: sprites are sorted by DESCENDING
+// XNA's contract for SpriteSortMode::BackToFront is: sprites are sorted by DESCENDING
 // layerDepth (larger depth == farther from the camera == drawn first, so nearer sprites composite
-// on top). flushBatch() implements this as
-// std::stable_sort(..., [](a,b){ return a.layerDepth > b.layerDepth; }) -- the mirror image of
-// Task 415's FrontToBack. Reuses Task 415's exact same 3 draws (same plans/plan_graphics.md Task 164/165
-// example depths) with only the sort mode and expected order reversed, per plans/plan_graphics.md's own
-// Task 165 note ("same 3 draws -- assert reverse delivery order").
+// on top). This reuses Task 415's three distinct depths with the expected order reversed;
+// equal/unordered cases are pinned separately below.
 // -----------------------------------------------------------------------
 
 TEST(SpriteBatchSortModeTest, BackToFrontSortsByDescendingLayerDepth)
@@ -904,6 +1325,70 @@ TEST(SpriteBatchSortModeTest, BackToFrontSortsByDescendingLayerDepth)
     EXPECT_EQ(rec->drawCalls[2].destinationRectangle.X, 10);
 }
 
+TEST(SpriteBatchSortModeTest, EqualDepthsMatchXnaArraySortOrdering)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+
+    for (const SpriteSortMode mode : {SpriteSortMode::FrontToBack, SpriteSortMode::BackToFront})
+    {
+        auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+        RecordingSpriteBatchRenderer* rec = renderer.get();
+        SpriteBatch batch(std::move(renderer));
+
+        DummyTextureRenderer texRenderer(1, 1);
+        Texture2D texture = Texture2D::CreateWithRendererForTests(
+            1, 1,
+            std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+                &texRenderer, [](auto*) {}));
+
+        batch.Begin(mode, BlendState::AlphaBlend);
+        for (int marker = 1; marker <= 3; ++marker)
+        {
+            batch.Draw(texture, Rectangle(marker, 0, 1, 1), Rectangle(0, 0, 1, 1),
+                       Color::White, 0.0f, Vector2::Zero, SpriteEffects::None, 0.5f);
+        }
+        batch.End();
+
+        ASSERT_EQ(rec->drawCalls.size(), 3u);
+        EXPECT_EQ(rec->drawCalls[0].destinationRectangle.X, 3);
+        EXPECT_EQ(rec->drawCalls[1].destinationRectangle.X, 2);
+        EXPECT_EQ(rec->drawCalls[2].destinationRectangle.X, 1);
+    }
+}
+
+TEST(SpriteBatchSortModeTest, InvalidNonzeroModeThrowsNotSupportedBeforeDrawing)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+
+    DummyTextureRenderer texRenderer(4, 4);
+    Texture2D tex = Texture2D::CreateWithRendererForTests(
+        4, 4,
+        std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&texRenderer, [](auto*) {}));
+
+    batch.Begin(static_cast<SpriteSortMode>(5), BlendState::AlphaBlend);
+    batch.Draw(tex, 0.0f, 0.0f);
+
+    EXPECT_THROW(batch.End(), System::NotSupportedException);
+    EXPECT_TRUE(rec->drawCalls.empty());
+    EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+    EXPECT_THROW(batch.End(), System::NotSupportedException);
+}
+
+TEST(SpriteBatchSortModeTest, InvalidNonzeroModeWithEmptyQueueDoesNotSort)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    SpriteBatch batch(std::move(renderer));
+
+    batch.Begin(static_cast<SpriteSortMode>(5), BlendState::AlphaBlend);
+    EXPECT_NO_THROW(batch.End());
+}
+
 // -----------------------------------------------------------------------
 // REMED-GFX-003: DrawString's axis-direction tables are indexed by (int)effects, and
 // SpriteEffects is a composable [Flags] enum -- FlipHorizontally|FlipVertically (value 3) is a
@@ -917,7 +1402,8 @@ TEST(SpriteBatchSortModeTest, BackToFrontSortsByDescendingLayerDepth)
 namespace
 {
     SpriteFont makeSingleGlyphFontWithRenderer(
-        const std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>& texRenderer)
+        const std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>& texRenderer,
+        std::optional<SharpRuntime::charcs> defaultCharacter = std::nullopt)
     {
         Texture2D atlas = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
         std::vector<Rectangle> glyphs   = { Rectangle(0, 0, 8, 12) };
@@ -926,7 +1412,7 @@ namespace
         std::vector<Microsoft::Xna::Framework::Vector3> kern =
             { Microsoft::Xna::Framework::Vector3(1.0f, 8.0f, 2.0f) };
         return SpriteFont(atlas, glyphs, cropping, chars, /*lineSpacing=*/16, /*spacing=*/0.0f,
-                          kern, std::nullopt);
+                          kern, defaultCharacter);
     }
 
     std::vector<RecordingSpriteBatchRenderer::DrawCall> drawSingleCharWithEffects(
@@ -956,28 +1442,57 @@ namespace
     }
 
     template<typename TAction>
-    void expectNumericArgumentOutOfRange(const char* parameterName, TAction&& action)
+    void expectCharacterArgumentException(TAction&& action)
     {
         try
         {
             action();
-            FAIL() << "Expected System::ArgumentOutOfRangeException for " << parameterName;
+            FAIL() << "Expected System::ArgumentException for character";
         }
-        catch (const ArgumentOutOfRangeException& exception)
+        catch (const System::ArgumentException& exception)
         {
-            EXPECT_EQ(exception.getParamNameProperty(), parameterName);
+            EXPECT_EQ(exception.getParamNameProperty(), "character");
         }
         catch (...)
         {
-            FAIL() << "Expected System::ArgumentOutOfRangeException for " << parameterName;
+            FAIL() << "Expected System::ArgumentException for character";
         }
     }
 }
 
-// -----------------------------------------------------------------------
-// REMED-GFX-057: public floating-point inputs that feed SpriteBatch's integer
-// destination bridge must be rejected before any undefined float-to-int cast.
-// -----------------------------------------------------------------------
+TEST(SpriteBatchTest, DrawStringUnknownCharWithNoDefaultThrowsArgumentException)
+{
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    SpriteBatch batch(std::move(renderer));
+    DummyTextureRenderer textureRendererRaw(16, 16);
+    auto textureRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &textureRendererRaw, [](auto*) {});
+    const SpriteFont font = makeSingleGlyphFontWithRenderer(textureRenderer);
+
+    batch.Begin();
+    expectCharacterArgumentException([&]
+    {
+        batch.DrawString(font, std::string("B"), Vector2::Zero, Color::White);
+    });
+    batch.End();
+}
+
+TEST(SpriteBatchTest, DrawStringInvalidContentDefaultThrowsForCharacter)
+{
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    SpriteBatch batch(std::move(renderer));
+    DummyTextureRenderer textureRendererRaw(16, 16);
+    auto textureRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &textureRendererRaw, [](auto*) {});
+    const SpriteFont font = makeSingleGlyphFontWithRenderer(textureRenderer, u'?');
+
+    batch.Begin();
+    expectCharacterArgumentException([&]
+    {
+        batch.DrawString(font, std::string("B"), Vector2::Zero, Color::White);
+    });
+    EXPECT_NO_THROW(batch.End());
+}
 
 // -----------------------------------------------------------------------
 // XNA 4.0 and FNA carry a sprite's destination through the batch as floats
@@ -1155,13 +1670,25 @@ TEST(SpriteBatchSubPixelDestinationTest, ARendererWithoutTheSubPixelOverloadStil
 
     batch.Begin();
     batch.Draw(texture, Vector2(12.75f, -9.75f), Color::White);
+    batch.Draw(texture,
+               Vector2(std::numeric_limits<float>::max(),
+                       -std::numeric_limits<float>::max()),
+               Color::White);
+    batch.Draw(texture,
+               Vector2(std::numeric_limits<float>::quiet_NaN(),
+                       std::numeric_limits<float>::infinity()),
+               Color::White);
     batch.End();
 
-    ASSERT_EQ(rec->destinations.size(), 1u);
+    ASSERT_EQ(rec->destinations.size(), 3u);
     EXPECT_EQ(rec->destinations[0], Rectangle(12, -9, 16, 16));
+    EXPECT_EQ(rec->destinations[1],
+              Rectangle(std::numeric_limits<int>::max(),
+                        std::numeric_limits<int>::lowest(), 16, 16));
+    EXPECT_EQ(rec->destinations[2], Rectangle(0, 0, 16, 16));
 }
 
-TEST(SpriteBatchNumericInputTest, DrawXYDefinesFiniteInt32BoundariesAndTruncation)
+TEST(SpriteBatchNumericInputTest, DrawXYCarriesTheCompleteFloatDomain)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -1179,20 +1706,20 @@ TEST(SpriteBatchNumericInputTest, DrawXYDefinesFiniteInt32BoundariesAndTruncatio
         std::nextafter(negativeLimit, -std::numeric_limits<float>::infinity());
 
     batch.Begin();
-    // CABI-38: non-finite coordinates are XNA-valid and travel through; only finite values too
-    // large to be a representable destination are refused.
+    // SOFTWARE-352: Microsoft XNA stores every Single directly in SpriteInfo. Its Draw and End
+    // both accept the finite values outside Int32 just as they accept non-finite values.
     batch.Draw(texture, std::numeric_limits<float>::quiet_NaN(), 0.0f);
     batch.Draw(texture, std::numeric_limits<float>::infinity(), 0.0f);
     batch.Draw(texture, 0.0f, -std::numeric_limits<float>::infinity());
-    expectNumericArgumentOutOfRange("x", [&] {
+    EXPECT_NO_THROW(
         batch.Draw(texture, std::numeric_limits<float>::max(), 0.0f);
-    });
-    expectNumericArgumentOutOfRange("x", [&] {
+    );
+    EXPECT_NO_THROW(
         batch.Draw(texture, 2147483648.0f, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("y", [&] {
+    );
+    EXPECT_NO_THROW(
         batch.Draw(texture, 0.0f, belowNegativeLimit);
-    });
+    );
 
     batch.Draw(texture, positiveLimit, negativeLimit);
     batch.Draw(texture, std::numeric_limits<float>::denorm_min(),
@@ -1200,18 +1727,21 @@ TEST(SpriteBatchNumericInputTest, DrawXYDefinesFiniteInt32BoundariesAndTruncatio
     batch.Draw(texture, 12.75f, -9.75f);
     batch.End();
 
-    ASSERT_EQ(rec->drawCalls.size(), 6u);
+    ASSERT_EQ(rec->drawCalls.size(), 9u);
     // The three non-finite draws arrive first, and arrive unaltered.
     EXPECT_TRUE(std::isnan(rec->drawCalls[0].destinationX));
     EXPECT_TRUE(std::isinf(rec->drawCalls[1].destinationX));
     EXPECT_TRUE(std::isinf(rec->drawCalls[2].destinationY));
-    EXPECT_EQ(rec->drawCalls[3].destinationRectangle,
+    EXPECT_FLOAT_EQ(rec->drawCalls[3].destinationX, std::numeric_limits<float>::max());
+    EXPECT_FLOAT_EQ(rec->drawCalls[4].destinationX, 2147483648.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[5].destinationY, belowNegativeLimit);
+    EXPECT_EQ(rec->drawCalls[6].destinationRectangle,
               Rectangle(2147483520, -2147483647 - 1, 16, 16));
-    EXPECT_EQ(rec->drawCalls[4].destinationRectangle, Rectangle(0, 0, 16, 16));
-    EXPECT_EQ(rec->drawCalls[5].destinationRectangle, Rectangle(12, -9, 16, 16));
+    EXPECT_EQ(rec->drawCalls[7].destinationRectangle, Rectangle(0, 0, 16, 16));
+    EXPECT_EQ(rec->drawCalls[8].destinationRectangle, Rectangle(12, -9, 16, 16));
 }
 
-TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoordinates)
+TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyCarriesFloatExtremes)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -1224,8 +1754,7 @@ TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoo
     const std::optional<Rectangle> source(Rectangle(2, 3, 8, 6));
 
     batch.Begin();
-    // CABI-38: the three non-finite positions are carried through; only the finite value too large
-    // to be a representable destination is refused.
+    // Non-finite and finite out-of-Int32 positions all reach the renderer unchanged.
     batch.Draw(texture,
                Vector2(std::numeric_limits<float>::quiet_NaN(), 0.0f),
                Color::White);
@@ -1236,21 +1765,22 @@ TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoo
                Vector2(-std::numeric_limits<float>::infinity(), 0.0f),
                source, Color::White, 0.0f, Vector2::Zero, 1.0f,
                SpriteEffects::None, 0.0f);
-    expectNumericArgumentOutOfRange("position", [&] {
+    EXPECT_NO_THROW(
         batch.Draw(texture,
                    Vector2(0.0f, std::numeric_limits<float>::max()),
                    source, Color::White, 0.0f, Vector2::Zero, Vector2::One,
                    SpriteEffects::None, 0.0f);
-    });
+    );
     batch.End();
 
-    ASSERT_EQ(rec->drawCalls.size(), 3u);
+    ASSERT_EQ(rec->drawCalls.size(), 4u);
     EXPECT_TRUE(std::isnan(rec->drawCalls[0].destinationX));
     EXPECT_TRUE(std::isinf(rec->drawCalls[1].destinationY));
     EXPECT_TRUE(std::isinf(rec->drawCalls[2].destinationX));
+    EXPECT_FLOAT_EQ(rec->drawCalls[3].destinationY, std::numeric_limits<float>::max());
     rec->drawCalls.clear();
 
-    // A rejected Draw leaves the Begin/End state balanced and reusable.
+    // The same batch remains balanced and reusable after carrying the extreme inputs.
     batch.Begin();
     batch.Draw(texture, Vector2(1.75f, -2.75f), Color::White);
     batch.Draw(texture, Vector2(3.75f, -4.75f), source, Color::White);
@@ -1267,7 +1797,7 @@ TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoo
     EXPECT_EQ(rec->drawCalls[3].destinationRectangle, Rectangle(7, -8, 8, 6));
 }
 
-TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepresentableValues)
+TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleCarryTheCompleteFloatDomain)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -1287,8 +1817,7 @@ TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepr
         std::nextafter(scalarNegativeLimit, -std::numeric_limits<float>::infinity());
 
     batch.Begin();
-    // CABI-38: a non-finite scale is XNA-valid and reaches the vertex path; the refusals below are
-    // the finite-but-unrepresentable ones, which is a separate contract and unchanged.
+    // Every Single scale is XNA-valid and reaches the vertex path.
     batch.Draw(texture, Vector2::Zero, source, Color::White,
                0.0f, Vector2::Zero, std::numeric_limits<float>::quiet_NaN(),
                SpriteEffects::None, 0.0f);
@@ -1305,17 +1834,15 @@ TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepr
                0.0f, Vector2::Zero,
                Vector2(std::numeric_limits<float>::infinity(), 1.0f),
                SpriteEffects::None, 0.0f);
-    // float::max() as a scale is finite, but the 16-pixel source multiplies it to infinity, and an
-    // infinite destination is now carried through rather than refused. The refusal below is the
-    // real remaining case: a value whose product stays finite and is still unrepresentable.
+    // float::max() as a scale is finite, but the 16-pixel source multiplies it to infinity.
     batch.Draw(texture, Vector2::Zero, source, Color::White,
                0.0f, Vector2::Zero, std::numeric_limits<float>::max(),
                SpriteEffects::None, 0.0f);
-    expectNumericArgumentOutOfRange("scale", [&] {
+    EXPECT_NO_THROW(
         batch.Draw(texture, Vector2::Zero, source, Color::White,
                    0.0f, Vector2::Zero, Vector2(1.0f, belowScalarNegativeLimit),
                    SpriteEffects::None, 0.0f);
-    });
+    );
 
     batch.Draw(texture, Vector2::Zero, source, Color::White,
                0.0f, Vector2::Zero, std::numeric_limits<float>::denorm_min(),
@@ -1334,22 +1861,24 @@ TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepr
                SpriteEffects::FlipHorizontally, 0.75f);
     batch.End();
 
-    ASSERT_EQ(rec->drawCalls.size(), 10u);
-    // The five non-finite scales arrive first, unaltered, and so does the one that overflowed.
+    ASSERT_EQ(rec->drawCalls.size(), 11u);
+    // The five non-finite scales arrive first, unaltered, followed by both finite extremes.
     EXPECT_TRUE(std::isnan(rec->drawCalls[0].destinationWidth));
     EXPECT_TRUE(std::isinf(rec->drawCalls[1].destinationWidth));
     EXPECT_TRUE(std::isinf(rec->drawCalls[2].destinationWidth));
     EXPECT_TRUE(std::isnan(rec->drawCalls[3].destinationHeight));
     EXPECT_TRUE(std::isinf(rec->drawCalls[4].destinationWidth));
     EXPECT_TRUE(std::isinf(rec->drawCalls[5].destinationWidth));
+    EXPECT_FLOAT_EQ(rec->drawCalls[6].destinationHeight,
+                    static_cast<float>(16) * belowScalarNegativeLimit);
 
-    EXPECT_EQ(rec->drawCalls[6].destinationRectangle, Rectangle(0, 0, 0, 0));
-    EXPECT_EQ(rec->drawCalls[7].destinationRectangle,
-              Rectangle(0, 0, 2147483520, 2147483520));
+    EXPECT_EQ(rec->drawCalls[7].destinationRectangle, Rectangle(0, 0, 0, 0));
     EXPECT_EQ(rec->drawCalls[8].destinationRectangle,
+              Rectangle(0, 0, 2147483520, 2147483520));
+    EXPECT_EQ(rec->drawCalls[9].destinationRectangle,
               Rectangle(0, 0, -2147483647 - 1, -2147483647 - 1));
 
-    const auto& ordinary = rec->drawCalls[9];
+    const auto& ordinary = rec->drawCalls[10];
     EXPECT_EQ(ordinary.destinationRectangle, Rectangle(10, -20, -24, 8));
     EXPECT_EQ(ordinary.sourceRectangle, source.value());
     EXPECT_EQ(ordinary.color, tint);
@@ -1410,10 +1939,8 @@ TEST(SpriteBatchNumericInputTest, EveryDrawStringFamilyCarriesNonFiniteValuesThr
         << "an infinite origin must reach the destination";
 }
 
-// The Int32 destination range is a separate contract from finiteness, and it survives CABI-38: a
-// finite value too large to be a representable destination is still refused, with the parameter
-// named. Only the non-finite refusals went away.
-TEST(SpriteBatchNumericInputTest, DrawStringStillRefusesUnrepresentableFiniteDestinations)
+// SOFTWARE-352: DrawString uses the same unchecked Single-domain SpriteInfo fields as Draw.
+TEST(SpriteBatchNumericInputTest, DrawStringCarriesFiniteValuesOutsideInt32)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -1427,21 +1954,24 @@ TEST(SpriteBatchNumericInputTest, DrawStringStillRefusesUnrepresentableFiniteDes
     builder.Append("A");
 
     batch.Begin();
-    expectNumericArgumentOutOfRange("position", [&] {
+    EXPECT_NO_THROW(
         batch.DrawString(font, std::string("A"),
                          Vector2(std::numeric_limits<float>::max(), 0.0f),
                          Color::White);
-    });
-    expectNumericArgumentOutOfRange("scale", [&] {
+    );
+    EXPECT_NO_THROW(
         batch.DrawString(font, builder, Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, std::numeric_limits<float>::max(),
                          SpriteEffects::None, 0.0f);
-    });
+    );
     batch.End();
 
-    EXPECT_TRUE(rec->drawCalls.empty());
+    ASSERT_EQ(rec->drawCalls.size(), 2u);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationX, std::numeric_limits<float>::max());
+    EXPECT_FLOAT_EQ(rec->drawCalls[1].destinationWidth, std::numeric_limits<float>::max());
+    rec->drawCalls.clear();
 
-    // A rejected DrawString leaves the Begin/End state balanced and reusable.
+    // The same batch remains balanced and reusable.
     batch.Begin();
     batch.DrawString(font, std::string("A"), Vector2(10.25f, -4.25f), Color::White);
     batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
@@ -1480,21 +2010,10 @@ TEST(SpriteBatchNumericInputTest, DrawStringStillRefusesUnrepresentableFiniteDes
     EXPECT_FLOAT_EQ(rec->drawCalls[5].layerDepth, 0.75f);
 }
 
-// CABI-38: a NaN layer depth must sort, not corrupt.
-//
-// This is the reason CNA could not simply accept non-finite values before. Both depth sorts used a
-// bare `<` on layerDepth, and NaN compares false against everything: `a < b` and `b < a` are both
-// false, which violates the strict weak ordering std::stable_sort requires. That is undefined
-// behaviour -- libstdc++ can walk off the end of the range -- not merely a surprising order.
-//
-// The order asserted below is FNA's, whose depth comparers are p2->depth.CompareTo(p1->depth)
-// (SpriteBatch.cs:1602) and so put NaN below everything. XNA's own comparers differ: a bare > / <
-// pair returning 0 when neither holds, which makes a NaN depth compare equal to every other depth.
-// Copying that shape would keep the undefined behaviour, since equivalence would not be transitive,
-// so CNA follows the behavioural reference here and this test pins that choice: enough sprites to
-// take stable_sort's real (non-insertion) path, with NaN depths scattered among finite ones, in
-// both sort modes.
-TEST(SpriteBatchNumericInputTest, NonFiniteLayerDepthsSortWithoutCorruptingTheQueue)
+// Microsoft XNA's depth comparer returns equality whenever either input is NaN, then passes that
+// comparer to .NET Framework 4's Array.Sort<int>. Reproducing the framework quicksort explicitly
+// is defined in C++ even though passing this non-transitive comparison to std::sort would not be.
+TEST(SpriteBatchNumericInputTest, NonFiniteLayerDepthsMatchXnaArraySort)
 {
     using Microsoft::Xna::Framework::Graphics::BlendState;
     const float nan = std::numeric_limits<float>::quiet_NaN();
@@ -1502,47 +2021,75 @@ TEST(SpriteBatchNumericInputTest, NonFiniteLayerDepthsSortWithoutCorruptingTheQu
 
     for (const SpriteSortMode mode : {SpriteSortMode::BackToFront, SpriteSortMode::FrontToBack})
     {
-        auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
-        RecordingSpriteBatchRenderer* rec = renderer.get();
-        SpriteBatch batch(std::move(renderer));
-
         DummyTextureRenderer texRendererRaw(16, 16);
         auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
             &texRendererRaw, [](auto*) {});
         Texture2D texture = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
 
-        // Well past stable_sort's insertion-sort threshold, so the merge path really runs.
-        constexpr int kCount = 64;
-        batch.Begin(mode, BlendState::AlphaBlend);
-        for (int index = 0; index < kCount; ++index)
         {
-            const float depth = (index % 4 == 0) ? nan
-                              : (index % 4 == 1) ? -inf
-                              : (index % 4 == 2) ? inf
-                                                 : static_cast<float>(index) / kCount;
-            batch.Draw(texture, Vector2(static_cast<float>(index), 0.0f), std::nullopt,
-                       Color::White, 0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, depth);
+            auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+            RecordingSpriteBatchRenderer* rec = renderer.get();
+            SpriteBatch batch(std::move(renderer));
+
+            batch.Begin(mode, BlendState::AlphaBlend);
+            batch.Draw(texture, Vector2(0.0f, 0.0f), std::nullopt, Color::White,
+                       0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f);
+            batch.Draw(texture, Vector2(1.0f, 0.0f), std::nullopt, Color::White,
+                       0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, nan);
+            batch.Draw(texture, Vector2(2.0f, 0.0f), std::nullopt, Color::White,
+                       0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 1.0f);
+            batch.End();
+
+            ASSERT_EQ(rec->drawCalls.size(), 3u);
+            if (mode == SpriteSortMode::FrontToBack)
+            {
+                EXPECT_EQ(rec->drawCalls[0].destinationRectangle.X, 2);
+                EXPECT_EQ(rec->drawCalls[1].destinationRectangle.X, 1);
+                EXPECT_EQ(rec->drawCalls[2].destinationRectangle.X, 0);
+            }
+            else
+            {
+                EXPECT_EQ(rec->drawCalls[0].destinationRectangle.X, 0);
+                EXPECT_EQ(rec->drawCalls[1].destinationRectangle.X, 1);
+                EXPECT_EQ(rec->drawCalls[2].destinationRectangle.X, 2);
+            }
         }
-        batch.End();
 
-        // Nothing lost, nothing duplicated: the queue survived the sort.
-        ASSERT_EQ(rec->drawCalls.size(), static_cast<std::size_t>(kCount));
-
-        // Every NaN depth is at one end -- the total order puts NaN below everything, so they lead
-        // in FrontToBack and trail in BackToFront.
-        const std::size_t nanCount = static_cast<std::size_t>((kCount + 3) / 4);
-        for (std::size_t index = 0; index < nanCount; ++index)
         {
-            const std::size_t at = (mode == SpriteSortMode::FrontToBack)
-                                 ? index
-                                 : rec->drawCalls.size() - 1 - index;
-            EXPECT_TRUE(std::isnan(rec->drawCalls[at].layerDepth))
-                << "NaN depths must gather at one end, index " << at;
+            auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+            RecordingSpriteBatchRenderer* rec = renderer.get();
+            SpriteBatch batch(std::move(renderer));
+
+            constexpr int kCount = 64;
+            batch.Begin(mode, BlendState::AlphaBlend);
+            for (int index = 0; index < kCount; ++index)
+            {
+                const float depth = (index % 4 == 0) ? nan
+                                  : (index % 4 == 1) ? -inf
+                                  : (index % 4 == 2) ? inf
+                                                     : static_cast<float>(index) / kCount;
+                batch.Draw(texture, Vector2(static_cast<float>(index), 0.0f), std::nullopt,
+                           Color::White, 0.0f, Vector2::Zero, 1.0f,
+                           SpriteEffects::None, depth);
+            }
+            batch.End();
+
+            ASSERT_EQ(rec->drawCalls.size(), static_cast<std::size_t>(kCount));
+            std::uint64_t orderHash = UINT64_C(1469598103934665603);
+            for (const auto& call : rec->drawCalls)
+            {
+                orderHash = orderHash * UINT64_C(1099511628211)
+                          + static_cast<std::uint64_t>(call.destinationRectangle.X);
+            }
+            const std::uint64_t expected = mode == SpriteSortMode::FrontToBack
+                ? UINT64_C(0x692c1bd1416b6e1f)
+                : UINT64_C(0xba5f51bfe446e58d);
+            EXPECT_EQ(orderHash, expected);
         }
     }
 }
 
-TEST(SpriteBatchNumericInputTest, DrawStringAcceptsExactInt32RoundedBoundaries)
+TEST(SpriteBatchNumericInputTest, DrawStringCarriesValuesAcrossFormerInt32Boundaries)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -1565,23 +2112,25 @@ TEST(SpriteBatchNumericInputTest, DrawStringAcceptsExactInt32RoundedBoundaries)
     batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
                      0.0f, Vector2::Zero, negativeLimit,
                      SpriteEffects::None, 0.0f);
-    expectNumericArgumentOutOfRange("scale", [&] {
+    EXPECT_NO_THROW(
         batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, 2147483648.0f,
                          SpriteEffects::None, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("scale", [&] {
+    );
+    EXPECT_NO_THROW(
         batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, belowNegativeLimit,
                          SpriteEffects::None, 0.0f);
-    });
+    );
     batch.End();
 
-    ASSERT_EQ(rec->drawCalls.size(), 2u);
+    ASSERT_EQ(rec->drawCalls.size(), 4u);
     EXPECT_EQ(rec->drawCalls[0].destinationRectangle,
               Rectangle(0, 0, 2147483520, 2147483520));
     EXPECT_EQ(rec->drawCalls[1].destinationRectangle,
               Rectangle(0, 0, -2147483647 - 1, -2147483647 - 1));
+    EXPECT_FLOAT_EQ(rec->drawCalls[2].destinationWidth, 2147483648.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[3].destinationWidth, belowNegativeLimit);
 }
 
 TEST(SpriteBatchDrawStringSpriteEffectsTest, CombinedFlipMirrorsXLikeHorizontalAlone)

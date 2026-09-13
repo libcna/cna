@@ -42,7 +42,7 @@ typedef struct CNA_VertexBufferCreateInfo {
     uint32_t struct_version;
     /** @brief Declaration copied into the buffer, or invalid for the CNA empty-declaration extension. */
     CNA_VertexDeclarationHandle vertex_declaration;
-    /** @brief Nonnegative logical capacity measured in vertices. */
+    /** @brief Positive logical capacity measured in vertices. */
     int32_t vertex_count;
     /** @brief Buffer usage identity. */
     CNA_BufferUsage buffer_usage;

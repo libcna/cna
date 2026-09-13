@@ -234,7 +234,6 @@ def render(answers):
     passed = sum(1 for ok, _ in answers if ok)
     lines.append("")
     lines.append("**%d of %d conditions hold.**" % (passed, len(answers)))
-    lines.append("")
     return "\n".join(lines) + "\n"
 
 

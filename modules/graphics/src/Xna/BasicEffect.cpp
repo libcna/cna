@@ -117,6 +117,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Effect* BasicEffect::Clone()
     {
+        ThrowIfDisposedForCloneInternal();
         return new BasicEffect(*this);
     }
 

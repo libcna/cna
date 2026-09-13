@@ -4,7 +4,9 @@
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/Collections/Generic/KeyNotFoundException.hpp"
 
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -23,7 +25,17 @@ TEST(ModelBoneCollectionTest, IndexOutOfRangeThrows)
 TEST(ModelBoneCollectionTest, NameLookupNotFoundThrows)
 {
     ModelBoneCollection col;
-    EXPECT_THROW(col[std::string("Root")], std::out_of_range);
+    EXPECT_THROW((void) col[std::string("Root")],
+                 System::Collections::Generic::KeyNotFoundException);
+}
+
+TEST(ModelBoneCollectionTest, EmptyNameThrowsArgumentNull)
+{
+    ModelBoneCollection col;
+    ModelBone* value = reinterpret_cast<ModelBone*>(1);
+    EXPECT_THROW((void) col[std::string()], System::ArgumentNullException);
+    EXPECT_THROW(col.TryGetValue("", value), System::ArgumentNullException);
+    EXPECT_EQ(value, reinterpret_cast<ModelBone*>(1));
 }
 
 // --- Populated collection (Task 432): built via ModelBone::AddChild, since

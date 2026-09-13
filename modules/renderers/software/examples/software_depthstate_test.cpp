@@ -47,7 +47,7 @@ namespace
 {
     constexpr int kWidth = 96;
     constexpr int kHeight = 72;
-    constexpr float kDepthBias = 3000000.0f; // 3e6 * 2^-24 ~= 0.179 in Software window depth.
+    constexpr float kDepthBias = 0.02f; // XNA constant bias is normalized window depth.
 
     const Color kClear(11, 17, 23, 255);
     const Color kOtherClear(29, 31, 37, 255);
@@ -137,6 +137,22 @@ namespace
                                   Color(0, 0, 0, 0));
         const Rectangle region(0, 0, width, height);
         device.GetBackBufferData(&region, pixels.data(), 0, static_cast<int>(pixels.size()));
+        return pixels;
+    }
+
+    Color ReadPixel(Texture2D& texture, int x, int y)
+    {
+        const Rectangle region(x, y, 1, 1);
+        Color pixel(0, 0, 0, 0);
+        texture.GetData(0, &region, &pixel, 0, 1);
+        return pixel;
+    }
+
+    std::vector<Color> ReadAll(Texture2D& texture, int width, int height)
+    {
+        std::vector<Color> pixels(static_cast<std::size_t>(width) * static_cast<std::size_t>(height),
+                                  Color(0, 0, 0, 0));
+        texture.GetData(pixels.data(), 0, static_cast<int>(pixels.size()));
         return pixels;
     }
 
@@ -370,15 +386,15 @@ protected:
         SetFullViewport(device, kWidth, kHeight);
 
         // GFX-083 contract: polygon offset is applied before the selected comparison and stored only
-        // on pass. Positive constant bias pushes z=0.4 behind stored 0.5; zero bias then passes.
+        // on pass. Positive constant bias pushes z=0.49 behind stored 0.5; zero bias then passes.
         ClearTargetAndDepth(device, kClear, 0.5f);
         device.setDepthStencilStateProperty(DepthStencilState::Default);
         SetRasterizer(device, kDepthBias, 0.0f);
-        DrawQuad(device, effect, -1.0f, 1.0f, 0.4f, kRed);
+        DrawQuad(device, effect, -1.0f, 1.0f, 0.49f, kRed);
         Check(Exact(ReadPixel(device, kWidth / 2, kHeight / 2), kClear),
               "DepthBias is applied before depth comparison");
         SetRasterizer(device);
-        DrawQuad(device, effect, -1.0f, 1.0f, 0.4f, kGreen);
+        DrawQuad(device, effect, -1.0f, 1.0f, 0.49f, kGreen);
         Check(Exact(ReadPixel(device, kWidth / 2, kHeight / 2), kGreen),
               "failed biased fragment did not replace stored depth");
 
@@ -395,9 +411,9 @@ protected:
             device.Clear(ClearOptions::DepthBuffer, kOtherClear, 0.9f, 0);
             device.setDepthStencilStateProperty(MakeDepthState(true, true, CompareFunction::Less));
             DrawQuad(device, effect, -1.0f, 1.0f, 0.8f, kCyan);
-            Check(AllExact(ReadAll(device, rtWidth, rtHeight), kCyan),
-                  "depth-only clear resets the complete active RenderTarget2D");
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Check(AllExact(ReadAll(target, rtWidth, rtHeight), kCyan),
+                  "depth-only clear resets the complete active RenderTarget2D");
             SetFullViewport(device, kWidth, kHeight);
         }
 
@@ -425,14 +441,16 @@ protected:
             ClearTargetAndDepth(device, kClear, 0.6f);
             device.setDepthStencilStateProperty(MakeDepthState(true, true, CompareFunction::Less));
             DrawQuad(device, effect, -1.0f, 1.0f, 0.2f, kRed);
-            const Color initialA = ReadPixel(device, aWidth / 2, aHeight / 2);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const Color initialA = ReadPixel(targetA, aWidth / 2, aHeight / 2);
 
             device.SetRenderTarget(&targetB);
             SetFullViewport(device, bWidth, bHeight);
             ClearTargetAndDepth(device, kOtherClear, 0.4f);
             device.setDepthStencilStateProperty(MakeDepthState(true, true, CompareFunction::Greater));
             DrawQuad(device, effect, -1.0f, 1.0f, 0.8f, kGreen);
-            const Color initialB = ReadPixel(device, bWidth / 2, bHeight / 2);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const Color initialB = ReadPixel(targetB, bWidth / 2, bHeight / 2);
             Check(Exact(initialBackbuffer, kBlue) && Exact(initialA, kRed) && Exact(initialB, kGreen),
                   "backbuffer and two RenderTarget2D depth targets establish distinct contents");
 
@@ -440,15 +458,16 @@ protected:
             SetFullViewport(device, aWidth, aHeight);
             device.setDepthStencilStateProperty(MakeDepthState(true, true, CompareFunction::Less));
             DrawQuad(device, effect, -1.0f, 1.0f, 0.5f, kCyan); // fails against A's 0.2
-            const Color restoredA = ReadPixel(device, aWidth / 2, aHeight / 2);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const Color restoredA = ReadPixel(targetA, aWidth / 2, aHeight / 2);
 
             device.SetRenderTarget(&targetB);
             SetFullViewport(device, bWidth, bHeight);
             device.setDepthStencilStateProperty(MakeDepthState(true, true, CompareFunction::Greater));
             DrawQuad(device, effect, -1.0f, 1.0f, 0.6f, kMagenta); // fails against B's 0.8
-            const Color restoredB = ReadPixel(device, bWidth / 2, bHeight / 2);
-
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const Color restoredB = ReadPixel(targetB, bWidth / 2, bHeight / 2);
+
             SetFullViewport(device, kWidth, kHeight);
             device.setDepthStencilStateProperty(MakeDepthState(true, true, CompareFunction::Greater));
             DrawQuad(device, effect, -1.0f, 1.0f, 0.4f, kYellow); // fails against backbuffer 0.5
@@ -463,12 +482,13 @@ protected:
             device.Clear(ClearOptions::DepthBuffer, kOtherClear, 0.9f, 0);
             device.setDepthStencilStateProperty(MakeDepthState(true, true, CompareFunction::Less));
             DrawQuad(device, effect, -1.0f, 1.0f, 0.5f, kCyan);
-            const Color clearedA = ReadPixel(device, aWidth / 2, aHeight / 2);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const Color clearedA = ReadPixel(targetA, aWidth / 2, aHeight / 2);
 
             device.SetRenderTarget(&targetB);
             SetFullViewport(device, bWidth, bHeight);
-            const Color untouchedB = ReadPixel(device, bWidth / 2, bHeight / 2);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const Color untouchedB = ReadPixel(targetB, bWidth / 2, bHeight / 2);
             SetFullViewport(device, kWidth, kHeight);
             const Color untouchedBackbuffer = ReadPixel(device, kWidth / 2, kHeight / 2);
             Check(Exact(clearedA, kCyan) && Exact(untouchedB, kGreen) &&
@@ -485,6 +505,7 @@ public:
     SoftwareDepthStateTest()
     {
         graphicsDeviceManager_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphicsDeviceManager_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphicsDeviceManager_->setPreferredBackBufferWidthProperty(kWidth);
         graphicsDeviceManager_->setPreferredBackBufferHeightProperty(kHeight);
         graphicsDeviceManager_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);

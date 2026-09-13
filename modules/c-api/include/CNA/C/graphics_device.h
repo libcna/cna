@@ -1284,8 +1284,8 @@ typedef CNA_Handle CNA_OcclusionQueryHandle;
  *
  * @param graphics_device Callback-scoped borrowed graphics-device handle.
  * @param out_occlusion_query Receives an owned occlusion-query handle on success.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend has no occlusion
- * queries, or a documented argument/handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the active XNA profile or backend
+ * has no occlusion queries, or a documented argument/handle/thread/native failure.
  *
  * The query is a child of the active game and must be destroyed before @ref cna_game_destroy.
  */
@@ -1297,7 +1297,8 @@ CNA_C_API CNA_Result cna_occlusion_query_create(
  * @brief Begins counting visible pixels; every draw until the matching end is counted.
  *
  * @param occlusion_query Owned occlusion-query handle.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend has no query object,
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` for a nested begin or reuse before a
+ * completion observation; `CNA_RESULT_NOT_SUPPORTED` when the profile/backend has no query object;
  * or a documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_occlusion_query_begin(CNA_OcclusionQueryHandle occlusion_query);
@@ -1306,8 +1307,9 @@ CNA_C_API CNA_Result cna_occlusion_query_begin(CNA_OcclusionQueryHandle occlusio
  * @brief Ends the query and submits it to the GPU for evaluation.
  *
  * @param occlusion_query Owned occlusion-query handle.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend has no query object,
- * or a documented handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` without a matching begin;
+ * `CNA_RESULT_NOT_SUPPORTED` when the profile/backend has no query object; or a documented
+ * handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_occlusion_query_end(CNA_OcclusionQueryHandle occlusion_query);
 
@@ -1316,8 +1318,8 @@ CNA_C_API CNA_Result cna_occlusion_query_end(CNA_OcclusionQueryHandle occlusion_
  *
  * @param occlusion_query Owned occlusion-query handle.
  * @param out_is_complete Receives `CNA_TRUE` when the result is available.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend has no query object,
- * or a documented argument/handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the profile/backend has no query
+ * object, or a documented argument/handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_occlusion_query_get_is_complete(
     CNA_OcclusionQueryHandle occlusion_query,
@@ -1328,8 +1330,9 @@ CNA_C_API CNA_Result cna_occlusion_query_get_is_complete(
  *
  * @param occlusion_query Owned occlusion-query handle.
  * @param out_pixel_count Receives the visible pixel count.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend has no query object,
- * or a documented argument/handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` while no completed result is available;
+ * `CNA_RESULT_NOT_SUPPORTED` when the profile/backend has no query object; or a documented
+ * argument/handle/thread/native failure.
  *
  * Some backends report only zero or one rather than an exact sample count.
  */

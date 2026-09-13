@@ -14,10 +14,7 @@
 //
 // This test exercises all 8 construction overloads/variants (VertexBuffer x2 ctors,
 // DynamicVertexBuffer, IndexBuffer x2 index widths, DynamicIndexBuffer x2 index widths), plus
-// confirms the throw fires unconditionally BEFORE any argument validation -- a zero-count and a
-// negative-count construction both still throw the SAME renderer-unsupported message, not an
-// ArgumentOutOfRangeException, since the renderer call happens in the member-initializer list
-// before the constructor body (where any such validation would live) ever runs.
+// confirms Microsoft XNA's positive-capacity validation runs before renderer allocation.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -30,6 +27,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -63,6 +61,24 @@ class SdlBufferConstructionThrowsTest : public Game
         catch (const std::runtime_error& e)
         {
             return std::strcmp(e.what(), expectedMessage.c_str()) == 0;
+        }
+        catch (const std::exception&)
+        {
+            return false;
+        }
+    }
+
+    template <typename F>
+    static bool ThrowsArgumentOutOfRange(F&& fn)
+    {
+        try
+        {
+            fn();
+            return false;
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            return true;
         }
         catch (const std::exception&)
         {
@@ -111,15 +127,13 @@ protected:
                   [&] { DynamicIndexBuffer dib(dev, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None); }, kNoIb),
               "DynamicIndexBuffer(ThirtyTwoBits, ...) throws CreateIndexBuffer16's message");
 
-        // --- Edge case: the renderer throw fires BEFORE any argument validation -- zero and
-        //     negative counts still hit the SAME message, not an ArgumentOutOfRangeException,
-        //     since the renderer call happens in the member-initializer list. ---
-        check(ThrowsExactRuntimeError([&] { VertexBuffer vb(dev, 0); }, kNoVb),
-              "VertexBuffer(device, 0) still throws the renderer message, not a validation exception");
-        check(ThrowsExactRuntimeError([&] { VertexBuffer vb(dev, -1); }, kNoVb),
-              "VertexBuffer(device, -1) still throws the renderer message, not a validation exception");
-        check(ThrowsExactRuntimeError([&] { IndexBuffer ib(dev, -1); }, kNoIb),
-              "IndexBuffer(device, -1) still throws the renderer message, not a validation exception");
+        // --- Microsoft XNA validates the public positive-capacity contract before allocation. ---
+        check(ThrowsArgumentOutOfRange([&] { VertexBuffer vb(dev, 0); }),
+              "VertexBuffer(device, 0) throws ArgumentOutOfRangeException before renderer allocation");
+        check(ThrowsArgumentOutOfRange([&] { VertexBuffer vb(dev, -1); }),
+              "VertexBuffer(device, -1) throws ArgumentOutOfRangeException before renderer allocation");
+        check(ThrowsArgumentOutOfRange([&] { IndexBuffer ib(dev, -1); }),
+              "IndexBuffer(device, -1) throws ArgumentOutOfRangeException before renderer allocation");
 
         // --- The device must remain fully usable after every throw above. ---
         dev.Clear(Color(0, 255, 255, 255));

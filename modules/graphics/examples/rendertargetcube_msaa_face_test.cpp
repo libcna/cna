@@ -141,8 +141,8 @@ namespace
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, true,
                                  Support::Unsupported, false, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
-    constexpr Contract kContract{"SOFTWARE", false, Support::Unsupported, false,
-                                 Support::Unsupported, false, false};
+    constexpr Contract kContract{"SOFTWARE", true, Support::Exact, true,
+                                 Support::Exact, false, false};
 #elif defined(CNA_RENDERER_EASYGL)
     // Pre-fix: ONE multisample renderbuffer for the whole cube. Post-fix: six, one per face,
     // re-attached to the render FBO on every bind.

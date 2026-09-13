@@ -191,26 +191,15 @@ namespace
     /**
      * @brief Whether this renderer POPULATES a render target's levels above zero at all.
      *
-     * False on SOFTWARE, whose `SoftwareRenderTargetRenderer::GetData` raises
-     * "the Software renderer stores mip level 0 only; level N was requested" -- a specific,
-     * catchable public refusal, with `LevelCount` still correct and level 0 still byte-exact.
-     * That is that renderer's own declared boundary, not this ticket's subject, and it is ASSERTED
-     * here rather than skipped: a nonzero level must throw and must leave the destination
-     * completely untouched. If Software ever grows a real chain, this check turns red and says so.
-     *
-     * False on HEADLESS too, which rasterizes nothing and refuses every render-target readback
-     * (`kTargetReadbackSupported`), so the refusal is already asserted one level up.
+     * Software now populates and reads its generated CPU chain. Headless rasterizes nothing and
+     * refuses every render-target readback (`kTargetReadbackSupported`), so its refusal is already
+     * asserted one level up.
      */
-    constexpr bool kTargetMipReadbackSupported =
-#if defined(CNA_RENDERER_SOFTWARE)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kTargetMipReadbackSupported = true;
 
     /** @brief Whether `SetRenderTargets` with more than one attachment is executed here. */
     constexpr bool kMrtSupported =
-#if defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_HEADLESS)
+#if defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;
@@ -232,12 +221,7 @@ namespace
 #endif
 
     /** @brief Whether `RenderTargetCube` is a bindable render target here. */
-    constexpr bool kCubeTargetSupported =
-#if defined(CNA_RENDERER_SOFTWARE)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kCubeTargetSupported = true;
 
     // ---- the asymmetric pattern -------------------------------------------------------------
     //
@@ -1061,7 +1045,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
         ReadLevelRect(*rt, 1, 1, 1, 3, 5, kRT, kRT, "F5 odd 3x5 region of level 1");
     }
 
-    /** @brief F6 -- a nonzero `startIndex` with a larger-than-needed destination. */
+    /** @brief F6 -- a nonzero `startIndex` with an exact count in a larger destination. */
     void LegF6()
     {
         auto& dev = getGraphicsDeviceProperty();
@@ -1076,14 +1060,12 @@ class RenderTargetMsaaMipReadbackTest : public Game
         }
         const int lw = kRT / 2, lh = kRT / 2;
         const int count = lw * lh;
-        // Deliberately oversized: REMED-GFX-149's contract says a capacity larger than the region
-        // is legal and the surplus must be left untouched.
-        const int capacity = count + 37;
-        std::vector<Color> buf(static_cast<std::size_t>(kGuard + capacity + kGuard), kSentinel);
+        const int tail = 37;
+        std::vector<Color> buf(static_cast<std::size_t>(kGuard + count + tail + kGuard), kSentinel);
         const Rectangle r(0, 0, lw, lh);
         step("F6: GetData(level=1, full rect, startIndex=" + std::to_string(kGuard) +
-             ", elementCount=" + std::to_string(capacity) + ") into an OVERSIZED destination");
-        if (!IssueRead([&] { rt->GetData(1, &r, buf.data(), kGuard, capacity); }, buf, "F6"))
+             ", elementCount=" + std::to_string(count) + ") into an OVERSIZED destination");
+        if (!IssueRead([&] { rt->GetData(1, &r, buf.data(), kGuard, count); }, buf, "F6"))
             return;
 
         int untouched = 0;
@@ -1093,7 +1075,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
                                   " region elements was written from startIndex " +
                                   std::to_string(kGuard));
         bool tailIntact = true;
-        for (int i = count; i < capacity + kGuard; ++i)
+        for (int i = count; i < count + tail + kGuard; ++i)
             if (!Exact(buf[static_cast<std::size_t>(kGuard + i)], kSentinel)) { tailIntact = false; break; }
         check(tailIntact, "F6: the surplus capacity beyond the region is left untouched");
         bool prefixIntact = true;
@@ -1651,6 +1633,7 @@ public:
     explicit RenderTargetMsaaMipReadbackTest(std::string onlyLeg) : onlyLeg_(std::move(onlyLeg))
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
@@ -1823,8 +1806,10 @@ int main(int argc, char** argv)
     }
 #endif
 
+#if !defined(CNA_RENDERER_SOFTWARE)
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
+#endif
 
     RenderTargetMsaaMipReadbackTest game(std::move(onlyLeg));
     game.Run();

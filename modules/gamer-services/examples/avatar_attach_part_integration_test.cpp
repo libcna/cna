@@ -169,6 +169,7 @@ public:
 int main()
 {
     AvatarAttachPartIntegrationTest game;
+    game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();
 }

@@ -211,7 +211,52 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             (void) ctx;
             (void) mainfn;
-            return MOJOSHADER_glCompileShader(tokenbuf, bufsize, swiz, swizcount, smap, smapcount);
+            MOJOSHADER_glShader* shader =
+                MOJOSHADER_glCompileShader(tokenbuf, bufsize, swiz, swizcount, smap, smapcount);
+            if (shader == nullptr || smapcount != 0)
+                return shader;
+
+            const MOJOSHADER_parseData* parseData = MOJOSHADER_glGetShaderParseData(shader);
+            if (parseData == nullptr || parseData->error_count != 0 ||
+                parseData->shader_type != MOJOSHADER_TYPE_PIXEL || parseData->major_ver != 1)
+                return shader;
+
+            std::vector<MOJOSHADER_samplerMap> inferred;
+            bool differs = false;
+            for (unsigned int symbolIndex = 0; symbolIndex < parseData->symbol_count;
+                 ++symbolIndex)
+            {
+                const MOJOSHADER_symbol& symbol = parseData->symbols[symbolIndex];
+                if (symbol.register_set != MOJOSHADER_SYMREGSET_SAMPLER)
+                    continue;
+                MOJOSHADER_samplerType type = MOJOSHADER_SAMPLER_UNKNOWN;
+                if (symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER ||
+                    symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER1D ||
+                    symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER2D)
+                    type = MOJOSHADER_SAMPLER_2D;
+                else if (symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLER3D)
+                    type = MOJOSHADER_SAMPLER_VOLUME;
+                else if (symbol.info.parameter_type == MOJOSHADER_SYMTYPE_SAMPLERCUBE)
+                    type = MOJOSHADER_SAMPLER_CUBE;
+                if (type == MOJOSHADER_SAMPLER_UNKNOWN)
+                    continue;
+
+                inferred.push_back({static_cast<int>(symbol.register_index), type});
+                const MOJOSHADER_sampler* parsedSampler = nullptr;
+                for (int samplerIndex = 0; samplerIndex < parseData->sampler_count;
+                     ++samplerIndex)
+                    if (parseData->samplers[samplerIndex].index ==
+                        static_cast<int>(symbol.register_index))
+                        parsedSampler = &parseData->samplers[samplerIndex];
+                differs = differs || parsedSampler == nullptr || parsedSampler->type != type;
+            }
+            if (!differs)
+                return shader;
+
+            MOJOSHADER_glDeleteShader(shader);
+            return MOJOSHADER_glCompileShader(
+                tokenbuf, bufsize, swiz, swizcount,
+                inferred.data(), static_cast<unsigned int>(inferred.size()));
         }
 
         void DeleteShaderTrampoline(const void* ctx, void* shader)
@@ -624,6 +669,17 @@ namespace CNA::Internal::Renderers::EasyGL
         MojoShaderEffect::TranslateLegacySamplerAssignments(
             effectData_, stateChanges_, maxSlots, samplerTextureParameters_, textures_,
             deviceState, changes);
+        for (const auto& change : changes.legacyBumpMapEnvs)
+        {
+            auto& state = renderer_.compiledLegacyBumpMapEnvs_[change.slot];
+            for (std::size_t component = 0; component < state.matrix.size(); ++component)
+                if ((change.assignedMask & (1u << component)) != 0u)
+                    state.matrix[component] = change.state.matrix[component];
+            if ((change.assignedMask & (1u << 4u)) != 0u)
+                state.luminanceScale = change.state.luminanceScale;
+            if ((change.assignedMask & (1u << 5u)) != 0u)
+                state.luminanceOffset = change.state.luminanceOffset;
+        }
 
         // plans/plan_fx.md FX-062: fold this pass's assignments into the persistent per-slot state a
         // draw route reads through GetBoundSamplerEXT. Matches real XNA behavior -- a slot this
@@ -812,7 +868,11 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLRenderer::BindCompiledEffectForDrawEXT(
         const CompiledEffectStreamEXT* streams, std::size_t streamCount,
         ICompiledEffectRuntime& runtime, const ITextureRenderer* spriteBatchSlotZeroTexture,
-        const Microsoft::Xna::Framework::Graphics::TextureCollection* spriteBatchTextures)
+        const Microsoft::Xna::Framework::Graphics::TextureCollection* deviceTextures,
+        const Microsoft::Xna::Framework::Graphics::SamplerStateCollection* deviceSamplerStates,
+        const Microsoft::Xna::Framework::Graphics::TextureCollection* deviceVertexTextures,
+        const Microsoft::Xna::Framework::Graphics::SamplerStateCollection*
+            deviceVertexSamplerStates)
     {
         RequireCompiledEffectContextEXT("a compiled-effect draw");
         auto* effect = dynamic_cast<EasyGLCompiledEffect*>(&runtime);
@@ -866,21 +926,6 @@ namespace CNA::Internal::Renderers::EasyGL
                 "EasyGL compiled effect: the applied pass's shaders have no reflection.");
         }
 
-        // plans/plan_fx.md FX-062, matching FX-071's own scope: a compiled effect's vertex shader
-        // sampling a texture is refused explicitly rather than silently mishandled -- this
-        // renderer's compiled-effect draw route does not bind vertex-stage sampler textures.
-        if (vertexParseData->sampler_count > 0)
-        {
-            // plans/plan_fx.md FX-109: a DIFFERENT limitation from the 3D/cube one below, and recorded
-            // as such. Vertex-stage texture sampling is unreachable on this renderer by ANY route
-            // -- GraphicsDevice.VertexTextures and VertexSamplerStates exist in the public API but
-            // no renderer consumes them (FX-110) -- so this is renderer-wide, not compiled-Effect
-            // specific.
-            throw System::NotSupportedException(
-                "CNA EasyGL: this compiled effect's vertex shader samples a texture. Vertex-stage "
-                "texture sampling is not implemented in this renderer at all, by any draw route.");
-        }
-
         // Vertex attributes: MOJOSHADER_glSetVertexAttribute no-ops for an attribute the bound
         // program's vertex shader does not use, so every declared element could be bound
         // unconditionally -- but a shader input no bound stream supplies has to fail loudly
@@ -909,10 +954,17 @@ namespace CNA::Internal::Renderers::EasyGL
             {
                 const CompiledEffectStreamEXT& stream = streams[s];
                 if (stream.buffer == nullptr) continue;
-                for (const VertexElement& element : stream.buffer->GetDeclarationElements())
+                const auto& elements = stream.buffer->GetDeclarationElements();
+                for (std::size_t elementIndex = 0;
+                     elementIndex < elements.size(); ++elementIndex)
                 {
+                    const VertexElement& element = elements[elementIndex];
+                    const int effectiveUsageIndex = stream.binding != nullptr
+                        ? stream.binding->EffectiveUsageIndex(
+                            elementIndex, element.getUsageIndexProperty())
+                        : element.getUsageIndexProperty();
                     if (ToMojoShaderUsage(element.getVertexElementUsageProperty()) == shaderInput.usage &&
-                        element.getUsageIndexProperty() == shaderInput.index)
+                        effectiveUsageIndex == shaderInput.index)
                     {
                         match = &element;
                         matchStream = &stream;
@@ -952,6 +1004,11 @@ namespace CNA::Internal::Renderers::EasyGL
         for (int i = 0; i < pixelParseData->sampler_count; ++i)
         {
             const MOJOSHADER_sampler& sampler = pixelParseData->samplers[i];
+            // A ps_1_4 BEM instruction needs the destination-numbered bump matrix uniform but
+            // performs no texture lookup. The managed MojoShader patch marks that synthetic
+            // uniform carrier with bit 1 while ordinary TEXBEM/L sampling uses bit 0.
+            if ((sampler.texbem & 2) != 0 && (sampler.texbem & 1) == 0)
+                continue;
             Texture* texture = nullptr;
             Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
             bool samplerAssigned = false;
@@ -973,9 +1030,9 @@ namespace CNA::Internal::Renderers::EasyGL
                 nativeTexture = ResolvedSamplerTextureEXT{};
                 nativeTexture.texture2D = spriteBatchSlotZeroTexture;
             }
-            else if (!nativeTexture.Resolved() && spriteBatchTextures != nullptr)
+            else if (deviceTextures != nullptr)
             {
-                selectedTexture = (*spriteBatchTextures)[sampler.index];
+                selectedTexture = (*deviceTextures)[sampler.index];
                 nativeTexture = ResolveSamplerTexture(selectedTexture);
             }
             const std::string slotName = std::to_string(sampler.index) + " ('" +
@@ -1037,6 +1094,11 @@ namespace CNA::Internal::Renderers::EasyGL
             // effect-declared MinFilter/AddressU/MaxAnisotropy was silently ignored at draw time
             // even though it was published correctly on GraphicsDevice.SamplerStates. A slot no
             // pass has assigned keeps whatever the game (or SpriteBatch.Begin) selected.
+            if (deviceSamplerStates != nullptr)
+            {
+                samplerState = (*deviceSamplerStates)[sampler.index];
+                samplerAssigned = true;
+            }
             if (samplerAssigned)
             {
                 ApplySamplerState(static_cast<int>(sampler.index),
@@ -1050,6 +1112,117 @@ namespace CNA::Internal::Renderers::EasyGL
                                      samplerState.getMaxMipLevelProperty(),
                                      samplerState.getMipMapLevelOfDetailBiasProperty());
             }
+        }
+
+        // XNA 4.0 exposes four independent HiDef vertex sampler slots. MojoShader's
+        // MOJOSHADER_XNA4_VERTEX_TEXTURES path assigns them to native texture units 16..19, after
+        // the complete sixteen-slot pixel range. Bind both the public collection and every
+        // sampler property at that same offset; logical vertex register zero must never alias
+        // pixel register zero.
+        constexpr int kVertexSamplerUnitOffset = 16;
+        for (int i = 0; i < vertexParseData->sampler_count; ++i)
+        {
+            const MOJOSHADER_sampler& sampler = vertexParseData->samplers[i];
+            if (sampler.index < 0 || sampler.index >= 4)
+            {
+                throw System::NotSupportedException(
+                    "CNA EasyGL: a compiled vertex sampler register is outside XNA's four-slot "
+                    "HiDef range.");
+            }
+            const int nativeUnit = kVertexSamplerUnitOffset + sampler.index;
+            Texture* texture = nullptr;
+            Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
+            bool samplerAssigned = false;
+            effect->GetBoundSamplerEXT(static_cast<std::uint32_t>(sampler.index),
+                                       /*vertexStage=*/true, texture, samplerState,
+                                       samplerAssigned);
+            Texture* selectedTexture = texture;
+            ResolvedSamplerTextureEXT nativeTexture;
+            nativeTexture.ownedTexture2D = effect->boundVertexTexture2DResources_[sampler.index];
+            nativeTexture.ownedVolume = effect->boundVertexTexture3DResources_[sampler.index];
+            nativeTexture.ownedCube = effect->boundVertexTextureCubeResources_[sampler.index];
+            nativeTexture.texture2D = nativeTexture.ownedTexture2D.get();
+            nativeTexture.volume = nativeTexture.ownedVolume.get();
+            nativeTexture.cube = nativeTexture.ownedCube.get();
+            if (deviceVertexTextures != nullptr)
+            {
+                selectedTexture = (*deviceVertexTextures)[sampler.index];
+                nativeTexture = ResolveSamplerTexture(selectedTexture);
+            }
+            const std::string slotName = std::to_string(sampler.index) + " ('" +
+                (sampler.name != nullptr ? sampler.name : "<unnamed>") + "')";
+            if (!nativeTexture.Resolved())
+            {
+                if (selectedTexture != nullptr)
+                {
+                    throw System::NotSupportedException(
+                        "CNA EasyGL: this compiled effect's vertex shader samples slot " +
+                        slotName + ", but the texture bound there is not owned by this EasyGL "
+                        "graphics device.");
+                }
+                UnbindSamplerTextureEXT(nativeUnit, sampler.type);
+                continue;
+            }
+            if (sampler.type != nativeTexture.Kind())
+            {
+                throw System::NotSupportedException(
+                    "CNA EasyGL: this compiled effect's vertex shader declares " +
+                    std::string(SamplerKindName(sampler.type)) + " at slot " + slotName +
+                    ", but the texture bound there is a " +
+                    SamplerKindName(nativeTexture.Kind()) + ". The dimensions must match.");
+            }
+            if (SampledRowOrderIsBottomUp(nativeTexture.texture2D))
+            {
+                const auto* renderTarget =
+                    dynamic_cast<const EasyGLRenderTargetRenderer*>(nativeTexture.texture2D);
+                if (renderTarget == nullptr)
+                {
+                    throw System::NotSupportedException(
+                        "CNA EasyGL: this compiled effect samples a rendered vertex texture "
+                        "whose row order cannot be corrected (slot " +
+                        std::to_string(sampler.index) + ").");
+                }
+                const ::easygl::Texture& corrected =
+                    AcquireCompiledEffectFlippedSourceEXT(nativeUnit, *renderTarget);
+                corrected.active_bind(
+                    static_cast<::easygl::TextureUnit>(
+                        static_cast<unsigned int>(::easygl::TextureUnit::Texture0) + nativeUnit),
+                    ::easygl::TextureTarget::Texture2D);
+            }
+            else
+            {
+                nativeTexture.BindGL(nativeUnit);
+            }
+            if (deviceVertexSamplerStates != nullptr)
+            {
+                samplerState = (*deviceVertexSamplerStates)[sampler.index];
+                samplerAssigned = true;
+            }
+            if (samplerAssigned)
+            {
+                ApplySamplerState(nativeUnit,
+                                  static_cast<int>(samplerState.getFilterProperty()),
+                                  static_cast<int>(samplerState.getAddressUProperty()),
+                                  static_cast<int>(samplerState.getAddressVProperty()),
+                                  samplerState.getMaxAnisotropyProperty());
+                ApplySamplerAddressW(nativeUnit,
+                                     static_cast<int>(samplerState.getAddressWProperty()));
+                ApplySamplerMipState(nativeUnit, samplerState.getMaxMipLevelProperty(),
+                                     samplerState.getMipMapLevelOfDetailBiasProperty());
+            }
+        }
+
+        for (int i = 0; i < pixelParseData->sampler_count; ++i)
+        {
+            const MOJOSHADER_sampler& sampler = pixelParseData->samplers[i];
+            if (sampler.texbem == 0 || sampler.index < 0 || sampler.index >= 16)
+                continue;
+            const auto& state =
+                compiledLegacyBumpMapEnvs_[static_cast<std::size_t>(sampler.index)];
+            MOJOSHADER_glSetLegacyBumpMapEnv(
+                static_cast<unsigned int>(sampler.index), state.matrix[0], state.matrix[1],
+                state.matrix[2], state.matrix[3], state.luminanceScale,
+                state.luminanceOffset);
         }
 
         // Pushes uniforms from the shared register files (already populated by ApplyPass()'s
@@ -1098,6 +1271,41 @@ namespace CNA::Internal::Renderers::EasyGL
             getPhysicalSize(targetW, targetH);
         MOJOSHADER_glProgramViewportInfo(targetW, targetH, targetW, targetH,
                                          /*renderTargetBound=*/0);
+
+        // XNA's D3D9 rasterizer uses integer pixel centres. The stock EasyGL path expresses that
+        // through the same clip-space translation before rasterization; compiled Effects must not
+        // silently retain OpenGL's half-integer centre convention. As with stock shaders, the
+        // single-sample correction is suppressed for a multisampled destination because applying
+        // a geometry translation to independent sample locations changes edge coverage.
+        int viewportX = 0, viewportY = 0, viewportW = 0, viewportH = 0;
+        device.get_viewport(viewportX, viewportY, viewportW, viewportH);
+        bool multisampledDestination = false;
+        if (bound_)
+        {
+            if (bound_->rt2D != nullptr && bound_->rt2D->GetMultiSampleCount() > 0)
+                multisampledDestination = true;
+            if (bound_->cube != nullptr && bound_->cube->GetMultiSampleCount() > 0)
+                multisampledDestination = true;
+            for (int slot = 0; slot < bound_->mrtCount; ++slot)
+            {
+                const EasyGLMrtBindingEXT& target = bound_->mrt[static_cast<std::size_t>(slot)];
+                if ((target.rt2D != nullptr && target.rt2D->GetMultiSampleCount() > 0) ||
+                    (target.cube != nullptr && target.cube->GetMultiSampleCount() > 0))
+                    multisampledDestination = true;
+            }
+        }
+        const float pixelCenterX = viewportW > 0 && !multisampledDestination
+            ? xnaPixelCenterScale_ / static_cast<float>(viewportW)
+            : 0.0f;
+        const float pixelCenterY = viewportH > 0 && !multisampledDestination
+            ? -xnaPixelCenterScale_ / static_cast<float>(viewportH)
+            : 0.0f;
+        MOJOSHADER_glProgramPixelCenterInfo(pixelCenterX, pixelCenterY);
+
+        // EasyGL keeps OpenGL's counter-clockwise front-face convention while XNA/D3D9 VFACE
+        // defines clockwise triangles as positive. Invert only the shader-visible sign; culling
+        // continues to use EasyGL's established face mapping.
+        MOJOSHADER_glProgramVFaceFlipInfo(1);
     }
 }
 

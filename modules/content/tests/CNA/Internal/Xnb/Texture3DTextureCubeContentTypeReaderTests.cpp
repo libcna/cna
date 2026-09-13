@@ -7,9 +7,12 @@
 // (volume textures are rare in real XNA content), so it is tested with a hand-constructed stream
 // verified field-by-field against FNA's own Texture3DReader.cs byte order instead.
 
+#include <algorithm>
+#include <array>
 #include <cstring>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <stdexcept>
 
 #include "CNA/RendererTestGate.hpp"
 
@@ -25,7 +28,10 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "System/IO/BinaryWriter.hpp"
@@ -38,7 +44,10 @@ using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentReader;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
+using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
@@ -99,6 +108,64 @@ namespace
         return ss.str();
     }
 
+    std::shared_ptr<Texture3D> ReadHandConstructedVolume(
+        GraphicsDevice& device, SurfaceFormat format, int32_t width, int32_t height,
+        int32_t depth, const std::vector<std::vector<std::uint8_t>>& levels)
+    {
+        System::IO::MemoryStream stream;
+        System::IO::BinaryWriter writer(&stream, true);
+        writer.Write(static_cast<int32_t>(format));
+        writer.Write(width);
+        writer.Write(height);
+        writer.Write(depth);
+        writer.Write(static_cast<int32_t>(levels.size()));
+        for (const auto& bytes : levels)
+        {
+            writer.Write(static_cast<int32_t>(bytes.size()));
+            for (const std::uint8_t value : bytes) writer.Write(value);
+        }
+        writer.Flush();
+        const auto serialized = stream.ToArray();
+
+        ContentManager content;
+        content.setGraphicsDevice(device);
+        System::IO::MemoryStream body(serialized.data(), static_cast<int32_t>(serialized.size()));
+        ContentReader reader(&content, &body, "test", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(
+            "Microsoft.Xna.Framework.Content.Texture3DReader");
+        if (!typeReader) return nullptr;
+        return std::any_cast<std::shared_ptr<Texture3D>>(
+            typeReader->ReadUntyped(reader, std::any{}));
+    }
+
+    TextureCube ReadHandConstructedCube(
+        GraphicsDevice& device, SurfaceFormat format,
+        const std::array<std::vector<std::uint8_t>, 6>& faces, int size = 1)
+    {
+        System::IO::MemoryStream stream;
+        System::IO::BinaryWriter writer(&stream, true);
+        writer.Write(static_cast<int32_t>(format));
+        writer.Write(static_cast<int32_t>(size));
+        writer.Write(static_cast<int32_t>(1));
+        for (const auto& bytes : faces)
+        {
+            writer.Write(static_cast<int32_t>(bytes.size()));
+            for (const std::uint8_t value : bytes) writer.Write(value);
+        }
+        writer.Flush();
+        const auto serialized = stream.ToArray();
+
+        ContentManager content;
+        content.setGraphicsDevice(device);
+        System::IO::MemoryStream body(serialized.data(), static_cast<int32_t>(serialized.size()));
+        ContentReader reader(&content, &body, "test", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(
+            "Microsoft.Xna.Framework.Content.TextureCubeReader");
+        if (!typeReader)
+            throw std::runtime_error("TextureCubeReader is not registered");
+        return std::any_cast<TextureCube>(typeReader->ReadUntyped(reader, std::any{}));
+    }
+
     class Texture3DTextureCubeContentTypeReaderTest : public ::testing::Test
     {
     protected:
@@ -111,7 +178,8 @@ namespace
 
         void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
 
-        GraphicsDevice gd;
+        GraphicsDevice gd{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters()};
     };
 }
 
@@ -197,6 +265,124 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
                                   static_cast<int>(level0.size())),
                      System::NotSupportedException);
         EXPECT_EQ(level0[0].getPackedValueProperty(), sentinel.getPackedValueProperty());
+    }
+}
+
+// SOFTWARE-275: FNA's TextureCubeReader constructs the serialized format and forwards every face
+// byte array unchanged. CNA accepted only Color/DXT and converted every non-native-compressed
+// payload through RGBA8, so no packed, integer, half or floating-point XNA cube could be loaded.
+TEST_F(Texture3DTextureCubeContentTypeReaderTest,
+       TextureCubeReaderPreservesEveryClassicUncompressedFormatAndExactBytes)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
+
+    constexpr std::array<SurfaceFormat, 15> formats{{
+        SurfaceFormat::Color,
+        SurfaceFormat::Bgr565,
+        SurfaceFormat::Bgra5551,
+        SurfaceFormat::Bgra4444,
+        SurfaceFormat::Rgba1010102,
+        SurfaceFormat::Rg32,
+        SurfaceFormat::Rgba64,
+        SurfaceFormat::Alpha8,
+        SurfaceFormat::Single,
+        SurfaceFormat::Vector2,
+        SurfaceFormat::Vector4,
+        SurfaceFormat::HalfSingle,
+        SurfaceFormat::HalfVector2,
+        SurfaceFormat::HalfVector4,
+        SurfaceFormat::HdrBlendable,
+    }};
+
+    for (const SurfaceFormat format : formats)
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        const std::size_t byteCount = static_cast<std::size_t>(
+            Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format));
+        std::array<std::vector<std::uint8_t>, 6> expected;
+        for (std::size_t face = 0; face < expected.size(); ++face)
+        {
+            expected[face].resize(byteCount);
+            for (std::size_t index = 0; index < byteCount; ++index)
+            {
+                expected[face][index] = static_cast<std::uint8_t>(
+                    0x21u + face * 23u + index * 11u + static_cast<std::size_t>(format));
+            }
+        }
+
+        TextureCube cube = ReadHandConstructedCube(gd, format, expected);
+        EXPECT_EQ(cube.getFormatProperty(), format);
+        EXPECT_EQ(cube.getLevelCountProperty(), 1);
+        for (std::size_t face = 0; face < expected.size(); ++face)
+        {
+            std::vector<std::uint8_t> actual(byteCount, 0xCDu);
+            cube.GetData(static_cast<CubeMapFace>(face), actual.data(),
+                         static_cast<int>(actual.size()));
+            EXPECT_EQ(actual, expected[face]) << "face " << face;
+        }
+    }
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest,
+       TextureCubeReaderPreservesEveryClassicCompressedFormatAndExactBlocks)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
+
+    constexpr std::array<SurfaceFormat, 3> formats{{
+        SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5,
+    }};
+    for (const SurfaceFormat format : formats)
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        const std::size_t byteCount = static_cast<std::size_t>(
+            Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format));
+        std::array<std::vector<std::uint8_t>, 6> expected;
+        for (std::size_t face = 0; face < expected.size(); ++face)
+        {
+            expected[face].resize(byteCount);
+            for (std::size_t index = 0; index < byteCount; ++index)
+            {
+                expected[face][index] = static_cast<std::uint8_t>(
+                    0x13u + face * 29u + index * 7u);
+            }
+        }
+
+        TextureCube cube = ReadHandConstructedCube(gd, format, expected, 4);
+        EXPECT_EQ(cube.getFormatProperty(), format);
+        for (std::size_t face = 0; face < expected.size(); ++face)
+        {
+            std::vector<std::uint8_t> actual(byteCount, 0xCDu);
+            cube.GetData(static_cast<CubeMapFace>(face), actual.data(),
+                         static_cast<int>(actual.size()));
+            EXPECT_EQ(actual, expected[face]) << "face " << face;
+        }
+    }
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest,
+       TextureCubeReaderRejectsSignedNormalizedFormats)
+{
+    for (const SurfaceFormat format :
+         {SurfaceFormat::NormalizedByte2, SurfaceFormat::NormalizedByte4})
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        System::IO::MemoryStream stream;
+        System::IO::BinaryWriter writer(&stream, true);
+        writer.Write(static_cast<int32_t>(format));
+        writer.Write(static_cast<int32_t>(1));
+        writer.Write(static_cast<int32_t>(1));
+        writer.Flush();
+        const auto serialized = stream.ToArray();
+
+        ContentManager content;
+        content.setGraphicsDevice(gd);
+        System::IO::MemoryStream body(
+            serialized.data(), static_cast<int32_t>(serialized.size()));
+        ContentReader reader(&content, &body, "test", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(
+            "Microsoft.Xna.Framework.Content.TextureCubeReader");
+        ASSERT_NE(typeReader, nullptr);
+        EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
     }
 }
 
@@ -301,6 +487,91 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderParsesHandConst
     for (std::size_t i = 0; i < pixels.size(); ++i)
     {
         EXPECT_EQ(readBack[i].getPackedValueProperty(), pixels[i].getPackedValueProperty()) << "pixel " << i;
+    }
+}
+
+// SOFTWARE-274: FNA does not reinterpret a Texture3DReader payload as Color. It constructs the
+// declared format and forwards the exact byte array for each mip level to Texture3D.SetData<byte>.
+// CNA previously accepted only Color/DXT here and always produced a Color texture, making fourteen
+// legal XNA HiDef volume formats impossible to load even though both parity renderers store them.
+TEST_F(Texture3DTextureCubeContentTypeReaderTest,
+       Texture3DReaderPreservesEveryClassicVolumeFormatAndExactBytes)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
+
+    struct FormatCase
+    {
+        SurfaceFormat format;
+        std::size_t bytesPerVoxel;
+    };
+    constexpr std::array<FormatCase, 15> cases{{
+        {SurfaceFormat::Color, 4u},
+        {SurfaceFormat::Bgr565, 2u},
+        {SurfaceFormat::Bgra5551, 2u},
+        {SurfaceFormat::Bgra4444, 2u},
+        {SurfaceFormat::Rgba1010102, 4u},
+        {SurfaceFormat::Rg32, 4u},
+        {SurfaceFormat::Rgba64, 8u},
+        {SurfaceFormat::Alpha8, 1u},
+        {SurfaceFormat::Single, 4u},
+        {SurfaceFormat::Vector2, 8u},
+        {SurfaceFormat::Vector4, 16u},
+        {SurfaceFormat::HalfSingle, 2u},
+        {SurfaceFormat::HalfVector2, 4u},
+        {SurfaceFormat::HalfVector4, 8u},
+        {SurfaceFormat::HdrBlendable, 8u},
+    }};
+
+    for (const FormatCase& formatCase : cases)
+    {
+        SCOPED_TRACE(static_cast<int>(formatCase.format));
+        std::vector<std::uint8_t> expected(formatCase.bytesPerVoxel * 2u);
+        for (std::size_t index = 0; index < expected.size(); ++index)
+        {
+            expected[index] = static_cast<std::uint8_t>(
+                0x21u + index * 17u + static_cast<std::size_t>(formatCase.format));
+        }
+
+        const auto texture = ReadHandConstructedVolume(
+            gd, formatCase.format, 2, 1, 1, {expected});
+        ASSERT_NE(texture, nullptr);
+        EXPECT_EQ(texture->getFormatProperty(), formatCase.format);
+        EXPECT_EQ(texture->getLevelCountProperty(), 1);
+
+        std::vector<std::uint8_t> actual(expected.size(), 0xCDu);
+        texture->GetData(actual.data(), static_cast<int>(actual.size()));
+        EXPECT_EQ(actual, expected);
+    }
+}
+
+// SOFTWARE-274: the canonical XNB validator retained the old width/height-only volume mip rule
+// after SOFTWARE-273 corrected Texture3D itself. A 1x1x8 authored volume therefore rejected its
+// legal second through fourth levels before the resource constructor could see them.
+TEST_F(Texture3DTextureCubeContentTypeReaderTest,
+       Texture3DReaderAcceptsDepthDominantMipChainAndPreservesEveryLevel)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
+
+    const std::vector<std::vector<std::uint8_t>> expected{
+        {0x10u, 0x11u, 0x12u, 0x13u, 0x14u, 0x15u, 0x16u, 0x17u},
+        {0x20u, 0x21u, 0x22u, 0x23u},
+        {0x30u, 0x31u},
+        {0x40u},
+    };
+    const auto texture = ReadHandConstructedVolume(
+        gd, SurfaceFormat::Alpha8, 1, 1, 8, expected);
+    ASSERT_NE(texture, nullptr);
+    EXPECT_EQ(texture->getFormatProperty(), SurfaceFormat::Alpha8);
+    EXPECT_EQ(texture->getLevelCountProperty(), 4);
+
+    int depth = 8;
+    for (int level = 0; level < 4; ++level)
+    {
+        std::vector<std::uint8_t> actual(expected[static_cast<std::size_t>(level)].size(), 0xCDu);
+        texture->GetData(level, 0, 0, 1, 1, 0, depth,
+                         actual.data(), 0, static_cast<int>(actual.size()));
+        EXPECT_EQ(actual, expected[static_cast<std::size_t>(level)]);
+        depth = std::max(depth >> 1, 1);
     }
 }
 
@@ -459,26 +730,32 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderZeroSizeThrow
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
-TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderRejectsUnsupportedSurfaceFormat)
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderRejectsCompressedSurfaceFormats)
 {
-    System::IO::MemoryStream ms;
-    System::IO::BinaryWriter writer(&ms, true);
-    writer.Write(static_cast<int32_t>(SurfaceFormat::Bgr565)); // not yet implemented
-    writer.Write(static_cast<int32_t>(4));
-    writer.Write(static_cast<int32_t>(4));
-    writer.Write(static_cast<int32_t>(1));
-    writer.Write(static_cast<int32_t>(1));
-    writer.Flush();
-    const auto buf = ms.ToArray();
-    const std::string fields(reinterpret_cast<const char*>(buf.data()), buf.size());
+    // XNA 4.0's exact HiDef volume-format table contains all fifteen uncompressed formats above,
+    // but no block-compressed format. CNA used to accept DXT1/3/5 and reject Bgr565 instead.
+    for (const SurfaceFormat format :
+         {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5})
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        System::IO::MemoryStream stream;
+        System::IO::BinaryWriter writer(&stream, true);
+        writer.Write(static_cast<int32_t>(format));
+        writer.Write(static_cast<int32_t>(4));
+        writer.Write(static_cast<int32_t>(4));
+        writer.Write(static_cast<int32_t>(1));
+        writer.Write(static_cast<int32_t>(1));
+        writer.Flush();
+        const auto serialized = stream.ToArray();
 
-    ContentManager cm;
-    cm.setGraphicsDevice(gd);
-    System::IO::MemoryStream body(
-        reinterpret_cast<const uint8_t*>(fields.data()), static_cast<int32_t>(fields.size()));
-    ContentReader reader(&cm, &body, "test", 5, 'w');
-
-    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture3DReader");
-    ASSERT_NE(typeReader, nullptr);
-    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+        ContentManager content;
+        content.setGraphicsDevice(gd);
+        System::IO::MemoryStream body(
+            serialized.data(), static_cast<int32_t>(serialized.size()));
+        ContentReader reader(&content, &body, "test", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(
+            "Microsoft.Xna.Framework.Content.Texture3DReader");
+        ASSERT_NE(typeReader, nullptr);
+        EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+    }
 }

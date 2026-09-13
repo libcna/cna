@@ -33,6 +33,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
@@ -47,6 +48,7 @@ namespace
     using CNA::Internal::Renderers::CnaPresentationMode;
     using CNA::Internal::Renderers::IGraphicsRenderer;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 
     using namespace ::CNA::Testing::Renderers;   // NOLINT(google-build-using-namespace)
 
@@ -354,6 +356,7 @@ TEST(PresentationRectangleTest, ALetterboxedDefaultViewportIsNotACustomSubViewpo
     using Microsoft::Xna::Framework::Graphics::Texture2D;
 
     GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     IGraphicsRenderer& renderer = device.GetRenderer();
 
     // Measure the drawable first, exactly as the tests above do, so the expectation cannot disagree

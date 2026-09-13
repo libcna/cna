@@ -1317,10 +1317,9 @@ namespace
             "device.set_cull_face(cullMode == 1 ? ::easygl::CullFace::Back : ::easygl::CullFace::Front)",
             "if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned",
             "if (params.pbr) return StockProgramShape::Pbr",
-            // SAMPLE-002 gave SelectProgram the declaration as a third argument. What this row
-            // asserts is that the caller's `params` reach program selection, so it stops at
-            // the comma rather than pinning an argument list that keeps growing.
-            "Prog3D& p = SelectProgram(layoutStride, params,"}}},
+            // The declaration is validated before program selection after the Software merge.
+            // What this row asserts is that the caller's `params` still reach program selection.
+            "Prog3D& p = SelectProgram(layoutStride, params);"}}},
         // plans/plan_igl.md: IGL bakes the cull mode into its pipeline key, so the caller's
         // RasterizerState reaches the draw through the pipeline cache rather than through a
         // per-draw state call -- and a PBR draw is a feature-flag variant of the same shader, so
@@ -2536,10 +2535,9 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererHonorsCallerOwnedCullState)
     const std::string graphicsDevice = Normalize(ReadFile(
         repository / "modules" / "graphics" / "src" / "Xna" / "GraphicsDevice.cpp"));
     EXPECT_NE(std::string::npos, graphicsDevice.find(Normalize(
-        "if (renderer_) renderer_->ApplyRasterizerState("
-        "(int)value.getCullModeProperty(), (int)value.getFillModeProperty(),"
-        "value.getScissorTestEnableProperty(), value.getDepthBiasProperty(),"
-        "value.getSlopeScaleDepthBiasProperty()); rasterizerState_ = value;")));
+        "renderer_->ApplyRasterizerState("
+        "CNA::Internal::Renderers::NormalizeXnaCullModeOrdinal("
+        "static_cast<int>(value.getCullModeProperty())),")));
 
     // Vulkan and WebGPU each build two immutable PBR pipelines. Scope their owners independently:
     // an ordinary 3D pipeline with correct culling must not hide a rigid or skinned PBR hardcode.

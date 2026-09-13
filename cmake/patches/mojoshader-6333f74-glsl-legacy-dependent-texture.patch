@@ -1,0 +1,126 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -1853,6 +1853,38 @@ static void state_TEXREG2GB(Context *ctx)
+     state_texreg2(ctx, "TEXREG2GB", 2);
+ } // state_TEXREG2GB
+ 
++static void state_legacy_dependent_texture(Context *ctx, const char *opcode,
++                                           const int sampler_dims)
++{
++    const SourceMod modifier = ctx->source_args[0].src_mod;
++    if (!shader_version_atleast(ctx, 1, 2) || shader_version_atleast(ctx, 1, 4))
++        failf(ctx, "%s opcode only available in Shader Model 1.2/1.3", opcode);
++    if ((modifier != SRCMOD_NONE) && (modifier != SRCMOD_SIGN) &&
++        (modifier != SRCMOD_SIGNNEGATE))
++        failf(ctx, "%s source only permits the _bx2 modifier", opcode);
++    state_texops(ctx, opcode, sampler_dims, 0);
++}
++
++static void state_TEXREG2RGB(Context *ctx)
++{
++    state_legacy_dependent_texture(ctx, "TEXREG2RGB", 2);
++} // state_TEXREG2RGB
++
++static void state_TEXDP3TEX(Context *ctx)
++{
++    state_legacy_dependent_texture(ctx, "TEXDP3TEX", 2);
++    RegisterList *sreg = reglist_find(&ctx->samplers, REG_TYPE_SAMPLER,
++                                      ctx->dest_arg.regnum);
++    const TextureType ttype = (TextureType) (sreg ? sreg->index : 0);
++    if (ttype != TEXTURE_TYPE_2D)
++        fail(ctx, "TEXDP3TEX needs a 2D sampler");
++} // state_TEXDP3TEX
++
++static void state_TEXDP3(Context *ctx)
++{
++    state_legacy_dependent_texture(ctx, "TEXDP3", 0);
++} // state_TEXDP3
++
+ static void state_TEXM3X2PAD(Context *ctx)
+ {
+     if (shader_version_atleast(ctx, 1, 4))
+diff --git a/mojoshader_internal.h b/mojoshader_internal.h
+--- a/mojoshader_internal.h
++++ b/mojoshader_internal.h
+@@ -756,9 +756,9 @@ INSTRUCTION_STATE(LOGP, "LOGP", 1, DS, MOJOSHADER_TYPE_ANY, 0xF)
+ INSTRUCTION_STATE(CND, "CND", 1, DSSS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(DEF, "DEF", 0, DEF, MOJOSHADER_TYPE_ANY, 0xF)
+-INSTRUCTION(TEXREG2RGB, "TEXREG2RGB", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+-INSTRUCTION(TEXDP3TEX, "TEXDP3TEX", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
++INSTRUCTION_STATE(TEXREG2RGB, "TEXREG2RGB", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
++INSTRUCTION_STATE(TEXDP3TEX, "TEXDP3TEX", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(TEXM3X2DEPTH, "TEXM3X2DEPTH", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+-INSTRUCTION(TEXDP3, "TEXDP3", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
++INSTRUCTION_STATE(TEXDP3, "TEXDP3", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(TEXM3X3, "TEXM3X3", 1, DS, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(TEXDEPTH, "TEXDEPTH", 1, D, MOJOSHADER_TYPE_PIXEL, 0xF)
+ INSTRUCTION_STATE(CMP, "CMP", 1, DSSS, MOJOSHADER_TYPE_PIXEL, 0xF)
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -2580,7 +2580,42 @@ void emit_GLSL_DEF(Context *ctx)
+ } // emit_GLSL_DEF
+ 
+-EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(TEXREG2RGB) // !!! FIXME
+-EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(TEXDP3TEX) // !!! FIXME
++void emit_GLSL_TEXREG2RGB(Context *ctx)
++{
++    const DestArgInfo *info = &ctx->dest_arg;
++    char sampler[64];
++    char src[128];
++    char code[512];
++    get_GLSL_varname_in_buf(ctx, REG_TYPE_SAMPLER, info->regnum,
++                            sampler, sizeof (sampler));
++    make_GLSL_srcarg_string_full(ctx, 0, src, sizeof (src));
++    RegisterList *sreg = reglist_find(&ctx->samplers, REG_TYPE_SAMPLER,
++                                      info->regnum);
++    const TextureType ttype = (TextureType) (sreg ? sreg->index : 0);
++    const char *ttypestr = (ttype == TEXTURE_TYPE_CUBE) ? "Cube" :
++                           (ttype == TEXTURE_TYPE_VOLUME) ? "3D" : "2D";
++    const char *components = (ttype == TEXTURE_TYPE_2D) ? "xy" : "xyz";
++    make_GLSL_destarg_assign(ctx, code, sizeof (code),
++        "texture%s(%s, (%s).%s)", ttypestr, sampler, src, components);
++    output_line(ctx, "%s", code);
++} // emit_GLSL_TEXREG2RGB
++
++void emit_GLSL_TEXDP3TEX(Context *ctx)
++{
++    const DestArgInfo *info = &ctx->dest_arg;
++    char dst[64];
++    char sampler[64];
++    char src[128];
++    char code[512];
++    get_GLSL_varname_in_buf(ctx, REG_TYPE_TEXTURE, info->regnum,
++                            dst, sizeof (dst));
++    get_GLSL_varname_in_buf(ctx, REG_TYPE_SAMPLER, info->regnum,
++                            sampler, sizeof (sampler));
++    make_GLSL_srcarg_string_full(ctx, 0, src, sizeof (src));
++    make_GLSL_destarg_assign(ctx, code, sizeof (code),
++        "texture2D(%s, vec2(dot(%s.xyz, (%s).xyz), 0.0))",
++        sampler, dst, src);
++    output_line(ctx, "%s", code);
++} // emit_GLSL_TEXDP3TEX
+ void emit_GLSL_TEXM3X2DEPTH(Context *ctx)
+ {
+     if (ctx->texm3x2pad_src0 == -1)
+@@ -2600,6 +2635,18 @@ void emit_GLSL_TEXM3X2DEPTH(Context *ctx)
+         denominatorRow, vector, numeratorRow, vector, denominatorRow, vector);
+ } // emit_GLSL_TEXM3X2DEPTH
+-EMIT_GLSL_OPCODE_UNIMPLEMENTED_FUNC(TEXDP3) // !!! FIXME
++void emit_GLSL_TEXDP3(Context *ctx)
++{
++    const DestArgInfo *info = &ctx->dest_arg;
++    char dst[64];
++    char src[128];
++    char code[512];
++    get_GLSL_varname_in_buf(ctx, REG_TYPE_TEXTURE, info->regnum,
++                            dst, sizeof (dst));
++    make_GLSL_srcarg_string_full(ctx, 0, src, sizeof (src));
++    make_GLSL_destarg_assign(ctx, code, sizeof (code),
++        "vec4(dot(%s.xyz, (%s).xyz))", dst, src);
++    output_line(ctx, "%s", code);
++} // emit_GLSL_TEXDP3
+ 
+ void emit_GLSL_TEXM3X3(Context *ctx)
+ {

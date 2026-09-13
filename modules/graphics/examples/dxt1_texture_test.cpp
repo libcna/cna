@@ -4,7 +4,7 @@
 //
 // Constructs a minimal in-memory DDS file containing one 4×4 DXT1 block with all
 // pixels solid red (R=255, G=0, B=0, A=255) and passes it through
-// Texture2D::FromStream.  The decoded texture is then rendered as a full-screen
+// Texture2D::DDSFromStreamEXT. The decoded texture is then rendered as a full-screen
 // sprite via SpriteBatch and read back.
 //
 // Exit code 0 = PASS, 1 = FAIL.
@@ -108,10 +108,11 @@ protected:
         auto& device = getGraphicsDeviceProperty();
         sb_ = std::make_unique<SpriteBatch>(device);
 
-        // Load the DXT1 DDS via Texture2D::FromStream.
+        // Load the DXT1 DDS via the explicit extension; classic FromStream follows XNA and
+        // accepts ordinary image formats only.
         auto dds = BuildSolidRedDxt1Dds();
         InMemoryStream stream(dds);
-        tex_ = Texture2D::FromStream(device, stream);
+        tex_ = Texture2D::DDSFromStreamEXT(device, stream);
     }
 
     void Draw(const GameTime&) override

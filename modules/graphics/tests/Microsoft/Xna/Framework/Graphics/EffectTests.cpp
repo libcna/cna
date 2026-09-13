@@ -11,8 +11,15 @@
 #include <memory>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectMaterial.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -20,11 +27,20 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/InvalidCastException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "CNA/TestSupport/TestPaths.hpp"
 
@@ -41,7 +57,11 @@ using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Quaternion;
+using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Vector4;
 
 namespace
 {
@@ -74,6 +94,22 @@ namespace
         const std::filesystem::path path =
             CNA::TestSupport::CompiledEffectFixtureDirectory() /
             "racing-shadow-map-xna4.fxb";
+        std::ifstream input(path, std::ios::binary);
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+
+    std::vector<SharpRuntime::bytecs> LoadConformanceCompiledEffectFixture()
+    {
+        const std::filesystem::path path =
+            CNA::TestSupport::CompiledEffectDirectory() / "CnaConformanceEffect.fxb";
+        std::ifstream input(path, std::ios::binary);
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+
+    std::vector<SharpRuntime::bytecs> LoadSkinnedCompiledEffectFixture()
+    {
+        const std::filesystem::path path =
+            CNA::TestSupport::CompiledEffectDirectory() / "SkinnedEffect.fxb";
         std::ifstream input(path, std::ios::binary);
         return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     }
@@ -132,7 +168,7 @@ namespace
         explicit TestEffect(GraphicsDevice& device) : Effect(device) {}
         TestEffect(GraphicsDevice& device, const std::vector<SharpRuntime::bytecs>& effectCode)
             : Effect(device, effectCode) {}
-        explicit TestEffect(const TestEffect& src) : Effect(src.getGraphicsDeviceInternal()) {}
+        explicit TestEffect(const TestEffect& src) : Effect(src) {}
 
         int applyCount = 0;
 
@@ -153,7 +189,7 @@ TEST(EffectTest, ConstructorCreatesExactlyOneDefaultTechnique)
     TestEffect fx(gd);
 
     ASSERT_EQ(fx.getTechniquesProperty().getCountProperty(), 1);
-    EXPECT_EQ(fx.getTechniquesProperty()[0].getNameProperty(), "Default");
+    EXPECT_EQ(fx.getTechniquesProperty()[0]->getNameProperty(), "Default");
 }
 
 TEST(EffectTest, ConstructorSelectsFirstTechniqueAsCurrent)
@@ -162,7 +198,7 @@ TEST(EffectTest, ConstructorSelectsFirstTechniqueAsCurrent)
     TestEffect fx(gd);
 
     ASSERT_NE(fx.getCurrentTechniqueProperty(), nullptr);
-    EXPECT_EQ(fx.getCurrentTechniqueProperty(), &fx.getTechniquesProperty()[0]);
+    EXPECT_EQ(fx.getCurrentTechniqueProperty(), fx.getTechniquesProperty()[0]);
 }
 
 TEST(EffectTest, ConstructorLeavesParametersEmpty)
@@ -180,7 +216,7 @@ TEST(EffectTest, GetTechniquesConstOverloadMatchesMutable)
     TestEffect fx(gd);
 
     const Effect& constFx = fx;
-    EXPECT_EQ(&constFx.getTechniquesProperty()[0], &fx.getTechniquesProperty()[0]);
+    EXPECT_EQ(constFx.getTechniquesProperty()[0], fx.getTechniquesProperty()[0]);
 }
 
 TEST(EffectTest, GraphicsDeviceInternalReturnsOwningDevice)
@@ -246,6 +282,366 @@ TEST(EffectTest, StructurallyValidFxReachesRendererCapabilityGate)
     }
 }
 
+TEST(EffectTest, CompiledTextureAccessorsValidateTheReflectedParameterType)
+{
+    GraphicsDevice gd;
+    const auto typedBytes = LoadValidCompiledEffectFixture();
+    const auto genericBytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(typedBytes.empty());
+    ASSERT_FALSE(genericBytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    TestEffect typedEffect(gd, typedBytes);
+    TestEffect genericEffect(gd, genericBytes);
+    auto* scalar = typedEffect.getParametersProperty()["DiffuseColor"];
+    auto* texture2D = typedEffect.getParametersProperty()["Texture"];
+    auto* genericTexture = genericEffect.getParametersProperty()["FxTexture"];
+    ASSERT_NE(scalar, nullptr);
+    ASSERT_NE(texture2D, nullptr);
+    ASSERT_NE(genericTexture, nullptr);
+
+    EXPECT_THROW(static_cast<void>(scalar->GetValueTexture2D()), System::InvalidCastException);
+    EXPECT_THROW(static_cast<void>(scalar->GetValueTexture3D()), System::InvalidCastException);
+    EXPECT_THROW(static_cast<void>(scalar->GetValueTextureCube()), System::InvalidCastException);
+    EXPECT_THROW(scalar->SetValue(static_cast<Microsoft::Xna::Framework::Graphics::Texture*>(nullptr)),
+                 System::InvalidCastException);
+
+    EXPECT_EQ(texture2D->GetValueTexture2D(), nullptr);
+    EXPECT_THROW(static_cast<void>(texture2D->GetValueTexture3D()),
+                 System::InvalidCastException);
+    EXPECT_THROW(static_cast<void>(texture2D->GetValueTextureCube()),
+                 System::InvalidCastException);
+    EXPECT_NO_THROW(texture2D->SetValue(
+        static_cast<Microsoft::Xna::Framework::Graphics::Texture2D*>(nullptr)));
+
+    EXPECT_EQ(genericTexture->GetValueTexture2D(), nullptr);
+    EXPECT_EQ(genericTexture->GetValueTexture3D(), nullptr);
+    EXPECT_EQ(genericTexture->GetValueTextureCube(), nullptr);
+}
+
+TEST(EffectTest, CompiledTextureSetterRejectsDisposedAndActiveRenderTargetsBeforeType)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadValidCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    TestEffect effect(gd, bytes);
+    auto* scalar = effect.getParametersProperty()["DiffuseColor"];
+    auto* texture2D = effect.getParametersProperty()["Texture"];
+    ASSERT_NE(scalar, nullptr);
+    ASSERT_NE(texture2D, nullptr);
+
+    Microsoft::Xna::Framework::Graphics::Texture2D disposed(gd, 1, 1);
+    disposed.Dispose();
+    EXPECT_THROW(texture2D->SetValue(&disposed), System::ObjectDisposedException);
+    EXPECT_THROW(scalar->SetValue(&disposed), System::ObjectDisposedException)
+        << "texture lifetime validation precedes reflected parameter-type validation";
+
+    Microsoft::Xna::Framework::Graphics::RenderTarget2D active(gd, 1, 1);
+    gd.SetRenderTarget(&active);
+    EXPECT_THROW(texture2D->SetValue(&active), System::InvalidOperationException);
+    EXPECT_THROW(scalar->SetValue(&active), System::InvalidOperationException)
+        << "active-target validation precedes reflected parameter-type validation";
+    gd.SetRenderTarget(nullptr);
+
+    EXPECT_NO_THROW(texture2D->SetValue(&active));
+    EXPECT_EQ(texture2D->GetValueTexture2D(), &active);
+}
+
+TEST(EffectTest, CompiledTypedValueSettersValidateReflectedShape)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    Effect effect(gd, bytes);
+    auto& parameters = effect.getParametersProperty();
+    auto* gain = parameters["Gain"];
+    auto* tint = parameters["Tint"];
+    auto* transform = parameters["Transform"];
+    auto* weights = parameters["Weights"];
+    auto* lighting = parameters["Lighting"];
+    ASSERT_NE(gain, nullptr);
+    ASSERT_NE(tint, nullptr);
+    ASSERT_NE(transform, nullptr);
+    ASSERT_NE(weights, nullptr);
+    ASSERT_NE(lighting, nullptr);
+    auto* direction = lighting->getStructureMembersProperty()["Direction"];
+    ASSERT_NE(direction, nullptr);
+
+    EXPECT_THROW(gain->SetValue(Vector2::One), System::InvalidCastException);
+    EXPECT_THROW(gain->SetValue(Vector4::One), System::InvalidCastException);
+    EXPECT_THROW(tint->SetValue(Vector3::One), System::InvalidCastException);
+    EXPECT_THROW(transform->SetValue(Vector4::One), System::InvalidCastException);
+    EXPECT_THROW(tint->SetValue(Matrix::getIdentityProperty()), System::InvalidCastException);
+    EXPECT_THROW(gain->SetValueTranspose(Matrix::getIdentityProperty()),
+                 System::InvalidCastException);
+    EXPECT_THROW(weights->SetValue(Vector4::One), System::InvalidCastException)
+        << "a scalar overload cannot address an array parent";
+
+    EXPECT_THROW(tint->SetValue(std::vector<Vector4>{Vector4::One}),
+                 System::InvalidCastException);
+    EXPECT_THROW(transform->SetValue(
+                     std::vector<Matrix>{Matrix::getIdentityProperty()}),
+                 System::InvalidCastException);
+    EXPECT_THROW(weights->SetValue(std::vector<Vector4>{Vector4::One}),
+                 System::InvalidCastException);
+
+    EXPECT_NO_THROW(tint->SetValue(Quaternion(0.0f, 0.0f, 0.0f, 1.0f)));
+    EXPECT_NO_THROW(tint->SetValue(Vector4::One));
+    EXPECT_NO_THROW(direction->SetValue(Vector3::One));
+    EXPECT_NO_THROW(transform->SetValue(Matrix::getIdentityProperty()));
+    EXPECT_NO_THROW(weights->SetValue(std::vector<float>{0.25f, 0.75f}));
+
+    const std::filesystem::path skinnedPath =
+        CNA::TestSupport::CompiledEffectDirectory() / "SkinnedEffect.fxb";
+    std::ifstream skinnedInput(skinnedPath, std::ios::binary);
+    const std::vector<SharpRuntime::bytecs> skinnedBytes{
+        std::istreambuf_iterator<char>(skinnedInput), std::istreambuf_iterator<char>()};
+    ASSERT_FALSE(skinnedBytes.empty());
+    Effect skinned(gd, skinnedBytes);
+    auto* bones = skinned.getParametersProperty()["Bones"];
+    ASSERT_NE(bones, nullptr);
+    ASSERT_EQ(bones->getElementsProperty().getCountProperty(), 72);
+    EXPECT_NO_THROW(bones->SetValue(
+        std::vector<Matrix>(72, Matrix::getIdentityProperty())));
+    EXPECT_THROW(bones->SetValue(
+                     std::vector<Matrix>(73, Matrix::getIdentityProperty())),
+                 System::InvalidCastException);
+}
+
+TEST(EffectTest, CompiledScalarSettersBroadcastAndRejectArrayParents)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    Effect effect(gd, bytes);
+    auto& parameters = effect.getParametersProperty();
+    auto* tint = parameters["Tint"];
+    auto* transform = parameters["Transform"];
+    auto* weights = parameters["Weights"];
+    ASSERT_NE(tint, nullptr);
+    ASSERT_NE(transform, nullptr);
+    ASSERT_NE(weights, nullptr);
+
+    tint->SetValue(0.25f);
+    EXPECT_EQ(tint->GetValueVector4(), Vector4(0.25f));
+    tint->SetValue(3);
+    EXPECT_EQ(tint->GetValueVector4(), Vector4(3.0f));
+    tint->SetValue(true);
+    EXPECT_EQ(tint->GetValueVector4(), Vector4::One);
+
+    transform->SetValue(2.0f);
+    const Matrix two = transform->GetValueMatrix();
+    EXPECT_EQ(two, Matrix(2.0f, 2.0f, 2.0f, 2.0f,
+                          2.0f, 2.0f, 2.0f, 2.0f,
+                          2.0f, 2.0f, 2.0f, 2.0f,
+                          2.0f, 2.0f, 2.0f, 2.0f));
+
+    EXPECT_THROW(weights->SetValue(1.0f), System::InvalidCastException);
+    EXPECT_THROW(weights->SetValue(1), System::InvalidCastException);
+    EXPECT_THROW(weights->SetValue(true), System::InvalidCastException);
+}
+
+TEST(EffectTest, CompiledNumericArraySettersRejectStructureParameters)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    Effect effect(gd, bytes);
+    auto* lighting = effect.getParametersProperty()["Lighting"];
+    ASSERT_NE(lighting, nullptr);
+
+    EXPECT_THROW(lighting->SetValue(std::vector<bool>{true}),
+                 System::InvalidCastException);
+    EXPECT_THROW(lighting->SetValue(std::vector<int>{1}),
+                 System::InvalidCastException);
+    EXPECT_THROW(lighting->SetValue(std::vector<float>{1.0f}),
+                 System::InvalidCastException);
+}
+
+TEST(EffectTest, CompiledTypedGettersValidateShapeBroadcastAndConvert)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    Effect effect(gd, bytes);
+    auto& parameters = effect.getParametersProperty();
+    auto* gain = parameters["Gain"];
+    auto* tint = parameters["Tint"];
+    auto* transform = parameters["Transform"];
+    auto* lighting = parameters["Lighting"];
+    ASSERT_NE(gain, nullptr);
+    ASSERT_NE(tint, nullptr);
+    ASSERT_NE(transform, nullptr);
+    ASSERT_NE(lighting, nullptr);
+
+    gain->SetValue(3.0f);
+    EXPECT_TRUE(gain->GetValueBoolean());
+    EXPECT_EQ(gain->GetValueInt32(), 3);
+    EXPECT_FLOAT_EQ(gain->GetValueSingle(), 3.0f);
+    EXPECT_EQ(gain->GetValueVector2(), Vector2(3.0f));
+    EXPECT_EQ(gain->GetValueVector3(), Vector3(3.0f));
+    EXPECT_EQ(gain->GetValueVector4(), Vector4(3.0f));
+    EXPECT_EQ(gain->GetValueQuaternion(), Quaternion(3.0f, 3.0f, 3.0f, 3.0f));
+    EXPECT_EQ(gain->GetValueMatrix(),
+              Matrix(3.0f, 3.0f, 3.0f, 3.0f,
+                     3.0f, 3.0f, 3.0f, 3.0f,
+                     3.0f, 3.0f, 3.0f, 3.0f,
+                     3.0f, 3.0f, 3.0f, 3.0f));
+
+    tint->SetValue(Vector4(1.0f, 2.0f, 3.0f, 4.0f));
+    EXPECT_EQ(tint->GetValueVector4(), Vector4(1.0f, 2.0f, 3.0f, 4.0f));
+    EXPECT_EQ(tint->GetValueQuaternion(), Quaternion(1.0f, 2.0f, 3.0f, 4.0f));
+    EXPECT_THROW((void) tint->GetValueBoolean(), System::InvalidCastException);
+    EXPECT_THROW((void) tint->GetValueInt32(), System::InvalidCastException);
+    EXPECT_THROW((void) tint->GetValueSingle(), System::InvalidCastException);
+    EXPECT_THROW((void) tint->GetValueVector2(), System::InvalidCastException);
+    EXPECT_THROW((void) tint->GetValueVector3(), System::InvalidCastException);
+    EXPECT_THROW((void) tint->GetValueMatrix(), System::InvalidCastException);
+
+    EXPECT_THROW((void) transform->GetValueVector4(), System::InvalidCastException);
+    EXPECT_THROW((void) transform->GetValueMatrixArray(1), System::InvalidCastException);
+    EXPECT_THROW((void) lighting->GetValueSingle(), System::InvalidCastException);
+
+    const auto stockBytes = LoadValidCompiledEffectFixture();
+    ASSERT_FALSE(stockBytes.empty());
+    Effect stock(gd, stockBytes);
+    auto* shaderIndex = stock.getParametersProperty()["ShaderIndex"];
+    ASSERT_NE(shaderIndex, nullptr);
+    shaderIndex->SetValue(7);
+    EXPECT_FLOAT_EQ(shaderIndex->GetValueSingle(), 7.0f);
+}
+
+TEST(EffectTest, CompiledArrayGettersReturnRequestedLengthAndPackedValues)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    Effect effect(gd, bytes);
+    auto& parameters = effect.getParametersProperty();
+    auto* gain = parameters["Gain"];
+    auto* tint = parameters["Tint"];
+    ASSERT_NE(gain, nullptr);
+    ASSERT_NE(tint, nullptr);
+
+    gain->SetValue(3.0f);
+    const auto booleans = gain->GetValueBooleanArray(3);
+    const auto integers = gain->GetValueInt32Array(3);
+    const auto singles = gain->GetValueSingleArray(3);
+    ASSERT_EQ(booleans.size(), 3u);
+    ASSERT_EQ(integers.size(), 3u);
+    ASSERT_EQ(singles.size(), 3u);
+    EXPECT_TRUE(booleans[0]);
+    EXPECT_FALSE(booleans[1]);
+    EXPECT_EQ(integers, (std::vector<int>{3, 0, 0}));
+    EXPECT_EQ(singles, (std::vector<float>{3.0f, 0.0f, 0.0f}));
+
+    tint->SetValue(Vector4(1.0f, 2.0f, 3.0f, 4.0f));
+    const auto vector2s = tint->GetValueVector2Array(3);
+    const auto vector3s = tint->GetValueVector3Array(2);
+    const auto vector4s = tint->GetValueVector4Array(2);
+    const auto quaternions = tint->GetValueQuaternionArray(2);
+    ASSERT_EQ(vector2s.size(), 3u);
+    ASSERT_EQ(vector3s.size(), 2u);
+    ASSERT_EQ(vector4s.size(), 2u);
+    ASSERT_EQ(quaternions.size(), 2u);
+    EXPECT_EQ(vector2s[0], Vector2(1.0f, 2.0f));
+    EXPECT_EQ(vector2s[1], Vector2(3.0f, 4.0f));
+    EXPECT_EQ(vector2s[2], Vector2::Zero);
+    EXPECT_EQ(vector3s[0], Vector3(1.0f, 2.0f, 3.0f));
+    EXPECT_EQ(vector3s[1], Vector3(4.0f, 0.0f, 0.0f));
+    EXPECT_EQ(vector4s[0], Vector4(1.0f, 2.0f, 3.0f, 4.0f));
+    EXPECT_EQ(vector4s[1], Vector4::Zero);
+    EXPECT_EQ(quaternions[0], Quaternion(1.0f, 2.0f, 3.0f, 4.0f));
+    EXPECT_EQ(quaternions[1], Quaternion());
+
+    const auto skinnedBytes = LoadSkinnedCompiledEffectFixture();
+    ASSERT_FALSE(skinnedBytes.empty());
+    Effect skinned(gd, skinnedBytes);
+    auto* bones = skinned.getParametersProperty()["Bones"];
+    ASSERT_NE(bones, nullptr);
+    const int boneCount = bones->getElementsProperty().getCountProperty();
+    ASSERT_GT(boneCount, 0);
+    const auto matrices = bones->GetValueMatrixArray(boneCount + 1);
+    const auto transposed = bones->GetValueMatrixTransposeArray(boneCount + 1);
+    ASSERT_EQ(matrices.size(), static_cast<std::size_t>(boneCount + 1));
+    ASSERT_EQ(transposed.size(), static_cast<std::size_t>(boneCount + 1));
+    EXPECT_EQ(matrices.back(), Matrix());
+    EXPECT_EQ(transposed.back(), Matrix());
+}
+
+TEST(EffectTest, CompiledNumericArraySettersConvertToReflectedStorageType)
+{
+    GraphicsDevice gd;
+    const auto bytes = LoadConformanceCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+
+    Effect effect(gd, bytes);
+    auto* gain = effect.getParametersProperty()["Gain"];
+    auto* tint = effect.getParametersProperty()["Tint"];
+    ASSERT_NE(gain, nullptr);
+    ASSERT_NE(tint, nullptr);
+
+    gain->SetValue(std::vector<int>{7});
+    EXPECT_FLOAT_EQ(gain->GetValueSingle(), 7.0f);
+    gain->SetValue(std::vector<bool>{true});
+    EXPECT_FLOAT_EQ(gain->GetValueSingle(), 1.0f);
+    tint->SetValue(std::vector<int>{1, 2, 3, 4});
+    EXPECT_EQ(tint->GetValueVector4(), Vector4(1.0f, 2.0f, 3.0f, 4.0f));
+
+    const auto stockBytes = LoadValidCompiledEffectFixture();
+    ASSERT_FALSE(stockBytes.empty());
+    Effect stock(gd, stockBytes);
+    auto* shaderIndex = stock.getParametersProperty()["ShaderIndex"];
+    ASSERT_NE(shaderIndex, nullptr);
+    shaderIndex->SetValue(std::vector<float>{7.0f});
+    EXPECT_EQ(shaderIndex->GetValueInt32(), 7);
+}
+
 TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)
 {
     GraphicsDevice gd;
@@ -268,7 +664,7 @@ TEST(EffectTest, AuthenticXna4EffectAcceptsRepeatedAndAuxiliaryObjectRecords)
          ++techniqueIndex)
     {
         EXPECT_EQ(effect.getTechniquesProperty()[techniqueIndex]
-                      .getPassesProperty().getCountProperty(),
+                      ->getPassesProperty().getCountProperty(),
                   1);
     }
 }
@@ -286,14 +682,14 @@ TEST(EffectTest, AuthenticXna4ShaderStateIdentifiersSurvivePassApplication)
 
     TestEffect effect(gd, racingEffect);
     ASSERT_GE(effect.getTechniquesProperty().getCountProperty(), 2);
-    EffectTechnique& technique = effect.getTechniquesProperty()[1];
+    EffectTechnique& technique = *effect.getTechniquesProperty()[1];
     ASSERT_EQ(technique.getPassesProperty().getCountProperty(), 1);
     effect.setCurrentTechniqueProperty(&technique);
 
     // The authentic XNA 4 payload stores VertexShader/PixelShader as MojoShader render-state
     // identifiers 146/147. If either identifier is incorrectly stripped to 18/19, applying this
     // pass reports unsupported FogStart/FogEnd before any draw can occur.
-    EXPECT_NO_THROW(technique.getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(technique.getPassesProperty()[0]->Apply());
 }
 
 TEST(EffectTest, RejectsInvalidRenderStateIdentifierBeforeEnumConversion)
@@ -388,29 +784,39 @@ TEST(EffectTest, RejectsOutOfRangeObjectReferencesBeforeNativeParser)
 }
 
 // -----------------------------------------------------------------------
-// CurrentTechnique — FNA's setter performs zero validation (any
-// EffectTechnique* is accepted, even one not owned by this Effect).
+// CurrentTechnique — recovered Microsoft XNA validates the Effect lifetime,
+// rejects null, and requires the technique to belong to the receiving Effect.
 // -----------------------------------------------------------------------
 
-TEST(EffectTest, SetCurrentTechniqueAcceptsAnyPointerWithoutValidation)
+TEST(EffectTest, SetCurrentTechniqueRejectsTechniqueOwnedByAnotherEffect)
 {
     GraphicsDevice gd;
     TestEffect fx(gd);
-    EffectTechnique unrelated(nullptr, "Unrelated");
+    TestEffect other(gd);
 
-    fx.setCurrentTechniqueProperty(&unrelated);
-
-    EXPECT_EQ(fx.getCurrentTechniqueProperty(), &unrelated);
+    EXPECT_THROW(fx.setCurrentTechniqueProperty(other.getCurrentTechniqueProperty()),
+                 System::InvalidOperationException);
+    EXPECT_EQ(fx.getCurrentTechniqueProperty(), fx.getTechniquesProperty()[0]);
 }
 
-TEST(EffectTest, SetCurrentTechniqueAcceptsNull)
+TEST(EffectTest, SetCurrentTechniqueRejectsNull)
 {
     GraphicsDevice gd;
     TestEffect fx(gd);
 
-    fx.setCurrentTechniqueProperty(nullptr);
+    EXPECT_THROW(fx.setCurrentTechniqueProperty(nullptr), System::ArgumentNullException);
+    EXPECT_EQ(fx.getCurrentTechniqueProperty(), fx.getTechniquesProperty()[0]);
+}
 
-    EXPECT_EQ(fx.getCurrentTechniqueProperty(), nullptr);
+TEST(EffectTest, SetCurrentTechniqueAfterDisposeThrowsEvenForCurrentValue)
+{
+    GraphicsDevice gd;
+    TestEffect fx(gd);
+    EffectTechnique* current = fx.getCurrentTechniqueProperty();
+    fx.Dispose();
+
+    EXPECT_THROW(fx.setCurrentTechniqueProperty(current), System::ObjectDisposedException);
+    EXPECT_EQ(fx.getCurrentTechniqueProperty(), current);
 }
 
 // -----------------------------------------------------------------------
@@ -464,7 +870,9 @@ TEST_F(EffectApplyTest, DrawPrimitivesThrowsWithoutPriorApply)
     vb.SetData(vpc.data(), 3);
     gd.SetVertexBuffer(&vb);
 
-    EXPECT_THROW(gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1), std::runtime_error);
+    EXPECT_THROW(
+        gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+        System::InvalidOperationException);
 }
 
 TEST_F(EffectApplyTest, ApplyMakesEffectCurrentSoDrawPrimitivesNoLongerThrowsForMissingEffect)
@@ -523,9 +931,19 @@ TEST_F(EffectApplyTest, DisposeIsIdempotentAndDoesNotThrow)
 
 TEST_F(EffectApplyTest, ApplyOnPassThrowsObjectDisposedExceptionWhenOwnerEffectDisposed)
 {
-    EffectPass& p0 = fx.getTechniquesProperty()[0].getPassesProperty()[0];
+    EffectPass& p0 = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
     fx.Dispose();
     EXPECT_THROW(p0.Apply(), System::ObjectDisposedException);
+}
+
+TEST_F(EffectApplyTest, DisposedEffectWinsBeforeNonCurrentPassValidation)
+{
+    EffectPass& originalPass = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
+    fx.getTechniquesProperty().Add(EffectTechnique(&fx, "Second"));
+    fx.setCurrentTechniqueProperty(fx.getTechniquesProperty()[1]);
+    fx.Dispose();
+
+    EXPECT_THROW(originalPass.Apply(), System::ObjectDisposedException);
 }
 
 // -----------------------------------------------------------------------
@@ -539,7 +957,7 @@ TEST_F(EffectApplyTest, ApplyOnPassThrowsObjectDisposedExceptionWhenOwnerEffectD
 
 TEST_F(EffectApplyTest, ApplyOnPassOfCurrentTechniqueSucceedsAndInvokesOnApply)
 {
-    EffectPass& p0 = fx.getTechniquesProperty()[0].getPassesProperty()[0];
+    EffectPass& p0 = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
 
     EXPECT_NO_THROW(p0.Apply());
     EXPECT_EQ(fx.applyCount, 1);
@@ -547,32 +965,20 @@ TEST_F(EffectApplyTest, ApplyOnPassOfCurrentTechniqueSucceedsAndInvokesOnApply)
 
 TEST_F(EffectApplyTest, ApplyOnPassNotInCurrentTechniqueThrowsInvalidOperationException)
 {
-    EffectPass& originalPass = fx.getTechniquesProperty()[0].getPassesProperty()[0];
-    EffectTechnique unrelated(nullptr, "Unrelated");
+    EffectPass& originalPass = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
+    fx.getTechniquesProperty().Add(EffectTechnique(&fx, "Second"));
 
-    fx.setCurrentTechniqueProperty(&unrelated);
+    fx.setCurrentTechniqueProperty(fx.getTechniquesProperty()[1]);
 
     EXPECT_THROW(originalPass.Apply(), System::InvalidOperationException);
     EXPECT_EQ(fx.applyCount, 0);
 }
 
-TEST_F(EffectApplyTest, ApplyWithNullCurrentTechniqueThrowsInvalidOperationException)
-{
-    EffectPass& p0 = fx.getTechniquesProperty()[0].getPassesProperty()[0];
-
-    fx.setCurrentTechniqueProperty(nullptr);
-
-    // FNA dereferences CurrentTechnique.TechniquePointer unconditionally here and would
-    // crash with a NullReferenceException; CNA maps that to this same, defined exception
-    // instead of undefined behavior (an intentional, documented deviation).
-    EXPECT_THROW(p0.Apply(), System::InvalidOperationException);
-}
-
 TEST_F(EffectApplyTest, ApplyIsConsistentAcrossInterleavedTechniqueSwitches)
 {
     fx.getTechniquesProperty().Add(EffectTechnique(&fx, "Second"));
-    EffectPass& firstPass = fx.getTechniquesProperty()[0].getPassesProperty()[0];
-    EffectPass& secondPass = fx.getTechniquesProperty()[1].getPassesProperty()[0];
+    EffectPass& firstPass = *fx.getTechniquesProperty()[0]->getPassesProperty()[0];
+    EffectPass& secondPass = *fx.getTechniquesProperty()[1]->getPassesProperty()[0];
 
     // CurrentTechnique still points at [0] (set at construction) — applying [1]'s pass
     // must fail, and applying [0]'s pass must keep succeeding.
@@ -582,7 +988,7 @@ TEST_F(EffectApplyTest, ApplyIsConsistentAcrossInterleavedTechniqueSwitches)
 
     // Switch CurrentTechnique to [1]: now [1]'s pass succeeds and [0]'s pass fails —
     // no stale state lingers from the previous technique being current.
-    fx.setCurrentTechniqueProperty(&fx.getTechniquesProperty()[1]);
+    fx.setCurrentTechniqueProperty(fx.getTechniquesProperty()[1]);
     EXPECT_THROW(firstPass.Apply(), System::InvalidOperationException);
     EXPECT_NO_THROW(secondPass.Apply());
     EXPECT_EQ(fx.applyCount, 2);
@@ -593,13 +999,8 @@ TEST_F(EffectApplyTest, ApplyIsConsistentAcrossInterleavedTechniqueSwitches)
 // EffectPassCollection is "the applied one" — accessed *through*
 // CurrentTechnique itself (getCurrentTechniqueProperty()->getPassesProperty()),
 // not via a directly-held technique index as Task 355's test above does.
-// Confirms FNA's CurrentTechnique.set (Effect.cs) has no additional hidden
-// state beyond the plain pointer swap CNA already performs: FNA's setter also
-// calls FNA3D_SetEffectTechnique, a native call into the compiled-effect
-// renderer with no C#-observable side effect beyond what INTERNAL_applyEffect
-// later reads — CNA has no compiled-technique GPU representation yet
-// (Phase 74), so the plain pointer swap already provides the complete
-// C#-visible contract.
+// The separate validation tests above cover Microsoft's null, ownership and
+// disposal checks; this block covers successful owned-technique transitions.
 // -----------------------------------------------------------------------
 
 TEST_F(EffectApplyTest, CurrentTechniquePropertyPassCollectionTracksSelectedTechnique)
@@ -608,24 +1009,24 @@ TEST_F(EffectApplyTest, CurrentTechniquePropertyPassCollectionTracksSelectedTech
 
     // Immediately after construction, CurrentTechnique's own Passes collection
     // must be technique [0]'s, not technique [1]'s.
-    EXPECT_EQ(&fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
-              &fx.getTechniquesProperty()[0].getPassesProperty()[0]);
-    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_EQ(fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
+              fx.getTechniquesProperty()[0]->getPassesProperty()[0]);
+    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 
-    fx.setCurrentTechniqueProperty(&fx.getTechniquesProperty()[1]);
+    fx.setCurrentTechniqueProperty(fx.getTechniquesProperty()[1]);
 
     // After switching, CurrentTechnique's own Passes collection must now be
     // technique [1]'s — a real toggle, not a one-directional/stale snapshot.
-    EXPECT_EQ(&fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
-              &fx.getTechniquesProperty()[1].getPassesProperty()[0]);
-    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_EQ(fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
+              fx.getTechniquesProperty()[1]->getPassesProperty()[0]);
+    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 
-    fx.setCurrentTechniqueProperty(&fx.getTechniquesProperty()[0]);
+    fx.setCurrentTechniqueProperty(fx.getTechniquesProperty()[0]);
 
     // Switching back restores [0]'s pass collection as current — bidirectional.
-    EXPECT_EQ(&fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
-              &fx.getTechniquesProperty()[0].getPassesProperty()[0]);
-    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_EQ(fx.getCurrentTechniqueProperty()->getPassesProperty()[0],
+              fx.getTechniquesProperty()[0]->getPassesProperty()[0]);
+    EXPECT_NO_THROW(fx.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 }
 
 // -----------------------------------------------------------------------
@@ -686,31 +1087,51 @@ TEST(EffectTest, CloneGetsIndependentTechniqueNotAliasedToOriginal)
     // original's, so EffectPass::Apply()'s owner_/techniqueId_ check on either
     // side can never accidentally resolve against the other effect's state.
     EXPECT_NE(clone->getCurrentTechniqueProperty(), fx.getCurrentTechniqueProperty());
-    EXPECT_NE(&clone->getTechniquesProperty()[0].getPassesProperty()[0],
-              &fx.getTechniquesProperty()[0].getPassesProperty()[0]);
+    EXPECT_NE(clone->getTechniquesProperty()[0]->getPassesProperty()[0],
+              fx.getTechniquesProperty()[0]->getPassesProperty()[0]);
 
     // Applying the clone's pass must not affect the original's apply count, and
     // vice versa — confirms there is no shared/aliased state between the two.
     auto& clonedTestFx = static_cast<TestEffect&>(*clone);
-    clone->getTechniquesProperty()[0].getPassesProperty()[0].Apply();
+    clone->getTechniquesProperty()[0]->getPassesProperty()[0]->Apply();
     EXPECT_EQ(clonedTestFx.applyCount, 1);
     EXPECT_EQ(fx.applyCount, 0);
 }
 
-TEST(EffectTest, CloneAfterDisposeDoesNotThrow)
+TEST(EffectTest, CloneAfterDisposeThrowsObjectDisposedException)
 {
-    // Unlike Apply() (which CNA deliberately guards with ObjectDisposedException,
-    // a documented safety improvement over FNA's UB), Clone() touches no renderer
-    // GPU handle at all in CNA's implementation — there is nothing for disposal
-    // to invalidate, so cloning a disposed effect is well-defined and safe.
-    // Matches every currently-shipped concrete Clone() (none of which guard on
-    // IsDisposed either); if a future Clone() implementation starts touching
-    // renderer state, this expectation should be revisited.
     GraphicsDevice gd;
     TestEffect fx(gd);
     fx.Dispose();
 
-    std::unique_ptr<Effect> clone;
-    EXPECT_NO_THROW(clone.reset(fx.Clone()));
-    EXPECT_NE(clone, nullptr);
+    EXPECT_THROW(std::unique_ptr<Effect>(fx.Clone()), System::ObjectDisposedException);
+}
+
+TEST(EffectTest, StockEffectClonesRejectDisposedSources)
+{
+    GraphicsDevice gd;
+    Microsoft::Xna::Framework::Graphics::AlphaTestEffect alphaTest(gd);
+    Microsoft::Xna::Framework::Graphics::BasicEffect basic(gd);
+    Microsoft::Xna::Framework::Graphics::DualTextureEffect dualTexture(gd);
+    Microsoft::Xna::Framework::Graphics::EnvironmentMapEffect environmentMap(gd);
+    Microsoft::Xna::Framework::Graphics::SkinnedEffect skinned(gd);
+    Microsoft::Xna::Framework::Graphics::SpriteEffect sprite(gd);
+    TestEffect materialSource(gd);
+    Microsoft::Xna::Framework::Graphics::EffectMaterial material(materialSource);
+
+    alphaTest.Dispose();
+    basic.Dispose();
+    dualTexture.Dispose();
+    environmentMap.Dispose();
+    skinned.Dispose();
+    sprite.Dispose();
+    material.Dispose();
+
+    EXPECT_THROW(std::unique_ptr<Effect>(alphaTest.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(std::unique_ptr<Effect>(basic.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(std::unique_ptr<Effect>(dualTexture.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(std::unique_ptr<Effect>(environmentMap.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(std::unique_ptr<Effect>(skinned.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(std::unique_ptr<Effect>(sprite.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(std::unique_ptr<Effect>(material.Clone()), System::ObjectDisposedException);
 }

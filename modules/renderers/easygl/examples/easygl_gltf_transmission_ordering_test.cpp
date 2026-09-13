@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
@@ -21,12 +22,20 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 
 #include <cmath>
+#include <memory>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
 class GltfTransmissionOrderingTest final : public CNA::Examples::PixelTestGame
 {
+public:
+    GltfTransmissionOrderingTest()
+    {
+        graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphics_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24);
+    }
+
 protected:
     void RunTest() override
     {
@@ -100,6 +109,9 @@ protected:
         ExpectPixel("back-to-front order keeps the dial visible through glass",
                     centre, Color(83, 38, 128, 255), 2);
     }
+
+private:
+    std::unique_ptr<GraphicsDeviceManager> graphics_;
 };
 
 int main()

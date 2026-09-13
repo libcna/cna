@@ -96,7 +96,28 @@ TEST(TextureProfileFormat, ACnaExtensionFormatIsNotTheProfilesBusiness)
                                                      SurfaceFormat::Bc7EXT));
 }
 
-// --- REMED-GFX-245: the other two resource kinds ---------------------------------------------
+// --- REMED-GFX-245 / SOFTWARE-173: the other resource kinds ----------------------------------
+
+TEST(TextureProfileFormat, VolumeFormatsAreHiDefOnlyAndMatchXnasExactList)
+{
+    for (int raw = 0; raw <= static_cast<int>(SurfaceFormat::HdrBlendable); ++raw)
+    {
+        const auto format = static_cast<SurfaceFormat>(raw);
+        SCOPED_TRACE(raw);
+        EXPECT_FALSE(Texture::IsVolumeFormatAllowedByProfileEXT(GraphicsProfile::Reach, format));
+        const bool expectedHiDef =
+            format == SurfaceFormat::Color || format == SurfaceFormat::Bgr565 ||
+            format == SurfaceFormat::Bgra5551 || format == SurfaceFormat::Bgra4444 ||
+            format == SurfaceFormat::Rgba1010102 || format == SurfaceFormat::Rg32 ||
+            format == SurfaceFormat::Rgba64 || format == SurfaceFormat::Alpha8 ||
+            format == SurfaceFormat::Single || format == SurfaceFormat::Vector2 ||
+            format == SurfaceFormat::Vector4 || format == SurfaceFormat::HalfSingle ||
+            format == SurfaceFormat::HalfVector2 || format == SurfaceFormat::HalfVector4 ||
+            format == SurfaceFormat::HdrBlendable;
+        EXPECT_EQ(Texture::IsVolumeFormatAllowedByProfileEXT(GraphicsProfile::HiDef, format),
+                  expectedHiDef);
+    }
+}
 
 TEST(TextureProfileFormat, ACubeNeverCarriesTheSignedNormalizedFormatsOnEitherProfile)
 {

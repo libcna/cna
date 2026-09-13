@@ -6,11 +6,16 @@
 #include "CNA/Internal/Graphics/DdsCubeDecoder.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "System/IO/Stream.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/FormatException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -37,11 +42,28 @@ namespace Microsoft::Xna::Framework::Graphics
         return std::max(1, base >> level);
     }
 
+    static void ValidateTransferWindowEXT(
+        const char* api, int startIndex, int elementCount, int requiredElements)
+    {
+        if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
+            static_cast<std::int64_t>((std::numeric_limits<int>::max)()))
+        {
+            throw System::ArgumentOutOfRangeException("elementCount");
+        }
+        if (elementCount != requiredElements)
+        {
+            throw System::ArgumentException(
+                std::string(api) +
+                ": total data size does not match the requested cube region");
+        }
+    }
+
     // D9-103 follow-up: same profile-CEILING enforcement Texture2D.cpp already established
-    // (D9-100's own table: Reach=512, HiDef=4096). Renderers with no profile distinction report
-    // no ceiling, which is exactly what they did when this was an #ifdef block.
+    // (D9-100's own table: Reach=512, HiDef=4096). SOFTWARE-179 made this renderer-independent
+    // profile rule the common renderer default; hardware limits remain a separate question.
     static void ValidateCubeSizeForProfileEXT(const GraphicsDevice& device, int size)
     {
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(size, "size");
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
         const int maxSize = device.GetRenderer().GetMaxCubeSizeForProfileEXT(profile);
         if (size > maxSize)
@@ -79,21 +101,66 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    static bool IsColorTransferFormatEXT(const GraphicsDevice* device, SurfaceFormat format) noexcept
+    [[nodiscard]] static bool IsClassicDxtFormat(SurfaceFormat format) noexcept
     {
-        if (device != nullptr)
-        {
-            switch (device->GetRenderer().ClassifyColorTransferFormatEXT(static_cast<int>(format)))
-            {
-                case CNA::Internal::Renderers::RendererFormatVerdict::Supported: return true;
-                case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported: return false;
-                case CNA::Internal::Renderers::RendererFormatVerdict::Defer: break;
-            }
-        }
-        return Texture::GetFormatSizeEXT(format) % 4 == 0;
+        return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+               format == SurfaceFormat::Dxt5;
     }
 
-    TextureCube::~TextureCube() = default;
+    static void ValidateTextureCubeCreationShapeEXT(
+        const GraphicsDevice& device, int size, SurfaceFormat format)
+    {
+        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach &&
+            !std::has_single_bit(static_cast<unsigned int>(size)))
+        {
+            throw System::NotSupportedException(
+                "Non-power-of-two TextureCube resources are not supported by the Reach graphics "
+                "profile.");
+        }
+        if (IsClassicDxtFormat(format) && (size & 3) != 0)
+        {
+            throw System::ArgumentException(
+                "DXT cube texture dimensions must be multiples of four.");
+        }
+    }
+
+    TextureCube::~TextureCube()
+    {
+        Dispose(false);
+    }
+
+    TextureCube::TextureCube(TextureCube&& other) noexcept
+        : Texture(std::move(other))
+        , size_(other.size_)
+        , renderer_(std::move(other.renderer_))
+        , cpuPixels_(std::move(other.cpuPixels_))
+    {
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->TransferMovedTexture(&other, this);
+        other.size_ = 0;
+    }
+
+    TextureCube& TextureCube::operator=(TextureCube&& other) noexcept
+    {
+        if (this != &other)
+        {
+            GraphicsDevice* const previousDevice = graphicsDevice_;
+            const bool previousDeviceAlive = !graphicsDeviceLifetime_.expired();
+            if (previousDevice != nullptr && previousDeviceAlive &&
+                previousDevice != other.graphicsDevice_)
+            {
+                previousDevice->DetachMovedTexture(this);
+            }
+            Texture::operator=(std::move(other));
+            size_ = other.size_;
+            renderer_ = std::move(other.renderer_);
+            cpuPixels_ = std::move(other.cpuPixels_);
+            if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+                graphicsDevice_->TransferMovedTexture(&other, this);
+            other.size_ = 0;
+        }
+        return *this;
+    }
 
     TextureCube::TextureCube(GraphicsDevice& device, int size, bool mipMap, SurfaceFormat format)
         : Texture(&device)
@@ -102,6 +169,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         ValidateCubeSizeForProfileEXT(device, size);
         ValidateTextureCubeFormatEXT(device, format);
+        ValidateTextureCubeCreationShapeEXT(device, size, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(size, size) : 1;
         renderer_ = device.GetRenderer().CreateTextureCube(size, mipMap, static_cast<int>(format));
@@ -208,32 +276,199 @@ namespace Microsoft::Xna::Framework::Graphics
             && f <= static_cast<int>(CubeMapFace::NegativeZ);
     }
 
-    void TextureCube::SetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
-                              const Color* data, int startIndex, int elementCount)
+    void TextureCube::ValidateCopyPreludeEXT(
+        const char* api, bool setting, int level, const void* data,
+        int startIndex, int elementCount) const
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("TextureCube");
-        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
-            throw std::invalid_argument(
-                "TextureCube::SetData: Color data requires a Color-compatible 32-bit format");
-        if (!IsValidCubeMapFace(face))
-            throw std::out_of_range("TextureCube::SetData: face is not a valid CubeMapFace value");
-        if (!data)
-            throw std::invalid_argument("TextureCube::SetData: data must not be null");
-        if (elementCount <= 0)
-            throw std::out_of_range("TextureCube::SetData: elementCount must be > 0");
+        if (data == nullptr)
+            throw System::ArgumentNullException("data");
+        ThrowIfDataTransferResourceInUseEXT(setting);
+        if (level < 0 || level >= levelCount_)
+        {
+            throw System::InvalidOperationException(
+                std::string(api) + ": level " + std::to_string(level) +
+                " must be in [0, LevelCount " + std::to_string(levelCount_) + ")");
+        }
         if (startIndex < 0)
-            throw std::out_of_range("TextureCube::SetData: startIndex must be >= 0");
-        if (level < 0)
-            throw std::out_of_range("TextureCube::SetData: level must be >= 0");
+            throw System::ArgumentOutOfRangeException("dataIndex");
+        if (elementCount <= 0)
+            throw System::ArgumentOutOfRangeException("elementCount");
+        if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
+            static_cast<std::int64_t>((std::numeric_limits<int>::max)()))
+        {
+            throw System::ArgumentOutOfRangeException("elementCount");
+        }
+    }
+
+    int TextureCube::ValidateTypedTransferEXT(
+        const char* api, bool setting, CubeMapFace face, int level,
+        const Microsoft::Xna::Framework::Rectangle* rect,
+        const void* data, int startIndex, int elementCount, int elementBytes) const
+    {
+        ValidateCopyPreludeEXT(api, setting, level, data, startIndex, elementCount);
+        const int formatBytes = Texture::GetFormatSizeEXT(format_);
+        if (Texture::GetBlockSizeSquaredEXT(format_) != 1 || elementBytes <= 0 ||
+            elementBytes > formatBytes || formatBytes % elementBytes != 0)
+        {
+            throw System::ArgumentException(
+                std::string(api) +
+                ": element width does not divide the uncompressed cube format");
+        }
+
+        const int levelSize = mipDim(size_, level);
+        int x = 0;
+        int y = 0;
+        int width = levelSize;
+        int height = levelSize;
+        if (rect != nullptr)
+        {
+            x = rect->X;
+            y = rect->Y;
+            width = rect->Width;
+            height = rect->Height;
+        }
+        if (x < 0 || y < 0 || width <= 0 || height <= 0 ||
+            width > levelSize || height > levelSize ||
+            x > levelSize - width || y > levelSize - height)
+        {
+            throw System::ArgumentException(
+                std::string(api) + ": rectangle out of texture bounds", "rect");
+        }
+        const int required = width * height * formatBytes / elementBytes;
+        ValidateTransferWindowEXT(api, startIndex, elementCount, required);
+        if (!IsValidCubeMapFace(face))
+        {
+            throw System::InvalidOperationException(
+                std::string(api) + ": face is not a valid CubeMapFace value");
+        }
+        return required;
+    }
+
+    int TextureCube::ValidateCompressedTransferEXT(
+        const char* api, bool setting, CubeMapFace face, int level,
+        const Microsoft::Xna::Framework::Rectangle* rect,
+        const void* data, int startIndex, int elementCount) const
+    {
+        ValidateCopyPreludeEXT(api, setting, level, data, startIndex, elementCount);
+
+        const int levelSize = mipDim(size_, level);
+        const int x = rect != nullptr ? rect->X : 0;
+        const int y = rect != nullptr ? rect->Y : 0;
+        const int width = rect != nullptr ? rect->Width : levelSize;
+        const int height = rect != nullptr ? rect->Height : levelSize;
+        if (x < 0 || y < 0 || width <= 0 || height <= 0 ||
+            width > levelSize || height > levelSize ||
+            x > levelSize - width || y > levelSize - height)
+        {
+            throw System::ArgumentException(
+                std::string(api) + ": rectangle out of texture bounds", "rect");
+        }
+        const bool touchesRightEdge = x == levelSize - width;
+        const bool touchesBottomEdge = y == levelSize - height;
+        if ((x % 4) != 0 || (y % 4) != 0 ||
+            ((width % 4) != 0 && !touchesRightEdge) ||
+            ((height % 4) != 0 && !touchesBottomEdge))
+        {
+            throw System::ArgumentException(
+                std::string(api) + ": compressed rectangle is not block-aligned", "rect");
+        }
+
+        const int requiredBytes = ((width + 3) / 4) * ((height + 3) / 4) *
+                                  Texture::GetFormatSizeEXT(format_);
+        ValidateTransferWindowEXT(api, startIndex, elementCount, requiredBytes);
+        if (!IsValidCubeMapFace(face))
+        {
+            throw System::InvalidOperationException(
+                std::string(api) + ": face is not a valid CubeMapFace value");
+        }
+        return requiredBytes;
+    }
+
+    void TextureCube::SetTypedDataBytesEXT(
+        CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
+        const std::uint8_t* data, int /*elementBytes*/)
+    {
+        ThrowIfDataTransferResourceInUseEXT(true);
+        if (!renderer_)
+            throw System::NotSupportedException(
+                "TextureCube::SetData: this renderer creates no cube-map resource");
+        const int levelSize = mipDim(size_, level);
+        const int x = rect != nullptr ? rect->X : 0;
+        const int y = rect != nullptr ? rect->Y : 0;
+        const int width = rect != nullptr ? rect->Width : levelSize;
+        const int height = rect != nullptr ? rect->Height : levelSize;
+        if (!renderer_->SetDataBytesEXT(
+                static_cast<int>(face), level, x, y, width, height,
+                data, width * height * Texture::GetFormatSizeEXT(format_)))
+        {
+            throw System::NotSupportedException(
+                "TextureCube::SetData: the active renderer did not store the complete "
+                "declared-format cube region");
+        }
+        if (format_ == SurfaceFormat::Color && level == 0)
+        {
+            const int faceIndex = static_cast<int>(face);
+            auto& shadow = cpuPixels_[static_cast<std::size_t>(faceIndex)];
+            const bool isNew = !shadow;
+            if (isNew)
+            {
+                shadow = std::make_shared<std::vector<std::uint8_t>>(
+                    static_cast<std::size_t>(size_) * size_ * 4u, 0u);
+            }
+            for (int row = 0; row < height; ++row)
+            {
+                std::memcpy(
+                    shadow->data() +
+                        (static_cast<std::size_t>(y + row) * size_ + x) * 4u,
+                    data + static_cast<std::size_t>(row) * width * 4u,
+                    static_cast<std::size_t>(width) * 4u);
+            }
+            if (isNew)
+                renderer_->ShareCpuPixels(faceIndex, shadow);
+        }
+    }
+
+    void TextureCube::GetTypedDataBytesEXT(
+        CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
+        std::uint8_t* data, int /*elementBytes*/) const
+    {
+        ThrowIfDataTransferResourceInUseEXT(false);
+        if (!renderer_)
+            throw System::NotSupportedException(
+                "TextureCube::GetData: this renderer creates no cube-map resource");
+        const int levelSize = mipDim(size_, level);
+        const int x = rect != nullptr ? rect->X : 0;
+        const int y = rect != nullptr ? rect->Y : 0;
+        const int width = rect != nullptr ? rect->Width : levelSize;
+        const int height = rect != nullptr ? rect->Height : levelSize;
+        if (!renderer_->GetDataBytesEXT(
+                static_cast<int>(face), level, x, y, width, height,
+                data, width * height * Texture::GetFormatSizeEXT(format_)))
+        {
+            throw System::NotSupportedException(
+                "TextureCube::GetData: the active renderer did not return the complete "
+                "declared-format cube region");
+        }
+    }
+
+    void TextureCube::SetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
+                              const Color* data, int startIndex, int elementCount)
+    {
+        const int required = ValidateTypedTransferEXT(
+            "TextureCube::SetData", true, face, level, rect, data,
+            startIndex, elementCount, 4);
+        if (format_ != SurfaceFormat::Color)
+        {
+            const auto bytes = colorsToRgba(data, startIndex, required);
+            SetTypedDataBytesEXT(face, level, rect, bytes.data(), 4);
+            return;
+        }
 
         const int levelSize = mipDim(size_, level);
         int x = 0, y = 0, w = levelSize, h = levelSize;
         if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
-        if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelSize || y + h > levelSize)
-            throw std::out_of_range("TextureCube::SetData: rectangle out of texture bounds");
-        if (elementCount < w * h)
-            throw std::out_of_range("TextureCube::SetData: elementCount is less than the number of pixels in the requested region");
 
         // REMED-GFX-135 (REMED-GFX-127/130's contract, applied to the WRITE direction). Every check
         // above runs BEFORE anything is converted or handed to a renderer, so a rejected call cannot
@@ -251,7 +486,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // Converted to the REQUESTED REGION, not to elementCount: the renderer stores exactly w*h
         // texels, so converting more would read source elements the call never uploads and hand
         // renderers a buffer whose length disagrees with the region they are told to write.
-        const auto rgba = colorsToRgba(data, startIndex, w * h);
+        const auto rgba = colorsToRgba(data, startIndex, required);
         if (!renderer_->SetData(static_cast<int>(face), level, x, y, w, h,
                                rgba.data(), static_cast<int>(rgba.size())))
         {
@@ -292,19 +527,19 @@ namespace Microsoft::Xna::Framework::Graphics
                               const Microsoft::Xna::Framework::Rectangle* rect,
                               const std::uint8_t* data, int startIndex, int elementCount)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("TextureCube");
-        if (!IsValidCubeMapFace(face))
-            throw std::out_of_range("TextureCube::SetData: face is not a valid CubeMapFace value");
-        if (!data || elementCount <= 0)
-            throw std::invalid_argument("TextureCube::SetData: data must not be null");
-        if (startIndex < 0)
-            throw std::out_of_range("TextureCube::SetData: startIndex must be >= 0");
-        if (level < 0 || level >= levelCount_)
-            throw std::out_of_range("TextureCube::SetData: level must be within the mip chain");
-        if (!graphicsDevice_ ||
-            !graphicsDevice_->GetRenderer().IsCompressedCubeTransferFormatEXT(
-                static_cast<int>(format_)))
+        if (Texture::GetBlockSizeSquaredEXT(format_) == 1)
+        {
+            (void)ValidateTypedTransferEXT(
+                "TextureCube::SetData", true, face, level, rect, data,
+                startIndex, elementCount, 1);
+            SetTypedDataBytesEXT(face, level, rect, data + startIndex, 1);
+            return;
+        }
+        const int requiredBytes = ValidateCompressedTransferEXT(
+            "TextureCube::SetData", true, face, level, rect, data,
+            startIndex, elementCount);
+        if (!graphicsDevice_ || !graphicsDevice_->GetRenderer().IsCompressedCubeTransferFormatEXT(
+                                    static_cast<int>(format_)))
         {
             throw System::NotSupportedException(
                 "TextureCube::SetData: this format has no compressed cube transfer route on the "
@@ -317,33 +552,56 @@ namespace Microsoft::Xna::Framework::Graphics
         const int levelSize = mipDim(size_, level);
         int x = 0, y = 0, w = levelSize, h = levelSize;
         if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
-        const bool touchesRightEdge = x + w == levelSize;
-        const bool touchesBottomEdge = y + h == levelSize;
-        if (x < 0 || y < 0 || w <= 0 || h <= 0
-            || w > levelSize || h > levelSize || x > levelSize - w || y > levelSize - h
-            || (x % 4) != 0 || (y % 4) != 0
-            || ((w % 4) != 0 && !touchesRightEdge)
-            || ((h % 4) != 0 && !touchesBottomEdge))
-        {
-            throw std::out_of_range(
-                "TextureCube::SetData: compressed rectangle must be block-aligned and within bounds");
-        }
-
-        const int requiredBytes = ((w + 3) / 4) * ((h + 3) / 4)
-            * Texture::GetFormatSizeEXT(format_);
-        if (elementCount < requiredBytes ||
-            static_cast<std::int64_t>(startIndex) + elementCount >
-                static_cast<std::int64_t>(std::numeric_limits<int>::max()))
-        {
-            throw std::out_of_range(
-                "TextureCube::SetData: elementCount is less than the requested block payload");
-        }
         if (!renderer_->SetCompressedDataEXT(
                 static_cast<int>(face), level, x, y, w, h,
                 data + startIndex, requiredBytes))
         {
             throw System::NotSupportedException(
                 "TextureCube::SetData: this graphics renderer did not store the complete "
+                "compressed cube face region");
+        }
+    }
+
+    void TextureCube::GetData(CubeMapFace face, std::uint8_t* data, int elementCount) const
+    {
+        GetData(face, 0, nullptr, data, 0, elementCount);
+    }
+
+    void TextureCube::GetData(CubeMapFace face, std::uint8_t* data,
+                              int startIndex, int elementCount) const
+    {
+        GetData(face, 0, nullptr, data, startIndex, elementCount);
+    }
+
+    void TextureCube::GetData(CubeMapFace face, int level,
+                              const Microsoft::Xna::Framework::Rectangle* rect,
+                              std::uint8_t* data, int startIndex, int elementCount) const
+    {
+        if (Texture::GetBlockSizeSquaredEXT(format_) == 1)
+        {
+            (void)ValidateTypedTransferEXT(
+                "TextureCube::GetData", false, face, level, rect, data,
+                startIndex, elementCount, 1);
+            GetTypedDataBytesEXT(face, level, rect, data + startIndex, 1);
+            return;
+        }
+
+        const int requiredBytes = ValidateCompressedTransferEXT(
+            "TextureCube::GetData", false, face, level, rect, data,
+            startIndex, elementCount);
+
+        if (!renderer_)
+            throw System::NotSupportedException(
+                "TextureCube::GetData: this renderer creates no cube-map resource");
+        const int levelSize = mipDim(size_, level);
+        int x = 0, y = 0, w = levelSize, h = levelSize;
+        if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
+        if (!renderer_->GetCompressedDataEXT(
+                static_cast<int>(face), level, x, y, w, h,
+                data + startIndex, requiredBytes))
+        {
+            throw System::NotSupportedException(
+                "TextureCube::GetData: the active renderer did not return the complete "
                 "compressed cube face region");
         }
     }
@@ -363,32 +621,20 @@ namespace Microsoft::Xna::Framework::Graphics
     void TextureCube::GetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
                               Color* data, int startIndex, int elementCount) const
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("TextureCube");
-        const bool isCompressedTransfer = graphicsDevice_ != nullptr &&
-            graphicsDevice_->GetRenderer().IsCompressedCubeTransferFormatEXT(
-                static_cast<int>(format_));
-        if (!IsColorTransferFormatEXT(graphicsDevice_, format_) && !isCompressedTransfer)
-            throw std::invalid_argument(
-                "TextureCube::GetData: Color data requires a Color-compatible 32-bit format");
-        if (!IsValidCubeMapFace(face))
-            throw std::out_of_range("TextureCube::GetData: face is not a valid CubeMapFace value");
-        if (!data)
-            throw std::invalid_argument("TextureCube::GetData: data must not be null");
-        if (elementCount <= 0)
-            throw std::out_of_range("TextureCube::GetData: elementCount must be > 0");
-        if (startIndex < 0)
-            throw std::out_of_range("TextureCube::GetData: startIndex must be >= 0");
-        if (level < 0)
-            throw std::out_of_range("TextureCube::GetData: level must be >= 0");
+        const int required = ValidateTypedTransferEXT(
+            "TextureCube::GetData", false, face, level, rect, data,
+            startIndex, elementCount, 4);
+        if (format_ != SurfaceFormat::Color)
+        {
+            std::vector<std::uint8_t> bytes(static_cast<std::size_t>(required) * 4u);
+            GetTypedDataBytesEXT(face, level, rect, bytes.data(), 4);
+            rgbaToColors(bytes, data, startIndex, required);
+            return;
+        }
 
         const int levelSize = mipDim(size_, level);
         int x = 0, y = 0, w = levelSize, h = levelSize;
         if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
-        if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelSize || y + h > levelSize)
-            throw std::out_of_range("TextureCube::GetData: rectangle out of texture bounds");
-        if (elementCount < w * h)
-            throw std::out_of_range("TextureCube::GetData: elementCount is less than the number of pixels in the requested region");
         Texture::ValidateGetDataFormat(format_, 4);
 
         // REMED-GFX-130 (REMED-GFX-127's contract, applied to ITextureCubeRenderer). `rgba` is
@@ -418,7 +664,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 "TextureCube::GetData: this graphics renderer cannot read a cube face back to the "
                 "CPU at the requested mip level");
         }
-        rgbaToColors(rgba, data, startIndex, w * h);
+        rgbaToColors(rgba, data, startIndex, required);
     }
 
     namespace

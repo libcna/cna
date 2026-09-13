@@ -28,9 +28,11 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] ModelBone* operator[](int index) const;
 
         /**
-         * @brief Retrieves a ModelBone by name. Throws if not found.
+         * @brief Retrieves a ModelBone by name.
          * @param name The name of the bone to retrieve.
          * @return Pointer to the ModelBone with the given name.
+         * @throws System::ArgumentNullException if @p name is empty.
+         * @throws System::Collections::Generic::KeyNotFoundException if no bone has that name.
          */
         [[nodiscard]] ModelBone* operator[](const std::string& name) const;
 
@@ -45,6 +47,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param boneName The name of the bone to find.
          * @param value Receives the bone named @p boneName, if found.
          * @return true if the bone was found; otherwise false.
+         * @throws System::ArgumentNullException if @p boneName is empty.
          */
         bool TryGetValue(const std::string& boneName, ModelBone*& value) const;
 

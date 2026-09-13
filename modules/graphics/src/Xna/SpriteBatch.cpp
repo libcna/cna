@@ -5,7 +5,6 @@
 #include <cmath>
 #include <cstddef>
 #include <functional>
-#include <limits>
 #include <stdexcept>
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -14,10 +13,11 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/XnaStateConversion.hpp"
 #include "CNA/Internal/Utf8Decode.hpp"
-#include "System/ArgumentOutOfRangeException.hpp"
-#include "System/Collections/Generic/KeyNotFoundException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -26,62 +26,100 @@ namespace Microsoft::Xna::Framework::Graphics
 
     namespace
     {
-        /**
-         * Total order over float, matching FNA's own depth comparers, which are
-         * `p2->depth.CompareTo(p1->depth)` (`SpriteBatch.cs:1602`): NaN sorts below everything,
-         * including negative infinity, and NaN compares equal to NaN.
-         *
-         * FNA is the behavioural reference, and here it and XNA genuinely differ. XNA's comparers
-         * are a bare `>` / `<` pair returning 0 when neither holds, so a NaN depth compares
-         * **equal to every other depth**. That is not merely a different order: equivalence stops
-         * being transitive (NaN ~ 1 and NaN ~ 2 while 1 !~ 2), which is exactly what
-         * `std::stable_sort` forbids. Copying XNA's shape here would leave the undefined behaviour
-         * in place, so FNA's total order is both the reference answer and the only safe one --
-         * and it is what let CNA start accepting non-finite depths at all.
-         */
-        [[nodiscard]] int CompareOrdered(float a, float b) noexcept
+        // XNA delegates to .NET Framework 4's unstable Array.Sort<T> quicksort. Its depth
+        // comparer also treats NaN as equal to every value, so a standard C++ sort would have
+        // undefined behavior; reproducing the original partition loop keeps both cases defined.
+        template <typename T, typename Compare>
+        void XnaArraySort(std::vector<T>& items, Compare compare)
         {
-            const bool aNaN = std::isnan(a);
-            const bool bNaN = std::isnan(b);
-            if (aNaN || bNaN)
+            if (items.size() < 2)
             {
-                if (aNaN && bNaN) return 0;
-                return aNaN ? -1 : 1;
+                return;
             }
-            if (a < b) return -1;
-            if (a > b) return 1;
+
+            const auto swapIfGreater = [&](std::ptrdiff_t first, std::ptrdiff_t second)
+            {
+                if (first != second && compare(items[static_cast<std::size_t>(first)],
+                                               items[static_cast<std::size_t>(second)]) > 0)
+                {
+                    std::swap(items[static_cast<std::size_t>(first)],
+                              items[static_cast<std::size_t>(second)]);
+                }
+            };
+
+            const auto quickSort = [&](auto&& self, std::ptrdiff_t left, std::ptrdiff_t right) -> void
+            {
+                do
+                {
+                    std::ptrdiff_t first = left;
+                    std::ptrdiff_t last = right;
+                    const std::ptrdiff_t middle = first + ((last - first) >> 1);
+
+                    swapIfGreater(first, middle);
+                    swapIfGreater(first, last);
+                    swapIfGreater(middle, last);
+
+                    const T pivot = items[static_cast<std::size_t>(middle)];
+                    do
+                    {
+                        while (compare(items[static_cast<std::size_t>(first)], pivot) < 0)
+                        {
+                            ++first;
+                        }
+                        while (compare(pivot, items[static_cast<std::size_t>(last)]) < 0)
+                        {
+                            --last;
+                        }
+                        if (first > last)
+                        {
+                            break;
+                        }
+                        if (first < last)
+                        {
+                            std::swap(items[static_cast<std::size_t>(first)],
+                                      items[static_cast<std::size_t>(last)]);
+                        }
+                        ++first;
+                        --last;
+                    }
+                    while (first <= last);
+
+                    if (last - left <= right - first)
+                    {
+                        if (left < last)
+                        {
+                            self(self, left, last);
+                        }
+                        left = first;
+                    }
+                    else
+                    {
+                        if (first < right)
+                        {
+                            self(self, first, right);
+                        }
+                        right = last;
+                    }
+                }
+                while (left < right);
+            };
+
+            quickSort(quickSort, 0, static_cast<std::ptrdiff_t>(items.size() - 1));
+        }
+
+        [[nodiscard]] int CompareXnaDepth(float first, float second,
+                                          bool frontToBack) noexcept
+        {
+            if (first > second)
+            {
+                return frontToBack ? 1 : -1;
+            }
+            if (first < second)
+            {
+                return frontToBack ? -1 : 1;
+            }
             return 0;
         }
-
-        [[noreturn]] void ThrowDestinationOutOfRange(const char* parameterName)
-        {
-            throw System::ArgumentOutOfRangeException(
-                parameterName,
-                "The calculated SpriteBatch destination component must be within Int32 range.");
-        }
-
-        // XNA/FNA keep a sprite's destination in floating point all the way to the vertex data,
-        // so a component is validated here but never quantised. The Int32 window is still the
-        // documented boundary of a SpriteBatch destination, and rejecting outside it keeps the
-        // exception contract every renderer and test already relies on.
-        // CABI-38: a non-finite component is not outside the Int32 window, it is outside the
-        // number line, and XNA carries it into the vertex path rather than refusing it. The range
-        // check therefore only asks the question of values that have an answer.
-        float ValidateDestinationComponent(float value, const char* parameterName)
-        {
-            if (!std::isfinite(value))
-            {
-                return value;
-            }
-            const double widened = static_cast<double>(value);
-            if (widened < static_cast<double>(std::numeric_limits<intcs>::lowest()) ||
-                widened > static_cast<double>(std::numeric_limits<intcs>::max()))
-            {
-                ThrowDestinationOutOfRange(parameterName);
-            }
-            return value;
-        }
-
     }
 
     // -----------------------------------------------------------------------
@@ -105,6 +143,61 @@ namespace Microsoft::Xna::Framework::Graphics
     SpriteBatch::~SpriteBatch() = default;
 
     GetTypeNameCPP(SpriteBatch, "Microsoft.Xna.Framework.Graphics.SpriteBatch")
+
+    void SpriteBatch::Dispose(bool disposing)
+    {
+        if (!isDisposed_)
+        {
+            renderer_.reset();
+            spriteQueue_.clear();
+            customEffect_ = nullptr;
+            begun = false;
+        }
+        GraphicsResource::Dispose(disposing);
+    }
+
+    void SpriteBatch::throwIfDisposed() const
+    {
+        if (getIsDisposedProperty())
+        {
+            throw System::ObjectDisposedException(
+                getNameProperty().empty() ? "SpriteBatch" : getNameProperty());
+        }
+    }
+
+    void SpriteBatch::applyRenderState()
+    {
+        if (graphicsDevice_ != nullptr)
+        {
+            graphicsDevice_->setBlendStateProperty(blendState_);
+            graphicsDevice_->getSamplerStatesProperty()[0] = samplerState_;
+            graphicsDevice_->setDepthStencilStateProperty(depthStencilState_);
+            graphicsDevice_->setRasterizerStateProperty(rasterizerState_);
+        }
+
+        // A deferred batch retains the caller's state object until this flush boundary. Its
+        // properties are still mutable between Begin and End, so refresh the renderer's private
+        // SpriteBatch sampler channel from the retained payload immediately before drawing.
+        if (renderer_ != nullptr)
+        {
+            renderer_->SetSamplerState(
+                CNA::Internal::Renderers::NormalizeXnaTextureFilterOrdinal(
+                    static_cast<int>(samplerState_.getFilterProperty())),
+                CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                    static_cast<int>(samplerState_.getAddressUProperty())),
+                CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                    static_cast<int>(samplerState_.getAddressVProperty())),
+                CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                    static_cast<int>(samplerState_.getAddressWProperty())),
+                samplerState_.getMaxAnisotropyProperty(),
+                samplerState_.getMaxMipLevelProperty(),
+                samplerState_.getMipMapLevelOfDetailBiasProperty());
+        }
+        if (graphicsDevice_ != nullptr)
+        {
+            graphicsDevice_->applySamplerStatesToRenderer(1);
+        }
+    }
 
     // -----------------------------------------------------------------------
     // Begin / End
@@ -184,50 +277,44 @@ namespace Microsoft::Xna::Framework::Graphics
                             Effect* effect,
                             Matrix transformMatrix)
     {
+        throwIfDisposed();
         if (begun)
-            throw std::runtime_error("Begin has been called before calling End.");
+            throw System::InvalidOperationException("Begin has been called before calling End.");
 
-        const SamplerState& effectiveSampler =
-            samplerState ? *samplerState : SamplerState::LinearClamp;
-        if (graphicsDevice_)
+        blendState_ = blendState ? *blendState : BlendState::AlphaBlend;
+        samplerState_ = samplerState ? *samplerState : SamplerState::LinearClamp;
+        depthStencilState_ = depthStencilState ? *depthStencilState : DepthStencilState::None;
+        rasterizerState_ =
+            rasterizerState ? *rasterizerState : RasterizerState::CullCounterClockwise;
+        customEffect_ = effect;
+        transformMatrix_ = transformMatrix;
+        sortMode_ = sortMode;
+        spriteQueue_.clear();
+
+        // Microsoft XNA coordinates every SpriteBatch attached to one GraphicsDevice. Multiple
+        // deferred batches may coexist, but Immediate is mutually exclusive with all of them.
+        // These checks precede Immediate state application and do not publish a failed Begin.
+        if (graphicsDevice_ != nullptr)
         {
-            graphicsDevice_->setBlendStateProperty(
-                blendState ? *blendState : BlendState::AlphaBlend);
-            // The effective sampler IS published to the public collection -- but from flushBatch(),
-            // not from here. plans/plan_fx.md FX-126 originally assigned it at Begin() so a later
-            // 3D draw could not inherit a stale collection entry; plans/plan_vulkan.md VULKAN-166
-            // and VULKAN-194 then measured the real XNA runtime
-            // (spikes/xna-spritebatch-sampler0-spike) and found the assignment is NOT visible after
-            // Begin() for a Deferred batch, only after the flush. flushBatch() publishes before its
-            // own empty check, so FX-126's requirement still holds for an empty batch too; doing it
-            // here as well only made the publication visible too early.
-            // Task 803 finding: this parameter was previously entirely unused -- SpriteBatch
-            // draws silently inherited whatever DepthStencilState the game's own 3D rendering
-            // last configured (or each renderer's own construction-time default), instead of
-            // FNA's real default of DepthStencilState.None when the caller passes null. Matches
-            // FNA's SpriteBatch.Begin(): a null depthStencilState always means None, the state is
-            // always (re-)applied here, never left over from a previous Begin() (mirrors the
-            // samplerState handling immediately below).
-            graphicsDevice_->setDepthStencilStateProperty(
-                depthStencilState ? *depthStencilState : DepthStencilState::None);
-            // REMED-GFX-081: this parameter was previously discarded (`/*rasterizerState*/`), so a
-            // RasterizerState supplied to Begin -- e.g. one with ScissorTestEnable/CullMode/FillMode
-            // set -- never reached the device or renderer; the only way to affect sprite rasterizer
-            // state was to assign GraphicsDevice.RasterizerState directly. FNA's PrepRenderState
-            // applies `rasterizerState ?? RasterizerState.CullCounterClockwise`; do the same here
-            // (a null rasterizerState always resolves to the SpriteBatch default and is always
-            // (re-)applied, never left over from a previous Begin -- mirrors the blend/depth/sampler
-            // handling). Applied via the GraphicsDevice property so it routes through the same
-            // ApplyRasterizerState path every renderer already uses; the state is copied (no raw
-            // pointer to the caller's RasterizerState is retained).
-            graphicsDevice_->setRasterizerStateProperty(
-                rasterizerState ? *rasterizerState : RasterizerState::CullCounterClockwise);
+            if (sortMode_ == SpriteSortMode::Immediate)
+            {
+                if (graphicsDevice_->spriteBeginCount_ > 0)
+                {
+                    throw System::InvalidOperationException(
+                        "Cannot begin an Immediate SpriteBatch while another SpriteBatch is active.");
+                }
+            }
+            else if (graphicsDevice_->spriteImmediateBeginCount_ > 0)
+            {
+                throw System::InvalidOperationException(
+                    "Cannot begin a SpriteBatch while an Immediate SpriteBatch is active.");
+            }
         }
 
-        customEffect_    = effect;
-        transformMatrix_ = transformMatrix;
-        sortMode_        = sortMode;
-        spriteQueue_.clear();
+        // Immediate applies state before the pair and device counters become active. Every other
+        // sorting mode waits until End(), including an empty batch.
+        if (sortMode_ == SpriteSortMode::Immediate)
+            applyRenderState();
 
         if (renderer_)
         {
@@ -237,8 +324,6 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderer_->SetTransformMatrix(transformMatrix_);
                 // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
                 // resolved state is always (re-)applied — never left over from a previous Begin().
-                const SamplerState& effectiveSampler = samplerState ? *samplerState : SamplerState::LinearClamp;
-                effectiveSampler_ = effectiveSampler;
                 // ONE call carrying all seven SamplerState properties. Three hooks for this job met
                 // when `next` merged into `sdlgpu` (2026-09-11): sdlgpu's complete-state
                 // SetSamplerState, the dx branch's SetSamplerAddressW + SetSamplerMipState, and the
@@ -251,26 +336,19 @@ namespace Microsoft::Xna::Framework::Graphics
                 // maxAnisotropy reaches a renderer for the first time here; only sdlgpu's hook
                 // ever carried it.
                 renderer_->SetSamplerState(
-                    static_cast<int>(effectiveSampler.getFilterProperty()),
-                    static_cast<int>(effectiveSampler.getAddressUProperty()),
-                    static_cast<int>(effectiveSampler.getAddressVProperty()),
-                    static_cast<int>(effectiveSampler.getAddressWProperty()),
-                    effectiveSampler.getMaxAnisotropyProperty(),
-                    effectiveSampler.getMaxMipLevelProperty(),
-                    effectiveSampler.getMipMapLevelOfDetailBiasProperty());
+                    CNA::Internal::Renderers::NormalizeXnaTextureFilterOrdinal(
+                        static_cast<int>(samplerState_.getFilterProperty())),
+                    CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                        static_cast<int>(samplerState_.getAddressUProperty())),
+                    CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                        static_cast<int>(samplerState_.getAddressVProperty())),
+                    CNA::Internal::Renderers::NormalizeXnaTextureAddressModeOrdinal(
+                        static_cast<int>(samplerState_.getAddressWProperty())),
+                    samplerState_.getMaxAnisotropyProperty(),
+                    samplerState_.getMaxMipLevelProperty(),
+                    samplerState_.getMipMapLevelOfDetailBiasProperty());
                 renderer_->SetImmediateMode(sortMode_ == SpriteSortMode::Immediate);
                 renderer_->Begin();
-                // plan_vulkan.md VULKAN-166: FNA's PrepRenderState pushes the whole sampler state
-                // down, and it runs from Begin() for Immediate (where no flushBatch ever will) and
-                // from FlushBatch otherwise. Do the same, from the same two places. Slot 0 is
-                // excluded because the three calls above already carry the batch's own sampler to
-                // it; slots 1 and up had no writer at all in a SpriteBatch-only frame, so a
-                // ShaderEffect's second texture unit was sampled with the first one's state.
-                if (graphicsDevice_ != nullptr && sortMode_ == SpriteSortMode::Immediate)
-                {
-                    graphicsDevice_->getSamplerStatesProperty()[0] = effectiveSampler_;
-                    graphicsDevice_->applySamplerStatesToRenderer(1);
-                }
             }
             catch (...)
             {
@@ -285,28 +363,74 @@ namespace Microsoft::Xna::Framework::Graphics
                 throw;
             }
         }
-        // Renderer setup can reject an unsupported requested state (for example Skia's mip-only
-        // sampler filters). Publish a successful Begin only after that setup completes, so the
-        // same SpriteBatch remains reusable after the caller catches the exception.
+        // Renderer setup can reject an unsupported requested state. Publish a successful Begin
+        // and the Microsoft device-level accounting only after that setup completes.
+        if (graphicsDevice_ != nullptr)
+        {
+            if (sortMode_ == SpriteSortMode::Immediate)
+                ++graphicsDevice_->spriteImmediateBeginCount_;
+            ++graphicsDevice_->spriteBeginCount_;
+        }
         begun = true;
     }
 
     void SpriteBatch::End()
     {
+        throwIfDisposed();
         if (!begun)
-            throw std::runtime_error("End was called, but Begin has not yet been called.");
-        if (renderer_)
+            throw System::InvalidOperationException("End was called, but Begin has not yet been called.");
+        bool rendererEndAttempted = false;
+        const auto releaseDeviceAccounting = [this]()
+        {
+            if (graphicsDevice_ == nullptr)
+                return;
+            if (sortMode_ == SpriteSortMode::Immediate &&
+                graphicsDevice_->spriteImmediateBeginCount_ > 0)
+            {
+                --graphicsDevice_->spriteImmediateBeginCount_;
+            }
+            if (graphicsDevice_->spriteBeginCount_ > 0)
+                --graphicsDevice_->spriteBeginCount_;
+        };
+        try
         {
             if (sortMode_ != SpriteSortMode::Immediate)
-                flushBatch();
-            renderer_->End();
-            renderer_->SetCustomEffect(nullptr);
-            // Deferred renderers may submit their final texture group only from End(). Retain
-            // every queued texture renderer through that call, then release the queue.
-            spriteQueue_.clear();
+                applyRenderState();
+            if (renderer_)
+            {
+                if (sortMode_ != SpriteSortMode::Immediate)
+                    flushBatch();
+                rendererEndAttempted = true;
+                renderer_->End();
+                renderer_->SetCustomEffect(nullptr);
+                // Deferred renderers may submit their final texture group only from End(). Retain
+                // every queued texture renderer through that call, then release the queue.
+                spriteQueue_.clear();
+            }
+            customEffect_ = nullptr;
         }
-        begun         = false;
-        customEffect_ = nullptr;
+        catch (...)
+        {
+            // Microsoft leaves the Begin/End pair and device counters active when deferred state
+            // application or Flush fails. A repeated End retries the same work, and Immediate
+            // remains blocked on this device. A CNA-private renderer End failure is different: its
+            // backend pair cannot safely be retried, so retain the established recoverable seam.
+            if (!rendererEndAttempted)
+                throw;
+
+            spriteQueue_.clear();
+            if (renderer_)
+            {
+                try { renderer_->SetCustomEffect(nullptr); }
+                catch (...) {}
+            }
+            customEffect_ = nullptr;
+            begun = false;
+            releaseDeviceAccounting();
+            throw;
+        }
+        begun = false;
+        releaseDeviceAccounting();
     }
 
     // -----------------------------------------------------------------------
@@ -389,6 +513,12 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::flushSingle(const SpriteInfo& s)
     {
         if (!renderer_ || !s.texture) return;
+        if (graphicsDevice_ != nullptr)
+        {
+            GpuDrawParams params;
+            params.texture0 = s.texture.get();
+            graphicsDevice_->validateDrawState(&params);
+        }
         renderer_->Draw(*s.texture,
                        s.destX, s.destY, s.destWidth, s.destHeight,
                        s.srcRect, s.color,
@@ -397,44 +527,37 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::flushBatch()
     {
-        // plan_vulkan.md VULKAN-166: before the empty check, matching FNA's FlushBatch, which
-        // calls PrepRenderState first and only then returns early on numSprites == 0.
-        // plan_vulkan.md VULKAN-194: PrepRenderState's first act is
-        // `GraphicsDevice.SamplerStates[0] = samplerState`, so the batch's sampler is left behind
-        // in the device collection and the next 3D draw inherits it. Measured on the XNA runtime
-        // (spikes/xna-spritebatch-sampler0-spike): the assignment is NOT visible after Begin() for
-        // a Deferred batch, only after the flush, and a following 3D draw really does sample with
-        // the batch's address mode.
-        if (graphicsDevice_ != nullptr)
-        {
-            graphicsDevice_->getSamplerStatesProperty()[0] = effectiveSampler_;
-            graphicsDevice_->applySamplerStatesToRenderer(1);
-        }
-
         if (spriteQueue_.empty()) return;
 
         if (sortMode_ == SpriteSortMode::BackToFront)
         {
-            std::stable_sort(spriteQueue_.begin(), spriteQueue_.end(),
+            XnaArraySort(spriteQueue_,
                 [](const SpriteInfo& a, const SpriteInfo& b) {
-                    return CompareOrdered(a.layerDepth, b.layerDepth) > 0;
+                    return CompareXnaDepth(a.layerDepth, b.layerDepth, false);
                 });
         }
         else if (sortMode_ == SpriteSortMode::FrontToBack)
         {
-            std::stable_sort(spriteQueue_.begin(), spriteQueue_.end(),
+            XnaArraySort(spriteQueue_,
                 [](const SpriteInfo& a, const SpriteInfo& b) {
-                    return CompareOrdered(a.layerDepth, b.layerDepth) < 0;
+                    return CompareXnaDepth(a.layerDepth, b.layerDepth, true);
                 });
         }
         else if (sortMode_ == SpriteSortMode::Texture)
         {
-            std::stable_sort(spriteQueue_.begin(), spriteQueue_.end(),
+            XnaArraySort(spriteQueue_,
                 [](const SpriteInfo& a, const SpriteInfo& b) {
-                    return std::less<const ITextureRenderer*>{}(a.texture.get(), b.texture.get());
+                    const auto less = std::less<const ITextureRenderer*>{};
+                    if (less(b.texture.get(), a.texture.get())) return -1;
+                    if (less(a.texture.get(), b.texture.get())) return 1;
+                    return 0;
                 });
         }
-        // Deferred: no sort, submission order
+        else if (sortMode_ != SpriteSortMode::Deferred)
+        {
+            throw System::NotSupportedException();
+        }
+        // Deferred: no sort, submission order.
 
         for (const SpriteInfo& s : spriteQueue_)
             flushSingle(s);
@@ -446,14 +569,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Draw(const Texture2D& texture, float x, float y)
     {
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        throwIfDisposed();
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
-        const float destinationX = ValidateDestinationComponent(x, "x");
-        const float destinationY = ValidateDestinationComponent(y, "y");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture,
-                   destinationX, destinationY,
+                   x, y,
                    static_cast<float>(w), static_cast<float>(h),
                    Rectangle(0, 0, w, h),
                    Color(255, 255, 255, 255),
@@ -465,7 +587,8 @@ namespace Microsoft::Xna::Framework::Graphics
                            const Rectangle& sourceRectangle,
                            Color color)
     {
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        throwIfDisposed();
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
@@ -480,7 +603,8 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effect,
                            float layerDepth)
     {
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        throwIfDisposed();
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, rotation_rad, origin, effect, layerDepth);
@@ -496,14 +620,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position, Color color)
     {
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        throwIfDisposed();
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
-        const float destinationX = ValidateDestinationComponent(position.X, "position");
-        const float destinationY = ValidateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture,
-                   destinationX, destinationY,
+                   position.X, position.Y,
                    static_cast<float>(w), static_cast<float>(h),
                    Rectangle(0, 0, w, h),
                    color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
@@ -512,17 +635,16 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position,
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        throwIfDisposed();
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
-        const float destinationX = ValidateDestinationComponent(position.X, "position");
-        const float destinationY = ValidateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
         const int dw = sourceRectangle.has_value() ? src.Width  : w;
         const int dh = sourceRectangle.has_value() ? src.Height : h;
         pushSprite(texture,
-                   destinationX, destinationY,
+                   position.X, position.Y,
                    static_cast<float>(dw), static_cast<float>(dh),
                    src, color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
@@ -532,21 +654,18 @@ namespace Microsoft::Xna::Framework::Graphics
                            float rotation, Vector2 origin, float scale,
                            SpriteEffects effects, float layerDepth)
     {
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        throwIfDisposed();
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
-        const float destinationX = ValidateDestinationComponent(position.X, "position");
-        const float destinationY = ValidateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
         const int dw = sourceRectangle.has_value() ? src.Width  : w;
         const int dh = sourceRectangle.has_value() ? src.Height : h;
-        const float destinationWidth =
-            ValidateDestinationComponent(static_cast<float>(dw) * scale, "scale");
-        const float destinationHeight =
-            ValidateDestinationComponent(static_cast<float>(dh) * scale, "scale");
+        const float destinationWidth = static_cast<float>(dw) * scale;
+        const float destinationHeight = static_cast<float>(dh) * scale;
         pushSprite(texture,
-                   destinationX, destinationY, destinationWidth, destinationHeight,
+                   position.X, position.Y, destinationWidth, destinationHeight,
                    src, color, rotation, origin, effects, layerDepth);
     }
 
@@ -555,28 +674,26 @@ namespace Microsoft::Xna::Framework::Graphics
                            float rotation, Vector2 origin, Vector2 scale,
                            SpriteEffects effects, float layerDepth)
     {
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        throwIfDisposed();
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
-        const float destinationX = ValidateDestinationComponent(position.X, "position");
-        const float destinationY = ValidateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
         const int dw = sourceRectangle.has_value() ? src.Width  : w;
         const int dh = sourceRectangle.has_value() ? src.Height : h;
-        const float destinationWidth =
-            ValidateDestinationComponent(static_cast<float>(dw) * scale.X, "scale");
-        const float destinationHeight =
-            ValidateDestinationComponent(static_cast<float>(dh) * scale.Y, "scale");
+        const float destinationWidth = static_cast<float>(dw) * scale.X;
+        const float destinationHeight = static_cast<float>(dh) * scale.Y;
         pushSprite(texture,
-                   destinationX, destinationY, destinationWidth, destinationHeight,
+                   position.X, position.Y, destinationWidth, destinationHeight,
                    src, color, rotation, origin, effects, layerDepth);
     }
 
     void SpriteBatch::Draw(const Texture2D& texture,
                            const Rectangle& destinationRectangle, Color color)
     {
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        throwIfDisposed();
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -588,7 +705,8 @@ namespace Microsoft::Xna::Framework::Graphics
                            const Rectangle& destinationRectangle,
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        throwIfDisposed();
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -606,7 +724,8 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effect,
                            float layerDepth)
     {
-        if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
+        throwIfDisposed();
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -624,6 +743,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  Vector2 position,
                                  Color color)
     {
+        throwIfDisposed();
         DrawString(spriteFont, text, position, color, 0.0f, Vector2::Zero,
                    Vector2(1.0f, 1.0f), SpriteEffects::None, 0.0f);
     }
@@ -638,6 +758,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  SpriteEffects effects,
                                  float layerDepth)
     {
+        throwIfDisposed();
         DrawString(spriteFont, text, position, color, rotation, origin,
                    Vector2(scale, scale), effects, layerDepth);
     }
@@ -652,16 +773,15 @@ namespace Microsoft::Xna::Framework::Graphics
                                  SpriteEffects effects,
                                  float layerDepth)
     {
-        if (!begun) throw std::runtime_error("SpriteBatch::DrawString called before Begin().");
+        throwIfDisposed();
+        if (!begun) throw System::InvalidOperationException("SpriteBatch::DrawString called before Begin().");
         if (!renderer_ || text.empty()) return;
 
         const Texture2D& texture = spriteFont.textureValue_;
         if (texture.getWidthProperty() == 0) return;
 
-        // CABI-7b: layerDepth was the one float every DrawString overload let through, while every
-        // Draw overload refused it. It is also the value flushBatch's BackToFront/FrontToBack
-        // comparators order by, and a NaN there breaks the strict weak ordering std::stable_sort
-        // requires -- undefined behaviour, not a wrong sort.
+        // Keep layerDepth in the original Single domain. The sorted modes reproduce XNA's
+        // Array.Sort partitioning explicitly, including its unordered NaN comparisons.
 
         const float sinR = std::sin(rotation);
         const float cosR = std::cos(rotation);
@@ -709,24 +829,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 continue;
             }
 
-            auto it = spriteFont.characterIndexMap_.find(c);
-            if (it == spriteFont.characterIndexMap_.end())
-            {
-                if (!spriteFont.defaultCharacter_.has_value())
-                    throw std::invalid_argument(
-                        "Text contains characters that cannot be resolved by this SpriteFont.");
-                it = spriteFont.characterIndexMap_.find(spriteFont.defaultCharacter_.value());
-                // REMED-GFX-002: defaultCharacter is validated on construction/set (SpriteFont.cpp),
-                // so this cannot fail in practice -- checked anyway rather than dereferencing
-                // end(), matching FNA's characterIndexMap[DefaultCharacter.Value] Dictionary
-                // indexer, which throws KeyNotFoundException on a miss.
-                if (it == spriteFont.characterIndexMap_.end())
-                {
-                    throw System::Collections::Generic::KeyNotFoundException(
-                        "defaultCharacter is not present in characters.");
-                }
-            }
-            const int index = it->second;
+            const int index = spriteFont.getIndexForCharacter(c);
 
             const Vector3& cKern = spriteFont.kerning_[index];
             if (firstInLine)
@@ -771,14 +874,10 @@ namespace Microsoft::Xna::Framework::Graphics
             // 255, 255, 255, 255 -- and the same is visible at a fractional scale. Quantising
             // here (which is what CNA did until this was measured) snapped every glyph onto a
             // whole pixel and lost that, while Draw() had already been corrected.
-            const float destinationX =
-                ValidateDestinationComponent(position.X + rotX, "position");
-            const float destinationY =
-                ValidateDestinationComponent(position.Y + rotY, "position");
-            const float destinationWidth =
-                ValidateDestinationComponent(static_cast<float>(cGlyph.Width) * scale.X, "scale");
-            const float destinationHeight =
-                ValidateDestinationComponent(static_cast<float>(cGlyph.Height) * scale.Y, "scale");
+            const float destinationX = position.X + rotX;
+            const float destinationY = position.Y + rotY;
+            const float destinationWidth = static_cast<float>(cGlyph.Width) * scale.X;
+            const float destinationHeight = static_cast<float>(cGlyph.Height) * scale.Y;
 
             pushSprite(texture, destinationX, destinationY, destinationWidth, destinationHeight,
                        cGlyph, color, rotation, Vector2::Zero, effects, layerDepth);
@@ -791,6 +890,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  const System::Text::StringBuilder& text,
                                  Vector2 position, Color color)
     {
+        throwIfDisposed();
         DrawString(spriteFont, text.ToString(), position, color);
     }
 
@@ -800,6 +900,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  float rotation, Vector2 origin, float scale,
                                  SpriteEffects effects, float layerDepth)
     {
+        throwIfDisposed();
         DrawString(spriteFont, text.ToString(), position, color,
                    rotation, origin, scale, effects, layerDepth);
     }
@@ -810,6 +911,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                  float rotation, Vector2 origin, Vector2 scale,
                                  SpriteEffects effects, float layerDepth)
     {
+        throwIfDisposed();
         DrawString(spriteFont, text.ToString(), position, color,
                    rotation, origin, scale, effects, layerDepth);
     }
@@ -818,6 +920,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                   const Vector2* positions, const Color* colors, const Vector2* uvs,
                                   int vertexCount, const std::uint16_t* indices, int indexCount)
     {
+        throwIfDisposed();
         if (!begun) throw std::runtime_error("SpriteBatch::DrawMeshEXT called before Begin().");
         // A mesh draw does not participate in the deferred sort/batch queue -- a declared, tested
         // scope boundary (docs/skia-vertices-2d-effect-contract.md), not a silent misbatch.

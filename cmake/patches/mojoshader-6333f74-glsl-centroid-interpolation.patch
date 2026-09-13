@@ -1,0 +1,274 @@
+diff --git a/mojoshader.h b/mojoshader.h
+--- a/mojoshader.h
++++ b/mojoshader.h
+@@ -273,6 +273,7 @@
+     MOJOSHADER_usage usage;
+     int index;
+     const char *name;
++    int flags;  /* destination modifiers from the declaration token. */
+ } MOJOSHADER_attribute;
+ 
+ /*
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -4433,6 +4433,7 @@
+                 wptr->usage = item->usage;
+                 wptr->index = item->index;
+                 wptr->name = alloc_varname(ctx, item);
++                wptr->flags = item->misc;
+                 wptr++;
+                 count++;
+             } // if
+@@ -4484,6 +4485,7 @@
+                     wptr->usage = item->usage;
+                     wptr->index = item->index;
+                     wptr->name = alloc_varname(ctx, item);
++                    wptr->flags = item->misc;
+                     wptr++;
+                     count++;
+                     break;
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -754,6 +754,18 @@
+     return 1;
+ } // get_GLSL_semantic_varname
+ 
++static void get_GLSL_centroid_varname(const MOJOSHADER_usage usage, const int index,
++                                      char *buf, const size_t len)
++{
++    snprintf(buf, len, "cna_centroid_%i_%i", usage, index);
++} // get_GLSL_centroid_varname
++
++static void get_GLSL_centroid_macro(const MOJOSHADER_usage usage, const int index,
++                                    char *buf, const size_t len)
++{
++    snprintf(buf, len, "CNA_CENTROID_%i_%i", usage, index);
++} // get_GLSL_centroid_macro
++
+ static void emit_GLSL_vertex_epilogue(Context *ctx)
+ {
+     if (shader_version_atleast(ctx, 3, 0))
+@@ -778,6 +790,24 @@
+                                 semantic, mask, reg, mask);
+                 else
+                     output_line(ctx, "%s%s = %s%s;", semantic, mask, reg, mask);
++
++                if ((item->usage != MOJOSHADER_USAGE_POSITION) &&
++                    (item->usage != MOJOSHADER_USAGE_POINTSIZE))
++                {
++                    char centroid[64];
++                    char centroid_macro[64];
++                    get_GLSL_centroid_varname(
++                        item->usage, item->index, centroid, sizeof (centroid));
++                    get_GLSL_centroid_macro(
++                        item->usage, item->index, centroid_macro, sizeof (centroid_macro));
++                    output_line(ctx, "#ifdef %s", centroid_macro);
++                    if (item->usage == MOJOSHADER_USAGE_COLOR)
++                        output_line(ctx, "%s%s = clamp(%s%s, 0.0, 1.0);",
++                                    centroid, mask, reg, mask);
++                    else
++                        output_line(ctx, "%s%s = %s%s;", centroid, mask, reg, mask);
++                    output_line(ctx, "#endif");
++                } // if
+             } // if
+             item = item->next;
+         } // while
+@@ -1143,12 +1173,6 @@
+ 
+     get_GLSL_varname_in_buf(ctx, regtype, regnum, var, sizeof (var));
+ 
+-    if (shader_is_pixel(ctx) && (flags & MOD_CENTROID))
+-    {
+-        failf(ctx, "centroid unsupported in %s profile", ctx->profile->name);
+-        return;
+-    } // if
+-
+     if (shader_version_atleast(ctx, 3, 0) &&
+         ((shader_is_vertex(ctx) && (regtype == REG_TYPE_OUTPUT)) ||
+          (shader_is_pixel(ctx) && (regtype == REG_TYPE_INPUT))))
+@@ -1163,18 +1187,25 @@
+             (first->writemask == wmask);
+         char semantic[64];
+         char mask[6];
+-        const int builtin = get_GLSL_semantic_varname(
++        const int centroid = shader_is_pixel(ctx) &&
++            (((flags & MOD_CENTROID) != 0) || (usage == MOJOSHADER_USAGE_COLOR));
++        int builtin = get_GLSL_semantic_varname(
+             ctx, vertex_output, usage, index, semantic, sizeof (semantic));
++        if (centroid)
++        {
++            get_GLSL_centroid_varname(usage, index, semantic, sizeof (semantic));
++            builtin = 0;
++        } // if
+         get_GLSL_writemask_suffix(wmask, mask, sizeof (mask));
+ 
+         if (support_glsles3(ctx))
+         {
+-            qualifier_in = "in";
++            qualifier_in = centroid ? "centroid in" : "in";
+             qualifier_out = "out";
+         } // if
+         else
+         {
+-            qualifier_in = "varying";
++            qualifier_in = centroid ? "centroid varying" : "varying";
+             qualifier_out = "varying";
+         } // else
+ 
+@@ -1192,6 +1223,27 @@
+                 output_line(ctx, "%s vec4 %s;",
+                             vertex_output ? qualifier_out : qualifier_in, semantic);
+         } // if
++        if (vertex_output &&
++            (usage != MOJOSHADER_USAGE_POSITION) &&
++            (usage != MOJOSHADER_USAGE_POINTSIZE))
++        {
++            char centroid_name[64];
++            char centroid_macro[64];
++            get_GLSL_centroid_varname(
++                usage, index, centroid_name, sizeof (centroid_name));
++            get_GLSL_centroid_macro(
++                usage, index, centroid_macro, sizeof (centroid_macro));
++            output_line(ctx, "#ifdef %s", centroid_macro);
++#if SUPPORT_PROFILE_GLSLES
++            if (support_glsles(ctx))
++                output_line(ctx, "%s highp vec4 %s;",
++                            support_glsles3(ctx) ? "centroid out" : "centroid varying",
++                            centroid_name);
++            else
++#endif
++                output_line(ctx, "centroid varying vec4 %s;", centroid_name);
++            output_line(ctx, "#endif");
++        } // if
+         pop_output(ctx);
+ 
+         if (!vertex_output)
+diff --git a/mojoshader_opengl.c b/mojoshader_opengl.c
+--- a/mojoshader_opengl.c
++++ b/mojoshader_opengl.c
+@@ -848,6 +848,66 @@
+ } // glsl_input_is_unmatched
+ 
+ 
++static int glsl_attribute_uses_centroid(const MOJOSHADER_attribute *attribute)
++{
++    return ((attribute->flags & 0x4) != 0) ||
++           (attribute->usage == MOJOSHADER_USAGE_COLOR);
++} // glsl_attribute_uses_centroid
++
++
++static char *glsl_source_with_centroid_outputs(const MOJOSHADER_parseData *vpd,
++                                               const MOJOSHADER_parseData *ppd)
++{
++    int i;
++    int count = 0;
++    const char *first_newline;
++    char *retval;
++    char *dst;
++
++    if ((vpd == NULL) || (ppd == NULL) || (vpd->output == NULL) ||
++        (vpd->output_len <= 0) || (ppd->attribute_count <= 0) ||
++        (ppd->attributes == NULL))
++        return NULL;
++
++    for (i = 0; i < ppd->attribute_count; i++)
++    {
++        if (glsl_attribute_uses_centroid(&ppd->attributes[i]) &&
++            !glsl_input_is_unmatched(vpd, &ppd->attributes[i]))
++            count++;
++    } // for
++    if (count == 0)
++        return NULL;
++
++    retval = (char *) Malloc(((size_t) vpd->output_len) +
++                             (((size_t) count) * 64) + 1);
++    if (retval == NULL)
++        return NULL;
++
++    first_newline = strchr(vpd->output, '\n');
++    if (first_newline == NULL)
++        first_newline = vpd->output;
++    else
++        first_newline++;
++    dst = retval;
++    memcpy(dst, vpd->output, (size_t) (first_newline - vpd->output));
++    dst += first_newline - vpd->output;
++    for (i = 0; i < ppd->attribute_count; i++)
++    {
++        const MOJOSHADER_attribute *attribute = &ppd->attributes[i];
++        if (!glsl_attribute_uses_centroid(attribute) ||
++            glsl_input_is_unmatched(vpd, attribute))
++            continue;
++        dst += snprintf(dst, 64, "#define CNA_CENTROID_%i_%i 1\n",
++                        (int) attribute->usage, attribute->index);
++    } // for
++    memcpy(dst, first_newline,
++           (size_t) ((vpd->output + vpd->output_len) - first_newline));
++    dst += (vpd->output + vpd->output_len) - first_newline;
++    *dst = '\0';
++    return retval;
++} // glsl_source_with_centroid_outputs
++
++
+ static char *glsl_source_without_unmatched_inputs(const MOJOSHADER_parseData *vpd,
+                                                   const MOJOSHADER_parseData *ppd)
+ {
+@@ -1001,7 +1061,34 @@
+     {
+         const GLuint program = ctx->glCreateProgram();
+         GLuint patched_fragment = 0;
++        GLuint centroid_vertex = 0;
+         char *patched_source = NULL;
++        char *centroid_source = NULL;
++
++        if ((vshader != NULL) && (pshader != NULL))
++            centroid_source = glsl_source_with_centroid_outputs(vshader->parseData,
++                                                                pshader->parseData);
++        if (centroid_source != NULL)
++        {
++            GLint compiled = 0;
++            const GLint centroid_len = (GLint) strlen(centroid_source);
++            centroid_vertex = ctx->glCreateShader(GL_VERTEX_SHADER);
++            ctx->glShaderSource(centroid_vertex, 1,
++                                (const GLchar **) &centroid_source, &centroid_len);
++            ctx->glCompileShader(centroid_vertex);
++            ctx->glGetShaderiv(centroid_vertex, GL_COMPILE_STATUS, &compiled);
++            if (!compiled)
++            {
++                GLsizei len = 0;
++                ctx->glGetShaderInfoLog(centroid_vertex, sizeof (error_buffer),
++                                       &len, (GLchar *) error_buffer);
++                ctx->glDeleteShader(centroid_vertex);
++                ctx->glDeleteProgram(program);
++                Free(centroid_source);
++                return 0;
++            } // if
++            Free(centroid_source);
++        } // if
+ 
+         /* -CNA: see glsl_source_without_unmatched_inputs. */
+         if ((vshader != NULL) && (pshader != NULL))
+@@ -1025,7 +1112,11 @@
+             Free(patched_source);
+         } // if
+ 
+-        if (vshader != NULL) ctx->glAttachShader(program, vshader->handle);
++        if (vshader != NULL)
++        {
++            ctx->glAttachShader(program,
++                                (centroid_vertex != 0) ? centroid_vertex : vshader->handle);
++        } // if
+         if (pshader != NULL)
+         {
+             ctx->glAttachShader(program,
+@@ -1038,6 +1129,8 @@
+          * object is not needed past this point. -CNA */
+         if (patched_fragment != 0)
+             ctx->glDeleteShader(patched_fragment);
++        if (centroid_vertex != 0)
++            ctx->glDeleteShader(centroid_vertex);
+ 
+         ctx->glGetProgramiv(program, GL_LINK_STATUS, &ok);
+         if (!ok)

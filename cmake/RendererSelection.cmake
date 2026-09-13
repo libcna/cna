@@ -807,6 +807,16 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     set(RENDERER_TARGET "cna_renderer_software")
     list(APPEND _cna_identity_defines CNA_RENDERER_SOFTWARE)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SOFTWARE")
+    # SOFTWARE-162/165: compiled Effects remain opt-in for the same dependency reason as EasyGL,
+    # SDL_GPU and Vulkan. When selected, however, the completed CPU executor advertises and runs
+    # the full shared public contract rather than exposing a private staging-only runtime.
+    option(CNA_SOFTWARE_COMPILED_EFFECTS
+           "Build Software support for compiled XNA Effect bytecode" OFF)
+    if(CNA_SOFTWARE_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_SOFTWARE_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "STUB")
     message(STATUS "CNA: Using STUB (no-op) graphics renderer")
     set(RENDERER_DIR "modules/renderers/stub")

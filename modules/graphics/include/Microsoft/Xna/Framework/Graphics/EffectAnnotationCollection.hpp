@@ -30,17 +30,17 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the annotation at the specified index (mutable overload).
          *
          * @param index Zero-based index of the annotation.
-         * @return Reference to the annotation.
+         * @return Pointer to the annotation, or nullptr if @p index is outside the collection.
          */
-        [[nodiscard]] EffectAnnotation& operator[](int index);
+        [[nodiscard]] EffectAnnotation* operator[](int index);
 
         /**
          * @brief Gets the annotation at the specified index (const overload).
          *
          * @param index Zero-based index of the annotation.
-         * @return Const reference to the annotation.
+         * @return Const pointer to the annotation, or nullptr if @p index is outside the collection.
          */
-        [[nodiscard]] const EffectAnnotation& operator[](int index) const;
+        [[nodiscard]] const EffectAnnotation* operator[](int index) const;
 
         /**
          * @brief Gets the annotation with the specified name.

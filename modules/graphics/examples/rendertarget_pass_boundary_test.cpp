@@ -180,11 +180,11 @@ namespace
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, true, Support::Unsupported,
                                  true, true, false, true, true, true, true, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
-    constexpr Contract kContract{"SOFTWARE", true, Support::Exact, false, Support::Unsupported,
-                                 true, true, false, true, true, true, true, false};
+    constexpr Contract kContract{"SOFTWARE", true, Support::Exact, true, Support::Exact,
+                                 true, true, false, true, true, true, true, true};
 #elif defined(CNA_RENDERER_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, Support::Exact,
-                                 true, true, false, true, true, true, true, false};
+                                 true, true, false, true, true, true, true, true};
 #elif defined(CNA_RENDERER_BGFX)
     // `msaaTargetReadback` was false while a multisampled RenderTarget2D reported a successful
     // readback over untouched memory; REMED-GFX-154 fixed that, so K1/K2 measure pass boundaries on
@@ -856,10 +856,8 @@ class RenderTargetPassBoundaryTest : public Game
     /**
      * @brief Binds two colour attachments, or reports that this renderer refuses to.
      *
-     * `SupportsCapability(MultipleRenderTargets)` cannot be trusted as the gate: it has no override
-     * on any renderer and `IGraphicsRenderer`'s default answers true, so Software (whose
-     * `SetRenderTargets` throws outright) claims MRT support. The only honest probe is the bind
-     * itself, with the backbuffer restored if it fails.
+     * The bind itself remains the strongest proof that this exact renderer/profile combination
+     * supports the requested set. Restore the backbuffer transactionally if it refuses.
      */
     bool TryBindMrt(GraphicsDevice& dev, RenderTarget2D& first, RenderTarget2D& second)
     {

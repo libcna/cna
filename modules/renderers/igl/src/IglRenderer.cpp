@@ -772,7 +772,7 @@ namespace CNA::Internal::Renderers::Igl
         if (w <= 0 || h <= 0 || depth <= 0)
             throw std::runtime_error("IGL renderer: a Texture3D needs positive dimensions");
 
-        const int mipLevels = mipMap ? CalculateMipLevels(w, h) : 1;
+        const int mipLevels = mipMap ? CalculateMipLevels(std::max(w, depth), h) : 1;
 
         igl::TextureDesc desc = igl::TextureDesc::new3D(
             ToIglSurfaceFormat(surfaceFormat), static_cast<std::uint32_t>(w),

@@ -303,7 +303,8 @@ TEST(VulkanCompiledEffectTest, RepeatedCreateApplyDisposeCyclesStayStable)
 
 TEST(VulkanCompiledEffectTest, SharedBackendConformanceContract)
 {
-    GraphicsDevice device;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectContract(device);

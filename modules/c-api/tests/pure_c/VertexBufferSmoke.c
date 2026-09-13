@@ -284,16 +284,24 @@ static int validate_all_typed(const CNA_Handle device)
 
 static int validate_default_and_raw(const CNA_Handle device)
 {
-    CNA_VertexBufferCreateInfo empty_info = {
+    CNA_VertexBufferCreateInfo zero_info = {
         sizeof(CNA_VertexBufferCreateInfo), UINT32_C(1), CNA_INVALID_HANDLE,
         0, CNA_BUFFER_USAGE_NONE, CNA_FALSE, {0U, 0U, 0U, 0U, 0U, 0U, 0U}};
+    CNA_VertexBufferHandle rejected = UINT64_MAX;
+    if (cna_vertex_buffer_create(device, &zero_info, &rejected) !=
+            CNA_RESULT_INVALID_ARGUMENT || rejected != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    CNA_VertexBufferCreateInfo empty_info = zero_info;
+    empty_info.vertex_count = 1;
     CNA_VertexBufferHandle empty = CNA_INVALID_HANDLE;
     CNA_VertexBufferInfo metadata = {
         sizeof(CNA_VertexBufferInfo), UINT32_C(1), 7, UINT32_MAX,
         CNA_TRUE, CNA_TRUE, CNA_FALSE, 1U, 7, 7U};
     if (cna_vertex_buffer_create(device, &empty_info, &empty) != CNA_RESULT_SUCCESS ||
         cna_vertex_buffer_get_info(empty, &metadata) != CNA_RESULT_SUCCESS ||
-        metadata.vertex_count != 0 || metadata.vertex_stride != 0 ||
+        metadata.vertex_count != 1 || metadata.vertex_stride != 0 ||
         metadata.vertex_element_count != 0U ||
         cna_vertex_buffer_set_data_raw(empty, 0, 0U, 0U, 1U) != CNA_RESULT_SUCCESS ||
         cna_vertex_buffer_destroy(empty) != CNA_RESULT_SUCCESS) {

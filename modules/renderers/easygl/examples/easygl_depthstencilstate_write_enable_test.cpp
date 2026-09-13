@@ -44,12 +44,14 @@
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include <cstdio>
+#include <memory>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -148,6 +150,12 @@ protected:
     }
 
 public:
+    DepthStencilStateWriteEnableTest()
+    {
+        graphics_.setGraphicsProfileProperty(GraphicsProfile::HiDef);
+        graphics_.setPreferredDepthStencilFormatProperty(DepthFormat::Depth24);
+    }
+
     int getResult() const { return result_; }
 };
 

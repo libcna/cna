@@ -1,0 +1,43 @@
+diff --git a/mojoshader.c b/mojoshader.c
+index a02fb8d..b49c830 100644
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -663,6 +663,30 @@ static void validate_output_register(Context *ctx, const RegisterType regtype,
+     } // if
+ } // validate_output_register
+ 
++static void validate_output_register_source(Context *ctx,
++                                            const RegisterType regtype)
++{
++    if (shader_is_vertex(ctx))
++    {
++        if (shader_version_atleast(ctx, 3, 0))
++        {
++            if (regtype == REG_TYPE_OUTPUT)
++                fail(ctx, "vertex output register cannot be an instruction source");
++        } // if
++        else if ((regtype == REG_TYPE_RASTOUT) ||
++                 (regtype == REG_TYPE_ATTROUT) ||
++                 (regtype == REG_TYPE_TEXCRDOUT))
++        {
++            fail(ctx, "vertex output register cannot be an instruction source");
++        } // else if
++    } // if
++    else if (shader_is_pixel(ctx) &&
++             ((regtype == REG_TYPE_COLOROUT) || (regtype == REG_TYPE_DEPTHOUT)))
++    {
++        fail(ctx, "pixel output register cannot be an instruction source");
++    } // else if
++} // validate_output_register_source
++
+ static void validate_constant_control_register(Context *ctx,
+                                                const RegisterType regtype,
+                                                const int regnum)
+@@ -1042,6 +1066,7 @@ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+ 
+     validate_temporary_register(ctx, info->regtype, info->regnum);
+     validate_input_register(ctx, info->regtype, info->regnum);
++    validate_output_register_source(ctx, info->regtype);
+     validate_constant_control_register(ctx, info->regtype, info->regnum);
+ 
+     info->swizzle = adjust_swizzle(ctx, info->regtype, info->regnum, swizzle);

@@ -26,7 +26,7 @@ TEST(ViewportTest, DefaultConstructorZeroFields)
     EXPECT_EQ(vp.getWidthProperty(), 0);
     EXPECT_EQ(vp.getHeightProperty(), 0);
     EXPECT_FLOAT_EQ(vp.getMinDepthProperty(), 0.0f);
-    EXPECT_FLOAT_EQ(vp.getMaxDepthProperty(), 1.0f);
+    EXPECT_FLOAT_EQ(vp.getMaxDepthProperty(), 0.0f);
 }
 
 TEST(ViewportTest, XYWidthHeightConstructor)
@@ -346,9 +346,17 @@ TEST(ViewportTest, UnprojectWithEqualMinMaxDepthProducesNonFiniteResult)
 TEST(ViewportTest, ToStringFormat)
 {
     Viewport vp(1, 2, 640, 480);
-    std::string s = vp.ToString();
-    EXPECT_NE(s.find("1"), std::string::npos);
-    EXPECT_NE(s.find("2"), std::string::npos);
-    EXPECT_NE(s.find("640"), std::string::npos);
-    EXPECT_NE(s.find("480"), std::string::npos);
+    vp.setMinDepthProperty(0.25f);
+    vp.setMaxDepthProperty(0.75f);
+    EXPECT_EQ(vp.ToString(),
+              "{X:1 Y:2 Width:640 Height:480 MinDepth:0.25 MaxDepth:0.75}");
+}
+
+TEST(ViewportTest, ToStringUsesXnaSingleDefaultPrecision)
+{
+    Viewport vp(1, 2, 3, 4);
+    vp.setMinDepthProperty(1.0f / 3.0f);
+    vp.setMaxDepthProperty(2.0f / 3.0f);
+    EXPECT_EQ(vp.ToString(),
+              "{X:1 Y:2 Width:3 Height:4 MinDepth:0.3333333 MaxDepth:0.6666667}");
 }

@@ -3,18 +3,40 @@
 #include <gtest/gtest.h>
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ColorWriteChannels.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "System/EventArgs.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::Blend;
+using Microsoft::Xna::Framework::Graphics::BlendFunction;
 using Microsoft::Xna::Framework::Graphics::BlendState;
+using Microsoft::Xna::Framework::Graphics::ColorWriteChannels;
 using Microsoft::Xna::Framework::Graphics::CullMode;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
+using Microsoft::Xna::Framework::Graphics::SamplerState;
+
+namespace
+{
+    class StateTestTag final : public System::Object
+    {
+    public:
+        [[nodiscard]] const std::string& GetTypeName() const override
+        {
+            static const std::string name = "StateTestTag";
+            return name;
+        }
+    };
+}
 
 // Task 302: FNA's GraphicsDevice.cs initializes "BlendState = BlendState.Opaque". Verifies the
 // default BlendState's Name matches Opaque's exactly (not just its blend-factor values, which
@@ -37,20 +59,10 @@ TEST(GraphicsDeviceDefaultStateTest, DefaultBlendStateMatchesOpaqueValues)
     EXPECT_EQ(bs.getAlphaDestinationBlendProperty(), BlendState::Opaque.getAlphaDestinationBlendProperty());
 }
 
-// Task 310: FNA's BlendState/DepthStencilState/RasterizerState have no freeze/immutability
-// enforcement at all (confirmed via FNA source: no exception, no frozen flag anywhere in
-// States/BlendState.cs et al.) - so there is no "throws if mutated after first use" behavior to
-// replicate. But FNA's GraphicsDevice.BlendState setter ("nextBlend = value;") stores a
-// *reference* to the same C# object, since BlendState is a reference type - mutating that same
-// object afterward changes what the device applies on the next Draw. CNA's GraphicsDevice stores
-// BlendState by VALUE ("blendState_ = value;" copies), a deliberate, project-wide pattern shared by
-// DepthStencilState/RasterizerState/SamplerStateCollection - so mutating the original object after
-// assignment does NOT affect the device's already-applied copy in CNA, unlike real XNA/FNA. This
-// is a real, confirmed, intentional architectural deviation (documented in plans/plan_graphics.md
-// Task 869), not a bug: no game code observed in this codebase relies on post-assignment mutation,
-// and matching FNA's reference-aliasing exactly would require every state property to become a
-// reference/pointer type project-wide.
-TEST(GraphicsDeviceDefaultStateTest, MutatingBlendStateAfterAssignmentDoesNotAffectDevice)
+// SOFTWARE-232: recovered Microsoft XNA state objects set isBound on first Apply and every
+// property setter subsequently throws InvalidOperationException. FNA's mutable behavior is a
+// compatibility divergence, not the authority for this contract.
+TEST(GraphicsDeviceDefaultStateTest, BoundBlendStateRejectsMutationThroughSourceAndDevice)
 {
     BlendState custom;
     custom.setColorSourceBlendProperty(Blend::One);
@@ -59,12 +71,31 @@ TEST(GraphicsDeviceDefaultStateTest, MutatingBlendStateAfterAssignmentDoesNotAff
     gd.setBlendStateProperty(custom);
     ASSERT_EQ(gd.getBlendStateProperty().getColorSourceBlendProperty(), Blend::One);
 
-    // Mutate the ORIGINAL object after it has already been assigned to the device.
-    custom.setColorSourceBlendProperty(Blend::Zero);
-
-    // CNA's value-copy semantics mean the device's copy is unaffected (a documented deviation from
-    // FNA's reference semantics, where this mutation would be visible - see comment above).
+    EXPECT_THROW(custom.setColorSourceBlendProperty(Blend::Zero),
+                 System::InvalidOperationException);
+    EXPECT_THROW(gd.getBlendStateProperty().setColorSourceBlendProperty(Blend::Zero),
+                 System::InvalidOperationException);
     EXPECT_EQ(gd.getBlendStateProperty().getColorSourceBlendProperty(), Blend::One);
+}
+
+TEST(GraphicsDeviceDefaultStateTest, BoundBlendStateRejectsEveryPropertySetter)
+{
+    BlendState custom;
+    GraphicsDevice gd;
+    gd.setBlendStateProperty(custom);
+
+    EXPECT_THROW(custom.setAlphaBlendFunctionProperty(BlendFunction::Subtract), System::InvalidOperationException);
+    EXPECT_THROW(custom.setAlphaDestinationBlendProperty(Blend::One), System::InvalidOperationException);
+    EXPECT_THROW(custom.setAlphaSourceBlendProperty(Blend::Zero), System::InvalidOperationException);
+    EXPECT_THROW(custom.setColorBlendFunctionProperty(BlendFunction::ReverseSubtract), System::InvalidOperationException);
+    EXPECT_THROW(custom.setColorDestinationBlendProperty(Blend::One), System::InvalidOperationException);
+    EXPECT_THROW(custom.setColorSourceBlendProperty(Blend::Zero), System::InvalidOperationException);
+    EXPECT_THROW(custom.setColorWriteChannelsProperty(ColorWriteChannels::None), System::InvalidOperationException);
+    EXPECT_THROW(custom.setColorWriteChannels1Property(ColorWriteChannels::None), System::InvalidOperationException);
+    EXPECT_THROW(custom.setColorWriteChannels2Property(ColorWriteChannels::None), System::InvalidOperationException);
+    EXPECT_THROW(custom.setColorWriteChannels3Property(ColorWriteChannels::None), System::InvalidOperationException);
+    EXPECT_THROW(custom.setBlendFactorProperty(Microsoft::Xna::Framework::Color::Black), System::InvalidOperationException);
+    EXPECT_THROW(custom.setMultiSampleMaskProperty(1), System::InvalidOperationException);
 }
 
 // Task 312: FNA's GraphicsDevice.cs initializes "DepthStencilState = DepthStencilState.Default"
@@ -126,13 +157,7 @@ TEST(GraphicsDeviceDefaultStateTest, DefaultRasterizerStateMatchesCullCounterClo
               "RasterizerState.CullCounterClockwise");
 }
 
-// Task 330: confirmed via direct FNA source read (Graphics/States/RasterizerState.cs) that FNA has
-// NO freeze/immutability enforcement for RasterizerState either - same finding as Task 310's
-// BlendState/DepthStencilState/RasterizerState-generic confirmation. Mirrors
-// MutatingBlendStateAfterAssignmentDoesNotAffectDevice exactly: CNA stores RasterizerState BY VALUE
-// (a deliberate, project-wide pattern - see Task 869), so mutating the original object after
-// assignment does NOT affect the device's already-applied copy, unlike FNA's reference semantics.
-TEST(GraphicsDeviceDefaultStateTest, MutatingRasterizerStateAfterAssignmentDoesNotAffectDevice)
+TEST(GraphicsDeviceDefaultStateTest, BoundRasterizerStateRejectsMutationThroughSourceAndDevice)
 {
     RasterizerState custom;
     custom.setCullModeProperty(CullMode::None);
@@ -141,12 +166,313 @@ TEST(GraphicsDeviceDefaultStateTest, MutatingRasterizerStateAfterAssignmentDoesN
     gd.setRasterizerStateProperty(custom);
     ASSERT_EQ(gd.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
 
-    // Mutate the ORIGINAL object after it has already been assigned to the device.
-    custom.setCullModeProperty(CullMode::CullClockwiseFace);
-
-    // CNA's value-copy semantics mean the device's copy is unaffected (a documented deviation from
-    // FNA's reference semantics, where this mutation would be visible - see comment above).
+    EXPECT_THROW(custom.setCullModeProperty(CullMode::CullClockwiseFace),
+                 System::InvalidOperationException);
+    EXPECT_THROW(gd.getRasterizerStateProperty().setCullModeProperty(CullMode::CullClockwiseFace),
+                 System::InvalidOperationException);
     EXPECT_EQ(gd.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
+}
+
+TEST(GraphicsDeviceDefaultStateTest, BoundRasterizerStateRejectsEveryPropertySetter)
+{
+    RasterizerState custom;
+    GraphicsDevice gd;
+    gd.setRasterizerStateProperty(custom);
+
+    EXPECT_THROW(custom.setCullModeProperty(CullMode::None), System::InvalidOperationException);
+    EXPECT_THROW(custom.setDepthBiasProperty(1.0f), System::InvalidOperationException);
+    EXPECT_THROW(custom.setFillModeProperty(Microsoft::Xna::Framework::Graphics::FillMode::WireFrame), System::InvalidOperationException);
+    EXPECT_THROW(custom.setMultiSampleAntiAliasProperty(false), System::InvalidOperationException);
+    EXPECT_THROW(custom.setScissorTestEnableProperty(true), System::InvalidOperationException);
+    EXPECT_THROW(custom.setSlopeScaleDepthBiasProperty(1.0f), System::InvalidOperationException);
+}
+
+TEST(GraphicsDeviceDefaultStateTest, BoundDepthStencilStateRejectsMutationThroughSourceAndDevice)
+{
+    DepthStencilState custom;
+    custom.setDepthBufferWriteEnableProperty(false);
+
+    GraphicsDevice gd;
+    gd.setDepthStencilStateProperty(custom);
+    ASSERT_FALSE(gd.getDepthStencilStateProperty().getDepthBufferWriteEnableProperty());
+
+    EXPECT_THROW(custom.setDepthBufferWriteEnableProperty(true),
+                 System::InvalidOperationException);
+    EXPECT_THROW(gd.getDepthStencilStateProperty().setDepthBufferWriteEnableProperty(true),
+                 System::InvalidOperationException);
+    EXPECT_FALSE(gd.getDepthStencilStateProperty().getDepthBufferWriteEnableProperty());
+}
+
+TEST(GraphicsDeviceDefaultStateTest, BoundDepthStencilStateRejectsEveryPropertySetter)
+{
+    DepthStencilState custom;
+    GraphicsDevice gd;
+    gd.setDepthStencilStateProperty(custom);
+
+    using Microsoft::Xna::Framework::Graphics::CompareFunction;
+    using Microsoft::Xna::Framework::Graphics::StencilOperation;
+    EXPECT_THROW(custom.setDepthBufferEnableProperty(false), System::InvalidOperationException);
+    EXPECT_THROW(custom.setDepthBufferWriteEnableProperty(false), System::InvalidOperationException);
+    EXPECT_THROW(custom.setDepthBufferFunctionProperty(CompareFunction::Less), System::InvalidOperationException);
+    EXPECT_THROW(custom.setStencilEnableProperty(true), System::InvalidOperationException);
+    EXPECT_THROW(custom.setStencilFunctionProperty(CompareFunction::Equal), System::InvalidOperationException);
+    EXPECT_THROW(custom.setStencilMaskProperty(1), System::InvalidOperationException);
+    EXPECT_THROW(custom.setStencilWriteMaskProperty(1), System::InvalidOperationException);
+    EXPECT_THROW(custom.setReferenceStencilProperty(1), System::InvalidOperationException);
+    EXPECT_THROW(custom.setStencilFailProperty(StencilOperation::Replace), System::InvalidOperationException);
+    EXPECT_THROW(custom.setStencilDepthBufferFailProperty(StencilOperation::Replace), System::InvalidOperationException);
+    EXPECT_THROW(custom.setStencilPassProperty(StencilOperation::Replace), System::InvalidOperationException);
+    EXPECT_THROW(custom.setTwoSidedStencilModeProperty(true), System::InvalidOperationException);
+    EXPECT_THROW(custom.setCounterClockwiseStencilFunctionProperty(CompareFunction::Equal), System::InvalidOperationException);
+    EXPECT_THROW(custom.setCounterClockwiseStencilFailProperty(StencilOperation::Replace), System::InvalidOperationException);
+    EXPECT_THROW(custom.setCounterClockwiseStencilDepthBufferFailProperty(StencilOperation::Replace), System::InvalidOperationException);
+    EXPECT_THROW(custom.setCounterClockwiseStencilPassProperty(StencilOperation::Replace), System::InvalidOperationException);
+}
+
+TEST(GraphicsDeviceDefaultStateTest, DisposedStatesAreRejectedBeforeBinding)
+{
+    GraphicsDevice gd;
+
+    BlendState blend;
+    blend.Dispose();
+    EXPECT_THROW(gd.setBlendStateProperty(blend), System::ObjectDisposedException);
+
+    DepthStencilState depthStencil;
+    depthStencil.Dispose();
+    EXPECT_THROW(gd.setDepthStencilStateProperty(depthStencil), System::ObjectDisposedException);
+
+    RasterizerState rasterizer;
+    rasterizer.Dispose();
+    EXPECT_THROW(gd.setRasterizerStateProperty(rasterizer), System::ObjectDisposedException);
+}
+
+// SOFTWARE-350: Microsoft XNA compares the incoming managed reference with its cached state before
+// calling Apply(), whose disposed check is therefore bypassed for an unchanged active object.
+// BlendFactor/MultiSampleMask and ReferenceStencil deliberately mark their parent state caches
+// dirty even when assigned the current value; the same-reference setter must then call Apply and
+// observe disposal. CNA's shared state payload is the safe C++ representation of that identity.
+TEST(GraphicsDeviceDefaultStateTest, DisposedActiveStateReassignmentIsNoOpUnlessDeviceStateIsDirty)
+{
+    GraphicsDevice gd;
+
+    BlendState blend;
+    gd.setBlendStateProperty(blend);
+    blend.Dispose();
+    EXPECT_NO_THROW(gd.setBlendStateProperty(blend));
+    EXPECT_NO_THROW(gd.setBlendStateProperty(gd.getBlendStateProperty()));
+    gd.setBlendFactorProperty(gd.getBlendFactorProperty());
+    EXPECT_THROW(gd.setBlendStateProperty(blend), System::ObjectDisposedException);
+
+    BlendState maskedBlend;
+    gd.setBlendStateProperty(maskedBlend);
+    maskedBlend.Dispose();
+    EXPECT_NO_THROW(gd.setBlendStateProperty(maskedBlend));
+    gd.setMultiSampleMaskProperty(gd.getMultiSampleMaskProperty());
+    EXPECT_THROW(gd.setBlendStateProperty(maskedBlend), System::ObjectDisposedException);
+
+    DepthStencilState depth;
+    gd.setDepthStencilStateProperty(depth);
+    depth.Dispose();
+    EXPECT_NO_THROW(gd.setDepthStencilStateProperty(depth));
+    EXPECT_NO_THROW(gd.setDepthStencilStateProperty(gd.getDepthStencilStateProperty()));
+    gd.setReferenceStencilProperty(gd.getReferenceStencilProperty());
+    EXPECT_THROW(gd.setDepthStencilStateProperty(depth), System::ObjectDisposedException);
+
+    RasterizerState rasterizer;
+    gd.setRasterizerStateProperty(rasterizer);
+    rasterizer.Dispose();
+    EXPECT_NO_THROW(gd.setRasterizerStateProperty(rasterizer));
+    EXPECT_NO_THROW(gd.setRasterizerStateProperty(gd.getRasterizerStateProperty()));
+}
+
+TEST(GraphicsDeviceDefaultStateTest, CustomStatesCanBeSharedAcrossDevicesAndCachedIdentityIsNoOp)
+{
+    GraphicsDevice first;
+    GraphicsDevice second;
+
+    BlendState blend;
+    blend.setColorWriteChannelsProperty(ColorWriteChannels::None);
+    EXPECT_NO_THROW(first.setBlendStateProperty(blend));
+    EXPECT_EQ(blend.getGraphicsDeviceProperty(), &first);
+    EXPECT_NO_THROW(second.setBlendStateProperty(blend));
+    EXPECT_EQ(blend.getGraphicsDeviceProperty(), &second);
+    EXPECT_NO_THROW(first.setBlendStateProperty(blend));
+    // The first device already caches this exact managed identity, so XNA does not call Apply
+    // again merely because another device most recently became its GraphicsResource parent.
+    EXPECT_EQ(blend.getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(second.getBlendStateProperty().getColorWriteChannelsProperty(),
+              ColorWriteChannels::None);
+
+    DepthStencilState depth;
+    depth.setDepthBufferEnableProperty(false);
+    EXPECT_NO_THROW(first.setDepthStencilStateProperty(depth));
+    EXPECT_EQ(depth.getGraphicsDeviceProperty(), &first);
+    EXPECT_NO_THROW(second.setDepthStencilStateProperty(depth));
+    EXPECT_EQ(depth.getGraphicsDeviceProperty(), &second);
+    EXPECT_NO_THROW(first.setDepthStencilStateProperty(depth));
+    EXPECT_EQ(depth.getGraphicsDeviceProperty(), &second);
+    EXPECT_FALSE(second.getDepthStencilStateProperty().getDepthBufferEnableProperty());
+
+    RasterizerState rasterizer;
+    rasterizer.setCullModeProperty(CullMode::None);
+    EXPECT_NO_THROW(first.setRasterizerStateProperty(rasterizer));
+    EXPECT_EQ(rasterizer.getGraphicsDeviceProperty(), &first);
+    EXPECT_NO_THROW(second.setRasterizerStateProperty(rasterizer));
+    EXPECT_EQ(rasterizer.getGraphicsDeviceProperty(), &second);
+    EXPECT_NO_THROW(first.setRasterizerStateProperty(rasterizer));
+    EXPECT_EQ(rasterizer.getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(second.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
+}
+
+TEST(GraphicsDeviceDefaultStateTest, AssignedStatesShareResourceSemanticsAcrossPublicAliases)
+{
+    GraphicsDevice device;
+    StateTestTag firstTag;
+    StateTestTag secondTag;
+    BlendState blend;
+    DepthStencilState depth;
+    RasterizerState rasterizer;
+    SamplerState sampler;
+    blend.setNameProperty("blend-before");
+    depth.setNameProperty("depth-before");
+    rasterizer.setNameProperty("raster-before");
+    sampler.setNameProperty("sampler-before");
+    blend.setTagProperty(&firstTag);
+    depth.setTagProperty(&firstTag);
+    rasterizer.setTagProperty(&firstTag);
+    sampler.setTagProperty(&firstTag);
+
+    device.setBlendStateProperty(blend);
+    device.setDepthStencilStateProperty(depth);
+    device.setRasterizerStateProperty(rasterizer);
+    device.getSamplerStatesProperty()[0] = sampler;
+    BlendState& retainedBlend = device.getBlendStateProperty();
+    DepthStencilState& retainedDepth = device.getDepthStencilStateProperty();
+    RasterizerState& retainedRasterizer = device.getRasterizerStateProperty();
+    SamplerState& retainedSampler = device.getSamplerStatesProperty()[0];
+
+    EXPECT_EQ(blend.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(depth.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(rasterizer.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(sampler.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(retainedBlend.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(retainedDepth.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(retainedRasterizer.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(retainedSampler.getGraphicsDeviceProperty(), &device);
+
+    blend.setNameProperty("blend-after");
+    depth.setNameProperty("depth-after");
+    rasterizer.setNameProperty("raster-after");
+    sampler.setNameProperty("sampler-after");
+    blend.setTagProperty(&secondTag);
+    depth.setTagProperty(&secondTag);
+    rasterizer.setTagProperty(&secondTag);
+    sampler.setTagProperty(&secondTag);
+    EXPECT_EQ(retainedBlend.getNameProperty(), "blend-after");
+    EXPECT_EQ(retainedDepth.getNameProperty(), "depth-after");
+    EXPECT_EQ(retainedRasterizer.getNameProperty(), "raster-after");
+    EXPECT_EQ(retainedSampler.getNameProperty(), "sampler-after");
+    EXPECT_EQ(retainedBlend.getTagProperty(), &secondTag);
+    EXPECT_EQ(retainedDepth.getTagProperty(), &secondTag);
+    EXPECT_EQ(retainedRasterizer.getTagProperty(), &secondTag);
+    EXPECT_EQ(retainedSampler.getTagProperty(), &secondTag);
+
+    int blendSourceDisposing = 0;
+    int blendRetainedDisposing = 0;
+    System::Object* blendSender = nullptr;
+    blend.Disposing += [&](System::Object* sender, const System::EventArgs&)
+    {
+        ++blendSourceDisposing;
+        blendSender = sender;
+    };
+    retainedBlend.Disposing += [&](System::Object* sender, const System::EventArgs&)
+    {
+        ++blendRetainedDisposing;
+        blendSender = sender;
+    };
+    retainedBlend.Dispose();
+    EXPECT_TRUE(blend.getIsDisposedProperty());
+    EXPECT_TRUE(retainedBlend.getIsDisposedProperty());
+    EXPECT_EQ(blendSourceDisposing, 1);
+    EXPECT_EQ(blendRetainedDisposing, 1);
+    EXPECT_EQ(blendSender, &blend);
+
+    depth.Dispose();
+    retainedRasterizer.Dispose();
+    sampler.Dispose();
+    EXPECT_TRUE(retainedDepth.getIsDisposedProperty());
+    EXPECT_TRUE(rasterizer.getIsDisposedProperty());
+    EXPECT_TRUE(retainedSampler.getIsDisposedProperty());
+}
+
+TEST(GraphicsDeviceDefaultStateTest, AssignedStateIdentitiesOutliveSourcesAndRebindAcrossDevices)
+{
+    GraphicsDevice first;
+    GraphicsDevice second;
+    {
+        BlendState blend;
+        DepthStencilState depth;
+        RasterizerState rasterizer;
+        SamplerState sampler;
+        blend.setNameProperty("retained-blend");
+        depth.setNameProperty("retained-depth");
+        rasterizer.setNameProperty("retained-rasterizer");
+        sampler.setNameProperty("retained-sampler");
+        first.setBlendStateProperty(blend);
+        first.setDepthStencilStateProperty(depth);
+        first.setRasterizerStateProperty(rasterizer);
+        first.getSamplerStatesProperty()[0] = sampler;
+    }
+
+    second.setBlendStateProperty(first.getBlendStateProperty());
+    second.setDepthStencilStateProperty(first.getDepthStencilStateProperty());
+    second.setRasterizerStateProperty(first.getRasterizerStateProperty());
+    second.getSamplerStatesProperty()[0] = first.getSamplerStatesProperty()[0];
+
+    EXPECT_EQ(first.getBlendStateProperty().getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(first.getDepthStencilStateProperty().getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(first.getRasterizerStateProperty().getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(first.getSamplerStatesProperty()[0].getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(second.getBlendStateProperty().getNameProperty(), "retained-blend");
+    EXPECT_EQ(second.getDepthStencilStateProperty().getNameProperty(), "retained-depth");
+    EXPECT_EQ(second.getRasterizerStateProperty().getNameProperty(), "retained-rasterizer");
+    EXPECT_EQ(second.getSamplerStatesProperty()[0].getNameProperty(), "retained-sampler");
+}
+
+TEST(GraphicsDeviceDefaultStateTest, DefaultStatesSharePresetResourceSemantics)
+{
+    GraphicsDevice first;
+    StateTestTag tag;
+
+    EXPECT_EQ(BlendState::Opaque.getGraphicsDeviceProperty(), &first);
+    EXPECT_EQ(DepthStencilState::Default.getGraphicsDeviceProperty(), &first);
+    EXPECT_EQ(RasterizerState::CullCounterClockwise.getGraphicsDeviceProperty(), &first);
+    EXPECT_EQ(SamplerState::LinearWrap.getGraphicsDeviceProperty(), &first);
+
+    first.getBlendStateProperty().setNameProperty("temporary-opaque");
+    first.getDepthStencilStateProperty().setNameProperty("temporary-depth");
+    first.getRasterizerStateProperty().setNameProperty("temporary-rasterizer");
+    first.getSamplerStatesProperty()[0].setNameProperty("temporary-linear-wrap");
+    first.getSamplerStatesProperty()[0].setTagProperty(&tag);
+    EXPECT_EQ(BlendState::Opaque.getNameProperty(), "temporary-opaque");
+    EXPECT_EQ(DepthStencilState::Default.getNameProperty(), "temporary-depth");
+    EXPECT_EQ(RasterizerState::CullCounterClockwise.getNameProperty(), "temporary-rasterizer");
+    EXPECT_EQ(SamplerState::LinearWrap.getNameProperty(), "temporary-linear-wrap");
+    EXPECT_EQ(first.getSamplerStatesProperty()[1].getNameProperty(), "temporary-linear-wrap");
+    EXPECT_EQ(SamplerState::LinearWrap.getTagProperty(), &tag);
+    EXPECT_EQ(first.getSamplerStatesProperty()[1].getTagProperty(), &tag);
+
+    first.getBlendStateProperty().setNameProperty("BlendState.Opaque");
+    first.getDepthStencilStateProperty().setNameProperty("DepthStencilState.Default");
+    first.getRasterizerStateProperty().setNameProperty("RasterizerState.CullCounterClockwise");
+    first.getSamplerStatesProperty()[0].setNameProperty("SamplerState.LinearWrap");
+    first.getSamplerStatesProperty()[0].setTagProperty(nullptr);
+
+    GraphicsDevice second;
+    EXPECT_EQ(first.getBlendStateProperty().getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(first.getDepthStencilStateProperty().getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(first.getRasterizerStateProperty().getGraphicsDeviceProperty(), &second);
+    EXPECT_EQ(first.getSamplerStatesProperty()[0].getGraphicsDeviceProperty(), &second);
 }
 
 // Task 319: FNA's GraphicsDevice.ReferenceStencil is a real, independent device property

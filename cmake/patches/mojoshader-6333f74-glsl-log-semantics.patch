@@ -1,0 +1,22 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -1561,9 +1561,16 @@ void emit_GLSL_EXP(Context *ctx)
+ 
+ void emit_GLSL_LOG(Context *ctx)
+ {
+-    char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
++    const int vecsize = vecsize_from_writemask(ctx->dest_arg.writemask);
++    char cast[16] = { '\0' };
++    if (vecsize != 1)
++        snprintf(cast, sizeof (cast), "vec%d", vecsize);
++    char src0[64]; make_GLSL_srcarg_string_scalar(ctx, 0, src0, sizeof (src0));
+     char code[128];
+-    make_GLSL_destarg_assign(ctx, code, sizeof (code), "log2(%s)", src0);
++    ctx->need_max_float = 1;
++    make_GLSL_destarg_assign(ctx, code, sizeof (code),
++                             "%s((%s == 0.0) ? -FLT_MAX : log2(abs(%s)))",
++                             cast, src0, src0);
+     output_line(ctx, "%s", code);
+ } // emit_GLSL_LOG
+ 

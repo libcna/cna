@@ -1283,8 +1283,10 @@ int main(int argc, char** argv)
     }
 #endif
 
+#if !defined(CNA_RENDERER_SOFTWARE)
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
+#endif
 
     RenderTargetMsaaFirstReadbackTest game(std::move(onlyLeg));
     game.Run();

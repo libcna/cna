@@ -8,6 +8,7 @@
 //   4. SetRenderTarget(rt2)  — DiscardContents → auto-Clear(black); then Clear(Blue).
 //   5. SetRenderTarget(nullptr), then read RT2 through RenderTarget2D::GetData → expect Blue.
 //   6. Read backbuffer pixel → expect Red (never overwritten after step 1).
+// Texture data transfers are performed only after unbinding, matching XNA's active-target rule.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -115,6 +116,7 @@ public:
     RtRoundtripTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

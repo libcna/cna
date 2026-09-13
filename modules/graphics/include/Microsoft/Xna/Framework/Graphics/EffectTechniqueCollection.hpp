@@ -82,17 +82,17 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the technique at the specified index (mutable overload).
          *
          * @param index Zero-based index of the technique.
-         * @return Reference to the technique.
+         * @return Pointer to the technique, or nullptr if @p index is outside the collection.
          */
-        [[nodiscard]] EffectTechnique& operator[](int index);
+        [[nodiscard]] EffectTechnique* operator[](int index);
 
         /**
          * @brief Gets the technique at the specified index (const overload).
          *
          * @param index Zero-based index of the technique.
-         * @return Const reference to the technique.
+         * @return Const pointer to the technique, or nullptr if @p index is outside the collection.
          */
-        [[nodiscard]] const EffectTechnique& operator[](int index) const;
+        [[nodiscard]] const EffectTechnique* operator[](int index) const;
 
         /**
          * @brief Gets the technique with the specified name.

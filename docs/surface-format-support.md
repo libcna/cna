@@ -175,7 +175,7 @@ current exceptions are documented only in its checked matrix linked above.
 | Bgr565 | 2 | ❌ | ❌ | ❌ | ❌ | Format not forwarded; RGBA8 used instead |
 | Bgra5551 | 2 | ❌ | ❌ | ❌ | ❌ | Same |
 | Bgra4444 | 2 | ❌ | ❌ | ❌ | ❌ | Same |
-| **Dxt1** | 0.5 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | `FromStream` (.DDS): CPU-decompressed to RGBA8 before upload — works, but 8× VRAM overhead. Direct `SetData` with compressed blocks: ❌ misinterpreted as RGBA8. No native GPU DXT path. |
+| **Dxt1** | 0.5 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | `DDSFromStreamEXT` (.DDS): CPU-decompressed to RGBA8 before upload — works, but 8× VRAM overhead. Direct `SetData` with compressed blocks: ❌ misinterpreted as RGBA8. No native GPU DXT path. |
 | **Dxt3** | 1 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | Same as Dxt1 |
 | **Dxt5** | 1 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | Same as Dxt1 |
 | NormalizedByte2 | 2 | ❌ | ❌ | ❌ | ❌ | Signed 8-bit per channel; no signed GL/Vk format used |

@@ -7,6 +7,9 @@
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SamplerState;
@@ -62,22 +65,106 @@ TEST(SamplerStateCollectionTest, IndexerAssignmentUpdatesSlot)
     EXPECT_EQ(coll[3].getNameProperty(), "SamplerState.PointClamp");
 }
 
+TEST(SamplerStateCollectionTest, IndexerAssignmentBindsSourceAndSlot)
+{
+    SamplerStateCollection coll;
+    SamplerState custom;
+    custom.setFilterProperty(TextureFilter::Point);
+
+    coll[3] = custom;
+
+    EXPECT_THROW(custom.setAddressUProperty(TextureAddressMode::Clamp),
+                 System::InvalidOperationException);
+    EXPECT_THROW(custom.setAddressVProperty(TextureAddressMode::Clamp),
+                 System::InvalidOperationException);
+    EXPECT_THROW(custom.setAddressWProperty(TextureAddressMode::Clamp),
+                 System::InvalidOperationException);
+    EXPECT_THROW(custom.setFilterProperty(TextureFilter::Linear),
+                 System::InvalidOperationException);
+    EXPECT_THROW(custom.setMaxAnisotropyProperty(16),
+                 System::InvalidOperationException);
+    EXPECT_THROW(custom.setMaxMipLevelProperty(2),
+                 System::InvalidOperationException);
+    EXPECT_THROW(custom.setMipMapLevelOfDetailBiasProperty(1.0f),
+                 System::InvalidOperationException);
+    EXPECT_THROW(coll[3].setFilterProperty(TextureFilter::Linear),
+                 System::InvalidOperationException);
+    EXPECT_EQ(coll[3].getFilterProperty(), TextureFilter::Point);
+}
+
+TEST(SamplerStateCollectionTest, IndexerAssignmentRejectsDisposedSampler)
+{
+    SamplerStateCollection coll;
+    SamplerState disposed;
+    disposed.Dispose();
+
+    EXPECT_THROW(coll[3] = disposed, System::ObjectDisposedException);
+    EXPECT_EQ(coll[3].getNameProperty(), "SamplerState.LinearWrap");
+}
+
+TEST(SamplerStateCollectionTest, DisposalAfterAssignmentInvalidatesSharedPayload)
+{
+    SamplerStateCollection coll;
+    SamplerState custom;
+    coll[3] = custom;
+    custom.Dispose();
+
+    EXPECT_THROW(coll[4] = coll[3], System::ObjectDisposedException);
+    EXPECT_EQ(coll[4].getNameProperty(), "SamplerState.LinearWrap");
+}
+
+// SOFTWARE-350: XNA's collection setter compares the incoming SamplerState reference with the
+// slot before Apply(), so an already-active disposed sampler is a no-op. A different slot above
+// still invokes Apply and must reject the exact same disposed object.
+TEST(SamplerStateCollectionTest, ReassigningSameDisposedSamplerIdentityIsNoOp)
+{
+    SamplerStateCollection coll;
+    SamplerState custom;
+    coll[3] = custom;
+    custom.Dispose();
+
+    EXPECT_NO_THROW(coll[3] = custom);
+    EXPECT_NO_THROW(coll[3] = coll[3]);
+    EXPECT_TRUE(coll[3].getIsDisposedProperty());
+}
+
+TEST(GraphicsDeviceSamplerStatesTest, CustomSamplerCanBeReappliedAcrossDevices)
+{
+    GraphicsDevice first;
+    GraphicsDevice second;
+    SamplerState sampler;
+    sampler.setAddressUProperty(TextureAddressMode::Mirror);
+
+    EXPECT_NO_THROW(first.getSamplerStatesProperty()[3] = sampler);
+    EXPECT_EQ(sampler.getGraphicsDeviceProperty(), &first);
+    EXPECT_NO_THROW(second.getSamplerStatesProperty()[3] = sampler);
+    EXPECT_EQ(sampler.getGraphicsDeviceProperty(), &second);
+    EXPECT_NO_THROW(first.getSamplerStatesProperty()[3] = sampler);
+    EXPECT_EQ(sampler.getGraphicsDeviceProperty(), &second);
+    // A different first-device slot does not cache this identity yet and therefore calls Apply.
+    EXPECT_NO_THROW(first.getSamplerStatesProperty()[4] = sampler);
+    EXPECT_EQ(sampler.getGraphicsDeviceProperty(), &first);
+    EXPECT_EQ(second.getSamplerStatesProperty()[3].getAddressUProperty(),
+              TextureAddressMode::Mirror);
+}
+
 TEST(SamplerStateCollectionTest, NegativeIndexThrows)
 {
     SamplerStateCollection coll;
-    EXPECT_THROW((void)coll[-1], std::out_of_range);
+    EXPECT_THROW((void)coll[-1], System::ArgumentOutOfRangeException);
 }
 
 TEST(SamplerStateCollectionTest, IndexAtMaxThrows)
 {
     SamplerStateCollection coll;
-    EXPECT_THROW((void)coll[SamplerStateCollection::MaxSamplers], std::out_of_range);
+    EXPECT_THROW((void)coll[SamplerStateCollection::MaxSamplers],
+                 System::ArgumentOutOfRangeException);
 }
 
 TEST(SamplerStateCollectionTest, ConstIndexerNegativeThrows)
 {
     const SamplerStateCollection coll;
-    EXPECT_THROW((void)coll[-1], std::out_of_range);
+    EXPECT_THROW((void)coll[-1], System::ArgumentOutOfRangeException);
 }
 
 // -----------------------------------------------------------------------
@@ -97,8 +184,9 @@ TEST(GraphicsDeviceSamplerStatesTest, DefaultSamplerStatesAreLinearWrap)
 TEST(GraphicsDeviceSamplerStatesTest, DefaultVertexSamplerStatesAreLinearWrap)
 {
     GraphicsDevice gd;
+    gd.SetGraphicsProfileEXT(Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     auto& states = gd.getVertexSamplerStatesProperty();
-    for (int i = 0; i < SamplerStateCollection::MaxSamplers; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         EXPECT_EQ(states[i].getNameProperty(), "SamplerState.LinearWrap") << "slot " << i;
     }

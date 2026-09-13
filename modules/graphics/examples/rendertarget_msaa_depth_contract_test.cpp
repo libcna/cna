@@ -141,12 +141,11 @@ namespace
     /**
      * @brief Whether a `RenderTargetCube` can be a draw destination here.
      *
-     * Software refuses a cube destination outright (a deliberate v1 boundary recorded under
-     * REMED-GFX-182) and Headless does not rasterize, so leg X1's cube regression gate is declared
-     * rather than measured on those two.
+     * Headless does not rasterize, so leg X1's cube regression gate is declared rather than
+     * measured there. SOFTWARE-119 supplies a real six-face CPU target, including 4x storage.
      */
     constexpr bool kCubeTargetSupported =
-#if defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE)
+#if defined(CNA_RENDERER_HEADLESS)
         false;
 #else
         true;
@@ -164,15 +163,12 @@ namespace
     /**
      * @brief Whether a stencil test actually gates rasterization here.
      *
-     * False on SOFTWARE, whose `SoftwareRenderer::ClearStencil` is an empty body and whose
-     * rasterizer runs no stencil test, and on WEBGPU, which stores the stencil state and
-     * deliberately never bakes it into a pipeline's `WGPUStencilFaceState` (WEBGPU-83). Both are
-     * pre-existing, separately recorded boundaries -- the same two the neighbouring
-     * `rendertarget_depthstencil_usage_test` declares through its `stencilInRT` field -- so leg D5
-     * reports them instead of claiming a stencil result those renderers cannot produce.
+     * False on WEBGPU, which stores the stencil state and deliberately never bakes it into a
+     * pipeline's `WGPUStencilFaceState` (WEBGPU-83). SOFTWARE-121 and SOFTWARE-110 provide the
+     * complete single- and per-sample CPU stencil state machine.
      */
     constexpr bool kStencilSupported =
-#if defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_WEBGPU)
+#if defined(CNA_RENDERER_WEBGPU)
         false;
 #else
         true;
@@ -192,6 +188,25 @@ namespace
     constexpr bool IsLegalSampleCount(int n)
     {
         return n == 0 || (n > 0 && (n & (n - 1)) == 0);
+    }
+
+    /**
+     * @brief Returns the complete clear mask supported by a target with @p depth.
+     *
+     * Microsoft XNA rejects an explicit request for a missing depth or stencil plane. Matrix cells
+     * therefore clear exactly the attachments whose construction they are intended to exercise.
+     *
+     * @param depth The target's requested depth/stencil format.
+     * @return The color, depth and stencil bits backed by that format.
+     */
+    constexpr ClearOptions ClearOptionsForDepthFormat(DepthFormat depth)
+    {
+        ClearOptions options = ClearOptions::Target;
+        if (depth != DepthFormat::None)
+            options = options | ClearOptions::DepthBuffer;
+        if (depth == DepthFormat::Depth24Stencil8)
+            options = options | ClearOptions::Stencil;
+        return options;
     }
 
     /// Far-apart flat colours. Any two differ by >= 100 on at least one channel, far outside kTol,
@@ -533,9 +548,8 @@ class RenderTargetMsaaDepthContractTest : public Game
 
         step(label + ": SetRenderTarget");
         dev.SetRenderTarget(rt.get());
-        step(label + ": Clear(Target|DepthBuffer|Stencil)");
-        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
-                  kClear, 1.0f, 0);
+        step(label + ": Clear(available attachments)");
+        dev.Clear(ClearOptionsForDepthFormat(depth), kClear, 1.0f, 0);
         if (kRasterizes)
         {
             step(label + ": DrawUserPrimitives");
@@ -722,7 +736,7 @@ class RenderTargetMsaaDepthContractTest : public Game
                                  RenderTargetUsage::DiscardContents,
                                  std::string("S3 ") + cells[i].name);
             dev.SetRenderTarget(rt.get());
-            dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, kFlat, 1.0f, 0);
+            dev.Clear(ClearOptionsForDepthFormat(cells[i].depth), kFlat, 1.0f, 0);
             dev.SetRenderTarget(nullptr);
             bool failed = false;
             const Color c = SampleThroughBackbuffer(dev, *rt, failed);
@@ -777,7 +791,7 @@ class RenderTargetMsaaDepthContractTest : public Game
                                const Color& second, float secondZ)
     {
         dev.SetRenderTarget(&rt);
-        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+        dev.Clear(ClearOptionsForDepthFormat(rt.getDepthStencilFormatProperty()),
                   kClear, 1.0f, 0);
         dev.setDepthStencilStateProperty(state);
         DrawQuadAt(dev, first, firstZ);
@@ -1106,6 +1120,7 @@ public:
     explicit RenderTargetMsaaDepthContractTest(std::string onlyLeg) : onlyLeg_(std::move(onlyLeg))
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
@@ -1280,8 +1295,10 @@ int main(int argc, char** argv)
     }
 #endif
 
+#if !defined(CNA_RENDERER_SOFTWARE)
     if (!CNA::Examples::ProbeGpuDisplayAvailable())
         return CNA::Examples::kSkipExitCode;
+#endif
 
     RenderTargetMsaaDepthContractTest game(std::move(onlyLeg));
     game.Run();

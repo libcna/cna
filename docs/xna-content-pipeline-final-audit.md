@@ -34,4 +34,3 @@ A check answers whether a row's evidence exists and says what the row claims. Wh
 | 26 | Quality | the final audit is complete | PASS | 1 ctest(s), all registered |
 
 **26 of 26 conditions hold.**
-

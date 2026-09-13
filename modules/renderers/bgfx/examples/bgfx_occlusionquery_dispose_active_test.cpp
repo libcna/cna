@@ -4,21 +4,9 @@
 // created queries.
 //
 // Distinct from Task 449's own examples/occlusion_query_test.cpp (EasyGL-only): that file covers
-// destroying (the C++ destructor) an active query, explicitly noting "CNA's own
-// OcclusionQuery::Dispose() doesn't touch renderer_ at all... so the real renderer teardown happens
-// in ~OcclusionQuery(), not Dispose()" -- an already-established, deliberate, FNA-matching design
-// (GraphicsResource.Dispose(bool) isn't overridden by OcclusionQuery). This test instead covers
-// calling the explicit .Dispose() XNA API method itself while active, on Bgfx specifically (no
-// Bgfx-registered test exercised this at all before this task).
-//
-// Given that finding, Dispose()-ing an active query is expected to be "safe" (per this row's own
-// either/or acceptance: safe OR throws correctly) -- it only flips IsDisposed to true; the real
-// bgfx::OcclusionQueryHandle stays alive (owned by BgfxOcclusionQueryRenderer, released at C++
-// destruction) so subsequent Begin()/End()/IsComplete()/PixelCount() calls on the "disposed"
-// object remain well-defined (they don't check isDisposed_, so they proceed against a still-live
-// handle) rather than corrupting shared renderer state. Repetition-based stress verification
-// (mirroring Task 449's own established convention for "no natural incorrect-vs-correct branch"
-// safety confirmations), not sabotage-and-revert.
+// destroying (the C++ destructor) an active query. The public wrapper now releases the native
+// renderer in Dispose() and rejects subsequent operations as disposed; this test retains the
+// renderer-specific stress proof that active disposal releases Bgfx's shared query slot.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -26,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 
 #include <cstdio>
@@ -70,8 +59,8 @@ protected:
                 query->Dispose();
                 wasDisposed = query->getIsDisposedProperty();
 
-                // Using the query after Dispose() must not crash, whether it silently proceeds
-                // (current behavior, since renderer_ isn't released by Dispose()) or throws.
+                // Disposed operations are expected to throw, but must never reach the released
+                // native handle or corrupt the shared renderer slot.
                 try { query->End(); } catch (...) {}
                 try { (void)query->getIsCompleteProperty(); } catch (...) {}
                 try { (void)query->getPixelCountProperty(); } catch (...) {}
@@ -101,6 +90,7 @@ public:
     BgfxOcclusionQueryDisposeActiveTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

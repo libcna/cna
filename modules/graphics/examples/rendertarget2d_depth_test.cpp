@@ -167,6 +167,8 @@ public:
 int main()
 {
     RenderTarget2DDepthTest game;
+    game.getGraphicsDeviceProperty().SetGraphicsProfileEXT(
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef);
     game.Run();
     return game.getResult();
 }

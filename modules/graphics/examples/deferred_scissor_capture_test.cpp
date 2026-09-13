@@ -99,6 +99,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <array>
 #include <cstdint>
@@ -144,9 +145,8 @@ namespace
         /// A degenerate (zero-width or zero-height) rectangle rasterizes nothing.
         bool emptyScissorDrawsNothing;
         /**
-         * A ScissorRectangle reaching past the bound target is REJECTED with a diagnostic instead
-         * of being clipped to the target. True only where the renderer's declared job is to validate
-         * (Headless, HEADLESS-23); every rendering renderer clips, which is the CNA/FNA contract.
+         * A ScissorRectangle reaching past the bound target is rejected by GraphicsDevice before
+         * renderer dispatch, matching the recovered Microsoft XNA setter validation.
          */
         bool outOfBoundsScissorRejected;
         bool wantHiDefProfile;
@@ -154,7 +154,7 @@ namespace
 
 #if defined(CNA_RENDERER_WEBGPU)
     constexpr Contract kContract{"WEBGPU", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false, false};
+                                 true, true, true, true, true, false};
 #elif defined(CNA_RENDERER_VULKAN)
     // `emptyScissorDrawsNothing` false: measured here. `VulkanRenderer`'s `computeScissor`
     // returns the WHOLE framebuffer for `sw == 0 || sh == 0`, so a degenerate rectangle does not
@@ -162,18 +162,18 @@ namespace
     // the degenerate case; it is recorded as its own finding rather than fixed here, and check E1
     // asserts the IGNORED outcome exactly so the declaration is falsifiable in both directions.
     constexpr Contract kContract{"VULKAN", Support::Exact, Support::Exact, true,
-                                 true, true, true, false, false, false};
+                                 true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_EASYGL)
-    // `emptyScissorDrawsNothing` false: measured here, by a DIFFERENT mechanism from Vulkan's.
-    // `EasyGLRenderer::SetScissorRect` returns early on `w <= 0 || h <= 0` and leaves the
-    // previously installed rectangle in place, so a degenerate rectangle is not merely unclipping,
-    // it never reaches the renderer at all. Same observable, recorded as its own finding.
+    // SOFTWARE-310: XNA permits a zero extent and FNA forwards it to glScissor, whose empty box
+    // rejects every fragment. The previous renderer-specific declaration pinned EasyGL's early-
+    // return bug as expected output and thereby hid the conformance failure.
     constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true,
-                                 true, true, true, false, false, false};
+                                 true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_BGFX)
-    // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and EasyGL.
+    // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan. EasyGL's
+    // formerly identical output was corrected by SOFTWARE-310.
     constexpr Contract kContract{"BGFX", Support::Exact, Support::Exact, true,
-                                 true, true, true, false, false, false};
+                                 true, true, true, false, true, false};
 #elif defined(CNA_RENDERER_SDL_GPU)
     // SDLGPU-67: the current modular renderer has a real backbuffer proxy/readback path. Exercise
     // it here instead of preserving the obsolete pre-proxy Unsupported expectation.
@@ -182,7 +182,7 @@ namespace
                                  true, true, true, false, false, false};
 #elif defined(CNA_RENDERER_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false, false};
+                                 true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_HEADLESS)
     // Headless rasterizes nothing and its readback is REMED-GFX-127/130's deterministic refusal.
     // Every sequence must still be legal. `outOfBoundsScissorRejected` true: this is the renderer
@@ -205,10 +205,10 @@ namespace
                                  true, true, true, true, false, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
     constexpr Contract kContract{"DIRECTX9", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false, true};
+                                 true, true, true, true, true, true};
 #elif defined(CNA_RENDERER_LLGL)
     constexpr Contract kContract{"LLGL", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false, false};
+                                 true, true, true, true, true, false};
 #else
 #error "REMED-GFX-146: this renderer has no declared deferred-scissor contract."
 #endif
@@ -750,13 +750,10 @@ class DeferredScissorCaptureTest : public Game
     /**
      * @brief E1 -- what a degenerate (zero-width or zero-height) rectangle does.
      *
-     * A measured cross-renderer divergence, declared per renderer rather than standardised away.
-     * WebGPU takes the natural hardware semantics -- a zero-extent scissor rejects every fragment.
-     * Vulkan's `computeScissor` returns the WHOLE framebuffer for `sw == 0 || sh == 0`, and
-     * EasyGL's `SetScissorRect` returns early on `w <= 0 || h <= 0` and leaves the previous
-     * rectangle installed; two different mechanisms, one shared observable -- the draw is not
-     * clipped away. Both outcomes are asserted EXACTLY here, so either declaration turns red the
-     * day its renderer changes.
+     * XNA accepts a zero extent and the resulting empty rasterizer rectangle rejects every
+     * fragment. FNA forwards the dimensions to its native renderer without treating them as an
+     * ignored state update. WebGPU and Software already implement that contract; SOFTWARE-310
+     * corrected EasyGL. Other renderer-specific deviations remain declared rather than concealed.
      *
      * The final real rectangle is a control on every renderer: whatever the degenerate ones do,
      * a genuine rectangle after them must still clip exactly, which rules out "the rectangle
@@ -1960,12 +1957,12 @@ class DeferredScissorCaptureTest : public Game
     }
 
     /**
-     * @brief K3 -- two DISTINCT RasterizerState objects with equal values behave identically, and
-     *        mutating the object after the draw changes nothing.
+     * @brief K3 -- two distinct RasterizerState objects with equal values behave identically and
+     *        both become immutable after binding.
      */
     void RunRasterizerStateIdentity(GraphicsDevice& dev)
     {
-        const std::string label = "K3 RasterizerState identity and post-draw mutation";
+        const std::string label = "K3 RasterizerState identity and bind-time freeze";
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
@@ -2000,18 +1997,89 @@ class DeferredScissorCaptureTest : public Game
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
             dev.SetVertexBuffer(nullptr);
         }
-        // Mutating the state objects AFTER both draws were queued must reach neither of them.
-        first.setScissorTestEnableProperty(false);
-        second.setScissorTestEnableProperty(false);
-        second.setCullModeProperty(CullMode::CullClockwiseFace);
+        bool firstRejected = false;
+        bool secondScissorRejected = false;
+        bool secondCullRejected = false;
+        try { first.setScissorTestEnableProperty(false); }
+        catch (const System::InvalidOperationException&) { firstRejected = true; }
+        try { second.setScissorTestEnableProperty(false); }
+        catch (const System::InvalidOperationException&) { secondScissorRejected = true; }
+        try { second.setCullModeProperty(CullMode::CullClockwiseFace); }
+        catch (const System::InvalidOperationException&) { secondCullRejected = true; }
         SetScissor(dev, 0, 0, kRTW, kRTH);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        check(firstRejected && secondScissorRejected && secondCullRejected,
+              label + ": bound source objects reject property mutation");
 
         if (!CanJudgeTarget(label)) return;
         const Image image = ReadTarget(*rt, kRTW, kRTH);
         CheckProbes(image, {
             {  8, 24, kRed  }, { 31, 24, kRed  },
             { 32, 24, kBlue }, { 63, 24, kBlue },
+        }, label);
+    }
+
+    /**
+     * @brief K4 -- the current GraphicsDevice.RasterizerState rejects mutation after binding;
+     *        state changes require a newly assigned mutable instance.
+     */
+    void RunCurrentRasterizerStateMutation(GraphicsDevice& dev)
+    {
+        const std::string label = "K4 current RasterizerState bind-time freeze";
+        keepAlive_.clear();
+        if (!kContract.draws3D || !kContract.targetScissorApplies)
+        {
+            skip(label + ": skipped -- no 3D render-target scissor on this renderer");
+            return;
+        }
+        auto rt = MakeTarget(dev, kRTW, kRTH);
+
+        dev.SetRenderTarget(rt.get());
+        dev.Clear(kBlack);
+        dev.setBlendStateProperty(BlendState::Opaque);
+        dev.setDepthStencilStateProperty(DepthStencilState::None);
+        fx_->VertexColorEnabled = true;
+        fx_->setTextureEnabledProperty(false);
+        fx_->Apply();
+        SetScissor(dev, 0, 0, kRTW / 2, kRTH);
+
+        bool enableRejected = false;
+        dev.setRasterizerStateProperty(Raster(false));
+        try { dev.getRasterizerStateProperty().setScissorTestEnableProperty(true); }
+        catch (const System::InvalidOperationException&) { enableRejected = true; }
+        dev.setRasterizerStateProperty(Raster(true));
+        {
+            VertexBuffer& vb = MakeVb(dev, FullQuad(kRed));
+            dev.SetVertexBuffer(&vb);
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            dev.SetVertexBuffer(nullptr);
+        }
+
+        bool disableRejected = false;
+        dev.setRasterizerStateProperty(Raster(true));
+        try { dev.getRasterizerStateProperty().setScissorTestEnableProperty(false); }
+        catch (const System::InvalidOperationException&) { disableRejected = true; }
+        dev.setRasterizerStateProperty(Raster(false));
+        {
+            VertexBuffer& vb = MakeVb(dev, Quad(-1.0f, 1.0f, -1.0f, 0.0f, 0.5f, kBlue));
+            dev.SetVertexBuffer(&vb);
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            dev.SetVertexBuffer(nullptr);
+        }
+
+        SetScissor(dev, 0, 0, kRTW, kRTH);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        dev.setRasterizerStateProperty(Raster(true));
+
+        check(enableRejected && disableRejected,
+              label + ": current bound state rejects property mutation");
+
+        if (!CanJudgeTarget(label)) return;
+        const Image image = ReadTarget(*rt, kRTW, kRTH);
+        CheckProbes(image, {
+            {  8, 12, kRed   }, { 40, 12, kBlack },
+            {  8, 40, kBlue  }, { 40, 40, kBlue  },
         }, label);
     }
 
@@ -2094,8 +2162,8 @@ class DeferredScissorCaptureTest : public Game
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
-        if (kContract.wantHiDefProfile)
-            gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
+        // This renderer contract deliberately exercises a 32-bit dynamic index buffer.
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->ApplyChanges();
         Game::Initialize();
 
@@ -2181,6 +2249,7 @@ class DeferredScissorCaptureTest : public Game
         RunScissorTestDisabled(dev);
         RunScissorTestToggledInOneCycle(dev);
         RunRasterizerStateIdentity(dev);
+        RunCurrentRasterizerStateMutation(dev);
         RunManyScissorsInOneCycle(dev);
         RunSameTargetTwiceInOneFrame(dev);
         // Repeat the decisive sequence once more in the same frame: nothing may have leaked.

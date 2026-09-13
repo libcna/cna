@@ -153,7 +153,7 @@ and HDR variants remain unsupported.
 
 CNA converts to RGBA8 on the CPU and uploads `SurfaceFormat::Color`, where FNA uploads the
 compressed blocks to a real compressed GPU format. That is a deliberate deviation matching
-`Texture2D::FromStream`'s stream-decoding contract. Some CNA renderers now accept explicit native
+`Texture2D::DDSFromStreamEXT`'s stream-decoding contract. Some CNA renderers now accept explicit native
 compressed-texture transfers, but this portable stream route still normalizes its supported source
 encodings before upload.
 

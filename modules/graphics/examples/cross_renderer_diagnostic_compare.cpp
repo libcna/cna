@@ -4,7 +4,7 @@
 // and reports the per-channel max/mean absolute difference, exiting 1 if the max exceeds the
 // given tolerance.
 //
-// Usage: cna_diag_compare <fileA> <fileB> [tolerance=40] [WxH=64x64]
+// Usage: cna_diag_compare <fileA> <fileB> [tolerance=1] [WxH=64x64]
 //
 // plans/plan_webgpu.md WEBGPU-207: the optional 4th argument is the frame size, so the shared
 // EasyGL<->WebGPU parity fixtures (modules/graphics/examples/parity/) can dump at whatever
@@ -48,10 +48,10 @@ int main(int argc, char** argv)
 {
     if (argc < 3)
     {
-        std::fprintf(stderr, "usage: cna_diag_compare <fileA> <fileB> [tolerance=40] [WxH=64x64]\n");
+        std::fprintf(stderr, "usage: cna_diag_compare <fileA> <fileB> [tolerance=1] [WxH=64x64]\n");
         return 2;
     }
-    const int tolerance = argc > 3 ? std::atoi(argv[3]) : 40;
+    const int tolerance = argc > 3 ? std::atoi(argv[3]) : 1;
 
     int width = kDefaultSize;
     int height = kDefaultSize;

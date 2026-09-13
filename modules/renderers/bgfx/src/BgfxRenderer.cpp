@@ -576,11 +576,17 @@ namespace CNA::Internal::Renderers::Bgfx
         return levels;
     }
 
-    // Mirrors Texture3D.cpp's CalculateMipLevels(width, height) -- depth does not participate.
-    static int BgfxVolumeMipLevels(int w, int h)
+    // XNA's D3D9 volume allocation requests the complete chain, so depth participates too.
+    static int BgfxVolumeMipLevels(int w, int h, int d)
     {
         int levels = 1;
-        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        while (w > 1 || h > 1 || d > 1)
+        {
+            w = std::max(1, w / 2);
+            h = std::max(1, h / 2);
+            d = std::max(1, d / 2);
+            ++levels;
+        }
         return levels;
     }
 
@@ -687,7 +693,7 @@ namespace CNA::Internal::Renderers::Bgfx
 
     BgfxTexture3DRenderer::BgfxTexture3DRenderer(int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
         : width_(w), height_(h), depth_(depth)
-        , levelCount_(mipMap ? BgfxVolumeMipLevels(w, h) : 1)
+        , levelCount_(mipMap ? BgfxVolumeMipLevels(w, h, depth) : 1)
     {
         // Task 914: mipMap now genuinely threaded through (was hardcoded false) -- verifiable now
         // that GetData() (below) provides a real readback path to check mip-level content.

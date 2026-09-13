@@ -1,0 +1,24 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -1853,9 +1853,17 @@ void emit_GLSL_ABS(Context *ctx)
+ 
+ void emit_GLSL_NRM(Context *ctx)
+ {
+-    char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
+-    char code[128];
+-    make_GLSL_destarg_assign(ctx, code, sizeof (code), "normalize(%s)", src0);
++    char src0[64]; make_GLSL_srcarg_string_full(ctx, 0, src0, sizeof (src0));
++    char swizzle[6];
++    make_GLSL_swizzle_string(swizzle, sizeof (swizzle), 0xE4,
++                             ctx->dest_arg.writemask);
++    char code[512];
++    ctx->need_max_float = 1;
++    make_GLSL_destarg_assign(
++        ctx, code, sizeof (code),
++        "((%s) * ((dot((%s).xyz, (%s).xyz) == 0.0) ? FLT_MAX : "
++        "inversesqrt(dot((%s).xyz, (%s).xyz))))%s",
++        src0, src0, src0, src0, src0, swizzle);
+     output_line(ctx, "%s", code);
+ } // emit_GLSL_NRM
+ 

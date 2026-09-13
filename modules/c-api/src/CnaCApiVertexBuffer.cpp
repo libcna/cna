@@ -535,7 +535,7 @@ CNA_Result cna_vertex_buffer_create(
         if (createInfo == nullptr ||
             createInfo->struct_size < sizeof(CNA_VertexBufferCreateInfo) ||
             createInfo->struct_version != StructureVersion ||
-            createInfo->vertex_count < 0 ||
+            createInfo->vertex_count <= 0 ||
             createInfo->buffer_usage > CNA_BUFFER_USAGE_WRITE_ONLY ||
             !IsBool(createInfo->dynamic) ||
             !IsZero(createInfo->reserved, 7U)) {

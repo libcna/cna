@@ -112,7 +112,9 @@ protected:
                 { Vector3(cx + half, cy - half, 0.0f), Vector2(1.0f, 0.0f) },
             };
 
-            dev.getSamplerStatesProperty()[0].setFilterProperty(filter);
+            SamplerState sampler = SamplerState::LinearClamp;
+            sampler.setFilterProperty(filter);
+            dev.getSamplerStatesProperty()[0] = sampler;
 
             BasicEffect fx(dev);
             fx.setWorldProperty(world);

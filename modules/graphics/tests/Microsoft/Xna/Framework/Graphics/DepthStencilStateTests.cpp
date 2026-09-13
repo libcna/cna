@@ -44,13 +44,13 @@ TEST(DepthStencilStateTest, DefaultStencilFunctionAlways)
 TEST(DepthStencilStateTest, DefaultStencilMask)
 {
     DepthStencilState ds;
-    EXPECT_EQ(ds.getStencilMaskProperty(), 0x7FFFFFFF);
+    EXPECT_EQ(ds.getStencilMaskProperty(), -1);
 }
 
 TEST(DepthStencilStateTest, DefaultStencilWriteMask)
 {
     DepthStencilState ds;
-    EXPECT_EQ(ds.getStencilWriteMaskProperty(), 0x7FFFFFFF);
+    EXPECT_EQ(ds.getStencilWriteMaskProperty(), -1);
 }
 
 TEST(DepthStencilStateTest, DefaultReferenceStencilZero)
@@ -102,6 +102,17 @@ TEST(DepthStencilStateTest, PresetDefaultDepthWriteEnabled)
 TEST(DepthStencilStateTest, PresetDefaultDepthFunctionLessEqual)
 {
     EXPECT_EQ(DepthStencilState::Default.getDepthBufferFunctionProperty(), CompareFunction::LessEqual);
+}
+
+TEST(DepthStencilStateTest, PresetMasksDefaultToMinusOne)
+{
+    for (const DepthStencilState* state : {
+             &DepthStencilState::Default, &DepthStencilState::DepthRead,
+             &DepthStencilState::None})
+    {
+        EXPECT_EQ(state->getStencilMaskProperty(), -1);
+        EXPECT_EQ(state->getStencilWriteMaskProperty(), -1);
+    }
 }
 
 // --- Predefined: DepthRead ---

@@ -35,6 +35,24 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         endif()
     endmacro()
 
+    if(CNA_SOFTWARE_COMPILED_EFFECTS)
+        cna_software_test(cna_test_software_compiled_effect_runtime
+            software_compiled_effect_runtime_test.cpp)
+        target_compile_definitions(cna_test_software_compiled_effect_runtime PRIVATE
+            CNA_SOFTWARE_COMPILED_EFFECTS)
+        target_compile_definitions(cna_test_software_compiled_effect_runtime PRIVATE
+            "CNA_SOFTWARE_STOCK_EFFECT_DIRECTORY=\"${CMAKE_SOURCE_DIR}/modules/renderers/fna3d/effects\"")
+        target_compile_definitions(cna_test_software_compiled_effect_runtime PRIVATE
+            "CNA_SOFTWARE_COMPILED_EFFECT_FIXTURE_DIRECTORY=\"${CMAKE_SOURCE_DIR}/tests/fixtures/compiled-effects\"")
+        target_include_directories(cna_test_software_compiled_effect_runtime PRIVATE
+            "${CMAKE_SOURCE_DIR}/tests/support")
+        target_link_libraries(cna_test_software_compiled_effect_runtime PRIVATE
+            cna_renderer_mojoshader_effect)
+        cna_register_renderer_test(NAME Software_CompiledEffectRuntime
+            COMMAND cna_test_software_compiled_effect_runtime
+            TIMEOUT 60 LABELS "Software;CompiledEffects")
+    endif()
+
     cna_software_test(cna_test_software_smoke software_smoke_test.cpp)
     cna_register_renderer_test(NAME Software_Smoke COMMAND cna_test_software_smoke
         TIMEOUT 30 LABELS "Software")
@@ -68,6 +86,111 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_software_test(cna_test_software_clipping software_clipping_test.cpp)
     cna_register_renderer_test(NAME Software_Clipping COMMAND cna_test_software_clipping
         TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-131: XNA/D3D9 addresses integer screen coordinates as pixel centers. Reuse the
+    # measured shared contract already required of EasyGL; Software must render the original XNA
+    # sample's one-pixel triangle rather than relying on an all-edges-inclusive accident.
+    cna_software_test(cna_test_software_xna_pixel_center
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/xna_pixel_center_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_XnaPixelCenter COMMAND cna_test_software_xna_pixel_center
+        TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-107: shared XNA/D3D top-left fill contract. Additive adjacent triangles expose both
+    # a crack and a double-owned edge, including reversed order/winding and 4x sample coverage.
+    cna_software_test(cna_test_software_top_left_fill
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/top_left_fill_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_TopLeftFill COMMAND cna_test_software_top_left_fill
+        TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-111: the same public AlphaTestEffect fragment contract is compiled for Software and
+    # EasyGL: all compares, composed alpha sources, null texture and discard-before-depth-write.
+    cna_software_test(cna_test_software_alpha_test_effect_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/alpha_test_effect_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_AlphaTestEffectContract
+        COMMAND cna_test_software_alpha_test_effect_contract TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-121: reuse EasyGL's renderer-neutral public stencil scenes unchanged. Although
+    # historically housed beside EasyGL, these sources use only XNA GraphicsDevice APIs and now
+    # serve as direct differential contracts for the CPU implementation.
+    set(CNA_EASYGL_PUBLIC_STENCIL_DIR
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples)
+    cna_software_test(cna_test_software_stencil_enable
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_depthstencilstate_stencil_enable_test.cpp)
+    cna_register_renderer_test(NAME Software_DepthStencilState_StencilEnable
+        COMMAND cna_test_software_stencil_enable TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_stencil_mask
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_depthstencilstate_stencil_mask_test.cpp)
+    cna_register_renderer_test(NAME Software_DepthStencilState_StencilMask
+        COMMAND cna_test_software_stencil_mask TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_stencil_ops
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_depthstencilstate_stencil_ops_test.cpp)
+    cna_register_renderer_test(NAME Software_DepthStencilState_StencilOps
+        COMMAND cna_test_software_stencil_ops TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_stencil_twosided
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_depthstencilstate_stencil_twosided_test.cpp)
+    cna_register_renderer_test(NAME Software_DepthStencilState_StencilTwoSided
+        COMMAND cna_test_software_stencil_twosided TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_reference_stencil
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_graphicsdevice_reference_stencil_test.cpp)
+    cna_register_renderer_test(NAME Software_GraphicsDevice_ReferenceStencil
+        COMMAND cna_test_software_reference_stencil TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_stencil_matrix
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/stencil_matrix_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_DepthStencilState_StencilMatrix
+        COMMAND cna_test_software_stencil_matrix TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-110: shared per-sample coverage/mask/depth/stencil contract.
+    cna_software_test(cna_test_software_msaa_fragment_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/msaa_fragment_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_MsaaFragmentContract
+        COMMAND cna_test_software_msaa_fragment_contract TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_msaa_storage software_msaa_storage_test.cpp)
+    cna_register_renderer_test(NAME Software_MsaaStorage
+        COMMAND cna_test_software_msaa_storage TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-112: all five classic fog-capable stock effects share one public contract.
+    cna_software_test(cna_test_software_stock_effect_fog_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_fog_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_StockEffectFogContract
+        COMMAND cna_test_software_stock_effect_fog_contract TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-113: renderer-neutral FNA/XNA BasicEffect lighting equations and dispatch.
+    cna_software_test(cna_test_software_basic_effect_lighting_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/basic_effect_lighting_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_BasicEffectLightingContract
+        COMMAND cna_test_software_basic_effect_lighting_contract TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-153: compile two unchanged EasyGL public scenes plus one renderer-neutral contract
+    # for the complete unlit BasicEffect material/texture matrix and D3D9 COLOR saturation point.
+    cna_software_test(cna_test_software_basiceffect_combinations
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_basiceffect_combinations_test.cpp)
+    cna_register_renderer_test(NAME Software_BasicEffectCombinations
+        COMMAND cna_test_software_basiceffect_combinations TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_basiceffect_vertex_color_clamp
+        ${CNA_EASYGL_PUBLIC_STENCIL_DIR}/easygl_basiceffect_vertex_color_clamp_test.cpp)
+    cna_register_renderer_test(NAME Software_BasicEffectVertexColorClamp
+        COMMAND cna_test_software_basiceffect_vertex_color_clamp TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_basic_effect_unlit_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/basic_effect_unlit_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_BasicEffectUnlitContract
+        COMMAND cna_test_software_basic_effect_unlit_contract TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-114: renderer-neutral FNA/XNA EnvironmentMapEffect vertex-lighting contract.
+    cna_software_test(cna_test_software_environment_map_effect_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/environment_map_effect_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_EnvironmentMapEffectContract
+        COMMAND cna_test_software_environment_map_effect_contract TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-115: renderer-neutral FNA/XNA SkinnedEffect material and full lighting oracles.
+    cna_software_test(cna_test_software_skinnedeffect_lighting_conformance
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/skinnedeffect_lighting_conformance_test.cpp)
+    cna_register_renderer_test(NAME Software_SkinnedEffectLightingConformance
+        COMMAND cna_test_software_skinnedeffect_lighting_conformance TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_skinned_effect_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/skinned_effect_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_SkinnedEffectContract
+        COMMAND cna_test_software_skinned_effect_contract TIMEOUT 30 LABELS "Software")
 
     cna_software_test(cna_test_software_dual_envmap_skinned software_dual_envmap_skinned_test.cpp)
     cna_register_renderer_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
@@ -119,8 +242,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         TIMEOUT 30 LABELS "Software")
 
     # REMED-GFX-083: RasterizerState.DepthBias / SlopeScaleDepthBias must offset the per-fragment depth
-    # -- ApplyRasterizerState previously dropped both floats. Constant bias (DepthBias * r) and slope
-    # bias (SlopeScaleDepthBias * max|dz/dx,dz/dy|) are added to the post-viewport window depth (sign:
+    # -- ApplyRasterizerState previously dropped both floats. Normalized constant bias (DepthBias) and
+    # slope bias (SlopeScaleDepthBias * max|dz/dx,dz/dy|) are added to window depth (sign:
     # positive pushes away from the camera), across the colored / shaded / wireframe / RT paths, with
     # a byte-identical zero-bias fast path. Deterministic exact-coplanar geometry (no z-fighting noise).
     cna_software_test(cna_test_software_depthbias software_depthbias_test.cpp)
@@ -136,6 +259,151 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_software_test(cna_test_software_indexed_addressing software_indexed_addressing_test.cpp)
     cna_register_renderer_test(NAME Software_IndexedAddressing COMMAND cna_test_software_indexed_addressing
         TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-109: compile EasyGL's renderer-neutral public buffer and draw-validation corpus
+    # unchanged against Software. Together with Software_IndexedAddressing this covers binding
+    # guards, draw ranges/topologies, static/dynamic mutation, all SetDataOptions values, readback,
+    # BufferUsage and disposed-buffer validation through the public GraphicsDevice API.
+    set(CNA_EASYGL_PUBLIC_BUFFER_DIR
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples)
+    cna_software_test(cna_test_software_draw_novertexbuffer
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_draw_novertexbuffer_test.cpp)
+    cna_register_renderer_test(NAME Software_DrawNoVertexBuffer
+        COMMAND cna_test_software_draw_novertexbuffer TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_draw_noindexbuffer
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_draw_noindexbuffer_test.cpp)
+    cna_register_renderer_test(NAME Software_DrawNoIndexBuffer
+        COMMAND cna_test_software_draw_noindexbuffer TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_draw_range_validation
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_draw_range_validation_test.cpp)
+    cna_register_renderer_test(NAME Software_DrawRangeValidation
+        COMMAND cna_test_software_draw_range_validation TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_primitivetype_validation
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_primitivetype_validation_test.cpp)
+    cna_register_renderer_test(NAME Software_PrimitiveTypeValidation
+        COMMAND cna_test_software_primitivetype_validation TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_vertexbuffer_setdata
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_vertexbuffer_setdata_test.cpp)
+    cna_register_renderer_test(NAME Software_VertexBufferSetData
+        COMMAND cna_test_software_vertexbuffer_setdata TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_dynamic_buffer_stress
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_dynamic_buffer_stress_test.cpp)
+    cna_register_renderer_test(NAME Software_DynamicBufferStress
+        COMMAND cna_test_software_dynamic_buffer_stress TIMEOUT 60 LABELS "Software")
+    cna_software_test(cna_test_software_buffer_usage
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_buffer_usage_test.cpp)
+    cna_register_renderer_test(NAME Software_BufferUsage
+        COMMAND cna_test_software_buffer_usage TIMEOUT 60 LABELS "Software")
+    cna_software_test(cna_test_software_disposed_buffer
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_disposed_buffer_test.cpp)
+    cna_register_renderer_test(NAME Software_DisposedBuffer
+        COMMAND cna_test_software_disposed_buffer TIMEOUT 60 LABELS "Software")
+    cna_software_test(cna_test_software_vertex_index_getdata
+        ${CNA_EASYGL_PUBLIC_BUFFER_DIR}/easygl_vertexbuffer_indexbuffer_getdata_test.cpp)
+    cna_register_renderer_test(NAME Software_VertexIndexGetData
+        COMMAND cna_test_software_vertex_index_getdata TIMEOUT 60 LABELS "Software")
+
+    # SOFTWARE-124: EasyGL's public lifecycle/validation sources are renderer-neutral despite
+    # their historical filenames. Compile the same programs unchanged against Software so CPU
+    # resources must obey the same disposal, binding, event, ownership and tracking contracts.
+    set(CNA_EASYGL_LIFECYCLE_DIR
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples)
+    cna_software_test(cna_test_software_device_validation
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_device_validation_test.cpp)
+    cna_register_renderer_test(NAME Software_DeviceValidation
+        COMMAND cna_test_software_device_validation TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_disposed_resource
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_disposed_resource_test.cpp)
+    cna_register_renderer_test(NAME Software_DisposedResource
+        COMMAND cna_test_software_disposed_resource TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_double_dispose
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_double_dispose_test.cpp)
+    cna_register_renderer_test(NAME Software_DoubleDispose
+        COMMAND cna_test_software_double_dispose TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_bound_resource_dispose
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_bound_resource_dispose_test.cpp)
+    cna_register_renderer_test(NAME Software_BoundResourceDispose
+        COMMAND cna_test_software_bound_resource_dispose TIMEOUT 60 LABELS "Software")
+    cna_software_test(cna_test_software_handle_release
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_handle_release_test.cpp)
+    cna_register_renderer_test(NAME Software_HandleRelease
+        COMMAND cna_test_software_handle_release TIMEOUT 60 LABELS "Software")
+    cna_software_test(cna_test_software_move_semantics
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_move_semantics_test.cpp)
+    cna_register_renderer_test(NAME Software_MoveSemantics
+        COMMAND cna_test_software_move_semantics TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_resource_events
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_resource_events_test.cpp)
+    cna_register_renderer_test(NAME Software_ResourceEvents
+        COMMAND cna_test_software_resource_events TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_device_dispose_order
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_device_dispose_order_test.cpp)
+    cna_register_renderer_test(NAME Software_DeviceDisposeOrder
+        COMMAND cna_test_software_device_dispose_order TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_resource_leak
+        ${CNA_EASYGL_LIFECYCLE_DIR}/easygl_resource_leak_test.cpp)
+    cna_register_renderer_test(NAME Software_ResourceLeak
+        COMMAND cna_test_software_resource_leak TIMEOUT 60 LABELS "Software")
+
+    # SOFTWARE-127: public presentation/reset state remains meaningful for a renderer without a
+    # physical window. Compile the renderer-neutral EasyGL programs unchanged against Software;
+    # native window resize, fullscreen switching and swap timing are intentionally not asserted.
+    set(CNA_EASYGL_PRESENTATION_DIR
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples)
+    cna_software_test(cna_test_software_presentation_parameters
+        ${CNA_EASYGL_PRESENTATION_DIR}/easygl_presentation_parameters_test.cpp)
+    cna_register_renderer_test(NAME Software_PresentationParameters
+        COMMAND cna_test_software_presentation_parameters TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_device_reset_events
+        ${CNA_EASYGL_PRESENTATION_DIR}/easygl_device_reset_events_test.cpp)
+    cna_register_renderer_test(NAME Software_DeviceResetEvents
+        COMMAND cna_test_software_device_reset_events TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_backbuffer_resize
+        ${CNA_EASYGL_PRESENTATION_DIR}/easygl_backbuffer_resize_test.cpp)
+    cna_register_renderer_test(NAME Software_BackbufferResize
+        COMMAND cna_test_software_backbuffer_resize TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_present_interval
+        ${CNA_EASYGL_PRESENTATION_DIR}/easygl_present_interval_test.cpp)
+    cna_register_renderer_test(NAME Software_PresentInterval
+        COMMAND cna_test_software_present_interval TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_fullscreen_field
+        ${CNA_EASYGL_PRESENTATION_DIR}/easygl_fullscreen_field_test.cpp)
+    cna_register_renderer_test(NAME Software_FullscreenField
+        COMMAND cna_test_software_fullscreen_field TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_depth_format
+        ${CNA_EASYGL_PRESENTATION_DIR}/easygl_depth_format_test.cpp)
+    cna_register_renderer_test(NAME Software_DepthFormat
+        COMMAND cna_test_software_depth_format TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_presentation_msaa_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/presentation_msaa_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_PresentationMsaaContract
+        COMMAND cna_test_software_presentation_msaa_contract 4 TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_rendertarget_viewport_scissor_reset
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget_viewport_scissor_reset_test.cpp)
+    cna_register_renderer_test(NAME Software_RenderTarget_ViewportScissorReset
+        COMMAND cna_test_software_rendertarget_viewport_scissor_reset
+        TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_presentation_reset_contract
+        software_presentation_reset_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_PresentationResetContract
+        COMMAND cna_test_software_presentation_reset_contract TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-152: run EasyGL's seven renderer-neutral preset/separate-state blend scenes
+    # unchanged, then cover a shared analytic matrix across every factor and function.
+    set(CNA_EASYGL_BLEND_DIR ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples)
+    foreach(CNA_BLEND_TEST IN ITEMS
+            opaque alphablend nonpremultiplied additive separate_functions separate_factors
+            blendfactor)
+        cna_software_test(cna_test_software_blendstate_${CNA_BLEND_TEST}
+            ${CNA_EASYGL_BLEND_DIR}/easygl_blendstate_${CNA_BLEND_TEST}_test.cpp)
+        cna_register_renderer_test(NAME Software_BlendState_${CNA_BLEND_TEST}
+            COMMAND cna_test_software_blendstate_${CNA_BLEND_TEST}
+            TIMEOUT 30 LABELS "Software")
+    endforeach()
+    cna_software_test(cna_test_software_blendstate_matrix
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/blend_state_matrix_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_BlendState_Matrix
+        COMMAND cna_test_software_blendstate_matrix TIMEOUT 30 LABELS "Software")
 
     # REMED-GFX-124: a RenderTarget2D must be readable and sampleable once it is no longer active --
     # GetData returns the rendered colour attachment (full level, rectangle, destination start index)
@@ -238,13 +506,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_BoundTargetLifetime COMMAND cna_test_software_bound_target_lifetime
         TIMEOUT 600 LABELS "Software")
 
-    # REMED-GFX-180: the public render-target -> Present lifecycle contract. `SdlGpu_RenderState`
-    # aborted with `Cannot present while render targets are bound`, which is the SECOND event in a
-    # two-stage chain: an over-range DrawPrimitives (two triangles from a three-vertex buffer) was
-    # correctly rejected by REMED-GFX-113's range guard, that rejection unwound past the fixture's own
-    # SetRenderTarget(nullptr), and EndDraw then met a still-bound target. FNA's contract is REJECT,
-    # never auto-unbind, so both guards are right and the fixture was wrong. Every leg runs in its own
-    # process; leg C2 reproduces the abort end to end and its correct outcome is SIGABRT.
+    # REMED-GFX-180/SOFTWARE-322: Present refuses while a target is bound independently of whether
+    # the preceding classic buffered draw used an out-of-range native input. Every leg runs in its
+    # own process; C1 proves explicit-unbind recovery and C2 proves the unhandled refusal is SIGABRT.
     cna_software_test(cna_test_software_present_lifecycle
         ${CNA_GRAPHICS_EXAMPLES_DIR}/present_lifecycle_contract_test.cpp)
     cna_register_renderer_test(NAME Software_PresentLifecycle COMMAND cna_test_software_present_lifecycle
@@ -349,7 +613,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_frontface_winding
         TIMEOUT 300 LABELS "Software")
 
-    # REMED-GFX-183 control: TriangleStrip remains an explicit unsupported 3D boundary.
+    # SOFTWARE-105 promotes REMED-GFX-183's shared control into a required Software contract:
+    # all six user/buffer, indexed/non-indexed and Uint16/Uint32 paths must preserve alternating
+    # strip winding under every CullMode, including nonzero offsets and baseVertex.
     cna_software_test(cna_test_software_triangle_strip_winding
         ${CNA_GRAPHICS_EXAMPLES_DIR}/triangle_strip_winding_test.cpp)
     cna_register_renderer_test(NAME Software_TriangleStripWinding
@@ -419,6 +685,27 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     cna_register_renderer_test(NAME Software_RenderTargetCube_MsaaFace
         COMMAND cna_test_software_rendertargetcube_msaa_face
         TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-119: the rendered cube and sampled TextureCube views are the same CPU resource.
+    cna_software_test(cna_test_software_rendertargetcube_sample
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_sample_test.cpp)
+    cna_register_renderer_test(NAME Software_RenderTargetCube_SampleAfterUnbind
+        COMMAND cna_test_software_rendertargetcube_sample
+        TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-120: classic XNA MRT binding/clear/depth/resolve/mip semantics with stock COLOR0.
+    cna_software_test(cna_test_software_mrt_stock_effect_contract
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/mrt_stock_effect_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_MrtStockEffectContract
+        COMMAND cna_test_software_mrt_stock_effect_contract
+        TIMEOUT 45 LABELS "Software")
+
+    # SOFTWARE-119/120: the existing normalized cube binding corpus now runs on the CPU renderer.
+    cna_software_test(cna_test_software_rendertargetcube_plural_binding
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_plural_binding_test.cpp)
+    cna_register_renderer_test(NAME Software_RenderTargetCube_PluralBinding
+        COMMAND cna_test_software_rendertargetcube_plural_binding
+        TIMEOUT 60 LABELS "Software")
 
     # REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
     # `preserveTargetContents` as storing the "color/depth/stencil" contents, and FNA's DiscardContents
@@ -573,6 +860,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_sampler_component_isolation
         TIMEOUT 300 LABELS "Software")
 
+    # SOFTWARE-117: public, renderer-independent evidence that anisotropic filtering uses the
+    # directional footprint, honours MaxAnisotropy, remains independent per slot, and preserves
+    # address modes. The same source is built against EasyGL below as the parity oracle.
+    cna_software_test(cna_test_software_anisotropic_filter_contract
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/anisotropic_filter_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_AnisotropicFilterContract
+        COMMAND cna_test_software_anisotropic_filter_contract
+        TIMEOUT 300 LABELS "Software")
+
     # REMED-GFX-175: the mip component of a TextureFilter ordinal, measured against a chain whose
     # levels name themselves. Software is the CPU reference implementation, so what it does with a
     # real chain settles the contract independently of any GPU driver.
@@ -600,10 +896,252 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
         COMMAND cna_test_software_point_sampling
         TIMEOUT 300 LABELS "Software")
 
+    # SOFTWARE-137: XNA/FNA preserve fractional SpriteBatch positions and scaled sizes to the
+    # renderer. Direct float draws must equal the same geometry expressed through Begin's matrix.
+    cna_software_test(cna_test_software_spritebatch_subpixel
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_subpixel_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatchSubpixelContract
+        COMMAND cna_test_software_spritebatch_subpixel TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-251: Microsoft XNA/FNA split SpriteBatch work into 2,048-sprite native batches.
+    # The same public discriminator runs on EasyGL, whose unbounded UInt16 index accumulation used
+    # to wrap the 16,385th same-texture sprite back onto vertex zero.
+    cna_software_test(cna_test_software_spritebatch_large_batch
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_large_batch_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatchLargeBatchContract
+        COMMAND cna_test_software_spritebatch_large_batch TIMEOUT 120 LABELS "Software")
+
+    # SOFTWARE-252: the renderer-side Draw called by SpriteSortMode::Immediate must submit before
+    # a subsequent target switch; EasyGL formerly queued it privately until End().
+    cna_software_test(cna_test_software_spritebatch_immediate_submission
+                      ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_immediate_submission_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatchImmediateSubmissionContract
+        COMMAND cna_test_software_spritebatch_immediate_submission TIMEOUT 60 LABELS "Software")
+
+    # SOFTWARE-138: compile the renderer-independent EasyGL SpriteBatch/SpriteFont public corpus
+    # unchanged for Software. Historical filenames remain beside their original EasyGL registrations;
+    # none of these sources reaches renderer internals.
+    cna_software_test(cna_test_software_sprite_effects_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sprite_effects_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteEffects_Parity
+        COMMAND cna_test_software_sprite_effects_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_rotation_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_rotation_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_RotationParity
+        COMMAND cna_test_software_spritebatch_rotation_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_scale_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_scale_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_ScaleParity
+        COMMAND cna_test_software_spritebatch_scale_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_rt_size_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_rendertarget_size_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_RenderTargetSizeParity
+        COMMAND cna_test_software_spritebatch_rt_size_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_source_rect_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_sourcerect_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_SourceRectangleParity
+        COMMAND cna_test_software_spritebatch_source_rect_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_layer_depth_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_layerdepth_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_LayerDepthParity
+        COMMAND cna_test_software_spritebatch_layer_depth_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_transform_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_transform_matrix_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_TransformParity
+        COMMAND cna_test_software_spritebatch_transform_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritefont_single_glyph_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_single_glyph_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteFont_SingleGlyphParity
+        COMMAND cna_test_software_spritefont_single_glyph_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritefont_spacing_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_multiglyph_spacing_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteFont_SpacingParity
+        COMMAND cna_test_software_spritefont_spacing_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritefont_newline_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_newline_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteFont_NewlineParity
+        COMMAND cna_test_software_spritefont_newline_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritefont_default_char_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_default_char_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteFont_DefaultCharacterParity
+        COMMAND cna_test_software_spritefont_default_char_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritefont_flip_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_effects_flip_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteFont_FlipParity
+        COMMAND cna_test_software_spritefont_flip_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritefont_rotation_scale_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritefont_effects_rotation_scale_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteFont_RotationScaleParity
+        COMMAND cna_test_software_spritefont_rotation_scale_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_blend_leak_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_blendstate_leak_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_BlendStateLeakParity
+        COMMAND cna_test_software_spritebatch_blend_leak_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_layered_blend_parity
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_sample_layered_blend_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_LayeredBlendParity
+        COMMAND cna_test_software_spritebatch_layered_blend_parity TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_viewport_switch_parity
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_viewport_switch_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_ViewportSwitchParity
+        COMMAND cna_test_software_spritebatch_viewport_switch_parity TIMEOUT 60 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_custom_viewport_rt_parity
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_custom_viewport_rt_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_CustomViewportRtParity
+        COMMAND cna_test_software_spritebatch_custom_viewport_rt_parity TIMEOUT 60 LABELS "Software")
+
+    cna_software_test(cna_test_software_spritebatch_rasterizer_scissor_parity
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_begin_rasterizerstate_scissor_test.cpp)
+    cna_register_renderer_test(NAME Software_SpriteBatch_RasterizerScissorParity
+        COMMAND cna_test_software_spritebatch_rasterizer_scissor_parity TIMEOUT 60 LABELS "Software")
+
+    # SOFTWARE-125: run the classic public Model corpus unchanged from EasyGL. Together these
+    # fixtures cover hand-built and Content.Load<Model>() models, hierarchy, per-mesh effects,
+    # 16/32-bit indices, texture material binding and real SkinnedEffect animation playback.
+    set(CNA_EASYGL_MODEL_TEST_DIR
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples)
+
+    cna_software_test(cna_test_software_model_draw
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_draw_test.cpp)
+    cna_register_renderer_test(NAME Software_ModelDraw_RedQuad
+        COMMAND cna_test_software_model_draw TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_hierarchy_child_mesh
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_hierarchy_child_mesh_test.cpp)
+    cna_register_renderer_test(NAME Software_Model_HierarchyChildMesh
+        COMMAND cna_test_software_model_hierarchy_child_mesh TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_two_meshes_effects
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_two_meshes_effects_test.cpp)
+    cna_register_renderer_test(NAME Software_Model_TwoMeshesEffects
+        COMMAND cna_test_software_model_two_meshes_effects TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_json_reader
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_json_reader_test.cpp)
+    cna_register_renderer_test(NAME Software_ModelJsonReader_Quad
+        COMMAND cna_test_software_model_json_reader TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_json_reader_32bit_indices
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_json_reader_32bit_indices_test.cpp)
+    cna_register_renderer_test(NAME Software_ModelJsonReader_32BitIndices
+        COMMAND cna_test_software_model_json_reader_32bit_indices TIMEOUT 60 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_json_reader_texture
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_json_reader_texture_test.cpp)
+    cna_register_renderer_test(NAME Software_ModelJsonReader_Texture
+        COMMAND cna_test_software_model_json_reader_texture TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_json_reader_bone_hierarchy
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_json_reader_bone_hierarchy_test.cpp)
+    cna_register_renderer_test(NAME Software_ModelJsonReader_BoneHierarchy
+        COMMAND cna_test_software_model_json_reader_bone_hierarchy TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_json_reader_skeleton
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_json_reader_skeleton_test.cpp)
+    cna_register_renderer_test(NAME Software_ModelJsonReader_Skeleton
+        COMMAND cna_test_software_model_json_reader_skeleton TIMEOUT 30 LABELS "Software")
+
+    cna_software_test(cna_test_software_model_skinned_animation
+        ${CNA_EASYGL_MODEL_TEST_DIR}/easygl_model_skinned_animation_playback_test.cpp)
+    cna_register_renderer_test(NAME Software_Model_SkinnedAnimationPlayback
+        COMMAND cna_test_software_model_skinned_animation TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-140: exact Reach packed-16 transfer bytes decoded into CPU RGBA sampling storage.
+    # The source is EasyGL's public draw oracle and contains no renderer-internal dependency.
+    cna_software_test(cna_test_software_packed16_format
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_packed16_format_test.cpp)
+    cna_register_renderer_test(NAME Software_Packed16Format
+        COMMAND cna_test_software_packed16_format TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-141: raw DXT1/3/5 blocks retained exactly and decoded into CPU sampling storage.
+    cna_software_test(cna_test_software_dxt_format
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_dxt_format_test.cpp)
+    cna_register_renderer_test(NAME Software_DxtFormat
+        COMMAND cna_test_software_dxt_format TIMEOUT 30 LABELS "Software")
+    # The WebGPU-named source is renderer-neutral: it checks the advertised loader policy, exact
+    # DXT format retention, a four-level DDS draw and the XNB Texture2DReader route.
+    cna_software_test(cna_test_software_dxt_content
+        ${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/examples/webgpu_compressed_content_test.cpp)
+    cna_register_renderer_test(NAME Software_DxtContent
+        COMMAND cna_test_software_dxt_content TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-144: the unchanged EasyGL public scene proves a 3x5 row pitch survives upload and
+    # point sampling on the CPU renderer instead of relying only on common-layer readback.
+    cna_software_test(cna_test_software_npot_texture
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_npot_texture_test.cpp)
+    cna_register_renderer_test(NAME Software_NpotTexture
+        COMMAND cna_test_software_npot_texture TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-104: a capability is a usable public promise, not a statement about what a CPU
+    # renderer might eventually implement. False entries are paired with the current factory/API
+    # boundary so unsupported queries, volume textures and custom shaders cannot masquerade as
+    # working features while their implementation tasks are pending.
+    cna_software_test(cna_test_software_capability_contract software_capability_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_CapabilityContract
+        COMMAND cna_test_software_capability_contract
+        TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-122: compile the existing public EasyGL query lifecycle/visible/occluded scenes
+    # unchanged for Software, then add a CPU-exact contract for every fragment gate and 4x sample
+    # accounting. These are real public OcclusionQuery draws, not direct counter-unit tests.
+    cna_software_test(cna_test_software_occlusion_query_cycle
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/occlusion_query_test.cpp)
+    cna_register_renderer_test(NAME Software_OcclusionQuery_Cycle
+        COMMAND cna_test_software_occlusion_query_cycle TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_occlusion_query_visible
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_occlusion_query_visible_quad_test.cpp)
+    cna_register_renderer_test(NAME Software_OcclusionQuery_VisibleQuad
+        COMMAND cna_test_software_occlusion_query_visible TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_occlusion_query_occluded
+        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_occlusion_query_occluded_quad_test.cpp)
+    cna_register_renderer_test(NAME Software_OcclusionQuery_OccludedQuad
+        COMMAND cna_test_software_occlusion_query_occluded TIMEOUT 30 LABELS "Software")
+    cna_software_test(cna_test_software_occlusion_query_contract
+        software_occlusion_query_contract_test.cpp)
+    cna_register_renderer_test(NAME Software_OcclusionQuery_ExactContract
+        COMMAND cna_test_software_occlusion_query_contract TIMEOUT 30 LABELS "Software")
+
+    # SOFTWARE-108 / SOFTWARE-130: declarations, not byte stride, identify stock-effect vertex
+    # attributes. The same source is compiled for EasyGL; it covers every XNA
+    # VertexElementFormat, reordered equal-stride records, a public VertexBufferBinding offset and
+    # two independent per-vertex streams through pixel readback.
+    cna_software_test(cna_test_software_vertex_declaration software_vertex_declaration_test.cpp)
+    cna_register_renderer_test(NAME Software_VertexDeclaration
+        COMMAND cna_test_software_vertex_declaration
+        TIMEOUT 30 LABELS "Software")
+
     # plans/plan_software.md SOFTWARE-61/84: this renderer's half of the cross-renderer diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
     cna_software_test(cna_diag_software ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
+
+    # SOFTWARE-343: renderer-neutral real-XNA scene-corpus measurement. The complete corpus remains
+    # diagnostic because hardware floating-point and edge precision make universal exact identity
+    # an invalid portable gate. SOFTWARE-344 promotes the two measured aliased-line scenes to an
+    # exact Software regression now that their D3D/GDI diamond-exit rule is implemented explicitly.
+    cna_software_test(cna_oracle_render_software
+        ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp)
+    cna_register_renderer_test(NAME Software_XnaLineCoverage
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-oracle-corpus-diff-software.sh
+            $<TARGET_FILE:cna_oracle_render_software> 0
+            colored_linelist_quad colored_linestrip_quad
+        TIMEOUT 30 LABELS "Software")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

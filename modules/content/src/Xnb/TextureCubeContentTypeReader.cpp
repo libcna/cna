@@ -65,9 +65,10 @@ namespace CNA::Internal::Xnb
                 "the serialized asset.");
         }
 
-        std::vector<std::vector<uint8_t>> uploadLevels = keepCompressed
-            ? decoded.levels
-            : ConvertXnbTextureToCnbRgba8(decoded, true).representations.front().levels;
+        std::vector<std::vector<uint8_t>> uploadLevels =
+            IsCompressed(decoded.surfaceFormat) && !keepCompressed
+                ? ConvertXnbTextureToCnbRgba8(decoded, true).representations.front().levels
+                : decoded.levels;
 
         TextureCube textureCube = existingInstance.has_value()
             ? std::move(*existingInstance)
@@ -81,7 +82,7 @@ namespace CNA::Internal::Xnb
                 const std::vector<uint8_t>& bytes = uploadLevels[
                     static_cast<std::size_t>(face) * decoded.mipCount +
                     static_cast<std::size_t>(level)];
-                if (keepCompressed)
+                if (!IsCompressed(decoded.surfaceFormat) || keepCompressed)
                 {
                     textureCube.SetData(static_cast<CubeMapFace>(face), level, nullptr,
                                         bytes.data(), 0, static_cast<int>(bytes.size()));

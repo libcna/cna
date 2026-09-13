@@ -4,9 +4,21 @@
 #include <cstddef>
 
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
+#include "VertexValueHash.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    std::size_t VertexPositionTexture::GetHashCode() const
+    {
+        using CNA::Internal::Graphics::SmartVertexHash;
+        using CNA::Internal::Graphics::VertexFloatWord;
+        return SmartVertexHash(VertexFloatWord(Position.X),
+                               VertexFloatWord(Position.Y),
+                               VertexFloatWord(Position.Z),
+                               VertexFloatWord(TextureCoordinate.X),
+                               VertexFloatWord(TextureCoordinate.Y));
+    }
+
     const VertexDeclaration& VertexPositionTexture::getVertexDeclarationStatic()
     {
         using Stream = CNA::Internal::Graphics::PositionTextureStream;

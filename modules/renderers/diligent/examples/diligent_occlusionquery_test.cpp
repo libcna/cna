@@ -10,8 +10,8 @@
 // only device this test actually runs against in this sandbox -- so a check that expected a
 // specific fraction of the viewport's pixel count would be renderer-correct but environment-flaky.
 //
-// Check A -- a query that was constructed but never Begin()/End()'d is not complete and reports
-//   zero pixels: the baseline state before any GPU work has happened.
+// Check A -- a query that was constructed but never Begin()/End()'d is not complete and its
+//   PixelCount getter throws because no result is available.
 // Check B -- a Begin()/End() span with NO draws inside it reports zero visible samples: proves the
 //   query measures real rendered work rather than always reporting "something".
 // Check C -- a quad covering the whole viewport with the depth test off reports a NON-zero visible
@@ -34,10 +34,12 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <chrono>
 #include <cstdio>
@@ -129,8 +131,17 @@ protected:
 
         {
             OcclusionQuery query(device);
-            Check(!query.getIsCompleteProperty() && query.getPixelCountProperty() == 0,
-                  "a fresh query that was never Begin()/End()'d is not complete and reports 0 pixels");
+            bool pixelCountThrew = false;
+            try
+            {
+                (void)query.getPixelCountProperty();
+            }
+            catch (const System::InvalidOperationException&)
+            {
+                pixelCountThrew = true;
+            }
+            Check(!query.getIsCompleteProperty() && pixelCountThrew,
+                  "a fresh query is incomplete and PixelCount rejects the unavailable result");
         }
 
         {
@@ -181,6 +192,7 @@ public:
     DiligentOcclusionQueryTest()
     {
         graphicsDeviceManager_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphicsDeviceManager_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphicsDeviceManager_->setPreferredBackBufferWidthProperty(kSize);
         graphicsDeviceManager_->setPreferredBackBufferHeightProperty(kSize);
         graphicsDeviceManager_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);

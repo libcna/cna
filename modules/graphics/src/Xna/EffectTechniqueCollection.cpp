@@ -5,8 +5,15 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     int EffectTechniqueCollection::getCountProperty() const { return (int)elements_.size(); }
 
-    EffectTechnique& EffectTechniqueCollection::operator[](int index) { return *elements_.at(index); }
-    const EffectTechnique& EffectTechniqueCollection::operator[](int index) const { return *elements_.at(index); }
+    EffectTechnique* EffectTechniqueCollection::operator[](int index)
+    {
+        return index >= 0 && index < getCountProperty() ? elements_[index].get() : nullptr;
+    }
+
+    const EffectTechnique* EffectTechniqueCollection::operator[](int index) const
+    {
+        return index >= 0 && index < getCountProperty() ? elements_[index].get() : nullptr;
+    }
 
     EffectTechnique* EffectTechniqueCollection::operator[](const std::string& name)
     {

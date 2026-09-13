@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -128,7 +129,8 @@ class OpenGL4OcclusionQueryTest : public Game
             dev.GetBackBufferData(&reg, &centre, 0, 1);
 
             complete = query->getIsCompleteProperty();
-            pixelCount = query->getPixelCountProperty();
+            if (complete)
+                pixelCount = query->getPixelCountProperty();
 
             if (complete || frame >= kMaxPollFrames)
                 break;
@@ -176,7 +178,8 @@ class OpenGL4OcclusionQueryTest : public Game
             dev.GetBackBufferData(&reg, &centre, 0, 1);
 
             complete = query->getIsCompleteProperty();
-            pixelCount = query->getPixelCountProperty();
+            if (complete)
+                pixelCount = query->getPixelCountProperty();
 
             if (complete || frame >= kMaxPollFrames)
                 break;
@@ -227,6 +230,7 @@ public:
     OpenGL4OcclusionQueryTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

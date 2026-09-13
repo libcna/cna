@@ -94,9 +94,9 @@ protected:
             { Vector3((float)kViewport, 0.0f, 0.0f), Vector2(2.0f, 0.0f) },
         };
 
-        dev.getSamplerStatesProperty()[0].setFilterProperty(TextureFilter::Point);
-        dev.getSamplerStatesProperty()[0].setAddressUProperty(TextureAddressMode::Mirror);
-        dev.getSamplerStatesProperty()[0].setAddressVProperty(TextureAddressMode::Clamp);
+        SamplerState sampler = SamplerState::PointClamp;
+        sampler.setAddressUProperty(TextureAddressMode::Mirror);
+        dev.getSamplerStatesProperty()[0] = sampler;
 
         BasicEffect fx(dev);
         fx.setWorldProperty(world);

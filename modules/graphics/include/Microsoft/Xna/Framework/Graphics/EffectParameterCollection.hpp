@@ -82,17 +82,17 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the parameter at the specified index (mutable overload).
          *
          * @param index Zero-based index of the parameter.
-         * @return Reference to the parameter.
+         * @return Pointer to the parameter, or nullptr if @p index is outside the collection.
          */
-        [[nodiscard]] EffectParameter& operator[](int index);
+        [[nodiscard]] EffectParameter* operator[](int index);
 
         /**
          * @brief Gets the parameter at the specified index (const overload).
          *
          * @param index Zero-based index of the parameter.
-         * @return Const reference to the parameter.
+         * @return Const pointer to the parameter, or nullptr if @p index is outside the collection.
          */
-        [[nodiscard]] const EffectParameter& operator[](int index) const;
+        [[nodiscard]] const EffectParameter* operator[](int index) const;
 
         /**
          * @brief Gets the parameter with the specified name.
@@ -118,7 +118,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void Add(EffectParameter param);
 
         /**
-         * @brief Gets the first parameter whose semantic matches the given string.
+         * @brief Gets the first parameter whose semantic matches the given string ignoring case.
          *
          * @param semantic The HLSL semantic string to search for.
          * @return Pointer to the matching parameter, or nullptr if not found.
@@ -126,7 +126,7 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] EffectParameter* GetParameterBySemantic(const std::string& semantic);
 
         /**
-         * @brief Gets the first parameter whose semantic matches the given string (const overload).
+         * @brief Gets the first parameter whose semantic matches the given string ignoring case (const overload).
          *
          * @param semantic The HLSL semantic string to search for.
          * @return Const pointer to the matching parameter, or nullptr if not found.

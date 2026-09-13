@@ -1,0 +1,37 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -3308,4 +3308,33 @@ static void state_BEM(Context *ctx)
+ {
++    const SourceArgInfo *src0 = &ctx->source_args[0];
++    const SourceArgInfo *src1 = &ctx->source_args[1];
++    if ((src0->regtype != REG_TYPE_CONST) &&
++        (src0->regtype != REG_TYPE_TEMP))
++        fail(ctx, "BEM source zero must be a constant or temporary register");
++    if (src1->regtype != REG_TYPE_TEMP)
++        fail(ctx, "BEM source one must be a temporary register");
++
++    int i;
++    for (i = 0; i < 2; i++)
++    {
++        const SourceArgInfo *src = &ctx->source_args[i];
++        if (src->regtype == REG_TYPE_TEMP)
++        {
++            const RegisterList *reg =
++                reglist_find(&ctx->used_registers, REG_TYPE_TEMP, src->regnum);
++            const int required_writemask =
++                (1 << src->swizzle_x) | (1 << src->swizzle_y);
++            const int same_destination =
++                (ctx->dest_arg.regtype == REG_TYPE_TEMP) &&
++                (ctx->dest_arg.regnum == src->regnum);
++            const int prior_writemask = same_destination
++                ? ctx->dest_arg_prior_writemask
++                : (reg == NULL ? 0 : reg->written);
++            if ((prior_writemask & required_writemask) != required_writemask)
++                failf(ctx, "BEM reads uninitialized component(s) of r%d", src->regnum);
++        } // if
++    } // for
++
+     if (!shader_version_exactly(ctx, 1, 4))
+         fail(ctx, "BEM opcode only available in Shader Model 1.4");
+     if (ctx->phase_count != 0)

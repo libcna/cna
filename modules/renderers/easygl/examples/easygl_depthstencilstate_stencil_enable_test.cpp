@@ -204,6 +204,7 @@ public:
         // test trivially always passes regardless of DepthStencilState.StencilEnable, which would
         // make this test unable to distinguish anything.
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
     }
 

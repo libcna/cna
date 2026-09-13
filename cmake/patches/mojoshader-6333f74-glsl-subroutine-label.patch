@@ -1,0 +1,52 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -1553,7 +1553,10 @@ void emit_GLSL_M3X2(Context *ctx)
+ 
+ void emit_GLSL_CALL(Context *ctx)
+ {
+-    char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
++    /* A label is an identifier, not a vector source. Using the last destination writemask here
++     * can append a component suffix (for example ps_l1.x), producing invalid GLSL. -CNA
++     */
++    char src0[64]; get_GLSL_srcarg_varname(ctx, 0, src0, sizeof (src0));
+     if (ctx->loops > 0)
+         output_line(ctx, "%s(aL);", src0);
+     else
+@@ -1565,6 +1568,6 @@ void emit_GLSL_CALLNZ(Context *ctx)
+     // !!! FIXME: if src1 is a constbool that's true, we can remove the
+     // !!! FIXME:  if. If it's false, we can make this a no-op.
+-    char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
++    char src0[64]; get_GLSL_srcarg_varname(ctx, 0, src0, sizeof (src0));
+     char src1[64]; make_GLSL_srcarg_string_masked(ctx, 1, src1, sizeof (src1));
+ 
+     if (ctx->loops > 0)
+@@ -1613,7 +1616,10 @@ void emit_GLSL_ENDLOOP(Context *ctx)
+ 
+ void emit_GLSL_LABEL(Context *ctx)
+ {
+-    char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
++    /* A label is an identifier, not a vector source. The raw name must be used for both its
++     * prototype and definition. -CNA
++     */
++    char src0[64]; get_GLSL_srcarg_varname(ctx, 0, src0, sizeof (src0));
+     const int label = ctx->source_args[0].regnum;
+     RegisterList *reg = reglist_find(&ctx->used_registers, REG_TYPE_LABEL, label);
+     assert(ctx->output == ctx->subroutines);  // not mainline, etc.
+@@ -1629,6 +1635,16 @@ void emit_GLSL_LABEL(Context *ctx)
+     // !!! FIXME:  only called once and, if so, forcibly inline it.
+ 
+     const char *uses_loopreg = ((reg) && (reg->misc == 1)) ? "int aL" : "";
++    if (reg != NULL)
++    {
++        /* Direct3D requires every call target to be a later label, so a subroutine may call a
++         * function whose definition has not been emitted yet. GLSL requires a prior declaration;
++         * helpers precede all subroutine definitions in the assembled output. -CNA
++         */
++        push_output(ctx, &ctx->helpers);
++        output_line(ctx, "void %s(%s);", src0, uses_loopreg);
++        pop_output(ctx);
++    } // if
+     output_line(ctx, "void %s(%s)", src0, uses_loopreg);
+     output_line(ctx, "{");
+     ctx->indent++;

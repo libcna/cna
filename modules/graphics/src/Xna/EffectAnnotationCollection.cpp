@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotationCollection.hpp"
-#include <stdexcept>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     int EffectAnnotationCollection::getCountProperty() const { return (int)elements_.size(); }
 
-    EffectAnnotation& EffectAnnotationCollection::operator[](int index) { return elements_.at(index); }
-    const EffectAnnotation& EffectAnnotationCollection::operator[](int index) const { return elements_.at(index); }
+    EffectAnnotation* EffectAnnotationCollection::operator[](int index)
+    {
+        return index >= 0 && index < getCountProperty() ? &elements_[index] : nullptr;
+    }
+
+    const EffectAnnotation* EffectAnnotationCollection::operator[](int index) const
+    {
+        return index >= 0 && index < getCountProperty() ? &elements_[index] : nullptr;
+    }
 
     EffectAnnotation* EffectAnnotationCollection::operator[](const std::string& name)
     {

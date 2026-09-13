@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
@@ -147,6 +148,114 @@ TEST(VertexDeclarationTest, NegativeExplicitStrideThrowsArgumentOutOfRangeExcept
             VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
         }),
         System::ArgumentOutOfRangeException);
+}
+
+TEST(VertexDeclarationTest, ExplicitStrideMustBeMultipleOfFour)
+{
+    EXPECT_THROW(
+        VertexDeclaration(13, {
+            VertexElement(0, VertexElementFormat::Vector3,
+                          VertexElementUsage::Position, 0),
+        }),
+        System::ArgumentException);
+}
+
+TEST(VertexDeclarationTest, ElementOffsetMustBeMultipleOfFour)
+{
+    EXPECT_THROW(
+        VertexDeclaration(16, {
+            VertexElement(2, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        }),
+        System::ArgumentException);
+}
+
+TEST(VertexDeclarationTest, NegativeElementOffsetIsRejected)
+{
+    EXPECT_THROW(
+        VertexDeclaration(16, {
+            VertexElement(-4, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        }),
+        System::ArgumentException);
+}
+
+TEST(VertexDeclarationTest, ElementMayNotExtendPastStride)
+{
+    EXPECT_THROW(
+        VertexDeclaration(16, {
+            VertexElement(12, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        }),
+        System::ArgumentException);
+}
+
+TEST(VertexDeclarationTest, OverlappingElementsAreRejected)
+{
+    EXPECT_THROW(
+        VertexDeclaration(16, {
+            VertexElement(0, VertexElementFormat::Vector3,
+                          VertexElementUsage::Position, 0),
+            VertexElement(8, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        }),
+        System::ArgumentException);
+}
+
+TEST(VertexDeclarationTest, DuplicateUsageAndIndexAreRejected)
+{
+    EXPECT_THROW(
+        VertexDeclaration(16, {
+            VertexElement(0, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(8, VertexElementFormat::Vector2,
+                          VertexElementUsage::TextureCoordinate, 0),
+        }),
+        System::ArgumentException);
+}
+
+TEST(VertexDeclarationTest, InvalidUsageOrdinalIsRejected)
+{
+    EXPECT_THROW(
+        VertexDeclaration(4, {
+            VertexElement(0, VertexElementFormat::Single,
+                          static_cast<VertexElementUsage>(13), 0),
+        }),
+        System::ArgumentException);
+}
+
+TEST(VertexDeclarationTest, StructuralValidationAlsoAppliesToVectorConstructor)
+{
+    const std::vector<VertexElement> elements{
+        VertexElement(0, VertexElementFormat::Vector2,
+                      VertexElementUsage::TextureCoordinate, 0),
+        VertexElement(8, VertexElementFormat::Vector2,
+                      VertexElementUsage::TextureCoordinate, 0),
+    };
+    EXPECT_THROW(VertexDeclaration(16, elements), System::ArgumentException);
+}
+
+TEST(VertexDeclarationTest, StructuralValidationAlsoAppliesToAutoStrideInitializerList)
+{
+    EXPECT_THROW(
+        VertexDeclaration({
+            VertexElement(0, VertexElementFormat::Single,
+                          VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(4, VertexElementFormat::Single,
+                          VertexElementUsage::TextureCoordinate, 0),
+        }),
+        System::ArgumentException);
+}
+
+TEST(VertexDeclarationTest, StructuralValidationAlsoAppliesToAutoStrideVector)
+{
+    const std::vector<VertexElement> elements{
+        VertexElement(0, VertexElementFormat::Single,
+                      VertexElementUsage::TextureCoordinate, 0),
+        VertexElement(4, VertexElementFormat::Single,
+                      VertexElementUsage::TextureCoordinate, 0),
+    };
+    EXPECT_THROW((VertexDeclaration(elements)), System::ArgumentException);
 }
 
 TEST(VertexDeclarationTest, VectorCtorStride)

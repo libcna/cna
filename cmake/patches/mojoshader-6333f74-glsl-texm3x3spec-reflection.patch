@@ -1,0 +1,21 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -2376,7 +2376,7 @@ void emit_GLSL_TEXM3X3SPEC_helper(Context *ctx)
+     push_output(ctx, &ctx->helpers);
+     output_line(ctx, "vec3 TEXM3X3SPEC_reflection(const vec3 normal, const vec3 eyeray)");
+     output_line(ctx, "{"); ctx->indent++;
+-    output_line(ctx,   "return (2.0 * ((normal * eyeray) / (normal * normal)) * normal) - eyeray;"); ctx->indent--;
++    output_line(ctx,   "return (2.0 * (dot(normal, eyeray) / dot(normal, normal)) * normal) - eyeray;"); ctx->indent--;
+     output_line(ctx, "}");
+     output_blank_line(ctx);
+     pop_output(ctx);
+@@ -2430,7 +2430,7 @@ void emit_GLSL_TEXM3X3SPEC(Context *ctx)
+                     "dot(%s.xyz, %s.xyz)"
+                 "),"
+-                "%s.xyz,"
++                "%s.xyz"
+             ")"
+         ")",
+         ttypestr, sampler, src0, src1, src2, src3, dst, src4, src5);
+ 

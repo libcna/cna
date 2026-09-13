@@ -64,4 +64,30 @@ namespace CNA::Platform {
      */
     void ResetCurrentPlatform();
 
+    namespace Detail {
+
+        /**
+         * @brief Pins a subsystem on the current ambient platform for a stable owner token.
+         *
+         * A pin follows `SetCurrentPlatform()` transitions. The replacement platform is acquired
+         * before the previous platform is released, preserving subsystem sessions whose native
+         * identifiers remain valid only while at least one reference is held. Repeating the call
+         * with the same owner and subsystem is idempotent.
+         *
+         * @param owner Stable non-null address identifying the pin owner.
+         * @param subsystem Subsystem to retain.
+         * @throws std::invalid_argument If @p owner is null.
+         * @throws PlatformException If the current platform cannot acquire the subsystem.
+         */
+        void PinCurrentPlatformSubsystem(const void* owner, PlatformSubsystem subsystem);
+
+        /**
+         * @brief Releases an ambient subsystem pin without throwing.
+         *
+         * @param owner Stable non-null address identifying the pin owner.
+         */
+        void UnpinCurrentPlatformSubsystem(const void* owner) noexcept;
+
+    } // namespace Detail
+
 } // namespace CNA::Platform

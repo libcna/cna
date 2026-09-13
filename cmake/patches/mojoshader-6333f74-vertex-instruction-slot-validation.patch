@@ -1,0 +1,39 @@
+diff --git a/mojoshader.c b/mojoshader.c
+index 52e75e9..91d2969 100644
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -316,6 +316,26 @@ static const Profile profiles[] =
+ #endif
+ };
+ 
++static void validate_vertex_instruction_slot_count(Context *ctx)
++{
++    if (!shader_is_vertex(ctx))
++        return;
++
++    int limit = 0;
++    if (ctx->major_ver == 1)
++        limit = 128;
++    else if (ctx->major_ver == 2)
++        limit = 256;
++
++    // Shader Model 3's limit is device-capability dependent (at least 512), so a
++    // parser without D3DCAPS9 must not substitute the minimum for the real cap.
++    if ((limit != 0) && (ctx->instruction_count > limit))
++    {
++        failf(ctx, "vertex shader instruction count %d exceeds the profile limit of %d slots",
++              ctx->instruction_count, limit);
++    } // if
++} // validate_vertex_instruction_slot_count
++
+ static int temporary_register_count(const Context *ctx)
+ {
+     if (shader_is_vertex(ctx))
+@@ -2659,6 +2679,7 @@ static int parse_instruction_token(Context *ctx)
+         instruction->state(ctx);
+ 
+     ctx->instruction_count += instruction->slots;
++    validate_vertex_instruction_slot_count(ctx);
+ 
+     if (!isfail(ctx))
+         emitter(ctx);  // call the profile's emitter.

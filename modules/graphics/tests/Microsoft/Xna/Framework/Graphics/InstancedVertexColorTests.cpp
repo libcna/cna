@@ -67,6 +67,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -92,6 +93,7 @@ using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using CNA::GraphicsCapability;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
@@ -112,22 +114,23 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool InstancedVertexColor()
 {
-    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU,
-                           Vulkan, DirectX9, DirectX11, DirectX12, SdlGpu);
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
+                           DirectX9, DirectX11, DirectX12, SdlGpu, Software);
 }
 
 // The renderers whose instanced route this file has measured, and which therefore carry a contract
 // assertion. D3D11 and D3D12 joined this set with DX-222's private headless-compositor run; D3D9
-// remains unmeasured.
+// remains unmeasured. Software is measured through deterministic CPU readback.
 /// plans/plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedVertexColorMeasured()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU,
-                           DirectX11, DirectX12, SdlGpu);
+                           DirectX11, DirectX12, SdlGpu, Software);
 }
 
 // The renderers whose instanced route was measured obeying the PUBLIC CONTRACT: EasyGL always did,
-// Vulkan and WebGPU were corrected by REMED-GFX-212, and bgfx by REMED-GFX-215.
+// Vulkan and WebGPU were corrected by REMED-GFX-212, bgfx by REMED-GFX-215, and Software gained
+// its independent CPU route in SOFTWARE-129.
 //
 // bgfx was outside this set until REMED-GFX-215. Its instanced route consumed COLOR0 -- which is
 // what REMED-GFX-212's own triage measured, with a WHITE DiffuseColor that cannot tell "COLOR0
@@ -145,7 +148,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 [[nodiscard]] inline bool InstancedVertexColorContract()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU, Bgfx,
-                           DirectX11, DirectX12, SdlGpu);
+                           DirectX11, DirectX12, SdlGpu, Software);
 }
 
 
@@ -543,6 +546,7 @@ protected:
     /// docs/opengles2-renderer.md) each skip every leg here up front.
     void SetUp() override
     {
+        device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
         if (!device.SupportsCapability(GraphicsCapability::ThreeD))
             GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
         if (!device.SupportsCapability(GraphicsCapability::Instancing))
@@ -1150,19 +1154,22 @@ TEST_F(InstancedVertexColorTest, QueuedInstancedDrawsKeepTheirOwnVertexColorStat
 
     BasicEffect effect(device);
     RenderTarget2D target = MakeTarget();
+    meshBuffer.SetDataRaw(meshA.data(), vertexCount, 16);
     device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
                              VertexBufferBinding(&instanceBuffer, 0, 1)});
     device.SetRenderTarget(&target);
     device.Clear(Color::Black);
 
-    meshBuffer.SetDataRaw(meshA.data(), vertexCount, 16);
     ApplyEffect(effect, true);
     device.DrawInstancedPrimitives(
         PrimitiveType::TriangleList, 0, 0, vertexCount, 0, quadCount * 2, 1);
 
     // Everything draw A captured now changes: the effect's VertexColorEnabled AND the bytes of the
     // very buffer it drew from.
+    device.SetVertexBuffers({});
     meshBuffer.SetDataRaw(meshB.data(), vertexCount, 16);
+    device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
+                             VertexBufferBinding(&instanceBuffer, 0, 1)});
     ApplyEffect(effect, false);
     device.DrawInstancedPrimitives(
         PrimitiveType::TriangleList, 0, 0, vertexCount, 0, quadCount * 2, 1);

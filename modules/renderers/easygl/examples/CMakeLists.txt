@@ -126,6 +126,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # a script) is what judges this binary's PNG output against the checked-in reference
         # images.
         cna_easygl_test(cna_oracle_render_easygl ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp)
+        # SOFTWARE-344: the fractional horizontal and diagonal aliased-line scenes are byte-exact
+        # against Microsoft XNA on current EasyGL and Software. Keep both renderer halves as an
+        # explicit shared regression rather than relying on the historical whole-corpus report.
+        cna_register_renderer_test(NAME EasyGL_XnaLineCoverage
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-oracle-corpus-diff-easygl.sh
+                $<TARGET_FILE:cna_oracle_render_easygl>
+                colored_linelist_quad colored_linestrip_quad
+            TIMEOUT 30 LABELS "EasyGL"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 461: canary proving the new shared PixelTestGame helper (modules/graphics/examples/common/) works
         cna_easygl_test(cna_test_easygl_pixeltestgame_smoke
@@ -873,6 +882,27 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_ViewSpace_Fog COMMAND cna_test_easygl_viewspace_fog
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-112: all five classic fog-capable stock effects share one public contract.
+        cna_easygl_test(cna_test_easygl_stock_effect_fog_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/stock_effect_fog_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_StockEffectFogContract
+            COMMAND cna_test_easygl_stock_effect_fog_contract
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-113: renderer-neutral FNA/XNA BasicEffect lighting equations and dispatch.
+        cna_easygl_test(cna_test_easygl_basic_effect_lighting_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/basic_effect_lighting_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_BasicEffectLightingContract
+            COMMAND cna_test_easygl_basic_effect_lighting_contract
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-114: renderer-neutral FNA/XNA EnvironmentMapEffect vertex-lighting contract.
+        cna_easygl_test(cna_test_easygl_environment_map_effect_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/environment_map_effect_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_EnvironmentMapEffectContract
+            COMMAND cna_test_easygl_environment_map_effect_contract
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
         cna_easygl_test(cna_test_easygl_skinnedeffect_multilight
                         easygl_skinnedeffect_multilight_test.cpp)
@@ -883,6 +913,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_easygl_test(cna_test_easygl_skinnedeffect_lighting_conformance
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/skinnedeffect_lighting_conformance_test.cpp)
         cna_register_renderer_test(NAME EasyGL_SkinnedEffect_LightingConformance COMMAND cna_test_easygl_skinnedeffect_lighting_conformance
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-115: renderer-neutral FNA/XNA skinning and lighting contract.
+        cna_easygl_test(cna_test_easygl_skinned_effect_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/skinned_effect_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SkinnedEffectContract
+            COMMAND cna_test_easygl_skinned_effect_contract
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 894: SkinnedEffect real specular highlights
@@ -931,7 +968,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_easygl_test(cna_test_easygl_rendertargetcube_sample
-                        easygl_rendertargetcube_sample_test.cpp)
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertargetcube_sample_test.cpp)
         cna_register_renderer_test(NAME EasyGL_RenderTargetCube_SampleAfterUnbind COMMAND cna_test_easygl_rendertargetcube_sample
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -941,6 +978,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_RenderTargetCube_PluralBinding
             COMMAND cna_test_easygl_rendertargetcube_plural_binding
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-120: renderer-neutral stock COLOR0 MRT semantics, independent of ShaderEffect.
+        cna_easygl_test(cna_test_easygl_mrt_stock_effect_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/mrt_stock_effect_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_MrtStockEffectContract
+            COMMAND cna_test_easygl_mrt_stock_effect_contract
+            TIMEOUT 45 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 877: RenderTargetCube honors its exact requested DepthFormat (None vs Depth24Stencil8)
         cna_easygl_test(cna_test_easygl_rendertargetcube_depthformat
@@ -1347,9 +1391,26 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_DepthFormat COMMAND cna_test_easygl_depth_format
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-181 adversarial differential: the Software reset contract is intentionally
+        # renderer-neutral and proves that the selected backbuffer depth/stencil format changes
+        # actual fragment acceptance, not merely the stored PresentationParameters field.
+        cna_easygl_test(cna_test_easygl_presentation_reset_contract
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/software/examples/software_presentation_reset_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_PresentationResetContract
+            COMMAND cna_test_easygl_presentation_reset_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_msaa_change
                         easygl_msaa_change_test.cpp)
         cna_register_renderer_test(NAME EasyGL_MsaaChange COMMAND cna_test_easygl_msaa_change
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-127: one source proves renderer-applied backbuffer sample reporting and real
+        # MultiSampleMask storage on both CPU Software (4) and non-reconfigurable EasyGL (0).
+        cna_easygl_test(cna_test_easygl_presentation_msaa_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/presentation_msaa_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_PresentationMsaaContract
+            COMMAND cna_test_easygl_presentation_msaa_contract 4
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_vertexbuffer_setdata
@@ -1390,6 +1451,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_easygl_test(cna_test_easygl_basiceffect_combinations
                         easygl_basiceffect_combinations_test.cpp)
         cna_register_renderer_test(NAME EasyGL_BasicEffectCombinations COMMAND cna_test_easygl_basiceffect_combinations
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-153: the same public unlit BasicEffect material/texture and vertex-output
+        # contract is compiled against both reference EasyGL and the independent CPU renderer.
+        cna_easygl_test(cna_test_easygl_basic_effect_unlit_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/basic_effect_unlit_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_BasicEffectUnlitContract
+            COMMAND cna_test_easygl_basic_effect_unlit_contract
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 364: BasicEffect pixel test — VertexColorEnabled=false, no texture, diffuse color only
@@ -1563,6 +1632,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_easygl_test(cna_test_easygl_vertex_formats
                         easygl_vertex_formats_test.cpp)
         cna_register_renderer_test(NAME EasyGL_VertexFormats_AllStrides COMMAND cna_test_easygl_vertex_formats
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-130: the same public declaration-driven draw must accept every XNA
+        # VertexElementFormat on both CPU Software and EasyGL. The source lives beside the
+        # original Software fixture but contains no renderer internals.
+        cna_easygl_test(cna_test_easygl_vertex_declaration_formats
+            ${CMAKE_SOURCE_DIR}/modules/renderers/software/examples/software_vertex_declaration_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_VertexDeclarationFormats
+            COMMAND cna_test_easygl_vertex_declaration_formats
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # plans/plan_gltf.md GLTF-157: a raw upload whose stride has no fixed layout and no explicit
@@ -1753,6 +1831,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_BlendState_BlendFactor COMMAND cna_test_easygl_blendstate_blendfactor
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-152: renderer-neutral analytic matrix for all 13 source factors, every valid
+        # destination factor and all five independent RGB/alpha blend functions.
+        cna_easygl_test(cna_test_easygl_blendstate_matrix
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/blend_state_matrix_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_BlendState_Matrix
+            COMMAND cna_test_easygl_blendstate_matrix TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 313: DepthStencilState.DepthBufferWriteEnable actually gates depth-buffer writes
         cna_easygl_test(cna_test_easygl_depthstencilstate_write_enable
                         easygl_depthstencilstate_write_enable_test.cpp)
@@ -1795,6 +1881,21 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_easygl_test(cna_test_easygl_graphicsdevice_reference_stencil
                         easygl_graphicsdevice_reference_stencil_test.cpp)
         cna_register_renderer_test(NAME EasyGL_GraphicsDevice_ReferenceStencil COMMAND cna_test_easygl_graphicsdevice_reference_stencil
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-121: shared exhaustive comparison/operation/topology/alpha-discard stencil
+        # matrix, compiled unchanged beside the five historical public EasyGL stencil scenes.
+        cna_easygl_test(cna_test_easygl_stencil_matrix
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/stencil_matrix_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_DepthStencilState_StencilMatrix
+            COMMAND cna_test_easygl_stencil_matrix
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-110: shared per-sample coverage/mask/depth/stencil contract.
+        cna_easygl_test(cna_test_easygl_msaa_fragment_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/msaa_fragment_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_MsaaFragmentContract
+            COMMAND cna_test_easygl_msaa_fragment_contract
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 871: GraphicsDevice::Clear() now actually clears the stencil buffer to the
@@ -1866,6 +1967,21 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_easygl_test(cna_test_easygl_xna_pixel_center
                         ${CNA_GRAPHICS_EXAMPLES_DIR}/xna_pixel_center_contract_test.cpp)
         cna_register_renderer_test(NAME EasyGL_XnaPixelCenter COMMAND cna_test_easygl_xna_pixel_center
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-107: renderer-independent XNA/D3D shared-edge ownership contract, paired with
+        # Software_TopLeftFill for differential coverage of order, winding and four samples.
+        cna_easygl_test(cna_test_easygl_top_left_fill
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/top_left_fill_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_TopLeftFill COMMAND cna_test_easygl_top_left_fill
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-111: renderer-independent AlphaTestEffect comparison/source/discard contract,
+        # paired with Software_AlphaTestEffectContract for direct behavioral evidence.
+        cna_easygl_test(cna_test_easygl_alpha_test_effect_contract
+                        ${CNA_GRAPHICS_EXAMPLES_DIR}/alpha_test_effect_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_AlphaTestEffectContract
+            COMMAND cna_test_easygl_alpha_test_effect_contract
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # XNA culling-compatibility audit (docs/xna_culling_compatibility_audit.md): extends the
@@ -2132,6 +2248,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_sampler_component_isolation
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-117 parity oracle: the same public contract exercises the driver-backed
+        # anisotropic path and verifies SpriteBatch forwards the caller's MaxAnisotropy.
+        cna_easygl_test(cna_test_easygl_anisotropic_filter_contract
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/anisotropic_filter_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_AnisotropicFilterContract
+            COMMAND cna_test_easygl_anisotropic_filter_contract
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_envmap_cube_sampler_state
             ${CNA_GRAPHICS_EXAMPLES_DIR}/envmap_cube_sampler_state_test.cpp)
         cna_register_renderer_test(NAME EasyGL_EnvMapCubeSamplerState
@@ -2184,6 +2308,31 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_point_sampling
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SOFTWARE-137 cross-renderer oracle: direct SpriteBatch float destinations must equal the
+        # same geometry expressed through Begin's transform, without a pixel tolerance.
+        cna_easygl_test(cna_test_easygl_spritebatch_subpixel
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_subpixel_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatchSubpixelContract
+            COMMAND cna_test_easygl_spritebatch_subpixel
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-251: the public XNA SpriteBatch surface accepts more sprites than one native
+        # UInt16-index submission. Microsoft XNA/FNA chunk at 2,048; this observes the 16,385th
+        # same-texture sprite, whose vertex base wrapped to zero in EasyGL before the repair.
+        cna_easygl_test(cna_test_easygl_spritebatch_large_batch
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_large_batch_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatchLargeBatchContract
+            COMMAND cna_test_easygl_spritebatch_large_batch
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # SOFTWARE-252: Immediate Draw must submit before a subsequent render-target switch rather
+        # than remaining in EasyGL's private same-texture queue until End().
+        cna_easygl_test(cna_test_easygl_spritebatch_immediate_submission
+            ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_immediate_submission_contract_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_SpriteBatchImmediateSubmissionContract
+            COMMAND cna_test_easygl_spritebatch_immediate_submission
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-151 cross-renderer control: the canonical XNA render-to-texture sequence -- render
         # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
         # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred
@@ -2233,13 +2382,9 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_BoundTargetLifetime COMMAND cna_test_easygl_bound_target_lifetime
             TIMEOUT 600 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # REMED-GFX-180: the public render-target -> Present lifecycle contract. `SdlGpu_RenderState`
-        # aborted with `Cannot present while render targets are bound`, which is the SECOND event in a
-        # two-stage chain: an over-range DrawPrimitives (two triangles from a three-vertex buffer) was
-        # correctly rejected by REMED-GFX-113's range guard, that rejection unwound past the fixture's own
-        # SetRenderTarget(nullptr), and EndDraw then met a still-bound target. FNA's contract is REJECT,
-        # never auto-unbind, so both guards are right and the fixture was wrong. Every leg runs in its own
-        # process; leg C2 reproduces the abort end to end and its correct outcome is SIGABRT.
+        # REMED-GFX-180/SOFTWARE-322: Present refuses while a target is bound independently of whether
+        # the preceding classic buffered draw used an out-of-range native input. Every leg runs in its
+        # own process; C1 proves explicit-unbind recovery and C2 proves the unhandled refusal is SIGABRT.
         cna_easygl_test(cna_test_easygl_present_lifecycle
             ${CNA_GRAPHICS_EXAMPLES_DIR}/present_lifecycle_contract_test.cpp)
         cna_register_renderer_test(NAME EasyGL_PresentLifecycle COMMAND cna_test_easygl_present_lifecycle

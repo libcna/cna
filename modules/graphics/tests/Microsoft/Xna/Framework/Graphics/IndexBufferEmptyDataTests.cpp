@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-054: public regression for CNA's established empty-index-buffer contract.
+// REMED-GFX-054 / SOFTWARE-204 / SOFTWARE-290: public index-buffer copy contract.
 //
-// Empty model parts are represented by a logical zero-capacity IndexBuffer.  Uploading an empty
-// range, including the pointer returned by an empty std::vector (which may be null), is a true
-// no-op: it must not mutate the renderer's last real upload.  The native allocation, if a renderer
-// needs a non-zero minimum internally, must not make a non-empty upload legal.
+// XNA requires both a positive logical capacity and a positive copy element count. A null array is
+// rejected even when the requested count is zero; a non-null zero-element copy is rejected as an
+// out-of-range elementCount and must not mutate the renderer's last real upload.
 
 #include <array>
 #include <cstdint>
@@ -22,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -34,6 +34,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 // plans/plan_runtimerenderer.md RTR-P9-9: a compile-time guard, because this block needs the WebGPU
@@ -55,6 +56,7 @@ using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
@@ -80,6 +82,7 @@ namespace
         // which is where GTEST_SKIP() genuinely prevents the test body from executing.
         void SetUp() override
         {
+            device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
                 GTEST_SKIP() << "Renderer explicitly does not support index buffers";
         }
@@ -150,19 +153,22 @@ namespace
 #endif
 }
 
-TEST_F(IndexBufferEmptyDataTest, ZeroCapacityConstructionPreservesLogicalCapacity)
+TEST_F(IndexBufferEmptyDataTest, ZeroCapacityConstructionThrowsForAllBufferKinds)
 {
     RequireIndexBuffers();
 
-    IndexBuffer static16(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
-    IndexBuffer static32(device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None);
-    DynamicIndexBuffer dynamic16(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
-    DynamicIndexBuffer dynamic32(device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None);
-
-    EXPECT_EQ(0, static16.getIndexCountProperty());
-    EXPECT_EQ(0, static32.getIndexCountProperty());
-    EXPECT_EQ(0, dynamic16.getIndexCountProperty());
-    EXPECT_EQ(0, dynamic32.getIndexCountProperty());
+    EXPECT_THROW((IndexBuffer(
+                     device, IndexElementSize::SixteenBits, 0, BufferUsage::None)),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((IndexBuffer(
+                     device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None)),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((DynamicIndexBuffer(
+                     device, IndexElementSize::SixteenBits, 0, BufferUsage::None)),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((DynamicIndexBuffer(
+                     device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None)),
+                 System::ArgumentOutOfRangeException);
 }
 
 TEST_F(IndexBufferEmptyDataTest, SharedThirtyTwoBitFactoryRejectsInsteadOfDelegatingToSixteenBits)
@@ -183,24 +189,30 @@ TEST_F(IndexBufferEmptyDataTest, SharedThirtyTwoBitFactoryRejectsInsteadOfDelega
     }
 }
 
-TEST_F(IndexBufferEmptyDataTest, ZeroCountAcceptsNullForStaticAndDynamicBuffers)
+TEST_F(IndexBufferEmptyDataTest, NullIsRejectedEvenWhenCountIsZero)
 {
     RequireIndexBuffers();
 
-    IndexBuffer static16(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
-    IndexBuffer static32(device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None);
-    DynamicIndexBuffer dynamic16(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
-    DynamicIndexBuffer dynamic32(device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None);
+    IndexBuffer static16(device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    IndexBuffer static32(device, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None);
+    DynamicIndexBuffer dynamic16(device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    DynamicIndexBuffer dynamic32(device, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None);
 
-    EXPECT_NO_THROW(static16.SetData(static_cast<const std::uint16_t*>(nullptr), 0));
-    EXPECT_NO_THROW(static32.SetData(static_cast<const std::uint32_t*>(nullptr), 0));
-    EXPECT_NO_THROW(dynamic16.SetData(
-        static_cast<const std::uint16_t*>(nullptr), 0, 0, SetDataOptions::Discard));
-    EXPECT_NO_THROW(dynamic32.SetData(
-        static_cast<const std::uint32_t*>(nullptr), 0, 0, SetDataOptions::NoOverwrite));
+    EXPECT_THROW(static16.SetData(static_cast<const std::uint16_t*>(nullptr), 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(static32.SetData(static_cast<const std::uint32_t*>(nullptr), 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(dynamic16.SetData(
+                     static_cast<const std::uint16_t*>(nullptr), 0, 0,
+                     SetDataOptions::Discard),
+                 System::ArgumentNullException);
+    EXPECT_THROW(dynamic32.SetData(
+                     static_cast<const std::uint32_t*>(nullptr), 0, 0,
+                     SetDataOptions::NoOverwrite),
+                 System::ArgumentNullException);
 }
 
-TEST_F(IndexBufferEmptyDataTest, ZeroCountAtStartAndSourceEndIsANoOpAfterARealUpload)
+TEST_F(IndexBufferEmptyDataTest, RejectedZeroCountLeavesTheLastRealUploadIntact)
 {
     RequireIndexBuffers();
 
@@ -214,14 +226,20 @@ TEST_F(IndexBufferEmptyDataTest, ZeroCountAtStartAndSourceEndIsANoOpAfterARealUp
     ASSERT_EQ(4, buffer16.GetRenderer().GetIndexCount());
     ASSERT_EQ(4, buffer32.GetRenderer().GetIndexCount());
 
-    EXPECT_NO_THROW(buffer16.SetData(source16.data(), 0));
-    EXPECT_NO_THROW(buffer32.SetData(source32.data(), 0));
-    EXPECT_NO_THROW(buffer16.SetData(
-        source16.data(), static_cast<int>(source16.size()), 0));
-    EXPECT_NO_THROW(buffer32.SetData(
-        source32.data(), static_cast<int>(source32.size()), 0));
-    EXPECT_NO_THROW(buffer16.SetData(static_cast<const std::uint16_t*>(nullptr), 0));
-    EXPECT_NO_THROW(buffer32.SetData(static_cast<const std::uint32_t*>(nullptr), 0));
+    EXPECT_THROW(buffer16.SetData(source16.data(), 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(buffer32.SetData(source32.data(), 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(buffer16.SetData(
+                     source16.data(), static_cast<int>(source16.size()), 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(buffer32.SetData(
+                     source32.data(), static_cast<int>(source32.size()), 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(buffer16.SetData(static_cast<const std::uint16_t*>(nullptr), 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(buffer32.SetData(static_cast<const std::uint32_t*>(nullptr), 0),
+                 System::ArgumentNullException);
 
     EXPECT_EQ(4, buffer16.GetRenderer().GetIndexCount());
     EXPECT_EQ(4, buffer32.GetRenderer().GetIndexCount());
@@ -234,30 +252,30 @@ TEST_F(IndexBufferEmptyDataTest, ZeroCountAtStartAndSourceEndIsANoOpAfterARealUp
     EXPECT_EQ(source32, result32);
 }
 
-TEST_F(IndexBufferEmptyDataTest, NativePaddingDoesNotPermitNonzeroUploadIntoZeroCapacity)
+TEST_F(IndexBufferEmptyDataTest, LogicalCapacityRejectsOversizedUploads)
 {
     RequireIndexBuffers();
 
-    const std::uint16_t source16 = 0;
-    const std::uint32_t source32 = 0;
-    IndexBuffer buffer16(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
-    IndexBuffer buffer32(device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None);
-    DynamicIndexBuffer dynamic16(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
-    DynamicIndexBuffer dynamic32(device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None);
+    const std::array<std::uint16_t, 2> source16{};
+    const std::array<std::uint32_t, 2> source32{};
+    IndexBuffer buffer16(device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    IndexBuffer buffer32(device, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None);
+    DynamicIndexBuffer dynamic16(device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    DynamicIndexBuffer dynamic32(device, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None);
 
-    EXPECT_THROW(buffer16.SetData(&source16, 1), System::ArgumentOutOfRangeException);
-    EXPECT_THROW(buffer32.SetData(&source32, 1), System::ArgumentOutOfRangeException);
-    EXPECT_THROW(dynamic16.SetData(&source16, 0, 1, SetDataOptions::Discard),
-                 System::ArgumentOutOfRangeException);
-    EXPECT_THROW(dynamic32.SetData(&source32, 0, 1, SetDataOptions::NoOverwrite),
-                 System::ArgumentOutOfRangeException);
-    EXPECT_EQ(0, buffer16.getIndexCountProperty());
-    EXPECT_EQ(0, buffer32.getIndexCountProperty());
-    EXPECT_EQ(0, dynamic16.getIndexCountProperty());
-    EXPECT_EQ(0, dynamic32.getIndexCountProperty());
+    EXPECT_THROW(buffer16.SetData(source16.data(), 2), System::InvalidOperationException);
+    EXPECT_THROW(buffer32.SetData(source32.data(), 2), System::InvalidOperationException);
+    EXPECT_THROW(dynamic16.SetData(source16.data(), 0, 2, SetDataOptions::Discard),
+                 System::InvalidOperationException);
+    EXPECT_THROW(dynamic32.SetData(source32.data(), 0, 2, SetDataOptions::NoOverwrite),
+                 System::InvalidOperationException);
+    EXPECT_EQ(1, buffer16.getIndexCountProperty());
+    EXPECT_EQ(1, buffer32.getIndexCountProperty());
+    EXPECT_EQ(1, dynamic16.getIndexCountProperty());
+    EXPECT_EQ(1, dynamic32.getIndexCountProperty());
 }
 
-TEST_F(IndexBufferEmptyDataTest, NullIsLegalOnlyForEmptyRanges)
+TEST_F(IndexBufferEmptyDataTest, NullIsRejectedForNonemptyRanges)
 {
     RequireIndexBuffers();
 
@@ -279,7 +297,7 @@ TEST_F(IndexBufferEmptyDataTest, NullIsLegalOnlyForEmptyRanges)
                  System::ArgumentNullException);
 }
 
-TEST_F(IndexBufferEmptyDataTest, EmptyRangeStillValidatesWidthAndNonnegativeArguments)
+TEST_F(IndexBufferEmptyDataTest, CopyValidationRejectsNullBeforeCountAndNegativeIndices)
 {
     RequireIndexBuffers();
 
@@ -290,12 +308,13 @@ TEST_F(IndexBufferEmptyDataTest, EmptyRangeStillValidatesWidthAndNonnegativeArgu
     DynamicIndexBuffer dynamic16(device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
 
     EXPECT_THROW(buffer16.SetData(static_cast<const std::uint32_t*>(nullptr), 0),
-                 System::ArgumentException);
+                 System::ArgumentNullException);
     EXPECT_THROW(buffer32.SetData(static_cast<const std::uint16_t*>(nullptr), 0),
-                 System::ArgumentException);
+                 System::ArgumentNullException);
     EXPECT_THROW(dynamic16.SetData(
-                     static_cast<const std::uint32_t*>(nullptr), 0, 0, SetDataOptions::Discard),
-                 System::ArgumentException);
+                     static_cast<const std::uint32_t*>(nullptr), 0, 0,
+                     SetDataOptions::Discard),
+                 System::ArgumentNullException);
     EXPECT_THROW(buffer16.SetData(&source16, -1, 0), System::ArgumentOutOfRangeException);
     EXPECT_THROW(buffer32.SetData(&source32, -1, 0), System::ArgumentOutOfRangeException);
     EXPECT_THROW(buffer16.SetData(&source16, -1), System::ArgumentOutOfRangeException);
@@ -304,14 +323,16 @@ TEST_F(IndexBufferEmptyDataTest, EmptyRangeStillValidatesWidthAndNonnegativeArgu
                  System::ArgumentOutOfRangeException);
 }
 
-TEST_F(IndexBufferEmptyDataTest, EmptyGetDataAvoidsNullMemcpyButPreservesRangeChecks)
+TEST_F(IndexBufferEmptyDataTest, GetDataRejectsNullEvenWhenCountIsZero)
 {
     RequireIndexBuffers();
 
-    IndexBuffer empty16(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
-    IndexBuffer empty32(device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None);
-    EXPECT_NO_THROW(empty16.GetData(static_cast<std::uint16_t*>(nullptr), 0));
-    EXPECT_NO_THROW(empty32.GetData(static_cast<std::uint32_t*>(nullptr), 0));
+    IndexBuffer empty16(device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    IndexBuffer empty32(device, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None);
+    EXPECT_THROW(empty16.GetData(static_cast<std::uint16_t*>(nullptr), 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(empty32.GetData(static_cast<std::uint32_t*>(nullptr), 0),
+                 System::ArgumentNullException);
 
     const std::array<std::uint16_t, 4> source16{0, 1, 2, 3};
     const std::array<std::uint32_t, 4> source32{10, 11, 12, 13};
@@ -320,26 +341,30 @@ TEST_F(IndexBufferEmptyDataTest, EmptyGetDataAvoidsNullMemcpyButPreservesRangeCh
     buffer16.SetData(source16.data(), static_cast<int>(source16.size()));
     buffer32.SetData(source32.data(), static_cast<int>(source32.size()));
 
-    EXPECT_NO_THROW(buffer16.GetData(
-        static_cast<std::uint16_t*>(nullptr), static_cast<int>(source16.size()), 0));
-    EXPECT_NO_THROW(buffer32.GetData(
-        static_cast<std::uint32_t*>(nullptr), static_cast<int>(source32.size()), 0));
+    EXPECT_THROW(buffer16.GetData(
+                     static_cast<std::uint16_t*>(nullptr),
+                     static_cast<int>(source16.size()), 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(buffer32.GetData(
+                     static_cast<std::uint32_t*>(nullptr),
+                     static_cast<int>(source32.size()), 0),
+                 System::ArgumentNullException);
     EXPECT_THROW(buffer16.GetData(static_cast<std::uint16_t*>(nullptr), 5, 0),
-                 System::ArgumentOutOfRangeException);
+                 System::ArgumentNullException);
     EXPECT_THROW(buffer32.GetData(static_cast<std::uint32_t*>(nullptr), 5, 0),
-                 System::ArgumentOutOfRangeException);
+                 System::ArgumentNullException);
     EXPECT_THROW(buffer16.GetData(static_cast<std::uint16_t*>(nullptr), 1),
                  System::ArgumentNullException);
     EXPECT_THROW(buffer32.GetData(static_cast<std::uint32_t*>(nullptr), 1),
                  System::ArgumentNullException);
 }
 
-TEST_F(IndexBufferEmptyDataTest, DisposedBuffersRejectEmptyOperationsBeforeNoOp)
+TEST_F(IndexBufferEmptyDataTest, DisposedBuffersRejectCopiesBeforeArgumentValidation)
 {
     RequireIndexBuffers();
 
-    IndexBuffer static16(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
-    DynamicIndexBuffer dynamic32(device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None);
+    IndexBuffer static16(device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    DynamicIndexBuffer dynamic32(device, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None);
     static16.Dispose();
     static16.Dispose();
     dynamic32.Dispose();
@@ -397,8 +422,8 @@ TEST_F(IndexBufferEmptyDataTest, NonzeroUploadsRemainExactForBothWidthsAndBuffer
     static32.GetData(&single32, 1);
     EXPECT_EQ(source16.front(), single16);
     EXPECT_EQ(source32.front(), single32);
-    EXPECT_EQ(1, static16.GetRenderer().GetIndexCount());
-    EXPECT_EQ(1, static32.GetRenderer().GetIndexCount());
+    EXPECT_EQ(4, static16.GetRenderer().GetIndexCount());
+    EXPECT_EQ(4, static32.GetRenderer().GetIndexCount());
 }
 
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
@@ -419,10 +444,12 @@ TEST_F(IndexBufferEmptyDataTest, WebGpuNativeErrorScopesStayClean)
     wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_OutOfMemory);
     wgpuDevicePushErrorScope(renderer->Device(), WGPUErrorFilter_Validation);
 
-    IndexBuffer empty16(device, IndexElementSize::SixteenBits, 0, BufferUsage::None);
-    IndexBuffer empty32(device, IndexElementSize::ThirtyTwoBits, 0, BufferUsage::None);
-    EXPECT_NO_THROW(empty16.SetData(static_cast<const std::uint16_t*>(nullptr), 0));
-    EXPECT_NO_THROW(empty32.SetData(static_cast<const std::uint32_t*>(nullptr), 0));
+    IndexBuffer empty16(device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    IndexBuffer empty32(device, IndexElementSize::ThirtyTwoBits, 1, BufferUsage::None);
+    EXPECT_THROW(empty16.SetData(static_cast<const std::uint16_t*>(nullptr), 0),
+                 System::ArgumentNullException);
+    EXPECT_THROW(empty32.SetData(static_cast<const std::uint32_t*>(nullptr), 0),
+                 System::ArgumentNullException);
 
     const std::uint16_t one16 = 7;
     const std::uint32_t one32 = 9;

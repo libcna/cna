@@ -1,0 +1,60 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -614,6 +614,14 @@ static void validate_restricted_destination_register(Context *ctx,
+     {
+         fail(ctx, "Boolean constant destination requires DEFB");
+     } // else if
++    else if (shader_is_vertex(ctx) && (regtype == REG_TYPE_ADDRESS) &&
++             (((ctx->major_ver == 1) && (opcode != 1)) ||
++              ((ctx->major_ver >= 2) && (opcode != 46))))
++    {
++        fail(ctx, ctx->major_ver == 1
++                      ? "Shader Model 1.1 address destination requires MOV"
++                      : "Shader Model 2+ address destination requires MOVA");
++    } // else if
+     else if (regtype == REG_TYPE_SAMPLER)
+     {
+         fail(ctx, "sampler pseudo-register cannot be an instruction destination");
+@@ -687,6 +695,15 @@ static void validate_output_register_source(Context *ctx,
+     } // else if
+ } // validate_output_register_source
+ 
++static void validate_address_register_source(Context *ctx,
++                                             const RegisterType regtype)
++{
++    if (shader_is_vertex(ctx) && (regtype == REG_TYPE_ADDRESS))
++    {
++        fail(ctx, "address register cannot be an ordinary instruction source");
++    } // if
++} // validate_address_register_source
++
+ static void validate_constant_control_register(Context *ctx,
+                                                const RegisterType regtype,
+                                                const int regnum)
+@@ -1070,6 +1087,7 @@ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+     validate_temporary_register(ctx, info->regtype, info->regnum);
+     validate_input_register(ctx, info->regtype, info->regnum);
+     validate_output_register_source(ctx, info->regtype);
++    validate_address_register_source(ctx, info->regtype);
+     validate_constant_control_register(ctx, info->regtype, info->regnum);
+ 
+     info->swizzle = adjust_swizzle(ctx, info->regtype, info->regnum, swizzle);
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -1391,7 +1391,13 @@ void emit_GLSL_MOV(Context *ctx)
+ {
+     char src0[64]; make_GLSL_srcarg_string_masked(ctx, 0, src0, sizeof (src0));
+     char code[128];
+-    make_GLSL_destarg_assign(ctx, code, sizeof (code), "%s", src0);
++    if (ctx->dest_arg.regtype == REG_TYPE_ADDRESS)
++    {
++        make_GLSL_destarg_assign(ctx, code, sizeof (code),
++                                 "int(floor(abs(%s) + 0.5) * sign(%s))", src0, src0);
++    } // if
++    else
++        make_GLSL_destarg_assign(ctx, code, sizeof (code), "%s", src0);
+     output_line(ctx, "%s", code);
+ } // emit_GLSL_MOV
+ 

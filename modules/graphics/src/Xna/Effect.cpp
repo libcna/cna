@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -26,11 +27,13 @@ namespace
     bool IsValidRenderStateType(std::uint32_t value)
     {
         // MojoShader's Effect ABI numbers the ordinary D3D9 render states contiguously from
-        // ZENABLE through BLENDOPALPHA, then reserves a gap before its two shader pseudo-states.
-        // The legacy compiler also emits 160 for PixelShaderConstant assignments and 178 for
-        // SetSampler metadata. They must remain distinguishable from ordinary enum values even
-        // when a backend cannot execute the corresponding Shader Model 1 assignment.
-        return value <= 102u || value == 146u || value == 147u || value == 160u ||
+        // ZENABLE through BLENDOPALPHA, then uses six values in the gap for the legacy texture-
+        // stage bump matrix/luminance assignments before its two shader pseudo-states. The legacy
+        // compiler also emits 160 for PixelShaderConstant assignments and 178 for SetSampler
+        // metadata. They must remain distinguishable from ordinary enum values even when a
+        // backend cannot execute the corresponding Shader Model 1 assignment.
+        return value <= 102u || (value >= 112u && value <= 115u) || value == 117u ||
+            value == 118u || value == 146u || value == 147u || value == 160u ||
             value == 178u;
     }
 
@@ -763,7 +766,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , device_(&device)
     {
         techniques_.Add(EffectTechnique(this, "Default"));
-        currentTechnique_ = &techniques_[0];
+        currentTechnique_ = techniques_[0];
     }
 
     Effect::Effect(GraphicsDevice& device, const std::string& stockTechniqueName)
@@ -771,7 +774,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , device_(&device)
     {
         techniques_.Add(EffectTechnique(this, stockTechniqueName));
-        currentTechnique_ = &techniques_[0];
+        currentTechnique_ = techniques_[0];
     }
 
     Effect::Effect(GraphicsDevice& device, const std::vector<SharpRuntime::bytecs>& effectCode)
@@ -844,13 +847,14 @@ namespace Microsoft::Xna::Framework::Graphics
         : GraphicsResource(cloneSource.device_)
         , device_(cloneSource.device_)
     {
+        cloneSource.ThrowIfDisposedForCloneInternal();
         if (!cloneSource.compiledRuntime_)
         {
             // A source with no compiled runtime -- a stock effect, or one built by the
             // device-only constructor -- has nothing for the renderer to clone, so the
             // clone gets the same single "Default" technique a bare Effect has.
             techniques_.Add(EffectTechnique(this, "Default"));
-            currentTechnique_ = &techniques_[0];
+            currentTechnique_ = techniques_[0];
             return;
         }
 
@@ -870,15 +874,15 @@ namespace Microsoft::Xna::Framework::Graphics
                                    cloneSource.parameters_.getCountProperty());
         for (int i = 0; i < count; ++i)
         {
-            parameters_[i].CopyMutableValueFromInternal(cloneSource.parameters_[i]);
+            parameters_[i]->CopyMutableValueFromInternal(*cloneSource.parameters_[i]);
         }
 
         for (int i = 0; i < cloneSource.techniques_.getCountProperty(); ++i)
         {
-            if (&cloneSource.techniques_[i] == cloneSource.currentTechnique_ &&
+            if (cloneSource.techniques_[i] == cloneSource.currentTechnique_ &&
                 i < techniques_.getCountProperty())
             {
-                setCurrentTechniqueProperty(&techniques_[i]);
+                setCurrentTechniqueProperty(techniques_[i]);
                 break;
             }
         }
@@ -901,22 +905,30 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GraphicsDevice& Effect::getGraphicsDeviceInternal() const { return *device_; }
 
+    void Effect::ThrowIfDisposedForCloneInternal() const
+    {
+        if (isDisposed_)
+            throw System::ObjectDisposedException(getNameProperty());
+    }
+
     EffectTechnique* Effect::getCurrentTechniqueProperty() const { return currentTechnique_; }
 
     void Effect::setCurrentTechniqueProperty(EffectTechnique* value)
     {
-        currentTechnique_ = value;
-        if (compiledRuntime_ && value != nullptr)
+        if (isDisposed_)
+            throw System::ObjectDisposedException(getNameProperty());
+        if (value == nullptr)
+            throw System::ArgumentNullException("value");
+        if (value->owner_ != this)
+            throw System::InvalidOperationException();
+        if (value == currentTechnique_)
+            return;
+
+        if (compiledRuntime_)
         {
-            for (int i = 0; i < techniques_.getCountProperty(); ++i)
-            {
-                if (&techniques_[i] == value)
-                {
-                    compiledRuntime_->SetTechnique(value->getIndexInternal());
-                    break;
-                }
-            }
+            compiledRuntime_->SetTechnique(value->getIndexInternal());
         }
+        currentTechnique_ = value;
     }
 
     EffectParameterCollection& Effect::getParametersProperty() { return parameters_; }
@@ -1001,6 +1013,14 @@ namespace Microsoft::Xna::Framework::Graphics
     void Effect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const
     {
         params.compiledEffectRuntime = compiledRuntime_.get();
+        if (compiledRuntime_ != nullptr && device_ != nullptr)
+        {
+            params.compiledDeviceTextures = &device_->getTexturesProperty();
+            params.compiledDeviceSamplerStates = &device_->getSamplerStatesProperty();
+            params.compiledDeviceVertexTextures = &device_->getVertexTexturesProperty();
+            params.compiledDeviceVertexSamplerStates =
+                &device_->getVertexSamplerStatesProperty();
+        }
     }
 
     const std::string& Effect::GetVertexSource() const
@@ -1022,6 +1042,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Effect* Effect::Clone()
     {
+        ThrowIfDisposedForCloneInternal();
         if (!compiledRuntime_)
         {
             return new Effect(*device_);
@@ -1127,7 +1148,7 @@ namespace Microsoft::Xna::Framework::Graphics
             techniques_.Add(std::move(technique));
         }
 
-        currentTechnique_ = &techniques_[0];
+        currentTechnique_ = techniques_[0];
         compiledRuntime_->SetTechnique(0);
     }
 

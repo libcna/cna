@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -213,13 +214,11 @@ protected:
               }),
               "cube render target null object can be bound and unbound");
 
-        OcclusionQuery query(device);
-        Check(DoesNotThrow([&] {
-                  query.Begin();
-                  query.End();
-              }) &&
-                  query.getIsCompleteProperty() && query.getPixelCountProperty() == 0,
-              "occlusion query null object completes with zero pixels");
+        bool queryRejected = false;
+        try { OcclusionQuery query(device); }
+        catch (const System::NotSupportedException&) { queryRejected = true; }
+        Check(queryRejected,
+              "Reach/unsupported renderer rejects an occlusion query instead of returning a null object");
 
         const Matrix identity = Matrix::getIdentityProperty();
         Check(DoesNotThrow([&] {

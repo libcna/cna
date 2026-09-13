@@ -30,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -180,6 +181,7 @@ public:
     DiligentCapabilityConsistencyTest()
     {
         graphicsDeviceManager_ = std::make_unique<GraphicsDeviceManager>(this);
+        graphicsDeviceManager_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         graphicsDeviceManager_->setPreferredBackBufferWidthProperty(64);
         graphicsDeviceManager_->setPreferredBackBufferHeightProperty(64);
     }

@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/NotSupportedException.hpp"
 
 using CNA::Internal::Renderers::Metal::RequireFaithfulDeclarationEXT;
@@ -90,12 +91,13 @@ TEST(MetalVertexDeclarationPolicy, RejectsSameStrideWithWrongFormat)
 
 TEST(MetalVertexDeclarationPolicy, RejectsDuplicateSemanticOwnership)
 {
-    const VertexDeclaration declaration(24, {
-        Element(0, VertexElementFormat::Vector3, VertexElementUsage::Position),
-        Element(12, VertexElementFormat::Color, VertexElementUsage::Color),
-        Element(16, VertexElementFormat::Color, VertexElementUsage::Color),
-    });
-    EXPECT_THROW(Require(declaration, 24), System::NotSupportedException);
+    EXPECT_THROW(
+        VertexDeclaration(24, {
+            Element(0, VertexElementFormat::Vector3, VertexElementUsage::Position),
+            Element(12, VertexElementFormat::Color, VertexElementUsage::Color),
+            Element(16, VertexElementFormat::Color, VertexElementUsage::Color),
+        }),
+        System::ArgumentException);
 }
 
 TEST(MetalVertexDeclarationPolicy, RejectsDeclarationStrideDifferentFromUpload)

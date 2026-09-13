@@ -1,0 +1,63 @@
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -2421,6 +2421,9 @@ void emit_GLSL_TEXLD(Context *ctx)
+             make_GLSL_srcarg_string_w(ctx, 0, bias, sizeof (bias));
+         } // if
+ 
++        const char *projsep = "";
++        char proj[64] = { '\0' };
++
+         switch ((const TextureType) sreg->index)
+         {
+             case TEXTURE_TYPE_2D:
+@@ -2438,7 +2441,10 @@ void emit_GLSL_TEXLD(Context *ctx)
+                 break;
+             case TEXTURE_TYPE_CUBE:
+                 if (ctx->instruction_controls == CONTROL_TEXLDP)
+-                    fail(ctx, "TEXLDP on a cubemap");  // !!! FIXME: is this legal?
++                {
++                    projsep = " / ";
++                    make_GLSL_srcarg_string_w(ctx, 0, proj, sizeof (proj));
++                } // if
+                 funcname = "textureCube";
+                 make_GLSL_srcarg_string_vec3(ctx, 0, src0, sizeof (src0));
+                 break;
+@@ -2465,8 +2471,8 @@ void emit_GLSL_TEXLD(Context *ctx)
+ 
+         char code[128];
+         make_GLSL_destarg_assign(ctx, code, sizeof (code),
+-                                 "%s(%s, %s%s%s)%s", funcname,
+-                                 src1, src0, biassep, bias, swiz_str);
++                                 "%s(%s, %s%s%s%s%s)%s", funcname,
++                                 src1, src0, projsep, proj, biassep, bias, swiz_str);
+ 
+         output_line(ctx, "%s", code);
+     } // else
+diff --git a/profiles/mojoshader_profile_hlsl.c b/profiles/mojoshader_profile_hlsl.c
+--- a/profiles/mojoshader_profile_hlsl.c
++++ b/profiles/mojoshader_profile_hlsl.c
+@@ -1731,8 +1731,6 @@ void emit_HLSL_TEXLD(Context *ctx)
+                     make_HLSL_srcarg_string_vec2(ctx, 0, src0, sizeof (src0));
+                 break;
+             case TEXTURE_TYPE_CUBE:
+-                if (ctx->instruction_controls == CONTROL_TEXLDP)
+-                    fail(ctx, "TEXLDP on a cubemap");  // !!! FIXME: is this legal?
+                 make_HLSL_srcarg_string_vec3(ctx, 0, src0, sizeof (src0));
+                 break;
+             case TEXTURE_TYPE_VOLUME:
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -2999,11 +2999,6 @@ static void state_TEXLD(Context *ctx)
+         const SourceArgInfo *src0 = &ctx->source_args[0];
+         const SourceArgInfo *src1 = &ctx->source_args[1];
+ 
+-        // !!! FIXME: verify texldp restrictions:
+-        //http://msdn.microsoft.com/en-us/library/bb206221(VS.85).aspx
+-        // !!! FIXME: ...and texldb, too.
+-        //http://msdn.microsoft.com/en-us/library/bb206217(VS.85).aspx
+-
+         if (ctx->dest_arg.result_mod & MOD_SATURATE)
+             fail(ctx, "TEXLD destination must not saturate");
+ 

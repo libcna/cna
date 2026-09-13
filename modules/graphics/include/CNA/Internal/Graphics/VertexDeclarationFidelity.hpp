@@ -685,21 +685,25 @@ namespace CNA::Internal::Graphics
     }
 
     /**
-     * @brief Throws unless every declaration semantic used by @p inputs has the expected format.
+     * @brief Throws unless every declaration semantic used by @p inputs has a convertible format.
      *
      * Declaration order and byte offsets are intentionally unrestricted. XNA vertex declarations
      * identify shader inputs by usage and usage index, and compiled XNB model data commonly orders
      * TextureCoordinate before Normal even though CNA's stock shaders declare Normal first. A
      * renderer that maps semantics to locations may bind either order faithfully. Inputs omitted
      * by the declaration remain unbound, preserving the position-only behavior used by existing
-     * stock draws; declaration elements the selected program does not consume are ignored.
+     * stock draws; declaration elements the selected program does not consume are ignored. Every
+     * XNA `VertexElementFormat` is convertible to a floating-point stock shader input: the native
+     * vertex fetch converts integer and normalized storage, supplies zero for missing Y/Z
+     * components and one for missing W, and discards excess components. This matches FNA3D's
+     * OpenGL binding and avoids treating a shader register's width as a required byte format.
      *
      * @param declaredElements The public declaration's elements.
      * @param inputs The selected stock program's inputs, in attribute-location order.
      * @param inputCount How many inputs @p inputs holds.
      * @param rendererName The renderer's public name, for the diagnostic.
      * @param programName The selected stock program's name, for the diagnostic.
-     * @throws System::NotSupportedException When a consumed semantic has the wrong format.
+     * @throws System::NotSupportedException When a consumed semantic uses an unknown format.
      */
     inline void RequireDeclarationMatchesStockProgram(
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
@@ -721,8 +725,7 @@ namespace CNA::Internal::Graphics
                 if (in.usage != e.getVertexElementUsageProperty() ||
                     in.usageIndex != e.getUsageIndexProperty())
                     continue;
-                if (in.format == e.getVertexElementFormatProperty() ||
-                    in.alternateFormat == e.getVertexElementFormatProperty())
+                if (detail::FormatSize(e.getVertexElementFormatProperty()) != 0)
                     break;
                 throw System::NotSupportedException(
                     std::string(rendererName) +
@@ -730,12 +733,8 @@ namespace CNA::Internal::Graphics
                     "' program -- element " + std::to_string(elementIndex) + " declares " +
                     detail::Describe(e.getVertexElementUsageProperty(), e.getUsageIndexProperty(),
                                      e.getOffsetProperty(), e.getVertexElementFormatProperty()) +
-                    " but shader input '" + in.name + "' expects " +
-                    detail::FormatName(in.format) +
-                    (in.alternateFormat == in.format
-                         ? std::string()
-                         : std::string(" or ") + detail::FormatName(in.alternateFormat)) +
-                    ".");
+                    " but shader input '" + in.name +
+                    "' cannot convert that unknown VertexElementFormat.");
             }
         }
     }

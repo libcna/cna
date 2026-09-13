@@ -92,7 +92,7 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
         // integer cast undefined in C++. Measured on the XNA 4.0 runtime:
         // tests/reference/xna40/framework/framework-packing-oracle.json, cases packed/*/ties,
         // packed/*/negative_ties and packed/*/nan_and_infinities.
-        
+
             auto xi = static_cast<uint32_t>(CNA::Internal::ClampAndRound(x, 0.0f, 255.0f));
             auto yi = static_cast<uint32_t>(CNA::Internal::ClampAndRound(y, 0.0f, 255.0f));
             auto zi = static_cast<uint32_t>(CNA::Internal::ClampAndRound(z, 0.0f, 255.0f));

@@ -7,9 +7,20 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "VertexValueHash.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    std::size_t VertexPositionColor::GetHashCode() const
+    {
+        using CNA::Internal::Graphics::SmartVertexHash;
+        using CNA::Internal::Graphics::VertexFloatWord;
+        return SmartVertexHash(VertexFloatWord(Position.X),
+                               VertexFloatWord(Position.Y),
+                               VertexFloatWord(Position.Z),
+                               Color.getPackedValueProperty());
+    }
+
     const VertexDeclaration& VertexPositionColor::getVertexDeclarationStatic()
     {
         using Stream = CNA::Internal::Graphics::PositionColorStream;

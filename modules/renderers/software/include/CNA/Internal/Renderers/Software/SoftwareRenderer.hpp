@@ -3,15 +3,20 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/Renderers/Software/SoftwareFramebufferAllocation.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <limits>
 #include <memory>
 #include <vector>
 
 namespace CNA::Internal::Renderers::Software
 {
+    class SoftwareRenderer;
+
     /**
      * @brief Real CPU-owned RGBA8 colour, depth and optional resolved 4x MSAA storage.
      *
@@ -22,9 +27,11 @@ namespace CNA::Internal::Renderers::Software
     struct SoftwareFramebuffer
     {
         explicit SoftwareFramebuffer(bool allocateDepth = true,
-                                     bool allocateStencil = true)
+                                     bool allocateStencil = true,
+                                     int requestedSurfaceFormat = 0)
             : allocateDepthStorage(allocateDepth),
-              allocateStencilStorage(allocateStencil)
+              allocateStencilStorage(allocateStencil),
+              surfaceFormat(requestedSurfaceFormat)
         {
         }
 
@@ -34,22 +41,95 @@ namespace CNA::Internal::Renderers::Software
         /// a const readback may refresh it from `multiSampleColor` without changing the rendered
         /// image or the active render-pass state.
         mutable std::vector<std::uint8_t> color;
-        std::vector<float> depthBuffer;   ///< width*height floats, 0..1.
-        /// One 8-bit stencil value per pixel. It remains per-pixel when the optional four-sample
-        /// colour plane is active; it is deliberately not a per-sample depth/stencil attachment.
+        /// Canonical shader-visible RGBA values for non-Color render-target formats.
+        mutable std::vector<float> wideColor;
+        std::vector<float> depthBuffer;   ///< Single-sample/resolved width*height depths, 0..1.
+        /// Single-sample/resolved 8-bit stencil value per pixel.
         std::vector<std::uint8_t> stencilBuffer;
         /// Four RGBA8 samples per pixel when 4x CPU MSAA is enabled; empty otherwise. `color`
         /// remains the resolved presentation/readback image, so existing consumers never see an
         /// unresolved sample plane.
-        std::vector<std::uint8_t> multiSampleColor;
+        mutable std::vector<std::uint8_t> multiSampleColor;
+        /// Four canonical float RGBA samples per pixel for non-Color 4x targets.
+        mutable std::vector<float> multiSampleWideColor;
+        /// Four independent float depth samples per pixel when 4x CPU MSAA is enabled.
+        std::vector<float> multiSampleDepthBuffer;
+        /// Four independent 8-bit stencil samples per pixel when 4x CPU MSAA is enabled.
+        std::vector<std::uint8_t> multiSampleStencilBuffer;
         int multiSampleCount = 0; ///< 0 = single sampled; the CPU implementation supports 4 only.
         bool allocateDepthStorage = true;
         bool allocateStencilStorage = true;
+        int surfaceFormat = 0; ///< Raw XNA SurfaceFormat ordinal; zero is Color/RGBA8.
 
         void Resize(int w, int h);
         void SetMultiSampleCount(int sampleCount);
+        /** @brief Returns whether four-sample color storage is active. */
         [[nodiscard]] bool HasMultiSampleColor() const { return multiSampleCount == 4; }
+        /** @brief Returns whether four-sample depth storage is active. */
+        [[nodiscard]] bool HasMultiSampleDepth() const
+        { return HasMultiSampleColor() && allocateDepthStorage; }
+        /** @brief Returns whether four-sample stencil storage is active. */
+        [[nodiscard]] bool HasMultiSampleStencil() const
+        { return HasMultiSampleColor() && allocateStencilStorage; }
+        /** @brief Returns the number of raster samples stored per pixel. */
         [[nodiscard]] int EffectiveSampleCount() const { return HasMultiSampleColor() ? 4 : 1; }
+        /** @brief Returns whether the target owns format-preserving float-domain colour storage. */
+        [[nodiscard]] bool HasWideColor() const { return surfaceFormat != 0; }
+        /**
+         * @brief Reads one stored destination colour in shader arithmetic range.
+         * @param pixel Pixel index in row-major order.
+         * @param sample Sample index 0-3 for MSAA, or -1 for resolved/single-sample storage.
+         * @return Canonical RGBA components after target-format quantization.
+         */
+        [[nodiscard]] std::array<float, 4> ReadColor(std::size_t pixel, int sample = -1) const;
+        /**
+         * @brief Applies the declared target format's channel expansion and precision.
+         * @param value Shader-domain RGBA value.
+         * @return The value a store followed by a load exposes.
+         */
+        [[nodiscard]] std::array<float, 4> QuantizeColor(
+            const std::array<float, 4>& value) const;
+        /**
+         * @brief Returns the exact byte width of one declared-format texel.
+         * @return Bytes per pixel for this framebuffer's SurfaceFormat.
+         */
+        [[nodiscard]] int DeclaredColorTexelSize() const;
+        /**
+         * @brief Decodes one exact declared-format texel.
+         * @param data Source texel bytes.
+         * @return Canonical shader-visible RGBA value.
+         */
+        [[nodiscard]] std::array<float, 4> DecodeDeclaredColor(const void* data) const;
+        /**
+         * @brief Encodes one canonical colour in the exact declared target format.
+         * @param value Canonical shader-visible RGBA value.
+         * @param data Destination texel bytes.
+         */
+        void EncodeDeclaredColor(const std::array<float, 4>& value, void* data) const;
+        /**
+         * @brief Writes selected channels and quantizes them to this target's declared format.
+         * @param pixel Pixel index in row-major order.
+         * @param sample Sample index 0-3 for MSAA, or -1 for resolved/single-sample storage.
+         * @param value Incoming RGBA components.
+         * @param colorWriteMask XNA ColorWriteChannels bits.
+         */
+        void WriteColor(std::size_t pixel, int sample,
+                        const std::array<float, 4>& value, int colorWriteMask) const;
+        /**
+         * @brief Replaces resolved level-zero colour from exact declared-format rows.
+         * @param data Source bytes.
+         * @param stride Source row pitch in bytes.
+         */
+        void LoadDeclaredColor(const std::uint8_t* data, int stride);
+        /**
+         * @brief Encodes a level-zero rectangle to exact declared-format bytes.
+         * @param x Left source coordinate.
+         * @param y Top source coordinate.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Destination bytes.
+         */
+        void StoreDeclaredColor(int x, int y, int w, int h, void* data) const;
         /// Copies every resolved RGBA pixel into all active samples. A no-op when MSAA is off.
         void CopyResolvedColorToMultiSample();
         /// Resolves the per-sample colour plane into `color`. A no-op for single-sample targets.
@@ -65,9 +145,9 @@ namespace CNA::Internal::Renderers::Software
         explicit SoftwareVertexBufferRenderer(int vertexCapacity);
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
-        // REMED-GFX-DECL-GUARD: the rasterizer still infers its attribute offsets from the byte
-        // stride (REMED-GFX-217), but the declaration is remembered rather than discarded so a
-        // draw can refuse a declaration those offsets would silently reinterpret.
+        // SOFTWARE-108: the CPU vertex reader resolves elements by declaration semantic/index,
+        // format and stream-local offset; retaining the declaration here avoids widening the
+        // renderer-neutral draw contract with Software-only convenience data.
         void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) override
         {
             declaration_.Remember(vertexDeclaration);
@@ -78,14 +158,13 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] int Capacity() const { return capacity_; }
         [[nodiscard]] std::size_t Stride() const { return stride_; }
-        /// The declaration this buffer carries, for REMED-GFX-DECL-GUARD's fidelity check.
+        /// The declaration this buffer carries for Software's semantic vertex decoder.
         [[nodiscard]] const CNA::Internal::Graphics::DeclaredVertexLayout& Declaration() const
         {
             return declaration_;
         }
-        /// Raw vertex bytes from the most recent SetData() call -- the rasterizer (Phase S4)
-        /// reads vertex attributes directly from here, keyed by Stride() (plans/plan_software.md
-        /// design decision 2: stride-based format inference).
+        /// Raw vertex bytes from the most recent SetData() call. Declared buffers are interpreted
+        /// by their elements; only the legacy empty-declaration CNAEXT buffer uses Stride().
         [[nodiscard]] const std::vector<std::uint8_t>& Data() const { return data_; }
 
     private:
@@ -182,6 +261,101 @@ namespace CNA::Internal::Renderers::Software
          */
         [[nodiscard]] virtual const std::vector<std::uint8_t>& ColorPixels(int level) const
         { (void)level; return ColorPixels(); }
+
+        /**
+         * @brief Fetches one texel in the value range exposed to an XNA pixel shader.
+         *
+         * The default converts the RGBA8 colour surface. Texture formats with signed-normalized,
+         * floating-point, or wider normalized storage override this so sampling does not lose
+         * range or precision merely because the CPU framebuffer itself is RGBA8.
+         *
+         * @param level Mip level beginning at zero.
+         * @param x Texel x coordinate within the level.
+         * @param y Texel y coordinate within the level.
+         * @param r Receives the red component.
+         * @param g Receives the green component.
+         * @param b Receives the blue component.
+         * @param a Receives the alpha component.
+         */
+        virtual void FetchColorTexel(int level, int x, int y,
+                                     float& r, float& g, float& b, float& a) const
+        {
+            const int width = ColorWidth(level);
+            const auto& pixels = ColorPixels(level);
+            const std::size_t offset =
+                (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) +
+                 static_cast<std::size_t>(x)) * 4u;
+            r = pixels[offset + 0] / 255.0f;
+            g = pixels[offset + 1] / 255.0f;
+            b = pixels[offset + 2] / 255.0f;
+            a = pixels[offset + 3] / 255.0f;
+        }
+    };
+
+    /**
+     * @brief Read-only access to one Software cube resource's face and mip storage.
+     *
+     * Plain TextureCube and RenderTargetCube both implement this renderer-local capability, so
+     * EnvironmentMapEffect samples the same CPU cube contract regardless of how the pixels were
+     * produced.
+     */
+    class SoftwareCubeSurface
+    {
+    public:
+        /** @brief Destroys the renderer-local cube storage view. */
+        virtual ~SoftwareCubeSurface() = default;
+        /**
+         * @brief Returns the level-zero edge length.
+         *
+         * @return The width and height of every level-zero face in pixels.
+         */
+        [[nodiscard]] virtual int CubeSize() const = 0;
+        /**
+         * @brief Returns the contiguous mip count available for one face.
+         *
+         * @param face Raw CubeMapFace ordinal in the range 0 through 5.
+         * @return The number of sampleable levels beginning at level zero.
+         */
+        [[nodiscard]] virtual int CubeFaceLevelCount(int face) const = 0;
+        /**
+         * @brief Returns one mip level's edge length.
+         *
+         * @param level Mip level beginning at zero.
+         * @return The width and height of the requested square face.
+         */
+        [[nodiscard]] virtual int CubeFaceDimension(int level) const = 0;
+        /**
+         * @brief Returns one face and mip level's tightly packed RGBA8 pixels.
+         *
+         * @param face Raw CubeMapFace ordinal in the range 0 through 5.
+         * @param level Mip level beginning at zero.
+         * @return The immutable pixel storage used by the CPU cube sampler.
+         */
+        [[nodiscard]] virtual const std::vector<std::uint8_t>& CubeFacePixels(
+            int face, int level) const = 0;
+        /**
+         * @brief Fetches one cube texel in shader-visible range without RGBA8 narrowing.
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Texel x coordinate.
+         * @param y Texel y coordinate.
+         * @param r Receives red.
+         * @param g Receives green.
+         * @param b Receives blue.
+         * @param a Receives alpha.
+         */
+        virtual void FetchCubeColorTexel(int face, int level, int x, int y,
+                                         float& r, float& g, float& b, float& a) const
+        {
+            const int dimension = CubeFaceDimension(level);
+            const std::vector<std::uint8_t>& pixels = CubeFacePixels(face, level);
+            const std::size_t offset =
+                (static_cast<std::size_t>(y) * dimension + x) * 4u;
+            r = pixels[offset + 0] / 255.0f;
+            g = pixels[offset + 1] / 255.0f;
+            b = pixels[offset + 2] / 255.0f;
+            a = pixels[offset + 3] / 255.0f;
+        }
     };
 
     /**
@@ -204,6 +378,14 @@ namespace CNA::Internal::Renderers::Software
         int addressU = 1;
         /** @brief Raw TextureAddressMode ordinal for V (0 = Wrap, 1 = Clamp, 2 = Mirror). */
         int addressV = 1;
+        /** @brief Raw TextureAddressMode ordinal for W (0 = Wrap, 1 = Clamp, 2 = Mirror). */
+        int addressW = 1;
+        /** @brief Requested maximum anisotropy; Software clamps work to its deterministic CPU cap. */
+        int maxAnisotropy = 4;
+        /** @brief Most detailed mip level the sampler may select. */
+        int maxMipLevel = 0;
+        /** @brief Bias added to the computed mip level of detail before resource clamping. */
+        float lodBias = 0.0f;
     };
 
     /**
@@ -222,12 +404,17 @@ namespace CNA::Internal::Renderers::Software
         int colorFunction = 0;
         int alphaFunction = 0;
 
-        /** @brief Whether this is the exact Opaque identity, including both functions. */
+        /**
+         * @brief Whether XNA/FNA disables blending for this factor combination.
+         *
+         * FNA3D derives BlendEnable from the four factors only. Consequently One/Zero on both
+         * channels bypasses even a non-Add blend function; Software preserves that observable
+         * fixed-function rule instead of evaluating an equation the reference never enables.
+         */
         [[nodiscard]] bool IsOpaqueIdentity() const
         {
             return colorSource == 0 && alphaSource == 0 &&
-                   colorDestination == 1 && alphaDestination == 1 &&
-                   colorFunction == 0 && alphaFunction == 0;
+                   colorDestination == 1 && alphaDestination == 1;
         }
     };
 
@@ -239,9 +426,16 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
+        /** @brief Returns the exact SurfaceFormat ordinal retained by this texture. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        /** @brief Reports whether exact caller-visible bytes exist for a mip level. */
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override;
+        /** @brief Copies exact declared-format bytes from a texture rectangle. */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         // SoftwareColorSurface -- real RGBA8 pixel storage, which the rasterizer's texture sampler
         // (Phase S5) reads directly from.
@@ -256,11 +450,26 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] int ColorWidth(int level) const override;
         [[nodiscard]] int ColorHeight(int level) const override;
         [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels(int level) const override;
+        /**
+         * @brief Fetches one decoded texel without narrowing signed or floating-point formats.
+         *
+         * @param level Mip level beginning at zero.
+         * @param x Texel x coordinate within the level.
+         * @param y Texel y coordinate within the level.
+         * @param r Receives the red component.
+         * @param g Receives the green component.
+         * @param b Receives the blue component.
+         * @param a Receives the alpha component.
+         */
+        void FetchColorTexel(int level, int x, int y,
+                             float& r, float& g, float& b, float& a) const override;
 
     protected:
         int width_ = 0;
         int height_ = 0;
         std::vector<std::uint8_t> pixels_;
+        /// Shader-visible RGBA values; unlike pixels_, this preserves signed and HDR ranges.
+        std::vector<float> samplePixels_;
 
         /**
          * @brief One supplied mip level above level 0.
@@ -277,8 +486,14 @@ namespace CNA::Internal::Renderers::Software
             int height = 0;
             /** @brief Tightly packed RGBA8 pixels, row-major, top row first. */
             std::vector<std::uint8_t> pixels;
+            /** @brief Exact caller-visible bytes in the declared SurfaceFormat. */
+            std::vector<std::uint8_t> rawPixels;
+            /** @brief Shader-visible RGBA values without RGBA8 narrowing. */
+            std::vector<float> samplePixels;
         };
 
+        int surfaceFormat_ = 0;
+        std::vector<std::uint8_t> rawPixels_;
         /// Levels 1..N as supplied; index i holds level i+1.
         std::vector<MipLevel> mipLevels_;
         /// How many levels are stored CONTIGUOUSLY from 0. Always at least 1.
@@ -292,14 +507,34 @@ namespace CNA::Internal::Renderers::Software
     public:
         SoftwareRenderTargetRenderer(int w, int h, int depthFormat, bool mipMap, int multiSampleCount,
                                     bool hasRealDepthBuffer = true,
-                                    bool hasStandaloneStencilBuffer = false);
+                                    bool hasStandaloneStencilBuffer = false,
+                                    int surfaceFormat = 0);
 
         [[nodiscard]] int GetWidth() const override { return framebuffer_.width; }
         [[nodiscard]] int GetHeight() const override { return framebuffer_.height; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /**
-         * @brief Copies a sub-rectangle of the rendered colour attachment into @p data as RGBA8.
+         * @brief Replaces one exact declared-format mip level.
+         * @param level Destination mip level.
+         * @param data Source pixels.
+         * @param levelW Expected mip width.
+         * @param levelH Expected mip height.
+         */
+        void UpdatePixelsLevel(int level, const uint8_t* data, int levelW, int levelH) override;
+        /**
+         * @brief Reports readable level-zero or allocated/generated mip storage.
+         * @param level Mip level to query.
+         * @return True when the level is currently readable.
+         */
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override;
+        /**
+         * @brief Returns the actual SurfaceFormat ordinal backing this target.
+         * @return Raw SurfaceFormat ordinal.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
+        /**
+         * @brief Copies a rendered sub-rectangle in the target's declared SurfaceFormat.
          *
          * REMED-GFX-124: without this override the call reached `ITextureRenderer::GetData`'s default
          * no-op. That was not merely a missing feature -- `Texture2D::GetData`'s render-target
@@ -320,7 +555,7 @@ namespace CNA::Internal::Renderers::Software
          * @param y          Top edge of the requested rectangle, in pixels.
          * @param w          Width of the requested rectangle, in pixels.
          * @param h          Height of the requested rectangle, in pixels.
-         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param data       Destination for @p w * @p h tightly packed declared-format pixels.
          * @param dataLength Capacity of @p data in bytes.
          * @throws System::ArgumentNullException if @p data is null.
          * @throws System::NotSupportedException if @p level is outside this target's chain, or
@@ -371,6 +606,18 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] int ColorWidth(int level) const override;
         [[nodiscard]] int ColorHeight(int level) const override;
         [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels(int level) const override;
+        /**
+         * @brief Fetches a target texel without narrowing float-domain storage to RGBA8.
+         * @param level Mip level beginning at zero.
+         * @param x Texel x coordinate.
+         * @param y Texel y coordinate.
+         * @param r Receives red.
+         * @param g Receives green.
+         * @param b Receives blue.
+         * @param a Receives alpha.
+         */
+        void FetchColorTexel(int level, int x, int y,
+                             float& r, float& g, float& b, float& a) const override;
 
         [[nodiscard]] bool IsBound() const { return bound_; }
         [[nodiscard]] SoftwareFramebuffer& Framebuffer() { return framebuffer_; }
@@ -388,7 +635,9 @@ namespace CNA::Internal::Renderers::Software
         bool mipMap_ = false;
         int levelCount_ = 1;
         std::vector<std::vector<std::uint8_t>> mipLevels_; ///< levels 1..levelCount_-1
+        std::vector<std::vector<float>> mipWideLevels_; ///< canonical RGBA float levels 1..N
         bool mipLevelsReady_ = false;
+        int surfaceFormat_ = 0;
         int multiSampleCount_ = 0;
         bool hasRealDepthBuffer_ = true;
         bool hasStandaloneStencilBuffer_ = false;
@@ -403,7 +652,8 @@ namespace CNA::Internal::Renderers::Software
     /// `SetData(level > 0, ...)` returned early without storing anything -- one of the three silent
     /// write-loss routes that finding removed. Storage is now allocated per level, so `LevelCount`
     /// and `SetData`/`GetData` agree at every level.
-    class SoftwareTextureCubeRenderer final : public ITextureCubeRenderer
+    class SoftwareTextureCubeRenderer final : public ITextureCubeRenderer,
+                                              public SoftwareCubeSurface
     {
     public:
         /**
@@ -411,8 +661,9 @@ namespace CNA::Internal::Renderers::Software
          *
          * @param size   Edge length of one cube face at mip 0, in texels.
          * @param mipMap Allocate the full mip chain down to 1x1 as well as level 0.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal retained by the cube.
          */
-        SoftwareTextureCubeRenderer(int size, bool mipMap);
+        SoftwareTextureCubeRenderer(int size, bool mipMap, int surfaceFormat);
 
         /**
          * @brief Copies one face's RGBA8 sub-rectangle into this renderer's CPU storage.
@@ -427,6 +678,54 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
         /**
+         * @brief Stores exact DXT blocks and refreshes the decoded CPU sampling face.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Block-aligned destination x coordinate in texels.
+         * @param y Block-aligned destination y coordinate in texels.
+         * @param w Region width in texels, block-aligned or reaching the mip edge.
+         * @param h Region height in texels, block-aligned or reaching the mip edge.
+         * @param data Exact DXT block payload.
+         * @param dataLength Available payload bytes.
+         * @return True when the complete region was retained and decoded.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
+        /**
+         * @brief Reads exact DXT blocks retained for a cube face or block-aligned region.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Block-aligned source x coordinate in texels.
+         * @param y Block-aligned source y coordinate in texels.
+         * @param w Region width in texels, block-aligned or reaching the mip edge.
+         * @param h Region height in texels, block-aligned or reaching the mip edge.
+         * @param data Destination for the exact DXT block payload.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete requested block region was copied.
+         */
+        [[nodiscard]] bool GetCompressedDataEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override;
+        /**
+         * @brief Stores exact uncompressed declared-format cube texels.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Destination x coordinate in texels.
+         * @param y Destination y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Tightly packed declared-format source texels.
+         * @param dataLength Available source bytes.
+         * @return True when the complete region and its decoded sampling plane were updated.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override;
+        /**
          * @brief Reads one face's stored RGBA8 sub-rectangle back from this renderer's CPU shadow.
          *
          * REMED-GFX-130. `levels_` IS this resource's authoritative content here -- SetData writes
@@ -440,8 +739,30 @@ namespace CNA::Internal::Renderers::Software
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Reads exact uncompressed declared-format cube texels.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Source x coordinate in texels.
+         * @param y Source y coordinate in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Destination for tightly packed declared-format texels.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete requested raw region was copied.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSize() const { return size_; }
+        /**
+         * @brief Returns the declared SurfaceFormat ordinal retained by this cube.
+         * @return The raw SurfaceFormat ordinal supplied at construction.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override
+        { return surfaceFormat_; }
         /**
          * @brief How many mip levels this cube ALLOCATED, counting from level 0.
          *
@@ -488,14 +809,66 @@ namespace CNA::Internal::Renderers::Software
          */
         [[nodiscard]] const std::vector<std::uint8_t>& FacePixels(int face, int level) const;
 
+        /**
+         * @brief Returns the level-zero edge length through the shared CPU cube sampler contract.
+         *
+         * @return The cube size in pixels.
+         */
+        [[nodiscard]] int CubeSize() const override { return GetSize(); }
+        /**
+         * @brief Returns the contiguous supplied mip count for one face.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @return The number of sampleable levels beginning at zero.
+         */
+        [[nodiscard]] int CubeFaceLevelCount(int face) const override
+        { return FaceLevelCount(face); }
+        /**
+         * @brief Returns one mip level's edge length.
+         *
+         * @param level Mip level beginning at zero.
+         * @return The face dimension in pixels.
+         */
+        [[nodiscard]] int CubeFaceDimension(int level) const override { return FaceDim(level); }
+        /**
+         * @brief Returns immutable sample storage for one face and mip level.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @return The tightly packed RGBA8 face pixels.
+         */
+        [[nodiscard]] const std::vector<std::uint8_t>& CubeFacePixels(
+            int face, int level) const override
+        { return FacePixels(face, level); }
+        /**
+         * @brief Fetches one format-decoded cube texel without precision narrowing.
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Texel x coordinate.
+         * @param y Texel y coordinate.
+         * @param r Receives red.
+         * @param g Receives green.
+         * @param b Receives blue.
+         * @param a Receives alpha.
+         */
+        void FetchCubeColorTexel(int face, int level, int x, int y,
+                                 float& r, float& g, float& b, float& a) const override;
+
     private:
         /// Face edge length at @p level, never below 1 -- mirrors TextureCube.cpp's own mipDim().
         [[nodiscard]] int LevelDim(int level) const;
 
         int size_ = 0;
+        int surfaceFormat_ = 0;
         int levelCount_ = 1;
         /// levels_[level][face] -- one tightly packed RGBA8 buffer per face per allocated mip level.
         std::vector<std::array<std::vector<std::uint8_t>, 6>> levels_;
+        /// Exact uncompressed declared-format bytes, retained independently from sampled colour.
+        std::vector<std::array<std::vector<std::uint8_t>, 6>> rawLevels_;
+        /// Canonical shader-visible RGBA values preserving wider-than-8-bit precision.
+        std::vector<std::array<std::vector<float>, 6>> sampleLevels_;
+        /// Exact face/mip DXT blocks; empty for an uncompressed cube.
+        std::vector<std::array<std::vector<std::uint8_t>, 6>> compressedLevels_;
         /// REMED-GFX-182: supplied_[level][face] -- whether the FULL face rectangle at that level
         /// has been written. Level 0 of every face counts as supplied from construction, matching
         /// SoftwareTextureRenderer's own `storedLevels_ = 1` starting point.
@@ -504,12 +877,414 @@ namespace CNA::Internal::Renderers::Software
         std::array<int, 6> faceLevels_{1, 1, 1, 1, 1, 1};
     };
 
-    // Cube-map render targets, Texture3D, and hardware occlusion queries remain out of scope for
-    // v1 (plans/plan_software.md Boundaries) -- CreateRenderTargetCube/CreateTexture3D/
-    // CreateOcclusionQuery all keep IGraphicsRenderer's own shared default (returns nullptr).
-    // REMED-CONTENT-004: Texture3D's own absence is now reported via
-    // SupportsCapability(GraphicsCapability::Texture3D) => false, so Texture3D's constructor fails
-    // cleanly instead of a caller's SetData()/GetData() calls silently discarding data.
+    /**
+     * @brief SOFTWARE-119 CPU renderable cube with isolated face colour and shared depth/stencil.
+     */
+    class SoftwareRenderTargetCubeRenderer final : public IRenderTargetCubeRenderer,
+                                                   public SoftwareCubeSurface
+    {
+    public:
+        /**
+         * @brief Allocates six renderable RGBA8 faces and the requested classic target storage.
+         *
+         * @param size Edge length of every face.
+         * @param depthFormat Raw XNA DepthFormat ordinal.
+         * @param preserveContents Whether public usage requests preservation.
+         * @param mipMap Whether to allocate and generate the full mip chain.
+         * @param multiSampleCount Requested sample count; Software applies either 0 or 4.
+         * @param surfaceFormat Raw SurfaceFormat ordinal for the colour attachment.
+         */
+        SoftwareRenderTargetCubeRenderer(int size, int depthFormat, bool preserveContents,
+                                         bool mipMap, int multiSampleCount,
+                                         int surfaceFormat = 0);
+
+        /**
+         * @brief Returns the level-zero edge length.
+         *
+         * @return The cube size in pixels.
+         */
+        [[nodiscard]] int GetSize() const override { return size_; }
+        /**
+         * @brief Selects one face as the active render surface.
+         *
+         * @param face Raw CubeMapFace ordinal in the range 0 through 5.
+         */
+        void BindAsRenderTargetFace(int face) override;
+        /** @brief Resolves and releases the active face, generating its mip chain when requested. */
+        void UnbindAsRenderTarget() override;
+        /**
+         * @brief Returns the applied sample count.
+         *
+         * @return Either zero or four.
+         */
+        [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        /**
+         * @brief Reports whether requested depth storage is real.
+         *
+         * @param requested Whether the public layer requested a depth buffer.
+         * @return True when the target owns compatible CPU depth storage.
+         */
+        [[nodiscard]] bool HasRealDepthBuffer(bool requested) const override
+        { return requested && depthFormat_ != 0; }
+        /**
+         * @brief Reports whether requested stencil storage is real.
+         *
+         * @param requested Whether the public layer requested a stencil buffer.
+         * @return True only for Depth24Stencil8 storage.
+         */
+        [[nodiscard]] bool HasRealStencilBuffer(bool requested) const override
+        { return requested && depthFormat_ == 3; }
+        /**
+         * @brief Uploads a tightly packed declared-format rectangle to one face and mip level.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the destination rectangle.
+         * @param y Top edge of the destination rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Source texels in the target's declared format.
+         * @param dataLength Available source bytes.
+         * @return True when the complete validated upload was performed.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+        /**
+         * @brief Uploads exact declared-format texels to one cube-target face.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the destination rectangle.
+         * @param y Top edge of the destination rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Source texels in the target's declared format.
+         * @param dataLength Available source bytes.
+         * @return True when the complete validated region was stored.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            const void* data, int dataLength) override
+        {
+            return SetData(face, level, x, y, w, h, data, dataLength);
+        }
+        /**
+         * @brief Reads a tightly packed declared-format rectangle from one face and mip level.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the source rectangle.
+         * @param y Top edge of the source rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Destination texels in the target's declared format.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete validated readback was performed.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+        /**
+         * @brief Reads exact declared-format texels from one cube-target face.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Left edge of the source rectangle.
+         * @param y Top edge of the source rectangle.
+         * @param w Rectangle width.
+         * @param h Rectangle height.
+         * @param data Destination texels in the target's declared format.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete validated region was returned.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(
+            int face, int level, int x, int y, int w, int h,
+            void* data, int dataLength) const override
+        {
+            return GetData(face, level, x, y, w, h, data, dataLength);
+        }
+
+        /**
+         * @brief Returns the level-zero edge length.
+         *
+         * @return The cube size in pixels.
+         */
+        [[nodiscard]] int CubeSize() const override { return size_; }
+        /**
+         * @brief Returns the contiguous generated or supplied mip count for one face.
+         * @param face Raw CubeMapFace ordinal.
+         * @return The number of sampleable levels beginning at zero.
+         */
+        [[nodiscard]] int CubeFaceLevelCount(int face) const override;
+        /**
+         * @brief Returns one mip level's edge length.
+         * @param level Mip level beginning at zero.
+         * @return The face dimension in pixels.
+         */
+        [[nodiscard]] int CubeFaceDimension(int level) const override;
+        /**
+         * @brief Returns immutable sample storage for one face and mip level.
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @return The tightly packed RGBA8 face pixels.
+         */
+        [[nodiscard]] const std::vector<std::uint8_t>& CubeFacePixels(
+            int face, int level) const override;
+        /**
+         * @brief Fetches a rendered cube texel from its format-preserving CPU plane.
+         * @param face Raw CubeMapFace ordinal.
+         * @param level Mip level beginning at zero.
+         * @param x Texel x coordinate.
+         * @param y Texel y coordinate.
+         * @param r Receives red.
+         * @param g Receives green.
+         * @param b Receives blue.
+         * @param a Receives alpha.
+         */
+        void FetchCubeColorTexel(int face, int level, int x, int y,
+                                 float& r, float& g, float& b, float& a) const override;
+
+        /**
+         * @brief Returns the face currently selected for rendering.
+         *
+         * @return The raw CubeMapFace ordinal, or -1 when unbound.
+         */
+        [[nodiscard]] int ActiveFace() const { return activeFace_; }
+        /**
+         * @brief Returns the active face's framebuffer.
+         *
+         * @return Mutable CPU color/depth/stencil storage for the bound face.
+         */
+        [[nodiscard]] SoftwareFramebuffer& Framebuffer();
+        /**
+         * @brief Returns the active face's framebuffer.
+         *
+         * @return Immutable CPU color/depth/stencil storage for the bound face.
+         */
+        [[nodiscard]] const SoftwareFramebuffer& Framebuffer() const;
+        /**
+         * @brief Prepares one face as a member of a simultaneous render-target set.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param ownsDepthStencil Whether this is slot zero and therefore owns the set's shared
+         *                         depth/stencil attachment.
+         * @return The selected face's CPU framebuffer.
+         */
+        [[nodiscard]] SoftwareFramebuffer& BindForMrt(int face, bool ownsDepthStencil);
+        /**
+         * @brief Resolves one face leaving a simultaneous render-target set.
+         *
+         * @param face Raw CubeMapFace ordinal.
+         * @param ownsDepthStencil Whether the face owns the set's shared depth/stencil attachment.
+         */
+        void UnbindForMrt(int face, bool ownsDepthStencil);
+
+    private:
+        void GenerateMipMaps(int face);
+        void LoadSharedDepthStencil(SoftwareFramebuffer& framebuffer);
+        void StoreSharedDepthStencil(const SoftwareFramebuffer& framebuffer);
+        [[nodiscard]] std::vector<std::uint8_t>& MutableFacePixels(int face, int level);
+
+        int size_ = 0;
+        int depthFormat_ = 0;
+        bool mipMap_ = false;
+        int levelCount_ = 1;
+        int multiSampleCount_ = 0;
+        int surfaceFormat_ = 0;
+        int activeFace_ = -1;
+        bool bound_ = false;
+        std::array<bool, 6> boundFaces_{};
+        std::array<SoftwareFramebuffer, 6> framebuffers_;
+        std::vector<std::array<std::vector<std::uint8_t>, 6>> mipLevels_;
+        std::vector<std::array<std::vector<float>, 6>> mipWideLevels_;
+        std::vector<std::array<bool, 6>> supplied_;
+        std::array<int, 6> faceLevelCounts_{1, 1, 1, 1, 1, 1};
+        std::vector<float> sharedDepth_;
+        std::vector<std::uint8_t> sharedStencil_;
+        std::vector<float> sharedMultiSampleDepth_;
+        std::vector<std::uint8_t> sharedMultiSampleStencil_;
+    };
+
+    /** @brief CPU-owned declared-format storage for an XNA volume texture and all mip levels. */
+    class SoftwareTexture3DRenderer final : public ITexture3DRenderer
+    {
+    public:
+        /**
+         * @brief Allocates zeroed storage for the requested volume and optional full mip chain.
+         *
+         * XNA requests the complete chain through the largest of width, height and depth.
+         *
+         * @param width Volume width at level zero.
+         * @param height Volume height at level zero.
+         * @param depth Volume depth at level zero.
+         * @param mipMap Whether to allocate the full XNA mip chain.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal retained by the volume.
+         */
+        SoftwareTexture3DRenderer(int width, int height, int depth, bool mipMap,
+                                  int surfaceFormat);
+
+        /**
+         * @brief Copies a tightly packed RGBA8 box into one mip level.
+         *
+         * @return True only when the complete box was stored.
+         */
+        [[nodiscard]] bool SetData(int level, int x, int y, int z,
+                                   int w, int h, int depth,
+                                   const void* data, int dataLength) override;
+
+        /**
+         * @brief Copies a tightly packed RGBA8 box out of one mip level.
+         *
+         * @return True only when the complete box was returned.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int z,
+                                   int w, int h, int depth,
+                                   void* data, int dataLength) const override;
+
+        /**
+         * @brief Stores exact declared-format voxels for the requested box.
+         * @param level Mip level.
+         * @param x Left edge.
+         * @param y Top edge.
+         * @param z Front edge.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Source bytes.
+         * @param dataLength Available source bytes.
+         * @return True when the complete box was stored.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            const void* data, int dataLength) override;
+
+        /**
+         * @brief Returns exact declared-format voxels for the requested box.
+         * @param level Mip level.
+         * @param x Left edge.
+         * @param y Top edge.
+         * @param z Front edge.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Destination bytes.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete box was returned.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(
+            int level, int x, int y, int z, int w, int h, int depth,
+            void* data, int dataLength) const override;
+
+        /**
+         * @brief Reports the level-zero volume dimensions to renderer-side consumers.
+         *
+         * @param width Receives the width.
+         * @param height Receives the height.
+         * @param depth Receives the depth.
+         */
+        void GetDimensionsEXT(int& width, int& height, int& depth) const noexcept override;
+
+        /** @brief Returns the number of sampleable volume mip levels. */
+        [[nodiscard]] int VolumeLevelCountEXT() const noexcept { return levelCount_; }
+
+        /** @brief Returns one mip level's width in voxels. */
+        [[nodiscard]] int VolumeWidthEXT(int level) const { return LevelWidth(level); }
+
+        /** @brief Returns one mip level's height in voxels. */
+        [[nodiscard]] int VolumeHeightEXT(int level) const { return LevelHeight(level); }
+
+        /** @brief Returns one mip level's depth in voxels. */
+        [[nodiscard]] int VolumeDepthEXT(int level) const { return LevelDepth(level); }
+
+        /**
+         * @brief Fetches one volume texel in the value range exposed to an XNA pixel shader.
+         * @param level Mip level beginning at zero.
+         * @param x Voxel x coordinate.
+         * @param y Voxel y coordinate.
+         * @param z Voxel z coordinate.
+         * @return Four decoded shader-visible components.
+         */
+        [[nodiscard]] std::array<float, 4> FetchVolumeTexelEXT(
+            int level, int x, int y, int z) const;
+
+    private:
+        [[nodiscard]] int LevelWidth(int level) const;
+        [[nodiscard]] int LevelHeight(int level) const;
+        [[nodiscard]] int LevelDepth(int level) const;
+        void DecodeLevel(int level);
+
+        int width_ = 0;
+        int height_ = 0;
+        int depth_ = 0;
+        int levelCount_ = 1;
+        int surfaceFormat_ = 0;
+        /// levels_[level] is slice-major, row-major, tightly packed declared-format storage.
+        std::vector<std::vector<std::uint8_t>> levels_;
+        /// Shader-visible canonical float4 voxels matching @ref levels_.
+        std::vector<std::vector<float>> sampleLevels_;
+    };
+
+    // Cube-map render targets remain a tracked parity gap. SOFTWARE-118 gives Texture3D an exact
+    // CPU storage/transfer implementation; shader sampling is a separate CNAEXT-only surface in
+    // the current repository and is not advertised by the storage capability.
+
+    /** @brief Deterministic CPU implementation of an XNA occlusion query. */
+    class SoftwareOcclusionQueryRenderer final : public IOcclusionQueryRenderer
+    {
+    public:
+        /**
+         * @brief Creates a query owned by the specified Software renderer.
+         *
+         * @param owner Renderer whose passing raster samples are measured.
+         */
+        explicit SoftwareOcclusionQueryRenderer(SoftwareRenderer& owner);
+
+        /** @brief Releases an active query slot before destruction. */
+        ~SoftwareOcclusionQueryRenderer() override;
+
+        /** @brief Starts a fresh synchronous CPU sample measurement. */
+        void Begin() override;
+
+        /** @brief Ends the current measurement and makes its result complete. */
+        void End() override;
+
+        /**
+         * @brief Gets whether the most recently ended measurement is complete.
+         *
+         * @return true after a matching End call.
+         */
+        [[nodiscard]] bool IsComplete() const override { return complete_ && !active_; }
+
+        /**
+         * @brief Gets the exact number of samples that passed the raster tests.
+         *
+         * @return Saturating exact sample count from the latest measurement.
+         */
+        [[nodiscard]] int PixelCount() const override { return pixelCount_; }
+
+        /**
+         * @brief Adds the set bits in a passing single-sample or 4x MSAA mask.
+         *
+         * @param passingSamples Mask returned by the shared fragment-test state machine.
+         */
+        void RecordPassingSamples(unsigned int passingSamples) noexcept
+        {
+            const int increment =
+                static_cast<int>((passingSamples >> 0u) & 1u) +
+                static_cast<int>((passingSamples >> 1u) & 1u) +
+                static_cast<int>((passingSamples >> 2u) & 1u) +
+                static_cast<int>((passingSamples >> 3u) & 1u);
+            if (pixelCount_ > std::numeric_limits<int>::max() - increment)
+                pixelCount_ = std::numeric_limits<int>::max();
+            else
+                pixelCount_ += increment;
+        }
+
+    private:
+        SoftwareRenderer* owner_ = nullptr;
+        int pixelCount_ = 0;
+        bool active_ = false;
+        bool complete_ = false;
+    };
 
     class SoftwareEffectRenderer final : public IEffectRenderer
     {
@@ -550,8 +1325,13 @@ namespace CNA::Internal::Renderers::Software
         void Begin() override;
         void End() override;
         void SetTransformMatrix(const Matrix& m) override { transformMatrix_ = m; }
-        void SetCustomEffect(Effect* effect) override { customEffect_ = effect; }
+        void SetCustomEffect(Effect* effect) override;
+        void SetImmediateMode(bool immediate) override { immediateMode_ = immediate; }
         void SetSamplerFilter(int textureFilter) override { textureFilter_ = textureFilter; }
+        void SetSamplerMaxAnisotropy(int maxAnisotropy) override
+        { maxAnisotropy_ = maxAnisotropy; }
+        void SetSamplerMipState(int maxMipLevel, float lodBias) override
+        { maxMipLevel_ = maxMipLevel; lodBias_ = lodBias; }
         void SetSamplerAddressMode(int addressU, int addressV) override
         { addressU_ = addressU; addressV_ = addressV; }
         void Draw(const ITextureRenderer& texture, float x, float y) override;
@@ -567,6 +1347,32 @@ namespace CNA::Internal::Renderers::Software
                   const Vector2& origin,
                   SpriteEffects effects,
                   float layerDepth) override;
+        /**
+         * @brief Rasterizes one sprite without quantizing its destination geometry.
+         *
+         * @param texture Source texture.
+         * @param destinationX Destination left edge in viewport-local pixels.
+         * @param destinationY Destination top edge in viewport-local pixels.
+         * @param destinationWidth Destination width in pixels.
+         * @param destinationHeight Destination height in pixels.
+         * @param sourceRectangle Source texel rectangle.
+         * @param color Per-channel tint.
+         * @param rotation Rotation about @p origin in radians.
+         * @param origin Rotation and scale origin in source-texel units.
+         * @param effects Horizontal and vertical reflection flags.
+         * @param layerDepth Sprite sort depth forwarded to the fragment pipeline.
+         */
+        void Draw(const ITextureRenderer& texture,
+                  float destinationX,
+                  float destinationY,
+                  float destinationWidth,
+                  float destinationHeight,
+                  const Rectangle& sourceRectangle,
+                  const Color& color,
+                  float rotation,
+                  const Vector2& origin,
+                  SpriteEffects effects,
+                  float layerDepth) override;
 
         [[nodiscard]] bool IsBegun() const { return begun_; }
 
@@ -575,16 +1381,37 @@ namespace CNA::Internal::Renderers::Software
         /// re-established on every Begin and cannot leak from a previous batch). Pre-fix these three
         /// fields were written here and read nowhere, so the whole SamplerState argument was inert.
         [[nodiscard]] SoftwareSamplerState GetSamplerState() const
-        { return SoftwareSamplerState{textureFilter_, addressU_, addressV_}; }
+        { return SoftwareSamplerState{textureFilter_, addressU_, addressV_, 1, maxAnisotropy_,
+                                      maxMipLevel_, lodBias_}; }
 
     private:
+        struct PendingCompiledSprite
+        {
+            const ITextureRenderer* texture = nullptr;
+            std::array<Microsoft::Xna::Framework::Vector4, 4> corners{};
+            std::array<float, 4> color{};
+            std::array<float, 4> textureCoordinates{};
+        };
+
+        [[nodiscard]] bool UsesCompiledEffect() const noexcept;
+        void ApplyCompiledSpriteEffect();
+        void FlushCompiledBatch();
+
         SoftwareRenderer& owner_;
         bool begun_ = false;
+        bool immediateMode_ = false;
         Matrix transformMatrix_ = Matrix::getIdentityProperty();
         Effect* customEffect_ = nullptr;
+        std::unique_ptr<ICompiledEffectRuntime> compiledSpriteEffect_;
+        std::uint32_t compiledSpriteMatrixParameter_ = 0;
+        const ITextureRenderer* compiledTexture_ = nullptr;
+        std::vector<PendingCompiledSprite> pendingCompiledSprites_;
         int textureFilter_ = 0;
         int addressU_ = 1;
         int addressV_ = 1;
+        int maxAnisotropy_ = 4;
+        int maxMipLevel_ = 0;
+        float lodBias_ = 0.0f;
     };
 
     /**
@@ -604,11 +1431,51 @@ namespace CNA::Internal::Renderers::Software
                                 bool allocateStencilBuffer = true);
         ~SoftwareRenderer() override;
 
+        /**
+         * @brief Reports that buffered draw ranges are made host-memory-safe inside Software.
+         * @return False so GraphicsDevice preserves XNA's native range-forwarding behavior.
+         */
+        [[nodiscard]] bool RequiresManagedBufferedDrawRangeValidationEXT() const noexcept override
+        { return false; }
+
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
+        /**
+         * @brief Returns the sample count actually stored by the CPU backbuffer.
+         * @return Zero for single-sample storage or four for the CPU 4x mode.
+         */
+        [[nodiscard]] int GetMultiSampleCount() const override
+        { return backbuffer_.multiSampleCount; }
+        /**
+         * @brief Reports the construction-time sample count applied by the CPU backbuffer.
+         * @param requestedMultiSampleCount Requested count before renderer clamping.
+         * @return Zero or four according to the storage actually allocated.
+         */
+        [[nodiscard]] int GetAppliedMultiSampleCountEXT(
+            int requestedMultiSampleCount) const override;
+        /**
+         * @brief Reports the fixed RGBA8 Color format used by the CPU backbuffer.
+         * @param requestedFormat Requested SurfaceFormat ordinal.
+         * @return SurfaceFormat::Color's ordinal.
+         */
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int requestedFormat) const override;
+        /**
+         * @brief Reconfigures CPU backbuffer sample storage at device reset time.
+         * @param requestedMultiSampleCount Requested XNA presentation sample count.
+         * @return Zero or four according to the storage actually allocated.
+         */
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        /**
+         * @brief Reconfigures meaningful CPU backbuffer depth and stencil storage.
+         * @param backBufferFormat Requested backbuffer SurfaceFormat ordinal.
+         * @param depthStencilFormat Requested DepthFormat ordinal.
+         * @param isFullScreen Requested fullscreen state, which has no CPU-window effect.
+         */
+        void UpdatePresentationFormatEXT(
+            int backBufferFormat, int depthStencilFormat, bool isFullScreen) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
 
@@ -618,15 +1485,119 @@ namespace CNA::Internal::Renderers::Software
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
+        /**
+         * @brief Creates a format-preserving CPU RenderTarget2D.
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         * @param depthFormat Raw DepthFormat ordinal.
+         * @param preserveContents Whether target transitions preserve prior contents.
+         * @param mipMap Whether to allocate a mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat Raw SurfaceFormat ordinal.
+         * @return A CPU render target with matching declared-format storage.
+         */
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
+        /**
+         * @brief Creates the staged Software compiled-effect runtime when its build option is on.
+         * @param effectCode Effect Framework bytes.
+         * @param effectCodeBytes Number of bytes at @p effectCode.
+         * @return A reflected token runtime, or null in the dependency-free default build.
+         */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+        std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap,
+                                                            int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap,
                                                                 int surfaceFormat) override;
+        /**
+         * @brief Creates a CPU-backed renderable cube resource.
+         *
+         * @param size Edge length of every face.
+         * @param depthFormat Raw XNA DepthFormat ordinal.
+         * @param preserveContents Whether target transitions preserve prior contents.
+         * @param mipMap Whether the target owns a generated mip chain.
+         * @param multiSampleCount Requested multisample count.
+         * @return A six-face Software render target.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents = false, bool mipMap = false,
+            int multiSampleCount = 0) override;
+        /**
+         * @brief Creates a format-preserving CPU RenderTargetCube.
+         * @param size Edge length of every face.
+         * @param depthFormat Raw DepthFormat ordinal.
+         * @param preserveContents Whether target transitions preserve prior contents.
+         * @param mipMap Whether to allocate a mip chain.
+         * @param multiSampleCount Requested sample count.
+         * @param surfaceFormat Raw SurfaceFormat ordinal.
+         * @return A six-face CPU render target with matching declared-format storage.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
+        /**
+         * @brief Selects one cube face as the active CPU framebuffer.
+         *
+         * @param rt Render target to bind, or null to restore the backbuffer.
+         * @param face Raw CubeMapFace ordinal.
+         */
+        void SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face) override;
+        std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        /**
+         * @brief Reports whether this build executes compiled XNA Effect bytecode.
+         *
+         * @return True for the complete opt-in Software compiled-Effect build; otherwise false.
+         */
+        [[nodiscard]] bool SupportsCompiledEffects() const override;
+        /**
+         * @brief Reports support for linearly filtering half-float texture data.
+         *
+         * @return Always true because the CPU sampler filters decoded floating-point planes.
+         */
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
+        /** @brief Classifies formats whose complete CPU texture path is implemented. */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
+            int surfaceFormat) const override;
+        /**
+         * @brief Classifies formats whose complete six-face CPU cube path is implemented.
+         * @param surfaceFormat Raw SurfaceFormat ordinal.
+         * @return Supported for Color and DXT1/3/5, Unsupported for known unfinished formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+        /**
+         * @brief Classifies formats whose complete CPU volume-transfer path is implemented.
+         * @param surfaceFormat Raw SurfaceFormat ordinal.
+         * @return Supported for the fifteen XNA HiDef volume formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
+            int surfaceFormat) const override;
+        /**
+         * @brief Reports exactly the classic colour target formats backed by CPU storage.
+         * @param surfaceFormat Raw SurfaceFormat ordinal.
+         * @return Supported for implemented classic target formats, Unsupported for known gaps.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(
+            int surfaceFormat) const override;
+        /** @brief Prevents packed texture bytes from entering the Color transfer overload. */
+        [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(
+            int surfaceFormat) const override;
+        /** @brief Reports the DXT formats whose exact 4x4 blocks Software preserves and decodes. */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+        /** @brief Reports DXT cube formats whose exact blocks Software retains and decodes. */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(
+            int surfaceFormat) const override;
+        /** @brief Keeps loader-provided DXT blocks so the Software texture owns exact bytes. */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override { return true; }
 
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc,
@@ -638,7 +1609,10 @@ namespace CNA::Internal::Renderers::Software
                                     int ccwStencilPass, int ccwStencilFail, int ccwStencilDepthFail) override;
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
+        void ApplyRasterizerMultiSampleState(bool enabled) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
+        void ApplySamplerAddressW(int slot, int addressW) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
         void SetReferenceStencil(int value) override;
         void SetScissorRect(int x, int y, int w, int h) override;
@@ -691,6 +1665,24 @@ namespace CNA::Internal::Renderers::Software
                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
+        /**
+         * @brief Draws indexed geometry once for each per-instance stream record.
+         *
+         * @param vb Primary per-vertex buffer.
+         * @param ib Bound index buffer.
+         * @param world Effect world matrix.
+         * @param view Effect view matrix.
+         * @param projection Effect projection matrix.
+         * @param primitive Primitive topology.
+         * @param primitiveCount Number of primitives per instance.
+         * @param instanceCount Number of instances to rasterize.
+         * @param params Complete per-draw effect and vertex-stream state.
+         */
+        void DrawInstancedPrimitivesEx(
+            const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, int primitiveCount, int instanceCount,
+            const GpuDrawParams& params) override;
 
         // ---- Software-specific, CNAEXT-equivalent debug/testing API ----
 
@@ -709,10 +1701,19 @@ namespace CNA::Internal::Renderers::Software
         /// REMED-GFX-030: raw XNA CompareFunction ordinal used for the depth comparison
         /// (Always=0 through NotEqual=7). Captured with the other two depth fields for each draw.
         [[nodiscard]] int GetDepthCompareFunction() const { return depthCompareFunction_; }
-        /// REMED-GFX-077: raw XNA ColorWriteChannels of the current BlendState (slot 0; Software has
-        /// one active colour buffer). Used by SoftwareSpriteBatchRenderer so its quads honour the
-        /// per-channel write mask the same way any other draw does. 15 (All) = every channel.
-        [[nodiscard]] int GetColorWriteMask() const { return colorWriteMask_; }
+        /**
+         * @brief Returns the raw XNA ColorWriteChannels mask for an MRT slot.
+         *
+         * Classic stock effects emit COLOR0 only, so the rasterizer consumes slot zero; retaining
+         * all four values keeps state application exact for multi-output effect paths.
+         *
+         * @param slot Render-target slot in the inclusive range zero through three.
+         * @return The raw ColorWriteChannels mask applied to the selected slot.
+         */
+        [[nodiscard]] int GetColorWriteMask(int slot = 0) const
+        {
+            return colorWriteMasks_[static_cast<std::size_t>(slot)];
+        }
         /// REMED-GFX-077/GDI-073: the current BlendState.MultiSampleMask. Bit 0 controls a
         /// single-sample surface; when the optional four-sample colour plane is active, bits 0..3
         /// independently gate its 2x2 coverage samples. 0xFFFFFFFF = all samples.
@@ -729,6 +1730,10 @@ namespace CNA::Internal::Renderers::Software
         /// same way it outlines 3D geometry.
         [[nodiscard]] int GetFillMode() const { return fillMode_; }
 
+        /** @brief Returns whether triangles use independent multisample coverage locations. */
+        [[nodiscard]] bool IsMultiSampleAntiAliasEnabled() const
+        { return multiSampleAntiAlias_; }
+
         /// REMED-GFX-083: the RasterizerState.DepthBias / SlopeScaleDepthBias floats from the most recent
         /// ApplyRasterizerState() call (both previously discarded). Consumed by SoftwareSpriteBatchRenderer
         /// via owner_ so a bias supplied through SpriteBatch.Begin's RasterizerState (REMED-GFX-081)
@@ -744,6 +1749,20 @@ namespace CNA::Internal::Renderers::Software
         [[nodiscard]] int GetStencilReadMask() const { return stencilReadMask_; }
         [[nodiscard]] int GetStencilWriteMask() const { return stencilWriteMask_; }
         [[nodiscard]] int GetReferenceStencil() const { return referenceStencil_; }
+        /** @brief Returns whether counter-clockwise faces use their separate stencil tuple. */
+        [[nodiscard]] bool IsTwoSidedStencilEnabled() const { return twoSidedStencilMode_; }
+        /** @brief Returns the raw counter-clockwise-face stencil comparison ordinal. */
+        [[nodiscard]] int GetCounterClockwiseStencilCompareFunction() const
+        { return counterClockwiseStencilCompareFunction_; }
+        /** @brief Returns the raw counter-clockwise-face stencil-pass operation ordinal. */
+        [[nodiscard]] int GetCounterClockwiseStencilPassOperation() const
+        { return counterClockwiseStencilPassOperation_; }
+        /** @brief Returns the raw counter-clockwise-face stencil-fail operation ordinal. */
+        [[nodiscard]] int GetCounterClockwiseStencilFailOperation() const
+        { return counterClockwiseStencilFailOperation_; }
+        /** @brief Returns the raw counter-clockwise-face depth-fail operation ordinal. */
+        [[nodiscard]] int GetCounterClockwiseStencilDepthFailOperation() const
+        { return counterClockwiseStencilDepthFailOperation_; }
 
         /// REMED-GFX-073: the active GraphicsDevice.Viewport rectangle in pixels of the currently
         /// bound target. When no custom viewport has been set (SetViewport never called), the full
@@ -800,24 +1819,52 @@ namespace CNA::Internal::Renderers::Software
 
     private:
         friend class SoftwareSpriteBatchRenderer;
+        friend class SoftwareOcclusionQueryRenderer;
+
+        /** @brief Claims the renderer-wide active query slot for @p query. */
+        [[nodiscard]] bool TryActivateOcclusionQuery(SoftwareOcclusionQueryRenderer* query);
+        /** @brief Releases the renderer-wide active query slot when owned by @p query. */
+        void ReleaseOcclusionQuery(SoftwareOcclusionQueryRenderer* query);
+
+        void DrawIndexedPrimitivesInternal(
+            const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params,
+            bool applyInstanceStreams);
 
         /// Submits one already-transformed SpriteBatch quad to the shared CPU triangle rasterizer.
         /// Keeping this narrow bridge private lets SoftwareSpriteBatchRenderer own the public draw
         /// geometry/transform path in its own translation unit while all CPU 2D and 3D triangles
         /// continue to share one fragment implementation.
         void RasterizeSpriteQuad(const ITextureRenderer& texture,
-                                 const Vector2& c0, const Vector2& c1,
-                                 const Vector2& c2, const Vector2& c3,
-                                 float layerDepth, float r, float g, float b, float a,
+                                 const Microsoft::Xna::Framework::Vector4& c0,
+                                 const Microsoft::Xna::Framework::Vector4& c1,
+                                 const Microsoft::Xna::Framework::Vector4& c2,
+                                 const Microsoft::Xna::Framework::Vector4& c3,
+                                 float r, float g, float b, float a,
                                  float u1, float v1, float u2, float v2,
                                  Effect* customEffect,
                                  const SoftwareSamplerState& spriteSampler);
+
+        /** @brief Submits one raw SpriteBatch quad through an applied compiled Effect pass. */
+        void RasterizeCompiledSpriteQuad(
+            const ITextureRenderer& texture,
+            const std::array<Microsoft::Xna::Framework::Vector4, 4>& corners,
+            const std::array<float, 4>& color,
+            const std::array<float, 4>& textureCoordinates,
+            const GpuDrawParams& effectParams);
 
         /// XNA exposes 16 texture sampler slots; ApplySamplerState validates against this.
         static constexpr int kMaxSamplerSlots = 16;
         /// REMED-GFX-150: the per-slot SamplerState the rasterizer's sampler consults. Previously
         /// ApplySamplerState stored nothing at all.
         SoftwareSamplerState samplerSlots_[kMaxSamplerSlots]{};
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS)
+        /// Device-wide D3D9 texture-stage state consumed by legacy compiled bump instructions.
+        std::shared_ptr<std::array<CompiledEffectLegacyBumpMapEnvState, kMaxSamplerSlots>>
+            compiledLegacyBumpMapEnvs_ = std::make_shared<
+                std::array<CompiledEffectLegacyBumpMapEnvState, kMaxSamplerSlots>>();
+#endif
 
         /// REMED-GFX-079: the active viewport as raster parameters for the 3D draw path --
         /// (x,y,w,h) from GetActiveViewport() plus the MinDepth/MaxDepth depth range (defaulting to
@@ -826,9 +1873,26 @@ namespace CNA::Internal::Renderers::Software
         /// custom GraphicsDevice.Viewport positions, sub-scales, and depth-range-remaps 3D geometry.
         void GetActiveViewportRaster(int& x, int& y, int& w, int& h,
                                      float& minDepth, float& maxDepth) const;
+        /** @brief Resolves every currently bound single or simultaneous render target. */
+        void UnbindCurrentTargets();
+        /**
+         * @brief Invokes a colour-only operation on every active MRT attachment.
+         *
+         * @param operation Operation applied to each active colour framebuffer.
+         */
+        void ForEachActiveColorTarget(
+            const std::function<void(SoftwareFramebuffer&)>& operation);
 
         SoftwareFramebuffer backbuffer_;
         SoftwareRenderTargetRenderer* currentRenderTarget_ = nullptr;
+        SoftwareRenderTargetCubeRenderer* currentCubeRenderTarget_ = nullptr;
+        std::array<SoftwareFramebuffer*, 4> currentMrtFramebuffers_{};
+        std::array<SoftwareRenderTargetRenderer*, 4> currentMrt2DTargets_{};
+        std::array<SoftwareRenderTargetCubeRenderer*, 4> currentMrtCubeTargets_{};
+        std::array<int, 4> currentMrtCubeFaces_{};
+        int currentMrtCount_ = 0;
+        /// The one query whose Begin/End interval currently receives passing raster samples.
+        SoftwareOcclusionQueryRenderer* activeOcclusionQuery_ = nullptr;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         bool depthTestEnabled_ = true;
@@ -847,9 +1911,9 @@ namespace CNA::Internal::Renderers::Software
         SoftwareBlendState blendState_{};
         /// GraphicsDevice.BlendFactor, snapshotted beside blendState_ for each Software draw.
         std::array<float, 4> blendFactor_{1.0f, 1.0f, 1.0f, 1.0f};
-        /// REMED-GFX-077: raw XNA ColorWriteChannels of the current BlendState, slot 0 (bit0=R,
+        /// REMED-GFX-077/SOFTWARE-120: raw XNA ColorWriteChannels for MRT slots 0..3 (bit0=R,
         /// bit1=G, bit2=B, bit3=A). Defaults to 15 (All), matching XNA's default BlendState.
-        int colorWriteMask_ = 15;
+        std::array<int, 4> colorWriteMasks_{15, 15, 15, 15};
         /// REMED-GFX-077/GDI-073: current BlendState.MultiSampleMask. Single-sample surfaces use
         /// bit 0; the optional four-sample colour plane uses bits 0..3. Defaults to 0xFFFFFFFF (all
         /// samples), matching XNA's default (-1).
@@ -869,15 +1933,16 @@ namespace CNA::Internal::Renderers::Software
         /// of CullMode/ScissorTestEnable.
         int fillMode_ = 0;
 
+        /** @brief XNA rasterizer multisample coverage toggle; enabled by default. */
+        bool multiSampleAntiAlias_ = true;
+
         /// REMED-GFX-083: RasterizerState.DepthBias / SlopeScaleDepthBias, stored by ApplyRasterizerState()
         /// (its 4th/5th float args, previously discarded). Both default to 0 (XNA/FNA default), for which
         /// the rasterizer adds no depth offset and the output is byte-identical to pre-GFX-083. Expressed
-        /// in the same UNSCALED units GraphicsDevice forwards to every GPU renderer: DepthBias in units of
-        /// the depth buffer's minimum resolvable difference (fed into vkCmdSetDepthBias's constantFactor /
-        /// glPolygonOffset's units / rounded into D3D11_RASTERIZER_DESC::DepthBias), SlopeScaleDepthBias as
-        /// a multiplier on the triangle's max screen-space depth slope (vkCmdSetDepthBias's slopeFactor /
-        /// glPolygonOffset's factor). The rasterizer folds both into the post-viewport per-fragment depth
-        /// via ComputeDepthBiasOffset (see the .cpp), matching the GPU renderers' polygon-offset contract.
+        /// in XNA's public units: DepthBias is a normalized post-viewport depth offset, while
+        /// SlopeScaleDepthBias multiplies the triangle's maximum screen-space depth slope. GPU
+        /// backends convert the constant to their native depth-buffer units; the CPU rasterizer
+        /// can add the normalized value directly in ComputeDepthBiasOffset (see the .cpp).
         float depthBias_ = 0.0f;
         float slopeScaleDepthBias_ = 0.0f;
 
@@ -891,6 +1956,13 @@ namespace CNA::Internal::Renderers::Software
         int stencilReadMask_ = 0xFF;
         int stencilWriteMask_ = 0xFF;
         int referenceStencil_ = 0;
+        /// SOFTWARE-121: XNA's counter-clockwise/back-face stencil tuple. Read/write masks and
+        /// ReferenceStencil remain shared across faces, exactly as on the public state object.
+        bool twoSidedStencilMode_ = false;
+        int counterClockwiseStencilCompareFunction_ = 0;
+        int counterClockwiseStencilPassOperation_ = 0;
+        int counterClockwiseStencilFailOperation_ = 0;
+        int counterClockwiseStencilDepthFailOperation_ = 0;
 
         /// REMED-GFX-073: current GraphicsDevice.Viewport, stored by SetViewport() and consumed by
         /// the SpriteBatch path (GetActiveViewport()). GraphicsDevice pushes this on every viewport

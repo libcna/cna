@@ -553,7 +553,8 @@ TEST(EasyGLCompiledEffectTest, SharedBackendConformanceContract)
     // techniques/passes, render state, state policy, samplers, texture binding, clone and
     // lifetime -- through the public Effect/GraphicsDevice API, since SupportsCompiledEffects()
     // is true.
-    GraphicsDevice device;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectContract(device);
@@ -569,7 +570,7 @@ TEST(EasyGLCompiledEffectTest, PixelShaderOnlyPassAppliesOnDesktopCoreContext)
     options.includeSampler = true;
     Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
 
-    EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply());
 }
 
 // plans/plan_fx.md FX-084/FX-086: the shared draw matrix. Each of these renders the compiled effect's
@@ -582,6 +583,3795 @@ TEST(EasyGLCompiledEffectDrawTest, SharedDrawMatrixContract)
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectDrawContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledOrdinaryDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    if (device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
+        GTEST_SKIP() << "this context exposes native polygon-mode wireframe";
+
+    struct PositionVertex { float x, y, z; };
+    const PositionVertex triangle[3] = {
+        {-0.75f, -0.75f, 0.0f}, {0.75f, -0.5f, 0.0f}, {-0.25f, 0.75f, 0.0f},
+    };
+    const VertexDeclaration declaration(
+        sizeof(PositionVertex),
+        {VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0)});
+    VertexBuffer buffer(device, declaration, 3, BufferUsage::None);
+    buffer.SetDataRaw(triangle, 3, sizeof(PositionVertex));
+
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    RasterizerState wire;
+    wire.setCullModeProperty(CullMode::None);
+    wire.setFillModeProperty(FillMode::WireFrame);
+    device.setRasterizerStateProperty(wire);
+    device.SetVertexBuffer(&buffer);
+
+    EXPECT_THROW(device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+                 System::NotSupportedException);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledMultiStreamDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    if (device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
+        GTEST_SKIP() << "this context exposes native polygon-mode wireframe";
+
+    struct PositionVertex { float x, y, z; };
+    struct OffsetVertex { float x, y, z, w; };
+    const PositionVertex triangle[3] = {
+        {-0.75f, -0.75f, 0.0f}, {0.75f, -0.5f, 0.0f}, {-0.25f, 0.75f, 0.0f},
+    };
+    const OffsetVertex offsets[3] = {{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}};
+    const VertexDeclaration positions(
+        sizeof(PositionVertex),
+        {VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0)});
+    const VertexDeclaration textureCoordinates(
+        sizeof(OffsetVertex),
+        {VertexElement(0, VertexElementFormat::Vector4,
+                       VertexElementUsage::TextureCoordinate, 0)});
+    VertexBuffer positionBuffer(device, positions, 3, BufferUsage::None);
+    positionBuffer.SetDataRaw(triangle, 3, sizeof(PositionVertex));
+    VertexBuffer offsetBuffer(device, textureCoordinates, 3, BufferUsage::None);
+    offsetBuffer.SetDataRaw(offsets, 3, sizeof(OffsetVertex));
+
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect(true));
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+    effect.getParametersProperty()["StreamMix"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(1, 1, 1, 1));
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    RasterizerState wire;
+    wire.setCullModeProperty(CullMode::None);
+    wire.setFillModeProperty(FillMode::WireFrame);
+    device.setRasterizerStateProperty(wire);
+    device.SetVertexBuffers({VertexBufferBinding(&positionBuffer),
+                             VertexBufferBinding(&offsetBuffer)});
+
+    EXPECT_THROW(device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+                 System::NotSupportedException);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledInstancedDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    if (device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
+        GTEST_SKIP() << "this context exposes native polygon-mode wireframe";
+    if (!device.SupportsCapability(CNA::GraphicsCapability::Instancing))
+        GTEST_SKIP() << "this EasyGL profile has no instanced draw route";
+
+    struct PositionVertex { float x, y, z; };
+    struct OffsetVertex { float x, y, z, w; };
+    const PositionVertex triangle[3] = {
+        {-0.75f, -0.75f, 0.0f}, {0.75f, -0.5f, 0.0f}, {-0.25f, 0.75f, 0.0f},
+    };
+    const OffsetVertex instance = {0, 0, 0, 0};
+    const std::uint16_t indices[3] = {0, 1, 2};
+    const VertexDeclaration positions(
+        sizeof(PositionVertex),
+        {VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0)});
+    const VertexDeclaration textureCoordinates(
+        sizeof(OffsetVertex),
+        {VertexElement(0, VertexElementFormat::Vector4,
+                       VertexElementUsage::TextureCoordinate, 0)});
+    VertexBuffer positionBuffer(device, positions, 3, BufferUsage::None);
+    positionBuffer.SetDataRaw(triangle, 3, sizeof(PositionVertex));
+    VertexBuffer instanceBuffer(device, textureCoordinates, 1, BufferUsage::None);
+    instanceBuffer.SetDataRaw(&instance, 1, sizeof(OffsetVertex));
+    IndexBuffer indexBuffer(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    indexBuffer.SetData(indices, 3);
+
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect(true));
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+    effect.getParametersProperty()["StreamMix"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(1, 1, 1, 1));
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    RasterizerState wire;
+    wire.setCullModeProperty(CullMode::None);
+    wire.setFillModeProperty(FillMode::WireFrame);
+    device.setRasterizerStateProperty(wire);
+    device.SetVertexBuffers({VertexBufferBinding(&positionBuffer, 0, 0),
+                             VertexBufferBinding(&instanceBuffer, 0, 1)});
+    device.SetIndexBuffer(&indexBuffer);
+
+    EXPECT_THROW(
+        device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1, 1),
+        System::NotSupportedException);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledSpriteBatchDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    if (device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
+        GTEST_SKIP() << "this context exposes native polygon-mode wireframe";
+
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+    effect.getParametersProperty()["Transform"]->SetValue(
+        Matrix::CreateOrthographicOffCenter(0, 8, 8, 0, -1, 1));
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+    Texture2D texture(device, 1, 1);
+    const Color white = Color::White;
+    texture.SetData(&white, 1);
+    RasterizerState wire;
+    wire.setCullModeProperty(CullMode::None);
+    wire.setFillModeProperty(FillMode::WireFrame);
+
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Immediate, BlendState::Opaque,
+                nullptr, nullptr, &wire, &effect);
+    EXPECT_THROW(batch.Draw(texture, Rectangle(0, 0, 8, 8), Color::White),
+                 System::NotSupportedException);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9LoopUsesIterationCountNotAddressLimit)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLoopContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9LogIgnoresSignAndReturnsFiniteValueForZero)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSignedLogContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9NrmUsesXYZLengthRegardlessOfDestinationMask)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectNrmWriteMaskContract(device);
+}
+
+class EasyGLCompiledEffectCompositeWriteMaskTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticCompositeWriteMaskProbe>
+{};
+
+TEST_P(EasyGLCompiledEffectCompositeWriteMaskTest,
+       WritesOnlySelectedCompositeResultComponents)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectCompositeWriteMaskContract(device, GetParam());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9DstAndCrs,
+    EasyGLCompiledEffectCompositeWriteMaskTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticCompositeWriteMaskProbe::VertexDst,
+        CNA::TestSupport::SyntheticCompositeWriteMaskProbe::VertexCrs));
+
+TEST(EasyGLCompiledEffectDrawTest, ShaderModel11ExppUsesLegacyFourPartResult)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyExppContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, ShaderModel11ImplicitVertexInputMap)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectShaderModel11InputContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, ShaderModel11ExtendedVertexInputMap)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectShaderModel11ExtendedInputContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9RelativeInputTextureCoordinates)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectRelativeInputTextureCoordinateContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9DependentTemporaryTextureCoordinatesDriveLod)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDependentTemporaryTextureCoordinateContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9DependentTemporaryCubeAndVolumeCoordinatesDriveLod)
+{
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDependentTemporaryTextureCoordinate3DContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9SubroutinesExecuteAndReturn)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSubroutineContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9DerivativesUseAdjacentLockStepRegisters)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectDerivativeContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9RasterInputsUseXnaCoordinatesAndFacing)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectRasterInputContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9InstructionPredicationMasksBothShaderStages)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectPredicationContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9PredicationGatesTexkill)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectPredicatedTexkillContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14TexcrdDwSelector)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectShaderModel14TexcrdDwContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14TexldDz)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectShaderModel14TexldDzContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14TexldDwSelector)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectShaderModel14TexldDwContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14TextureLoad)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectShaderModel14TextureLoadContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9ShaderModel14Phase)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectShaderModel14PhaseContract(device);
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsDuplicateD3D9ShaderModel14Phase)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderDuplicatesShaderModel14Phase = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsInvalidD3D9ShaderModel14PhaseState)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticShaderModel14PhaseProbe;
+    for (const Probe probe : {
+             Probe::TextureAfterArithmetic,
+             Probe::SecondPhaseTextureAfterArithmetic,
+             Probe::ColorReadBeforePhase,
+             Probe::TexkillBeforePhase,
+             Probe::DependentTextureReadInSameBlock,
+             Probe::TextureDestinationReuse,
+             Probe::TexdepthBeforePhase,
+             Probe::TexdepthReadAfter,
+             Probe::TexdepthSaturate,
+             Probe::TexdepthShift,
+             Probe::TexdepthPartialDestination,
+             Probe::AlphaReadAfterPhase,
+             Probe::OutputAlphaLostAtPhase,
+         })
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.shaderModel14PhaseProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectTest, AcceptsValidD3D9ShaderModel14PhaseState)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticShaderModel14PhaseProbe;
+    for (const Probe probe : {
+             Probe::NoMarkerColorRead,
+             Probe::NoMarkerTexkill,
+             Probe::PreserveRgbAcrossPhase,
+             Probe::ReinitializeAlphaAfterPhase,
+             Probe::TextureThenArithmeticBothPhases,
+             Probe::DependentTextureReadFromPreviousPhase,
+             Probe::TexkillPreservesCoordinate,
+             Probe::TexdepthAfterPhase,
+         })
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.shaderModel14PhaseProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectTest, EnforcesD3D9PixelShader1OutputLiveness)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticPixel1OutputLivenessProbe;
+    for (const Probe probe : {
+             Probe::Pixel11RgbOnly,
+             Probe::Pixel11AlphaOnly,
+             Probe::Pixel14XzOnly,
+         })
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixel1OutputLivenessProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixel1OutputLivenessProbe = Probe::Pixel14SplitFull;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsInvalidD3D9BemOperands)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticBemOperandProbe;
+    for (const Probe probe : {
+             Probe::Source0Texture,
+             Probe::Source1Constant,
+             Probe::Source1Texture,
+             Probe::Source0UninitializedY,
+             Probe::Source1UninitializedY,
+         })
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderBemOperandProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectTest, AcceptsValidD3D9BemOperands)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticBemOperandProbe;
+    for (const Probe probe : {
+             Probe::ConstantTemporary,
+             Probe::ReplicatedX,
+             Probe::DestinationSaturate,
+             Probe::TemporarySourceModifiers,
+         })
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderBemOperandProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsInvalidD3D9ShaderModel14TextureSelectors)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticTextureCoordinateSelectorProbe;
+    for (const Probe probe : {
+             Probe::TexcrdInvalidSelector,
+             Probe::TexldInvalidSelector,
+             Probe::MixedSameRegister,
+             Probe::IdentityThenXyw,
+             Probe::XyzThenDw,
+         })
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderTextureCoordinateSelectorProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectTest, AcceptsValidD3D9ShaderModel14TextureSelectors)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticTextureCoordinateSelectorProbe;
+    for (const Probe probe : {
+             Probe::IdentityThenXyz,
+             Probe::RepeatXyw,
+             Probe::DifferentRegisters,
+             Probe::XywThenDw,
+         })
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderTextureCoordinateSelectorProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectTest, EnforcesD3D9ShaderModel14TemporaryTextureSelectors)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    using Probe = CNA::TestSupport::SyntheticTemporaryTextureSelectorProbe;
+    for (const Probe probe : {Probe::Xyw, Probe::Reordered})
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderTemporaryTextureSelectorProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+    for (const Probe probe : {Probe::Identity, Probe::Xyz})
+    {
+        SCOPED_TRACE(static_cast<int>(probe));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderTemporaryTextureSelectorProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsReadOfUninitializedTemporaryDestination)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = false;
+    options.pixelShaderReadsUninitializedDestination = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsVertex11UninitializedTemporaryRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.temporaryInitializationProbe =
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex11;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+class EasyGLCompiledEffectPermissiveTemporaryInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTemporaryInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPermissiveTemporaryInitializationTest,
+       AcceptsUninitializedTemporaryRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.temporaryInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    PermissiveTemporaryInitializationProfiles,
+    EasyGLCompiledEffectPermissiveTemporaryInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel30,
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel2x,
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel2xTexkill,
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex20,
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex30));
+
+class EasyGLCompiledEffectInvalidMoveComponentInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTemporaryInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidMoveComponentInitializationTest,
+       RejectsUninitializedSourceComponent)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.temporaryInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidMoveComponentInitialization,
+    EasyGLCompiledEffectInvalidMoveComponentInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel20MoveUnwrittenY,
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex11MoveUnwrittenY));
+
+class EasyGLCompiledEffectValidMoveComponentInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTemporaryInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidMoveComponentInitializationTest,
+       AcceptsInitializedSourceComponent)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.temporaryInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidMoveComponentInitialization,
+    EasyGLCompiledEffectValidMoveComponentInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Pixel20MoveWrittenX,
+        CNA::TestSupport::SyntheticTemporaryInitializationProbe::Vertex11MoveWrittenX));
+
+class EasyGLCompiledEffectInvalidComponentwiseInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticComponentwiseInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidComponentwiseInitializationTest,
+       RejectsUninitializedSourceComponent)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.componentwiseInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidComponentwiseInitialization,
+    EasyGLCompiledEffectInvalidComponentwiseInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticComponentwiseInitializationProbe::
+            Pixel20AddSource0UnwrittenY,
+        CNA::TestSupport::SyntheticComponentwiseInitializationProbe::
+            Pixel20AddSource1UnwrittenY,
+        CNA::TestSupport::SyntheticComponentwiseInitializationProbe::
+            Pixel20MadSource2UnwrittenY,
+        CNA::TestSupport::SyntheticComponentwiseInitializationProbe::Pixel20FrcUnwrittenY,
+        CNA::TestSupport::SyntheticComponentwiseInitializationProbe::Pixel14AddUnwrittenY,
+        CNA::TestSupport::SyntheticComponentwiseInitializationProbe::Vertex11AddUnwrittenY));
+
+class EasyGLCompiledEffectValidComponentwiseInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticComponentwiseInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidComponentwiseInitializationTest,
+       AcceptsInitializedSourceComponent)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.componentwiseInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidComponentwiseInitialization,
+    EasyGLCompiledEffectValidComponentwiseInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticComponentwiseInitializationProbe::
+            Pixel20AddSource0WrittenX,
+        CNA::TestSupport::SyntheticComponentwiseInitializationProbe::Pixel20AddFullFromWrittenX,
+        CNA::TestSupport::SyntheticComponentwiseInitializationProbe::Pixel14AddWrittenX,
+        CNA::TestSupport::SyntheticComponentwiseInitializationProbe::Vertex11AddWrittenX));
+
+class EasyGLCompiledEffectInvalidScalarInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticScalarInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidScalarInitializationTest,
+       RejectsUninitializedSelectedComponent)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.scalarInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidScalarInitialization,
+    EasyGLCompiledEffectInvalidScalarInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20RcpUnwrittenY,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource0UnwrittenY,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource1UnwrittenY,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Vertex11RcpUnwrittenY,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Vertex11ExppUnwrittenY));
+
+class EasyGLCompiledEffectValidScalarInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticScalarInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidScalarInitializationTest,
+       AcceptsInitializedSelectedComponent)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.scalarInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidScalarInitialization,
+    EasyGLCompiledEffectValidScalarInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20RcpWrittenX,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource0WrittenX,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Pixel20PowSource1WrittenX,
+        CNA::TestSupport::SyntheticScalarInitializationProbe::Vertex11RcpWrittenX));
+
+class EasyGLCompiledEffectInvalidFixedVectorInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticFixedVectorInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidFixedVectorInitializationTest,
+       RejectsUninitializedSelectedComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.fixedVectorInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidFixedVectorInitialization,
+    EasyGLCompiledEffectInvalidFixedVectorInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20Dp3UnwrittenYz,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20Dp4UnwrittenYzw,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+            Pixel20Dp2AddSource0UnwrittenY,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+            Pixel20Dp2AddSource1UnwrittenY,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+            Pixel20Dp2AddSource2UnwrittenY,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20NrmUnwrittenYz,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Vertex11Dp3UnwrittenYz,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Vertex11Dp4UnwrittenYzw));
+
+class EasyGLCompiledEffectValidFixedVectorInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticFixedVectorInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidFixedVectorInitializationTest,
+       AcceptsInitializedSelectedComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.fixedVectorInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidFixedVectorInitialization,
+    EasyGLCompiledEffectValidFixedVectorInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20Dp3ReplicatedX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20Dp4ReplicatedX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+            Pixel20Dp2AddSource0ReplicatedX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+            Pixel20Dp2AddSource1ReplicatedX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::
+            Pixel20Dp2AddSource2WrittenX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Pixel20NrmReplicatedX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Vertex11Dp3ReplicatedX,
+        CNA::TestSupport::SyntheticFixedVectorInitializationProbe::Vertex11Dp4ReplicatedX));
+
+class EasyGLCompiledEffectInvalidMatrixInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticMatrixInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidMatrixInitializationTest,
+       RejectsUninitializedMatrixComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.matrixInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidMatrixInitialization,
+    EasyGLCompiledEffectInvalidMatrixInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M4x4VectorUnwrittenW,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M4x3VectorUnwrittenW,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x4VectorUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x3VectorUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x2VectorUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x2MatrixRowUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M4x4VectorUnwrittenW,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M4x3VectorUnwrittenW,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x4VectorUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x3VectorUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x2VectorUnwrittenZ,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x2MatrixRowUnwrittenZ));
+
+class EasyGLCompiledEffectValidMatrixInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticMatrixInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidMatrixInitializationTest,
+       AcceptsInitializedMatrixComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.matrixInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidMatrixInitialization,
+    EasyGLCompiledEffectValidMatrixInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M4x4VectorWritten,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M4x3VectorWritten,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x4VectorWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x3VectorWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x2VectorWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Pixel20M3x2MatrixRowsWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M4x4VectorWritten,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M4x3VectorWritten,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x4VectorWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x3VectorWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x2VectorWrittenXyz,
+        CNA::TestSupport::SyntheticMatrixInitializationProbe::Vertex11M3x2MatrixRowsWrittenXyz));
+
+class EasyGLCompiledEffectInvalidSpecialVectorInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSpecialVectorInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidSpecialVectorInitializationTest,
+       RejectsUninitializedSpecialVectorComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.specialVectorInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidSpecialVectorInitialization,
+    EasyGLCompiledEffectInvalidSpecialVectorInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Vertex11LitUnwrittenW,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+            Vertex11DstSource0UnwrittenZ,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+            Vertex11DstSource1UnwrittenW,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+            Pixel20CrsSource0UnwrittenZ,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::
+            Pixel20CrsSource1UnwrittenZ));
+
+class EasyGLCompiledEffectValidSpecialVectorInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSpecialVectorInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidSpecialVectorInitializationTest,
+       AcceptsInitializedSpecialVectorComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.specialVectorInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidSpecialVectorInitialization,
+    EasyGLCompiledEffectValidSpecialVectorInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Vertex11LitWrittenXyw,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Vertex11DstSource0WrittenYz,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Vertex11DstSource1WrittenYw,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Pixel20CrsSource0WrittenXyz,
+        CNA::TestSupport::SyntheticSpecialVectorInitializationProbe::Pixel20CrsSource1WrittenXyz));
+
+class EasyGLCompiledEffectInvalidCndInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticCndInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidCndInitializationTest,
+       RejectsUninitializedCndSourceComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.cndInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidCndInitialization,
+    EasyGLCompiledEffectInvalidCndInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticCndInitializationProbe::Pixel11ConditionAlphaUnwritten,
+        CNA::TestSupport::SyntheticCndInitializationProbe::Pixel11Source1RgbUnwritten,
+        CNA::TestSupport::SyntheticCndInitializationProbe::Pixel11Source2RgbUnwritten,
+        CNA::TestSupport::SyntheticCndInitializationProbe::Pixel14ConditionXUnwritten,
+        CNA::TestSupport::SyntheticCndInitializationProbe::Pixel14Source1XUnwritten,
+        CNA::TestSupport::SyntheticCndInitializationProbe::Pixel14Source2XUnwritten));
+
+class EasyGLCompiledEffectValidCndInitializationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticCndInitializationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidCndInitializationTest,
+       AcceptsInitializedCndSourceComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.cndInitializationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidCndInitialization,
+    EasyGLCompiledEffectValidCndInitializationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticCndInitializationProbe::Pixel11ConditionAlphaWritten,
+        CNA::TestSupport::SyntheticCndInitializationProbe::Pixel11Source1RgbWritten,
+        CNA::TestSupport::SyntheticCndInitializationProbe::Pixel11Source2RgbWritten,
+        CNA::TestSupport::SyntheticCndInitializationProbe::Pixel14ConditionYWritten,
+        CNA::TestSupport::SyntheticCndInitializationProbe::Pixel14Source1ZWritten,
+        CNA::TestSupport::SyntheticCndInitializationProbe::Pixel14Source2WWritten));
+
+TEST(EasyGLCompiledEffectTest, RejectsTexkillWithUndefinedTemporaryComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = false;
+    options.pixelShaderTexkillReadsPartialTemporary = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, AcceptsTexkillAfterSplitXyzTemporaryWrites)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = false;
+    options.pixelShaderTexkillReadsSplitTemporary = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+class EasyGLCompiledEffectInvalidTexkillOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTexkillOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidTexkillOperandTest, RejectsUndeclaredInputComponents)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = false;
+    options.pixelShaderTexkillOperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTexkillOperands,
+    EasyGLCompiledEffectInvalidTexkillOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel20TextureXy,
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel30InputXy,
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel30InputXyz));
+
+class EasyGLCompiledEffectValidTexkillOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTexkillOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidTexkillOperandTest, AcceptsProfileSpecificOperand)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = false;
+    options.pixelShaderTexkillOperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidTexkillOperands,
+    EasyGLCompiledEffectValidTexkillOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel14TemporaryXyz,
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel20TextureXyz,
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel30TemporaryXy,
+        CNA::TestSupport::SyntheticTexkillOperandProbe::Pixel30InputFull));
+
+TEST(EasyGLCompiledEffectTest, AcceptsVertexSgnWithUninitializedScratchRegisters)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.vertexShaderSgnScratchOperands =
+        CNA::TestSupport::SyntheticSgnScratchOperands::ValidUninitialized;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsVertexSgnWithAliasedScratchRegisters)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.vertexShaderSgnScratchOperands =
+        CNA::TestSupport::SyntheticSgnScratchOperands::Aliased;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsVertexSgnWithNonTemporaryScratchRegisters)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.vertexShaderSgnScratchOperands =
+        CNA::TestSupport::SyntheticSgnScratchOperands::NonTemporary;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+class EasyGLCompiledEffectSgnOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSgnScratchOperands>
+{
+};
+
+TEST_P(EasyGLCompiledEffectSgnOperandTest, RejectsInvalidScratchOrValueAliasing)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.vertexShaderSgnScratchOperands = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidSgnOperands,
+    EasyGLCompiledEffectSgnOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSgnScratchOperands::Scratch1Negate,
+        CNA::TestSupport::SyntheticSgnScratchOperands::Scratch1Swizzle,
+        CNA::TestSupport::SyntheticSgnScratchOperands::Scratch2Negate,
+        CNA::TestSupport::SyntheticSgnScratchOperands::Scratch2Swizzle,
+        CNA::TestSupport::SyntheticSgnScratchOperands::ValueAliasesScratch1,
+        CNA::TestSupport::SyntheticSgnScratchOperands::ValueAliasesScratch2));
+
+TEST(EasyGLCompiledEffectSgnOperandTest, AcceptsValueModifierAndDestinationScratchAliasing)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticSgnScratchOperands;
+    for (const Probe probe : {Probe::ValueNegate,
+                              Probe::DestinationAliasesScratch1,
+                              Probe::DestinationAliasesScratch2})
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexShaderSgnScratchOperands = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsPixelSgnOpcode)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderUsesInvalidSgn = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsPixelExppOpcode)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderUsesInvalidExpp = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsPixelLogpOpcode)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderUsesInvalidLogp = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsVertexExppWithoutReplicateSwizzle)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.vertexShaderUsesInvalidExppSwizzle = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsPixelLitOpcode)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderUsesInvalidLit = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsPixelSltOpcode)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderUsesInvalidSlt = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsPixelSgeOpcode)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderUsesInvalidSge = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsPixelExpWithoutReplicateSwizzle)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderUsesInvalidExpSwizzle = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsVertexExpWithoutReplicateSwizzle)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.vertexShaderUsesInvalidExpSwizzle = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+class EasyGLCompiledEffectPixelShaderModel1OpcodeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPixelShaderModel1OpcodeTest, RejectsShaderModel2Arithmetic)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderModel1InvalidOpcode = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ArithmeticOpcodes,
+    EasyGLCompiledEffectPixelShaderModel1OpcodeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Rcp,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Rsq,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Min,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Max,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Exp,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Log,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Frc,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Pow,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Crs,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Abs,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Nrm,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Dsx,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel1Opcode::Dsy));
+
+class EasyGLCompiledEffectVertexShaderModel1OpcodeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode>
+{
+};
+
+TEST_P(EasyGLCompiledEffectVertexShaderModel1OpcodeTest, RejectsLaterProfileOpcode)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.vertexShaderModel1InvalidOpcode = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    LaterProfileOpcodes,
+    EasyGLCompiledEffectVertexShaderModel1OpcodeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Abs,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Crs,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Nrm,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Pow,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::SinCos,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Sgn,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Mova,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Defb,
+        CNA::TestSupport::SyntheticInvalidVertexShaderModel1Opcode::Defi));
+
+class EasyGLCompiledEffectPixelShaderModel20OpcodeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidPixelShaderModel20Opcode>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPixelShaderModel20OpcodeTest, RejectsLaterProfileOpcode)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderModel20InvalidOpcode = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    LaterProfileOpcodes,
+    EasyGLCompiledEffectPixelShaderModel20OpcodeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel20Opcode::Defb,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel20Opcode::Defi,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel20Opcode::Rep,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel20Opcode::If,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel20Opcode::Dsx,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel20Opcode::Dsy,
+        CNA::TestSupport::SyntheticInvalidPixelShaderModel20Opcode::Setp));
+
+class EasyGLCompiledEffectShaderModel20DynamicFeatureTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature>
+{
+};
+
+TEST_P(EasyGLCompiledEffectShaderModel20DynamicFeatureTest, RejectsLaterProfileFeature)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.shaderModel20InvalidDynamicFeature = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    LaterProfileFeatures,
+    EasyGLCompiledEffectShaderModel20DynamicFeatureTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::PixelPredicatedMov,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexIfc,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexBreak,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexBreakc,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexSetp,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexIfPredicate,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexCallnzPredicate,
+        CNA::TestSupport::SyntheticInvalidShaderModel20DynamicFeature::VertexPredicatedMov));
+
+TEST(EasyGLCompiledEffectTest, RejectsLoopInPixelShaderModel2x)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderModel2xUsesInvalidLoop = true;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+class EasyGLCompiledEffectInvalidFlowControlTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticFlowControlProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidFlowControlTest,
+       RejectsInvalidStructureNestingOrControlOperand)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.flowControlProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidStructures,
+    EasyGLCompiledEffectInvalidFlowControlTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticFlowControlProbe::ElseWithoutIf,
+        CNA::TestSupport::SyntheticFlowControlProbe::EndIfWithoutIf,
+        CNA::TestSupport::SyntheticFlowControlProbe::IfWithoutEndIf,
+        CNA::TestSupport::SyntheticFlowControlProbe::DuplicateElse,
+        CNA::TestSupport::SyntheticFlowControlProbe::LoopEndsBeforeIf,
+        CNA::TestSupport::SyntheticFlowControlProbe::IfEndsBeforeLoop,
+        CNA::TestSupport::SyntheticFlowControlProbe::RepEndsBeforeIf,
+        CNA::TestSupport::SyntheticFlowControlProbe::IfEndsBeforeRep,
+        CNA::TestSupport::SyntheticFlowControlProbe::StaticIfDepth25,
+        CNA::TestSupport::SyntheticFlowControlProbe::DynamicIfDepth25,
+        CNA::TestSupport::SyntheticFlowControlProbe::LoopRepDepth5,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelIfPredicateNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelIfPredicateVectorSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelIfBooleanNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzPredicateNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzPredicateVectorSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzBooleanNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateVectorSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelLoopCounterNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelLoopCounterSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelLoopConstantNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelLoopConstantSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelRepConstantNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelRepConstantSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelSetpMissingComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelSetpReservedComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelIfcMissingComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelIfcReservedComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakcMissingComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakcReservedComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelNopReservedInstructionControl,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelMovReservedInstructionControl,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth2,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17If,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17Else,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17Loop,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17Rep,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17Call,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17CallNz,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex2xStaticFlowCount17,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfPredicateNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfPredicateVectorSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfBooleanNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzPredicateNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzPredicateVectorSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzBooleanNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateVectorSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30LoopCounterNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30LoopCounterSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30LoopConstantNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30LoopConstantSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30RepConstantNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30RepConstantSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30SetpMissingComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30SetpReservedComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfcMissingComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfcReservedComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakcMissingComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakcReservedComparison,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30NopReservedInstructionControl,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30MovReservedInstructionControl));
+
+class EasyGLCompiledEffectValidFlowControlTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticFlowControlProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidFlowControlTest,
+       AcceptsLegalStructureBoundaryDepthAndControlOperand)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.flowControlProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    BoundaryDepths,
+    EasyGLCompiledEffectValidFlowControlTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticFlowControlProbe::ProperlyNestedLoopIf,
+        CNA::TestSupport::SyntheticFlowControlProbe::StaticIfDepth24,
+        CNA::TestSupport::SyntheticFlowControlProbe::DynamicIfDepth24,
+        CNA::TestSupport::SyntheticFlowControlProbe::LoopRepDepth4,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelIfPredicateNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelIfPredicateReplicateY,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelIfBooleanNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzPredicateNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzPredicateReplicateY,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzBooleanNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateReplicateY,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelPlainLoopRepOperands,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelComparisonControls1Through6,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth1,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount16,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex2xStaticFlowCount16,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfPredicateNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfPredicateReplicateY,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfBooleanNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzPredicateNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzPredicateReplicateY,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzBooleanNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateReplicateY,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30PlainLoopRepOperands,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30ComparisonControls1Through6));
+
+class EasyGLCompiledEffectInvalidCallGraphTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticCallGraphProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidCallGraphTest, RejectsInvalidCallGraphsOrLabelOperands)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.callGraphProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidCalls,
+    EasyGLCompiledEffectInvalidCallGraphTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel2xDepth5,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30Depth5,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30BackwardCall,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30BackwardCallNz,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30UndefinedLabel,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30DuplicateLabel,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30MissingReturn,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30CallLabelNegate,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30CallLabelSwizzle,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30CallNzLabelNegate,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30CallNzLabelSwizzle,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30LabelDefinitionNegate,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30LabelDefinitionSwizzle,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex20Depth2,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex2xDepth5,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Depth5,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30BackwardCall,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30BackwardCallNz,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30UndefinedLabel,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30DuplicateLabel,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30MissingReturn,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30CallLabelNegate,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30CallLabelSwizzle,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30CallNzLabelNegate,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30CallNzLabelSwizzle,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30LabelDefinitionNegate,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30LabelDefinitionSwizzle));
+
+class EasyGLCompiledEffectValidCallGraphTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticCallGraphProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidCallGraphTest, AcceptsForwardCallsAndPlainLabelOperands)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.callGraphProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    BoundaryDepths,
+    EasyGLCompiledEffectValidCallGraphTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel2xDepth4,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30Depth4,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex20Depth1,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex2xDepth4,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Depth4,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30Label16,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30Label2047,
+        CNA::TestSupport::SyntheticCallGraphProbe::Pixel30PlainLabelOperands,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Label16,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30Label2047,
+        CNA::TestSupport::SyntheticCallGraphProbe::Vertex30PlainLabelOperands));
+
+class EasyGLCompiledEffectMatrixOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInvalidMatrixOperands>
+{
+};
+
+TEST_P(EasyGLCompiledEffectMatrixOperandTest, RejectsInvalidOperands)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderInvalidMatrixOperands = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidOperands,
+    EasyGLCompiledEffectMatrixOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidMatrixOperands::NegatedMatrixSource,
+        CNA::TestSupport::SyntheticInvalidMatrixOperands::SwizzledMatrixSource,
+        CNA::TestSupport::SyntheticInvalidMatrixOperands::DestinationAliasesVectorSource));
+
+class EasyGLCompiledEffectMatrixImplicitAliasTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticMatrixAliasProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectMatrixImplicitAliasTest, RejectsDestinationAlias)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderMatrixAliasProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ImplicitRows,
+    EasyGLCompiledEffectMatrixImplicitAliasTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticMatrixAliasProbe::DestinationAliasesSecondMatrixRow,
+        CNA::TestSupport::SyntheticMatrixAliasProbe::DestinationAliasesLastMatrixRow));
+
+TEST(EasyGLCompiledEffectMatrixImplicitAliasTest, AcceptsLegalSourceAndDestinationAliases)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    constexpr std::array validAliases{
+        CNA::TestSupport::SyntheticMatrixAliasProbe::DestinationAliasesMatrixBase,
+        CNA::TestSupport::SyntheticMatrixAliasProbe::VectorAliasesMatrixBase,
+        CNA::TestSupport::SyntheticMatrixAliasProbe::VectorAliasesImplicitMatrixRow,
+    };
+    for (const auto alias : validAliases)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderMatrixAliasProbe = alias;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectLegacyTextureMatrixSequenceTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectLegacyTextureMatrixSequenceTest, RejectsInvalidSequence)
+{
+    using Probe = CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe;
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.samplerRegister = 3;
+    options.pixelShaderLegacyTextureMatrixSequenceProbe = GetParam();
+    if (GetParam() == Probe::Matrix3SecondPadGap ||
+        GetParam() == Probe::Matrix3RepeatedPad ||
+        GetParam() == Probe::Matrix3IncompleteOnePad ||
+        GetParam() == Probe::Matrix3IncompleteTwoPads)
+        options.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidSequences,
+    EasyGLCompiledEffectLegacyTextureMatrixSequenceTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix2FinalGap,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix2RepeatedPad,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix2SourceMismatch,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix2Incomplete,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix3SecondPadGap,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix3RepeatedPad,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix3IncompleteOnePad,
+        CNA::TestSupport::SyntheticLegacyTextureMatrixSequenceProbe::Matrix3IncompleteTwoPads));
+
+TEST(EasyGLCompiledEffectLegacyTextureMatrixSequenceTest, AcceptsConsecutiveSequences)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+
+    CNA::TestSupport::SyntheticEffectOptions matrix2;
+    matrix2.includeDrawableProgram = true;
+    matrix2.samplerRegister = 2;
+    matrix2.pixelShaderUsesLegacyTextureMatrix2 = true;
+    const auto matrix2Bytes = CNA::TestSupport::BuildSyntheticEffect(matrix2);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(matrix2Bytes.data(), matrix2Bytes.size()));
+
+    CNA::TestSupport::SyntheticEffectOptions matrix3;
+    matrix3.includeDrawableProgram = true;
+    matrix3.samplerRegister = 3;
+    matrix3.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+    matrix3.pixelShaderUsesLegacyTextureMatrix3Sample = true;
+    const auto matrix3Bytes = CNA::TestSupport::BuildSyntheticEffect(matrix3);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(matrix3Bytes.data(), matrix3Bytes.size()));
+}
+
+class EasyGLCompiledEffectLegacyTextureOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticLegacyTextureOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectLegacyTextureOperandTest, RejectsInvalidOperand)
+{
+    using Probe = CNA::TestSupport::SyntheticLegacyTextureOperandProbe;
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderLegacyTextureOperandProbe = GetParam();
+    if (GetParam() >= Probe::TextureMatrixSignedScale &&
+        GetParam() <= Probe::TextureMatrixDestinationShift)
+        options.samplerRegister = 2;
+    else if (GetParam() >= Probe::TextureMatrixSpecularEyeNegate)
+    {
+        options.samplerRegister = 3;
+        options.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+    }
+    else
+        options.samplerRegister = 1;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidOperands,
+    EasyGLCompiledEffectLegacyTextureOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixBias,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixNegate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixSignedScaleNegate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixSwizzle,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixDestinationSaturate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixDestinationShift,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureBumpSignedScale,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureBumpBias,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureBumpNegate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureBumpSwizzle,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureDotBias,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureDotNegate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureDotSignedScaleNegate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureDotSwizzle,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixSpecularEyeNegate,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixSpecularEyeBias,
+        CNA::TestSupport::SyntheticLegacyTextureOperandProbe::TextureMatrixSpecularEyeSwizzle));
+
+TEST(EasyGLCompiledEffectLegacyTextureOperandTest, AcceptsSignedScaleWhereMicrosoftAllowsIt)
+{
+    using Probe = CNA::TestSupport::SyntheticLegacyTextureOperandProbe;
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    constexpr std::array validProbes{
+        Probe::TextureMatrixSignedScale,
+        Probe::TextureMatrixMixedSignedScale,
+        Probe::TextureDotSignedScale,
+    };
+    for (const Probe probe : validProbes)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.samplerRegister = probe == Probe::TextureDotSignedScale ? 1u : 2u;
+        options.pixelShaderLegacyTextureOperandProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectLegacyTexInstructionTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticLegacyTexInstructionProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectLegacyTexInstructionTest, RejectsInvalidForm)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderLegacyTexInstructionProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidForms,
+    EasyGLCompiledEffectLegacyTexInstructionTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::PartialDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::SaturateDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::ShiftDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::
+            TextureCoordinateSaturateDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::
+            TextureCoordinateShiftDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::
+            TextureCoordinateTemporaryDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::TextureKillSaturateDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::TextureKillShiftDestination,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::DuplicateTextureStage,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::MixedDuplicateStage,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::DescendingTextureStages,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::MixedDescendingStages,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::TextureKillThenLowerStage,
+        CNA::TestSupport::SyntheticLegacyTexInstructionProbe::HigherStageThenTextureKill));
+
+TEST(EasyGLCompiledEffectLegacyTexInstructionTest, AcceptsLegalStageOrdering)
+{
+    using Probe = CNA::TestSupport::SyntheticLegacyTexInstructionProbe;
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    constexpr std::array validProbes{
+        Probe::StageOneOnly,
+        Probe::AscendingStages,
+        Probe::MixedAscendingGap,
+    };
+    for (const Probe probe : validProbes)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixelShaderLegacyTexInstructionProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectPreShaderModel3AbsoluteSourceTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPreShaderModel3AbsoluteSourceTest, RejectsAbsoluteSourceModifier)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.invalidPreShaderModel3AbsoluteSource = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    PreShaderModel3,
+    EasyGLCompiledEffectPreShaderModel3AbsoluteSourceTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource::PixelAbsolute,
+        CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource::PixelAbsoluteNegate,
+        CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource::VertexAbsolute,
+        CNA::TestSupport::SyntheticInvalidPreShaderModel3AbsoluteSource::VertexAbsoluteNegate));
+
+class EasyGLCompiledEffectShaderModel3MixedConstantAbsoluteTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute>
+{
+};
+
+TEST_P(EasyGLCompiledEffectShaderModel3MixedConstantAbsoluteTest,
+       RejectsMixedAbsoluteAndOrdinaryFloatConstantReads)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.invalidShaderModel3MixedConstantAbsolute = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    MixedConstantAbsolute,
+    EasyGLCompiledEffectShaderModel3MixedConstantAbsoluteTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute::
+            PixelPlainThenAbsolute,
+        CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute::
+            PixelAbsoluteThenPlain,
+        CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute::
+            VertexPlainThenAbsolute,
+        CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute::
+            VertexAbsoluteThenPlain));
+
+TEST(EasyGLCompiledEffectTest, AcceptsConsistentShaderModel3AbsoluteFloatConstantReads)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Source = CNA::TestSupport::SyntheticInvalidShaderModel3MixedConstantAbsolute;
+    for (const Source source : {Source::PixelAllAbsolute, Source::VertexAllAbsolute})
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.invalidShaderModel3MixedConstantAbsolute = source;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsPixelSamplerRegister16)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeSampler = true;
+    options.includeDrawableProgram = true;
+    options.pixelShaderSamplesTexture = true;
+    options.samplerRegister = 16u;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTest, RejectsVertexSamplerRegister4)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeSampler = true;
+    options.includeDrawableProgram = true;
+    options.vertexShaderSamplesTexture = true;
+    options.samplerRegister = 4u;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+class EasyGLCompiledEffectTemporaryRegisterRangeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTemporaryRegisterProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectTemporaryRegisterRangeTest, RejectsFirstOutOfRangeRegister)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.temporaryRegisterProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangeTemporary,
+    EasyGLCompiledEffectTemporaryRegisterRangeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTemporaryRegisterProbe::Pixel11OutOfRange,
+        CNA::TestSupport::SyntheticTemporaryRegisterProbe::Pixel14OutOfRange,
+        CNA::TestSupport::SyntheticTemporaryRegisterProbe::Pixel20OutOfRange,
+        CNA::TestSupport::SyntheticTemporaryRegisterProbe::Pixel2xOutOfRange,
+        CNA::TestSupport::SyntheticTemporaryRegisterProbe::Pixel30OutOfRange,
+        CNA::TestSupport::SyntheticTemporaryRegisterProbe::Vertex11OutOfRange,
+        CNA::TestSupport::SyntheticTemporaryRegisterProbe::Vertex20OutOfRange,
+        CNA::TestSupport::SyntheticTemporaryRegisterProbe::Vertex2xOutOfRange,
+        CNA::TestSupport::SyntheticTemporaryRegisterProbe::Vertex30OutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedTemporaryRegisters)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticTemporaryRegisterProbe;
+    for (const Probe probe : {
+             Probe::Pixel11Maximum,
+             Probe::Pixel14Maximum,
+             Probe::Pixel20Maximum,
+             Probe::Pixel2xMaximum,
+             Probe::Pixel30Maximum,
+             Probe::Vertex11Maximum,
+             Probe::Vertex20Maximum,
+             Probe::Vertex2xMaximum,
+             Probe::Vertex30Maximum,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.temporaryRegisterProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectInputRegisterRangeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInputRegisterProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInputRegisterRangeTest, RejectsFirstOutOfRangeRegister)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.inputRegisterProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangeInput,
+    EasyGLCompiledEffectInputRegisterRangeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel11ColorOutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel11TextureOutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel14TextureOutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel20ColorOutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel20TexCoordOutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel30OutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Vertex20OutOfRange,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Vertex30OutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedInputRegisters)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticInputRegisterProbe;
+    for (const Probe probe : {
+             Probe::Pixel11ColorMaximum,
+             Probe::Pixel11TextureMaximum,
+             Probe::Pixel14TextureMaximum,
+             Probe::Pixel20ColorMaximum,
+             Probe::Pixel20TexCoordMaximum,
+             Probe::Pixel30Maximum,
+             Probe::Vertex20Maximum,
+             Probe::Vertex30Maximum,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.inputRegisterProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectInputRegisterAccessTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticInputRegisterProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInputRegisterAccessTest, RejectsReadOnlyInputDestination)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.inputRegisterProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ReadOnlyInputDestination,
+    EasyGLCompiledEffectInputRegisterAccessTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel11ColorDestination,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel20ColorDestination,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel20TexCoordDestination,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Pixel30Destination,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Vertex20Destination,
+        CNA::TestSupport::SyntheticInputRegisterProbe::Vertex30Destination));
+
+class EasyGLCompiledEffectDestinationRegisterAccessTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticDestinationRegisterAccessProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectDestinationRegisterAccessTest, RejectsRestrictedDestination)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.destinationRegisterAccessProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    RestrictedDestination,
+    EasyGLCompiledEffectDestinationRegisterAccessTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel20FloatConstant,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel30IntegerConstant,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel30BooleanConstant,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel30Sampler,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel30Miscellaneous,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel30Loop,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Pixel30Predicate,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex20FloatConstant,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex30IntegerConstant,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex30BooleanConstant,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex30Sampler,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex30Loop,
+        CNA::TestSupport::SyntheticDestinationRegisterAccessProbe::Vertex30Predicate));
+
+class EasyGLCompiledEffectOutputRegisterSourceTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterSourceProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectOutputRegisterSourceTest, RejectsWriteOnlyOutputSource)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.outputRegisterSourceProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    WriteOnlyOutputSource,
+    EasyGLCompiledEffectOutputRegisterSourceTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Pixel20Color,
+        CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Pixel30Depth,
+        CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Vertex20Raster,
+        CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Vertex20Color,
+        CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Vertex20TexCoord,
+        CNA::TestSupport::SyntheticOutputRegisterSourceProbe::Vertex30Generic));
+
+TEST(EasyGLCompiledEffectAddressRegisterTest, AcceptsProfileSpecificWriteInstructions)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    constexpr std::array legalProbes{
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex11MovDestination,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex20MovaDestination,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex30MovaDestination,
+    };
+    for (const auto probe : legalProbes)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.addressRegisterAccessProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectAddressRegisterAccessTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticAddressRegisterAccessProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectAddressRegisterAccessTest, RejectsInvalidAccess)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.addressRegisterAccessProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidAddressAccess,
+    EasyGLCompiledEffectAddressRegisterAccessTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex11Source,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex20Source,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex30Source,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex11AddDestination,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex20MovDestination,
+        CNA::TestSupport::SyntheticAddressRegisterAccessProbe::Vertex30MovDestination));
+
+class EasyGLCompiledEffectSamplerRegisterSourceTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSamplerRegisterSourceProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectSamplerRegisterSourceTest, RejectsDirectRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.samplerRegisterSourceProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    DirectSamplerSource,
+    EasyGLCompiledEffectSamplerRegisterSourceTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSamplerRegisterSourceProbe::Pixel20,
+        CNA::TestSupport::SyntheticSamplerRegisterSourceProbe::Pixel30,
+        CNA::TestSupport::SyntheticSamplerRegisterSourceProbe::Vertex30));
+
+class EasyGLCompiledEffectMissingSamplerDeclarationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticMissingSamplerDeclarationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectMissingSamplerDeclarationTest, RejectsTextureInstruction)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.missingSamplerDeclarationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    UndeclaredSampler,
+    EasyGLCompiledEffectMissingSamplerDeclarationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticMissingSamplerDeclarationProbe::Pixel20,
+        CNA::TestSupport::SyntheticMissingSamplerDeclarationProbe::Pixel30,
+        CNA::TestSupport::SyntheticMissingSamplerDeclarationProbe::Vertex30));
+
+class EasyGLCompiledEffectImmediateConstantValidTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectImmediateConstantValidTest, AcceptsDefinition)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.immediateConstantDefinitionProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidImmediateConstant,
+    EasyGLCompiledEffectImmediateConstantValidTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexFloatDuplicate,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerMinimum,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerMaximum,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexIntegerMinimum,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexIntegerMaximum));
+
+class EasyGLCompiledEffectImmediateConstantInvalidTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectImmediateConstantInvalidTest, RejectsDefinition)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.immediateConstantDefinitionProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidImmediateConstant,
+    EasyGLCompiledEffectImmediateConstantInvalidTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelFloatDuplicate,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerDuplicate,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexIntegerDuplicate,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelBooleanDuplicate,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexBooleanDuplicate,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerCountBelow,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerCountAbove,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerInitialBelow,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerInitialAbove,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerStepBelow,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerStepAbove,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::PixelIntegerReservedW,
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexIntegerReservedW));
+
+TEST(EasyGLCompiledEffectDrawTest, VertexFloatRedefinitionUsesTheFinalConstant)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.immediateConstantDefinitionProbe =
+        CNA::TestSupport::SyntheticImmediateConstantDefinitionProbe::VertexFloatDuplicate;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Transform"]->SetValue(
+        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+
+    struct Vertex { float x, y, z; };
+    const Vertex quad[6] = {
+        {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+        {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+    };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    RenderTarget2D target(device, 4, 4);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Magenta);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                              static_cast<const void*>(quad), 0, 2, declaration);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color centre = Color::Transparent;
+    const Rectangle rectangle(2, 2, 1, 1);
+    target.GetData(0, &rectangle, &centre, 0, 1);
+    EXPECT_EQ(centre, Color::Lime);
+}
+
+class EasyGLCompiledEffectDuplicateDeclarationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticDuplicateDeclarationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectDuplicateDeclarationTest, RejectsDeclaration)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.duplicateDeclarationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    DuplicateDeclaration,
+    EasyGLCompiledEffectDuplicateDeclarationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::PixelSamplerSame,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::PixelSamplerConflict,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::VertexSamplerSame,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::VertexSamplerConflict,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::Pixel20TextureInputSame,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::Pixel20TextureInputDifferentMask,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::Pixel20ColorInputSame,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::Vertex20InputSameRegister,
+        CNA::TestSupport::SyntheticDuplicateDeclarationProbe::
+            Vertex20SemanticSameDifferentRegister));
+
+class EasyGLCompiledEffectTextureSourceModifierTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTextureSourceModifierProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectTextureSourceModifierTest, RejectsModifier)
+{
+    using Probe = CNA::TestSupport::SyntheticTextureSourceModifierProbe;
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.vertexShaderSamplesTexture =
+        GetParam() == Probe::VertexTexldlCoordinate ||
+        GetParam() == Probe::VertexTexldlSampler;
+    options.textureSourceModifierProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTextureSourceModifier,
+    EasyGLCompiledEffectTextureSourceModifierTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::PixelTexlddCoordinate,
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::PixelTexlddSampler,
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::PixelTexlddGradient,
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::PixelTexldlCoordinate,
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::PixelTexldlSampler,
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::VertexTexldlCoordinate,
+        CNA::TestSupport::SyntheticTextureSourceModifierProbe::VertexTexldlSampler));
+
+class EasyGLCompiledEffectTexld20OperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTexld20OperandProbe>
+{
+};
+
+TEST(EasyGLCompiledEffectTexld20OperandTest, AcceptsPartialPrecision)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texld20OperandProbe =
+        CNA::TestSupport::SyntheticTexld20OperandProbe::PartialPrecisionDestination;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+TEST(EasyGLCompiledEffectTexld20OperandTest, RejectsIncompleteTemporaryCoordinates)
+{
+    using Probe = CNA::TestSupport::SyntheticTexld20OperandProbe;
+    using Kind = CNA::TestSupport::SyntheticSamplerKind;
+    constexpr std::array probes{
+        Probe::OrdinaryIncompleteCoordinate,
+        Probe::ProjectedIncompleteCoordinate,
+        Probe::BiasedIncompleteCoordinate,
+    };
+    constexpr std::array kinds{Kind::Sampler2D, Kind::SamplerCube, Kind::Sampler3D};
+
+    for (const Probe probe : probes)
+    {
+        for (const Kind kind : kinds)
+        {
+            SCOPED_TRACE(::testing::Message()
+                         << "probe=" << static_cast<int>(probe)
+                         << ", sampler=" << static_cast<int>(kind));
+            GraphicsDevice device;
+            EasyGLRenderer* renderer = RendererOf(device);
+            if (renderer == nullptr) GTEST_SKIP() << "this build did not select EasyGL";
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.samplerKind = kind;
+            options.texld20OperandProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        }
+    }
+}
+
+TEST(EasyGLCompiledEffectTexld20OperandTest, AcceptsExactlyInitializedTemporaryCoordinates)
+{
+    using Probe = CNA::TestSupport::SyntheticTexld20OperandProbe;
+    using Kind = CNA::TestSupport::SyntheticSamplerKind;
+    constexpr std::array probes{
+        Probe::OrdinaryCompleteCoordinate,
+        Probe::ProjectedCompleteCoordinate,
+        Probe::BiasedCompleteCoordinate,
+    };
+    constexpr std::array kinds{Kind::Sampler2D, Kind::SamplerCube, Kind::Sampler3D};
+
+    for (const Probe probe : probes)
+    {
+        for (const Kind kind : kinds)
+        {
+            SCOPED_TRACE(::testing::Message()
+                         << "probe=" << static_cast<int>(probe)
+                         << ", sampler=" << static_cast<int>(kind));
+            GraphicsDevice device;
+            EasyGLRenderer* renderer = RendererOf(device);
+            if (renderer == nullptr) GTEST_SKIP() << "this build did not select EasyGL";
+            CNA::TestSupport::SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = true;
+            options.samplerKind = kind;
+            options.texld20OperandProbe = probe;
+            const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+            EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        }
+    }
+}
+
+TEST_P(EasyGLCompiledEffectTexld20OperandTest, RejectsOperand)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texld20OperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTexld20Operand,
+    EasyGLCompiledEffectTexld20OperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexld20OperandProbe::InputDestination,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::TextureDestination,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::OutputDestination,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::PartialDestination,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::SaturateDestination,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::ColorCoordinate,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::ConstantCoordinate,
+        CNA::TestSupport::SyntheticTexld20OperandProbe::SamplerSwizzle));
+
+class EasyGLCompiledEffectSincosOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSincosOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectSincosOperandTest, RejectsModifiedScratchConstant)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.sincosOperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidSincosScratchOperand,
+    EasyGLCompiledEffectSincosOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSincosOperandProbe::Scratch1Negate,
+        CNA::TestSupport::SyntheticSincosOperandProbe::Scratch1Swizzle,
+        CNA::TestSupport::SyntheticSincosOperandProbe::Scratch2Negate,
+        CNA::TestSupport::SyntheticSincosOperandProbe::Scratch2Swizzle));
+
+TEST(EasyGLCompiledEffectSincosOperandTest, AcceptsIdentityScratchAndModifiedValue)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticSincosOperandProbe;
+    for (const Probe probe : {Probe::Valid, Probe::ValueNegate})
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.sincosOperandProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectTextureInstructionProfileTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTextureInstructionProfileProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectTextureInstructionProfileTest, RejectsInstruction)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.textureInstructionProfileProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTextureInstructionProfile,
+    EasyGLCompiledEffectTextureInstructionProfileTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Pixel20Texldd,
+        CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Pixel20Texldl,
+        CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Pixel2xTexldl,
+        CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Vertex20Texldl,
+        CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Vertex2xTexldl));
+
+TEST(EasyGLCompiledEffectTextureInstructionProfileTests, AcceptsPixel2xTexldd)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.textureInstructionProfileProbe =
+        CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Pixel2xTexldd;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+class EasyGLCompiledEffectInvalidTexlddOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTexlddOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidTexlddOperandTest, RejectsOperand)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texlddOperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTexlddOperand,
+    EasyGLCompiledEffectInvalidTexlddOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xOutputDestination,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xPartialDestination,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xSaturateDestination,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xColorCoordinate,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xConstantCoordinate,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xCoordinateSwizzle,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xSamplerSwizzle,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xGradientSwizzle,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel30SaturateDestination));
+
+class EasyGLCompiledEffectValidTexlddOperandTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTexlddOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidTexlddOperandTest, AcceptsOperand)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texlddOperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidTexlddOperand,
+    EasyGLCompiledEffectValidTexlddOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xPartialPrecisionDestination,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xTemporaryCoordinate,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel2xConstantGradients,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel30OutputDestination,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel30PartialDestination,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel30ConstantCoordinate,
+        CNA::TestSupport::SyntheticTexlddOperandProbe::Pixel30SourceSwizzles));
+
+class EasyGLCompiledEffectInvalidTexldlDestinationModifierTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticTexldlDestinationModifierProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidTexldlDestinationModifierTest, RejectsModifier)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texldlDestinationModifierProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTexldlDestinationModifier,
+    EasyGLCompiledEffectInvalidTexldlDestinationModifierTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexldlDestinationModifierProbe::PixelSaturate,
+        CNA::TestSupport::SyntheticTexldlDestinationModifierProbe::VertexSaturate));
+
+TEST(EasyGLCompiledEffectTexldlDestinationModifierTests, AcceptsPixelPartialPrecision)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texldlDestinationModifierProbe =
+        CNA::TestSupport::SyntheticTexldlDestinationModifierProbe::PixelPartialPrecision;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+class EasyGLCompiledEffectInvalidTexldDestinationModifierTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidTexldDestinationModifierTest, RejectsModifier)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texldDestinationModifierProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTexldDestinationModifier,
+    EasyGLCompiledEffectInvalidTexldDestinationModifierTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::Pixel30TexldSaturate,
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::Pixel30TexldpSaturate,
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::Pixel30TexldbSaturate));
+
+class EasyGLCompiledEffectValidTexldDestinationModifierTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidTexldDestinationModifierTest, AcceptsModifier)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.texldDestinationModifierProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ValidTexldDestinationModifier,
+    EasyGLCompiledEffectValidTexldDestinationModifierTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+            Pixel30TexldpPartialPrecision,
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+            Pixel30TexldbPartialPrecision));
+
+TEST(EasyGLCompiledEffectDrawTest, ProjectedCubeLoadDividesDirectionByW)
+{
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    constexpr std::array profiles{
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+            Pixel20TexldpPartialPrecision,
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+            Pixel30TexldpPartialPrecision,
+    };
+    for (const auto profile : profiles)
+    {
+        SCOPED_TRACE(static_cast<int>(profile));
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+        options.texldDestinationModifierProbe = profile;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+        };
+        Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+        EXPECT_EQ(CNA::TestSupport::DrawCompiledEffectProjectedCubeSampler(device, effect),
+                  Color::Green);
+    }
+}
+
+TEST(EasyGLCompiledEffectDrawTest, Projected2DLoadDerivesLodAfterDivisionByW)
+{
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    const std::array probes = {
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+            Pixel20TexldpPartialPrecision,
+        CNA::TestSupport::SyntheticTexldDestinationModifierProbe::
+            Pixel30TexldpPartialPrecision,
+    };
+    for (const auto probe : probes)
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.includeSampler = true;
+        options.texldDestinationModifierProbe = probe;
+        options.samplerStates = {
+            {Fx::SampMagFilter, Fx::FilterPoint},
+            {Fx::SampMinFilter, Fx::FilterPoint},
+            {Fx::SampMipFilter, Fx::FilterPoint},
+            {Fx::SampAddressU, Fx::AddressClamp},
+            {Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+        EXPECT_EQ(CNA::TestSupport::DrawCompiledEffectProjected2DLod(device, effect),
+                  Color::Blue);
+    }
+}
+
+class EasyGLCompiledEffectTypedControlSourceTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticTypedControlSourceProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectTypedControlSourceTest, RejectsOrdinaryArithmeticRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.typedControlSourceProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OrdinaryTypedControlSource,
+    EasyGLCompiledEffectTypedControlSourceTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticTypedControlSourceProbe::PixelInteger,
+        CNA::TestSupport::SyntheticTypedControlSourceProbe::PixelBoolean,
+        CNA::TestSupport::SyntheticTypedControlSourceProbe::VertexInteger,
+        CNA::TestSupport::SyntheticTypedControlSourceProbe::VertexBoolean));
+
+class EasyGLCompiledEffectSpecialControlSourceTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSpecialControlSourceProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectSpecialControlSourceTest, RejectsOrdinaryArithmeticRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.specialControlSourceProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OrdinarySpecialControlSource,
+    EasyGLCompiledEffectSpecialControlSourceTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSpecialControlSourceProbe::PixelPredicate,
+        CNA::TestSupport::SyntheticSpecialControlSourceProbe::PixelLabel,
+        CNA::TestSupport::SyntheticSpecialControlSourceProbe::PixelLoop,
+        CNA::TestSupport::SyntheticSpecialControlSourceProbe::VertexPredicate,
+        CNA::TestSupport::SyntheticSpecialControlSourceProbe::VertexLabel,
+        CNA::TestSupport::SyntheticSpecialControlSourceProbe::VertexLoop));
+
+class EasyGLCompiledEffectInvalidRelativeAddressingTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticRelativeAddressingProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidRelativeAddressingTest, RejectsInvalidRegisterOrScope)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.relativeAddressingProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectInvalidRelativeAddressingTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::PixelInputOutsideLoop,
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::PixelInputAddressInsideLoop,
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::PixelConstantInsideLoop,
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::VertexConstantOutsideLoop));
+
+class EasyGLCompiledEffectValidRelativeAddressingTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticRelativeAddressingProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidRelativeAddressingTest, AcceptsLoopInheritedAddress)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.relativeAddressingProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectValidRelativeAddressingTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::PixelInputSubroutineInsideLoop,
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::VertexConstantInsideLoop,
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::VertexConstantSubroutineInsideLoop,
+        CNA::TestSupport::SyntheticRelativeAddressingProbe::VertexInputInsideLoop));
+
+class EasyGLCompiledEffectMiscellaneousInputTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticMiscellaneousInputProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectMiscellaneousInputTest, RejectsInvalidPositionOrFaceUse)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.miscellaneousInputProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectMiscellaneousInputTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::PositionMaskZ,
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::PositionMaskXYZ,
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::PositionMaskFull,
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::FaceOrdinaryMove));
+
+class EasyGLCompiledEffectValidMiscellaneousInputTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticMiscellaneousInputProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidMiscellaneousInputTest, AcceptsPositionMasksAndFaceCondition)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.miscellaneousInputProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectValidMiscellaneousInputTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::PositionMaskX,
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::PositionMaskY,
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::PositionMaskXY,
+        CNA::TestSupport::SyntheticMiscellaneousInputProbe::FaceConditionalCompare));
+
+class EasyGLCompiledEffectInvalidSemanticDeclarationTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSemanticDeclarationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidSemanticDeclarationTest,
+       RejectsOverlapsDuplicatesAndForbiddenMasks)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.semanticDeclarationProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectInvalidSemanticDeclarationTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::PixelOverlappingMasks,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::PixelDuplicateSemantic,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::VertexOutputOverlappingMasks,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::VertexOutputDuplicateSemantic,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::VertexInputPartialMask,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::VertexPositionPartialMask,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::VertexPointSizePartialMask));
+
+class EasyGLCompiledEffectInvalidDeclarationModifierTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticDeclarationModifierProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidDeclarationModifierTest,
+       RejectsModifiersForbiddenForTheDeclarationRegisterClass)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.declarationModifierProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectInvalidDeclarationModifierTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Pixel20InputSaturate,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Pixel30InputSaturate,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Pixel30PositionPartialPrecision,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Pixel30PositionCentroid,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Pixel30SamplerPartialPrecision,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Pixel30SamplerCentroid,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Vertex30InputSaturate,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::Vertex30OutputSaturate));
+
+class EasyGLCompiledEffectValidDeclarationModifierTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticDeclarationModifierProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectValidDeclarationModifierTest,
+       AcceptsPixelInterpolatorPartialPrecisionAndCentroid)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.declarationModifierProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectValidDeclarationModifierTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::
+            Pixel20InputPartialPrecisionCentroid,
+        CNA::TestSupport::SyntheticDeclarationModifierProbe::
+            Pixel30InputPartialPrecisionCentroid));
+
+TEST(EasyGLCompiledEffectDrawTest, ShaderModel3PacksDisjointSemanticsIntoOneRegister)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.semanticDeclarationProbe =
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::PackedDisjoint;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Transform"]->SetValue(
+        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+
+    struct Vertex { float x, y, z; };
+    const Vertex quad[6] = {
+        {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+        {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+    };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    RenderTarget2D target(device, 4, 4);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Magenta);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                              static_cast<const void*>(quad), 0, 2, declaration);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color centre = Color::Transparent;
+    const Rectangle probe(2, 2, 1, 1);
+    target.GetData(0, &probe, &centre, 0, 1);
+    EXPECT_NEAR(centre.getRProperty(), 64, 2);
+    EXPECT_NEAR(centre.getGProperty(), 128, 2);
+    EXPECT_NEAR(centre.getBProperty(), 191, 2);
+    EXPECT_NEAR(centre.getAProperty(), 255, 2);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, ShaderModel3PacksSeparateSemanticOutputsIntoOnePixelInput)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.semanticDeclarationProbe =
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::PixelPackedFromSeparateOutputs;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Transform"]->SetValue(
+        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+
+    struct Vertex { float x, y, z; };
+    const Vertex quad[6] = {
+        {-1,  1, 0}, {-1, -1, 0}, { 1, -1, 0},
+        {-1,  1, 0}, { 1, -1, 0}, { 1,  1, 0},
+    };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    });
+    RenderTarget2D target(device, 4, 4);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Magenta);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                              static_cast<const void*>(quad), 0, 2, declaration);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color centre = Color::Transparent;
+    const Rectangle probe(2, 2, 1, 1);
+    target.GetData(0, &probe, &centre, 0, 1);
+    EXPECT_NEAR(centre.getRProperty(), 64, 2);
+    EXPECT_NEAR(centre.getGProperty(), 128, 2);
+    EXPECT_NEAR(centre.getBProperty(), 191, 2);
+    EXPECT_NEAR(centre.getAProperty(), 255, 2);
+}
+
+class EasyGLCompiledEffectCentroidTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticSemanticDeclarationProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectCentroidTest, InterpolatesInsideAPartiallyCoveredPixel)
+{
+    using Probe = CNA::TestSupport::SyntheticSemanticDeclarationProbe;
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.semanticDeclarationProbe = GetParam();
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Transform"]->SetValue(
+        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+
+    struct Vertex { float x, y, z, u, v; };
+    const Vertex triangle[3] = {
+        {-0.2f,  1.0f, 0.0f, 0.0f, 0.0f},
+        {-0.2f, -1.0f, 0.0f, 0.0f, 0.0f},
+        { 0.9f,  0.0f, 0.0f, 1.0f, 0.0f},
+    };
+    const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    RenderTarget2D target(device, 4, 4, false, SurfaceFormat::Color,
+                          DepthFormat::None, 4, RenderTargetUsage::PreserveContents);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                              static_cast<const void*>(triangle), 0, 1, declaration);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color edge = Color::Transparent;
+    const Rectangle probe(1, 1, 1, 1);
+    target.GetData(0, &probe, &edge, 0, 1);
+    if (GetParam() == Probe::PixelCentroidControl ||
+        GetParam() == Probe::Pixel20CentroidControl)
+    {
+        EXPECT_GT(edge.getRProperty(), edge.getGProperty());
+        EXPECT_GT(edge.getRProperty(), 32);
+    }
+    else
+    {
+        EXPECT_GT(edge.getGProperty(), edge.getRProperty());
+        EXPECT_GT(edge.getGProperty(), 32);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    D3D9Contract,
+    EasyGLCompiledEffectCentroidTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::PixelCentroidControl,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::PixelCentroidExplicit,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::PixelCentroidImplicitColor,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::Pixel20CentroidControl,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::Pixel20CentroidExplicit,
+        CNA::TestSupport::SyntheticSemanticDeclarationProbe::Pixel20CentroidImplicitColor));
+
+class EasyGLCompiledEffectOutputRegisterRangeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticOutputRegisterProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectOutputRegisterRangeTest, RejectsFirstOutOfRangeRegister)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.outputRegisterProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangeOutput,
+    EasyGLCompiledEffectOutputRegisterRangeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticOutputRegisterProbe::Pixel30ColorOutOfRange,
+        CNA::TestSupport::SyntheticOutputRegisterProbe::Pixel30DepthOutOfRange,
+        CNA::TestSupport::SyntheticOutputRegisterProbe::Vertex20ColorOutOfRange,
+        CNA::TestSupport::SyntheticOutputRegisterProbe::Vertex20TexCoordOutOfRange,
+        CNA::TestSupport::SyntheticOutputRegisterProbe::Vertex20RasterOutOfRange,
+        CNA::TestSupport::SyntheticOutputRegisterProbe::Vertex30OutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedOutputRegisters)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticOutputRegisterProbe;
+    for (const Probe probe : {
+             Probe::Pixel30ColorMaximum,
+             Probe::Pixel30DepthMaximum,
+             Probe::Vertex20ColorMaximum,
+             Probe::Vertex20TexCoordMaximum,
+             Probe::Vertex20RasterMaximum,
+             Probe::Vertex30Maximum,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.outputRegisterProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectConstantControlRegisterRangeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticConstantControlRegisterProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectConstantControlRegisterRangeTest, RejectsFirstOutOfRangeRegister)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.constantControlRegisterProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangeConstantControl,
+    EasyGLCompiledEffectConstantControlRegisterRangeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Pixel11FloatOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Pixel20FloatOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Pixel30FloatOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Pixel30IntegerOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Pixel30BooleanOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Pixel30PredicateOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Vertex30IntegerOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Vertex30BooleanOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Vertex30PredicateOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Vertex20AddressOutOfRange,
+        CNA::TestSupport::SyntheticConstantControlRegisterProbe::Vertex20LoopOutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedConstantControlRegisters)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticConstantControlRegisterProbe;
+    for (const Probe probe : {
+             Probe::Pixel11FloatMaximum,
+             Probe::Pixel20FloatMaximum,
+             Probe::Pixel30FloatMaximum,
+             Probe::Pixel30IntegerMaximum,
+             Probe::Pixel30BooleanMaximum,
+             Probe::Pixel30PredicateMaximum,
+             Probe::Vertex30IntegerMaximum,
+             Probe::Vertex30BooleanMaximum,
+             Probe::Vertex30PredicateMaximum,
+             Probe::Vertex20AddressMaximum,
+             Probe::Vertex20LoopMaximum,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.constantControlRegisterProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectVertexInstructionSlotTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticVertexInstructionSlotProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectVertexInstructionSlotTest, RejectsFirstInstructionSlotBeyondProfileLimit)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.vertexInstructionSlotProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangeVertexInstructionSlots,
+    EasyGLCompiledEffectVertexInstructionSlotTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticVertexInstructionSlotProbe::Vertex11OutOfRange,
+        CNA::TestSupport::SyntheticVertexInstructionSlotProbe::Vertex20OutOfRange,
+        CNA::TestSupport::SyntheticVertexInstructionSlotProbe::Vertex2xOutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumVertexInstructionSlots)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticVertexInstructionSlotProbe;
+    for (const Probe probe : {
+             Probe::Vertex11Maximum,
+             Probe::Vertex20Maximum,
+             Probe::Vertex2xMaximum,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.vertexInstructionSlotProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectPixel20InstructionSlotTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticPixel20InstructionSlotProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPixel20InstructionSlotTest,
+       RejectsFirstInstructionSlotBeyondProfileLimit)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeSampler = GetParam() ==
+                             CNA::TestSupport::SyntheticPixel20InstructionSlotProbe::
+                                 TextureOutOfRange;
+    options.includeDrawableProgram = true;
+    options.pixel20InstructionSlotProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangePixel20InstructionSlots,
+    EasyGLCompiledEffectPixel20InstructionSlotTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticPixel20InstructionSlotProbe::ArithmeticOutOfRange,
+        CNA::TestSupport::SyntheticPixel20InstructionSlotProbe::TextureOutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumPixel20InstructionSlots)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticPixel20InstructionSlotProbe;
+    for (const Probe probe : {Probe::ArithmeticMaximum, Probe::TextureMaximum})
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeSampler = probe == Probe::TextureMaximum;
+        options.includeDrawableProgram = true;
+        options.pixel20InstructionSlotProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectPixel1InstructionSlotTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticPixel1InstructionSlotProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPixel1InstructionSlotTest,
+       RejectsFirstInstructionSlotBeyondProfileLimit)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixel1InstructionSlotProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    OutOfRangePixel1InstructionSlots,
+    EasyGLCompiledEffectPixel1InstructionSlotTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::Pixel11ArithmeticOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::Pixel11TextureOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::Pixel12DoubleArithmeticOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::Pixel14ArithmeticOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::Pixel14TextureOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::
+            Pixel14SecondPhaseArithmeticOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::
+            Pixel11CoissuedArithmeticOutOfRange,
+        CNA::TestSupport::SyntheticPixel1InstructionSlotProbe::
+            Pixel11TexbemlArithmeticOutOfRange));
+
+TEST(EasyGLCompiledEffectTest, AcceptsMaximumPixel1InstructionSlots)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticPixel1InstructionSlotProbe;
+    for (const Probe probe : {
+             Probe::Pixel11ArithmeticMaximum,
+             Probe::Pixel11TextureMaximum,
+             Probe::Pixel12DoubleArithmeticMaximum,
+             Probe::Pixel14ArithmeticMaximum,
+             Probe::Pixel14TextureMaximum,
+             Probe::Pixel14TwoPhaseArithmeticMaximum,
+             Probe::Pixel11CoissuedArithmeticMaximum,
+             Probe::Pixel11TexbemlArithmeticMaximum,
+             Probe::Pixel11ZeroSlotNopControl,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixel1InstructionSlotProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectPixel1DestinationMaskTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticPixel1DestinationMaskProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPixel1DestinationMaskTest, RejectsInvalidDestinationMask)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixel1DestinationMaskProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidPixel1DestinationMasks,
+    EasyGLCompiledEffectPixel1DestinationMaskTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticPixel1DestinationMaskProbe::Pixel11MovArbitrary,
+        CNA::TestSupport::SyntheticPixel1DestinationMaskProbe::Pixel11Dp3Alpha,
+        CNA::TestSupport::SyntheticPixel1DestinationMaskProbe::Pixel11TexturePartial,
+        CNA::TestSupport::SyntheticPixel1DestinationMaskProbe::Pixel14TexcrdArbitrary));
+
+TEST(EasyGLCompiledEffectTest, AcceptsValidPixel1DestinationMasks)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticPixel1DestinationMaskProbe;
+    for (const Probe probe : {
+             Probe::Pixel11MovFull,
+             Probe::Pixel11MovRgb,
+             Probe::Pixel11MovAlpha,
+             Probe::Pixel14MovArbitrary,
+         })
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixel1DestinationMaskProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+class EasyGLCompiledEffectShaderModel14TextureOperandTest :
+    public ::testing::TestWithParam<
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectShaderModel14TextureOperandTest,
+       RejectsInvalidProjectiveOperand)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.shaderModel14TextureOperandProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidProjectiveOperands,
+    EasyGLCompiledEffectShaderModel14TextureOperandTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexcrdDz,
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexcrdDwIdentity,
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexcrdDwWrongDestinationMask,
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexldTextureDz,
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexldTextureDwIdentity,
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexldTemporaryDw,
+        CNA::TestSupport::SyntheticShaderModel14TextureOperandProbe::TexldTemporaryDzIdentity));
+
+class EasyGLCompiledEffectPixel1CoissueTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticPixel1CoissueProbe>
+{
+};
+
+TEST_P(EasyGLCompiledEffectPixel1CoissueTest, RejectsInvalidCoissueEncoding)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixel1CoissueProbe = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidPixel1Coissue,
+    EasyGLCompiledEffectPixel1CoissueTest,
+    ::testing::Values(CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11Texture,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel14Dp4,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11OrphanAlpha,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11RgbThenRgb,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11FullThenAlpha,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11TextureThenAlpha,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel11Triple,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel14Dp4ThenAlpha,
+                      CNA::TestSupport::SyntheticPixel1CoissueProbe::Pixel14PhaseThenAlpha));
+
+TEST(EasyGLCompiledEffectTest, AcceptsBothValidPixel1CoissueOrders)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Probe = CNA::TestSupport::SyntheticPixel1CoissueProbe;
+    for (const Probe probe : {Probe::Pixel11RgbThenAlpha, Probe::Pixel11AlphaThenRgb})
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.pixel1CoissueProbe = probe;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    }
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyTextureMatrixContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9LegacySampledTextureMatrix2)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyTextureMatrix2Contract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9LegacySampledTextureMatrix3)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyTextureMatrix3SampleContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureMatrix3Specular)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyTextureMatrix3SpecularContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyPixelDepthOutputs)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyDepthOutputContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyTextureComponentRemap)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyTextureRemapContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyDependentTextureOperations)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyDependentTextureContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9LegacyBumpEnvironmentOperations)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyBumpEnvironmentContract(device);
+}
+
+class EasyGLCompiledEffectInvalidTexbemSourceLifetimeTest :
+    public ::testing::TestWithParam<CNA::TestSupport::SyntheticLegacyBumpEnvironment>
+{
+};
+
+TEST_P(EasyGLCompiledEffectInvalidTexbemSourceLifetimeTest, RejectsOrdinaryLaterRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.samplerRegister = 1;
+    options.pixelShaderLegacyBumpEnvironment = GetParam();
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_ANY_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    InvalidTexbemSourceLifetime,
+    EasyGLCompiledEffectInvalidTexbemSourceLifetimeTest,
+    ::testing::Values(
+        CNA::TestSupport::SyntheticLegacyBumpEnvironment::TextureReadSourceLater,
+        CNA::TestSupport::SyntheticLegacyBumpEnvironment::
+            TextureLuminanceReadSourceLater));
+
+TEST(EasyGLCompiledEffectTexbemSourceLifetimeTest, AcceptsAnotherBumpEnvironmentRead)
+{
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.samplerRegister = 1;
+    options.pixelShaderLegacyBumpEnvironment =
+        CNA::TestSupport::SyntheticLegacyBumpEnvironment::TextureReadSourceByBumpLater;
+    const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
 }
 
 TEST(EasyGLCompiledEffectDrawTest, SharedMultiStreamDrawContract)
@@ -648,6 +4438,97 @@ TEST(EasyGLCompiledEffectDrawTest, SpriteBatchInheritsStockVertexShaderForPixelO
     EXPECT_NEAR(actual.getBProperty(), 0, 3);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SpriteBatchLayerDepthReachesInheritedStockVertexShader)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeSampler = true;
+    options.pixelShaderSamplesTexture = true;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4::One);
+
+    Texture2D nearTexture(device, 1, 1);
+    Texture2D farTexture(device, 1, 1);
+    const Color red[1] = {Color::Red};
+    const Color green[1] = {Color::Green};
+    nearTexture.SetData(red, 1);
+    farTexture.SetData(green, 1);
+
+    RenderTarget2D target(device, 8, 8, false, SurfaceFormat::Color,
+                          DepthFormat::Depth24);
+    device.SetRenderTarget(&target);
+    device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                 Color::Black, 1.0f, 0);
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                &DepthStencilState::Default, &RasterizerState::CullNone, &effect);
+    batch.Draw(nearTexture, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 1, 1), Color::White,
+               0.0f, Microsoft::Xna::Framework::Vector2::Zero, SpriteEffects::None, 0.1f);
+    batch.Draw(farTexture, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 1, 1), Color::White,
+               0.0f, Microsoft::Xna::Framework::Vector2::Zero, SpriteEffects::None, 0.9f);
+    batch.End();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color actual = Color::Transparent;
+    const Rectangle centre(4, 4, 1, 1);
+    target.GetData(0, &centre, &actual, 0, 1);
+    EXPECT_GT(actual.getRProperty(), 100);
+    EXPECT_NEAR(actual.getGProperty(), 0, 3);
+    EXPECT_NEAR(actual.getBProperty(), 0, 3);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SpriteBatchBeginMipClampReachesCompiledPixelSampler)
+{
+    // SOFTWARE-187: this effect samples slot 0 but assigns no sampler-state fields of its own.
+    // FNA therefore leaves SpriteBatch.Begin's public slot-0 state authoritative. The sprite is
+    // magnified, so only MaxMipLevel=2 can select the blue 1x1 mip instead of the red base level.
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeSampler = true;
+    options.pixelShaderSamplesTexture = true;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4::One);
+
+    Texture2D sprite(device, 4, 4, true, SurfaceFormat::Color);
+    const Color red[16] = {
+        Color::Red, Color::Red, Color::Red, Color::Red,
+        Color::Red, Color::Red, Color::Red, Color::Red,
+        Color::Red, Color::Red, Color::Red, Color::Red,
+        Color::Red, Color::Red, Color::Red, Color::Red,
+    };
+    const Color green[4] = {Color::Green, Color::Green, Color::Green, Color::Green};
+    const Color blue[1] = {Color::Blue};
+    sprite.SetData(0, nullptr, red, 0, 16);
+    sprite.SetData(1, nullptr, green, 0, 4);
+    sprite.SetData(2, nullptr, blue, 0, 1);
+
+    SamplerState sampler = SamplerState::PointClamp;
+    sampler.setMaxMipLevelProperty(2);
+    RenderTarget2D target(device, 8, 8);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler, nullptr, nullptr, &effect);
+    batch.Draw(sprite, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 4, 4), Color::White);
+    batch.End();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color actual(0, 0, 0, 0);
+    const Rectangle centre(4, 4, 1, 1);
+    target.GetData(0, &centre, &actual, 0, 1);
+    EXPECT_NEAR(actual.getRProperty(), 0, 3);
+    EXPECT_NEAR(actual.getGProperty(), 0, 3);
+    EXPECT_NEAR(actual.getBProperty(), 255, 3);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedOrientationContract)
 {
     GraphicsDevice device;
@@ -676,6 +4557,124 @@ TEST(EasyGLCompiledEffectDrawTest, SharedSamplerPixelContract)
     options.supportsLodBias = CNA::Internal::Renderers::EasyGL::IsDesktopCoreProfile(
         CNA::Internal::Renderers::EasyGL::ActiveGlProfile());
     CNA::TestSupport::RunCompiledEffectSamplerPixelContract(device, options);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9SamplerSourceSwizzlesSampleResult)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSamplerResultSwizzleContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9TexlddUsesItsSecondSourceAsTheSampler)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.pixelShaderUsesTextureGradients = true;
+    options.samplerStates = {
+        {Fx::SampMagFilter, Fx::FilterPoint},
+        {Fx::SampMinFilter, Fx::FilterPoint},
+        {Fx::SampMipFilter, Fx::FilterPoint},
+        {Fx::SampAddressU, Fx::AddressClamp},
+        {Fx::SampAddressV, Fx::AddressClamp},
+    };
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    EXPECT_EQ(CNA::TestSupport::DrawCompiledEffectSamplerResultSwizzle(device, effect),
+              Color(32, 64, 128, 255));
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedVertexSamplerContract)
+{
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectVertexSamplerContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, D3D9VertexSamplerSourceSwizzlesSampleResult)
+{
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectVertexSamplerResultSwizzleContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, SharedVertexSamplerDimensionsContract)
+{
+    GraphicsDevice device(
+        GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectVertexSamplerDimensionsContract(device);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, DeviceTextureAndSamplerOverridesRemainAuthoritativeAfterPassApply)
+{
+    // SOFTWARE-186: FNA's Effect.INTERNAL_updateSamplers publishes a pass's assignments into the
+    // GraphicsDevice collections. A later application assignment to those same public slots is
+    // therefore what ApplySamplers verifies at the draw. The three possible centre colours below
+    // identify the failure precisely: blue means the stale effect-private texture won; green
+    // means the public texture won but the stale Clamp sampler did; only red means both public
+    // collections remained authoritative.
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    namespace Fx = CNA::TestSupport::EffectFormat;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticSamplingEffect({
+        {Fx::SampMagFilter, Fx::FilterPoint},
+        {Fx::SampMinFilter, Fx::FilterPoint},
+        {Fx::SampMipFilter, Fx::FilterPoint},
+        {Fx::SampAddressU, Fx::AddressClamp},
+        {Fx::SampAddressV, Fx::AddressClamp},
+    }));
+    auto& parameters = effect.getParametersProperty();
+    parameters["Transform"]->SetValue(Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+    parameters["Tint"]->SetValue(Microsoft::Xna::Framework::Vector4::One);
+
+    Texture2D passTexture(device, 1, 1);
+    const Color blue[1] = {Color::Blue};
+    passTexture.SetData(blue, 1);
+    parameters["FxTexture"]->SetValue(&passTexture);
+
+    Texture2D deviceTexture(device, 2, 1);
+    const Color redGreen[2] = {Color::Red, Color::Green};
+    deviceTexture.SetData(redGreen, 2);
+
+    CNA::TestSupport::SamplingQuadVertex quad[6];
+    CNA::TestSupport::FillSamplingQuad(quad, 1.25f, 0.5f);
+    RenderTarget2D target(device, 8, 8);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setBlendStateProperty(BlendState::Opaque);
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+
+    device.getTexturesProperty()(0, &deviceTexture);
+    device.getSamplerStatesProperty()[0] = SamplerState::PointWrap;
+    device.DrawUserPrimitives(
+        PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2,
+        CNA::TestSupport::SamplingQuadDeclaration());
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color actual(0, 0, 0, 0);
+    const Rectangle centre(4, 4, 1, 1);
+    target.GetData(0, &centre, &actual, 0, 1);
+    EXPECT_NEAR(actual.getRProperty(), 255, 3);
+    EXPECT_NEAR(actual.getGProperty(), 0, 3);
+    EXPECT_NEAR(actual.getBProperty(), 0, 3);
 }
 
 TEST(EasyGLCompiledEffectDrawTest, SharedPassSelectionContract)
@@ -783,7 +4782,7 @@ TEST(EasyGLCompiledEffectDrawTest, MultipleRenderTargetSamplersKeepTheirOwnTextu
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
     device.setBlendStateProperty(BlendState::Opaque);
-    effect.getTechniquesProperty()[0].getPassesProperty()[0].Apply();
+    effect.getTechniquesProperty()[0]->getPassesProperty()[0]->Apply();
     device.SetVertexBuffer(&vertexBuffer);
     device.setIndicesProperty(nullptr);
     device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
@@ -874,7 +4873,7 @@ TEST(EasyGLCompiledEffectDrawTest, CompiledDrawObjectsSurviveAContextRecreation)
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
-        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
         device.DrawUserPrimitives(PrimitiveType::TriangleList, static_cast<const void*>(quad), 0, 2,
                                   CNA::TestSupport::SamplingQuadDeclaration());
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -902,7 +4901,10 @@ TEST(EasyGLCompiledEffectDrawTest, CompiledDrawObjectsSurviveAContextRecreation)
 
 TEST(EasyGLCompiledEffectDrawTest, SharedCubeAndVolumeSamplerContract)
 {
-    GraphicsDevice device;
+    // SOFTWARE-179: Texture3D is a HiDef-only XNA resource. This compiled-effect family predated
+    // profile-ceiling enforcement and accidentally kept constructing the default Reach device.
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
     CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
@@ -925,12 +4927,11 @@ TEST(EasyGLCompiledEffectDrawTest, SharedTruncationContract)
 }
 
 
-// SAMPLE-028: MojoShader ends every generated vertex shader with Direct3D 9's clip-space depth
-// conversion (`gl_Position.z = gl_Position.z * 2.0 - gl_Position.w`), because OpenGL's clip volume
-// is z in [-w, w] where Direct3D's is [0, w]. EasyGL's own stock shaders do NOT do that -- they
-// emit the XNA projection's Direct3D-style z unchanged. Without a compensating GL depth range the
-// two encodings disagree, and compiled-effect geometry is depth-tested against everything else on
-// a different scale: it wins where it should lose.
+// SAMPLE-028/SOFTWARE-336: MojoShader ends every generated vertex shader with Direct3D 9's
+// clip-space depth conversion (`gl_Position.z = gl_Position.z * 2.0 - gl_Position.w`), because
+// OpenGL's clip volume is z in [-w, w] where Direct3D's is [0, w]. EasyGL's stock shaders now apply
+// the same conversion. This mixed-path test prevents either route from returning to a different
+// depth scale.
 //
 // Found on ColorReplacementSample_4_0, where the car body (a compiled effect) swallowed the
 // headlight lens and thin window edges that ordinary BasicEffect parts draw in front of it. This
@@ -970,12 +4971,9 @@ TEST(EasyGLCompiledEffectDrawTest, IsDepthTestedOnTheSameScaleAsStockGeometry)
         VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
     });
 
-    // 1. Stock geometry at z = 0.6. The two z values are chosen so the encodings disagree about
-    //    the ORDER, which is the whole defect: stock lands at (0.6+1)/2 = 0.800, and a compiled
-    //    quad at z = 0.7 lands at 0.700 without the compensation (wrongly nearer) but at
-    //    0.5 + 0.5*0.7 = 0.850 with it (correctly farther). Any pair with
-    //    z_stock < z_fx < (z_stock+1)/2 exposes it; this one is the sample's own situation, a lens
-    //    sitting just in front of the body.
+    // 1. Stock geometry at z = 0.6. Both paths must map this D3D-style coordinate to window depth
+    //    0.6; the compiled quad at z = 0.7 below is strictly farther. These values retain the
+    //    sample's own situation, a lens sitting just in front of the body.
     const auto nearQuad = fullScreenQuad(0.6f);
     auto stockVb = renderer->CreateVertexBuffer(6);
     stockVb->SetVertexDeclaration(stockDeclaration);

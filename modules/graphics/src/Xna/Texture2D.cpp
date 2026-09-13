@@ -16,7 +16,12 @@
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
+#include "CNA/Internal/Graphics/SurfaceFormatDecoder.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp"
@@ -48,13 +53,14 @@ namespace Microsoft::Xna::Framework::Graphics
     // -----------------------------------------------------------------------
 
     // plans/plan_runtimerenderer.md design decision 9 / plans/plan_dx9.md D9-103: GraphicsProfile.Reach/HiDef
-    // texture-size ceilings. Only a renderer with a real capability structure to consult (D3D9)
-    // enforces one; every other renderer reports no ceiling, which is exactly what it did when this
-    // was a compile-time renderer branch. Checked as a profile CEILING, not a hardware
-    // query: even where the device could allocate more, a Reach-profile game is restricted to the
-    // profile's own limit, which is what XNA's portability guarantee means.
+    // texture-size ceilings. Checked as a profile CEILING, not a hardware query: even where the
+    // device could allocate more, a Reach-profile game is restricted to the profile's own limit,
+    // which is what XNA's portability guarantee means. SOFTWARE-179 made the renderer-interface
+    // default carry this rule so non-D3D9 renderers cannot silently opt out.
     static void ValidateTextureSizeForProfileEXT(const GraphicsDevice& device, int w, int h)
     {
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(w, "width");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(h, "height");
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
         const int maxSize = device.GetRenderer().GetMaxTextureSizeForProfileEXT(profile);
         if (w > maxSize || h > maxSize)
@@ -64,6 +70,15 @@ namespace Microsoft::Xna::Framework::Graphics
                 " exceeds GraphicsProfile." +
                 (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
                 "'s own maximum of " + std::to_string(maxSize) + "x" + std::to_string(maxSize));
+        }
+
+        constexpr std::int64_t maximumAspectRatio = 2048;
+        const std::int64_t larger = std::max(w, h);
+        const std::int64_t smaller = std::min(w, h);
+        if (larger > smaller * maximumAspectRatio)
+        {
+            throw System::NotSupportedException(
+                "Texture2D's aspect ratio exceeds the active graphics profile limit of 2048:1.");
         }
     }
 
@@ -132,23 +147,41 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    [[nodiscard]] static bool IsColorTransferFormatEXT(const GraphicsDevice* device,
-                                                        SurfaceFormat format) noexcept
+    [[nodiscard]] static bool IsClassicDxtFormat(SurfaceFormat format) noexcept
     {
-        // The framework rule is "any format whose texel is a multiple of four bytes", which is the
-        // rule Texture::ValidateGetDataFormat(format, 4) applies alongside it. It is a route real
-        // code depends on -- MouseCursor::FromTexture2D reads a ColorSrgbEXT texture through it --
-        // so a renderer has to opt out of it explicitly rather than have it withdrawn by default.
-        if (device != nullptr)
+        return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
+               format == SurfaceFormat::Dxt5;
+    }
+
+    static void ValidateTexture2DCreationShapeEXT(
+        const GraphicsDevice& device, int width, int height, bool mipMap, SurfaceFormat format)
+    {
+        const bool nonPowerOfTwo =
+            !std::has_single_bit(static_cast<unsigned int>(width)) ||
+            !std::has_single_bit(static_cast<unsigned int>(height));
+        const bool compressed = IsClassicDxtFormat(format);
+
+        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach && nonPowerOfTwo)
         {
-            switch (device->GetRenderer().ClassifyColorTransferFormatEXT(static_cast<int>(format)))
+            if (mipMap)
             {
-                case CNA::Internal::Renderers::RendererFormatVerdict::Supported:   return true;
-                case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported: return false;
-                case CNA::Internal::Renderers::RendererFormatVerdict::Defer:       break;
+                throw System::NotSupportedException(
+                    "Mipmapped non-power-of-two Texture2D resources are not supported by the "
+                    "Reach graphics profile.");
+            }
+            if (compressed)
+            {
+                throw System::NotSupportedException(
+                    "Compressed non-power-of-two Texture2D resources are not supported by the "
+                    "Reach graphics profile.");
             }
         }
-        return Texture::GetFormatSizeEXT(format) % 4 == 0;
+
+        if (compressed && ((width & 3) != 0 || (height & 3) != 0))
+        {
+            throw System::ArgumentException(
+                "DXT texture dimensions must be multiples of four.");
+        }
     }
 
     /// SKIA-140/141: Dxt1/Dxt3/Dxt5/Bc7EXT/Bc7SrgbEXT transfer raw compressed blocks through the
@@ -183,15 +216,67 @@ namespace Microsoft::Xna::Framework::Graphics
     static void validateMipLevel(const char* api, int level, int levelCount)
     {
         if (level < 0)
-            throw std::out_of_range(std::string(api) + ": level must be >= 0");
-        if (level >= levelCount)
-            throw std::out_of_range(
+            throw System::InvalidOperationException(
                 std::string(api) + ": level " + std::to_string(level) +
-                " must be less than LevelCount " + std::to_string(levelCount));
+                " must be in [0, LevelCount " + std::to_string(levelCount) + ")");
+        if (level >= levelCount)
+            throw System::InvalidOperationException(
+                std::string(api) + ": level " + std::to_string(level) +
+                " must be in [0, LevelCount " + std::to_string(levelCount) + ")");
     }
 
     static void validateTransferWindow(const char* api, int startIndex, int elementCount,
                                        int requiredElements);
+
+    static void ValidateCopyArguments(const void* data, int startIndex, int elementCount)
+    {
+        if (!data)
+            throw System::ArgumentNullException("data");
+        if (startIndex < 0)
+            throw System::ArgumentOutOfRangeException("dataIndex");
+        if (elementCount <= 0)
+            throw System::ArgumentOutOfRangeException("elementCount");
+        if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
+            static_cast<std::int64_t>((std::numeric_limits<int>::max)()))
+        {
+            throw System::ArgumentOutOfRangeException("elementCount");
+        }
+    }
+
+    static int ValidatedRequestedTexelCount(const char* api, int baseWidth, int baseHeight,
+                                            int level, int levelCount, const Rectangle* rect)
+    {
+        validateMipLevel(api, level, levelCount);
+        const int levelWidth = mipDim(baseWidth, level);
+        const int levelHeight = mipDim(baseHeight, level);
+        if (!rect)
+            return levelWidth * levelHeight;
+        if (rect->X < 0 || rect->Y < 0 || rect->Width <= 0 || rect->Height <= 0 ||
+            rect->Width > levelWidth || rect->Height > levelHeight ||
+            rect->X > levelWidth - rect->Width || rect->Y > levelHeight - rect->Height)
+        {
+            throw System::ArgumentException(
+                std::string(api) + ": rectangle out of texture bounds", "rect");
+        }
+        return rect->Width * rect->Height;
+    }
+
+    static int ValidatedRequestedElementCount(const char* api, int baseWidth, int baseHeight,
+                                              int level, int levelCount, const Rectangle* rect,
+                                              SurfaceFormat format, int elementBytes)
+    {
+        const int formatBytes = Texture::GetFormatSizeEXT(format);
+        if (Texture::GetBlockSizeSquaredEXT(format) != 1 || elementBytes <= 0 ||
+            elementBytes > formatBytes || formatBytes % elementBytes != 0)
+        {
+            throw System::ArgumentException(
+                std::string(api) +
+                ": element width does not divide the uncompressed texture format");
+        }
+        const int texels = ValidatedRequestedTexelCount(
+            api, baseWidth, baseHeight, level, levelCount, rect);
+        return texels * formatBytes / elementBytes;
+    }
 
     void Texture2D::MaybeFreeCpuPixels()
     {
@@ -306,6 +391,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
         ValidateTexture2DFormatEXT(&graphicsDevice, format);
+        ValidateTexture2DCreationShapeEXT(graphicsDevice, w, h, mipMap, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(w, h) : 1;
         ImageData data;
@@ -357,7 +443,53 @@ namespace Microsoft::Xna::Framework::Graphics
         gpuOnlyContent_ = true;
     }
 
-    Texture2D::~Texture2D() = default;
+    Texture2D::~Texture2D()
+    {
+        Dispose(false);
+    }
+
+    Texture2D::Texture2D(Texture2D&& other) noexcept
+        : Texture(std::move(other))
+        , renderer_(std::move(other.renderer_))
+        , width(other.width)
+        , height(other.height)
+        , cpuPixels_(std::move(other.cpuPixels_))
+        , extraMipLevels_(std::move(other.extraMipLevels_))
+        , gpuOnlyContent_(other.gpuOnlyContent_)
+    {
+        if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+            graphicsDevice_->TransferMovedTexture(&other, this);
+        other.width = 0;
+        other.height = 0;
+        other.gpuOnlyContent_ = false;
+    }
+
+    Texture2D& Texture2D::operator=(Texture2D&& other) noexcept
+    {
+        if (this != &other)
+        {
+            GraphicsDevice* const previousDevice = graphicsDevice_;
+            const bool previousDeviceAlive = !graphicsDeviceLifetime_.expired();
+            if (previousDevice != nullptr && previousDeviceAlive &&
+                previousDevice != other.graphicsDevice_)
+            {
+                previousDevice->DetachMovedTexture(this);
+            }
+            Texture::operator=(std::move(other));
+            renderer_ = std::move(other.renderer_);
+            width = other.width;
+            height = other.height;
+            cpuPixels_ = std::move(other.cpuPixels_);
+            extraMipLevels_ = std::move(other.extraMipLevels_);
+            gpuOnlyContent_ = other.gpuOnlyContent_;
+            if (graphicsDevice_ != nullptr && !graphicsDeviceLifetime_.expired())
+                graphicsDevice_->TransferMovedTexture(&other, this);
+            other.width = 0;
+            other.height = 0;
+            other.gpuOnlyContent_ = false;
+        }
+        return *this;
+    }
 
     void Texture2D::Dispose(bool disposing)
     {
@@ -384,17 +516,44 @@ namespace Microsoft::Xna::Framework::Graphics
     // SetData
     // -----------------------------------------------------------------------
 
-    void Texture2D::SetData(const Color* data, int elementCount)
+    void Texture2D::ValidateCopyArgumentsEXT(
+        int level, const void* data, int startIndex, int elementCount)
+    {
+        ValidateCopyArgumentsEXT(
+            "Texture2D::SetData", true, level, data, startIndex, elementCount);
+    }
+
+    void Texture2D::ValidateCopyArgumentsEXT(
+        int level, const void* data, int startIndex, int elementCount) const
+    {
+        ValidateCopyArgumentsEXT(
+            "Texture2D::GetData", false, level, data, startIndex, elementCount);
+    }
+
+    void Texture2D::ValidateCopyArgumentsEXT(
+        const char* api, bool setting, int level, const void* data,
+        int startIndex, int elementCount) const
     {
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
-        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
-            throw std::invalid_argument(
-                "Texture2D::SetData: Color data requires a Color-compatible 32-bit format");
-        if (!graphicsDevice_ || !data || elementCount <= 0) return;
+        if (!data)
+            throw System::ArgumentNullException("data");
+        ThrowIfDataTransferResourceInUseEXT(setting);
+        validateMipLevel(api, level, levelCount_);
+        ValidateCopyArguments(data, startIndex, elementCount);
+    }
+
+    void Texture2D::SetData(const Color* data, int elementCount)
+    {
+        ValidateCopyArgumentsEXT(0, data, 0, elementCount);
+        if (Texture::GetFormatSizeEXT(format_) != 4)
+        {
+            SetData(0, nullptr, data, 0, elementCount);
+            return;
+        }
+        if (!graphicsDevice_) return;
         const int total = width * height;
-        if (elementCount < total)
-            throw std::out_of_range("Texture2D::SetData: elementCount is less than the number of pixels in the texture");
+        validateTransferWindow("Texture2D::SetData", 0, elementCount, total);
         ImageData img;
         img.width     = width;
         img.height    = height;
@@ -437,17 +596,25 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect,
                             const Color* data, int startIndex, int elementCount)
     {
-        if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
-        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
-            throw std::invalid_argument(
-                "Texture2D::SetData: Color data requires a Color-compatible 32-bit format");
-        if (!data || elementCount <= 0)
-            throw std::invalid_argument("Texture2D::SetData: data must not be null");
-        if (startIndex < 0)
-            throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
-        validateMipLevel("Texture2D::SetData", level, levelCount_);
-
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        if (Texture::GetFormatSizeEXT(format_) != 4)
+        {
+            const int requiredElements = ValidatedRequestedElementCount(
+                "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 4);
+            validateTransferWindow(
+                "Texture2D::SetData", startIndex, elementCount, requiredElements);
+            std::vector<std::uint8_t> bytes(
+                static_cast<std::size_t>(requiredElements) * 4u);
+            for (int index = 0; index < requiredElements; ++index)
+            {
+                const auto packed = data[startIndex + index].getPackedValueProperty();
+                for (int byte = 0; byte < 4; ++byte)
+                    bytes[static_cast<std::size_t>(index) * 4u + byte] =
+                        static_cast<std::uint8_t>(packed >> (byte * 8));
+            }
+            SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
+            return;
+        }
         const int levelW = mipDim(width,  level);
         const int levelH = mipDim(height, level);
 
@@ -457,10 +624,11 @@ namespace Microsoft::Xna::Framework::Graphics
             x = rect->X; y = rect->Y;
             w = rect->Width; h = rect->Height;
         }
-        if (x < 0 || y < 0 || x + w > levelW || y + h > levelH)
-            throw std::out_of_range("Texture2D::SetData: rectangle out of texture bounds");
-        if (elementCount < w * h)
-            throw std::out_of_range("Texture2D::SetData: elementCount is less than the number of pixels in the requested region");
+        if (x < 0 || y < 0 || w <= 0 || h <= 0
+            || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
+            throw System::ArgumentException(
+                "Texture2D::SetData: rectangle out of texture bounds", "rect");
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, w * h);
 
         // getMipBuffer(0) lazily re-creates cpuPixels_ as a zero-filled buffer when it has
         // been freed (context recovery disabled — see MaybeFreeCpuPixels). If the requested
@@ -576,15 +744,14 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
-        if (!data || elementCount <= 0)
-            throw std::invalid_argument("Texture2D::SetData: data must not be null");
-        if (startIndex < 0)
-            throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
+        ValidateCopyArguments(data, startIndex, elementCount);
+        ThrowIfDataTransferResourceInUseEXT(true);
         validateMipLevel("Texture2D::SetData", level, levelCount_);
         const int bytesPerTexel = getBytesPerTexel();
-        if (elementBytes != bytesPerTexel)
-            throw std::invalid_argument(
-                "Texture2D::SetData: packed element type does not match the texture format");
+        if (elementBytes <= 0 || elementBytes > bytesPerTexel ||
+            bytesPerTexel % elementBytes != 0)
+            throw System::ArgumentException(
+                "Texture2D::SetData: element width does not divide the texture format");
 
         const int levelW = mipDim(width, level);
         const int levelH = mipDim(height, level);
@@ -602,12 +769,12 @@ namespace Microsoft::Xna::Framework::Graphics
         if (x < 0 || y < 0 || w <= 0 || h <= 0
             || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
         {
-            throw std::out_of_range("Texture2D::SetData: rectangle out of texture bounds");
+            throw System::ArgumentException(
+                "Texture2D::SetData: rectangle out of texture bounds", "rect");
         }
-        const int requiredElements = w * h;
-        if (elementCount < requiredElements)
-            throw std::out_of_range(
-                "Texture2D::SetData: elementCount is less than the requested region");
+        const int requiredElements = w * h * bytesPerTexel / elementBytes;
+        validateTransferWindow(
+            "Texture2D::SetData", startIndex, elementCount, requiredElements);
 
         const bool coversFullLevel = x == 0 && y == 0 && w == levelW && h == levelH;
         if (gpuOnlyContent_)
@@ -653,8 +820,9 @@ namespace Microsoft::Xna::Framework::Graphics
         const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel;
         for (int row = 0; row < h; ++row)
         {
-            const std::size_t sourceOffset = static_cast<std::size_t>(startIndex + row * w)
-                * bytesPerTexel;
+            const std::size_t sourceOffset =
+                static_cast<std::size_t>(startIndex) * elementBytes +
+                static_cast<std::size_t>(row) * rowBytes;
             const std::size_t destinationOffset =
                 (static_cast<std::size_t>(y + row) * levelW + x) * bytesPerTexel;
             std::memcpy(destination.data() + destinationOffset, data + sourceOffset, rowBytes);
@@ -699,10 +867,8 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
-        if (!data || elementCount <= 0)
-            throw std::invalid_argument("Texture2D::SetData: data must not be null");
-        if (startIndex < 0)
-            throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
+        ValidateCopyArguments(data, startIndex, elementCount);
+        ThrowIfDataTransferResourceInUseEXT(true);
         validateMipLevel("Texture2D::SetData", level, levelCount_);
         if (!renderer_)
             throw std::runtime_error("Texture2D::SetData: compressed texture has no renderer");
@@ -722,16 +888,20 @@ namespace Microsoft::Xna::Framework::Graphics
         // FNA's own raw w*h*GetFormatSizeEXT/GetBlockSizeSquaredEXT validation formula, which
         // under-counts the true padded byte requirement for a rectangle whose edge falls inside
         // a partial NPOT tail block; every byte count below uses the exact padded block count.
-        const bool touchesRightEdge = x + w == levelW;
-        const bool touchesBottomEdge = y + h == levelH;
         if (x < 0 || y < 0 || w <= 0 || h <= 0
-            || w > levelW || h > levelH || x > levelW - w || y > levelH - h
-            || (x % 4) != 0 || (y % 4) != 0
+            || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
+        {
+            throw System::ArgumentException(
+                "Texture2D::SetData: compressed rectangle must be within bounds", "rect");
+        }
+        const bool touchesRightEdge = x == levelW - w;
+        const bool touchesBottomEdge = y == levelH - h;
+        if ((x % 4) != 0 || (y % 4) != 0
             || ((w % 4) != 0 && !touchesRightEdge)
             || ((h % 4) != 0 && !touchesBottomEdge))
         {
-            throw std::out_of_range(
-                "Texture2D::SetData: compressed rectangle must be block-aligned and within bounds");
+            throw System::ArgumentException(
+                "Texture2D::SetData: compressed rectangle must be block-aligned", "rect");
         }
 
         const int blockByteSize = Texture::GetFormatSizeEXT(format_);
@@ -785,10 +955,7 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<std::uint8_t> EncodePackedElements(
             const Packed* data, int startIndex, int elementCount)
         {
-            if (!data || elementCount <= 0)
-                throw std::invalid_argument("Texture2D::SetData: data must not be null");
-            if (startIndex < 0)
-                throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
+            ValidateCopyArguments(data, startIndex, elementCount);
             std::vector<std::uint8_t> result(
                 static_cast<std::size_t>(elementCount) * sizeof(Word));
             for (int index = 0; index < elementCount; ++index)
@@ -826,10 +993,7 @@ namespace Microsoft::Xna::Framework::Graphics
             const Word* data, int startIndex, int elementCount)
         {
             static_assert(std::is_unsigned_v<Word>);
-            if (!data || elementCount <= 0)
-                throw std::invalid_argument("Texture2D::SetData: data must not be null");
-            if (startIndex < 0)
-                throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
+            ValidateCopyArguments(data, startIndex, elementCount);
             std::vector<std::uint8_t> result(
                 static_cast<std::size_t>(elementCount) * sizeof(Word));
             for (int index = 0; index < elementCount; ++index)
@@ -918,10 +1082,7 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<std::uint8_t> EncodeFloatElements(
             const Element* data, int startIndex, int elementCount)
         {
-            if (!data || elementCount <= 0)
-                throw std::invalid_argument("Texture2D::SetData: data must not be null");
-            if (startIndex < 0)
-                throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
+            ValidateCopyArguments(data, startIndex, elementCount);
             constexpr int components = FloatElementTraits<Element>::Components;
             std::vector<std::uint8_t> result(
                 static_cast<std::size_t>(elementCount) * components * sizeof(float));
@@ -960,22 +1121,34 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
-        int ValidatedRequestedTexelCount(const char* api, int baseWidth, int baseHeight,
-                                         int level, int levelCount, const Rectangle* rect)
-        {
-            validateMipLevel(api, level, levelCount);
-            const int levelWidth = mipDim(baseWidth, level);
-            const int levelHeight = mipDim(baseHeight, level);
-            if (!rect)
-                return levelWidth * levelHeight;
-            if (rect->X < 0 || rect->Y < 0 || rect->Width <= 0 || rect->Height <= 0
-                || rect->Width > levelWidth || rect->Height > levelHeight
-                || rect->X > levelWidth - rect->Width || rect->Y > levelHeight - rect->Height)
-            {
-                throw std::out_of_range(std::string(api) + ": rectangle out of texture bounds");
-            }
-            return rect->Width * rect->Height;
-        }
+    }
+
+    void Texture2D::SetTrivialDataEXT(int level, const Rectangle* rect, const void* data,
+                                      int startIndex, int elementCount, int elementBytes)
+    {
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect,
+            format_, elementBytes);
+        validateTransferWindow(
+            "Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto* source = static_cast<const std::uint8_t*>(data) +
+            static_cast<std::size_t>(startIndex) * elementBytes;
+        SetDataBytes(level, rect, source, 0, requiredElements, elementBytes);
+    }
+
+    void Texture2D::GetTrivialDataEXT(int level, const Rectangle* rect, void* data,
+                                      int startIndex, int elementCount, int elementBytes) const
+    {
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect,
+            format_, elementBytes);
+        validateTransferWindow(
+            "Texture2D::GetData", startIndex, elementCount, requiredElements);
+        auto* destination = static_cast<std::uint8_t*>(data) +
+            static_cast<std::size_t>(startIndex) * elementBytes;
+        GetDataBytes(level, rect, destination, 0, requiredElements, elementBytes);
     }
 
     void Texture2D::SetData(const PackedVector::Bgr565* data, int elementCount)
@@ -986,10 +1159,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Bgr565* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::Bgr565)
-            throw std::invalid_argument("Texture2D::SetData: Bgr565 data requires Bgr565 format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::Bgr565, std::uint16_t>(
             data, startIndex, requiredElements);
@@ -1004,11 +1176,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Bgra4444* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::Bgra4444)
-            throw std::invalid_argument(
-                "Texture2D::SetData: Bgra4444 data requires Bgra4444 format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::Bgra4444, std::uint16_t>(
             data, startIndex, requiredElements);
@@ -1023,11 +1193,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Bgra5551* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::Bgra5551)
-            throw std::invalid_argument(
-                "Texture2D::SetData: Bgra5551 data requires Bgra5551 format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::Bgra5551, std::uint16_t>(
             data, startIndex, requiredElements);
@@ -1043,11 +1211,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             const PackedVector::Rgba1010102* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::Rgba1010102)
-            throw std::invalid_argument(
-                "Texture2D::SetData: Rgba1010102 data requires Rgba1010102 format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::Rgba1010102, std::uint32_t>(
             data, startIndex, requiredElements);
@@ -1062,10 +1228,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Alpha8* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::Alpha8)
-            throw std::invalid_argument("Texture2D::SetData: Alpha8 data requires Alpha8 format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 1);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::Alpha8, std::uint8_t>(
             data, startIndex, requiredElements);
@@ -1080,10 +1245,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Rg32* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::Rg32)
-            throw std::invalid_argument("Texture2D::SetData: Rg32 data requires Rg32 format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::Rg32, std::uint32_t>(
             data, startIndex, requiredElements);
@@ -1098,10 +1262,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Rgba64* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::Rgba64)
-            throw std::invalid_argument("Texture2D::SetData: Rgba64 data requires Rgba64 format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 8);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::Rgba64, std::uint64_t>(
             data, startIndex, requiredElements);
@@ -1117,11 +1280,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             const PackedVector::NormalizedByte2* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::NormalizedByte2)
-            throw std::invalid_argument(
-                "Texture2D::SetData: NormalizedByte2 data requires NormalizedByte2 format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::NormalizedByte2, std::uint16_t>(
             data, startIndex, requiredElements);
@@ -1137,11 +1298,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             const PackedVector::NormalizedByte4* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::NormalizedByte4)
-            throw std::invalid_argument(
-                "Texture2D::SetData: NormalizedByte4 data requires NormalizedByte4 format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::NormalizedByte4, std::uint32_t>(
             data, startIndex, requiredElements);
@@ -1156,10 +1315,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const float* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::Single)
-            throw std::invalid_argument("Texture2D::SetData: float data requires Single format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodeFloatElements(data, startIndex, requiredElements);
         SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
@@ -1173,10 +1331,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const Vector2* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::Vector2)
-            throw std::invalid_argument("Texture2D::SetData: Vector2 data requires Vector2 format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 8);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodeFloatElements(data, startIndex, requiredElements);
         SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 8);
@@ -1190,10 +1347,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const Vector4* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::Vector4)
-            throw std::invalid_argument("Texture2D::SetData: Vector4 data requires Vector4 format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 16);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodeFloatElements(data, startIndex, requiredElements);
         SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 16);
@@ -1208,11 +1364,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             const PackedVector::HalfSingle* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::HalfSingle)
-            throw std::invalid_argument(
-                "Texture2D::SetData: HalfSingle data requires HalfSingle format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::HalfSingle, std::uint16_t>(
             data, startIndex, requiredElements);
@@ -1228,11 +1382,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             const PackedVector::HalfVector2* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::HalfVector2)
-            throw std::invalid_argument(
-                "Texture2D::SetData: HalfVector2 data requires HalfVector2 format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::HalfVector2, std::uint32_t>(
             data, startIndex, requiredElements);
@@ -1248,11 +1400,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             const PackedVector::HalfVector4* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::HalfVector4 && format_ != SurfaceFormat::HdrBlendable)
-            throw std::invalid_argument(
-                "Texture2D::SetData: HalfVector4 data requires HalfVector4 or HdrBlendable format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 8);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::HalfVector4, std::uint64_t>(
             data, startIndex, requiredElements);
@@ -1267,18 +1417,18 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const std::uint8_t* data,
                             int startIndex, int elementCount)
     {
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         if (IsCompressedTransferFormatEXT(graphicsDevice_, format_))
         {
             SetCompressedDataBytes(level, rect, data, startIndex, elementCount);
             return;
         }
-        if (format_ != SurfaceFormat::ByteEXT)
-            throw std::invalid_argument("Texture2D::SetData: byte data requires ByteEXT format");
-        const int requiredElements = ValidatedRequestedTexelCount(
+        const int requiredTexels = ValidatedRequestedTexelCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect);
-        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
-        const auto bytes = EncodeUnsignedElements(data, startIndex, requiredElements);
-        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 1);
+        const int bytesPerTexel = Texture::GetFormatSizeEXT(format_);
+        const int requiredBytes = requiredTexels * bytesPerTexel;
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredBytes);
+        SetDataBytes(level, rect, data + startIndex, 0, requiredTexels, bytesPerTexel);
     }
 
     void Texture2D::SetData(const std::uint16_t* data, int elementCount)
@@ -1289,11 +1439,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const std::uint16_t* data,
                             int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::UShortEXT)
-            throw std::invalid_argument(
-                "Texture2D::SetData: ushort data requires UShortEXT format");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodeUnsignedElements(data, startIndex, requiredElements);
         SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
@@ -1330,11 +1478,11 @@ namespace Microsoft::Xna::Framework::Graphics
     //                   `AddrOfPinnedObject() + startIndex * elementSizeInBytes`, i.e. the pinned
     //                   DESTINATION array's base. It is never a source-texel offset and never a
     //                   byte offset.
-    //   elementCount -- the destination capacity available from startIndex. FNA hands it to the
-    //                   native transfer as `elementCount * elementSizeInBytes` and derives the
-    //                   transfer size from the requested REGION, so a capacity larger than the
-    //                   region is legal (`GetData<T>(T[] data)` passes `data.Length`) and must be
-    //                   left untouched, while a smaller one must be rejected before any transfer.
+    //   elementCount -- XNA's private ValidateTotalSize compares
+    //                   `elementCount * sizeof(T)` with the exact region byte size. Both a short
+    //                   and a surplus window are therefore invalid even when the backing array is
+    //                   larger. This is a measured Microsoft XNA rule; FNA's looser capacity rule
+    //                   is lower-authority here.
     //
     // The sum is computed in 64 bits and rejected before use. Evaluated as `int` it wraps for large
     // arguments and the wrapped value then passes every subsequent bound, so the copy reads and
@@ -1342,13 +1490,16 @@ namespace Microsoft::Xna::Framework::Graphics
     static void validateTransferWindow(const char* api, int startIndex, int elementCount,
                                        int requiredElements)
     {
-        if (elementCount < requiredElements)
-            throw std::out_of_range(std::string(api) +
-                ": elementCount is less than the number of pixels in the requested region");
+        if (startIndex < 0)
+            throw System::ArgumentOutOfRangeException("dataIndex");
+        if (elementCount <= 0)
+            throw System::ArgumentOutOfRangeException("elementCount");
         if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
             static_cast<std::int64_t>(std::numeric_limits<int>::max()))
-            throw std::out_of_range(std::string(api) +
-                ": startIndex + elementCount does not fit in a 32-bit element index");
+            throw System::ArgumentOutOfRangeException("elementCount");
+        if (requiredElements != 0 && elementCount != requiredElements)
+            throw System::ArgumentException(
+                std::string(api) + ": total data size does not match the requested region");
     }
 
     /// Records exactly what a transfer was asked for and what it is authorised to write, so the
@@ -1375,15 +1526,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::GetData(Color* data, int startIndex, int elementCount) const
     {
-        if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
-        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
-            throw std::invalid_argument(
-                "Texture2D::GetData: Color data requires a Color-compatible 32-bit format");
-        if (!data || elementCount <= 0)
-            throw std::invalid_argument("data must not be null and elementCount must be > 0");
-        if (startIndex < 0)
-            throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
+        ValidateCopyArgumentsEXT(0, data, startIndex, elementCount);
+        if (Texture::GetFormatSizeEXT(format_) != 4)
+        {
+            GetData(0, nullptr, data, startIndex, elementCount);
+            return;
+        }
         Texture::ValidateGetDataFormat(format_, 4);
 
         // The requested region of this overload is the COMPLETE level 0 -- never elementCount,
@@ -1466,16 +1614,26 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect,
                             Color* data, int startIndex, int elementCount) const
     {
-        if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
-        if (!IsColorTransferFormatEXT(graphicsDevice_, format_))
-            throw std::invalid_argument(
-                "Texture2D::GetData: Color data requires a Color-compatible 32-bit format");
-        if (!data || elementCount <= 0)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        if (startIndex < 0)
-            throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
-        validateMipLevel("Texture2D::GetData", level, levelCount_);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        if (Texture::GetFormatSizeEXT(format_) != 4)
+        {
+            const int requiredElements = ValidatedRequestedElementCount(
+                "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 4);
+            validateTransferWindow(
+                "Texture2D::GetData", startIndex, elementCount, requiredElements);
+            std::vector<std::uint8_t> bytes(
+                static_cast<std::size_t>(requiredElements) * 4u);
+            GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
+            for (int index = 0; index < requiredElements; ++index)
+            {
+                std::uint32_t packed = 0;
+                for (int byte = 0; byte < 4; ++byte)
+                    packed |= static_cast<std::uint32_t>(
+                        bytes[static_cast<std::size_t>(index) * 4u + byte]) << (byte * 8);
+                data[startIndex + index].setPackedValueProperty(packed);
+            }
+            return;
+        }
         Texture::ValidateGetDataFormat(format_, 4);
 
         // Delegate before touching the CPU-side mip shadow at all -- the 3-arg overload has its
@@ -1504,8 +1662,11 @@ namespace Microsoft::Xna::Framework::Graphics
                 const int levelH = mipDim(height, level);
                 int x = 0, y = 0, w = levelW, h = levelH;
                 if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
-                if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelW || y + h > levelH)
-                    throw std::out_of_range("Texture2D::GetData: rectangle out of texture bounds");
+                if (x < 0 || y < 0 || w <= 0 || h <= 0
+                    || w > levelW || h > levelH
+                    || x > levelW - w || y > levelH - h)
+                    throw System::ArgumentException(
+                        "Texture2D::GetData: rectangle out of texture bounds", "rect");
                 // REMED-GFX-149: the required element count comes from THIS rectangle's own
                 // dimensions at THIS mip level -- never from level 0 and never from the full
                 // resource -- and the destination window is checked overflow-safely.
@@ -1546,8 +1707,10 @@ namespace Microsoft::Xna::Framework::Graphics
             w = rect->Width; h = rect->Height;
         }
 
-        if (x < 0 || y < 0 || x + w > levelW || y + h > levelH)
-            throw std::out_of_range("Texture2D::GetData: rectangle out of texture bounds");
+        if (x < 0 || y < 0 || w <= 0 || h <= 0
+            || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
+            throw System::ArgumentException(
+                "Texture2D::GetData: rectangle out of texture bounds", "rect");
         // REMED-GFX-149: as above -- this rectangle's own dimensions at this mip level, and an
         // overflow-safe destination window.
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, w * h);
@@ -1573,15 +1736,14 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
-        if (!data || elementCount <= 0)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        if (startIndex < 0)
-            throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
+        ValidateCopyArguments(data, startIndex, elementCount);
+        ThrowIfDataTransferResourceInUseEXT(false);
         validateMipLevel("Texture2D::GetData", level, levelCount_);
         const int bytesPerTexel = getBytesPerTexel();
-        if (elementBytes != bytesPerTexel)
-            throw std::invalid_argument(
-                "Texture2D::GetData: packed element type does not match the texture format");
+        if (elementBytes <= 0 || elementBytes > bytesPerTexel ||
+            bytesPerTexel % elementBytes != 0)
+            throw System::ArgumentException(
+                "Texture2D::GetData: element width does not divide the texture format");
 
         const int levelW = mipDim(width, level);
         const int levelH = mipDim(height, level);
@@ -1599,9 +1761,10 @@ namespace Microsoft::Xna::Framework::Graphics
         if (x < 0 || y < 0 || w <= 0 || h <= 0
             || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
         {
-            throw std::out_of_range("Texture2D::GetData: rectangle out of texture bounds");
+            throw System::ArgumentException(
+                "Texture2D::GetData: rectangle out of texture bounds", "rect");
         }
-        const int requiredElements = w * h;
+        const int requiredElements = w * h * bytesPerTexel / elementBytes;
         validateTransferWindow(
             "Texture2D::GetData", startIndex, elementCount, requiredElements);
 
@@ -1619,7 +1782,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 const std::size_t sourceOffset =
                     (static_cast<std::size_t>(y + row) * levelW + x) * bytesPerTexel;
                 const std::size_t destinationOffset =
-                    static_cast<std::size_t>(startIndex + row * w) * bytesPerTexel;
+                    static_cast<std::size_t>(startIndex) * elementBytes +
+                    static_cast<std::size_t>(row) * copyBytes;
                 std::memcpy(data + destinationOffset, source->data() + sourceOffset, copyBytes);
             }
             return;
@@ -1632,14 +1796,14 @@ namespace Microsoft::Xna::Framework::Graphics
                 "Texture2D::GetData: no CPU-side packed pixel data for requested mip level");
 
         std::vector<uint8_t> scratch(
-            static_cast<std::size_t>(requiredElements) * bytesPerTexel);
+            static_cast<std::size_t>(w) * h * bytesPerTexel);
         if (!renderer_->GetData(level, x, y, w, h, scratch.data(),
                                static_cast<int>(scratch.size())))
         {
             throw System::NotSupportedException(
                 "Texture2D::GetData: renderer cannot read the requested packed pixels");
         }
-        std::memcpy(data + static_cast<std::size_t>(startIndex) * bytesPerTexel,
+        std::memcpy(data + static_cast<std::size_t>(startIndex) * elementBytes,
                     scratch.data(), scratch.size());
     }
 
@@ -1648,10 +1812,8 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (isDisposed_)
             throw System::ObjectDisposedException("Texture2D");
-        if (!data || elementCount <= 0)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        if (startIndex < 0)
-            throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
+        ValidateCopyArguments(data, startIndex, elementCount);
+        ThrowIfDataTransferResourceInUseEXT(false);
         validateMipLevel("Texture2D::GetData", level, levelCount_);
         if (!renderer_)
             throw std::runtime_error("Texture2D::GetData: compressed texture has no renderer");
@@ -1665,16 +1827,20 @@ namespace Microsoft::Xna::Framework::Graphics
             w = rect->Width; h = rect->Height;
         }
 
-        const bool touchesRightEdge = x + w == levelW;
-        const bool touchesBottomEdge = y + h == levelH;
         if (x < 0 || y < 0 || w <= 0 || h <= 0
-            || w > levelW || h > levelH || x > levelW - w || y > levelH - h
-            || (x % 4) != 0 || (y % 4) != 0
+            || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
+        {
+            throw System::ArgumentException(
+                "Texture2D::GetData: compressed rectangle must be within bounds", "rect");
+        }
+        const bool touchesRightEdge = x == levelW - w;
+        const bool touchesBottomEdge = y == levelH - h;
+        if ((x % 4) != 0 || (y % 4) != 0
             || ((w % 4) != 0 && !touchesRightEdge)
             || ((h % 4) != 0 && !touchesBottomEdge))
         {
-            throw std::out_of_range(
-                "Texture2D::GetData: compressed rectangle must be block-aligned and within bounds");
+            throw System::ArgumentException(
+                "Texture2D::GetData: compressed rectangle must be block-aligned", "rect");
         }
 
         const int blockByteSize = Texture::GetFormatSizeEXT(format_);
@@ -1703,12 +1869,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Bgr565* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::Bgr565)
-            throw std::invalid_argument("Texture2D::GetData: Bgr565 data requires Bgr565 format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 2u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
@@ -1729,13 +1892,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Bgra4444* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::Bgra4444)
-            throw std::invalid_argument(
-                "Texture2D::GetData: Bgra4444 data requires Bgra4444 format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 2u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
@@ -1756,13 +1915,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Bgra5551* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::Bgra5551)
-            throw std::invalid_argument(
-                "Texture2D::GetData: Bgra5551 data requires Bgra5551 format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 2u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
@@ -1785,13 +1940,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             PackedVector::Rgba1010102* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::Rgba1010102)
-            throw std::invalid_argument(
-                "Texture2D::GetData: Rgba1010102 data requires Rgba1010102 format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 4u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
@@ -1812,12 +1963,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Alpha8* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::Alpha8)
-            throw std::invalid_argument("Texture2D::GetData: Alpha8 data requires Alpha8 format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 1);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements));
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 1);
@@ -1838,12 +1986,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Rg32* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::Rg32)
-            throw std::invalid_argument("Texture2D::GetData: Rg32 data requires Rg32 format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 4u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
@@ -1864,12 +2009,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Rgba64* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::Rgba64)
-            throw std::invalid_argument("Texture2D::GetData: Rgba64 data requires Rgba64 format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 8);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 8u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 8);
@@ -1892,13 +2034,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             PackedVector::NormalizedByte2* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::NormalizedByte2)
-            throw std::invalid_argument(
-                "Texture2D::GetData: NormalizedByte2 data requires NormalizedByte2 format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 2u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
@@ -1921,13 +2059,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             PackedVector::NormalizedByte4* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::NormalizedByte4)
-            throw std::invalid_argument(
-                "Texture2D::GetData: NormalizedByte4 data requires NormalizedByte4 format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 4u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
@@ -1948,12 +2082,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, float* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::Single)
-            throw std::invalid_argument("Texture2D::GetData: float data requires Single format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 4u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
@@ -1973,12 +2104,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, Vector2* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::Vector2)
-            throw std::invalid_argument("Texture2D::GetData: Vector2 data requires Vector2 format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 8);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 8u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 8);
@@ -1998,12 +2126,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, Vector4* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::Vector4)
-            throw std::invalid_argument("Texture2D::GetData: Vector4 data requires Vector4 format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 16);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 16u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 16);
@@ -2025,13 +2150,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             PackedVector::HalfSingle* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::HalfSingle)
-            throw std::invalid_argument(
-                "Texture2D::GetData: HalfSingle data requires HalfSingle format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 2u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
@@ -2054,13 +2175,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             PackedVector::HalfVector2* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::HalfVector2)
-            throw std::invalid_argument(
-                "Texture2D::GetData: HalfVector2 data requires HalfVector2 format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 4);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 4u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
@@ -2083,13 +2200,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             PackedVector::HalfVector4* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::HalfVector4 && format_ != SurfaceFormat::HdrBlendable)
-            throw std::invalid_argument(
-                "Texture2D::GetData: HalfVector4 data requires HalfVector4 or HdrBlendable format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 8);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 8u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 8);
@@ -2110,21 +2223,18 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, std::uint8_t* data,
                             int startIndex, int elementCount) const
     {
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
         if (IsCompressedTransferFormatEXT(graphicsDevice_, format_))
         {
             GetCompressedDataBytes(level, rect, data, startIndex, elementCount);
             return;
         }
-        if (format_ != SurfaceFormat::ByteEXT)
-            throw std::invalid_argument("Texture2D::GetData: byte data requires ByteEXT format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
+        const int requiredTexels = ValidatedRequestedTexelCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect);
-        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
-        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements));
-        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 1);
-        DecodeUnsignedElements(bytes, requiredElements, data, startIndex);
+        const int bytesPerTexel = Texture::GetFormatSizeEXT(format_);
+        const int requiredBytes = requiredTexels * bytesPerTexel;
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredBytes);
+        GetDataBytes(level, rect, data + startIndex, 0, requiredTexels, bytesPerTexel);
     }
 
     void Texture2D::GetData(std::uint16_t* data, int startIndex, int elementCount) const
@@ -2140,13 +2250,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, std::uint16_t* data,
                             int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::UShortEXT)
-            throw std::invalid_argument(
-                "Texture2D::GetData: ushort data requires UShortEXT format");
-        if (!data)
-            throw std::invalid_argument("Texture2D::GetData: data must not be null");
-        const int requiredElements = ValidatedRequestedTexelCount(
-            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        const int requiredElements = ValidatedRequestedElementCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect, format_, 2);
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 2u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
@@ -2185,7 +2291,7 @@ namespace Microsoft::Xna::Framework::Graphics
             || blockWidth * blockHeight > std::numeric_limits<std::size_t>::max() / bytesPerBlock)
         {
             throw System::FormatException(
-                "Texture2D::FromStream: DDS mip byte count overflows the host address space");
+                "Texture2D::DDSFromStreamEXT: DDS mip byte count overflows the host address space");
         }
         return blockWidth * blockHeight * bytesPerBlock;
     }
@@ -2200,7 +2306,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (len < 4 || buf[0] != 'D' || buf[1] != 'D' || buf[2] != 'S' || buf[3] != ' ')
             return false;
         if (len < 128)
-            throw System::FormatException("Texture2D::FromStream: truncated DDS header");
+            throw System::FormatException("Texture2D::DDSFromStreamEXT: truncated DDS header");
 
         // DDS_HEADER fields (all little-endian uint32)
         auto r32 = [&](std::size_t off) -> uint32_t {
@@ -2208,7 +2314,7 @@ namespace Microsoft::Xna::Framework::Graphics
         };
 
         if (r32(4) != 124u || r32(76) != 32u)
-            throw System::FormatException("Texture2D::FromStream: invalid DDS header size");
+            throw System::FormatException("Texture2D::DDSFromStreamEXT: invalid DDS header size");
 
         const uint32_t rawHeight = r32(12);
         const uint32_t rawWidth = r32(16);
@@ -2216,14 +2322,14 @@ namespace Microsoft::Xna::Framework::Graphics
             || rawWidth > static_cast<uint32_t>(std::numeric_limits<int>::max())
             || rawHeight > static_cast<uint32_t>(std::numeric_limits<int>::max()))
         {
-            throw System::FormatException("Texture2D::FromStream: invalid DDS dimensions");
+            throw System::FormatException("Texture2D::DDSFromStreamEXT: invalid DDS dimensions");
         }
         const int width = static_cast<int>(rawWidth);
         const int height = static_cast<int>(rawHeight);
         if (width > maximumTextureDimension || height > maximumTextureDimension)
         {
             throw System::NotSupportedException(
-                "Texture2D::FromStream: DDS dimensions exceed this device's maximum texture "
+                "Texture2D::DDSFromStreamEXT: DDS dimensions exceed this device's maximum texture "
                 "dimension of " + std::to_string(maximumTextureDimension));
         }
 
@@ -2233,7 +2339,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (fourCC != 0x31545844u && fourCC != 0x33545844u && fourCC != 0x35545844u)
         {
             throw System::NotSupportedException(
-                "Texture2D::FromStream: unsupported DDS pixel format "
+                "Texture2D::DDSFromStreamEXT: unsupported DDS pixel format "
                 "(only DXT1/DXT3/DXT5 are supported)");
         }
 
@@ -2249,7 +2355,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (declaredMipCount > static_cast<uint32_t>(maximumLevels))
         {
             throw System::FormatException(
-                "Texture2D::FromStream: DDS declares more mip levels than its dimensions allow");
+                "Texture2D::DDSFromStreamEXT: DDS declares more mip levels than its dimensions allow");
         }
         const int mipCount = declaredMipCount == 0u ? 1 : static_cast<int>(declaredMipCount);
         // Texture2D's XNA-compatible public allocation is either level zero or a complete chain.
@@ -2258,7 +2364,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (mipCount != 1 && mipCount != maximumLevels)
         {
             throw System::FormatException(
-                "Texture2D::FromStream: DDS mip chain is incomplete; expected level zero only or "
+                "Texture2D::DDSFromStreamEXT: DDS mip chain is incomplete; expected level zero only or "
                 "the complete chain");
         }
 
@@ -2278,7 +2384,7 @@ namespace Microsoft::Xna::Framework::Graphics
             if (offset > len || levelBytes > len - offset)
             {
                 throw System::FormatException(
-                    "Texture2D::FromStream: truncated DDS mip level " + std::to_string(level));
+                    "Texture2D::DDSFromStreamEXT: truncated DDS mip level " + std::to_string(level));
             }
 
             const uint8_t* levelData = buf + offset;
@@ -2303,19 +2409,55 @@ namespace Microsoft::Xna::Framework::Graphics
         return true;
     }
 
-    // Reads the entire stream and decodes it into RGBA8 pixel data — DDS/DXT1/3/5 via
-    // DxtUtil, everything else through ImageLoader (see docs/texture-stream-formats.md for
-    // the formats verified by CI).
+    // Reads the entire stream and routes either an explicitly requested DDS through DxtUtil or a
+    // classic FromStream image through ImageLoader (see docs/texture-stream-formats.md).
+    [[nodiscard]] static bool IsClassicXnaImageContainer(
+        const uint8_t* data, const std::size_t size) noexcept
+    {
+        static constexpr uint8_t pngSignature[] = {
+            0x89u, 0x50u, 0x4Eu, 0x47u, 0x0Du, 0x0Au, 0x1Au, 0x0Au
+        };
+        const bool isPng = size >= sizeof(pngSignature)
+            && std::memcmp(data, pngSignature, sizeof(pngSignature)) == 0;
+        const bool isJpeg = size >= 3u
+            && data[0] == 0xFFu && data[1] == 0xD8u && data[2] == 0xFFu;
+        const bool isGif = size >= 6u
+            && (std::memcmp(data, "GIF87a", 6u) == 0
+                || std::memcmp(data, "GIF89a", 6u) == 0);
+        return isPng || isJpeg || isGif;
+    }
+
     static DecodedTexture2D DecodeStreamToImageData(
         System::IO::Stream& stream, int maximumTextureDimension,
-        const GraphicsDevice* device, bool allowCompressed)
+        const GraphicsDevice* device, bool decodeDds, bool allowCompressed)
     {
         using System::IO::intcs;
         using System::IO::bytecs;
 
         intcs len = stream.getLengthProperty();
+        if (stream.getCanSeekProperty())
+        {
+            intcs position = stream.getPositionProperty();
+            // FNA/XNA decode from the caller's current stream position, except for the common
+            // reusable-stream case where Position already equals Length: that exact state is
+            // rewound to the beginning before decoding. Allocate/read only the remaining range;
+            // asking for the stream's complete Length from a nonzero position necessarily
+            // over-reads at EOF and used to make both valid cases fail.
+            if (position == len)
+            {
+                position = stream.Seek(0, System::IO::SeekOrigin::Begin);
+            }
+            if (position < 0 || position > len)
+            {
+                len = 0;
+            }
+            else
+            {
+                len -= position;
+            }
+        }
         if (len <= 0)
-            throw std::runtime_error("Texture2D::FromStream: stream is empty or length unknown");
+            throw System::InvalidOperationException("Decoding image failed!");
 
         std::vector<bytecs> buf(static_cast<std::size_t>(len));
         intcs bytesRead = 0;
@@ -2323,22 +2465,54 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             const intcs count = stream.Read(buf.data(), bytesRead, len - bytesRead);
             if (count <= 0)
-                throw std::runtime_error("Texture2D::FromStream: stream ended before its declared length");
+                throw System::InvalidOperationException("Decoding image failed!");
             bytesRead += count;
         }
 
         const auto* raw = reinterpret_cast<const uint8_t*>(buf.data());
 
         DecodedTexture2D decoded;
-        if (!TryDecodeDds(raw, static_cast<std::size_t>(len), maximumTextureDimension,
-                          device, allowCompressed, decoded))
+        if (decodeDds)
         {
-            ImageData image = ImageLoader::LoadFromMemory(raw, static_cast<std::size_t>(len));
+            if (!TryDecodeDds(raw, static_cast<std::size_t>(len), maximumTextureDimension,
+                              device, allowCompressed, decoded))
+            {
+                throw System::NotSupportedException(
+                    "Texture2D::DDSFromStreamEXT: the stream does not contain DDS data");
+            }
+        }
+        else
+        {
+            if (!IsClassicXnaImageContainer(raw, static_cast<std::size_t>(len)))
+                throw System::InvalidOperationException("Decoding image failed!");
+
+            ImageData image;
+            try
+            {
+                image = ImageLoader::LoadFromMemory(raw, static_cast<std::size_t>(len));
+            }
+            catch (const std::runtime_error&)
+            {
+                throw System::InvalidOperationException("Decoding image failed!");
+            }
+            catch (const std::invalid_argument&)
+            {
+                throw System::InvalidOperationException("Decoding image failed!");
+            }
             decoded.width = image.width;
             decoded.height = image.height;
             decoded.rgbaLevels.push_back(std::move(image.pixels));
         }
         return decoded;
+    }
+
+    static void ValidateImageStream(const System::IO::Stream& stream)
+    {
+        if (!stream.getCanSeekProperty())
+        {
+            throw System::ArgumentException(
+                "The stream is required to be seekable.", "stream");
+        }
     }
 
     Texture2D Texture2D::MakeTextureFromPixels(GraphicsDevice& device, int w, int h,
@@ -2436,8 +2610,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream)
     {
+        ValidateImageStream(stream);
         DecodedTexture2D decoded = DecodeStreamToImageData(
-            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice, /*allowCompressed=*/true);
+            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice,
+            /*decodeDds=*/false, /*allowCompressed=*/false);
         if (decoded.compressed)
             return MakeCompressedTextureFromMipBlocks(
                 graphicsDevice, decoded.width, decoded.height, decoded.compressedFormat,
@@ -2449,9 +2625,52 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream,
                                     int width, int height, bool zoom)
     {
+        ValidateImageStream(stream);
+        // After its separate seekability guard, Microsoft XNA validates the requested dimensions
+        // before querying the position/length or reading encoded data. This preserves the public
+        // exception names, makes width win when both dimensions are invalid, and prevents malformed
+        // image data from hiding the argument error.
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
+
         // The resize overload must resample RGBA pixels, so it never keeps compressed blocks.
         DecodedTexture2D decoded = DecodeStreamToImageData(
-            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice, /*allowCompressed=*/false);
+            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice,
+            /*decodeDds=*/false, /*allowCompressed=*/false);
+        const std::vector<uint8_t>& levelZero = decoded.rgbaLevels.front();
+        ImageData resized = ImageLoader::ResizeRgba(
+            levelZero.data(), decoded.width, decoded.height, width, height, zoom);
+        return MakeTextureFromPixels(
+            graphicsDevice, resized.width, resized.height, std::move(resized.pixels));
+    }
+
+    Texture2D Texture2D::DDSFromStreamEXT(
+        GraphicsDevice& graphicsDevice, System::IO::Stream& stream)
+    {
+        ValidateImageStream(stream);
+        DecodedTexture2D decoded = DecodeStreamToImageData(
+            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice,
+            /*decodeDds=*/true, /*allowCompressed=*/true);
+        if (decoded.compressed)
+        {
+            return MakeCompressedTextureFromMipBlocks(
+                graphicsDevice, decoded.width, decoded.height, decoded.compressedFormat,
+                std::move(decoded.rgbaLevels));
+        }
+        return MakeTextureFromMipPixels(
+            graphicsDevice, decoded.width, decoded.height, std::move(decoded.rgbaLevels));
+    }
+
+    Texture2D Texture2D::DDSFromStreamEXT(
+        GraphicsDevice& graphicsDevice, System::IO::Stream& stream,
+        int width, int height, bool zoom)
+    {
+        ValidateImageStream(stream);
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
+        DecodedTexture2D decoded = DecodeStreamToImageData(
+            stream, graphicsDevice.GetMaxTextureDimension(), &graphicsDevice,
+            /*decodeDds=*/true, /*allowCompressed=*/false);
         const std::vector<uint8_t>& levelZero = decoded.rgbaLevels.front();
         ImageData resized = ImageLoader::ResizeRgba(
             levelZero.data(), decoded.width, decoded.height, width, height, zoom);
@@ -2463,64 +2682,72 @@ namespace Microsoft::Xna::Framework::Graphics
     // SaveAsPng
     // -----------------------------------------------------------------------
 
-    // -----------------------------------------------------------------------
-    // plan_vulkan.md VULKAN-169, finding F-32: what the four save routines encode.
-    // -----------------------------------------------------------------------
-
-    // Before this, all four encoded `cpuPixels_` and threw when there was none -- so a
-    // RenderTarget2D a game drew into and never SetData'd could not be saved at all, which is the
-    // screenshot idiom every XNA sample uses. The pixels are on the GPU, and this layer already
-    // knows how to fetch them: GetData does it, and does it in this exact precedence.
-    //
-    // The renderer is PREFERRED for a render target and only for a render target, for the reason
-    // GetData states beside its own copy of this rule: a shadow left by a temporary SetData staging
-    // buffer is not authoritative once something has rendered into the target. For every other
-    // texture the shadow IS the content, and asking the renderer would be both slower and, on a
-    // renderer whose textures are not readable, wrong.
-    //
-    // The result is deliberately NOT cached into `cpuPixels_`. Saving twice would then be cheaper,
-    // and the second save would be stale the moment anything rendered into the target again -- the
-    // exact defect the preference above exists to avoid.
-    const std::uint8_t* Texture2D::gatherPixelsForEncode(std::vector<std::uint8_t>& scratch) const
+    std::vector<std::uint8_t> Texture2D::GetPixelsForSave(const char* api) const
     {
-        const int total = width * height;
-        if (gpuOnlyContent_ && renderer_ != nullptr && total > 0)
+        using namespace CNA::Internal::Graphics::SurfaceFormatDecoder;
+        if (width <= 0 || height <= 0)
+            throw std::runtime_error(std::string(api) + ": texture dimensions are invalid");
+
+        // XNA reads level zero from the live native texture, then converts its declared surface
+        // format to an image-compatible RGBA plane. Reading through the public transfer path also
+        // keeps render-target resolves and disposed/active-resource validation authoritative.
+        const int surfaceFormat = static_cast<int>(format_);
+        const std::size_t rawByteCount = RawByteCount(surfaceFormat, width, height);
+        if (rawByteCount > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
+            throw std::overflow_error(std::string(api) + ": texture storage is too large");
+        std::vector<std::uint8_t> raw(rawByteCount);
+        GetData(raw.data(), static_cast<int>(raw.size()));
+
+        std::vector<std::uint8_t> rgba;
+        std::vector<float> samples;
+        DecodePixels(surfaceFormat, raw.data(), raw.size(),
+                     IsDxt(surfaceFormat) ? 0 : width * BytesPerTexel(surfaceFormat),
+                     width, height, rgba, samples, MissingColorChannels::ImageEncoding);
+
+        // Measured Microsoft XNA 4.0 normalizes fully transparent pixels for both encoders while
+        // preserving RGB for every nonzero alpha, rather than generally premultiplying colors.
+        for (std::size_t offset = 0; offset < rgba.size(); offset += 4u)
         {
-            scratch.assign(static_cast<std::size_t>(total) * 4, 0);
-            if (renderer_->GetData(0, 0, 0, width, height, scratch.data(),
-                                   static_cast<int>(scratch.size())))
-                return scratch.data();
-            scratch.clear();
+            if (rgba[offset + 3u] == 0u)
+            {
+                rgba[offset + 0u] = 0u;
+                rgba[offset + 1u] = 0u;
+                rgba[offset + 2u] = 0u;
+            }
         }
-        if (cpuPixels_ && !cpuPixels_->empty() &&
-            cpuPixels_->size() >= static_cast<std::size_t>(total) * 4)
-            return cpuPixels_->data();
-        return nullptr;
+        return rgba;
+    }
+
+    static void ValidateSaveTargetDimensions(int targetWidth, int targetHeight)
+    {
+        if (targetWidth < 0)
+            throw System::ArgumentException("Resource size must be greater than zero.", "targetWidth");
+        if (targetHeight < 0)
+            throw System::ArgumentException("Resource size must be greater than zero.", "targetHeight");
+        if (targetWidth == 0 || targetHeight == 0)
+            throw System::ArgumentException("Value does not fall within the expected range.");
     }
 
     void Texture2D::SaveAsPng(System::IO::Stream* stream, int targetWidth, int targetHeight) const
     {
         if (!stream)
-            throw std::invalid_argument("Texture2D::SaveAsPng: stream is null");
-        std::vector<std::uint8_t> scratch;
-        const std::uint8_t* pixels = gatherPixelsForEncode(scratch);
-        if (pixels == nullptr)
-            throw std::runtime_error("Texture2D::SaveAsPng: no CPU-side pixel data available");
+            throw System::ArgumentNullException("stream");
+        ValidateSaveTargetDimensions(targetWidth, targetHeight);
+        const std::vector<std::uint8_t> source = GetPixelsForSave("Texture2D::SaveAsPng");
+        const ImageData pixels = ImageLoader::ResizeRgbaForXnaSave(
+            source.data(), width, height, targetWidth, targetHeight);
 
         const std::vector<uint8_t> encoded = ImageLoader::EncodePng(
-            pixels, width, height, targetWidth, targetHeight);
+            pixels.pixels.data(), targetWidth, targetHeight, targetWidth, targetHeight);
         stream->Write(reinterpret_cast<const System::IO::bytecs*>(encoded.data()), 0,
                       static_cast<System::IO::intcs>(encoded.size()));
     }
 
     void Texture2D::SaveAsPng(const std::string& filename) const
     {
-        std::vector<std::uint8_t> scratch;
-        const std::uint8_t* pixels = gatherPixelsForEncode(scratch);
-        if (pixels == nullptr)
-            throw std::runtime_error("Texture2D::SaveAsPng: no CPU-side pixel data available");
+        const std::vector<std::uint8_t> pixels = GetPixelsForSave("Texture2D::SaveAsPng");
 
-        ImageLoader::SavePng(pixels, width, height, filename);
+        ImageLoader::SavePng(pixels.data(), width, height, filename);
     }
 
     // -----------------------------------------------------------------------
@@ -2543,26 +2770,25 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SaveAsJpeg(System::IO::Stream* stream, int targetWidth, int targetHeight) const
     {
         if (!stream)
-            throw std::invalid_argument("Texture2D::SaveAsJpeg: stream is null");
-        std::vector<std::uint8_t> scratch;
-        const std::uint8_t* pixels = gatherPixelsForEncode(scratch);
-        if (pixels == nullptr)
-            throw std::runtime_error("Texture2D::SaveAsJpeg: no CPU-side pixel data available");
+            throw System::ArgumentNullException("stream");
+        ValidateSaveTargetDimensions(targetWidth, targetHeight);
+        const std::vector<std::uint8_t> source = GetPixelsForSave("Texture2D::SaveAsJpeg");
+        const ImageData pixels = ImageLoader::ResizeRgbaForXnaSave(
+            source.data(), width, height, targetWidth, targetHeight);
 
         const std::vector<uint8_t> encoded = ImageLoader::EncodeJpeg(
-            pixels, width, height, targetWidth, targetHeight, GetJpegSaveQuality());
+            pixels.pixels.data(), targetWidth, targetHeight,
+            targetWidth, targetHeight, GetJpegSaveQuality());
         stream->Write(reinterpret_cast<const System::IO::bytecs*>(encoded.data()), 0,
                       static_cast<System::IO::intcs>(encoded.size()));
     }
 
     void Texture2D::SaveAsJpeg(const std::string& filename) const
     {
-        std::vector<std::uint8_t> scratch;
-        const std::uint8_t* pixels = gatherPixelsForEncode(scratch);
-        if (pixels == nullptr)
-            throw std::runtime_error("Texture2D::SaveAsJpeg: no CPU-side pixel data available");
+        const std::vector<std::uint8_t> pixels = GetPixelsForSave("Texture2D::SaveAsJpeg");
 
-        ImageLoader::SaveJpeg(pixels, width, height, filename, GetJpegSaveQuality());
+        ImageLoader::SaveJpeg(
+            pixels.data(), width, height, filename, GetJpegSaveQuality());
     }
 
     Texture2D Texture2D::CreateFromPixels(GraphicsDevice& device,

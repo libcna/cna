@@ -526,7 +526,7 @@ namespace CNA::Internal::Renderers::Diligent
         , width_(width)
         , height_(height)
         , depth_(depth)
-        , mipLevels_(mipMap ? MipLevelCount(width, height) : 1)
+        , mipLevels_(mipMap ? MipLevelCount(std::max(width, depth), height) : 1)
     {
         if (width_ <= 0 || height_ <= 0 || depth_ <= 0)
             throw std::runtime_error("CNA Diligent: volume texture dimensions must be positive");

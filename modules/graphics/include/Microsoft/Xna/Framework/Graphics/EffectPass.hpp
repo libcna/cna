@@ -59,12 +59,10 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * Must be called before issuing draw calls that should use this pass.
          *
+         * @throws System::ObjectDisposedException If the owning Effect has been disposed.
          * @throws System::InvalidOperationException If owner is non-null and this pass does not
          * belong to the owning Effect's currently-selected technique (getCurrentTechniqueProperty()),
-         * matching FNA's own "Applied a pass not in the current technique!" guard. This includes the
-         * case where CurrentTechnique has been set to null: FNA dereferences it unconditionally and
-         * crashes with a NullReferenceException, which CNA maps to this same, defined exception
-         * instead of undefined behavior.
+         * matching XNA's "not current technique" guard.
          */
         void Apply();
 

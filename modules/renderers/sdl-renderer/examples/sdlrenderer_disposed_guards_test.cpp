@@ -2,13 +2,9 @@
 // Task 717: Verify disposed-resource guards throw ObjectDisposedException consistently on
 // SDL_Renderer (Texture2D, RenderTarget2D, BlendState, SamplerState, SpriteBatch).
 //
-// CNA's disposed-guard policy deliberately matches FNA's own: guards live at GraphicsDevice
-// CONSUMPTION points (SetVertexBuffer, SetIndexBuffer, SetRenderTarget/SetRenderTargets,
-// TextureCollection's texture-slot assignment), not on every instance method of every resource
-// type -- FNA's own BlendState/SamplerState/SpriteBatch have zero self-guards anywhere, and
-// GraphicsDevice.BlendState's setter is a trivial field assignment with no disposed check either.
-// This test verifies that established, narrower-by-design policy holds consistently across the
-// consumption points that exist today, on this specific renderer.
+// Microsoft XNA is authoritative for state/resource lifetime: disposed graphics states are
+// rejected when they are applied, and a disposed SpriteBatch rejects further public use. FNA's
+// missing state guards are a documented divergence rather than this test's expected contract.
 //
 // Real bug found and fixed while writing this test: SpriteBatch::Draw(Texture2D&, ...) had NO
 // guard at all -- worse than FNA's own leniency, since a disposed Texture2D's renderer_ (a
@@ -120,37 +116,34 @@ protected:
             sb_->End();
         }
 
-        // --- BlendState: matches FNA -- no guard anywhere; setting a disposed BlendState must
-        // not throw and must not corrupt device state. ---
+        // --- BlendState: rejected at the GraphicsDevice consumption boundary. ---
         {
             BlendState bs;
             bs.Dispose();
-            check(!ThrowsObjectDisposed([&]{ dev.setBlendStateProperty(bs); }),
-                  "setBlendStateProperty with a disposed BlendState does not throw (matches FNA's own lack of guard)");
+            check(ThrowsObjectDisposed([&]{ dev.setBlendStateProperty(bs); }),
+                  "setBlendStateProperty rejects a disposed BlendState");
         }
 
-        // --- SamplerState: matches FNA -- no guard anywhere; a disposed SamplerState passed to
-        // Begin() must not throw and must not corrupt device state. ---
+        // --- SamplerState: Deferred retains it at Begin and rejects it when End applies state. ---
         {
             SamplerState ss;
             ss.Dispose();
-            check(!ThrowsObjectDisposed([&]{
+            check(ThrowsObjectDisposed([&]{
                 sb_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &ss, nullptr, nullptr);
                 sb_->Draw(*whiteTex_, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
                 sb_->End();
-            }), "SpriteBatch::Begin with a disposed SamplerState does not throw (matches FNA's own lack of guard)");
+            }), "SpriteBatch::End rejects a disposed deferred SamplerState");
         }
 
-        // --- SpriteBatch: matches FNA -- disposing a SpriteBatch here doesn't tear down anything
-        // Begin/Draw/End depend on (renderer_ is untouched), so it keeps working normally. ---
+        // --- SpriteBatch: public use after disposal is rejected. ---
         {
             SpriteBatch localSb(dev);
             localSb.Dispose();
-            check(!ThrowsObjectDisposed([&]{
+            check(ThrowsObjectDisposed([&]{
                 localSb.Begin();
                 localSb.Draw(*whiteTex_, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
                 localSb.End();
-            }), "A disposed SpriteBatch's Begin/Draw/End still work normally (matches FNA's own lack of self-guard)");
+            }), "A disposed SpriteBatch rejects Begin");
         }
 
         // --- The device must remain fully usable after all of the above. ---

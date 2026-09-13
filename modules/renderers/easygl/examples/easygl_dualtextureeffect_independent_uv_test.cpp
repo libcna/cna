@@ -63,6 +63,7 @@ namespace
         IndependentUvTest()
         {
             graphics_ = std::make_unique<GraphicsDeviceManager>(this);
+            graphics_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
             graphics_->setPreferredBackBufferWidthProperty(64);
             graphics_->setPreferredBackBufferHeightProperty(64);
         }

@@ -88,6 +88,8 @@ namespace
 
 TEST(RenderTargetSemantics, PreserveContentsKeepsWhatWasDrawnAcrossARebind)
 {
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
+        GTEST_SKIP() << "HEADLESS has no render-target pixel storage to preserve";
     GraphicsDevice device;
     RenderTarget2D preserve(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
                             RenderTargetUsage::PreserveContents);
@@ -102,6 +104,8 @@ TEST(RenderTargetSemantics, PreserveContentsKeepsWhatWasDrawnAcrossARebind)
 
 TEST(RenderTargetSemantics, DiscardContentsDoesNotKeepIt)
 {
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
+        GTEST_SKIP() << "HEADLESS has no render-target pixel storage to discard";
     GraphicsDevice device;
     RenderTarget2D discard(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
                            RenderTargetUsage::DiscardContents);
@@ -178,6 +182,8 @@ TEST(RenderTargetSemantics, ARenderTargetCubeReportsWhatItWasAskedFor)
 // first user of an empty one.
 TEST(RenderTargetSemantics, TargetsWithDifferentSampleCountsBothRenderInOneRun)
 {
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
+        GTEST_SKIP() << "HEADLESS cannot observe pixels after rebuilding the target state";
     GraphicsDevice device;
     const Color first(0x11, 0x99, 0x22, 0xFF);
     const Color second(0x99, 0x22, 0x44, 0xFF);

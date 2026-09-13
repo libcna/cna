@@ -4,6 +4,7 @@
 // unsupported-SurfaceFormat error path) -- see ContentManagerTexture2DXnbTests.cpp for the
 // full end-to-end milestone test through ContentManager.
 
+#include <array>
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
@@ -12,10 +13,14 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/MemoryStream.hpp"
 
@@ -23,9 +28,12 @@ using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentReader;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
+using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2;
 using Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4;
+using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
@@ -45,6 +53,34 @@ namespace
 
         GraphicsDevice gd;
     };
+
+    Texture2D ReadHandConstructedTexture2D(
+        GraphicsDevice& device, SurfaceFormat format, int32_t width, int32_t height,
+        const std::vector<std::vector<std::uint8_t>>& levels)
+    {
+        System::IO::MemoryStream stream;
+        System::IO::BinaryWriter writer(&stream, true);
+        writer.Write(static_cast<int32_t>(format));
+        writer.Write(width);
+        writer.Write(height);
+        writer.Write(static_cast<int32_t>(levels.size()));
+        for (const auto& bytes : levels)
+        {
+            writer.Write(static_cast<int32_t>(bytes.size()));
+            for (const std::uint8_t value : bytes) writer.Write(value);
+        }
+        writer.Flush();
+        const auto serialized = stream.ToArray();
+
+        ContentManager content;
+        content.setGraphicsDevice(device);
+        System::IO::MemoryStream body(serialized.data(), static_cast<int32_t>(serialized.size()));
+        ContentReader reader(&content, &body, "test", 5, 'w');
+        auto typeReader = ContentTypeReaderManager::CreateReader(
+            "Microsoft.Xna.Framework.Content.Texture2DReader");
+        if (!typeReader) return {};
+        return std::any_cast<Texture2D>(typeReader->ReadUntyped(reader, std::any{}));
+    }
 }
 
 TEST_F(Texture2DContentTypeReaderTest, IsRegisteredUnderRealFnaCanonicalName)
@@ -77,7 +113,7 @@ TEST_F(Texture2DContentTypeReaderTest, UnsupportedSurfaceFormatThrowsContentLoad
 
     System::IO::MemoryStream ms;
     System::IO::BinaryWriter writer(&ms, true);
-    writer.Write((int32_t)1);  // SurfaceFormat.Bgr565 -- not yet implemented
+    writer.Write((int32_t)999);  // not a SurfaceFormat value
     writer.Write((int32_t)4);  // width
     writer.Write((int32_t)4);  // height
     writer.Write((int32_t)1);  // levelCount
@@ -93,6 +129,90 @@ TEST_F(Texture2DContentTypeReaderTest, UnsupportedSurfaceFormatThrowsContentLoad
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
+// SOFTWARE-275: FNA's Texture2DReader retains every uncompressed XNA SurfaceFormat and uploads
+// the serialized level bytes unchanged. CNA's former allow-list rejected everything here except
+// Color and the two signed-normalized formats even though Software and EasyGL already store all
+// seventeen representations exactly.
+TEST_F(Texture2DContentTypeReaderTest,
+       PreservesEveryClassicUncompressedFormatAndExactBytes)
+{
+    using namespace CNA::Testing::Renderers;
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
+
+    GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters()};
+    constexpr std::array<SurfaceFormat, 17> formats{{
+        SurfaceFormat::Color,
+        SurfaceFormat::Bgr565,
+        SurfaceFormat::Bgra5551,
+        SurfaceFormat::Bgra4444,
+        SurfaceFormat::NormalizedByte2,
+        SurfaceFormat::NormalizedByte4,
+        SurfaceFormat::Rgba1010102,
+        SurfaceFormat::Rg32,
+        SurfaceFormat::Rgba64,
+        SurfaceFormat::Alpha8,
+        SurfaceFormat::Single,
+        SurfaceFormat::Vector2,
+        SurfaceFormat::Vector4,
+        SurfaceFormat::HalfSingle,
+        SurfaceFormat::HalfVector2,
+        SurfaceFormat::HalfVector4,
+        SurfaceFormat::HdrBlendable,
+    }};
+
+    for (const SurfaceFormat format : formats)
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        const std::size_t byteCount =
+            static_cast<std::size_t>(Texture::GetFormatSizeEXT(format)) * 2u;
+        std::vector<std::uint8_t> expected(byteCount);
+        for (std::size_t index = 0; index < expected.size(); ++index)
+        {
+            expected[index] = static_cast<std::uint8_t>(
+                0x31u + index * 19u + static_cast<std::size_t>(format));
+        }
+
+        Texture2D texture = ReadHandConstructedTexture2D(
+            device, format, 2, 1, {expected});
+        EXPECT_EQ(texture.getFormatProperty(), format);
+        EXPECT_EQ(texture.getLevelCountProperty(), 1);
+
+        std::vector<std::uint8_t> actual(expected.size(), 0xCDu);
+        texture.GetData(actual.data(), static_cast<int>(actual.size()));
+        EXPECT_EQ(actual, expected);
+    }
+}
+
+TEST_F(Texture2DContentTypeReaderTest,
+       PreservesEveryClassicCompressedFormatAndExactBlocks)
+{
+    using namespace CNA::Testing::Renderers;
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
+
+    GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters()};
+    constexpr std::array<SurfaceFormat, 3> formats{{
+        SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5,
+    }};
+    for (const SurfaceFormat format : formats)
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        const std::size_t byteCount =
+            static_cast<std::size_t>(Texture::GetFormatSizeEXT(format));
+        std::vector<std::uint8_t> expected(byteCount);
+        for (std::size_t index = 0; index < expected.size(); ++index)
+            expected[index] = static_cast<std::uint8_t>(0x17u + index * 13u);
+
+        Texture2D texture = ReadHandConstructedTexture2D(
+            device, format, 4, 4, {expected});
+        EXPECT_EQ(texture.getFormatProperty(), format);
+        std::vector<std::uint8_t> actual(byteCount, 0xCDu);
+        texture.GetData(actual.data(), static_cast<int>(actual.size()));
+        EXPECT_EQ(actual, expected);
+    }
+}
+
 // A NormalizedByte2 texture is TWO bytes per texel, not four. Found by porting Microsoft's
 // DistortionSample, whose own content pipeline extension ends DisplacementMapProcessor with
 // ConvertBitmapType(PixelBitmapContent<NormalizedByte2>): a 2D displacement map has an X and a Y
@@ -101,7 +221,7 @@ TEST_F(Texture2DContentTypeReaderTest, UnsupportedSurfaceFormatThrowsContentLoad
 TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2ReadsTwoBytesPerTexel)
 {
     using namespace CNA::Testing::Renderers;
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     ContentManager cm;
     cm.setGraphicsDevice(gd);
@@ -150,11 +270,9 @@ TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2RejectsAFourBytePerTexelLe
 {
     using namespace CNA::Testing::Renderers;
     // Same guard as NormalizedByte2ReadsTwoBytesPerTexel above: the reader constructs the texture
-    // before it validates the per-level byte count, so on a renderer that cannot create a
-    // NormalizedByte2 texture at all (e.g. WebGPU) construction throws a runtime_error first and the
-    // expected ContentLoadException is never reached. The malformed-level rejection this test pins
-    // is renderer-independent in intent, but only observable where the format is supported.
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2);
+    // before it validates the per-level byte count, so the malformed-level rejection is observable
+    // only on renderers that can create a NormalizedByte2 texture.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     ContentManager cm;
     cm.setGraphicsDevice(gd);
@@ -182,7 +300,7 @@ TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2RejectsAFourBytePerTexelLe
 TEST_F(Texture2DContentTypeReaderTest, NormalizedByte4PreservesSignedPackedTexels)
 {
     using namespace CNA::Testing::Renderers;
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGLES3, OpenGL33, WebGL2);
 
     ContentManager cm;
     cm.setGraphicsDevice(gd);

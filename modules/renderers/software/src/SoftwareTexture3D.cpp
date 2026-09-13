@@ -1,0 +1,244 @@
+// SPDX-License-Identifier: MS-PL
+
+#include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
+#include "SoftwareTextureFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <stdexcept>
+
+namespace CNA::Internal::Renderers::Software
+{
+    namespace
+    {
+        int CalculateVolumeMipLevels(int width, int height, int depth)
+        {
+            int levels = 1;
+            while (width > 1 || height > 1 || depth > 1)
+            {
+                width = std::max(1, width / 2);
+                height = std::max(1, height / 2);
+                depth = std::max(1, depth / 2);
+                ++levels;
+            }
+            return levels;
+        }
+
+        bool RequiredBytes(int width, int height, int depth, int bytesPerTexel,
+                           std::size_t& result)
+        {
+            if (width <= 0 || height <= 0 || depth <= 0 || bytesPerTexel <= 0) return false;
+            const std::size_t w = static_cast<std::size_t>(width);
+            const std::size_t h = static_cast<std::size_t>(height);
+            const std::size_t d = static_cast<std::size_t>(depth);
+            const std::size_t maximum = (std::numeric_limits<std::size_t>::max)();
+            const std::size_t bpp = static_cast<std::size_t>(bytesPerTexel);
+            if (w > maximum / h || w * h > maximum / d || w * h * d > maximum / bpp)
+                return false;
+            result = w * h * d * bpp;
+            return true;
+        }
+    }
+
+    SoftwareTexture3DRenderer::SoftwareTexture3DRenderer(
+        int width, int height, int depth, bool mipMap, int surfaceFormat)
+        : width_(width), height_(height), depth_(depth)
+        , levelCount_(mipMap ? CalculateVolumeMipLevels(width, height, depth) : 1)
+        , surfaceFormat_(surfaceFormat)
+    {
+        if (width <= 0 || height <= 0 || depth <= 0)
+            throw std::invalid_argument("SoftwareTexture3DRenderer: dimensions must be positive");
+
+        levels_.resize(static_cast<std::size_t>(levelCount_));
+        sampleLevels_.resize(static_cast<std::size_t>(levelCount_));
+        const int bytesPerTexel = Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+            static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat_));
+        for (int level = 0; level < levelCount_; ++level)
+        {
+            std::size_t bytes = 0;
+            if (!RequiredBytes(LevelWidth(level), LevelHeight(level), LevelDepth(level),
+                               bytesPerTexel, bytes))
+                throw std::length_error("SoftwareTexture3DRenderer: volume byte size overflows");
+            levels_[static_cast<std::size_t>(level)].assign(bytes, 0u);
+            sampleLevels_[static_cast<std::size_t>(level)].assign(
+                static_cast<std::size_t>(LevelWidth(level)) *
+                    static_cast<std::size_t>(LevelHeight(level)) *
+                    static_cast<std::size_t>(LevelDepth(level)) * 4u,
+                0.0f);
+            DecodeLevel(level);
+        }
+    }
+
+    int SoftwareTexture3DRenderer::LevelWidth(int level) const
+    {
+        return std::max(1, width_ >> level);
+    }
+
+    int SoftwareTexture3DRenderer::LevelHeight(int level) const
+    {
+        return std::max(1, height_ >> level);
+    }
+
+    int SoftwareTexture3DRenderer::LevelDepth(int level) const
+    {
+        return std::max(1, depth_ >> level);
+    }
+
+    void SoftwareTexture3DRenderer::DecodeLevel(int level)
+    {
+        const int levelW = LevelWidth(level);
+        const int levelH = LevelHeight(level);
+        const int levelD = LevelDepth(level);
+        const int bytesPerTexel = SoftwareTextureFormat::BytesPerTexel(surfaceFormat_);
+        const std::size_t sliceBytes =
+            static_cast<std::size_t>(levelW) * static_cast<std::size_t>(levelH) *
+            static_cast<std::size_t>(bytesPerTexel);
+        const auto& raw = levels_[static_cast<std::size_t>(level)];
+        auto& samples = sampleLevels_[static_cast<std::size_t>(level)];
+        std::vector<std::uint8_t> display;
+        std::vector<float> decoded;
+        for (int slice = 0; slice < levelD; ++slice)
+        {
+            SoftwareTextureFormat::DecodePixels(
+                surfaceFormat_, raw.data() + static_cast<std::size_t>(slice) * sliceBytes,
+                sliceBytes, levelW * bytesPerTexel, levelW, levelH, display, decoded);
+            std::copy(decoded.begin(), decoded.end(),
+                      samples.begin() + static_cast<std::ptrdiff_t>(slice) * levelW * levelH * 4);
+        }
+    }
+
+    bool SoftwareTexture3DRenderer::SetData(
+        int level, int x, int y, int z, int w, int h, int depth,
+        const void* data, int dataLength)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+            return false;
+        return SetDataBytesEXT(level, x, y, z, w, h, depth, data, dataLength);
+    }
+
+    bool SoftwareTexture3DRenderer::SetDataBytesEXT(
+        int level, int x, int y, int z, int w, int h, int depth,
+        const void* data, int dataLength)
+    {
+        if (data == nullptr || level < 0 || level >= levelCount_ || dataLength < 0)
+            return false;
+        const int levelW = LevelWidth(level);
+        const int levelH = LevelHeight(level);
+        const int levelD = LevelDepth(level);
+        if (w <= 0 || h <= 0 || depth <= 0 || x < 0 || y < 0 || z < 0 ||
+            x > levelW - w || y > levelH - h || z > levelD - depth)
+            return false;
+
+        const int bytesPerTexel = Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+            static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat_));
+        std::size_t required = 0;
+        if (!RequiredBytes(w, h, depth, bytesPerTexel, required) ||
+            static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        const auto* source = static_cast<const std::uint8_t*>(data);
+        std::vector<std::uint8_t>& destination = levels_[static_cast<std::size_t>(level)];
+        const std::size_t rowBytes =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel);
+        const std::size_t sourceSliceBytes = rowBytes * static_cast<std::size_t>(h);
+        for (int slice = 0; slice < depth; ++slice)
+        {
+            for (int row = 0; row < h; ++row)
+            {
+                const std::size_t sourceOffset =
+                    static_cast<std::size_t>(slice) * sourceSliceBytes +
+                    static_cast<std::size_t>(row) * rowBytes;
+                const std::size_t destinationOffset =
+                    ((static_cast<std::size_t>(z + slice) * static_cast<std::size_t>(levelH) +
+                      static_cast<std::size_t>(y + row)) * static_cast<std::size_t>(levelW) +
+                     static_cast<std::size_t>(x)) * static_cast<std::size_t>(bytesPerTexel);
+                std::copy_n(source + sourceOffset, rowBytes,
+                            destination.begin() + static_cast<std::ptrdiff_t>(destinationOffset));
+            }
+        }
+        DecodeLevel(level);
+        return true;
+    }
+
+    bool SoftwareTexture3DRenderer::GetData(
+        int level, int x, int y, int z, int w, int h, int depth,
+        void* data, int dataLength) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat_) != SurfaceFormat::Color)
+            return false;
+        return GetDataBytesEXT(level, x, y, z, w, h, depth, data, dataLength);
+    }
+
+    bool SoftwareTexture3DRenderer::GetDataBytesEXT(
+        int level, int x, int y, int z, int w, int h, int depth,
+        void* data, int dataLength) const
+    {
+        if (data == nullptr || level < 0 || level >= levelCount_ || dataLength < 0)
+            return false;
+        const int levelW = LevelWidth(level);
+        const int levelH = LevelHeight(level);
+        const int levelD = LevelDepth(level);
+        if (w <= 0 || h <= 0 || depth <= 0 || x < 0 || y < 0 || z < 0 ||
+            x > levelW - w || y > levelH - h || z > levelD - depth)
+            return false;
+
+        const int bytesPerTexel = Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(
+            static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat_));
+        std::size_t required = 0;
+        if (!RequiredBytes(w, h, depth, bytesPerTexel, required) ||
+            static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        const std::vector<std::uint8_t>& source = levels_[static_cast<std::size_t>(level)];
+        auto* destination = static_cast<std::uint8_t*>(data);
+        const std::size_t rowBytes =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(bytesPerTexel);
+        const std::size_t destinationSliceBytes = rowBytes * static_cast<std::size_t>(h);
+        for (int slice = 0; slice < depth; ++slice)
+        {
+            for (int row = 0; row < h; ++row)
+            {
+                const std::size_t sourceOffset =
+                    ((static_cast<std::size_t>(z + slice) * static_cast<std::size_t>(levelH) +
+                      static_cast<std::size_t>(y + row)) * static_cast<std::size_t>(levelW) +
+                     static_cast<std::size_t>(x)) * static_cast<std::size_t>(bytesPerTexel);
+                const std::size_t destinationOffset =
+                    static_cast<std::size_t>(slice) * destinationSliceBytes +
+                    static_cast<std::size_t>(row) * rowBytes;
+                std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(sourceOffset), rowBytes,
+                            destination + destinationOffset);
+            }
+        }
+        return true;
+    }
+
+    void SoftwareTexture3DRenderer::GetDimensionsEXT(
+        int& width, int& height, int& depth) const noexcept
+    {
+        width = width_;
+        height = height_;
+        depth = depth_;
+    }
+
+    std::array<float, 4> SoftwareTexture3DRenderer::FetchVolumeTexelEXT(
+        int level, int x, int y, int z) const
+    {
+        if (level < 0 || level >= levelCount_ || x < 0 || y < 0 || z < 0 ||
+            x >= LevelWidth(level) || y >= LevelHeight(level) || z >= LevelDepth(level))
+        {
+            throw std::out_of_range("SoftwareTexture3DRenderer: sampled voxel is out of range");
+        }
+        const std::size_t offset =
+            ((static_cast<std::size_t>(z) * static_cast<std::size_t>(LevelHeight(level)) +
+              static_cast<std::size_t>(y)) * static_cast<std::size_t>(LevelWidth(level)) +
+             static_cast<std::size_t>(x)) * 4u;
+        const auto& samples = sampleLevels_[static_cast<std::size_t>(level)];
+        return {samples[offset], samples[offset + 1u], samples[offset + 2u],
+                samples[offset + 3u]};
+    }
+}

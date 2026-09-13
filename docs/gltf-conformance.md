@@ -1048,13 +1048,12 @@ L7 campaign is complete at 140 deterministic captures plus eight deterministic s
 its two additional renderer-boundary findings and exact evidence are in §5.5.
 
 `GLTF-396` records the adjacent clip/depth boundary in `docs/gltf-conventions.md`. CNA projection
-matrices emit Direct3D/XNA `0 <= z <= w`: Vulkan consumes that range natively, EasyGL accepts it as
-the upper half of OpenGL's wider clip-depth interval, and SOFTWARE maps `z/w` directly but clips
-only at its eye plane rather than every homogeneous frustum plane. The mappings are all monotonic
-for stock in-frustum draws. EasyGL and Vulkan each pass the shared 39/39 viewport suite (including
-both depth-range checks), while SOFTWARE passes 25/25 plus the 4/4 public depth contract; the
-renderer-independent L5/L6 outputs and all four raster/capability corpus selections remain green.
-No importer compensation is permitted for these renderer-owned differences.
+matrices emit Direct3D/XNA `0 <= z <= w`: Vulkan consumes that range natively, EasyGL now converts
+it to OpenGL's wider clip interval in every renderer-owned 3D vertex shader, and SOFTWARE clips all
+six homogeneous XNA planes before mapping `z/w` directly. `SOFTWARE-336` adds the missing absolute
+EasyGL proof: stock clip `z=0` is the near depth endpoint and `z<0` is rejected. Existing viewport,
+clipping and corpus selections retain the wider output coverage. No importer compensation is
+permitted for these renderer-owned conversions.
 
 `GLTF-397` similarly keeps render-target orientation out of import. The asymmetric asset UV lock
 remains byte-exact, while the shared 8x4 render-target sampling oracle feeds the same deliberately

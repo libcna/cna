@@ -47,6 +47,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
@@ -82,6 +83,7 @@ using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
@@ -436,6 +438,7 @@ namespace
         // calls that follow it, which only run once SetUp() has already let the test proceed.
         void SetUp() override
         {
+            device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
                 GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
         }
@@ -1148,26 +1151,15 @@ namespace
 // vertex's bytes. Rejected deterministically, before anything is uploaded.
 TEST_F(BuiltInVertexValidationTest, ElementBeyondTheDeclaredStrideIsRejected)
 {
-    const VertexDeclaration tooSmall(
-        14,
-        {
-            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
-            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
-        });
     EXPECT_THROW(
-        device.DrawUserPrimitives(
-            PrimitiveType::TriangleList, static_cast<const void*>(vertices.data()), 0, 1,
-            tooSmall),
-        System::ArgumentException);
-    EXPECT_THROW(
-        device.DrawUserIndexedPrimitives(
-            PrimitiveType::TriangleList, static_cast<const void*>(vertices.data()), 0, 3,
-            indices16.data(), 0, 1, tooSmall),
-        System::ArgumentException);
-    EXPECT_THROW(
-        device.DrawUserIndexedPrimitives(
-            PrimitiveType::TriangleList, static_cast<const void*>(vertices.data()), 0, 3,
-            indices32.data(), 0, 1, tooSmall),
+        (VertexDeclaration(
+            12,
+            {
+                VertexElement(0, VertexElementFormat::Vector3,
+                              VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Color,
+                              VertexElementUsage::Color, 0),
+            })),
         System::ArgumentException);
 }
 

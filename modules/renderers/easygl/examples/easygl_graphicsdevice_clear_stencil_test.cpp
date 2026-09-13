@@ -259,6 +259,7 @@ public:
     GraphicsDeviceClearStencilTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
     }
 

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-144 Phase 2 (XNB-24): the content loaders reach the GPU-native block-compressed path.
+// WEBGPU-144 Phase 2 (XNB-24) / SOFTWARE-318: the content loaders reach the GPU-native
+// block-compressed path through a truthfully seekable stream.
 // Phase 1 proved a Texture2D built directly with a Dxt* format + SetData(blocks) uploads to a
 // WGPUTextureFormat_BC*. This test proves the two CONTENT loaders now do the same instead of
-// force-decoding DXT to Color: Texture2D::FromStream (DDS) and the .xnb Texture2DReader.
+// force-decoding DXT to Color: Texture2D::DDSFromStreamEXT and the .xnb Texture2DReader.
 //
 // WebGPU opts in via LoadsCompressedContentNativelyEXT(); the actual per-format capability (and the
 // bcSupported_ device gate) is IsCompressedTransferFormatEXT. The test asserts the CONTRACT rather
@@ -10,7 +11,7 @@
 // reports it can transfer that format as blocks, and decodes to Color otherwise -- so it is correct
 // on an adapter with or without BC support, while still proving the gate is wired.
 //
-// Check A -- FromStream(DDS DXT1, 8x8, 4 mips): Format() == Dxt1 (native) or Color (fallback),
+// Check A -- DDSFromStreamEXT(DXT1, 8x8, 4 mips): Format() == Dxt1 (native) or Color (fallback),
 //   matching the capability; the 4-level chain is preserved either way.
 // Check B -- that same texture renders its level-0 red through SpriteBatch (proves the native BC
 //   upload actually samples correctly end-to-end via FromStream, not just that a format was set).
@@ -32,13 +33,12 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
-#include "System/IO/Stream.hpp"
+#include "System/IO/MemoryStream.hpp"
 
 #include <algorithm>
 #include <any>
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -49,33 +49,6 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     constexpr int kSize = 32;
-
-    class VectorStream final : public System::IO::Stream
-    {
-    public:
-        explicit VectorStream(const std::vector<std::uint8_t>& bytes) : bytes_(bytes) {}
-        System::IO::intcs Read(System::IO::bytecs buffer[], System::IO::intcs offset,
-                               System::IO::intcs count) override
-        {
-            const int remaining = static_cast<int>(bytes_.size()) - position_;
-            const int read = std::min(count, remaining);
-            if (read > 0)
-            {
-                std::memcpy(buffer + offset, bytes_.data() + position_,
-                            static_cast<std::size_t>(read));
-                position_ += read;
-            }
-            return read;
-        }
-        void Close() override {}
-        [[nodiscard]] System::IO::intcs getLengthProperty() const override
-        {
-            return static_cast<System::IO::intcs>(bytes_.size());
-        }
-    private:
-        const std::vector<std::uint8_t>& bytes_;
-        int position_ = 0;
-    };
 
     void WriteU32(std::vector<std::uint8_t>& b, std::size_t o, std::uint32_t v)
     {
@@ -173,7 +146,8 @@ class WebGpuCompressedContentTest : public Game
         CNA::Internal::Xnb::RegisterTexture2DXnbReader();
         ContentManager manager;
         manager.setGraphicsDevice(device);
-        VectorStream stream(body);
+        System::IO::MemoryStream stream(
+            body.data(), static_cast<System::IO::intcs>(body.size()), false);
         ContentReader reader(&manager, &stream, "webgpu-compressed-content", 5, 'w');
         auto typeReader = ContentTypeReaderManager::CreateReader(
             "Microsoft.Xna.Framework.Content.Texture2DReader");
@@ -188,8 +162,9 @@ protected:
         Game::Initialize();
         sb_ = std::make_unique<SpriteBatch>(getGraphicsDeviceProperty());
         auto dds = BuildDds(0x31545844u, 4);
-        VectorStream stream(dds);
-        ddsTex_ = Texture2D::FromStream(getGraphicsDeviceProperty(), stream);
+        System::IO::MemoryStream stream(
+            dds.data(), static_cast<System::IO::intcs>(dds.size()), false);
+        ddsTex_ = Texture2D::DDSFromStreamEXT(getGraphicsDeviceProperty(), stream);
     }
 
     void Draw(const GameTime&) override
@@ -205,12 +180,12 @@ protected:
         const bool nativeDxt5 = renderer.LoadsCompressedContentNativelyEXT()
             && renderer.IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt5));
 
-        // Check A: FromStream DDS DXT1 keeps its compressed format iff the renderer can transfer it.
+        // Check A: DDSFromStreamEXT keeps DXT1 compressed iff the renderer can transfer it.
         const SurfaceFormat expectedDds = nativeDxt1 ? SurfaceFormat::Dxt1 : SurfaceFormat::Color;
         check(ddsTex_.getFormatProperty() == expectedDds && ddsTex_.getLevelCountProperty() == 4,
               nativeDxt1
-                  ? "FromStream DDS DXT1 keeps native Dxt1 storage with its 4-level chain"
-                  : "FromStream DDS DXT1 decodes to Color (renderer reports no BC transfer)");
+                  ? "DDSFromStreamEXT keeps native Dxt1 storage with its 4-level chain"
+                  : "DDSFromStreamEXT decodes to Color (renderer reports no BC transfer)");
 
         // Check B: the loaded texture renders red -- native BC upload samples correctly via FromStream.
         dev.Clear(Color(0, 0, 0, 255));
@@ -243,6 +218,7 @@ public:
     WebGpuCompressedContentTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setGraphicsProfileProperty(GraphicsProfile::HiDef);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
         gdm_->setPreferredBackBufferHeightProperty(kSize);
     }

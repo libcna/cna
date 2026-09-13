@@ -10,11 +10,9 @@
 
 namespace CNA::Internal::Xnb
 {
-    using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Content::ContentLoadException;
     using Microsoft::Xna::Framework::Content::ContentReader;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
-    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     using Microsoft::Xna::Framework::Graphics::Texture3D;
 
     namespace
@@ -35,8 +33,6 @@ namespace CNA::Internal::Xnb
         ContentReader& input, std::optional<std::shared_ptr<Texture3D>> existingInstance)
     {
         const XnbTextureData decoded = DecodeTexture3DXnbData(input);
-        const CNA::Content::Cnb::CnbTextureData rgba =
-            ConvertXnbTextureToCnbRgba8(decoded, true);
         int32_t width = static_cast<int32_t>(decoded.width);
         int32_t height = static_cast<int32_t>(decoded.height);
         int32_t depth = static_cast<int32_t>(decoded.depth);
@@ -47,22 +43,15 @@ namespace CNA::Internal::Xnb
         {
             texture = std::make_shared<Texture3D>(
                 RequireGraphicsDevice(input), width, height, depth, levelCount > 1,
-                SurfaceFormat::Color);
+                decoded.surfaceFormat);
         }
 
         for (int32_t level = 0; level < levelCount; ++level)
         {
             const std::vector<uint8_t>& bytes =
-                rgba.representations.front().levels[static_cast<std::size_t>(level)];
-            const auto voxelCount = static_cast<int32_t>(bytes.size() / 4u);
-            std::vector<Color> colors;
-            colors.reserve(static_cast<std::size_t>(voxelCount));
-            for (int32_t i = 0; i < voxelCount; ++i)
-            {
-                const std::size_t o = static_cast<std::size_t>(i) * 4;
-                colors.emplace_back(bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]);
-            }
-            texture->SetData(level, 0, 0, width, height, 0, depth, colors.data(), 0, voxelCount);
+                decoded.levels[static_cast<std::size_t>(level)];
+            texture->SetData(level, 0, 0, width, height, 0, depth,
+                             bytes.data(), 0, static_cast<int>(bytes.size()));
 
             // Calculate dimensions of the next mip level, matching FNA exactly.
             width = std::max(width >> 1, 1);

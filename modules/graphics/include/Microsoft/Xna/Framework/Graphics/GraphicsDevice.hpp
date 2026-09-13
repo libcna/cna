@@ -2,15 +2,18 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
@@ -71,6 +74,7 @@ namespace Microsoft::Xna::Framework::Graphics
     class Effect;
     class RenderTarget2D;
     class RenderTargetCube;
+    class Texture;
 }
 
 namespace Microsoft::Xna::Framework::Content
@@ -112,7 +116,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // --- Constructors ---
         /** @brief Initializes a GraphicsDevice with no window (headless mode). */
-        GraphicsDevice();
+        CNAEXT GraphicsDevice();
 
         /**
          * @brief Initializes a new GraphicsDevice for the given adapter and presentation settings.
@@ -179,6 +183,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Sets the blend state.
          * @param value The new blend state to apply.
+         * @throws System::NotSupportedException if the state uses a blend combination forbidden
+         *         by the active graphics profile.
          */
         void setBlendStateProperty(const BlendState& value);
         /** @brief Returns the current blend state (const). */
@@ -266,7 +272,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param b Blue channel (0–1).
          * @param a Alpha channel (0–1).
          */
-        void Clear(float r, float g, float b, float a);
+        CNAEXT void Clear(float r, float g, float b, float a);
         /**
          * @brief Clears the specified buffers.
          * @param options Flags indicating which buffers to clear.
@@ -276,11 +282,20 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Clear(ClearOptions options, const Color& color, float depth, int stencil);
         /**
+         * @brief Clears the specified buffers after converting a floating-point color to Color.
+         *
+         * @param options Flags indicating which buffers to clear.
+         * @param color   Floating-point color value converted through XNA's packed Color rules.
+         * @param depth   Depth value for the depth buffer (0–1).
+         * @param stencil Stencil value for the stencil buffer.
+         */
+        void Clear(ClearOptions options, const Vector4& color, float depth, int stencil);
+        /**
          * @brief Clears the color and depth buffers.
          * @param color Color value for the color buffer.
          * @param depth Depth value for the depth buffer (0–1).
          */
-        void Clear(const Color& color, float depth);
+        CNAEXT void Clear(const Color& color, float depth);
 
         /** @brief Presents the rendered frame to the display. */
         void Present();
@@ -303,7 +318,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param presentationParameters The new presentation parameters.
          * @param adapter                Pointer to the graphics adapter, or nullptr to keep the current one.
          */
-        void Reset(const PresentationParameters& presentationParameters, GraphicsAdapter* adapter);
+        CNAEXT void Reset(const PresentationParameters& presentationParameters, GraphicsAdapter* adapter);
 
         /** @brief Releases all resources held by this device. */
         void Dispose() override;
@@ -313,6 +328,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Copies all back-buffer pixels into the provided Color array.
          * @param data         Output array to receive pixel data.
          * @param elementCount Number of Color elements to read.
+         * @throws System::NotSupportedException under the Reach graphics profile.
+         * @throws System::ArgumentNullException if @p data is null.
+         * @throws System::ArgumentOutOfRangeException if @p elementCount is not positive.
+         * @throws System::ArgumentException if @p elementCount does not equal the back-buffer pixel count.
+         * @throws System::InvalidOperationException if a render target is active.
          */
         void GetBackBufferData(Color* data, int elementCount);
         /**
@@ -320,6 +340,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param data         Output array to receive pixel data.
          * @param startIndex   First element index in @p data to write to.
          * @param elementCount Number of Color elements to read.
+         * @throws System::NotSupportedException under the Reach graphics profile.
+         * @throws System::ArgumentNullException if @p data is null.
+         * @throws System::ArgumentOutOfRangeException if the destination range is invalid.
+         * @throws System::ArgumentException if @p elementCount does not equal the back-buffer pixel count.
+         * @throws System::InvalidOperationException if a render target is active.
          */
         void GetBackBufferData(Color* data, int startIndex, int elementCount);
         /**
@@ -328,8 +353,56 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param data         Output array to receive pixel data.
          * @param startIndex   First element index in @p data to write to.
          * @param elementCount Number of Color elements to read.
+         * @throws System::NotSupportedException under the Reach graphics profile.
+         * @throws System::ArgumentNullException if @p data is null.
+         * @throws System::ArgumentOutOfRangeException if the destination range is invalid.
+         * @throws System::ArgumentException if @p rect is invalid or @p elementCount does not match it.
+         * @throws System::InvalidOperationException if a render target is active.
          */
         void GetBackBufferData(const Rectangle* rect, Color* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Copies the complete back buffer into arbitrary trivially-copyable elements.
+         *
+         * @tparam T Destination value type whose size divides the back-buffer texel size.
+         * @param data Output elements.
+         * @param elementCount Exact element count whose bytes equal the complete back buffer.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void GetBackBufferData(T* data, int elementCount)
+        {
+            GetBackBufferData(data, 0, elementCount);
+        }
+
+        /**
+         * @brief Copies the complete back buffer into a destination element window.
+         *
+         * @tparam T Destination value type whose size divides the back-buffer texel size.
+         * @param data Output elements.
+         * @param startIndex First destination element to write.
+         * @param elementCount Exact element count whose bytes equal the complete back buffer.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void GetBackBufferData(T* data, int startIndex, int elementCount)
+        {
+            GetBackBufferData(nullptr, data, startIndex, elementCount);
+        }
+
+        /**
+         * @brief Copies a back-buffer rectangle into arbitrary trivially-copyable elements.
+         *
+         * @tparam T Destination value type whose size divides the back-buffer texel size.
+         * @param rect Source rectangle, or null for the complete back buffer.
+         * @param data Output elements.
+         * @param startIndex First destination element to write.
+         * @param elementCount Exact element count whose bytes equal the requested rectangle.
+         */
+        template<typename T> requires std::is_trivially_copyable_v<T>
+        void GetBackBufferData(const Rectangle* rect, T* data,
+                               int startIndex, int elementCount)
+        {
+            GetBackBufferDataCore(rect, data, startIndex, elementCount, sizeof(T), false);
+        }
 
         // --- Render targets ---
         /**
@@ -362,16 +435,16 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetVertexBuffer(const VertexBuffer* vertexBuffer);
         /**
          * @brief Binds a vertex buffer with an explicit vertex offset.
-         * @param vertexBuffer The vertex buffer to bind.
-         * @param vertexOffset Offset (in vertices) into the buffer.
+         * @param vertexBuffer The vertex buffer to bind, or nullptr to unbind.
+         * @param vertexOffset Offset (in vertices) into the buffer; ignored when unbinding.
          */
         void SetVertexBuffer(const VertexBuffer* vertexBuffer, int vertexOffset);
         /**
          * @brief Binds multiple vertex buffers simultaneously.
-         * @param vertexBuffers Vector of vertex buffer bindings to apply. A binding whose
-         *        vertex buffer is null is a legal unused slot; an empty vector is valid and
-         *        unbinds all vertex buffers.
-         * @throws System::ArgumentOutOfRangeException if more than 16 bindings are supplied.
+         * @param vertexBuffers Vector of non-null vertex buffer bindings to apply. An empty
+         *        vector is valid and unbinds all vertex buffers.
+         * @throws System::ArgumentException if any binding contains a null vertex buffer.
+         * @throws System::NotSupportedException if more than 16 bindings are supplied.
          */
         void SetVertexBuffers(const std::vector<VertexBufferBinding>& vertexBuffers);
         /**
@@ -384,17 +457,17 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Binds an index buffer.
          * @param indexBuffer The index buffer to bind, or nullptr to unbind.
          */
-        void SetIndexBuffer(const IndexBuffer* indexBuffer);
+        CNAEXT void SetIndexBuffer(const IndexBuffer* indexBuffer);
         /**
          * @brief Returns the currently bound vertex buffer (first slot).
          * @return Pointer to the bound vertex buffer, or nullptr.
          */
-        [[nodiscard]] const VertexBuffer* GetVertexBuffer() const;
+        CNAEXT [[nodiscard]] const VertexBuffer* GetVertexBuffer() const;
         /**
          * @brief Returns the currently bound index buffer.
          * @return Pointer to the bound index buffer, or nullptr.
          */
-        [[nodiscard]] const IndexBuffer* GetIndexBuffer() const;
+        CNAEXT [[nodiscard]] const IndexBuffer* GetIndexBuffer() const;
 
         // --- Draw ---
         /**
@@ -402,16 +475,25 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param primitiveType  The type of primitive to draw.
          * @param vertexStart    Index of the first vertex to draw.
          * @param primitiveCount Number of primitives to draw.
+         * @throws System::InvalidOperationException if no effect or vertex buffer is bound.
+         * @throws System::NotSupportedException if @p primitiveCount exceeds the active graphics
+         *         profile limit.
          */
         void DrawPrimitives(PrimitiveType primitiveType, int vertexStart, int primitiveCount);
         /**
          * @brief Draws indexed primitives from the bound vertex and index buffers.
          * @param primitiveType  The type of primitive to draw.
-         * @param baseVertex     Offset added to each index before reading from the vertex buffer.
+         * @param baseVertex     Signed offset added to each index before reading from the vertex
+         *                       buffer. A negative value is valid when the resulting indices and
+         *                       declared vertex window remain in range.
          * @param minVertexIndex Minimum vertex index among the referenced vertices.
          * @param numVertices    Number of vertices referenced.
          * @param startIndex     Location in the index buffer to start reading.
          * @param primitiveCount Number of primitives to draw.
+         * @throws System::InvalidOperationException if no effect, index buffer, or vertex buffer
+         *         is bound.
+         * @throws System::NotSupportedException if @p primitiveCount exceeds the active graphics
+         *         profile limit.
          */
         void DrawIndexedPrimitives(PrimitiveType primitiveType,
                                    int baseVertex, int minVertexIndex,
@@ -429,19 +511,24 @@ namespace Microsoft::Xna::Framework::Graphics
          * begins at that binding's vertex offset.
          *
          * @param primitiveType  The type of primitive to draw.
-         * @param baseVertex     Offset added to each index before reading from the vertex buffer.
+         * @param baseVertex     Signed offset added to each index before reading from the vertex
+         *                       buffer. A negative value is valid when the resulting indices and
+         *                       declared vertex window remain in range.
          * @param minVertexIndex Minimum vertex index among the referenced vertices.
          * @param numVertices    Number of vertices referenced.
          * @param startIndex     Location in the index buffer to start reading.
          * @param primitiveCount Number of primitives per instance.
          * @param instanceCount  Number of instances to draw.
-         * @throws std::runtime_error if no vertex buffer, index buffer or effect is bound.
+         * @throws System::InvalidOperationException if no effect, index buffer, or vertex buffer
+         *         is bound.
          * @throws System::ArgumentOutOfRangeException if @p primitiveCount, @p numVertices or
-         *         @p instanceCount is not positive; if @p baseVertex, @p minVertexIndex or
-         *         @p startIndex is negative; if the requested index range leaves the bound index
-         *         buffer; if the declared vertex range leaves the bound vertex buffer after its
-         *         binding offset and @p baseVertex; or if the required per-instance element range
-         *         leaves its bound buffer after applying binding offset and instance frequency.
+         *         @p instanceCount is not positive; if @p minVertexIndex or @p startIndex is
+         *         negative; if the requested index range leaves the bound index buffer; if the
+         *         declared vertex range leaves the bound vertex buffer after its binding offset
+         *         and @p baseVertex; or if the required per-instance element range leaves its
+         *         bound buffer after applying binding offset and instance frequency.
+         * @throws System::NotSupportedException if @p primitiveCount or @p instanceCount exceeds
+         *         the active graphics profile limit.
          */
         void DrawInstancedPrimitives(PrimitiveType primitiveType,
                                      int baseVertex, int minVertexIndex,
@@ -530,6 +617,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param vertexData     Pointer to the raw vertex data (assumed VertexPositionColor layout).
          * @param vertexOffset   Offset into @p vertexData (in vertices) to start drawing from.
          * @param primitiveCount Number of primitives to draw.
+         * @throws System::InvalidOperationException if no effect has been applied.
+         * @throws System::NotSupportedException if @p primitiveCount exceeds the active graphics
+         *         profile limit.
          */
         void DrawUserPrimitives(PrimitiveType primitiveType, const void* vertexData,
                                 int vertexOffset, int primitiveCount);
@@ -666,6 +756,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param indexData      Pointer to the raw index data.
          * @param indexOffset    Offset into @p indexData (in indices).
          * @param primitiveCount Number of primitives to draw.
+         * @throws System::InvalidOperationException if no effect has been applied.
+         * @throws System::NotSupportedException if @p primitiveCount exceeds the active graphics
+         *         profile limit.
          */
         void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
                                        const void* vertexData, int vertexOffset, int numVertices,
@@ -1375,12 +1468,12 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void SetCurrentEffect(Effect* effect);
 
         /** @brief Returns the currently bound index buffer. */
-        [[nodiscard]] const IndexBuffer* Indices() const;
+        CNAEXT [[nodiscard]] const IndexBuffer* Indices() const;
         /**
          * @brief Binds an index buffer.
          * @param indexBuffer The index buffer to bind.
          */
-        void Indices(const IndexBuffer* indexBuffer);
+        CNAEXT void Indices(const IndexBuffer* indexBuffer);
 
         /** @brief Returns the fully qualified .NET type name of this class. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
@@ -1482,6 +1575,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /// callback, so this stays Normal there, matching the pre-existing hardcoded behavior.
         GraphicsDeviceStatus deviceStatus_ = GraphicsDeviceStatus::Normal;
 
+        // State/sampler collection construction binds public resource identities to this device.
+        // Declare the lifetime token first so that binding never observes it before construction.
+        std::shared_ptr<void> resourceDeviceLifetime_ = std::make_shared<int>(0);
+
         BlendState blendState_;
         DepthStencilState depthStencilState_;
         RasterizerState rasterizerState_;
@@ -1489,6 +1586,10 @@ namespace Microsoft::Xna::Framework::Graphics
         Color blendFactor_;
         int multiSampleMask_ = -1;
         int referenceStencil_ = 0;
+        bool blendStateDirty_ = false;
+        bool depthStencilStateDirty_ = false;
+        std::uint16_t spriteBeginCount_ = 0;
+        std::uint16_t spriteImmediateBeginCount_ = 0;
 
         TextureCollection textures_;
         SamplerStateCollection samplerStates_;
@@ -1504,6 +1605,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // avoiding a heap allocation on every draw call once capacity has grown to fit.
         std::vector<std::uint8_t> userVertexScratch_;
         std::vector<std::uint8_t> userIndexScratch_;
+        void ThrowIfDisposed() const;
+        void GetBackBufferDataCore(const Rectangle* rect, void* data,
+                                   int startIndex, int elementCount,
+                                   std::size_t elementSizeInBytes, bool colorObjects);
+        void GetActiveRenderDimensions(int& width, int& height) const;
+        [[nodiscard]] ClearOptions GetDefaultClearOptions() const;
         [[nodiscard]] void* AcquireUserVertexScratch(std::size_t bytes);
         [[nodiscard]] void* AcquireUserIndexScratch(std::size_t bytes);
 
@@ -1524,6 +1631,21 @@ namespace Microsoft::Xna::Framework::Graphics
         // only split that keeps every per-stream native byte offset non-negative while still
         // giving each stream `binding.VertexOffset + vertexStart` of its own elements.
         [[nodiscard]] int FoldedVertexStreamOffset() const;
+
+        // A binding remains cached when its resource is disposed. Validate before any renderer
+        // handle is dereferenced so that use-after-dispose is a public exception, not null UB.
+        void ThrowIfBoundVertexBufferDisposed() const;
+        void ThrowIfBoundIndexBufferDisposed() const;
+        void DetachDestroyedVertexBuffer(const VertexBuffer* vertexBuffer) noexcept;
+        void DetachDestroyedIndexBuffer(const IndexBuffer* indexBuffer) noexcept;
+        void DetachMovedTexture(const Texture* texture) noexcept;
+        void TransferMovedVertexBuffer(const VertexBuffer* source,
+                                       const VertexBuffer* destination) noexcept;
+        void TransferMovedIndexBuffer(const IndexBuffer* source,
+                                      const IndexBuffer* destination) noexcept;
+        void TransferMovedTexture(const Texture* source, Texture* destination) noexcept;
+        void TransferResourceReference(GraphicsResource* source,
+                                       GraphicsResource* destination) noexcept;
 
         // REMED-GFX-201: copies every active declared VertexBufferBinding into `p.vertexStreams`,
         // in public slot order, and computes `p.combinedVertexStride`. `foldedOffset` is subtracted
@@ -1546,14 +1668,12 @@ namespace Microsoft::Xna::Framework::Graphics
         void ValidateVertexStreamCapability(
             const CNA::Internal::Renderers::GpuDrawParams& p) const;
 
-        // REMED-GFX-201: REMED-GFX-113's range gate widened from stream 0 to every per-vertex
-        // stream. `startElement` is vertexStart for the non-indexed route and
-        // baseVertex + minVertexIndex for the indexed one; `elementCount` is the topology-derived
-        // vertex count or numVertices respectively. A stream too short for the requested window is
-        // rejected here even when stream 0 is long enough, naming the offending slot.
+        // Compatibility guard for renderers that stage unchecked CPU copies. Microsoft XNA does
+        // not perform this validation for classic buffered draws, so GraphicsDevice calls it only
+        // when the renderer explicitly requires protection from out-of-range host-memory access.
         void ValidateVertexStreamRanges(
             const CNA::Internal::Renderers::GpuDrawParams& p,
-            int startElement,
+            std::int64_t startElement,
             int elementCount,
             const char* parameterName,
             const std::string& parameterValue) const;
@@ -1635,6 +1755,8 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetVirtualResolution(int width, int height);
         void SetPresentationMode(int mode);
         void applyPresentationParametersToWindow();
+        void validateDrawState(
+            const CNA::Internal::Renderers::GpuDrawParams* drawParams = nullptr) const;
         /**
          * @brief Pushes SamplerStates[firstSlot..MaxSamplers-1] down to the renderer.
          *
@@ -1646,7 +1768,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * a ShaderEffect's second texture unit could not be sampled differently from its first.
          *
          * @param firstSlot Lowest sampler slot to publish; slots below it are left alone.
-         */
+        */
         void applySamplerStatesToRenderer(int firstSlot = 0);
 
         /**
@@ -1703,7 +1825,12 @@ namespace Microsoft::Xna::Framework::Graphics
             AcquireRendererThreadContextLeaseForFrame();
 
         friend class Texture2D;
+        friend class Texture3D;
+        friend class TextureCube;
         friend class RenderTargetCube;
+        friend class GraphicsResource;
+        friend class VertexBuffer;
+        friend class IndexBuffer;
         friend class ShaderEffect;
         friend class Effect;
         friend class SpriteBatch;

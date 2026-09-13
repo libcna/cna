@@ -15,6 +15,8 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelEffectCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 namespace CNA::Internal::Graphics
 {
@@ -388,7 +390,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Model::CopyAbsoluteBoneTransformsTo(std::vector<Matrix>& dest) const
     {
         if (dest.size() < static_cast<std::size_t>(bones_.getCountProperty()))
-            throw std::out_of_range("destinationBoneTransforms");
+            throw System::ArgumentOutOfRangeException("destinationBoneTransforms");
 
         int count = bones_.getCountProperty();
         for (int i = 0; i < count; ++i)
@@ -411,7 +413,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Model::CopyBoneTransformsFrom(const std::vector<Matrix>& src)
     {
         if (src.size() < static_cast<std::size_t>(bones_.getCountProperty()))
-            throw std::out_of_range("sourceBoneTransforms");
+            throw System::ArgumentOutOfRangeException("sourceBoneTransforms");
 
         int count = bones_.getCountProperty();
         for (int i = 0; i < count; ++i)
@@ -421,7 +423,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void Model::CopyBoneTransformsTo(std::vector<Matrix>& dest) const
     {
         if (dest.size() < static_cast<std::size_t>(bones_.getCountProperty()))
-            throw std::out_of_range("destinationBoneTransforms");
+            throw System::ArgumentOutOfRangeException("destinationBoneTransforms");
 
         int count = bones_.getCountProperty();
         for (int i = 0; i < count; ++i)
@@ -448,7 +450,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 Effect* effect = effects[ei];
                 IEffectMatrices* em = dynamic_cast<IEffectMatrices*>(effect);
                 if (em == nullptr)
-                    throw std::runtime_error("Effect does not implement IEffectMatrices");
+                    throw System::InvalidOperationException();
 
                 int boneIdx = mesh->getParentBoneProperty()
                               ? mesh->getParentBoneProperty()->getIndexProperty() : 0;

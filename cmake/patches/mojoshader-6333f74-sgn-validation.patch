@@ -1,0 +1,73 @@
+diff --git a/mojoshader.c b/mojoshader.c
+--- a/mojoshader.c
++++ b/mojoshader.c
+@@ -843,9 +843,10 @@ static int parse_source_token(Context *ctx, SourceArgInfo *info)
+         reg = set_used_register(ctx, info->regtype, info->regnum, 0);
+         const int uninitialized_destination_self_read =
+             ctx->have_dest_arg && (ctx->dest_arg.regtype == REG_TYPE_TEMP) &&
+             (ctx->dest_arg.regnum == info->regnum) &&
+             !ctx->dest_arg_was_written;
+-        if ((info->regtype == REG_TYPE_TEMP) && (reg) &&
++        if (!ctx->ignore_temp_read_validation &&
++            (info->regtype == REG_TYPE_TEMP) && (reg) &&
+             ((!reg->written) || uninitialized_destination_self_read))
+             failf(ctx, "Temp register r%d used uninitialized", info->regnum);
+     } // if
+@@ -1193,5 +1194,18 @@ static int parse_args_DSSS(Context *ctx)
+     return retval;
+ } // parse_args_DSSS
+ 
+ 
++static int parse_args_DSSS_SGN(Context *ctx)
++{
++    int retval = 1;
++    retval += parse_destination_token(ctx, &ctx->dest_arg);
++    retval += parse_source_token(ctx, &ctx->source_args[0]);
++    ctx->ignore_temp_read_validation = 1;
++    retval += parse_source_token(ctx, &ctx->source_args[1]);
++    retval += parse_source_token(ctx, &ctx->source_args[2]);
++    ctx->ignore_temp_read_validation = 0;
++    return retval;
++} // parse_args_DSSS_SGN
++
++
+ static int parse_args_DSSSS(Context *ctx)
+@@ -1393,4 +1406,16 @@ static void state_FRC(Context *ctx)
+ } // state_FRC
+ 
+ 
++static void state_SGN(Context *ctx)
++{
++    const SourceArgInfo *scratch0 = &ctx->source_args[1];
++    const SourceArgInfo *scratch1 = &ctx->source_args[2];
++    if ((scratch0->regtype != REG_TYPE_TEMP) ||
++        (scratch1->regtype != REG_TYPE_TEMP))
++        fail(ctx, "SGN scratch operands must be temporary registers");
++    else if (scratch0->regnum == scratch1->regnum)
++        fail(ctx, "SGN scratch operands must use different registers");
++} // state_SGN
++
++
+ // replicate the matrix registers to source args. The D3D profile will
+diff --git a/mojoshader_internal.h b/mojoshader_internal.h
+--- a/mojoshader_internal.h
++++ b/mojoshader_internal.h
+@@ -708,6 +708,6 @@ INSTRUCTION_STATE(DCL, "DCL", 0, DCL, MOJOSHADER_TYPE_ANY, 0xF)
+ INSTRUCTION_STATE(POW, "POW", 3, DSS, MOJOSHADER_TYPE_ANY, 0xF)
+ INSTRUCTION(CRS, "CRS", 2, DSS, MOJOSHADER_TYPE_ANY, 0xF)
+-INSTRUCTION(SGN, "SGN", 3, DSSS, MOJOSHADER_TYPE_ANY, 0xF)
++INSTRUCTION_STATE(SGN, "SGN", 3, DSSS_SGN, MOJOSHADER_TYPE_VERTEX, 0xF)
+ INSTRUCTION(ABS, "ABS", 1, DS, MOJOSHADER_TYPE_ANY, 0xF)
+ INSTRUCTION(NRM, "NRM", 3, DS, MOJOSHADER_TYPE_ANY, 0xF)
+ INSTRUCTION_STATE(SINCOS, "SINCOS", 8, SINCOS, MOJOSHADER_TYPE_ANY, 0xF)
+diff --git a/profiles/mojoshader_profile.h b/profiles/mojoshader_profile.h
+--- a/profiles/mojoshader_profile.h
++++ b/profiles/mojoshader_profile.h
+@@ -125,6 +125,7 @@ typedef struct Context
+     int have_dest_arg;
+     int dest_arg_was_written;
+     int dest_arg_prior_writemask;
++    int ignore_temp_read_validation;
+     SourceArgInfo source_args[5];
+     SourceArgInfo predicate_arg;  // for predicated instructions.
+     uint32 dwords[4];

@@ -1,0 +1,89 @@
+diff --git a/mojoshader.h b/mojoshader.h
+--- a/mojoshader.h
++++ b/mojoshader.h
+@@ -1750,6 +1750,15 @@ DECLSPEC void MOJOSHADER_glProgramViewportInfo(int viewportW, int viewportH,
+                                                int backbufferW, int backbufferH,
+                                                int renderTargetBound);
+ 
++/*
++ * Apply a clip-space X/Y correction to the prepared vertex shader output.
++ * The values are multiplied by gl_Position.w before being added, so callers
++ * provide normalized-device-coordinate offsets. Pass zeroes to disable it.
++ *
++ * This call is NOT thread safe and requires a current MOJOSHADER_glContext.
++ */
++DECLSPEC void MOJOSHADER_glProgramPixelCenterInfo(float x, float y);
++
+ /*
+  * Free the resources of a linked program. This will delete the GL object
+  *  and free memory.
+diff --git a/mojoshader_opengl.c b/mojoshader_opengl.c
+--- a/mojoshader_opengl.c
++++ b/mojoshader_opengl.c
+@@ -131,6 +131,8 @@ struct MOJOSHADER_glProgram
+     // Numerous fixes for coordinate system mismatches
+     GLint ps_vpos_flip_loc;
+     int current_vpos_flip[2];
++    GLint vs_pixel_center_loc;
++    float current_pixel_center[2];
+ #ifdef MOJOSHADER_FLIP_RENDERTARGET
+     GLint vs_flip_loc;
+     int current_flip;
+@@ -1083,6 +1085,7 @@ static void impl_GLSL_FinalInitProgram(MOJOSHADER_glProgram *program)
+     program->ps_int4_loc = glsl_uniform_loc(program, "ps_uniforms_ivec4");
+     program->ps_bool_loc = glsl_uniform_loc(program, "ps_uniforms_bool");
+     program->ps_vpos_flip_loc = glsl_uniform_loc(program, "vposFlip");
++    program->vs_pixel_center_loc = glsl_uniform_loc(program, "cnaPixelCenter");
+ #ifdef MOJOSHADER_FLIP_RENDERTARGET
+     program->vs_flip_loc = glsl_uniform_loc(program, "vpFlip");
+ #endif
+@@ -2479,6 +2482,7 @@ MOJOSHADER_glProgram *MOJOSHADER_glLinkProgram(MOJOSHADER_glShader *vshader,
+         goto link_program_fail;
+     memset(retval, '\0', sizeof (MOJOSHADER_glProgram));
+     memset(retval->vertex_attrib_loc, 0xFF, sizeof(retval->vertex_attrib_loc));
++    retval->vs_pixel_center_loc = -1;
+ 
+     numregs = 0;
+     if (vshader != NULL) numregs += vshader->parseData->uniform_count;
+@@ -3222,6 +3226,21 @@ void MOJOSHADER_glProgramViewportInfo(int viewportW, int viewportH,
+ } // MOJOSHADER_glViewportInfo
+ 
+ 
++void MOJOSHADER_glProgramPixelCenterInfo(float x, float y)
++{
++    MOJOSHADER_glProgram *program = ctx->bound_program;
++
++    if ((program->vs_pixel_center_loc != -1) &&
++        ((program->current_pixel_center[0] != x) ||
++         (program->current_pixel_center[1] != y)))
++    {
++        ctx->glUniform2f(program->vs_pixel_center_loc, x, y);
++        program->current_pixel_center[0] = x;
++        program->current_pixel_center[1] = y;
++    } // if
++} // MOJOSHADER_glProgramPixelCenterInfo
++
++
+ void MOJOSHADER_glDeleteProgram(MOJOSHADER_glProgram *program)
+ {
+     program_unref(program);
+diff --git a/profiles/mojoshader_profile_glsl.c b/profiles/mojoshader_profile_glsl.c
+--- a/profiles/mojoshader_profile_glsl.c
++++ b/profiles/mojoshader_profile_glsl.c
+@@ -619,6 +619,7 @@ void emit_GLSL_end(Context *ctx)
+     } // if
+     else if (shader_is_vertex(ctx))
+     {
++        output_line(ctx, "gl_Position.xy += cnaPixelCenter * gl_Position.w;");
+ #ifdef MOJOSHADER_FLIP_RENDERTARGET
+         output_line(ctx, "gl_Position.y = gl_Position.y * vpFlip;");
+ #endif
+@@ -709,6 +710,8 @@ void emit_GLSL_finalize(Context *ctx)
+     output_GLSL_uniform_array(ctx, REG_TYPE_CONST, ctx->uniform_float4_count);
+     output_GLSL_uniform_array(ctx, REG_TYPE_CONSTINT, ctx->uniform_int4_count);
+     output_GLSL_uniform_array(ctx, REG_TYPE_CONSTBOOL, ctx->uniform_bool_count);
++    if (shader_is_vertex(ctx))
++        output_line(ctx, "uniform vec2 cnaPixelCenter;");
+ #ifdef MOJOSHADER_FLIP_RENDERTARGET
+     if (shader_is_vertex(ctx))
+         output_line(ctx, "uniform float vpFlip;");

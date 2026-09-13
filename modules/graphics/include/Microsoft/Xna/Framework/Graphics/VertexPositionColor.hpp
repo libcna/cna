@@ -6,6 +6,7 @@
 
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IVertexType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -17,18 +18,15 @@ namespace Microsoft::Xna::Framework::Graphics
      * is plain old data (POD-ish) so it can be uploaded directly to a GPU
      * vertex buffer.
      */
-    struct VertexPositionColor
+    struct VertexPositionColor : public IVertexType
     {
         /** @brief Position in object space. */
         Microsoft::Xna::Framework::Vector3 Position;
         /** @brief Per-vertex color. */
         Microsoft::Xna::Framework::Color Color;
 
-        /** @brief Constructs a default VertexPositionColor with position (0,0,0) and white color. */
-        VertexPositionColor()
-            : Position(0, 0, 0), Color(255, 255, 255, 255)
-        {
-        }
+        /** @brief Constructs a default VertexPositionColor with zero-initialized fields. */
+        VertexPositionColor() = default;
 
         /**
          * @brief Constructs a VertexPositionColor with the given position and color.
@@ -51,6 +49,15 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return Const reference to the VertexDeclaration for VertexPositionColor.
          */
         [[nodiscard]] static const ::Microsoft::Xna::Framework::Graphics::VertexDeclaration& getVertexDeclarationStatic();
+
+        /**
+         * @brief Returns the vertex declaration for this instance.
+         * @return The static VertexPositionColor declaration.
+         */
+        [[nodiscard]] const VertexDeclaration& getVertexDeclarationProperty() const override
+        {
+            return getVertexDeclarationStatic();
+        }
 
         /**
          * @brief Tests equality by comparing Position and Color.
@@ -84,10 +91,10 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] bool Equals(const VertexPositionColor& other) const { return *this == other; }
 
         /**
-         * @brief Returns a hash code. Consistent with FNA (always 0).
-         * @return 0.
+         * @brief Returns a hash code derived from this vertex's fields.
+         * @return The hash code.
          */
-        [[nodiscard]] std::size_t GetHashCode() const { return 0; }
+        [[nodiscard]] std::size_t GetHashCode() const;
 
         /**
          * @brief Returns a human-readable description of this vertex.

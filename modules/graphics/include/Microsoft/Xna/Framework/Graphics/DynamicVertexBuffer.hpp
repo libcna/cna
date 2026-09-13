@@ -22,6 +22,11 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param vertexDeclaration Layout description for the vertex type.
          * @param vertexCount       Capacity in vertices.
          * @param bufferUsage       Usage hint for the buffer.
+         * @throws System::ArgumentOutOfRangeException if @p vertexCount is not positive.
+         * @throws System::ObjectDisposedException if @p vertexDeclaration is disposed.
+         * @throws System::ArgumentException if a usage index is outside the XNA device range.
+         * @throws System::NotSupportedException if the declaration or buffer size exceeds the
+         *         active profile.
          */
         DynamicVertexBuffer(GraphicsDevice& device,
                             const VertexDeclaration& vertexDeclaration,
@@ -152,8 +157,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * This is the C++ equivalent of XNA's generic
          * `SetData<T>(T[] data, int startIndex, int elementCount, SetDataOptions options)`.
          * A game supplies its own type here — a per-instance transform stream is the usual case,
-         * where the elements are plain `Matrix` values — so there is no packing step and the
-         * buffer's `VertexDeclaration` must describe exactly `sizeof(TVertex)` bytes.
+         * where the elements are plain `Matrix` values — so there is no packing step. As in XNA,
+         * the type determines the contiguous transfer span but need not equal the declaration's
+         * drawing stride, provided the span fits the buffer's byte capacity.
          *
          * The built-in XNA vertex types keep their dedicated overloads above, which pack the C++
          * object into the compact GPU stream first.
@@ -204,10 +210,22 @@ namespace Microsoft::Xna::Framework::Graphics
                      int vertexStride,
                      SetDataOptions options)
         {
-            static_assert(std::is_trivially_copyable_v<TVertex>,
-                          "DynamicVertexBuffer::SetData<T> requires a trivially-copyable vertex type");
-            VertexBuffer::SetDataRawAtWithOptions(
-                offsetInBytes, data, startIndex, elementCount, vertexStride, options);
+            if constexpr (std::is_same_v<TVertex, VertexPositionColor> ||
+                          std::is_same_v<TVertex, VertexPositionColorTexture> ||
+                          std::is_same_v<TVertex, VertexPositionNormalTexture> ||
+                          std::is_same_v<TVertex, VertexPositionTexture>)
+            {
+                VertexBuffer::SetDataAtInternal(
+                    offsetInBytes, data, startIndex, elementCount, vertexStride, options, true);
+            }
+            else
+            {
+                static_assert(std::is_trivially_copyable_v<TVertex>,
+                              "DynamicVertexBuffer::SetData<T> requires a trivially-copyable vertex type");
+                VertexBuffer::SetDataElementsAtInternal(
+                    offsetInBytes, data, startIndex, elementCount, sizeof(TVertex),
+                    vertexStride, options, true);
+            }
         }
 
     private:

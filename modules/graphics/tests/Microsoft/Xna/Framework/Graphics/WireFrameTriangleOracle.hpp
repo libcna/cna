@@ -72,7 +72,9 @@ namespace CnaTest::WireFrameOracle
         return HasPixelOracle() && !CNA_RENDERER_IS(DirectX12);
     }
 
-    // Measured to render a genuine wireframe: edges lit, interior empty.
+    // Measured to render a genuine wireframe: edges lit, interior empty. The answer is a runtime
+    // capability because SOFTWARE-178 makes EasyGL conditional on the active context's native
+    // polygon-mode API (desktop core, GL_NV_polygon_mode or WEBGL_polygon_mode).
     //
     // plans/plan_webgpu.md WEBGPU-153: WebGPU used to be excluded here, on the grounds that it "has
     // no polygon-mode API at all and now refuses the request outright (WEBGPU-115)". The first half
@@ -81,23 +83,22 @@ namespace CnaTest::WireFrameOracle
     // line list -- and WebGPU now does exactly that, on every 3D route. It is measured by this
     // oracle like every other renderer.
     /** @brief Whether the active renderer draws a genuine wireframe: edges lit, interior empty. */
-    [[nodiscard]] inline bool RendersEdges()
+    [[nodiscard]] inline bool RendersEdges(
+        const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device)
     {
-        return IsMeasured();
+        return IsMeasured() &&
+               device.SupportsCapability(CNA::GraphicsCapability::WireFrame);
     }
 
-    // The renderers that answer a WireFrame request with a deterministic refusal instead of pixels.
-    //
-    // This set is EMPTY again, and that is a reading rather than an omission. REMED-GFX-209 found it
-    // empty and recorded the absence rather than manufacturing a member; WEBGPU-115 filled it with
-    // WebGPU; plans/plan_webgpu.md WEBGPU-153 implemented the edge expansion and emptied it once
-    // more. The arm below is kept for the day a renderer legitimately needs it -- a capability
-    // boundary that has no test until something fails is not a boundary -- and skips while no
-    // renderer refuses.
+    // WEBGPU-115 / SOFTWARE-178: a measured renderer that truthfully reports no native wireframe
+    // answers a polygon draw with a deterministic refusal instead of silently substituting a
+    // different rasterization mode.
     /** @brief Whether the active renderer refuses a WireFrame request deterministically. */
-    [[nodiscard]] inline bool RejectsWireFrame()
+    [[nodiscard]] inline bool RejectsWireFrame(
+        const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device)
     {
-        return false;
+        return IsMeasured() &&
+               !device.SupportsCapability(CNA::GraphicsCapability::WireFrame);
     }
 
     /** @brief The active renderer's display name. */
@@ -447,4 +448,3 @@ namespace CnaTest::WireFrameOracle
             << RendererName() << " Solid produced a lit pixel that is neither ink nor clear";
     }
 }   // namespace CnaTest::WireFrameOracle
-

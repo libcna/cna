@@ -122,6 +122,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a boolean.
          *
          * @return The boolean value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a scalar value.
          */
         [[nodiscard]] bool GetValueBoolean() const;
 
@@ -130,6 +132,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of elements to retrieve.
          * @return Vector of boolean values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<bool> GetValueBooleanArray(int count) const;
 
@@ -137,6 +140,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a 32-bit integer.
          *
          * @return The integer value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a scalar value.
          */
         [[nodiscard]] int GetValueInt32() const;
 
@@ -145,6 +150,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of elements to retrieve.
          * @return Vector of integer values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<int> GetValueInt32Array(int count) const;
 
@@ -152,6 +158,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a single-precision float.
          *
          * @return The float value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a scalar value.
          */
         [[nodiscard]] float GetValueSingle() const;
 
@@ -160,6 +168,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of elements to retrieve.
          * @return Vector of float values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<float> GetValueSingleArray(int count) const;
 
@@ -176,6 +185,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value as a Matrix by unpacking column-major effect storage.
          *
          * @return The Matrix value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter is neither a
+         *         scalar nor a matrix-compatible value.
          */
         [[nodiscard]] Matrix GetValueMatrix() const;
 
@@ -184,6 +195,9 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of matrices to retrieve.
          * @return Vector of Matrix values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a Matrix
+         *         array.
          */
         [[nodiscard]] std::vector<Matrix> GetValueMatrixArray(int count) const;
 
@@ -191,6 +205,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the transposed value by reading effect storage in row-major order.
          *
          * @return The transposed Matrix value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter is neither a
+         *         scalar nor a matrix-compatible value.
          */
         [[nodiscard]] Matrix GetValueMatrixTranspose() const;
 
@@ -199,6 +215,9 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of matrices to retrieve.
          * @return Vector of transposed Matrix values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a Matrix
+         *         array.
          */
         [[nodiscard]] std::vector<Matrix> GetValueMatrixTransposeArray(int count) const;
 
@@ -206,6 +225,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a Quaternion.
          *
          * @return The Quaternion value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a four-component vector.
          */
         [[nodiscard]] Quaternion GetValueQuaternion() const;
 
@@ -214,6 +235,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of quaternions to retrieve.
          * @return Vector of Quaternion values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<Quaternion> GetValueQuaternionArray(int count) const;
 
@@ -221,6 +243,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a Vector2.
          *
          * @return The Vector2 value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a two-component vector.
          */
         [[nodiscard]] Vector2 GetValueVector2() const;
 
@@ -229,6 +253,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of elements to retrieve.
          * @return Vector of Vector2 values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<Vector2> GetValueVector2Array(int count) const;
 
@@ -236,6 +261,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a Vector3.
          *
          * @return The Vector3 value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a three-component vector.
          */
         [[nodiscard]] Vector3 GetValueVector3() const;
 
@@ -244,6 +271,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of elements to retrieve.
          * @return Vector of Vector3 values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<Vector3> GetValueVector3Array(int count) const;
 
@@ -251,6 +279,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a Vector4.
          *
          * @return The Vector4 value stored in this parameter.
+         * @throws System::InvalidCastException If a reflected compiled parameter cannot be read
+         *         as a four-component vector.
          */
         [[nodiscard]] Vector4 GetValueVector4() const;
 
@@ -259,6 +289,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param count Number of elements to retrieve.
          * @return Vector of Vector4 values.
+         * @throws System::ArgumentOutOfRangeException If @p count is not positive.
          */
         [[nodiscard]] std::vector<Vector4> GetValueVector4Array(int count) const;
 
@@ -266,6 +297,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a Texture2D pointer.
          *
          * @return Pointer to the Texture2D, or nullptr if none is set.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         Texture or Texture2D parameter.
          */
         [[nodiscard]] Texture2D* GetValueTexture2D() const;
 
@@ -273,6 +306,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a Texture3D pointer.
          *
          * @return Pointer to the Texture3D, or nullptr if none is set.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         Texture or Texture3D parameter.
          */
         [[nodiscard]] Texture3D* GetValueTexture3D() const;
 
@@ -280,6 +315,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Gets the value of this parameter as a TextureCube pointer.
          *
          * @return Pointer to the TextureCube, or nullptr if none is set.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         Texture or TextureCube parameter.
          */
         [[nodiscard]] TextureCube* GetValueTextureCube() const;
 
@@ -289,6 +326,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a boolean.
          *
          * @param value The boolean value to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is an array or
+         *         cannot receive a scalar value.
          */
         void SetValue(bool value);
 
@@ -296,6 +335,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a boolean array.
          *
          * @param value The array of boolean values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not numeric.
          */
         void SetValue(const std::vector<bool>& value);
 
@@ -303,6 +343,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a 32-bit integer.
          *
          * @param value The integer value to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is an array or
+         *         cannot receive a scalar value.
          */
         void SetValue(int value);
 
@@ -310,6 +352,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from an integer array.
          *
          * @param value The array of integer values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not numeric.
          */
         void SetValue(const std::vector<int>& value);
 
@@ -317,6 +360,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a single-precision float.
          *
          * @param value The float value to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is an array or
+         *         cannot receive a scalar value.
          */
         void SetValue(float value);
 
@@ -324,6 +369,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a float array.
          *
          * @param value The array of float values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not numeric.
          */
         void SetValue(const std::vector<float>& value);
 
@@ -340,6 +386,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value by packing the Matrix into column-major effect storage.
          *
          * @param value The Matrix to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         non-array matrix.
          */
         void SetValue(const Matrix& value);
 
@@ -347,6 +395,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets values by packing each Matrix into column-major effect storage.
          *
          * @param value The array of matrices to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a matrix
+         *         array or the supplied array has more elements than the parameter.
          */
         void SetValue(const std::vector<Matrix>& value);
 
@@ -354,6 +404,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the transposed value using row-major effect storage.
          *
          * @param value The Matrix to transpose and store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         non-array matrix.
          */
         void SetValueTranspose(const Matrix& value);
 
@@ -361,6 +413,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets transposed values using row-major effect storage for each matrix.
          *
          * @param value The array of matrices to transpose and store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a matrix
+         *         array or the supplied array has more elements than the parameter.
          */
         void SetValueTranspose(const std::vector<Matrix>& value);
 
@@ -368,6 +422,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Quaternion.
          *
          * @param value The Quaternion to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         non-array one-row four-column vector.
          */
         void SetValue(const Quaternion& value);
 
@@ -375,6 +431,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Quaternion array.
          *
          * @param value The array of Quaternion values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a vector
+         *         array.
          */
         void SetValue(const std::vector<Quaternion>& value);
 
@@ -382,6 +440,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Vector2.
          *
          * @param value The Vector2 to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         non-array one-row two-column vector.
          */
         void SetValue(const Vector2& value);
 
@@ -389,6 +449,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Vector2 array.
          *
          * @param value The array of Vector2 values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a vector
+         *         array.
          */
         void SetValue(const std::vector<Vector2>& value);
 
@@ -396,6 +458,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Vector3.
          *
          * @param value The Vector3 to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         non-array one-row three-column vector.
          */
         void SetValue(const Vector3& value);
 
@@ -403,6 +467,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Vector3 array.
          *
          * @param value The array of Vector3 values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a vector
+         *         array.
          */
         void SetValue(const std::vector<Vector3>& value);
 
@@ -410,6 +476,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Vector4.
          *
          * @param value The Vector4 to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         non-array one-row four-column vector.
          */
         void SetValue(const Vector4& value);
 
@@ -417,6 +485,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Vector4 array.
          *
          * @param value The array of Vector4 values to store.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a vector
+         *         array.
          */
         void SetValue(const std::vector<Vector4>& value);
 
@@ -424,6 +494,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a base Texture pointer.
          *
          * @param value Pointer to the texture to bind.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         texture parameter.
+         * @throws System::ObjectDisposedException If @p value has been disposed.
+         * @throws System::InvalidOperationException If @p value is an active render target.
          */
         void SetValue(Texture* value);
 
@@ -431,6 +505,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Texture2D pointer.
          *
          * @param value Pointer to the Texture2D to bind.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         texture parameter.
+         * @throws System::ObjectDisposedException If @p value has been disposed.
+         * @throws System::InvalidOperationException If @p value is an active render target.
          */
         void SetValue(Texture2D* value);
 
@@ -438,6 +516,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a Texture3D pointer.
          *
          * @param value Pointer to the Texture3D to bind.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         texture parameter.
+         * @throws System::ObjectDisposedException If @p value has been disposed.
+         * @throws System::InvalidOperationException If @p value is an active render target.
          */
         void SetValue(Texture3D* value);
 
@@ -445,6 +527,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the value of this parameter from a TextureCube pointer.
          *
          * @param value Pointer to the TextureCube to bind.
+         * @throws System::InvalidCastException If a reflected compiled parameter is not a
+         *         texture parameter.
+         * @throws System::ObjectDisposedException If @p value has been disposed.
+         * @throws System::InvalidOperationException If @p value is an active render target.
          */
         void SetValue(TextureCube* value);
 
@@ -466,6 +552,24 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void RequireStringParameter(const char* operation) const;
         void RequireNumericParameter(const char* operation) const;
+        void RequireScalarValueShape(EffectParameterClass parameterClass,
+                                     int columnCount = 0) const;
+        void RequireArrayValueShape(EffectParameterClass parameterClass,
+                                    std::size_t valueCount,
+                                    bool enforceElementCount) const;
+        void RequireCompiledNumericArrayClass() const;
+        void RequireCompiledScalarGetterShape() const;
+        [[nodiscard]] bool RequireCompiledVectorGetterShape(int columnCount) const;
+        [[nodiscard]] bool RequireCompiledMatrixGetterShape() const;
+        [[nodiscard]] int ReadCompiledNumericCellAsInt(
+            std::size_t relativeOffset = 0) const;
+        [[nodiscard]] float ReadCompiledNumericCellAsFloat(
+            std::size_t relativeOffset = 0) const;
+        void SetCompiledScalarValue(float floatingValue, int integerValue,
+                                    bool sourceIsInteger);
+        void RequireTextureGetterParameter(EffectParameterType requestedType) const;
+        void RequireTextureSetterParameter() const;
+        void RequireTextureValueUsable(Texture* value) const;
 
         [[nodiscard]] bool IsCompiledInternal() const noexcept;
         [[nodiscard]] const void* GetRawValueInternal() const noexcept;

@@ -18,6 +18,11 @@ namespace CNA::Internal::Renderers
     class ICompiledEffectRuntime;
 }
 
+namespace CNA::TestSupport
+{
+    struct CompiledEffectTestAccess;
+}
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
@@ -70,6 +75,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets the currently active technique.
          *
          * @param value Pointer to the technique to activate.
+         * @throws System::ObjectDisposedException If this effect has been disposed.
+         * @throws System::ArgumentNullException If @p value is null.
+         * @throws System::InvalidOperationException If @p value belongs to another effect.
          */
         void setCurrentTechniqueProperty(EffectTechnique* value);
 
@@ -118,8 +126,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * clone's own identity, not copied from the original), with the same current values;
          * mutating a parameter on either the clone or the original never affects the other.
          *
-         * @return Owning pointer to the cloned effect, with the same concrete runtime type as
-         * this object. Caller takes ownership.
+         * @return Owning pointer to the cloned effect. Caller takes ownership.
+         * @throws System::ObjectDisposedException If this effect has been disposed.
          *
          * @note CNAEXT return-type deviation — FNA's Clone() returns a GC-managed Effect
          * reference; CNA has no garbage collector, so ownership is transferred to the caller
@@ -235,6 +243,13 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
         /**
+         * @brief Throws when this effect cannot be used as a clone source because it is disposed.
+         *
+         * @throws System::ObjectDisposedException If this effect has been disposed.
+         */
+        CNAEXT void ThrowIfDisposedForCloneInternal() const;
+
+        /**
          * @brief Constructs an effect that is a clone of @p cloneSource.
          *
          * XNA's `protected Effect(Effect cloneSource)`: the constructor a subclass such as
@@ -273,5 +288,7 @@ namespace Microsoft::Xna::Framework::Graphics
         std::unique_ptr<CNA::Internal::Renderers::ICompiledEffectRuntime> compiledRuntime_;
 
         friend class EffectPass;
+        /** @brief Allows conformance tests to exercise staged runtimes before capability enablement. */
+        CNAEXT friend struct CNA::TestSupport::CompiledEffectTestAccess;
     };
 }
