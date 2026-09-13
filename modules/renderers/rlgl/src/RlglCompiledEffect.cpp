@@ -218,7 +218,7 @@ namespace CNA::Internal::Renderers::Rlgl
             CreateNativeEffect();
             textures_.resize(static_cast<std::size_t>(effectData_->param_count), nullptr);
             parameterValues_.resize(static_cast<std::size_t>(effectData_->param_count));
-            lifetime_->Register(*this);
+            (void)lifetime_->Register(*this);
         }
         catch (...)
         {
@@ -257,7 +257,7 @@ namespace CNA::Internal::Renderers::Rlgl
                         static_cast<std::uint32_t>(index), value.data(), value.size());
             }
             SetTechnique(techniqueIndex_);
-            lifetime_->Register(*this);
+            (void)lifetime_->Register(*this);
         }
         catch (...)
         {
@@ -285,6 +285,15 @@ namespace CNA::Internal::Renderers::Rlgl
             MOJOSHADER_deleteEffect(effectData_);
         effectData_ = nullptr;
         context_ = nullptr;
+    }
+
+    RlglResourceRecoveryInfo RlglCompiledEffect::GetRecoveryInfo() const noexcept
+    {
+        RlglResourceRecoveryInfo info;
+        if (effectCode_) info.retainedCpuBytes = effectCode_->size();
+        for (const auto& value : parameterValues_)
+            info.retainedCpuBytes += value.size();
+        return info;
     }
 
     void RlglCompiledEffect::CreateNativeEffect()

@@ -65,6 +65,12 @@ namespace CNA::Internal::Renderers::Rlgl
         [[nodiscard]] std::shared_ptr<RlglResourceLifetime>
             GetResourceLifetimeForTesting() const noexcept;
 
+        /**
+         * @brief Selects whether subsequently created resources retain context-recovery state.
+         * @param enabled True to register future resources for recovery.
+         */
+        void SetContextRecoveryEnabled(bool enabled) override;
+
         /** @brief RLGL devices cannot be copied because each owns a GL context lifecycle. */
         RlglRenderer(const RlglRenderer&) = delete;
 

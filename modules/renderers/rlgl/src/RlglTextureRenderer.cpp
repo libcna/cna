@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -115,28 +116,28 @@ namespace CNA::Internal::Renderers::Rlgl
 
                 id_ = Bridge::CreateTexture2D(
                     surfaceFormat_, width_, height_, mipLevels_, data.pixels.data());
+                bool registered = false;
                 try
                 {
-                    if (compressed_)
+                    recoveryRegistered_ = lifetime_->Register(*this);
+                    registered = true;
+                    if (recoveryRegistered_ && !(compressed_ && !nativeCompressed_))
                     {
-                        compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
-                        compressedLevels_[0] = data.pixels;
-                        for (int level = 1; level < mipLevels_; ++level)
-                        {
-                            const int levelWidth = MipDimension(width_, level);
-                            const int levelHeight = MipDimension(height_, level);
-                            compressedLevels_[static_cast<std::size_t>(level)].assign(
-                                static_cast<std::size_t>((levelWidth + 3) / 4) *
-                                    static_cast<std::size_t>((levelHeight + 3) / 4) * blockBytes_,
-                                0u);
-                        }
+                        recoveryLevels_.resize(static_cast<std::size_t>(mipLevels_));
+                        recoveryLevels_[0] = data.pixels;
+                    }
+                    if (compressed_ && !nativeCompressed_)
+                    {
+                        fallbackCompressedLevels_.resize(
+                            static_cast<std::size_t>(mipLevels_));
+                        fallbackCompressedLevels_[0] = data.pixels;
                     }
                     definedLevels_[0] = true;
-                    lifetime_->Register(*this);
                 }
                 catch (...)
                 {
-                    ReleaseNativeResource();
+                    if (registered) lifetime_->Dispose(*this);
+                    else ReleaseNativeResource();
                     throw;
                 }
             }
@@ -163,8 +164,23 @@ namespace CNA::Internal::Renderers::Rlgl
                         "RLGL: compressed Texture2D requires block transfer");
                 if (data == nullptr || stride != width_ * bytesPerTexel_)
                     throw std::invalid_argument("RLGL: invalid level-zero texture update");
+                const std::size_t byteCount =
+                    static_cast<std::size_t>(width_) * height_ * bytesPerTexel_;
+                const bool sharedBytesAreCurrent = sharedLevelZero_ &&
+                    sharedLevelZero_->size() == byteCount &&
+                    sharedLevelZero_->data() == data;
+                std::vector<std::uint8_t> recoveryCopy;
+                if (recoveryRegistered_ && !sharedBytesAreCurrent)
+                {
+                    recoveryCopy.assign(data, data + byteCount);
+                }
                 Bridge::UpdateTexture2D(
                     id_, surfaceFormat_, 0, width_, height_, data);
+                if (recoveryRegistered_ && !sharedBytesAreCurrent)
+                {
+                    if (sharedLevelZero_) *sharedLevelZero_ = std::move(recoveryCopy);
+                    else recoveryLevels_[0] = std::move(recoveryCopy);
+                }
                 definedLevels_[0] = true;
             }
 
@@ -175,16 +191,36 @@ namespace CNA::Internal::Renderers::Rlgl
                 ValidateLevel(level, levelWidth, levelHeight);
                 if (data == nullptr)
                     throw std::invalid_argument("RLGL: Texture2D update data must not be null");
+                const std::size_t byteCount = compressed_
+                    ? static_cast<std::size_t>((levelWidth + 3) / 4) *
+                        static_cast<std::size_t>((levelHeight + 3) / 4) * blockBytes_
+                    : static_cast<std::size_t>(levelWidth) * levelHeight * bytesPerTexel_;
+                const bool sharedBytesAreCurrent = level == 0 && sharedLevelZero_ &&
+                    sharedLevelZero_->size() == byteCount &&
+                    sharedLevelZero_->data() == data;
+                std::vector<std::uint8_t> recoveryCopy;
+                std::vector<std::uint8_t> fallbackCopy;
+                if (recoveryRegistered_ && !(compressed_ && !nativeCompressed_) &&
+                    !sharedBytesAreCurrent)
+                {
+                    recoveryCopy.assign(data, data + byteCount);
+                }
+                if (compressed_ && !nativeCompressed_)
+                    fallbackCopy.assign(data, data + byteCount);
                 Bridge::UpdateTexture2D(
                     id_, surfaceFormat_, level, levelWidth, levelHeight, data);
-                if (compressed_)
+                if (recoveryRegistered_ && !(compressed_ && !nativeCompressed_) &&
+                    !sharedBytesAreCurrent)
                 {
-                    const std::size_t byteCount =
-                        static_cast<std::size_t>((levelWidth + 3) / 4) *
-                        static_cast<std::size_t>((levelHeight + 3) / 4) * blockBytes_;
-                    compressedLevels_[static_cast<std::size_t>(level)].assign(
-                        data, data + byteCount);
+                    if (level == 0 && sharedLevelZero_)
+                        *sharedLevelZero_ = std::move(recoveryCopy);
+                    else
+                        recoveryLevels_[static_cast<std::size_t>(level)] =
+                            std::move(recoveryCopy);
                 }
+                if (compressed_ && !nativeCompressed_)
+                    fallbackCompressedLevels_[static_cast<std::size_t>(level)] =
+                        std::move(fallbackCopy);
                 definedLevels_[static_cast<std::size_t>(level)] = true;
             }
 
@@ -192,6 +228,16 @@ namespace CNA::Internal::Renderers::Rlgl
             {
                 return level >= 0 && level < mipLevels_
                     && definedLevels_[static_cast<std::size_t>(level)];
+            }
+
+            void ShareCpuPixels(std::shared_ptr<std::vector<std::uint8_t>> pixels) override
+            {
+                if (!recoveryRegistered_ || compressed_ || !pixels) return;
+                const std::size_t expected =
+                    static_cast<std::size_t>(width_) * height_ * bytesPerTexel_;
+                if (pixels->size() != expected) return;
+                sharedLevelZero_ = std::move(pixels);
+                std::vector<std::uint8_t>().swap(recoveryLevels_[0]);
             }
 
             [[nodiscard]] bool GetData(
@@ -226,7 +272,8 @@ namespace CNA::Internal::Renderers::Rlgl
 
                 if (compressed_ && !nativeCompressed_)
                 {
-                    const auto& levelBytes = compressedLevels_[static_cast<std::size_t>(level)];
+                    const auto& levelBytes =
+                        fallbackCompressedLevels_[static_cast<std::size_t>(level)];
                     const int levelBlockColumns = (levelWidth + 3) / 4;
                     const int rectangleBlockColumns = (width + 3) / 4;
                     const int rectangleBlockRows = (height + 3) / 4;
@@ -269,11 +316,53 @@ namespace CNA::Internal::Renderers::Rlgl
                 return false;
             }
 
+            [[nodiscard]] Texture2DResourceSnapshot Snapshot() const
+            {
+                Texture2DResourceSnapshot snapshot;
+                snapshot.texture = id_;
+                snapshot.width = width_;
+                snapshot.height = height_;
+                snapshot.levelCount = mipLevels_;
+                snapshot.surfaceFormat = surfaceFormat_;
+                snapshot.nativeCompressed = nativeCompressed_;
+                snapshot.recoveryRegistered = recoveryRegistered_;
+                if (recoveryRegistered_)
+                {
+                    snapshot.definedLevels = definedLevels_;
+                    snapshot.recoveryLevels = compressed_ && !nativeCompressed_
+                        ? fallbackCompressedLevels_ : recoveryLevels_;
+                    if (sharedLevelZero_)
+                        snapshot.recoveryLevels[0] = *sharedLevelZero_;
+                }
+                return snapshot;
+            }
+
         private:
             void ReleaseNativeResource() noexcept override
             {
                 Bridge::DestroyTexture2D(id_);
                 id_ = 0;
+            }
+
+            [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
+            {
+                RlglResourceRecoveryInfo info;
+                info.definedTextureSubresources = static_cast<std::size_t>(
+                    std::count(definedLevels_.begin(), definedLevels_.end(), true));
+                if (compressed_ && !nativeCompressed_)
+                {
+                    for (const auto& level : fallbackCompressedLevels_)
+                        info.retainedCpuBytes += level.size();
+                }
+                else
+                {
+                    for (std::size_t level = 0; level < recoveryLevels_.size(); ++level)
+                    {
+                        info.retainedCpuBytes += level == 0 && sharedLevelZero_
+                            ? sharedLevelZero_->size() : recoveryLevels_[level].size();
+                    }
+                }
+                return info;
             }
 
             void ValidateLevel(
@@ -296,8 +385,11 @@ namespace CNA::Internal::Renderers::Rlgl
             int blockBytes_ = 0;
             bool compressed_ = false;
             bool nativeCompressed_ = false;
+            bool recoveryRegistered_ = false;
             std::vector<bool> definedLevels_;
-            std::vector<std::vector<std::uint8_t>> compressedLevels_;
+            std::vector<std::vector<std::uint8_t>> fallbackCompressedLevels_;
+            std::vector<std::vector<std::uint8_t>> recoveryLevels_;
+            std::shared_ptr<std::vector<std::uint8_t>> sharedLevelZero_;
             std::shared_ptr<RlglResourceLifetime> lifetime_;
         };
     }
@@ -323,5 +415,14 @@ namespace CNA::Internal::Renderers::Rlgl
         if (texture == nullptr)
             throw std::invalid_argument("RLGL: texture resource belongs to another renderer");
         return texture->SampledRowsAreBottomUp();
+    }
+
+    Texture2DResourceSnapshot GetTexture2DResourceSnapshotForTesting(
+        const ITextureRenderer& resource)
+    {
+        const auto* const texture = dynamic_cast<const RlglTextureRenderer*>(&resource);
+        if (texture == nullptr)
+            throw std::invalid_argument("RLGL: texture belongs to another renderer");
+        return texture->Snapshot();
     }
 }

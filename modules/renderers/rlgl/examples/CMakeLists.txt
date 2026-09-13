@@ -45,6 +45,16 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_resource_lifetime PRIVATE SDL3::SDL3main)
     endif()
 
+    add_executable(cna_test_rlgl_resource_recovery_shadow
+        rlgl_resource_recovery_shadow_test.cpp)
+    target_include_directories(cna_test_rlgl_resource_recovery_shadow
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_resource_recovery_shadow
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_resource_recovery_shadow PRIVATE SDL3::SDL3main)
+    endif()
+
     add_executable(cna_test_rlgl_texture rlgl_texture_test.cpp)
     target_include_directories(cna_test_rlgl_texture PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     target_link_libraries(cna_test_rlgl_texture PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
@@ -479,6 +489,17 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             COMMAND cna_test_rlgl_resource_lifetime
             TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsResource;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ResourceRecoveryShadow
+            COMMAND cna_test_rlgl_resource_recovery_shadow
+            TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsResource;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ResourceRecoveryShadow_dxt_fallback
+            COMMAND cna_test_rlgl_resource_recovery_shadow
+            TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsResource;Rlgl"
+            ENVIRONMENT
+                "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1;CNA_RLGL_FORCE_DXT_FALLBACK=1")
         cna_register_renderer_test(NAME Rlgl_Texture COMMAND cna_test_rlgl_texture
             TIMEOUT 60 LABELS "GraphicsTexture;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")

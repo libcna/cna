@@ -122,6 +122,7 @@ namespace CNA::Internal::Renderers::Rlgl
         RlglCompiledEffect(RlglRenderer& renderer, const RlglCompiledEffect& cloneSource);
         void CreateNativeEffect();
         void ReleaseNativeResource() noexcept override;
+        [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override;
 
         RlglRenderer& renderer_;
         std::shared_ptr<RlglResourceLifetime> lifetime_;

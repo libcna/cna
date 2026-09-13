@@ -154,7 +154,7 @@ namespace CNA::Internal::Renderers::Rlgl
     {
     }
 
-    void RlglResourceLifetime::Register(IRlglNativeResource& resource)
+    bool RlglResourceLifetime::Register(IRlglNativeResource& resource)
     {
         const auto control = contextControl_.lock();
         if (!control)
@@ -163,8 +163,36 @@ namespace CNA::Internal::Renderers::Rlgl
         const std::scoped_lock lock(control->mutex);
         if (!active_.load(std::memory_order_acquire))
             throw std::runtime_error("RLGL: renderer resource lifetime is shutting down");
+        const bool recoveryEnabled = recoveryEnabled_.load(std::memory_order_relaxed);
         resources_.push_back(&resource);
+        try
+        {
+            if (recoveryEnabled) recoveryResources_.push_back(&resource);
+        }
+        catch (...)
+        {
+            resources_.pop_back();
+            throw;
+        }
         registeredResources_.fetch_add(1, std::memory_order_relaxed);
+        if (recoveryEnabled)
+        {
+            registeredRecoveryResources_.fetch_add(1, std::memory_order_relaxed);
+        }
+        return recoveryEnabled;
+    }
+
+    void RlglResourceLifetime::SetRecoveryEnabled(const bool enabled)
+    {
+        const auto control = contextControl_.lock();
+        if (!control)
+        {
+            recoveryEnabled_.store(enabled, std::memory_order_release);
+            return;
+        }
+
+        const std::scoped_lock lock(control->mutex);
+        recoveryEnabled_.store(enabled, std::memory_order_release);
     }
 
     void RlglResourceLifetime::Dispose(IRlglNativeResource& resource) noexcept
@@ -186,6 +214,13 @@ namespace CNA::Internal::Renderers::Rlgl
         }
         resources_.erase(found);
         registeredResources_.fetch_sub(1, std::memory_order_relaxed);
+        const auto recovery =
+            std::find(recoveryResources_.begin(), recoveryResources_.end(), &resource);
+        if (recovery != recoveryResources_.end())
+        {
+            recoveryResources_.erase(recovery);
+            registeredRecoveryResources_.fetch_sub(1, std::memory_order_relaxed);
+        }
 
         if (!active_.load(std::memory_order_acquire))
         {
@@ -218,7 +253,9 @@ namespace CNA::Internal::Renderers::Rlgl
         {
             active_.store(false, std::memory_order_release);
             resources_.clear();
+            recoveryResources_.clear();
             registeredResources_.store(0, std::memory_order_relaxed);
+            registeredRecoveryResources_.store(0, std::memory_order_relaxed);
             return;
         }
 
@@ -246,17 +283,47 @@ namespace CNA::Internal::Renderers::Rlgl
                 CNA::LogCategory::RENDER);
         }
         resources_.clear();
+        recoveryResources_.clear();
         registeredResources_.store(0, std::memory_order_relaxed);
+        registeredRecoveryResources_.store(0, std::memory_order_relaxed);
     }
 
     RlglResourceLifetimeSnapshot
     RlglResourceLifetime::GetSnapshotForTesting() const noexcept
     {
-        return {
-            registeredResources_.load(std::memory_order_relaxed),
-            releasedResources_.load(std::memory_order_relaxed),
-            lateDisposals_.load(std::memory_order_relaxed),
-            active_.load(std::memory_order_acquire)};
+        RlglResourceLifetimeSnapshot snapshot;
+        const auto readCounters = [&snapshot, this]()
+        {
+            snapshot.registeredResources =
+                registeredResources_.load(std::memory_order_relaxed);
+            snapshot.releasedResources =
+                releasedResources_.load(std::memory_order_relaxed);
+            snapshot.lateDisposals = lateDisposals_.load(std::memory_order_relaxed);
+            snapshot.active = active_.load(std::memory_order_acquire);
+            snapshot.recoveryResources =
+                registeredRecoveryResources_.load(std::memory_order_relaxed);
+            snapshot.recoveryEnabledForNewResources =
+                recoveryEnabled_.load(std::memory_order_acquire);
+        };
+
+        const auto control = contextControl_.lock();
+        if (!control)
+        {
+            readCounters();
+            return snapshot;
+        }
+
+        const std::scoped_lock lock(control->mutex);
+        readCounters();
+        for (const IRlglNativeResource* const resource : recoveryResources_)
+        {
+            const RlglResourceRecoveryInfo info = resource->GetRecoveryInfo();
+            snapshot.retainedCpuBytes += info.retainedCpuBytes;
+            snapshot.definedTextureSubresources += info.definedTextureSubresources;
+            if (info.contentLostOnReset) ++snapshot.contentLostResources;
+            else ++snapshot.restorableResources;
+        }
+        return snapshot;
     }
 
     RlglRenderer::RlglRenderer(const GraphicsRendererCreateArgs& args)
@@ -296,6 +363,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 std::make_shared<RlglThreadContextLeaseControl>(platformContext_);
             resourceLifetime_ =
                 std::make_shared<RlglResourceLifetime>(threadContextLeaseControl_);
+            resourceLifetime_->SetRecoveryEnabled(args.contextRecoveryEnabled);
             IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
             registered_ = true;
 
@@ -458,6 +526,11 @@ namespace CNA::Internal::Renderers::Rlgl
     RlglRenderer::GetResourceLifetimeForTesting() const noexcept
     {
         return resourceLifetime_;
+    }
+
+    void RlglRenderer::SetContextRecoveryEnabled(const bool enabled)
+    {
+        if (resourceLifetime_) resourceLifetime_->SetRecoveryEnabled(enabled);
     }
 
     void RlglRenderer::Clear(const float r, const float g, const float b, const float a)

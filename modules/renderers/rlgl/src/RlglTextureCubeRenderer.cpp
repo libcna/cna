@@ -9,9 +9,11 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 namespace CNA::Internal::Renderers::Rlgl
 {
@@ -75,13 +77,23 @@ namespace CNA::Internal::Renderers::Rlgl
                 {
                     id_ = Bridge::CreateTextureCubeColor(size_, levelCount_);
                 }
+                bool registered = false;
                 try
                 {
-                    lifetime_->Register(*this);
+                    recoveryRegistered_ = lifetime_->Register(*this);
+                    registered = true;
+                    if (recoveryRegistered_)
+                    {
+                        const std::size_t count =
+                            static_cast<std::size_t>(6 * levelCount_);
+                        definedSubresources_.assign(count, false);
+                        recoverySubresources_.resize(count);
+                    }
                 }
                 catch (...)
                 {
-                    ReleaseNativeResource();
+                    if (registered) lifetime_->Dispose(*this);
+                    else ReleaseNativeResource();
                     throw;
                 }
             }
@@ -100,11 +112,20 @@ namespace CNA::Internal::Renderers::Rlgl
                 const void* data, const int dataLength) override
             {
                 if (compressed_) return false;
-                (void)ValidateRegion(face, level, x, y, width, height, data);
+                const int levelSize =
+                    ValidateRegion(face, level, x, y, width, height, data);
                 ValidateByteCount(width, height, 4, dataLength);
+                std::vector<std::uint8_t> recoveryCopy;
+                if (recoveryRegistered_)
+                {
+                    recoveryCopy = PrepareColorShadow(
+                        face, level, levelSize, x, y, width, height,
+                        static_cast<const std::uint8_t*>(data));
+                }
                 Bridge::UpdateTextureCubeColor(
                     id_, face, level, x, y, width, height,
                     static_cast<const std::uint8_t*>(data));
+                CommitRecoveryShadow(face, level, std::move(recoveryCopy));
                 return true;
             }
 
@@ -131,9 +152,17 @@ namespace CNA::Internal::Renderers::Rlgl
                     throw std::out_of_range(
                         "RLGL: compressed TextureCube transfer buffer is too small");
                 }
+                std::vector<std::uint8_t> recoveryCopy;
+                if (recoveryRegistered_)
+                {
+                    recoveryCopy = PrepareCompressedShadow(
+                        face, level, levelSize, x, y, width, height,
+                        static_cast<const std::uint8_t*>(data));
+                }
                 Bridge::UpdateTextureCubeDxt(
                     id_, surfaceFormat_, nativeCompressed_, face, level,
                     x, y, width, height, static_cast<const std::uint8_t*>(data), required);
+                CommitRecoveryShadow(face, level, std::move(recoveryCopy));
                 return true;
             }
 
@@ -173,9 +202,11 @@ namespace CNA::Internal::Renderers::Rlgl
                 return false;
             }
 
-            [[nodiscard]] TextureCubeResourceSnapshot Snapshot() const noexcept
+            [[nodiscard]] TextureCubeResourceSnapshot Snapshot() const
             {
-                return {id_, size_, levelCount_, surfaceFormat_, nativeCompressed_};
+                return {
+                    id_, size_, levelCount_, surfaceFormat_, nativeCompressed_,
+                    recoveryRegistered_, definedSubresources_, recoverySubresources_};
             }
 
         private:
@@ -183,6 +214,92 @@ namespace CNA::Internal::Renderers::Rlgl
             {
                 Bridge::DestroyTextureCube(id_);
                 id_ = 0;
+            }
+
+            [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
+            {
+                RlglResourceRecoveryInfo info;
+                info.definedTextureSubresources = static_cast<std::size_t>(
+                    std::count(
+                        definedSubresources_.begin(), definedSubresources_.end(), true));
+                for (const auto& subresource : recoverySubresources_)
+                    info.retainedCpuBytes += subresource.size();
+                return info;
+            }
+
+            [[nodiscard]] std::size_t SubresourceIndex(
+                const int face, const int level) const noexcept
+            {
+                return static_cast<std::size_t>(face * levelCount_ + level);
+            }
+
+            [[nodiscard]] std::vector<std::uint8_t> PrepareColorShadow(
+                const int face, const int level, const int levelSize,
+                const int x, const int y, const int width, const int height,
+                const std::uint8_t* const data) const
+            {
+                const std::size_t index = SubresourceIndex(face, level);
+                std::vector<std::uint8_t> result = recoverySubresources_[index];
+                if (result.empty())
+                {
+                    result.assign(
+                        static_cast<std::size_t>(levelSize) * levelSize * 4u, 0u);
+                }
+                const std::size_t destinationRowBytes =
+                    static_cast<std::size_t>(levelSize) * 4u;
+                const std::size_t sourceRowBytes = static_cast<std::size_t>(width) * 4u;
+                for (int row = 0; row < height; ++row)
+                {
+                    std::memcpy(
+                        result.data() + static_cast<std::size_t>(y + row) *
+                            destinationRowBytes + static_cast<std::size_t>(x) * 4u,
+                        data + static_cast<std::size_t>(row) * sourceRowBytes,
+                        sourceRowBytes);
+                }
+                return result;
+            }
+
+            [[nodiscard]] std::vector<std::uint8_t> PrepareCompressedShadow(
+                const int face, const int level, const int levelSize,
+                const int x, const int y, const int width, const int height,
+                const std::uint8_t* const data) const
+            {
+                const std::size_t index = SubresourceIndex(face, level);
+                const int levelBlockColumns = (levelSize + 3) / 4;
+                const int levelBlockRows = (levelSize + 3) / 4;
+                const int rectangleBlockColumns = (width + 3) / 4;
+                const int rectangleBlockRows = (height + 3) / 4;
+                std::vector<std::uint8_t> result = recoverySubresources_[index];
+                if (result.empty())
+                {
+                    result.assign(
+                        static_cast<std::size_t>(levelBlockColumns) * levelBlockRows *
+                            static_cast<std::size_t>(blockBytes_),
+                        0u);
+                }
+                const std::size_t destinationRowBytes =
+                    static_cast<std::size_t>(levelBlockColumns) * blockBytes_;
+                const std::size_t sourceRowBytes =
+                    static_cast<std::size_t>(rectangleBlockColumns) * blockBytes_;
+                for (int row = 0; row < rectangleBlockRows; ++row)
+                {
+                    std::memcpy(
+                        result.data() + static_cast<std::size_t>(y / 4 + row) *
+                            destinationRowBytes +
+                            static_cast<std::size_t>(x / 4) * blockBytes_,
+                        data + static_cast<std::size_t>(row) * sourceRowBytes,
+                        sourceRowBytes);
+                }
+                return result;
+            }
+
+            void CommitRecoveryShadow(
+                const int face, const int level, std::vector<std::uint8_t> bytes)
+            {
+                if (!recoveryRegistered_) return;
+                const std::size_t index = SubresourceIndex(face, level);
+                recoverySubresources_[index] = std::move(bytes);
+                definedSubresources_[index] = true;
             }
 
             [[nodiscard]] int ValidateRegion(
@@ -220,6 +337,9 @@ namespace CNA::Internal::Renderers::Rlgl
             int blockBytes_ = 0;
             bool compressed_ = false;
             bool nativeCompressed_ = false;
+            bool recoveryRegistered_ = false;
+            std::vector<bool> definedSubresources_;
+            std::vector<std::vector<std::uint8_t>> recoverySubresources_;
             std::shared_ptr<RlglResourceLifetime> lifetime_;
         };
     }

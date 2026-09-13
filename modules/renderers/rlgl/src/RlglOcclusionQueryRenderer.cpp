@@ -21,7 +21,7 @@ namespace CNA::Internal::Renderers::Rlgl
             {
                 try
                 {
-                    lifetime_->Register(*this);
+                    (void)lifetime_->Register(*this);
                 }
                 catch (...)
                 {

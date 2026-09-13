@@ -39,14 +39,56 @@ namespace CNA::Internal::Renderers::Rlgl
         const CNA::Internal::Graphics::ImageData& data,
         const std::shared_ptr<RlglResourceLifetime>& lifetime);
 
+    /** @brief Complete Texture2D recovery state exposed to focused validation. */
+    struct Texture2DResourceSnapshot
+    {
+        /** @brief Current native texture name. */
+        unsigned int texture = 0;
+        /** @brief Base width in texels. */
+        int width = 0;
+        /** @brief Base height in texels. */
+        int height = 0;
+        /** @brief Number of allocated mip levels. */
+        int levelCount = 1;
+        /** @brief Raw XNA SurfaceFormat ordinal. */
+        int surfaceFormat = 0;
+        /** @brief Whether the live context stores compressed blocks natively. */
+        bool nativeCompressed = false;
+        /** @brief Whether this resource joined its device's recovery registry. */
+        bool recoveryRegistered = false;
+        /** @brief Exact mask of mip levels whose retained contents are defined. */
+        std::vector<bool> definedLevels;
+        /** @brief Full format-native bytes retained for each defined mip level. */
+        std::vector<std::vector<std::uint8_t>> recoveryLevels;
+    };
+
+    /**
+     * @brief Captures Texture2D recovery state for focused validation.
+     * @param resource RLGL two-dimensional texture resource.
+     * @return Native identity, creation description, defined mask, and retained bytes.
+     */
+    [[nodiscard]] Texture2DResourceSnapshot GetTexture2DResourceSnapshotForTesting(
+        const ITextureRenderer& resource);
+
     /** @brief Complete renderer/native TextureCube facts exposed to focused validation. */
     struct TextureCubeResourceSnapshot
     {
+        /** @brief Current native cube texture name. */
         unsigned int texture = 0;
+        /** @brief Width and height of each face at level zero. */
         int size = 0;
+        /** @brief Number of allocated levels per face. */
         int levelCount = 1;
+        /** @brief Raw XNA SurfaceFormat ordinal. */
         int surfaceFormat = 0;
+        /** @brief Whether the live context stores compressed blocks natively. */
         bool nativeCompressed = false;
+        /** @brief Whether this resource joined its device's recovery registry. */
+        bool recoveryRegistered = false;
+        /** @brief Face-major mask of defined face/level subresources. */
+        std::vector<bool> definedSubresources;
+        /** @brief Face-major full format-native bytes for every defined subresource. */
+        std::vector<std::vector<std::uint8_t>> recoverySubresources;
     };
 
     /**
@@ -194,6 +236,7 @@ namespace CNA::Internal::Renderers::Rlgl
         int ordinaryUploadCount = 0;
         int discardUploadCount = 0;
         int noOverwriteUploadCount = 0;
+        bool recoveryRegistered = false;
         std::vector<std::uint8_t> cpuBytes;
         std::vector<std::uint8_t> nativeBytes;
         std::vector<Microsoft::Xna::Framework::Graphics::VertexElement> declaration;

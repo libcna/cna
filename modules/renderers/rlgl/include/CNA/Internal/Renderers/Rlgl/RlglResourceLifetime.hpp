@@ -10,6 +10,17 @@ namespace CNA::Internal::Renderers::Rlgl
 {
     class RlglThreadContextLeaseControl;
 
+    /** @brief CPU state retained by one native child for later context recovery. */
+    struct RlglResourceRecoveryInfo
+    {
+        /** @brief Bytes retained specifically to recreate the resource or restore its contents. */
+        std::size_t retainedCpuBytes = 0;
+        /** @brief Texture mip levels or cube face/level pairs with defined retained contents. */
+        std::size_t definedTextureSubresources = 0;
+        /** @brief Whether recreation must report content loss through the public resource contract. */
+        bool contentLostOnReset = false;
+    };
+
     /** @brief Native-resource release hook tracked by one RLGL renderer lifetime. */
     class IRlglNativeResource
     {
@@ -19,6 +30,15 @@ namespace CNA::Internal::Renderers::Rlgl
 
         /** @brief Releases and clears every native handle owned by this resource. */
         virtual void ReleaseNativeResource() noexcept = 0;
+
+        /**
+         * @brief Describes CPU state retained for context recovery.
+         * @return Retained byte count, defined texture subresources, and content-loss policy.
+         */
+        [[nodiscard]] virtual RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept
+        {
+            return {};
+        }
     };
 
     /** @brief Observable resource-lifetime facts used by focused renderer validation. */
@@ -32,6 +52,18 @@ namespace CNA::Internal::Renderers::Rlgl
         std::size_t lateDisposals = 0;
         /** @brief Whether the device registry still accepts resources and native disposal. */
         bool active = false;
+        /** @brief Number of live children registered for native-context recreation. */
+        std::size_t recoveryResources = 0;
+        /** @brief Recovery children whose contents or state can be restored from CPU descriptions. */
+        std::size_t restorableResources = 0;
+        /** @brief Recovery children that must raise the existing content-loss contract. */
+        std::size_t contentLostResources = 0;
+        /** @brief Total bytes retained specifically for registered resource recovery. */
+        std::size_t retainedCpuBytes = 0;
+        /** @brief Total currently defined texture mip or cube face/level shadows. */
+        std::size_t definedTextureSubresources = 0;
+        /** @brief Whether resources created from now on join the recovery registry. */
+        bool recoveryEnabledForNewResources = true;
     };
 
     /**
@@ -50,8 +82,15 @@ namespace CNA::Internal::Renderers::Rlgl
         /**
          * @brief Registers a newly created native child with the renderer lifetime.
          * @param resource Resource whose handles must be released before context shutdown.
+         * @return True when the resource also joined the context-recovery registry.
          */
-        void Register(IRlglNativeResource& resource);
+        [[nodiscard]] bool Register(IRlglNativeResource& resource);
+
+        /**
+         * @brief Selects whether subsequently created children retain context-recovery state.
+         * @param enabled True to register future resources for recovery.
+         */
+        void SetRecoveryEnabled(bool enabled);
 
         /**
          * @brief Releases and unregisters a resource while the renderer context is current.
@@ -73,9 +112,12 @@ namespace CNA::Internal::Renderers::Rlgl
     private:
         std::weak_ptr<RlglThreadContextLeaseControl> contextControl_;
         std::vector<IRlglNativeResource*> resources_;
+        std::vector<IRlglNativeResource*> recoveryResources_;
         std::atomic<std::size_t> registeredResources_{0};
+        std::atomic<std::size_t> registeredRecoveryResources_{0};
         std::atomic<std::size_t> releasedResources_{0};
         std::atomic<std::size_t> lateDisposals_{0};
         std::atomic<bool> active_{true};
+        std::atomic<bool> recoveryEnabled_{true};
     };
 }

@@ -79,7 +79,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     multiSampleCount, surfaceFormat_);
                 try
                 {
-                    lifetime_->Register(*this);
+                    (void)lifetime_->Register(*this);
                 }
                 catch (...)
                 {
@@ -238,6 +238,11 @@ namespace CNA::Internal::Renderers::Rlgl
             void ReleaseNativeResource() noexcept override
             {
                 Bridge::DestroyRenderTarget2D(storage_);
+            }
+
+            [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
+            {
+                return {0, 0, true};
             }
 
             void ValidateLevel(

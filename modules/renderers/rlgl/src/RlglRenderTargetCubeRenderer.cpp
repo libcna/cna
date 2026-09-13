@@ -61,7 +61,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     size_, levelCount_, depthFormat_, multiSampleCount, surfaceFormat_);
                 try
                 {
-                    lifetime_->Register(*this);
+                    (void)lifetime_->Register(*this);
                 }
                 catch (...)
                 {
@@ -216,6 +216,11 @@ namespace CNA::Internal::Renderers::Rlgl
             void ReleaseNativeResource() noexcept override
             {
                 Bridge::DestroyRenderTargetCube(storage_);
+            }
+
+            [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
+            {
+                return {0, 0, true};
             }
 
             static void ValidateFace(const int face)

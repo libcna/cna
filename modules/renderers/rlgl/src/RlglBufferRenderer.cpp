@@ -70,7 +70,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 if (capacity_ < 0)
                     throw std::invalid_argument(
                         "RLGL: vertex-buffer capacity must be non-negative");
-                lifetime_->Register(*this);
+                recoveryRegistered_ = lifetime_->Register(*this);
             }
 
             ~RlglVertexBufferRenderer() override
@@ -129,6 +129,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 result.ordinaryUploadCount = ordinaryUploadCount_;
                 result.discardUploadCount = discardUploadCount_;
                 result.noOverwriteUploadCount = noOverwriteUploadCount_;
+                result.recoveryRegistered = recoveryRegistered_;
                 return result;
             }
 
@@ -137,6 +138,11 @@ namespace CNA::Internal::Renderers::Rlgl
             {
                 Bridge::DestroyBuffer(id_);
                 id_ = 0;
+            }
+
+            [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
+            {
+                return {cpuBytes_.size(), 0, false};
             }
 
             void EnsureStorage(const std::size_t stride)
@@ -150,10 +156,14 @@ namespace CNA::Internal::Renderers::Rlgl
 
                 const int byteCapacity =
                     CheckedByteCapacity(capacity_, stride, "vertex-buffer");
+                std::vector<std::uint8_t> newCpuBytes;
+                if (recoveryRegistered_)
+                    newCpuBytes.assign(static_cast<std::size_t>(byteCapacity), 0u);
+                const unsigned int newId = Bridge::CreateVertexBuffer(byteCapacity);
                 Bridge::DestroyBuffer(id_);
-                id_ = Bridge::CreateVertexBuffer(byteCapacity);
+                id_ = newId;
                 stride_ = stride;
-                cpuBytes_.assign(static_cast<std::size_t>(byteCapacity), 0u);
+                cpuBytes_ = std::move(newCpuBytes);
             }
 
             void Upload(
@@ -184,7 +194,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 {
                     Bridge::OrphanBuffer(
                         id_, false, CheckedByteCapacity(capacity_, stride_, "vertex-buffer"));
-                    std::fill(cpuBytes_.begin(), cpuBytes_.end(), 0u);
+                    if (recoveryRegistered_)
+                        std::fill(cpuBytes_.begin(), cpuBytes_.end(), 0u);
                     ++discardUploadCount_;
                 }
                 else if (options == SetDataOptions::NoOverwrite)
@@ -193,7 +204,8 @@ namespace CNA::Internal::Renderers::Rlgl
                     ++ordinaryUploadCount_;
 
                 Bridge::UpdateVertexBuffer(id_, data, byteCount);
-                std::memcpy(cpuBytes_.data(), data, static_cast<std::size_t>(byteCount));
+                if (recoveryRegistered_)
+                    std::memcpy(cpuBytes_.data(), data, static_cast<std::size_t>(byteCount));
                 vertexCount_ = vertexCount;
             }
 
@@ -206,6 +218,7 @@ namespace CNA::Internal::Renderers::Rlgl
             int ordinaryUploadCount_ = 0;
             int discardUploadCount_ = 0;
             int noOverwriteUploadCount_ = 0;
+            bool recoveryRegistered_ = false;
             std::shared_ptr<RlglResourceLifetime> lifetime_;
         };
 
@@ -224,14 +237,18 @@ namespace CNA::Internal::Renderers::Rlgl
                 const int byteCapacity =
                     CheckedByteCapacity(capacity_, elementSize_, "index-buffer");
                 id_ = Bridge::CreateIndexBuffer(byteCapacity);
+                bool registered = false;
                 try
                 {
-                    cpuBytes_.assign(static_cast<std::size_t>(byteCapacity), 0u);
-                    lifetime_->Register(*this);
+                    recoveryRegistered_ = lifetime_->Register(*this);
+                    registered = true;
+                    if (recoveryRegistered_)
+                        cpuBytes_.assign(static_cast<std::size_t>(byteCapacity), 0u);
                 }
                 catch (...)
                 {
-                    ReleaseNativeResource();
+                    if (registered) lifetime_->Dispose(*this);
+                    else ReleaseNativeResource();
                     throw;
                 }
             }
@@ -288,6 +305,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 result.ordinaryUploadCount = ordinaryUploadCount_;
                 result.discardUploadCount = discardUploadCount_;
                 result.noOverwriteUploadCount = noOverwriteUploadCount_;
+                result.recoveryRegistered = recoveryRegistered_;
                 return result;
             }
 
@@ -296,6 +314,11 @@ namespace CNA::Internal::Renderers::Rlgl
             {
                 Bridge::DestroyBuffer(id_);
                 id_ = 0;
+            }
+
+            [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
+            {
+                return {cpuBytes_.size(), 0, false};
             }
 
             void Upload(
@@ -320,7 +343,8 @@ namespace CNA::Internal::Renderers::Rlgl
                     Bridge::OrphanBuffer(
                         id_, true,
                         CheckedByteCapacity(capacity_, elementSize_, "index-buffer"));
-                    std::fill(cpuBytes_.begin(), cpuBytes_.end(), 0u);
+                    if (recoveryRegistered_)
+                        std::fill(cpuBytes_.begin(), cpuBytes_.end(), 0u);
                     ++discardUploadCount_;
                 }
                 else if (options == SetDataOptions::NoOverwrite)
@@ -329,7 +353,8 @@ namespace CNA::Internal::Renderers::Rlgl
                     ++ordinaryUploadCount_;
 
                 Bridge::UpdateIndexBuffer(id_, data, byteCount);
-                std::memcpy(cpuBytes_.data(), data, static_cast<std::size_t>(byteCount));
+                if (recoveryRegistered_)
+                    std::memcpy(cpuBytes_.data(), data, static_cast<std::size_t>(byteCount));
                 indexCount_ = indexCount;
             }
 
@@ -342,6 +367,7 @@ namespace CNA::Internal::Renderers::Rlgl
             int ordinaryUploadCount_ = 0;
             int discardUploadCount_ = 0;
             int noOverwriteUploadCount_ = 0;
+            bool recoveryRegistered_ = false;
             std::shared_ptr<RlglResourceLifetime> lifetime_;
         };
     }

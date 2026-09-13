@@ -88,7 +88,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     }
                     spriteMatrixParameterIndex_ = matrix->runtimeIndex;
 #endif
-                    lifetime_->Register(*this);
+                    (void)lifetime_->Register(*this);
                 }
                 catch (...)
                 {
