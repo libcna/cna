@@ -1,11 +1,11 @@
 # CNA Software Renderer Adversarial Parity Handoff
 
-Updated: 2026-09-13, continued through SOFTWARE-86 closure
+Updated: 2026-09-13, completed through SOFTWARE-100 final reconciliation
 
-This document is the restart point for the hostile Software-versus-EasyGL classic XNA 4.0/Core
-parity review. Do not interpret the large completed task count or green regression suites as proof
-that the campaign is finished. The objective is to falsify the parity claim, repair every bounded
-gap that can be proved, and keep any remaining gap explicit.
+This document is the final restart and audit record for the hostile Software-versus-EasyGL classic
+XNA 4.0/Core parity review. The campaign is complete because every plan row is classified and the
+final regression suites are green, not merely because the task count is large. Future work starts
+only from a newly demonstrated gap.
 
 ## Read before changing anything
 
@@ -35,13 +35,13 @@ infallible oracle.
 - Repository: `/rv/data/development/github.com/openeggbert/cnasoftware`
 - Branch: `software`, tracking `origin/software`
 - Adversarial challenge start: `92ed418b3dfcd4a2e03ea8c0d092a0b4caca9e9f`
-- Last task commit before SOFTWARE-86: `2df8f3f60` —
-  `docs(SOFTWARE-85): close optional window blit`
-- Campaign delta at that commit: 338 commits, 701 changed files, 67,442 insertions and 6,750
+- Last task commit before SOFTWARE-100: `8fbcb7ad9` —
+  `docs(SOFTWARE-86): close speculative optimization`
+- Campaign delta at that commit: 339 commits, 701 changed files, 67,457 insertions and 6,754
   deletions relative to the challenge start. Recompute rather than copying these numbers into
   a future final report because this handoff commit and subsequent work change them.
-- `origin/software` was at `6861caf32` when this update was written. Before the SOFTWARE-86 task
-  commit, the local branch was thirteen commits ahead. Do not push without a new explicit request in
+- `origin/software` was at `6861caf32` when this update was written. Before the SOFTWARE-100 task
+  commit, the local branch was fourteen commits ahead. Do not push without a new explicit request in
   the active conversation.
 - The only expected worktree entry after the handoff commit is the user's untracked `.junie/`.
   Preserve it. Do not stage it.
@@ -76,18 +76,19 @@ modern HDR/post-processing/shadows/IBL, physical GPU handles, and headless-meani
 swapchain behavior, unless one of those paths reveals a shared classic XNA/Core bug. Classic
 compiled XNA Effects are in scope and are not the same API as CNAEXT `ShaderEffect`.
 
-## Current verdict
+## Final verdict
 
-The evidence-backed verdict remains:
+The evidence-backed final verdict is:
 
-**C — HIGH PARITY, SPECIFIC GAPS REMAIN.**
+**B — PARITY WITH DOCUMENTED LANGUAGE/PLATFORM BOUNDARIES.**
 
 `SOFTWARE-164/165` are now complete. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software advertises
 `GraphicsCapability::CompiledEffects=true`, accepts the public compiled-Effect entry point and
 passes the complete shared conformance surface plus the formerly skipped public Effect tests.
-Opt-out builds retain the dependency-free false capability. The only remaining plan boundary is
-the independently blocked repository-wide `SOFTWARE-100`; do not treat this handoff as
-authority to stop before the active user's explicit completion goal is met.
+Opt-out builds retain the dependency-free false capability. No non-complete row remains in
+`plans/plan_software.md`. Literal CLR wrapper identity is recorded as an accepted C++ mapping
+deviation, native window/GPU behavior and speculative optimization are N/A, and the unrelated
+repository/GDI residuals retained by SOFTWARE-100 are not claimed as repaired renderer behavior.
 
 The prompted sampler, AddressW, and multisample-rasterizer hypotheses were all confirmed and fixed;
 the exact evidence and task mapping are in the `Final adversarial parity challenge` section of
@@ -97,7 +98,21 @@ classic-XNA parity requirement, not a CNAEXT deferral. `SOFTWARE-178` removes Ea
 GLES/WebGL `GL_LINES` wireframe: native polygon mode is used where the active context exposes it,
 and every triangle path is refused consistently where it does not.
 
-## Latest completed work: SOFTWARE-86
+## Latest completed work: SOFTWARE-100
+
+Final reconciliation rebuilt the compiled-effect-enabled Software graphics target with `-j3`, then
+passed all 160 Software CTests and the complete Software graphics program at 2,640 passed with 48
+classified skips. The complete desktop EasyGL comparison program passed 2,635 with 53 classified
+skips, and its 679-test compiled-effect family remains green.
+
+The old broad `CnaTests` evidence still contains five named non-renderer failures and one
+pathological CNAEXT Guide search; MinGW GDI still stops in sibling sharp-runtime's POSIX-only
+`<poll.h>` before CNA compilation. SOFTWARE-100 closes because its implementation,
+documentation, build, capability and renderer-test baselines are reconciled, while those external
+content/net/GamerServices/CNAEXT/sharp-runtime facts remain explicit and are not misreported as
+fixed.
+
+## Earlier completed work: SOFTWARE-86
 
 Speculative SIMD, multithreading and tiling are closed as the explicit non-goal in design decision
 1. The Software renderer is a deterministic correctness oracle, not a real-time gameplay backend,
@@ -350,16 +365,11 @@ The lesson from SOFTWARE-468 is important: never generalize an exact `ps_2_0` as
 `ps_2_x`, `ps_3_0`, or a vertex profile without measuring it. The Microsoft profile boundaries can
 be counterintuitive.
 
-## Open plan rows
+## Plan completion
 
-The following are the only non-complete rows in `plans/plan_software.md` at this handoff:
-
-| Task | Meaning and next treatment |
-|---|---|
-| `SOFTWARE-100` | Independently blocked repository-wide acceptance row. Its exact unrelated test and GDI/sharp-runtime blockers are documented in the plan; do not broaden the renderer campaign to hide them. |
-
-All rows through `SOFTWARE-484` are closed except for the rows above. Assign the next demonstrated issue as
-`SOFTWARE-485`; never add a task merely to keep numbering moving.
+Every row in `plans/plan_software.md` is complete or explicitly complete-as-N/A. There are no open
+or blocked Software-plan tasks. Assign the next demonstrated issue as `SOFTWARE-485`; never add a
+task merely to keep numbering moving.
 
 ## Recommended next audit direction
 
@@ -386,10 +396,10 @@ texture-instruction cube and 2D programs regardless of sampler number, while the
 Shader 2 texture-slot budget counts each load once. No CNA public behavior was found. Do not change
 that counter without a reproducible public XNA/Core impact.
 
-Other high-value SOFTWARE-165 closure areas remain authentic EffectMaterial/model-content draws,
-resource lifetime and clone/application failure ordering, malformed bytecode fuzzing with bounded
-execution, and a final shared contract that can justify changing the capability flag. Do not enable
-the flag incrementally.
+The completed SOFTWARE-165 audit already covers authentic EffectMaterial/model-content draws,
+resource lifetime and clone/application failure ordering, malformed bytecode with bounded execution,
+and the shared contract that enabled the capability flag. Future work in those areas requires a new
+reproducible regression rather than treating this historical checklist as unfinished plan scope.
 
 ## Relevant code map
 
@@ -576,11 +586,12 @@ actual count, because parameterized fixtures frequently increase the EasyGL tota
 - If a real gap is too large for a bounded implementation, document the architecture and remaining
   scope honestly instead of faking parity.
 
-The eventual final report must choose exactly one of the owner's A/B/C/D verdict categories and
-include start/end SHAs, branch, commit and LOC counts, new/completed/remaining tasks, prompted and
-new findings, compiled-Effect verdict, exact skips, all test families run, and the reason for the
-classification. At this handoff the correct classification is C.
+The final report must use the owner's A/B/C/D verdict categories and include start/end SHAs,
+branch, commit and LOC counts, new/completed/remaining tasks, prompted and new findings,
+compiled-Effect verdict, exact skips, all test families run, and the reason for the classification.
+The correct classification is B because the approved renderer scope is closed and the remaining
+differences are documented language/platform/N/A boundaries rather than unimplemented plan rows.
 
-The owner explicitly resumed the campaign and requested completion of the whole plan. Continue
-through the remaining plan rows; do not reinstate the obsolete SOFTWARE-484 stop condition. Do not
-push without a new explicit request for the current branch state.
+The owner explicitly resumed the campaign and requested completion of the whole plan. That goal is
+now met. Do not reopen a completed row without new behavioral evidence, and do not push without a
+new explicit request for the current branch state.

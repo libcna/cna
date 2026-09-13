@@ -23,6 +23,12 @@ as ownership by the windowless Software device. The renderer only needs the same
 SDL3/SDL3_image/SDL3_mixer and
 `../sharp-runtime` checkout every other renderer already requires.
 
+The completed parity-plan verdict is **B — parity with documented language/platform boundaries**.
+Final reconciliation passes all 160 Software-labeled CTests and 2,640 of 2,688 Software graphics
+tests; the remaining 48 are exact negative controls, foreign-renderer selectors, platform-only
+tests or CNAEXT exclusions. The comparison desktop EasyGL build passes 2,635 of 2,688 with 53
+equally classified skips. No open task remains in `plans/plan_software.md`.
+
 Software executes classic Direct3D 9 Effect Framework bytecode when built with the same opt-in
 MojoShader dependency model as EasyGL. `SOFTWARE-162..165` and the focused `SOFTWARE-355..484`
 campaign provide the parser/reflection/state runtime, both SM1-3 CPU shader stages, clipping,
