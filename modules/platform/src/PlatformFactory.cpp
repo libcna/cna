@@ -12,6 +12,9 @@
 #if defined(CNA_PLATFORM_SDL2)
 #  include "Sdl2/Sdl2Platform.hpp"
 #endif
+#if defined(CNA_PLATFORM_X11)
+#  include "X11/X11Platform.hpp"
+#endif
 
 // Compiled on every POSIX target regardless of the selection -- see the module's CMakeLists for
 // why, and _WIN32 for why not there.
@@ -31,6 +34,8 @@ namespace CNA::Platform {
         const std::string kDefaultName = "Terminal";
 #elif defined(CNA_PLATFORM_SDL2)
         const std::string kDefaultName = "SDL2";
+#elif defined(CNA_PLATFORM_X11)
+        const std::string kDefaultName = "X11";
 #else
         const std::string kDefaultName = "SDL3";
 #endif
@@ -54,6 +59,12 @@ namespace CNA::Platform {
         if (name == "SDL2")
         {
             return std::make_unique<Sdl2::Sdl2Platform>();
+        }
+#endif
+#if defined(CNA_PLATFORM_X11)
+        if (name == "X11")
+        {
+            return std::make_unique<X11::X11Platform>();
         }
 #endif
 
@@ -96,6 +107,9 @@ namespace CNA::Platform {
 #endif
 #if defined(CNA_PLATFORM_SDL2)
         available.emplace_back("SDL2");
+#endif
+#if defined(CNA_PLATFORM_X11)
+        available.emplace_back("X11");
 #endif
         available.emplace_back("Headless");
 #if !defined(_WIN32)

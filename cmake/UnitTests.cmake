@@ -98,6 +98,14 @@ if(CNA_BUILD_TESTS)
     if(NOT CNA_PLATFORM STREQUAL "SDL2")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Sdl2.*\\.cpp$")
     endif()
+    # plans/plan_x11.md X11-0005: the native X11 tests exercise CNA::Platform::X11, which is
+    # compiled only when CNA_PLATFORM=X11 -- the same rule, and the same reason, as the SDL3 and
+    # SDL2 lines above. The implementation-neutral suites (the contract, and the conformance suite
+    # parameterised over every available implementation) always build.
+    if(NOT CNA_PLATFORM STREQUAL "X11")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/X11.*\\.cpp$")
+    endif()
+
     # The SDL2 native-queue mapper test must not share CnaTests with SDL3-native fixture tests:
     # SDL deliberately makes both imported targets declare mutually exclusive SDL_VERSION
     # interface requirements. It receives its own small executable below.
@@ -527,8 +535,23 @@ if(CNA_BUILD_TESTS)
     # needs SDL3 has already been filtered out above, and linking it anyway would put two
     # libraries exporting the same entry points into one process; see
     # cmake/Sdl2OnlyConfiguration.cmake for why that silently invalidates the conformance run.
-    if(NOT CNA_SDL2_ONLY_CONFIGURATION)
+    if(NOT CNA_SDL2_ONLY_CONFIGURATION AND CNA_ENABLE_SDL)
         target_link_libraries(cna_test_build_config INTERFACE SDL3::SDL3)
+    endif()
+
+    # plans/plan_x11.md X11-0005: the native X11 tests include this backend's own translation
+    # tables (X11Keyboard.hpp, X11EventMapper.hpp) and therefore need the X headers, the
+    # CNA_X11_HAVE_* definitions that decide which extension code those headers expose, and the X
+    # libraries. Exactly the same arrangement as the SDL3 line above, and like it, only for the
+    # selection whose sources are compiled.
+    if(CNA_PLATFORM STREQUAL "X11")
+        if(CNA_X11_INCLUDE_DIRS)
+            target_include_directories(cna_test_build_config INTERFACE ${CNA_X11_INCLUDE_DIRS})
+        endif()
+        if(CNA_X11_DEFINITIONS)
+            target_compile_definitions(cna_test_build_config INTERFACE ${CNA_X11_DEFINITIONS})
+        endif()
+        target_link_libraries(cna_test_build_config INTERFACE ${CNA_X11_LIBRARIES} ${CMAKE_DL_LIBS})
     endif()
 
     # The Draco corpus owns one test-only encoder oracle: it recreates the committed compressed

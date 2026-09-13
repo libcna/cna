@@ -149,8 +149,32 @@ set(CNA_TEST_DISPLAY ":0" CACHE STRING "DISPLAY value used by GPU/window-creatin
 # sysroot/architecture/deployment target this file settles has to exist before they are launched.
 include(cmake/ApplePlatform.cmake)
 
+# Platform, audio and renderer selection must be settled BEFORE the vendored SDL sub-build is
+# decided, because whether SDL is needed at all is a consequence of those three choices
+# (plans/plan_x11.md X11-0090). Until the X11 backend landed, cna_configure_vendored_sdl() ran
+# unconditionally here and made SDL an existential dependency of CNA: a configuration referencing
+# no SDL symbol anywhere still could not be configured without it.
+#
+# CNA_PLATFORM selects windowing, events, input and host services; CNA_AUDIO_PLATFORM selects
+# playback/capture. The two are independent axes and always have been, which is why they are two
+# includes and not one.
+include(cmake/PlatformSelection.cmake)
+
+# SDL2 is an independent platform edge, not an SDL3 compatibility layer. Configure it only after
+# selection, so a default build never downloads or compiles a second native toolkit.
+if(CNA_PLATFORM STREQUAL "SDL2")
+    include(cmake/ThirdPartySDL2.cmake)
+    cna_configure_sdl2()
+endif()
+
+include(cmake/AudioPlatformSelection.cmake)
+include(cmake/Sdl2OnlyConfiguration.cmake)
+
+include(cmake/SdlAvailability.cmake)
 include(cmake/ThirdPartySDL.cmake)
-cna_configure_vendored_sdl()
+if(CNA_ENABLE_SDL)
+    cna_configure_vendored_sdl()
+endif()
 
 include(cmake/TestHelpers.cmake)
 
@@ -252,21 +276,10 @@ cna_generate_renderer_registry(CNA_RENDERER_REGISTRY_SOURCE ${_cna_renderer_iden
 # It defines its target from modules/renderers/CMakeLists.txt, once the selected families are known.
 include(cmake/RendererDescriptorGate.cmake)
 # Platform implementation selection (plans/plan_platform.md PLAT-11). A separate axis from
-# CNA_GRAPHICS_RENDERER: the renderer decides how pixels are produced, the platform decides
-# where the window, events and input come from.
-include(cmake/PlatformSelection.cmake)
-
-# SDL2 is an independent platform edge, not an SDL3 compatibility layer. Configure it only after
-# selection, so a default build never downloads or compiles a second native toolkit.
-if(CNA_PLATFORM STREQUAL "SDL2")
-    include(cmake/ThirdPartySDL2.cmake)
-    cna_configure_sdl2()
-endif()
-
-# Playback/capture implementation selection (plans/plan_platform.md PLAT-93). This is intentionally
-# independent from CNA_PLATFORM: window/input and audio backends are orthogonal choices.
-include(cmake/AudioPlatformSelection.cmake)
-include(cmake/Sdl2OnlyConfiguration.cmake)
+# CNA_GRAPHICS_RENDERER decides how pixels are produced; CNA_PLATFORM decides where the window,
+# events and input come from. Both selections, and the audio one, are resolved much earlier --
+# just before the vendored SDL sub-build, which needs to know whether any of them wants SDL at
+# all. See the SdlAvailability.cmake include above.
 
 # Platform ratchet (plans/plan_platform.md PLAT-8): reports how much of CNA still calls SDL
 # directly outside the PLAT-3 allowlist, and warns when that count has gone up. Warning

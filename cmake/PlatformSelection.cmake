@@ -12,7 +12,7 @@
 # capability is known -- not silently tolerated until something dereferences null.
 # =====================================================================================
 
-set(CNA_PLATFORM "SDL3" CACHE STRING "Platform implementation (SDL3 | SDL2 | HEADLESS | TERMINAL)")
+set(CNA_PLATFORM "SDL3" CACHE STRING "Platform implementation (SDL3 | SDL2 | X11 | HEADLESS | TERMINAL)")
 
 # Implemented today. TERMINAL is POSIX-only: it is built on termios, and there is no Windows
 # console path for it (plans/plan_platform.md Phase 10). Offering it on Windows would produce a
@@ -20,6 +20,28 @@ set(CNA_PLATFORM "SDL3" CACHE STRING "Platform implementation (SDL3 | SDL2 | HEA
 set(_cna_platforms_available SDL3 SDL2 HEADLESS)
 if(NOT WIN32)
     list(APPEND _cna_platforms_available TERMINAL)
+endif()
+
+# X11 is a native backend that talks to Xlib directly, with no SDL anywhere in it
+# (plans/plan_x11.md). It is offered only where the X development environment actually exists,
+# for the same reason TERMINAL is offered only on POSIX -- but the two cases differ in one way
+# that matters: termios is libc and is either there or not by target, while the X client
+# libraries are an installable package. So when X11 is requested and unavailable the diagnostic
+# below names what to install, and the configure fails rather than falling back to SDL3.
+include(cmake/PlatformX11.cmake)
+cna_detect_x11()
+if(CNA_X11_AVAILABLE)
+    list(APPEND _cna_platforms_available X11)
+endif()
+
+if(CNA_PLATFORM STREQUAL "X11" AND NOT CNA_X11_AVAILABLE)
+    message(FATAL_ERROR
+        "CNA: CNA_PLATFORM=X11 was requested but this machine cannot build it.\n"
+        "Reason: ${CNA_X11_UNAVAILABLE_REASON}\n"
+        "The X11 backend is native -- it uses Xlib directly and never falls back to SDL, so "
+        "there is nothing to degrade to. Install the X development packages, or select one of "
+        "${_cna_platforms_available}.\n"
+        "See docs/platform-x11.md for the full dependency table.")
 endif()
 
 # Reserved-but-unimplemented. These are recognised so that configuring with one fails
@@ -53,6 +75,9 @@ if(NOT CNA_PLATFORM IN_LIST _cna_platforms_available)
 endif()
 
 message(STATUS "CNA: Using ${CNA_PLATFORM} platform implementation")
+if(CNA_PLATFORM STREQUAL "X11")
+    message(STATUS "CNA: X11 platform dependencies -- ${CNA_X11_SUMMARY}")
+endif()
 
 # The compile definition an implementation's own sources and the entrypoint header key
 # off. Named CNA_PLATFORM_<NAME> to match the CNA_RENDERER_<NAME> convention.

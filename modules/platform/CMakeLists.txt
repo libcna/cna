@@ -25,6 +25,14 @@ if(CNA_PLATFORM STREQUAL "SDL2")
     file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/Sdl2/*.cpp")
     list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
 endif()
+# The native X11 backend (plans/plan_x11.md). Compiled only for its own selection: unlike
+# Headless and Terminal, it has real third-party link inputs, and always compiling it would
+# put libX11 into the link closure of every build on a Unix host -- exactly the kind of
+# unconditional native dependency this backend exists to disprove.
+if(CNA_PLATFORM STREQUAL "X11")
+    file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/X11/*.cpp")
+    list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
+endif()
 
 # Implementation pieces shared between implementations that have no platform library to ask --
 # std::filesystem path resolution, standard-library host facts. Not in the public include tree:
@@ -82,4 +90,23 @@ if(CNA_PLATFORM STREQUAL "SDL3")
 endif()
 if(CNA_PLATFORM STREQUAL "SDL2")
     target_link_libraries(cna_platform PRIVATE SDL2::SDL2)
+endif()
+
+# Every X library is PRIVATE and so are the include roots: <X11/Xlib.h> must never reach a
+# consumer's translation unit. `Display`, `Window`, `Atom` and `XEvent` appear in no public
+# header -- the contract already carries an X11 window as an opaque `void* display` plus an
+# integer XID, and that is the entire public surface of this backend. ContractIsSdlFreeTests
+# and the module probes are what keep it that way.
+if(CNA_PLATFORM STREQUAL "X11")
+    target_link_libraries(cna_platform PRIVATE ${CNA_X11_LIBRARIES})
+    if(CNA_X11_INCLUDE_DIRS)
+        target_include_directories(cna_platform PRIVATE ${CNA_X11_INCLUDE_DIRS})
+    endif()
+    if(CNA_X11_DEFINITIONS)
+        target_compile_definitions(cna_platform PRIVATE ${CNA_X11_DEFINITIONS})
+    endif()
+    # dlopen/dlsym for the GLX and Vulkan entry points the backend resolves at run time rather
+    # than linking; libdl is folded into glibc on modern Linux but is a separate library on
+    # several other Unix hosts, so it is asked for rather than assumed.
+    target_link_libraries(cna_platform PRIVATE ${CMAKE_DL_LIBS})
 endif()
