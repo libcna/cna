@@ -1123,9 +1123,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   only effects whose `FillGpuDrawParams()` output matches one of this renderer's fixed stock-effect
   CPU paths will render correctly.
 - **`Present()` completes immediately without a physical swap**, preserving the CPU framebuffer
-  and current viewport/scissor state. There is no way to visually inspect a Software-rendered frame
-  on screen in this renderer's current form. An opt-in "blit the CPU framebuffer to a real window"
-  mode is a reasonable future addition (`plans/plan_software.md` design decision 3) but isn't needed for
-  this renderer's actual value proposition (deterministic, GPU-free pixel tests).
+  and current viewport/scissor state. This is the intentional display-free presentation contract,
+  not a pending parity gap: rendered output is inspected through exact readback and the established
+  cross-renderer image comparator. `SOFTWARE-85` closes the historical opt-in window-blit idea as
+  non-applicable; a window-owning platform blitter would be a separate presentation mode.
 
 See `plans/plan_software.md` for the full task-by-task status and design rationale.
