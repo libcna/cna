@@ -1085,6 +1085,15 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         const RenderTargetStorage& storage, int width, int height);
 
     /**
+     * @brief Copies a resolved renderer-owned backbuffer image to the platform framebuffer.
+     * @param storage Multisampled storage whose resolve framebuffer contains the source image.
+     * @param width Backbuffer width.
+     * @param height Backbuffer height.
+     */
+    void BlitResolvedBackbufferToDefault(
+        const RenderTargetStorage& storage, int width, int height);
+
+    /**
      * @brief Resolves one face's multisample storage into the cube texture.
      * @param storage Cube render-target storage.
      * @param face XNA cube face ordinal.

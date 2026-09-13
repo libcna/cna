@@ -3349,6 +3349,9 @@ void main()
         const int x, const int y, const int width, const int height,
         const int framebufferHeight, unsigned char* pixels)
     {
+        const FramebufferBindingRestore framebufferRestore;
+        rlBindFramebuffer(RL_READ_FRAMEBUFFER, 0);
+        glReadBuffer(GL_BACK);
         GLint previousPackAlignment = 4;
         glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
         glPixelStorei(GL_PACK_ALIGNMENT, 1);
@@ -4550,6 +4553,24 @@ void main()
         rlBlitFramebuffer(
             0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT);
         ThrowIfGlError("RenderTarget2D multisample resolve");
+    }
+
+    void BlitResolvedBackbufferToDefault(
+        const RenderTargetStorage& storage, const int width, const int height)
+    {
+        RequireInitialized("backbuffer presentation resolve");
+        if (storage.multiSampleCount <= 0 || storage.resolveFramebuffer == 0 ||
+            width <= 0 || height <= 0)
+        {
+            throw std::invalid_argument("RLGL: invalid resolved backbuffer blit request");
+        }
+
+        const FramebufferBindingRestore framebufferRestore;
+        rlBindFramebuffer(RL_READ_FRAMEBUFFER, storage.resolveFramebuffer);
+        rlBindFramebuffer(RL_DRAW_FRAMEBUFFER, 0);
+        rlBlitFramebuffer(
+            0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT);
+        ThrowIfGlError("backbuffer presentation resolve");
     }
 
     void ResolveRenderTargetCubeFace(

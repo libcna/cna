@@ -44,9 +44,7 @@ namespace CNA::Internal::Renderers::Rlgl
         std::mutex lifecycleMutex;
         bool lifecycleActive = false;
 
-        CNA::Platform::GlContextDescription RequestedContext(
-            const int multiSampleCount, const bool withMultisampling,
-            const bool robustAccess)
+        CNA::Platform::GlContextDescription RequestedContext(const bool robustAccess)
         {
             CNA::Platform::GlContextDescription description;
             description.majorVersion = 3;
@@ -57,11 +55,6 @@ namespace CNA::Internal::Renderers::Rlgl
             description.doubleBuffer = true;
             description.robustAccess = robustAccess;
             description.loseContextOnReset = robustAccess;
-            if (withMultisampling && multiSampleCount > 1)
-            {
-                description.multisampleBuffers = 1;
-                description.multisampleSamples = multiSampleCount;
-            }
             return description;
         }
 
@@ -525,6 +518,7 @@ namespace CNA::Internal::Renderers::Rlgl
         , virtualHeight_(args.virtualHeight)
         , presentationMode_(args.presentationMode)
         , swapInterval_(args.swapInterval)
+        , requestedMultiSampleCount_(args.multiSampleCount)
         , deviceEventCallback_(args.deviceEventCallback)
     {
         RequirePlatformGlWindow(args.surface, kRendererName);
@@ -556,6 +550,7 @@ namespace CNA::Internal::Renderers::Rlgl
         {
             if (rlglInitialized_)
             {
+                DestroyRendererNativeState();
                 Bridge::Shutdown();
                 rlglInitialized_ = false;
             }
@@ -614,27 +609,16 @@ namespace CNA::Internal::Renderers::Rlgl
 
     void RlglRenderer::CreateContext(const int requestedMultiSampleCount)
     {
-        const bool wantMultisampling = requestedMultiSampleCount > 1;
-        const std::array<std::array<bool, 2>, 4> attempts{{
-            {{wantMultisampling, true}},
-            {{wantMultisampling, false}},
-            {{false, true}},
-            {{false, false}}}};
+        requestedMultiSampleCount_ = requestedMultiSampleCount;
+        const std::array<bool, 2> attempts{{true, false}};
         std::exception_ptr lastFailure;
         for (std::size_t attempt = 0; attempt < attempts.size(); ++attempt)
         {
-            bool duplicate = false;
-            for (std::size_t prior = 0; prior < attempt; ++prior)
-                duplicate = duplicate || attempts[prior] == attempts[attempt];
-            if (duplicate) continue;
-
             try
             {
                 platformContext_ = std::make_shared<PlatformGlContextOwner>(
                     *platformGlService_, surface_.GetWindowId(),
-                    RequestedContext(
-                        requestedMultiSampleCount,
-                        attempts[attempt][0], attempts[attempt][1]));
+                    RequestedContext(attempts[attempt]));
                 break;
             }
             catch (const CNA::Platform::PlatformException&)
@@ -667,10 +651,6 @@ namespace CNA::Internal::Renderers::Rlgl
         backBufferFormat_ = AppliedBackBufferFormat(granted);
         depthStencilFormat_ = AppliedDepthStencilFormat(granted);
         robustContext_ = granted.robustAccess && granted.loseContextOnReset;
-        multiSampleCount_ =
-            granted.multisampleBuffers > 0 && granted.multisampleSamples > 1
-                ? granted.multisampleSamples
-                : 0;
     }
 
     std::string RlglRenderer::InitializeContextState()
@@ -689,6 +669,7 @@ namespace CNA::Internal::Renderers::Rlgl
         maxRenderTargets_ = Bridge::GetMaxRenderTargets();
         maxRenderTargetSamples_ = Bridge::GetMaxRenderTargetSamples();
         maxSamplerAnisotropy_ = Bridge::GetMaxSamplerAnisotropy();
+        RecreateBackbufferStorage(width, height);
         nativeLossPollingAvailable_ =
             robustContext_ && Bridge::SupportsGraphicsResetStatus();
         if (maxSamplerSlots_ < static_cast<int>(samplers_.size()))
@@ -724,6 +705,7 @@ namespace CNA::Internal::Renderers::Rlgl
         mojoShaderContext_ = nullptr;
 #endif
         mrtFramebuffer_ = 0;
+        backbufferStorage_.reset();
         Bridge::AbandonLostContext();
         rlglInitialized_ = false;
     }
@@ -744,6 +726,9 @@ namespace CNA::Internal::Renderers::Rlgl
         DestroyCompiledEffectContext();
 #endif
         Bridge::DestroyMrtFramebuffer(mrtFramebuffer_);
+        if (backbufferStorage_)
+            Bridge::DestroyRenderTarget2D(*backbufferStorage_);
+        backbufferStorage_.reset();
         std::array<unsigned int, 16> samplerIds{};
         for (std::size_t index = 0; index < samplers_.size(); ++index)
         {
@@ -806,7 +791,7 @@ namespace CNA::Internal::Renderers::Rlgl
     {
         if (currentRenderTargetCount_ == 0)
         {
-            Bridge::BindDefaultFramebuffer();
+            BindBackbuffer();
             return;
         }
 
@@ -1275,6 +1260,7 @@ namespace CNA::Internal::Renderers::Rlgl
         ThrowIfNativeContextWasReset();
         try
         {
+            ResolveBackbufferToDefault();
             platformContext_->SwapBuffers();
         }
         catch (const std::exception& error)
@@ -1288,6 +1274,53 @@ namespace CNA::Internal::Renderers::Rlgl
     void RlglRenderer::GetPhysicalSize(int& width, int& height) const
     {
         surface_.GetDrawableSize(width, height);
+    }
+
+    void RlglRenderer::RecreateBackbufferStorage(const int width, const int height)
+    {
+        if (width <= 0 || height <= 0) return;
+
+        std::unique_ptr<Bridge::RenderTargetStorage> replacement;
+        const int requestedSamples = requestedMultiSampleCount_ > 1
+            ? std::min(requestedMultiSampleCount_, maxRenderTargetSamples_)
+            : 0;
+        if (requestedSamples > 1)
+        {
+            replacement = std::make_unique<Bridge::RenderTargetStorage>(
+                Bridge::CreateRenderTarget2D(
+                    width, height, 1, depthStencilFormat_, requestedSamples,
+                    backBufferFormat_));
+        }
+
+        std::unique_ptr<Bridge::RenderTargetStorage> previous =
+            std::move(backbufferStorage_);
+        backbufferStorage_ = std::move(replacement);
+        multiSampleCount_ = backbufferStorage_
+            ? backbufferStorage_->multiSampleCount
+            : 0;
+        if (previous) Bridge::DestroyRenderTarget2D(*previous);
+
+        if (currentRenderTargetCount_ == 0) BindBackbuffer();
+    }
+
+    void RlglRenderer::BindBackbuffer()
+    {
+        if (backbufferStorage_ && backbufferStorage_->multiSampleCount > 0)
+            Bridge::BindFramebuffer(backbufferStorage_->framebuffer);
+        else
+            Bridge::BindDefaultFramebuffer();
+    }
+
+    void RlglRenderer::ResolveBackbufferToDefault()
+    {
+        if (!backbufferStorage_ || backbufferStorage_->multiSampleCount <= 0) return;
+
+        int width = 0;
+        int height = 0;
+        GetPhysicalSize(width, height);
+        Bridge::ResolveRenderTarget2D(*backbufferStorage_, width, height);
+        Bridge::BlitResolvedBackbufferToDefault(
+            *backbufferStorage_, width, height);
     }
 
     void RlglRenderer::GetLogicalSize(int& width, int& height) const
@@ -1358,6 +1391,7 @@ namespace CNA::Internal::Renderers::Rlgl
         int height = 0;
         GetPhysicalSize(width, height);
         Bridge::SetFramebufferSize(width, height);
+        RecreateBackbufferStorage(width, height);
     }
 
     void RlglRenderer::SetVirtualResolution(const int width, const int height)
@@ -1386,7 +1420,20 @@ namespace CNA::Internal::Renderers::Rlgl
 
     int RlglRenderer::ApplyMultiSampleCount(const int requestedMultiSampleCount)
     {
-        (void)requestedMultiSampleCount;
+        const int previousRequest = requestedMultiSampleCount_;
+        requestedMultiSampleCount_ = requestedMultiSampleCount;
+        int width = 0;
+        int height = 0;
+        GetPhysicalSize(width, height);
+        try
+        {
+            RecreateBackbufferStorage(width, height);
+        }
+        catch (...)
+        {
+            requestedMultiSampleCount_ = previousRequest;
+            throw;
+        }
         return multiSampleCount_;
     }
 
@@ -1461,6 +1508,7 @@ namespace CNA::Internal::Renderers::Rlgl
         int framebufferHeight = 0;
         GetPhysicalSize(framebufferWidth, framebufferHeight);
         (void)framebufferWidth;
+        ResolveBackbufferToDefault();
         Bridge::ReadBackbuffer(x, y, w, h, framebufferHeight, pixels);
     }
 
@@ -1793,7 +1841,7 @@ namespace CNA::Internal::Renderers::Rlgl
         {
             FinalizeCurrentRenderTargets();
             Bridge::DestroyMrtFramebuffer(mrtFramebuffer_);
-            Bridge::BindDefaultFramebuffer();
+            BindBackbuffer();
             ApplyCurrentRasterizerState();
             return;
         }

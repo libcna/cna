@@ -30,6 +30,7 @@ namespace CNA::Internal::Renderers::Rlgl
     {
         struct CompiledEffectDrawResources;
         struct PrimitivePipeline;
+        struct RenderTargetStorage;
     }
 
     /** @brief Observable stages of the RLGL native-context recovery transaction. */
@@ -82,7 +83,7 @@ namespace CNA::Internal::Renderers::Rlgl
         int appliedBackBufferFormat = 0;
         /** @brief XNA DepthFormat ordinal matching the granted depth/stencil planes. */
         int appliedDepthStencilFormat = 0;
-        /** @brief Multisample count granted by the platform context. */
+        /** @brief Multisample count applied to the renderer-owned backbuffer. */
         int appliedMultiSampleCount = 0;
         /** @brief Whether the platform granted robust-access, lose-context-on-reset semantics. */
         bool robustContext = false;
@@ -231,25 +232,25 @@ namespace CNA::Internal::Renderers::Rlgl
         CNAEXT [[nodiscard]] int GetSwapIntervalEXT() const override { return swapInterval_; }
 
         /**
-         * @brief Returns the multisample count actually granted for the back buffer.
+         * @brief Returns the multisample count applied to the renderer-owned back buffer.
          *
-         * @return The granted sample count, or zero when multisampling is disabled.
+         * @return The applied sample count, or zero when multisampling is disabled.
          */
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
 
         /**
-         * @brief Maps a presentation multisample request to the driver-granted count.
+         * @brief Maps a presentation multisample request to the renderer-applied count.
          *
-         * @param requestedMultiSampleCount The requested count; retained only for interface parity.
-         * @return The count actually granted for this device.
+         * @param requestedMultiSampleCount The requested sample count.
+         * @return The count actually applied to this device's back buffer.
          */
         [[nodiscard]] int GetAppliedMultiSampleCountEXT(
             int requestedMultiSampleCount) const override;
 
         /**
-         * @brief Keeps the context-created sample count during an ordinary presentation Reset.
+         * @brief Recreates renderer-owned backbuffer storage for a new sample request.
          * @param requestedMultiSampleCount Requested new sample count.
-         * @return The unchanged platform-granted context sample count.
+         * @return The device-clamped sample count that was applied.
          */
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
 
@@ -944,6 +945,9 @@ namespace CNA::Internal::Renderers::Rlgl
         void NotifyDeviceEvent(RendererDeviceEvent event);
         void GetPhysicalSize(int& width, int& height) const;
         void GetLogicalSize(int& width, int& height) const;
+        void RecreateBackbufferStorage(int width, int height);
+        void BindBackbuffer();
+        void ResolveBackbufferToDefault();
         SamplerRecord& GetSamplerRecord(int slot);
         void ApplySamplerRecord(int slot, SamplerRecord& sampler);
         Bridge::PrimitivePipeline& GetPrimitivePipeline();
@@ -977,6 +981,7 @@ namespace CNA::Internal::Renderers::Rlgl
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         int swapInterval_ = 1;
+        int requestedMultiSampleCount_ = 0;
         int multiSampleCount_ = 0;
         int depthBits_ = 0;
         int stencilBits_ = 0;
@@ -991,6 +996,7 @@ namespace CNA::Internal::Renderers::Rlgl
 #endif
         int maxRenderTargets_ = 1;
         int maxRenderTargetSamples_ = 0;
+        std::unique_ptr<Bridge::RenderTargetStorage> backbufferStorage_;
         float maxSamplerAnisotropy_ = 1.0f;
         std::array<SamplerRecord, 16> samplers_{};
 #if defined(CNA_RLGL_COMPILED_EFFECTS)

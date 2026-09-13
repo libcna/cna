@@ -143,8 +143,8 @@ namespace
                         initial.appliedDepthStencilFormat &&
                     initialParameters.getMultiSampleCountProperty() ==
                         initial.appliedMultiSampleCount,
-                "initial public presentation parameters report the granted framebuffer");
-            std::printf("[INFO] granted framebuffer: color=%d depth=%d samples=%d robust=%s "
+                "initial public presentation parameters report the applied backbuffer");
+            std::printf("[INFO] applied backbuffer: color=%d depth=%d samples=%d robust=%s "
                         "native-reset-poll=%s\n",
                         initial.appliedBackBufferFormat,
                         initial.appliedDepthStencilFormat,
@@ -171,9 +171,12 @@ namespace
                         initial.appliedBackBufferFormat &&
                     static_cast<int>(applied.getDepthStencilFormatProperty()) ==
                         initial.appliedDepthStencilFormat &&
-                    applied.getMultiSampleCountProperty() == initial.appliedMultiSampleCount &&
+                    applied.getMultiSampleCountProperty() > 1 &&
+                    applied.getMultiSampleCountProperty() <= 8 &&
+                    applied.getMultiSampleCountProperty() ==
+                        afterFirstReset.appliedMultiSampleCount &&
                     contentLostEvents == 0 && !target.getIsContentLostProperty(),
-                "ordinary Reset reports achieved formats without loss or context recreation");
+                "ordinary Reset applies renderer-owned MSAA without loss or context recreation");
 
             device.Reset(reset);
             const auto afterSecondReset = renderer.GetContextRecoverySnapshotForTesting();
@@ -182,8 +185,10 @@ namespace
                     events_[3] == ordinaryResetEvents[1] &&
                     afterSecondReset.contextGeneration == initial.contextGeneration &&
                     afterSecondReset.presentationResets == initial.presentationResets + 2 &&
+                    afterSecondReset.appliedMultiSampleCount ==
+                        afterFirstReset.appliedMultiSampleCount &&
                     contentLostEvents == 0,
-                "repeated ordinary Reset remains presentation-only and deterministic");
+                "repeated ordinary Reset retains the applied renderer-owned MSAA count");
 
             events_.clear();
             SetEnvironment("CNA_RLGL_DEBUG_FORCE_NATIVE_LOSS", "1");
@@ -217,8 +222,10 @@ namespace
             Check(events_ == nativeCycleEvents && renderer.CanBeginDrawEXT() &&
                     restored.contextGeneration == initial.contextGeneration + 1 &&
                     restored.presentationResets == initial.presentationResets + 2 &&
+                    restored.appliedMultiSampleCount ==
+                        afterFirstReset.appliedMultiSampleCount &&
                     contentLostEvents == 1 && target.getIsContentLostProperty(),
-                "native recreation raises Lost/Resetting/Reset and ContentLost in XNA order");
+                "native recreation restores renderer-owned MSAA and raises lifecycle events in XNA order");
 
             events_.clear();
             SetEnvironment("CNA_RLGL_DEBUG_FORCE_NATIVE_LOSS", "1");
