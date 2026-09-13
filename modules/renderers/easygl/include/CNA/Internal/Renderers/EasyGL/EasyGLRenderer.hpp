@@ -1416,15 +1416,20 @@ namespace CNA::Internal::Renderers::EasyGL
         mutable std::optional<bool> probedHalfFloatRenderable_;
         mutable std::array<std::optional<bool>, 3> probedNormalizedRenderTargets_{};
 
-        // FillMode::WireFrame emulation for OpenGL ES/WebGL, which have no glPolygonMode:
-        // when active, triangle draws are re-expanded into GL_LINES. Desktop GL uses native
-        // polygon mode so rasterizer state reaches every draw path, including SpriteBatch and
-        // compiled effects, and native polygon-offset-line state can bias its fragments.
-        bool wireframe_ = false;
-        bool desktopWireframe_ = false;
-        ::easygl::Buffer wireframeIbo_;        ///< scratch element buffer of line indices
-        bool wireframeIboCreated_ = false;
-        std::vector<std::uint32_t> wireframeScratch_;  ///< CPU build buffer (32-bit line indices)
+        // SOFTWARE-178: polygon mode must stay a polygon operation. Re-expanding triangles as
+        // GL_LINES loses post-transform culling, polygon depth bias and topology-wide rasterizer
+        // state, and it cannot cover SpriteBatch, compiled-effect, multi-stream and instanced paths
+        // uniformly. Desktop GL is native; GLES/WebGL use their optional native polygon-mode
+        // extensions. A context with neither reports false and refuses triangle draws.
+        enum class NativeWireframeApi
+        {
+            None,
+            Desktop,
+            NvPolygonMode,
+            WebGlPolygonMode
+        };
+        NativeWireframeApi nativeWireframeApi_ = NativeWireframeApi::None;
+        bool fillModeWireframe_ = false;
 
         // A compensated negative base can require an attribute address before buffer start on
         // GLES/WebGL and is driver-sensitive even where a native desktop entry point exists.
@@ -1447,13 +1452,9 @@ namespace CNA::Internal::Renderers::EasyGL
             bool instanced,
             int instanceCount);
 
-        // Draw the given triangle geometry as a wireframe (GL_LINES). Returns false when the
-        // primitive is not a triangle list/strip (caller should fall back to a normal draw).
-        // ib == nullptr means a non-indexed draw (sequential vertices from firstVertex).
-        bool DrawWireframe(const EasyGLVertexBufferRenderer& vb,
-                           const EasyGLIndexBufferRenderer* ib,
-                           PrimitiveType primitive, int primitiveCount,
-                           int startIndex, int baseVertex, int firstVertex);
+        void DetectNativeWireframeApi();
+        void SetNativePolygonMode(bool wireframe);
+        void RequireSupportedFillModeEXT(PrimitiveType primitive) const;
 
         void EnsureColored3DProgram();
         void EnsureTextured3DProgram();
@@ -1754,10 +1755,10 @@ namespace CNA::Internal::Renderers::EasyGL
 #endif
         // AnisotropicFiltering/MultiSampleAntiAliasing re-query the same live GL state the
         // startup capability dump (EnsureGL()) already prints, since they're cheap, idempotent GL
-        // queries -- no need to cache them. WireFrame is implemented through measured triangle
-        // edge re-expansion because GLES3 has no polygon-mode wireframe. Everything else
-        // CNA::GraphicsCapability currently enumerates is genuinely supported here, so falls
-        // through to the shared default (true).
+        // queries -- no need to cache them. WireFrame is true only when the active context exposes
+        // a native polygon-mode API; otherwise triangle draws are refused instead of approximated.
+        // Everything else CNA::GraphicsCapability currently enumerates is genuinely supported
+        // here, so falls through to the shared default (true).
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         void Clear(float r, float g, float b, float a) override;
         void Present() override;

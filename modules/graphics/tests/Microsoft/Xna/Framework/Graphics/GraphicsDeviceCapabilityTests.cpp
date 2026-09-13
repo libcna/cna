@@ -62,9 +62,9 @@ using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespac
 // phase 11) legitimately differs from EasyGL's on 3 of these checks: OPENGL1 has no
 // ARB_multitexture-based MRT or custom-shader Effect pipeline (this renderer's own design rule:
 // "No GLSL/custom ShaderEffect pipeline in the strict OPENGL1 renderer"), but DOES support
-// wireframe via real glPolygonMode(GL_LINE); EasyGL instead uses measured triangle-edge
-// re-expansion because GLES3 has no polygon mode. Both report working wireframe through different
-// implementations. OcclusionQuery (plans/plan_opengl1.md item 23, EasyGL parity, added
+// wireframe via real glPolygonMode(GL_LINE). EasyGL now likewise uses native polygon mode on
+// desktop or through optional GLES/WebGL extensions and truthfully reports false where none is
+// exposed. OcclusionQuery (plans/plan_opengl1.md item 23, EasyGL parity, added
 // 2026-07-20) is no longer one of the differing checks -- both renderers now genuinely support it
 // (OPENGL1 via real ARB_occlusion_query/core-1.5 GL_SAMPLES_PASSED queries).
 
@@ -406,7 +406,8 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 // oracle in this file, not a reading of the source:
 //
 //   Software, Vulkan, bgfx, SDL_GPU, D3D9, D3D11  reports true, renders a real wireframe
-//   EasyGL                                        reports true, renders line-expansion wireframe
+//   EasyGL desktop/native-extension contexts       report true, render native wireframe
+//   EasyGL GLES/WebGL without polygon-mode ext     report false, refuse (SOFTWARE-178)
 //   WebGPU                                        reports FALSE, refuses the draw (WEBGPU-115)
 //   Headless                                      reports true, rasterizes nothing at all
 //   D3D12                                         maps FILL_WIREFRAME through the shared
@@ -428,9 +429,10 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 // matrix for that boundary lives in WebGpuWireFrameContractTests.cpp; this file keeps the
 // per-renderer shape of the contract.
 //
-// HISTORICAL EASYGL FINDING, NOW RESOLVED. Before REMED-GFX-219 the implementation rendered a
-// measured-correct GL_LINES wireframe while the capability under-reported false. The current
-// report is true and the oracle below preserves that correction.
+// HISTORICAL EASYGL FINDING, SUPERSEDED. REMED-GFX-219 promoted a narrow GL_LINES edge expansion
+// after one unclipped triangle passed. SOFTWARE-178 proved that path could not preserve culling,
+// polygon depth bias or topology-wide state and bypassed whole draw families. EasyGL now uses
+// native polygon mode when available and otherwise takes the same truthful refusal shape.
 // ============================================================================
 
 // The oracle itself -- geometry, probes, colours, the Solid control and the single-draw renderer
@@ -450,17 +452,11 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     const bool reported = gd.SupportsCapability(GraphicsCapability::WireFrame);
 
 #if defined(CNA_RENDERER_EASYGL)
-    // REMED-GFX-219 landed with the GL-family lane: the EasyGL implementation's GL_LINES
-    // re-expansion renders a correct wireframe (the pixel oracle below measures interior 0/1089
-    // with all three edges present), so the report now states the capability the renderer
-    // genuinely has. True for every GL profile alike -- the emulation draws line primitives and
-    // depends on no polygon-mode API. Under OPENGLES2 the renderer's report is additionally
-    // conditional on GL_OES_element_index_uint (the emulation's 32-bit line indices are an
-    // extension in core ES 2.0); every driver this suite runs on advertises it, so the
-    // expectation holds unchanged there.
-    EXPECT_TRUE(reported)
-        << "the EasyGL-family renderers under-report WireFrame again -- REMED-GFX-219's corrected "
-           "report is gone while the GL_LINES emulation still renders a measured-correct wireframe";
+    // SOFTWARE-178: desktop OpenGL always has native polygon mode. GLES/WebGL report the runtime
+    // truth of GL_NV_polygon_mode / WEBGL_polygon_mode, so either value is legal there and the
+    // positive/refusal arms below verify that the reported value matches the actual draw.
+    if (CNA_RENDERER_IS(OpenGL33))
+        EXPECT_TRUE(reported) << "desktop EasyGL lost core glPolygonMode support";
 #elif defined(CNA_RENDERER_WEBGPU)
     // WEBGPU-115: asserted, not inherited. wgpu-native has no polygon mode at all, so
     // WebGPURenderer::SupportsCapability answers false and the draw-time guard refuses.
@@ -546,12 +542,12 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorU
     if (!IsMeasured())
         GTEST_SKIP() << RendererName()
                      << " has no runtime in this environment; the oracle runs but cannot measure";
-    if (!RendersEdges())
+    GraphicsDevice gd;
+    if (!RendersEdges(gd))
         // The rejecting renderer gets its own arm below; asserting the positive contract here would
         // only duplicate that arm's failure mode with a worse diagnostic.
         GTEST_SKIP() << RendererName()
                      << " does not rasterize wireframe; see the deterministic-rejection arm";
-    GraphicsDevice gd;
     const Result solid = RenderTriangle(gd, FillMode::Solid);
     PrintReading("solid", solid);
     const Result wire = RenderTriangle(gd, FillMode::WireFrame);
@@ -604,9 +600,9 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasteri
     if (!HasPixelOracle())
         GTEST_SKIP() << RendererName()
                      << " does not rasterize and read pixels back, so there is nothing to measure";
-    if (!IsMeasured() || !RendersEdges())
-        GTEST_SKIP() << RendererName() << " is not in the measured wireframe-rendering set";
     GraphicsDevice gd;
+    if (!IsMeasured() || !RendersEdges(gd))
+        GTEST_SKIP() << RendererName() << " is not in the measured wireframe-rendering set";
     // WireFrame -> Solid -> WireFrame. A renderer that caches a pipeline, a polygon mode or an
     // expanded index buffer across state changes produces a different third frame; a renderer that
     // never applied the state in the first place produces three identical solid ones.
@@ -647,7 +643,7 @@ TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
     GraphicsDevice gd;
     const Result wire = RenderTriangle(gd, FillMode::WireFrame);
     PrintReading("wireframe-before-recovery", wire);
-    if (RejectsWireFrame())
+    if (RejectsWireFrame(gd))
     {
         // A refusal is this renderer's correct answer (WEBGPU-115) -- what must still hold is that
         // it left nothing behind for the next draw to trip over.
@@ -676,12 +672,12 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameIsRefusedDeterministicallyOnThisRend
     if (!HasPixelOracle())
         GTEST_SKIP() << RendererName()
                      << " does not rasterize and read pixels back, so there is nothing to measure";
-    if (!RejectsWireFrame())
-        GTEST_SKIP() << RendererName() << " is not in the WireFrame-rejecting set";
+    GraphicsDevice gd;
+    if (!RejectsWireFrame(gd))
+        GTEST_SKIP() << RendererName() << " exposes native polygon-mode wireframe";
     // The whole point of the boundary is that the two frames are NOT the same picture and NOT both
     // produced: Solid renders exactly, WireFrame throws, and the target the refused draw was aimed
     // at still holds nothing but the clear colour.
-    GraphicsDevice gd;
     const Result solid = RenderTriangle(gd, FillMode::Solid);
     PrintReading("solid", solid);
     const Result wire = RenderTriangle(gd, FillMode::WireFrame);

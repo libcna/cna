@@ -585,6 +585,165 @@ TEST(EasyGLCompiledEffectDrawTest, SharedDrawMatrixContract)
     CNA::TestSupport::RunCompiledEffectDrawContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledOrdinaryDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    if (device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
+        GTEST_SKIP() << "this context exposes native polygon-mode wireframe";
+
+    struct PositionVertex { float x, y, z; };
+    const PositionVertex triangle[3] = {
+        {-0.75f, -0.75f, 0.0f}, {0.75f, -0.5f, 0.0f}, {-0.25f, 0.75f, 0.0f},
+    };
+    const VertexDeclaration declaration(
+        sizeof(PositionVertex),
+        {VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0)});
+    VertexBuffer buffer(device, declaration, 3, BufferUsage::None);
+    buffer.SetDataRaw(triangle, 3, sizeof(PositionVertex));
+
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    RasterizerState wire;
+    wire.setCullModeProperty(CullMode::None);
+    wire.setFillModeProperty(FillMode::WireFrame);
+    device.setRasterizerStateProperty(wire);
+    device.SetVertexBuffer(&buffer);
+
+    EXPECT_THROW(device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+                 System::NotSupportedException);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledMultiStreamDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    if (device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
+        GTEST_SKIP() << "this context exposes native polygon-mode wireframe";
+
+    struct PositionVertex { float x, y, z; };
+    struct OffsetVertex { float x, y, z, w; };
+    const PositionVertex triangle[3] = {
+        {-0.75f, -0.75f, 0.0f}, {0.75f, -0.5f, 0.0f}, {-0.25f, 0.75f, 0.0f},
+    };
+    const OffsetVertex offsets[3] = {{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}};
+    const VertexDeclaration positions(
+        sizeof(PositionVertex),
+        {VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0)});
+    const VertexDeclaration textureCoordinates(
+        sizeof(OffsetVertex),
+        {VertexElement(0, VertexElementFormat::Vector4,
+                       VertexElementUsage::TextureCoordinate, 0)});
+    VertexBuffer positionBuffer(device, positions, 3, BufferUsage::None);
+    positionBuffer.SetDataRaw(triangle, 3, sizeof(PositionVertex));
+    VertexBuffer offsetBuffer(device, textureCoordinates, 3, BufferUsage::None);
+    offsetBuffer.SetDataRaw(offsets, 3, sizeof(OffsetVertex));
+
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect(true));
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+    effect.getParametersProperty()["StreamMix"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(1, 1, 1, 1));
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    RasterizerState wire;
+    wire.setCullModeProperty(CullMode::None);
+    wire.setFillModeProperty(FillMode::WireFrame);
+    device.setRasterizerStateProperty(wire);
+    device.SetVertexBuffers({VertexBufferBinding(&positionBuffer),
+                             VertexBufferBinding(&offsetBuffer)});
+
+    EXPECT_THROW(device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1),
+                 System::NotSupportedException);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledInstancedDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    if (device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
+        GTEST_SKIP() << "this context exposes native polygon-mode wireframe";
+    if (!device.SupportsCapability(CNA::GraphicsCapability::Instancing))
+        GTEST_SKIP() << "this EasyGL profile has no instanced draw route";
+
+    struct PositionVertex { float x, y, z; };
+    struct OffsetVertex { float x, y, z, w; };
+    const PositionVertex triangle[3] = {
+        {-0.75f, -0.75f, 0.0f}, {0.75f, -0.5f, 0.0f}, {-0.25f, 0.75f, 0.0f},
+    };
+    const OffsetVertex instance = {0, 0, 0, 0};
+    const std::uint16_t indices[3] = {0, 1, 2};
+    const VertexDeclaration positions(
+        sizeof(PositionVertex),
+        {VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0)});
+    const VertexDeclaration textureCoordinates(
+        sizeof(OffsetVertex),
+        {VertexElement(0, VertexElementFormat::Vector4,
+                       VertexElementUsage::TextureCoordinate, 0)});
+    VertexBuffer positionBuffer(device, positions, 3, BufferUsage::None);
+    positionBuffer.SetDataRaw(triangle, 3, sizeof(PositionVertex));
+    VertexBuffer instanceBuffer(device, textureCoordinates, 1, BufferUsage::None);
+    instanceBuffer.SetDataRaw(&instance, 1, sizeof(OffsetVertex));
+    IndexBuffer indexBuffer(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    indexBuffer.SetData(indices, 3);
+
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect(true));
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+    effect.getParametersProperty()["StreamMix"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(1, 1, 1, 1));
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    RasterizerState wire;
+    wire.setCullModeProperty(CullMode::None);
+    wire.setFillModeProperty(FillMode::WireFrame);
+    device.setRasterizerStateProperty(wire);
+    device.SetVertexBuffers({VertexBufferBinding(&positionBuffer, 0, 0),
+                             VertexBufferBinding(&instanceBuffer, 0, 1)});
+    device.SetIndexBuffer(&indexBuffer);
+
+    EXPECT_THROW(
+        device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1, 1),
+        System::NotSupportedException);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, UnsupportedNativeWireframeRefusesCompiledSpriteBatchDraw)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters());
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    if (device.SupportsCapability(CNA::GraphicsCapability::WireFrame))
+        GTEST_SKIP() << "this context exposes native polygon-mode wireframe";
+
+    Effect effect(device, CNA::TestSupport::BuildSyntheticDrawableEffect());
+    effect.getParametersProperty()["Transform"]->SetValue(
+        Matrix::CreateOrthographicOffCenter(0, 8, 8, 0, -1, 1));
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4(0.25f, 0.5f, 0.75f, 1.0f));
+    Texture2D texture(device, 1, 1);
+    const Color white = Color::White;
+    texture.SetData(&white, 1);
+    RasterizerState wire;
+    wire.setCullModeProperty(CullMode::None);
+    wire.setFillModeProperty(FillMode::WireFrame);
+
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Immediate, BlendState::Opaque,
+                nullptr, nullptr, &wire, &effect);
+    EXPECT_THROW(batch.Draw(texture, Rectangle(0, 0, 8, 8), Color::White),
+                 System::NotSupportedException);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, D3D9LoopUsesIterationCountNotAddressLimit)
 {
     GraphicsDevice device;

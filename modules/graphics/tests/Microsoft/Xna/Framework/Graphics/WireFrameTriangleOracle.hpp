@@ -72,24 +72,26 @@ namespace CnaTest::WireFrameOracle
         return HasPixelOracle() && !CNA_RENDERER_IS(DirectX12);
     }
 
-    // Measured to render a genuine wireframe: edges lit, interior empty. WebGPU is excluded
-    // because it has no polygon-mode API at all and now refuses the request outright (WEBGPU-115).
+    // Measured to render a genuine wireframe: edges lit, interior empty. The answer is a runtime
+    // capability because SOFTWARE-178 makes EasyGL conditional on the active context's native
+    // polygon-mode API (desktop core, GL_NV_polygon_mode or WEBGL_polygon_mode).
     /** @brief Whether the active renderer draws a genuine wireframe: edges lit, interior empty. */
-    [[nodiscard]] inline bool RendersEdges()
+    [[nodiscard]] inline bool RendersEdges(
+        const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device)
     {
-        return IsMeasured() && !CNA_RENDERER_IS(WebGPU);
+        return IsMeasured() &&
+               device.SupportsCapability(CNA::GraphicsCapability::WireFrame);
     }
 
-    // WEBGPU-115: the renderers that answer a WireFrame request with a deterministic refusal
-    // instead of pixels. This arm used to have an empty registration set -- no renderer rejected,
-    // so REMED-GFX-209 recorded the absence rather than manufacturing one. WebGPU now fills it,
-    // and it is the only member: EasyGL renders a genuine wireframe despite reporting false
-    // (REMED-GFX-219, deferred and deliberately untouched here), and every other measured renderer
-    // reports true and renders one.
+    // WEBGPU-115 / SOFTWARE-178: a measured renderer that truthfully reports no native wireframe
+    // answers a polygon draw with a deterministic refusal instead of silently substituting a
+    // different rasterization mode.
     /** @brief Whether the active renderer refuses a WireFrame request deterministically. */
-    [[nodiscard]] inline bool RejectsWireFrame()
+    [[nodiscard]] inline bool RejectsWireFrame(
+        const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device)
     {
-        return IsMeasured() && CNA_RENDERER_IS(WebGPU);
+        return IsMeasured() &&
+               !device.SupportsCapability(CNA::GraphicsCapability::WireFrame);
     }
 
     /** @brief The active renderer's display name. */
@@ -439,4 +441,3 @@ namespace CnaTest::WireFrameOracle
             << RendererName() << " Solid produced a lit pixel that is neither ink nor clear";
     }
 }   // namespace CnaTest::WireFrameOracle
-

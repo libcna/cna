@@ -121,6 +121,19 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
     console.warn('[CNA] Simulating WebGL context restore');
     ext.restoreContext();
 });
+
+EM_JS(int, CNA_HasWebGLPolygonMode, (), {
+    if (typeof GLctx === 'undefined' || !GLctx) return 0;
+    return GLctx.getExtension('WEBGL_polygon_mode') ? 1 : 0;
+});
+
+EM_JS(void, CNA_SetWebGLPolygonMode, (int wireframe), {
+    if (typeof GLctx === 'undefined' || !GLctx) return;
+    const ext = GLctx.getExtension('WEBGL_polygon_mode');
+    if (!ext) return;
+    ext.polygonModeWEBGL(GLctx.FRONT_AND_BACK,
+                         wireframe ? ext.LINE_WEBGL : ext.FILL_WEBGL);
+});
 #endif
 
 // REMED-GFX-147: the one GLSL declaration every fragment shader that samples a sampler2D shares.
@@ -1300,18 +1313,6 @@ if (ProfileIsDesktopCore())
             if (glEnableFn) glEnableFn(kGlVertexProgramPointSize);
         }
 
-        void SetDesktopPolygonMode(bool wireframe)
-        {
-            using GlPolygonModeFn = void (*)(unsigned int, unsigned int);
-            const auto glPolygonModeFn =
-                reinterpret_cast<GlPolygonModeFn>(LoadEasyGlProcAddress("glPolygonMode"));
-            if (glPolygonModeFn == nullptr)
-                throw std::runtime_error("desktop GL context exposes no glPolygonMode entry point");
-            constexpr unsigned int kGlFrontAndBack = 0x0408;
-            constexpr unsigned int kGlLine = 0x1B01;
-            constexpr unsigned int kGlFill = 0x1B02;
-            glPolygonModeFn(kGlFrontAndBack, wireframe ? kGlLine : kGlFill);
-        }
     }
 
     // --- EasyGLTexture3DRenderer ---
@@ -5980,6 +5981,7 @@ if (ProfileUsesGlslEs100())
         }
 
         device.initialize(glProcAddressLoader);
+        DetectNativeWireframeApi();
         // WebGL commonly exposes only four rasterizer subpixel bits. Wine's usual 63/128-pixel
         // displacement rounds back to exactly half a pixel at that precision, putting XNA's 1x1
         // right triangles on an excluded fill edge again. Use the closest representable value
@@ -6270,8 +6272,6 @@ if (ProfileUsesGlslEs100())
         msaaH_ = 0;
         mrtFbo_.reset_handle_no_gl();
         bound_->mrtFramebuffer = 0;
-        wireframeIbo_.reset_handle_no_gl();
-        wireframeIboCreated_ = false;
         negativeBaseVertexIbo_.reset_handle_no_gl();
         negativeBaseVertexIboCreated_ = false;
         probedFullFloatRenderable_.reset();
@@ -6322,22 +6322,10 @@ else
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
             case CNA::GraphicsCapability::WireFrame:
-                // REMED-GFX-219 resolved: this renderer's GL_LINES re-expansion renders a genuinely
-                // correct wireframe (shared pixel oracle: interior 0/1089, all three triangle edges
-                // present), so the previous `false` under-stated the implementation. The emulation
-                // draws line primitives and depends on no polygon-mode API, so it holds for every
-                // GL profile (OPENGLES3/OPENGL33/WEBGL1/WEBGL2) alike.
-if (ProfileIsEs2ApiGeneration())
-{
-                // ...with one ES 2.0 nuance: the re-expanded line indices are 32-bit, and
-                // GL_UNSIGNED_INT element indices are an extension there (core in ES 3.0), so the
-                // report is conditional on the runtime genuinely providing it.
-                return metagl::HasExtension("GL_OES_element_index_uint");
-}
-else
-{
-                return true;
-}
+                // SOFTWARE-178: a true answer means the context exposes a real polygon mode,
+                // which preserves culling, clipping, polygon depth bias, MSAA and stencil across
+                // every triangle route. GL_LINES expansion cannot make that promise.
+                return nativeWireframeApi_ != NativeWireframeApi::None;
             case CNA::GraphicsCapability::MultiStreamVertexInput:
                 // REMED-GFX-201: implemented -- Draw*PrimitivesEx binds every per-vertex stream
                 // into the VAO at locations continuing after the previous stream's, each with its
@@ -6435,10 +6423,9 @@ else
                 "meta-gl failed to reload GL entry points after debug context loss");
         }
         if (ProfileIsDesktopCore())
-        {
             EnableVertexProgramPointSize();
-            SetDesktopPolygonMode(desktopWireframe_);
-        }
+        DetectNativeWireframeApi();
+        SetNativePolygonMode(fillModeWireframe_);
         ApplyCurrentDepthBias();
 
         // 4. Notify listeners that context is restored. ResourceRegistry calls
@@ -7977,7 +7964,9 @@ if (!ProfileIsEs2ApiGeneration())
 
     void EasyGLRenderer::ApplyStencilPrimitiveTopology(PrimitiveType primitive)
     {
-        if (metagl::IsContextLost() || !stencilEnabled_ || !stencilTwoSided_) return;
+        if (metagl::IsContextLost()) return;
+        RequireSupportedFillModeEXT(primitive);
+        if (!stencilEnabled_ || !stencilTwoSided_) return;
 
         // Direct3D 9 applies the CCW tuple only to counter-clockwise triangles. Two-sided stencil
         // is ignored for lines and points, which instead use the ordinary tuple. GL's separate
@@ -8048,20 +8037,12 @@ if (!ProfileIsEs2ApiGeneration())
                                                 : ::easygl::CullFace::Front);
         }
         device.set_scissor_test_enabled(scissorTestEnable);
-        // Desktop GL's native polygon mode is both more complete and more faithful: it affects
-        // every triangle path (including SpriteBatch and compiled effects), preserves native
-        // culling, and works with GL_POLYGON_OFFSET_LINE. ES/WebGL have no polygon mode, so they
-        // retain the explicit GL_LINES expansion in DrawWireframe.
-        desktopWireframe_ = (fillMode == 1);
-        if (ProfileIsDesktopCore())
-        {
-            SetDesktopPolygonMode(desktopWireframe_);
-            wireframe_ = false;
-        }
-        else
-        {
-            wireframe_ = desktopWireframe_;
-        }
+        // SOFTWARE-178: native polygon mode is the only representation that keeps the operation
+        // after clipping and culling and gives it polygon offset, MSAA and two-sided stencil.
+        // Unsupported contexts remember the legal XNA state selection and refuse only a later
+        // triangle draw; line/point topologies remain unaffected by FillMode.
+        fillModeWireframe_ = (fillMode == 1);
+        SetNativePolygonMode(fillModeWireframe_);
         // FNA exposes constant DepthBias in normalized depth coordinates. GL instead defines the
         // polygon-offset `units` argument in minimum-resolvable depth increments, so the active
         // depth format determines the conversion. Preserve the public state and apply it through
@@ -8086,7 +8067,7 @@ if (!ProfileIsEs2ApiGeneration())
 
         const bool enabled = slopeScaleDepthBias_ != 0.0f || depthBias_ != 0.0f;
         device.set_polygon_offset_fill_enabled(enabled);
-        if (ProfileIsDesktopCore())
+        if (nativeWireframeApi_ != NativeWireframeApi::None)
         {
             constexpr auto polygonOffsetLine = static_cast<metagl::Capability>(0x2A02);
             if (enabled)
@@ -8095,6 +8076,74 @@ if (!ProfileIsEs2ApiGeneration())
                 metagl::glDisable(polygonOffsetLine);
         }
         device.set_polygon_offset(slopeScaleDepthBias_, depthBias_ * depthScale);
+    }
+
+    void EasyGLRenderer::DetectNativeWireframeApi()
+    {
+        nativeWireframeApi_ = NativeWireframeApi::None;
+        if (ProfileIsDesktopCore())
+        {
+            if (LoadEasyGlProcAddress("glPolygonMode") != nullptr)
+                nativeWireframeApi_ = NativeWireframeApi::Desktop;
+            return;
+        }
+
+        if (device.capabilities().is_webgl())
+        {
+#if defined(__EMSCRIPTEN__)
+            if (CNA_HasWebGLPolygonMode() != 0)
+                nativeWireframeApi_ = NativeWireframeApi::WebGlPolygonMode;
+#endif
+            return;
+        }
+
+        if (metagl::HasExtension("GL_NV_polygon_mode") &&
+            LoadEasyGlProcAddress("glPolygonModeNV") != nullptr)
+        {
+            nativeWireframeApi_ = NativeWireframeApi::NvPolygonMode;
+        }
+    }
+
+    void EasyGLRenderer::SetNativePolygonMode(bool wireframe)
+    {
+        if (nativeWireframeApi_ == NativeWireframeApi::None || metagl::IsContextLost())
+            return;
+
+        if (nativeWireframeApi_ == NativeWireframeApi::WebGlPolygonMode)
+        {
+#if defined(__EMSCRIPTEN__)
+            CNA_SetWebGLPolygonMode(wireframe ? 1 : 0);
+#endif
+            return;
+        }
+
+        using GlPolygonModeFn = void (*)(unsigned int, unsigned int);
+        const char* entryPoint = nativeWireframeApi_ == NativeWireframeApi::NvPolygonMode
+            ? "glPolygonModeNV" : "glPolygonMode";
+        const auto polygonMode =
+            reinterpret_cast<GlPolygonModeFn>(LoadEasyGlProcAddress(entryPoint));
+        if (polygonMode == nullptr)
+            throw std::runtime_error(std::string("EasyGL context lost its ") + entryPoint +
+                                     " polygon-mode entry point");
+        constexpr unsigned int kGlFrontAndBack = 0x0408;
+        constexpr unsigned int kGlLine = 0x1B01;
+        constexpr unsigned int kGlFill = 0x1B02;
+        polygonMode(kGlFrontAndBack, wireframe ? kGlLine : kGlFill);
+    }
+
+    void EasyGLRenderer::RequireSupportedFillModeEXT(PrimitiveType primitive) const
+    {
+        if (!fillModeWireframe_ || nativeWireframeApi_ != NativeWireframeApi::None)
+            return;
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::TriangleStrip)
+            return;
+
+        throw System::NotSupportedException(
+            "EasyGL: FillMode::WireFrame is not supported by this GLES/WebGL context, so the "
+            "triangle draw is refused instead of being approximated with GL_LINES. The context "
+            "exposes neither GL_NV_polygon_mode nor WEBGL_polygon_mode. Query GraphicsDevice::"
+            "SupportsCapability(GraphicsCapability::WireFrame) and select FillMode::Solid when "
+            "it reports false.");
     }
 
     void EasyGLRenderer::ApplyRasterizerMultiSampleState(bool enabled)
@@ -12639,102 +12688,6 @@ if (ProfileIsEs2ApiGeneration())
         }
     }
 
-    bool EasyGLRenderer::DrawWireframe(const EasyGLVertexBufferRenderer& vb,
-                                              const EasyGLIndexBufferRenderer* ib,
-                                              PrimitiveType primitive, int primitiveCount,
-                                              int startIndex, int baseVertex, int firstVertex)
-    {
-        // Only triangle geometry needs expanding; line/point primitives are already "wireframe".
-        if (primitive != PrimitiveType::TriangleList &&
-            primitive != PrimitiveType::TriangleStrip)
-            return false;
-        if (primitiveCount <= 0) return true;
-
-        const bool foldNegativeIndices = ib != nullptr && baseVertex < 0;
-
-        // Source vertex index at sequence position `pos` within this draw.
-        auto readSrc = [&](int pos) -> std::uint32_t {
-            if (!ib) return static_cast<std::uint32_t>(firstVertex + pos);
-            const auto& bytes = ib->GetCpuBytes();
-            const std::int64_t sourceElement =
-                static_cast<std::int64_t>(startIndex) + pos;
-            if (sourceElement < 0 || sourceElement >= ib->GetIndexCount())
-                return 0;   // SOFTWARE-322: never over-read the CPU wireframe expansion source
-            const std::size_t sourceOffset =
-                static_cast<std::size_t>(sourceElement) * (ib->IsThirtyTwoBit() ? 4u : 2u);
-            const std::size_t sourceWidth = ib->IsThirtyTwoBit() ? 4u : 2u;
-            if (sourceOffset > bytes.size() || sourceWidth > bytes.size() - sourceOffset)
-                return 0;
-            std::uint32_t sourceIndex = 0;
-            if (ib->IsThirtyTwoBit()) {
-                std::memcpy(&sourceIndex, bytes.data() + sourceOffset, 4);
-            } else {
-                std::uint16_t value = 0;
-                std::memcpy(&value, bytes.data() + sourceOffset, 2);
-                sourceIndex = value;
-            }
-            if (!foldNegativeIndices) return sourceIndex;
-
-            const std::int64_t effective =
-                static_cast<std::int64_t>(sourceIndex) + baseVertex;
-            if (effective < 0 || effective > (std::numeric_limits<std::uint32_t>::max)())
-                return 0;
-            return static_cast<std::uint32_t>(effective);
-        };
-
-        wireframeScratch_.clear();
-        auto edge = [&](std::uint32_t a, std::uint32_t b) {
-            wireframeScratch_.push_back(a);
-            wireframeScratch_.push_back(b);
-        };
-        if (primitive == PrimitiveType::TriangleList) {
-            for (int t = 0; t < primitiveCount; ++t) {
-                const std::uint32_t a = readSrc(3 * t);
-                const std::uint32_t b = readSrc(3 * t + 1);
-                const std::uint32_t c = readSrc(3 * t + 2);
-                edge(a, b); edge(b, c); edge(c, a);
-            }
-        } else { // TriangleStrip: primitiveCount triangles over primitiveCount+2 vertices
-            for (int t = 0; t < primitiveCount; ++t) {
-                const std::uint32_t a = readSrc(t);
-                const std::uint32_t b = readSrc(t + 1);
-                const std::uint32_t c = readSrc(t + 2);
-                edge(a, b); edge(b, c); edge(c, a);
-            }
-        }
-
-        if (!wireframeIboCreated_) { wireframeIbo_.create(); wireframeIboCreated_ = true; }
-        vb.BindForDraw();
-        wireframeIbo_.bind(::easygl::BufferTarget::ElementArray);
-        wireframeIbo_.set_data(::easygl::BufferTarget::ElementArray,
-                               wireframeScratch_.data(),
-                               wireframeScratch_.size() * sizeof(std::uint32_t),
-                               ::easygl::BufferUsage::DynamicDraw);
-        const int lineIndexCount = static_cast<int>(wireframeScratch_.size());
-        const int effectiveBaseVertex = foldNegativeIndices ? 0 : baseVertex;
-        if (effectiveBaseVertex == 0) {
-            device.draw_elements(::easygl::PrimitiveType::Lines, lineIndexCount,
-                                 ::easygl::DataType::UnsignedInt, nullptr);
-        } else {
-if (ProfileRequiresBaseVertexPointerRebase())
-{
-            // GLES/WebGL profiles cannot assume glDrawElementsBaseVertex (ES 3.2).
-            ShiftEnabledPerVertexAttribPointers(effectiveBaseVertex, +1);
-            device.draw_elements(::easygl::PrimitiveType::Lines, lineIndexCount,
-                                 ::easygl::DataType::UnsignedInt, nullptr);
-            ShiftEnabledPerVertexAttribPointers(effectiveBaseVertex, -1);
-}
-else
-{
-            ::metagl::glDrawElementsBaseVertex(::easygl::PrimitiveType::Lines, lineIndexCount,
-                                               ::easygl::DataType::UnsignedInt, nullptr,
-                                               effectiveBaseVertex);
-}
-        }
-        vb.UnbindAfterDraw();
-        return true;
-    }
-
     void EasyGLRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb_in,
                                                       const Matrix& world,
                                                       const Matrix& view,
@@ -12765,9 +12718,6 @@ else
         const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawColoredPrimitives: prim=" << static_cast<int>(primitive)
             << " count=" << primitiveCount << " verts=" << vertex_count);
-
-        if (wireframe_ && DrawWireframe(vb, nullptr, primitive, primitiveCount, 0, 0, 0))
-            return;
 
         vb.BindForDraw();
         device.draw_arrays(ToEasyGl(primitive), 0, vertex_count);
@@ -12806,9 +12756,6 @@ else
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawIndexedColoredPrimitives: prim=" << static_cast<int>(primitive)
             << " count=" << primitiveCount << " indices=" << index_count);
-
-        if (wireframe_ && DrawWireframe(vb, &ib, primitive, primitiveCount, 0, 0, 0))
-            return;
 
         vb.BindForDraw();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
@@ -13008,10 +12955,6 @@ else
         CNA_RENDER_LOG("DrawPrimitivesEx: stride=" << layoutStride
             << " prim=" << static_cast<int>(primitive) << " verts=" << vertex_count);
 
-        if (!multiStream && wireframe_ &&
-            DrawWireframe(vb, nullptr, primitive, primitiveCount, 0, 0, params.vertexStart))
-            return;
-
         vb.BindForDraw();
         const bool semanticLayout = ConfigureDeclarationForStockProgramEXT(
             const_cast<EasyGLVertexBufferRenderer&>(vb), layoutStride, params);
@@ -13124,11 +13067,6 @@ else
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawIndexedPrimitivesEx: stride=" << layoutStride
             << " prim=" << static_cast<int>(primitive) << " indices=" << index_count);
-
-        if (!multiStream && wireframe_ &&
-            DrawWireframe(vb, &ib, primitive, primitiveCount,
-                          params.startIndex, params.baseVertex, 0))
-            return;
 
         vb.BindForDraw();
         const bool semanticLayout = ConfigureDeclarationForStockProgramEXT(
