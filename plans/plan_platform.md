@@ -795,6 +795,32 @@ SDL2 bugs; SDL2 was the first configuration that asked the questions.
 
 ---
 
+## 11b. X11 platform implementation (separate workstream)
+
+A fourth implementation landed after this plan closed: **`CNA_PLATFORM=X11`**, a native backend
+written against Xlib and the X extensions with no SDL in it at all. It is not a step of this
+campaign and does not renumber anything here; its own plan, task ledger and evidence are
+[`plans/plan_x11.md`](plan_x11.md) and its capability boundary is
+[`docs/platform-x11.md`](../docs/platform-x11.md).
+
+Two things about it matter to *this* plan, because they change claims made above:
+
+1. **This plan's goal is now measurable.** §1 says SDL3 should become "the first implementation of
+   that contract, not the substrate CNA is written against". Until X11, that could not be checked:
+   `cna_configure_vendored_sdl()` ran unconditionally from the root `CMakeLists.txt`, so a
+   configuration referencing no SDL symbol anywhere still could not be configured without it.
+   `CNA_ENABLE_SDL` now gates that, and `-DCNA_PLATFORM=X11 -DCNA_AUDIO_PLATFORM=NULL
+   -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_ENABLE_SDL=OFF` builds a CNA test binary with no
+   `libSDL` in `ldd` and no undefined `SDL_` symbol in `nm`.
+
+2. **The ratchet's allowlist is narrower than it was.** PLAT-8 exempts `modules/platform/` wholesale,
+   because that module is the one place SDL may be linked. `tools/platform/sdl_ratchet.py` now
+   denylists `modules/platform/src/X11/` from that exemption: the backend inside it exists to
+   demonstrate that CNA does not depend existentially on SDL, and a module-level exemption would
+   let an SDL call be added there with no gate noticing.
+
+---
+
 ## 12. Possible future implementations (NOT in scope)
 
 **None of the following is implemented by this plan.** They are recorded because they are the

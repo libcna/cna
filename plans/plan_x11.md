@@ -7,6 +7,14 @@
 > SDL3 stays CNA's default and an excellent optional backend. Nothing here removes, deprecates or
 > degrades it. What changes is that SDL stops being the only way CNA can reach a desktop.
 >
+> **Status: every task in the ledger is implemented and verified.** 53 of 53 rows are ✅. The
+> SDL-free configuration is measured, not argued: `ldd` shows no `libSDL` and `nm` shows no
+> undefined `SDL_` symbol in a working CNA test binary, and its 427 tests pass. See
+> [§9 Evidence log](#9-evidence-log) for every command and its result, [§7](#7-findings-that-are-not-this-backends)
+> for the five defects found that belong to other parts of the tree, and
+> [§8](#8-defects-this-work-found-in-its-own-implementation) for the ten this work's own tests
+> caught in this work's own code.
+>
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code exists but has not met those criteria; ⬜ not implemented;
 > ⛔ understood but blocked, with the blocker named in the row;
@@ -380,4 +388,113 @@ run against a bare virtual server.
 
 ## 9. Evidence log
 
-Filled in as tasks complete. Each entry names the exact command and its result.
+Every line below is a command that was run and its measured result, not a claim about what should
+happen.
+
+### Commits
+
+| Commit | What |
+|---|---|
+| `b2c78033` | the backend, the build integration and the SDL-availability gate |
+| `8086fa82` | the three test suites, the SDL-containment gate and `docs/platform-x11.md` |
+| `60d58a44` | real Vulkan surfaces, XNA key names, the window-manager fixes and the honest guards |
+
+Baseline: `e05b3d0f026e0926741f89459daf02579240399d`.
+
+### The SDL-free proof
+
+```
+cmake -S . -B cmake-build-x11-nosdl -G Ninja \
+      -DCNA_PLATFORM=X11 -DCNA_AUDIO_PLATFORM=NULL \
+      -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_ENABLE_SDL=OFF
+```
+
+```
+-- CNA: SDL is NOT configured (CNA_ENABLE_SDL=OFF). No SDL source is fetched,
+   built, found or linked by this configuration.
+
+$ ldd cmake-build-x11-nosdl/CnaPlatformModuleTests | grep -ci sdl
+0
+$ nm -uC cmake-build-x11-nosdl/CnaPlatformModuleTests | grep -c SDL_
+0
+$ ./tools/platform/x11_test_server.sh --require-window-manager \
+      ./cmake-build-x11-nosdl/CnaPlatformModuleTests
+[  PASSED  ] 427 tests.
+```
+
+The shared objects that binary does load: `libX11`, `libXext`, `libXi`, `libXrandr`, `libXcursor`,
+`libXfixes`, `libGLX`, `libGLdispatch`, `libxcb`, and libc/libstdc++. Nothing else.
+
+`CNA_ENABLE_SDL=OFF` was also verified to refuse rather than substitute: adding
+`-DCNA_AUDIO_PLATFORM=SDL3` to the above fails the configure naming
+`CNA_AUDIO_PLATFORM=SDL3` as the reason.
+
+### The X11 test suites
+
+| Suite | Environment | Result |
+|---|---|---|
+| `CnaX11MappingTests` | no `DISPLAY` | passed, 0.08 s |
+| `CnaX11IntegrationTests` | private `Xvfb` | passed, 8.55 s |
+| `CnaX11WindowManagerTests` | `Xvfb` + `openbox` | passed, 2.81 s |
+
+```
+$ ctest -R CnaX11 --output-on-failure
+100% tests passed, 0 tests failed out of 3
+```
+
+Platform-module suite, run directly in three separate display environments:
+
+| Environment | Result |
+|---|---|
+| `Xvfb` + `openbox` | 427 passed, 2 skipped, 0 failed |
+| bare `Xvfb` | 427 passed |
+| no `DISPLAY` at all | 354 passed, the rest skipping with a recorded reason |
+
+### Under AddressSanitizer and LeakSanitizer
+
+`-DCNA_SANITIZE=address`, same three environments. **0 leaks, 0 sanitizer errors.** LeakSanitizer
+was confirmed active in this environment first, with a deliberately leaking probe — a clean run
+from a sanitizer that is not switched on proves nothing.
+
+### What ran against a real X server rather than a fake
+
+- a real GLX context: `glXCreateContextAttribsARB` at 3.3 core on Xvfb's software GLX, made
+  current, swapped, its granted attributes read back from `glXGetFBConfigAttrib`;
+- a real `VK_KHR_xlib_surface`: a real `VkInstance` built with the two extensions the platform
+  names, a surface on a real window, and `vkGetPhysicalDeviceSurfaceSupportKHR` confirming a
+  physical device (llvmpipe) can present to it — creation succeeding proves only the call was
+  well-formed, that query proves the surface is the window's;
+- real pixels: a frame presented through `XPutImage` and read back off the window with
+  `XGetImage`, unpacked through the visual's own masks and compared per channel;
+- real input: `xdotool` keystrokes into a focused window arriving with both `Scancode::A` and
+  `KeyCode::A` and a matching release, committed text appearing only while text input is started,
+  and a click arriving as CNA button 1 with client coordinates;
+- a real external clipboard peer: `xclip` pasting what CNA copied and CNA pasting what `xclip`
+  copied, including a 512 KB `INCR` transfer in both directions and the `TARGETS` list.
+
+### Regression
+
+| Check | Result |
+|---|---|
+| SDL3 platform suite (`cmake-build-baseline`) | 506 tests, 453 passed, 52 skipped, 1 failed — **bit-identical to the baseline commit**, and the one failure is `AcquireSubsystem(Audio)` on a machine with no audio device |
+| `sdl_inventory.py --check` | already stale at `e05b3d0f`; see F-1 |
+| `sdl_classify.py --check` | all 1047 identifiers classified |
+| `renderer_sdl_audit.py --check` | allowlist unchanged at the four families |
+| `sdl_ratchet.py --check --strict` | at budget, 0 files / 0 references — **and now covers `src/X11/`**, verified by planting a synthetic `SDL_Init` there and watching it fail |
+| `hot_path_lint.py` | 0 violations across 2052 production sources |
+| `nonproduction_sdl_audit.py --check` | at per-file ceilings |
+| `check_contract.py` | 28 headers covered, 635 declarations documented |
+| full `CnaTests` under `CNA_PLATFORM=X11` | 9476 tests; every remaining failure is content-pipeline/XNB and **fails identically on the SDL3 baseline build at the same commit** (measured, §7 F-4 and F-5) |
+
+### Real-desktop validation: what is still missing
+
+This machine has no X session, no GPU and no input-method server. Xvfb plus `openbox` plus
+llvmpipe covers a great deal and is not the same thing. Not validated here, and recorded as such
+rather than assumed:
+
+- a hardware GLX driver, and a compositor's own fullscreen and vsync behaviour;
+- a multi-monitor XRandR layout, and monitor hotplug;
+- an `Xft.dpi` other than unset, so the high-DPI branch of the scale policy;
+- a real input method (ibus, fcitx) driving `Xutf8LookupString` through a composition;
+- physical input devices, so XInput2 raw motion from a real mouse;
+- a window manager other than `openbox`.

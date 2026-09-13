@@ -25,6 +25,9 @@ frame API, not a drawing API. Audio selection is orthogonal and uses `CNA_AUDIO_
 cmake -S . -B build -DCNA_PLATFORM=SDL3
 cmake -S . -B build-sdl2 \
   -DCNA_PLATFORM=SDL2 -DCNA_AUDIO_PLATFORM=SDL2 -DCNA_GRAPHICS_RENDERER=OPENGLES3
+cmake -S . -B build-x11 \
+  -DCNA_PLATFORM=X11 -DCNA_AUDIO_PLATFORM=NULL \
+  -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_ENABLE_SDL=OFF
 cmake -S . -B build-headless \
   -DCNA_PLATFORM=HEADLESS -DCNA_GRAPHICS_RENDERER=HEADLESS
 cmake -S . -B build-terminal \
@@ -39,6 +42,12 @@ default, not necessarily the only factory name present in the binary.
 SDL3, and it advertises a deliberately narrow capability profile. Its boundary, the renderers it
 can and cannot back, and its supported build/test commands are
 [`docs/platform-sdl2.md`](platform-sdl2.md).
+
+`X11` is a native backend that uses Xlib and the X extensions directly and contains no SDL at all.
+It is what makes an SDL-free CNA a configuration that exists rather than an argument:
+`CNA_ENABLE_SDL=OFF` skips the vendored SDL sub-build entirely and refuses any selection that
+genuinely needs it. Its capability boundary, dependency table, DPI policy and the host state it
+deliberately does not seize are [`docs/platform-x11.md`](platform-x11.md).
 
 **Two implementations of the same native library cannot share a process.** SDL2 and SDL3 export
 identically named entry points (`SDL_Init`, `SDL_GetError`, `SDL_PollEvent` and many more), so a

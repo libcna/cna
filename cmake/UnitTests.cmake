@@ -1404,7 +1404,7 @@ if(CNA_BUILD_TESTS)
             cna_register_renderer_test(NAME CnaX11IntegrationTests
                 COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
                         $<TARGET_FILE:CnaTests>
-                        --gtest_filter=X11Live.*:X11ClipboardInterop.*
+                        --gtest_filter=X11Live.*:X11ClipboardInterop.*:X11VulkanSurfaceTest.*
                 LABELS "platform" TIMEOUT 300)
 
             cna_register_renderer_test(NAME CnaX11WindowManagerTests

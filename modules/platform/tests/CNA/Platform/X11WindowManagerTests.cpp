@@ -478,6 +478,161 @@ TEST_F(X11WithWindowManager, ClosingASecondaryWindowIsNotApplicationTermination)
     EXPECT_EQ(first->GetTitle(), "first");
 }
 
+// --- injected input ---------------------------------------------------------------------------
+//
+// These need the window manager, not because input does, but because they need the window to have
+// keyboard FOCUS -- and on a bare Xvfb nothing gives it any. `xdotool key --window` sends a
+// synthetic event to a specific window and bypasses focus, which is convenient and proves less:
+// it does not exercise the focus tracking, the XIM context, or the state the real path carries.
+// So focus comes from the window manager and the key goes to whatever has it.
+
+TEST_F(X11WithWindowManager, AnInjectedKeyArrivesWithBothItsPhysicalAndItsLogicalIdentity)
+{
+    if (std::system("command -v xdotool >/dev/null 2>&1") != 0)
+    {
+        GTEST_SKIP() << "xdotool is not installed, so there is no way to inject a key";
+    }
+    window_ = MakeVisibleWindow("CNA key input");
+    const WindowId id = window_->GetId();
+    ASSERT_TRUE(PumpUntil([this](const std::vector<PlatformEvent>&) { return window_->HasFocus(); }))
+        << "the window never took focus, so an injected key would go elsewhere";
+    seen_.clear();
+
+    (void) std::system("xdotool key --clearmodifiers a >/dev/null 2>&1");
+
+    const bool sawPress = PumpUntil([id](const std::vector<PlatformEvent>& events) {
+        return std::any_of(events.begin(), events.end(), [id](const PlatformEvent& event) {
+            const auto* key = std::get_if<KeyEvent>(&event);
+            return key != nullptr && key->window == id && key->pressed;
+        });
+    });
+    ASSERT_TRUE(sawPress) << "no key press arrived";
+
+    const KeyEvent* press = nullptr;
+    const KeyEvent* release = nullptr;
+    for (const PlatformEvent& event : seen_)
+    {
+        if (const auto* key = std::get_if<KeyEvent>(&event))
+        {
+            if (key->pressed && press == nullptr) { press = key; }
+            if (!key->pressed) { release = key; }
+        }
+    }
+    ASSERT_NE(press, nullptr);
+
+    // The two identities the contract keeps separate, both present and both correct. On a US
+    // layout the A position produces `a`; on another layout the scancode would be the same and
+    // the key code would differ, which is exactly the distinction being asserted.
+    EXPECT_EQ(press->scancode, Scancode::A) << "the physical key is the A position";
+    EXPECT_EQ(press->keycode, KeyCode::A) << "the layout maps that position to A";
+    EXPECT_FALSE(press->repeat) << "a single keystroke is not auto-repeat";
+
+    // And a real release, which is what `exactKeyboardState` promises. A backend that synthesised
+    // releases from a timeout would still pass the press assertions above.
+    const bool sawRelease = release != nullptr || PumpUntil([id](const std::vector<PlatformEvent>& events) {
+        return std::any_of(events.begin(), events.end(), [id](const PlatformEvent& event) {
+            const auto* key = std::get_if<KeyEvent>(&event);
+            return key != nullptr && key->window == id && !key->pressed;
+        });
+    });
+    EXPECT_TRUE(sawRelease) << "every press must have a matching release";
+}
+
+TEST_F(X11WithWindowManager, AnInjectedKeyProducesCommittedTextOnlyWhileTextInputIsActive)
+{
+    if (std::system("command -v xdotool >/dev/null 2>&1") != 0)
+    {
+        GTEST_SKIP() << "xdotool is not installed";
+    }
+    window_ = MakeVisibleWindow("CNA text input");
+    const WindowId id = window_->GetId();
+    ASSERT_TRUE(PumpUntil([this](const std::vector<PlatformEvent>&) { return window_->HasFocus(); }));
+
+    IPlatformTextInput* text = platform_->GetTextInput();
+    ASSERT_NE(text, nullptr);
+
+    // Text input off: the key event arrives, the text does not. A backend that always produced
+    // text would type into a game that never asked for it.
+    seen_.clear();
+    (void) std::system("xdotool key --clearmodifiers x >/dev/null 2>&1");
+    PumpUntil([id](const std::vector<PlatformEvent>& events) {
+        return std::any_of(events.begin(), events.end(), [id](const PlatformEvent& event) {
+            const auto* key = std::get_if<KeyEvent>(&event);
+            return key != nullptr && key->window == id && key->pressed;
+        });
+    });
+    const bool textWhileOff = std::any_of(seen_.begin(), seen_.end(), [](const PlatformEvent& e) {
+        return std::holds_alternative<TextInputEvent>(e);
+    });
+    EXPECT_FALSE(textWhileOff) << "text arrived while text input was not started";
+
+    // Text input on: the committed characters arrive as well.
+    text->Start(id, TextInputType::Text);
+    seen_.clear();
+    (void) std::system("xdotool key --clearmodifiers x >/dev/null 2>&1");
+    const bool textWhileOn = PumpUntil([](const std::vector<PlatformEvent>& events) {
+        return std::any_of(events.begin(), events.end(), [](const PlatformEvent& event) {
+            const auto* input = std::get_if<TextInputEvent>(&event);
+            return input != nullptr && input->text == "x";
+        });
+    });
+    EXPECT_TRUE(textWhileOn) << "no committed text arrived while text input was active";
+    text->Stop(id);
+}
+
+TEST_F(X11WithWindowManager, AnInjectedClickArrivesAsAButtonEventWithCoordinates)
+{
+    if (std::system("command -v xdotool >/dev/null 2>&1") != 0)
+    {
+        GTEST_SKIP() << "xdotool is not installed";
+    }
+    window_ = MakeVisibleWindow("CNA mouse input");
+    const WindowId id = window_->GetId();
+    PumpUntil([this](const std::vector<PlatformEvent>&) { return window_->HasFocus(); });
+    window_->Sync();
+
+    const WindowBounds bounds = window_->GetClientBounds();
+    const int targetX = bounds.x + bounds.width / 2;
+    const int targetY = bounds.y + bounds.height / 2;
+    seen_.clear();
+
+    const std::string move =
+        "xdotool mousemove " + std::to_string(targetX) + " " + std::to_string(targetY) +
+        " >/dev/null 2>&1";
+    (void) std::system(move.c_str());
+    (void) std::system("xdotool click 1 >/dev/null 2>&1");
+
+    const bool sawPress = PumpUntil([id](const std::vector<PlatformEvent>& events) {
+        return std::any_of(events.begin(), events.end(), [id](const PlatformEvent& event) {
+            const auto* button = std::get_if<MouseButtonEvent>(&event);
+            return button != nullptr && button->window == id && button->pressed;
+        });
+    });
+    ASSERT_TRUE(sawPress) << "no button press arrived at the window under the pointer";
+
+    const MouseButtonEvent* press = nullptr;
+    bool sawRelease = false;
+    for (const PlatformEvent& event : seen_)
+    {
+        if (const auto* button = std::get_if<MouseButtonEvent>(&event))
+        {
+            if (button->pressed && press == nullptr) { press = button; }
+            if (!button->pressed) { sawRelease = true; }
+        }
+    }
+    ASSERT_NE(press, nullptr);
+    EXPECT_EQ(press->button, 1) << "the left button is CNA button 1";
+    EXPECT_EQ(press->clicks, 1) << "one click is not a double click";
+    // Client coordinates, roughly the window's centre. Exactness is the window manager's to
+    // decide -- it owns the frame -- so this asserts the coordinates are inside the window rather
+    // than an arbitrary pixel.
+    EXPECT_GE(press->x, 0.0f);
+    EXPECT_GE(press->y, 0.0f);
+    EXPECT_LE(press->x, static_cast<float>(bounds.width));
+    EXPECT_LE(press->y, static_cast<float>(bounds.height));
+    EXPECT_TRUE(sawRelease) << "every button press must have a matching release";
+}
+
 TEST_F(X11WithWindowManager, TheWindowManagerSeesTheTitleCnaSet)
 {
     if (std::system("command -v xdotool >/dev/null 2>&1") != 0)

@@ -810,6 +810,92 @@ TEST_F(X11Live, TheSurfacePresenterPutsRealPixelsOnAWindow)
     EXPECT_FALSE(presenter->SetVSync(true));
 }
 
+TEST_F(X11Live, PresentedPixelsAreReadableBackOffTheRealWindow)
+{
+    // The presenter's other test proves the calls are accepted. This one proves pixels arrived.
+    //
+    // The read-back goes through `XGetImage` on the window itself -- the X server's own copy of
+    // what is on screen -- so it measures the whole path: the RGBA8 to visual-format conversion
+    // derived from the visual's masks, the scaling, and the transfer. A conversion that packed
+    // the channels in the wrong order would pass every other assertion in this file and fail
+    // here, which is the point.
+    window_ = MakeWindow(64, 64);
+    window_->Show();
+    window_->Sync();
+    // A mapped window is not yet a *viewable* one: the server has to process the map before its
+    // contents can be read. The first Expose is that signal.
+    const WindowId id = window_->GetId();
+    ASSERT_TRUE(PumpUntil([this, id](const std::vector<PlatformEvent>& events) {
+        return SawWindowEvent(events, id, WindowEventKind::Exposed);
+    })) << "the window never became viewable";
+
+    std::unique_ptr<IPlatformSurfacePresenter> presenter =
+        platform_->CreateSurfacePresenter(*window_);
+    ASSERT_NE(presenter, nullptr);
+
+    // A deliberately asymmetric colour: 0xFF/0x80/0x20 is different in every channel, so a
+    // swapped red and blue is visible where a grey or a pure primary would not be.
+    constexpr std::uint8_t kRed = 0xFF;
+    constexpr std::uint8_t kGreen = 0x80;
+    constexpr std::uint8_t kBlue = 0x20;
+    std::vector<std::uint8_t> pixels(static_cast<std::size_t>(64 * 64 * 4), 0);
+    for (std::size_t index = 0; index < pixels.size(); index += 4)
+    {
+        pixels[index + 0] = kRed;
+        pixels[index + 1] = kGreen;
+        pixels[index + 2] = kBlue;
+        pixels[index + 3] = 0xFF;
+    }
+    SurfaceFrame frame;
+    frame.pixels = pixels.data();
+    frame.width = 64;
+    frame.height = 64;
+    presenter->SetScaleMode(PresentScaleMode::Stretch, PresentFilter::Nearest);
+    ASSERT_NO_THROW(presenter->Present(frame));
+
+    const NativeWindowHandle handle = window_->GetNativeHandle();
+    X11NativeWindow x11{};
+    ASSERT_TRUE(TryGetX11(handle, x11));
+    auto* display = static_cast<::Display*>(x11.display);
+    XSync(display, kXFalse);
+
+    XImage* image = XGetImage(display, static_cast<::Window>(x11.window), 16, 16, 8, 8, AllPlanes,
+                              ZPixmap);
+    ASSERT_NE(image, nullptr) << "the X server would not return the window's contents";
+
+    XWindowAttributes attributes{};
+    ASSERT_NE(XGetWindowAttributes(display, static_cast<::Window>(x11.window), &attributes), 0);
+    Visual* visual = attributes.visual;
+    ASSERT_NE(visual, nullptr);
+
+    // Unpacked through the visual's own masks, the same way the presenter packed them. Comparing
+    // raw pixel values would only assert that two pieces of code share a bug.
+    const auto unpack = [](const unsigned long value, const unsigned long mask) -> int {
+        if (mask == 0) { return -1; }
+        int shift = 0;
+        unsigned long probe = mask;
+        while ((probe & 1u) == 0) { probe >>= 1; ++shift; }
+        int bits = 0;
+        while ((probe & 1u) != 0) { probe >>= 1; ++bits; }
+        const unsigned long channel = (value & mask) >> shift;
+        return static_cast<int>(bits >= 8 ? (channel >> (bits - 8)) : (channel << (8 - bits)));
+    };
+
+    const unsigned long sample = XGetPixel(image, 4, 4);
+    const int red = unpack(sample, visual->red_mask);
+    const int green = unpack(sample, visual->green_mask);
+    const int blue = unpack(sample, visual->blue_mask);
+    XDestroyImage(image);
+
+    // Tolerance, not equality: a 16-bit visual carries 5 or 6 bits per channel, so the value
+    // round-trips lossily by construction. Wide enough to survive that, far narrower than the
+    // distance between these three channel values -- so a swap still fails.
+    constexpr int kTolerance = 8;
+    EXPECT_NEAR(red, kRed, kTolerance) << "red channel";
+    EXPECT_NEAR(green, kGreen, kTolerance) << "green channel";
+    EXPECT_NEAR(blue, kBlue, kTolerance) << "blue channel";
+}
+
 TEST_F(X11Live, TheSurfacePresenterRejectsAMalformedFrameBeforeReadingIt)
 {
     window_ = MakeWindow(64, 48);
