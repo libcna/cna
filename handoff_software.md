@@ -1,6 +1,6 @@
 # CNA Software Renderer Adversarial Parity Handoff
 
-Updated: 2026-09-13, continued through SOFTWARE-198 classification
+Updated: 2026-09-13, continued through SOFTWARE-207 classification
 
 This document is the restart point for the hostile Software-versus-EasyGL classic XNA 4.0/Core
 parity review. Do not interpret the large completed task count or green regression suites as proof
@@ -35,13 +35,13 @@ infallible oracle.
 - Repository: `/rv/data/development/github.com/openeggbert/cnasoftware`
 - Branch: `software`, tracking `origin/software`
 - Adversarial challenge start: `92ed418b3dfcd4a2e03ea8c0d092a0b4caca9e9f`
-- Last task commit before SOFTWARE-198: `6b3e27cae` —
-  `fix(SOFTWARE-178): make EasyGL wireframe capability truthful`
-- Campaign delta at that commit: 335 commits, 701 changed files, 67,390 insertions and 6,740
+- Last task commit before SOFTWARE-207: `cd8e30de1` —
+  `docs(SOFTWARE-198): classify literal state identity`
+- Campaign delta at that commit: 336 commits, 701 changed files, 67,410 insertions and 6,740
   deletions relative to the challenge start. Recompute rather than copying these numbers into
   a future final report because this handoff commit and subsequent work change them.
-- `origin/software` was at `6861caf32` when this update was written. Before the SOFTWARE-198 task
-  commit, the local branch was ten commits ahead. Do not push without a new explicit request in
+- `origin/software` was at `6861caf32` when this update was written. Before the SOFTWARE-207 task
+  commit, the local branch was eleven commits ahead. Do not push without a new explicit request in
   the active conversation.
 - The only expected worktree entry after the handoff commit is the user's untracked `.junie/`.
   Preserve it. Do not stage it.
@@ -85,9 +85,9 @@ The evidence-backed verdict remains:
 `SOFTWARE-164/165` are now complete. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software advertises
 `GraphicsCapability::CompiledEffects=true`, accepts the public compiled-Effect entry point and
 passes the complete shared conformance surface plus the formerly skipped public Effect tests.
-Opt-out builds retain the dependency-free false capability. The remaining plan boundaries are
-`SOFTWARE-207`, the independently blocked repository-wide `SOFTWARE-100`, and the historical
-optional/no-goal `SOFTWARE-85/86`; do not treat this handoff as
+Opt-out builds retain the dependency-free false capability. The remaining plan boundaries are the
+independently blocked repository-wide `SOFTWARE-100` and the historical optional/no-goal
+`SOFTWARE-85/86`; do not treat this handoff as
 authority to stop before the active user's explicit completion goal is met.
 
 The prompted sampler, AddressW, and multisample-rasterizer hypotheses were all confirmed and fixed;
@@ -98,7 +98,17 @@ classic-XNA parity requirement, not a CNAEXT deferral. `SOFTWARE-178` removes Ea
 GLES/WebGL `GL_LINES` wireframe: native polygon mode is used where the active context exposes it,
 and every triangle path is refused consistently where it does not.
 
-## Latest completed work: SOFTWARE-198
+## Latest completed work: SOFTWARE-207
+
+`VertexBuffer.VertexDeclaration` now has the same explicit language-boundary classification as
+graphics states. The buffer-owned wrapper safely shares declaration elements/stride, device
+rebinding, `Name`, `Tag`, disposal, notification delivery and canonical sender after stack,
+temporary or moved source wrappers disappear. Returning the caller's literal address or sharing
+one physical event-token collection cannot be represented by the existing `const
+VertexDeclaration&` constructor without a breaking managed-handle API. The deviation is recorded
+in `CHECKLIST.md`; all five focused tests pass on displayless Software and Mesa desktop EasyGL.
+
+## Earlier completed work: SOFTWARE-198
 
 The remaining graphics-state identity question is now recorded in `CHECKLIST.md` as an accepted
 C++ mapping deviation. Public setters accept `const State&`, including legal stack objects and
@@ -329,13 +339,11 @@ The following are the only non-complete rows in `plans/plan_software.md` at this
 
 | Task | Meaning and next treatment |
 |---|---|
-| `SOFTWARE-207` | Exact managed-reference identity for `VertexBuffer.VertexDeclaration`; likewise narrowed to a public ownership-model issue after practical resource identity was fixed. |
 | `SOFTWARE-100` | Independently blocked repository-wide acceptance row. Its exact unrelated test and GDI/sharp-runtime blockers are documented in the plan; do not broaden the renderer campaign to hide them. |
 | `SOFTWARE-85` | Historical optional CPU-framebuffer window blit. Not required for the headless Software parity target. |
 | `SOFTWARE-86` | Historical optional performance work. Explicitly not a goal without a real impractical test. |
 
-All rows through `SOFTWARE-206`, the completed later ranges stated in the plan, and
-`SOFTWARE-315..484` are closed except for the rows above. Assign the next demonstrated issue as
+All rows through `SOFTWARE-484` are closed except for the rows above. Assign the next demonstrated issue as
 `SOFTWARE-485`; never add a task merely to keep numbering moving.
 
 ## Recommended next audit direction

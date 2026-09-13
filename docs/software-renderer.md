@@ -922,9 +922,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **`VertexBuffer.VertexDeclaration` preserves observable resource identity** (`SOFTWARE-348`).
   Microsoft XNA binds and returns the caller's declaration object. CNA's lifetime-safe C++ wrapper
   aliases now share its device, Name, Tag, disposal and disposal-event delivery, including stack/temporary
-  sources and cross-device ownership rebinding. Literal caller-address equality remains the
-  explicitly tracked ownership-model limitation `SOFTWARE-207`; it is not emulated with a dangling
-  borrowed pointer.
+  sources and cross-device ownership rebinding. `SOFTWARE-207` classifies literal caller-address
+  and cross-wrapper event-token identity as an accepted C++ mapping deviation; emulating it with a
+  borrowed pointer would dangle.
 - **Graphics-state aliases preserve observable resource identity** (`SOFTWARE-349`). Microsoft XNA
   retains assigned Blend/DepthStencil/Rasterizer/Sampler objects and rebinds their parent when they
   are applied to another device. CNA's source, device-property and sampler-slot wrappers now share
