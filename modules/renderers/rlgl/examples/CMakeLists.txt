@@ -884,6 +884,13 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
                 ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         endif()
     endif()
+
+    # RLGL-021: one drift-free build target for every executable owned by this directory. With
+    # CNA_BUILD_TESTS=ON this includes the central parity corpus, whose targets are created while
+    # registering CTest above; CI can therefore build exactly the complete `Rlgl` label inventory
+    # without maintaining a second handwritten executable list.
+    get_property(_cna_rlgl_runtime_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    add_custom_target(cna_test_rlgl_all DEPENDS ${_cna_rlgl_runtime_targets})
 endif()
 
 cna_apply_skip_convention()

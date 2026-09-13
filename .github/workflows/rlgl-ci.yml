@@ -1,6 +1,5 @@
-# plans/plan_rlgl.md RLGL-008: initial CI coverage is compile-focused. The renderer's runtime
-# vertical slice is locally proven with SDL3 offscreen + Mesa llvmpipe, but that exact context path
-# has not yet been established on a hosted runner. RLGL-021 owns promotion to a runtime CI gate.
+# plans/plan_rlgl.md RLGL-021: compile and execute the complete registered RLGL suite through
+# SDL3's display-server-free offscreen driver and Mesa software rendering.
 name: RLGL CI
 
 on:
@@ -11,7 +10,11 @@ on:
       - 'CMakeLists.txt'
       - 'cmake/**'
       - 'modules/**'
-      - 'scripts/check_renderer_identities.py'
+      - 'scripts/check_renderer_*.py'
+      - 'scripts/check_runtime_renderer_discipline.py'
+      - 'docs/rlgl*.md'
+      - 'plans/plan_rlgl.md'
+      - 'THIRD_PARTY_NOTICES.md'
   pull_request:
     branches: [next, develop, main]
     paths:
@@ -19,7 +22,11 @@ on:
       - 'CMakeLists.txt'
       - 'cmake/**'
       - 'modules/**'
-      - 'scripts/check_renderer_identities.py'
+      - 'scripts/check_renderer_*.py'
+      - 'scripts/check_runtime_renderer_discipline.py'
+      - 'docs/rlgl*.md'
+      - 'plans/plan_rlgl.md'
+      - 'THIRD_PARTY_NOTICES.md'
   workflow_dispatch: {}
 
 permissions:
@@ -31,7 +38,7 @@ concurrency:
 
 jobs:
   linux-build:
-    name: GCC (Linux x86_64, compile gate)
+    name: GCC (Linux x86_64, Mesa runtime gate)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -81,7 +88,8 @@ jobs:
             libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
             libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
-            wayland-protocols libxkbcommon-dev libgl1-mesa-dev
+            wayland-protocols libxkbcommon-dev \
+            libgl1-mesa-dev libgl1-mesa-dri mesa-utils
 
       - name: Configure RLGL
         working-directory: cna
@@ -89,7 +97,7 @@ jobs:
           cmake -S . -B build-rlgl -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCNA_GRAPHICS_RENDERER=RLGL \
-            -DCNA_BUILD_TESTS=OFF \
+            -DCNA_BUILD_TESTS=ON \
             -DCNA_BUILD_EXAMPLES=OFF \
             -DCNA_RLGL_COMPILED_EFFECTS=ON \
             -DCNA_ENABLE_VIDEO=OFF \
@@ -100,96 +108,24 @@ jobs:
             -DFETCHCONTENT_SOURCE_DIR_RLGL="${GITHUB_WORKSPACE}/raylib" \
             -DFETCHCONTENT_SOURCE_DIR_FNA3D="${GITHUB_WORKSPACE}/fna3d"
 
-      - name: Build renderer and focused smoke executable
+      - name: Build complete RLGL runtime inventory
+        working-directory: cna
+        run: cmake --build build-rlgl --parallel 2 --target cna_test_rlgl_all
+
+      - name: Run complete offscreen Mesa runtime suite
+        working-directory: cna
+        env:
+          SDL_VIDEODRIVER: offscreen
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          ./build-rlgl/cna_test_rlgl_smoke
+          ctest --test-dir build-rlgl --output-on-failure --label-regex '^Rlgl$' --parallel 1
+
+      - name: Verify renderer integration invariants
         working-directory: cna
         run: |
-          cmake --build build-rlgl --parallel 2 --target \
-            cna_renderer_rlgl \
-            cna_test_rlgl_smoke \
-            cna_test_rlgl_thread_context_lease_binding \
-            cna_test_rlgl_thread_context_lease_exclusion \
-            cna_test_rlgl_background_content_context \
-            cna_test_rlgl_resource_lifetime \
-            cna_test_rlgl_resource_recovery_shadow \
-            cna_test_rlgl_context_recreate \
-            cna_test_rlgl_resource_recreate \
-            cna_test_rlgl_lifecycle_matrix \
-            cna_test_rlgl_texture \
-            cna_test_rlgl_texture_cube \
-            cna_test_rlgl_texture_cube_oracle \
-            cna_test_rlgl_sampler \
-            cna_test_rlgl_state \
-            cna_test_rlgl_spritebatch \
-            cna_test_rlgl_render_target \
-            cna_test_rlgl_render_target_formats \
-            cna_test_rlgl_mrt \
-            cna_test_rlgl_mrt_oracle \
-            cna_test_rlgl_render_target_cube \
-            cna_test_rlgl_rendertargetcube_getdata_contract \
-            cna_test_rlgl_rendertargetcube_usage \
-            cna_test_rlgl_rendertargetcube_msaa_face \
-            cna_test_rlgl_rendertargetcube_plural_binding \
-            cna_test_rlgl_render_target_orientation \
-            cna_test_rlgl_render_target_full \
-            cna_test_rlgl_msaa_first_readback \
-            cna_test_rlgl_msaa_mip_readback \
-            cna_test_rlgl_buffer \
-            cna_test_rlgl_primitive \
-            cna_test_rlgl_effect \
-            cna_test_rlgl_shader_effect \
-            cna_test_rlgl_xna_pixel_center \
-            cna_test_rlgl_basiceffect_one_light \
-            cna_test_rlgl_basiceffect_multilight_emissive \
-            cna_test_rlgl_basiceffect_specular \
-            cna_test_rlgl_basiceffect_preferperpixellighting \
-            cna_test_rlgl_basiceffect_lit_vertex_color \
-            cna_test_rlgl_basiceffect_lit_vertex_color_perpixel \
-            cna_test_rlgl_basiceffect_vertex_color_clamp \
-            cna_test_rlgl_basiceffect_world_scale_precision \
-            cna_test_rlgl_basiceffect_normal_transform \
-            cna_test_rlgl_basiceffect_lighting \
-            cna_test_rlgl_dual_texture_effect \
-            cna_test_rlgl_dual_texture_independent_uv \
-            cna_test_rlgl_environment_map \
-            cna_test_rlgl_environment_map_terms \
-            cna_test_rlgl_environment_map_alpha_scaled_lerp \
-            cna_test_rlgl_environment_map_fog \
-            cna_test_rlgl_environment_map_amount_clamp \
-            cna_test_rlgl_environment_map_sampler_contract \
-            cna_test_rlgl_environment_map_sampler_state \
-            cna_test_rlgl_environment_map_render_target_cube \
-            cna_test_rlgl_environmentmapeffect_golden \
-            cna_test_rlgl_environmentmapeffect_amount_zero \
-            cna_test_rlgl_environmentmapeffect_amount_one \
-            cna_test_rlgl_environmentmapeffect_specular \
-            cna_test_rlgl_environmentmapeffect_fresnel \
-            cna_test_rlgl_environmentmapeffect_fresnel_gradient \
-            cna_test_rlgl_environmentmapeffect_eyeposition \
-            cna_test_rlgl_environmentmapeffect_worldtransform \
-            cna_test_rlgl_environmentmapeffect_combined \
-            cna_test_rlgl_environmentmapeffect_multilight \
-            cna_test_rlgl_skinned_effect \
-            cna_test_rlgl_skinned_terms \
-            cna_test_rlgl_skinnedeffect_identity_bones \
-            cna_test_rlgl_skinnedeffect_translation_bone \
-            cna_test_rlgl_skinnedeffect_twobone_blend \
-            cna_test_rlgl_skinnedeffect_vector4_bone_indices \
-            cna_test_rlgl_skinnedeffect_weightspervertex \
-            cna_test_rlgl_skinnedeffect_multilight \
-            cna_test_rlgl_skinnedeffect_specular \
-            cna_test_rlgl_skinnedeffect_vertexcolor \
-            cna_test_rlgl_skinnedeffect_preferperpixellighting \
-            cna_test_rlgl_skinnedeffect_fog \
-            cna_test_rlgl_skinnedeffect_world_normal \
-            cna_test_rlgl_skinnedeffect_combined \
-            cna_test_rlgl_model_draw \
-            cna_test_rlgl_model_json_reader_texture \
-            cna_test_rlgl_model_two_meshes_effects \
-            cna_test_rlgl_model_hierarchy_child_mesh \
-            cna_test_rlgl_model_skinned_animation_playback \
-            cna_test_rlgl_compiled_effect_runtime \
-            cna_test_rlgl_compiled_effect_draw
-
-      - name: Verify renderer registry consistency
-        working-directory: cna
-        run: python3 scripts/check_renderer_identities.py
+          python3 scripts/check_renderer_identities.py
+          python3 scripts/check_renderer_target_discipline.py
+          python3 scripts/check_runtime_renderer_discipline.py
+          python3 scripts/check_renderer_combinations.py
+          python3 scripts/check_renderer_descriptors.py

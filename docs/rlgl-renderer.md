@@ -104,7 +104,7 @@ portability work.
 
 | Environment | Status |
 |---|---|
-| Linux x86_64, SDL3 offscreen, Mesa llvmpipe 25.0.7 | Runtime validated; the driver granted OpenGL 4.5 core for CNA's 3.3-core request |
+| Linux x86_64, SDL3 offscreen, Mesa llvmpipe 25.0.7 | Runtime validated; the driver granted OpenGL 4.5 core for CNA's 3.3-core request. The Ubuntu 24.04 CI definition installs Mesa's software driver and makes the complete `Rlgl` CTest label a required runtime command. |
 | Linux with an on-screen X11/Wayland driver | Expected from the shared CNA GL context contract, but not yet runtime validated for RLGL |
 | Windows | Source/build architecture is intended to be portable; not yet compiled or runtime validated |
 | macOS | A 3.3 core context is within the platform's OpenGL ceiling; not yet compiled or runtime validated |
@@ -119,40 +119,13 @@ With the repository's normal sibling/submodule dependencies available:
 cmake -S . -B cmake-build-rlgl -G Ninja \
       -DCMAKE_BUILD_TYPE=Debug \
       -DCNA_GRAPHICS_RENDERER=RLGL \
-      -DCNA_BUILD_TESTS=OFF
-cmake --build cmake-build-rlgl --parallel 3 --target \
-      cna_renderer_rlgl cna_test_rlgl_smoke \
-      cna_test_rlgl_thread_context_lease_binding \
-      cna_test_rlgl_thread_context_lease_exclusion \
-      cna_test_rlgl_background_content_context \
-      cna_test_rlgl_resource_lifetime \
-      cna_test_rlgl_resource_recovery_shadow \
-      cna_test_rlgl_context_recreate \
-      cna_test_rlgl_resource_recreate \
-      cna_test_rlgl_lifecycle_matrix \
-      cna_test_rlgl_texture cna_test_rlgl_sampler \
-      cna_test_rlgl_texture_cube cna_test_rlgl_texture_cube_oracle \
-      cna_test_rlgl_state cna_test_rlgl_spritebatch cna_test_rlgl_buffer \
-      cna_test_rlgl_primitive cna_test_rlgl_instanced_parity \
-      cna_test_rlgl_occlusion_query cna_test_rlgl_occlusion_query_visible \
-      cna_test_rlgl_occlusion_query_occluded cna_test_rlgl_occlusion_query_lifetime \
-      cna_test_rlgl_effect cna_test_rlgl_shader_effect \
-      cna_test_rlgl_xna_pixel_center \
-      cna_test_rlgl_basiceffect_lighting cna_test_rlgl_dual_texture_effect \
-      cna_test_rlgl_dual_texture_independent_uv cna_test_rlgl_environment_map \
-      cna_test_rlgl_environment_map_terms cna_test_rlgl_environment_map_sampler_contract \
-      cna_test_rlgl_environment_map_sampler_state \
-      cna_test_rlgl_environment_map_render_target_cube cna_test_rlgl_skinned_effect \
-      cna_test_rlgl_skinned_terms cna_test_rlgl_render_target \
-      cna_test_rlgl_render_target_formats cna_test_rlgl_mrt \
-      cna_test_rlgl_mrt_oracle \
-      cna_test_rlgl_render_target_cube \
-      cna_test_rlgl_rendertargetcube_getdata_contract \
-      cna_test_rlgl_rendertargetcube_usage \
-      cna_test_rlgl_rendertargetcube_msaa_face \
-      cna_test_rlgl_rendertargetcube_plural_binding \
-      cna_test_rlgl_render_target_orientation cna_test_rlgl_render_target_full \
-      cna_test_rlgl_msaa_first_readback cna_test_rlgl_msaa_mip_readback
+      -DCNA_BUILD_TESTS=ON \
+      -DCNA_RLGL_COMPILED_EFFECTS=ON
+cmake --build cmake-build-rlgl --parallel 4 --target cna_test_rlgl_all
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+      ./cmake-build-rlgl/cna_test_rlgl_smoke
+ctest --test-dir cmake-build-rlgl --output-on-failure \
+      --label-regex '^Rlgl$' --parallel 1
 ```
 
 Classic XNA Effect Framework bytecode has an optional path through CNA's existing pinned MojoShader
@@ -398,10 +371,16 @@ Offline compiled-effect builds can add
 - An unsupported resource path names its owning `RLGL-*` plan task. Do not replace these failures
   with no-ops while bringing up new functionality.
 
-The dedicated `.github/workflows/rlgl-ci.yml` lane configures the Linux renderer against an
-independently checked-out copy of the exact upstream commit and compiles the renderer plus the
-  smoke, context/lifetime, texture, sampler, state, SpriteBatch, buffer, primitive, effect, XNA pixel-center, and
-  BasicEffect-lighting, DualTextureEffect, SkinnedEffect, RenderTarget2D/MRT, RenderTargetCube, and
-  optional compiled-effect runtime and ordinary/SpriteBatch-draw executables. It
-  intentionally does not yet claim hosted runtime coverage; promotion to a CI runtime gate belongs
-  to `RLGL-021` after the runner's context path is proven.
+The dedicated `.github/workflows/rlgl-ci.yml` lane configures Ubuntu 24.04 against independently
+checked-out copies of the exact raylib and FNA3D/MojoShader revisions, with no configure-time
+dependency drift. Its `cna_test_rlgl_all` meta-target derives dependencies from every executable in
+the RLGL test directory, including the central parity corpus when tests are enabled; the workflow
+therefore has no handwritten target inventory to become stale. It installs Mesa's software driver,
+builds with two jobs, and executes all 134 currently registered `Rlgl` tests through SDL3 offscreen.
+Before CTest, the workflow executes `cna_test_rlgl_smoke` directly, so its exit-77 no-context result
+fails the shell instead of being accepted as a CTest skip. The same workflow also runs the renderer
+identity, target, runtime-dispatch, combination, and descriptor integration gates. A hosted result
+becomes evidence only when the workflow actually runs after a push or pull request; the
+workflow-equivalent local build and all 134 tests pass on the validated Linux environment. Windows,
+macOS, on-screen Linux, and SDL2 runtime behavior remain explicitly outside this lane and are not
+claimed by it.
