@@ -930,8 +930,10 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   are applied to another device. CNA's source, device-property and sampler-slot wrappers now share
   device, Name, Tag, disposal and disposal-event delivery while remaining lifetime-safe after a
   stack source leaves scope. Device defaults also retain the three named preset identities, and
-  untouched sampler slots share `SamplerState.LinearWrap` as XNA/FNA do. Only literal C++ wrapper
-  address and event-token identity remain under `SOFTWARE-198`.
+  untouched sampler slots share `SamplerState.LinearWrap` as XNA/FNA do. `SOFTWARE-198` classifies
+  literal C++ wrapper-address and cross-wrapper event-token identity as an accepted mapping
+  deviation: the reference-based API accepts stack objects and temporaries whose addresses cannot
+  safely be returned after their scope ends.
 - **Active state reassignment follows XNA reference and dirty-cache rules** (`SOFTWARE-350`). A
   disposed state that is already active remains cached and may still be drawn with; assigning that
   same Blend/DepthStencil/Rasterizer/Sampler identity again is a no-op before `Apply`. Assigning
