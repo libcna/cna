@@ -19,6 +19,7 @@
 #include "RlglResources.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -196,6 +197,116 @@ namespace CNA::Internal::Renderers::Rlgl
             case MOJOSHADER_SAMPLER_CUBE: return "samplerCube";
             case MOJOSHADER_SAMPLER_VOLUME: return "sampler3D";
             default: return "unknown sampler";
+            }
+        }
+
+        void ValidateCompiledEffectStreams(
+            const IVertexBufferRenderer& primaryVertexBuffer,
+            const GpuDrawParams& params)
+        {
+            if (params.vertexStreamCount < 0 ||
+                params.vertexStreamCount > static_cast<int>(params.vertexStreams.size()))
+            {
+                throw std::invalid_argument(
+                    "RLGL compiled effect: invalid vertex-stream binding count");
+            }
+            if (params.vertexStreamCount == 0) return;
+            if (params.vertexStreams[0].buffer != &primaryVertexBuffer ||
+                params.vertexStreams[0].instanceFrequency != 0)
+            {
+                throw std::invalid_argument(
+                    "RLGL compiled effect: stream zero does not match the primary buffer");
+            }
+
+            int expectedCombinedByteBase = 0;
+            int perVertexStreams = 0;
+            int instanceStreams = 0;
+            std::array<bool, kMaxVertexStreams> occupiedSlots{};
+            std::vector<std::pair<VertexElementUsage, int>> semantics;
+            for (int streamIndex = 0;
+                 streamIndex < params.vertexStreamCount; ++streamIndex)
+            {
+                const GpuVertexStreamBinding& stream = params.vertexStreams[streamIndex];
+                if (stream.buffer == nullptr || stream.slot < 0 ||
+                    stream.slot >= kMaxVertexStreams ||
+                    occupiedSlots[static_cast<std::size_t>(stream.slot)] ||
+                    stream.strideInBytes <= 0 || stream.vertexOffset < 0 ||
+                    stream.instanceFrequency < 0 || stream.vertexCount < 0 ||
+                    stream.vertexCount > GetBufferCapacity(*stream.buffer) ||
+                    GetNativeBufferId(*stream.buffer) == 0)
+                {
+                    throw std::invalid_argument(
+                        "RLGL compiled effect: invalid vertex-stream binding");
+                }
+                occupiedSlots[static_cast<std::size_t>(stream.slot)] = true;
+                const std::vector<VertexElement>& declaration =
+                    GetVertexDeclaration(*stream.buffer);
+                if (declaration.empty() ||
+                    GetVertexStride(*stream.buffer) !=
+                        static_cast<std::size_t>(stream.strideInBytes))
+                {
+                    throw System::NotSupportedException(
+                        "RLGL compiled effect: every bound vertex stream needs its own "
+                        "non-empty matching VertexDeclaration");
+                }
+                if (stream.vertexOffset >
+                    std::numeric_limits<int>::max() / stream.strideInBytes)
+                {
+                    throw std::overflow_error(
+                        "RLGL compiled effect: vertex-stream byte offset exceeds Int32");
+                }
+                for (const VertexElement& element : declaration)
+                {
+                    const auto semantic = std::pair{
+                        element.getVertexElementUsageProperty(),
+                        element.getUsageIndexProperty()};
+                    if (std::find(semantics.begin(), semantics.end(), semantic) !=
+                        semantics.end())
+                    {
+                        throw System::NotSupportedException(
+                            "RLGL compiled effect: bound vertex streams declare the same "
+                            "semantic more than once");
+                    }
+                    semantics.push_back(semantic);
+                }
+
+                if (stream.instanceFrequency > 0)
+                {
+                    ++instanceStreams;
+                    if (stream.combinedByteBase != 0)
+                        throw std::invalid_argument(
+                            "RLGL compiled effect: an instance stream cannot contribute to "
+                            "the combined vertex stride");
+                    continue;
+                }
+                ++perVertexStreams;
+                if (stream.combinedByteBase != expectedCombinedByteBase)
+                    throw std::invalid_argument(
+                        "RLGL compiled effect: invalid combined vertex-stream offset");
+                if (stream.strideInBytes >
+                    std::numeric_limits<int>::max() - expectedCombinedByteBase)
+                {
+                    throw std::overflow_error(
+                        "RLGL compiled effect: combined vertex stride exceeds Int32");
+                }
+                expectedCombinedByteBase += stream.strideInBytes;
+            }
+            if (perVertexStreams == 0 ||
+                params.combinedVertexStride != expectedCombinedByteBase)
+            {
+                throw std::invalid_argument(
+                    "RLGL compiled effect: invalid combined vertex-stream shape");
+            }
+            if (instanceStreams > 0 && params.firstInstance != 0)
+            {
+                throw System::NotSupportedException(
+                    "RLGL compiled effect: classic GL 3.3 instancing requires firstInstance "
+                    "zero");
+            }
+            if (params.instanceCount > 1 && instanceStreams == 0)
+            {
+                throw std::invalid_argument(
+                    "RLGL compiled effect: an instanced draw needs a per-instance stream");
             }
         }
     }
@@ -554,47 +665,8 @@ namespace CNA::Internal::Renderers::Rlgl
         }
         if (!effect->passActive_)
             throw std::runtime_error("RLGL compiled effect: no pass is currently applied");
-        if (params.instanceCount != 1 || params.firstInstance != 0)
-        {
-            throw System::NotSupportedException(
-                "RLGL compiled effect: instanced drawing is deferred to RLGL-049");
-        }
-        if (params.vertexStreamCount < 0 || params.vertexStreamCount > 1)
-        {
-            throw System::NotSupportedException(
-                "RLGL compiled effect: multi-stream input is deferred to RLGL-049");
-        }
-
-        std::size_t stride = GetVertexStride(vertexBuffer);
-        std::size_t baseByteOffset = 0;
-        if (params.vertexStreamCount == 1)
-        {
-            const GpuVertexStreamBinding& stream = params.vertexStreams[0];
-            if (stream.buffer != &vertexBuffer || stream.instanceFrequency != 0 ||
-                stream.strideInBytes <= 0 || stream.vertexOffset < 0)
-            {
-                throw System::NotSupportedException(
-                    "RLGL compiled effect: the primary vertex stream is not an ordinary "
-                    "single-stream binding");
-            }
-            stride = static_cast<std::size_t>(stream.strideInBytes);
-            if (static_cast<std::size_t>(stream.vertexOffset) >
-                std::numeric_limits<std::size_t>::max() / stride)
-            {
-                throw std::overflow_error(
-                    "RLGL compiled effect: vertex-stream byte offset overflow");
-            }
-            baseByteOffset = static_cast<std::size_t>(stream.vertexOffset) * stride;
-        }
-        if (stride == 0 || stride > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
-            baseByteOffset > static_cast<std::size_t>(std::numeric_limits<int>::max()))
-        {
-            throw std::invalid_argument(
-                "RLGL compiled effect: vertex stream has no representable stride or offset");
-        }
-
-        const std::vector<VertexElement>& declaration = GetVertexDeclaration(vertexBuffer);
-        if (declaration.empty())
+        ValidateCompiledEffectStreams(vertexBuffer, params);
+        if (params.vertexStreamCount == 0 && GetVertexDeclaration(vertexBuffer).empty())
         {
             throw System::NotSupportedException(
                 "RLGL compiled effect: every vertex buffer needs its own VertexDeclaration");
@@ -623,12 +695,16 @@ namespace CNA::Internal::Renderers::Rlgl
                 MOJOSHADER_glGetShaderParseData(pixelShader);
             if (vertexParseData == nullptr || pixelParseData == nullptr)
                 throw std::runtime_error("RLGL compiled effect: shader reflection is unavailable");
-            if (vertexParseData->sampler_count > 0)
+
+            struct BoundAttribute
             {
-                throw System::NotSupportedException(
-                    "RLGL compiled effect: vertex-stage texture sampling is deferred to "
-                    "RLGL-049");
-            }
+                MOJOSHADER_usage usage;
+                int index;
+                unsigned int divisor;
+            };
+            std::vector<BoundAttribute> boundAttributes;
+            boundAttributes.reserve(static_cast<std::size_t>(
+                std::max(vertexParseData->attribute_count, 0)));
 
             for (int inputIndex = 0;
                  inputIndex < vertexParseData->attribute_count; ++inputIndex)
@@ -636,14 +712,38 @@ namespace CNA::Internal::Renderers::Rlgl
                 const MOJOSHADER_attribute& shaderInput =
                     vertexParseData->attributes[inputIndex];
                 const VertexElement* match = nullptr;
-                for (const VertexElement& element : declaration)
+                const IVertexBufferRenderer* sourceBuffer = &vertexBuffer;
+                int sourceStride = static_cast<int>(GetVertexStride(vertexBuffer));
+                int sourceVertexOffset = 0;
+                int sourceDivisor = 0;
+                const int streamCount = params.vertexStreamCount > 0
+                    ? params.vertexStreamCount : 1;
+                for (int streamIndex = 0;
+                     streamIndex < streamCount && match == nullptr; ++streamIndex)
                 {
-                    if (ToMojoShaderUsage(element.getVertexElementUsageProperty()) ==
-                            shaderInput.usage &&
-                        element.getUsageIndexProperty() == shaderInput.index)
+                    const GpuVertexStreamBinding* stream =
+                        params.vertexStreamCount > 0
+                            ? &params.vertexStreams[streamIndex] : nullptr;
+                    const IVertexBufferRenderer* candidate =
+                        stream != nullptr ? stream->buffer : &vertexBuffer;
+                    const std::vector<VertexElement>& declaration =
+                        GetVertexDeclaration(*candidate);
+                    for (const VertexElement& element : declaration)
                     {
-                        match = &element;
-                        break;
+                        if (ToMojoShaderUsage(element.getVertexElementUsageProperty()) ==
+                                shaderInput.usage &&
+                            element.getUsageIndexProperty() == shaderInput.index)
+                        {
+                            match = &element;
+                            sourceBuffer = candidate;
+                            if (stream != nullptr)
+                            {
+                                sourceStride = stream->strideInBytes;
+                                sourceVertexOffset = stream->vertexOffset;
+                                sourceDivisor = stream->instanceFrequency;
+                            }
+                            break;
+                        }
                     }
                 }
                 if (match == nullptr)
@@ -659,8 +759,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 }
 
                 const VertexAttributeBinding attribute = DescribeVertexAttribute(
-                    *match, 0, static_cast<int>(stride), static_cast<int>(baseByteOffset));
-                Bridge::BindCompiledEffectVertexBuffer(GetNativeBufferId(vertexBuffer));
+                    *match, 0, sourceStride, sourceVertexOffset * sourceStride);
+                Bridge::BindCompiledEffectVertexBuffer(GetNativeBufferId(*sourceBuffer));
                 MOJOSHADER_glSetVertexAttribute(
                     shaderInput.usage, shaderInput.index,
                     static_cast<unsigned int>(attribute.componentCount),
@@ -669,6 +769,116 @@ namespace CNA::Internal::Renderers::Rlgl
                     static_cast<unsigned int>(attribute.stride),
                     reinterpret_cast<const void*>(
                         static_cast<std::uintptr_t>(attribute.offset)));
+                boundAttributes.push_back(BoundAttribute{
+                    shaderInput.usage, shaderInput.index,
+                    static_cast<unsigned int>(sourceDivisor)});
+            }
+
+            const int vertexSamplerOffset =
+                Bridge::GetCompiledEffectVertexSamplerOffset();
+            for (int samplerIndex = 0;
+                 samplerIndex < vertexParseData->sampler_count; ++samplerIndex)
+            {
+                const MOJOSHADER_sampler& shaderSampler =
+                    vertexParseData->samplers[samplerIndex];
+                if (shaderSampler.index < 0 ||
+                    shaderSampler.index >= maxVertexSamplerSlots_)
+                {
+                    throw System::NotSupportedException(
+                        "RLGL compiled effect: vertex sampler register exceeds the live "
+                        "GL/MojoShader limit");
+                }
+                if (shaderSampler.type == MOJOSHADER_SAMPLER_VOLUME)
+                {
+                    throw System::NotSupportedException(
+                        "RLGL compiled effect: vertex sampler3D requires the unimplemented "
+                        "RLGL Texture3D resource");
+                }
+
+                const std::size_t slot = static_cast<std::size_t>(shaderSampler.index);
+                Texture* const selectedTexture = effect->boundVertexTextures_[slot];
+                const ITextureRenderer* const texture2D =
+                    effect->boundVertexTexture2DResources_[slot].get();
+                const ITextureCubeRenderer* const textureCube =
+                    effect->boundVertexTextureCubeResources_[slot].get();
+                const bool expects2D = shaderSampler.type == MOJOSHADER_SAMPLER_2D;
+                const bool expectsCube = shaderSampler.type == MOJOSHADER_SAMPLER_CUBE;
+                if (!expects2D && !expectsCube)
+                {
+                    throw System::NotSupportedException(
+                        "RLGL compiled effect: unsupported reflected vertex sampler kind");
+                }
+                if (selectedTexture != nullptr && texture2D == nullptr && textureCube == nullptr)
+                {
+                    throw System::NotSupportedException(
+                        "RLGL compiled effect: the texture selected for vertex sampler slot " +
+                        std::to_string(shaderSampler.index) +
+                        " is not an implemented resource of this device");
+                }
+                if ((texture2D != nullptr && !expects2D) ||
+                    (textureCube != nullptr && !expectsCube))
+                {
+                    throw System::NotSupportedException(
+                        "RLGL compiled effect: vertex shader declares " +
+                        std::string(SamplerKindName(shaderSampler.type)) + " at slot " +
+                        std::to_string(shaderSampler.index) +
+                        ", but the effect bound a different texture dimension");
+                }
+
+                const int physicalSlot = vertexSamplerOffset + shaderSampler.index;
+                if (texture2D != nullptr)
+                {
+                    if (SampledRowsAreBottomUp(*texture2D))
+                    {
+                        const auto* const target =
+                            dynamic_cast<const IRenderTargetRenderer*>(texture2D);
+                        if (target == nullptr)
+                        {
+                            throw System::NotSupportedException(
+                                "RLGL compiled effect: rendered vertex texture row order "
+                                "cannot be resolved for this resource");
+                        }
+                        const RenderTargetResourceSnapshot snapshot =
+                            GetRenderTargetResourceSnapshotForTesting(*target);
+                        const unsigned int sourceFramebuffer =
+                            snapshot.multiSampleCount > 0
+                                ? snapshot.resolveFramebuffer : snapshot.framebuffer;
+                        const unsigned int corrected =
+                            Bridge::PrepareCompiledEffectFlippedTexture(
+                                resources, physicalSlot, sourceFramebuffer,
+                                snapshot.colorTexture, snapshot.width, snapshot.height,
+                                snapshot.surfaceFormat);
+                        Bridge::BindTexture2D(corrected, physicalSlot);
+                    }
+                    else
+                    {
+                        texture2D->BindGL(physicalSlot);
+                    }
+                }
+                else if (textureCube != nullptr)
+                {
+                    textureCube->BindGL(physicalSlot);
+                }
+                else
+                {
+                    Bridge::UnbindCompiledEffectTexture(
+                        physicalSlot, static_cast<int>(shaderSampler.type));
+                }
+
+                if (effect->vertexSamplerAssigned_[slot])
+                {
+                    const auto& source = effect->boundVertexSamplers_[slot];
+                    SamplerRecord& sampler =
+                        GetCompiledEffectVertexSamplerRecord(shaderSampler.index);
+                    sampler.filter = static_cast<int>(source.getFilterProperty());
+                    sampler.addressU = static_cast<int>(source.getAddressUProperty());
+                    sampler.addressV = static_cast<int>(source.getAddressVProperty());
+                    sampler.addressW = static_cast<int>(source.getAddressWProperty());
+                    sampler.maxAnisotropy = source.getMaxAnisotropyProperty();
+                    sampler.maxMipLevel = source.getMaxMipLevelProperty();
+                    sampler.lodBias = source.getMipMapLevelOfDetailBiasProperty();
+                    ApplyCompiledEffectVertexSamplerRecord(shaderSampler.index, sampler);
+                }
             }
 
             for (int samplerIndex = 0;
@@ -794,6 +1004,16 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
             MOJOSHADER_glProgramReady();
+            for (const BoundAttribute& attribute : boundAttributes)
+            {
+                const int location = MOJOSHADER_glGetVertexAttribLocation(
+                    attribute.usage, attribute.index);
+                if (location >= 0)
+                {
+                    Bridge::SetCompiledEffectAttributeDivisor(
+                        static_cast<unsigned int>(location), attribute.divisor);
+                }
+            }
             int targetWidth = currentRenderTargetCount_ > 0
                 ? currentRenderTargetWidth_ : 0;
             int targetHeight = currentRenderTargetCount_ > 0
@@ -809,6 +1029,14 @@ namespace CNA::Internal::Renderers::Rlgl
                 indexBuffer != nullptr ? GetNativeBufferId(*indexBuffer) : 0u,
                 static_cast<int>(primitive), elementCount,
                 firstVertex, startIndex, baseVertex,
+                params.instanceCount,
+                std::any_of(
+                    params.vertexStreams.begin(),
+                    params.vertexStreams.begin() + params.vertexStreamCount,
+                    [](const GpuVertexStreamBinding& stream)
+                    {
+                        return stream.instanceFrequency > 0;
+                    }),
                 indexBuffer != nullptr && indexBuffer->IsThirtyTwoBit());
         }
         catch (...)

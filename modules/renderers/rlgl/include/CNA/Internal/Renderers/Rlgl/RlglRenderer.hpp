@@ -60,6 +60,12 @@ namespace CNA::Internal::Renderers::Rlgl
         std::size_t liveSamplers = 0;
         /** @brief Current native sampler identities by slot. */
         std::array<unsigned int, 16> samplerIds{};
+        /** @brief Number of compiled vertex-sampler slots that must survive recreation. */
+        std::size_t realizedVertexSamplers = 0;
+        /** @brief Number of compiled vertex-sampler slots owning a replacement object. */
+        std::size_t liveVertexSamplers = 0;
+        /** @brief Current native compiled vertex-sampler identities by logical slot. */
+        std::array<unsigned int, 4> vertexSamplerIds{};
         /** @brief Whether the lazy stock primitive pipeline has been realized. */
         bool primitivePipelineRealized = false;
         /** @brief Whether the current context owns the realized stock primitive pipeline. */
@@ -915,6 +921,8 @@ namespace CNA::Internal::Renderers::Rlgl
         void ApplyCurrentRasterizerState();
         void FinalizeCurrentRenderTargets();
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
+        SamplerRecord& GetCompiledEffectVertexSamplerRecord(int slot);
+        void ApplyCompiledEffectVertexSamplerRecord(int slot, SamplerRecord& sampler);
         Bridge::CompiledEffectDrawResources& GetCompiledEffectDrawResources();
         void DrawCompiledEffectGeometry(
             const IVertexBufferRenderer& vertexBuffer,
@@ -948,9 +956,15 @@ namespace CNA::Internal::Renderers::Rlgl
         bool nativeLossPollingAvailable_ = false;
         int maxTextureSize_ = 0;
         int maxSamplerSlots_ = 0;
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        int maxVertexSamplerSlots_ = 0;
+#endif
         int maxRenderTargets_ = 1;
         float maxSamplerAnisotropy_ = 1.0f;
         std::array<SamplerRecord, 16> samplers_{};
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        std::array<SamplerRecord, 4> vertexSamplers_{};
+#endif
         BlendRecord blend_{};
         StencilRecord stencil_{};
         ViewportRecord viewport_{};

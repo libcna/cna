@@ -212,7 +212,7 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     struct CompiledEffectDrawResources
     {
         unsigned int vertexArray = 0;
-        std::array<CompiledEffectFlippedTexture, 16> flippedTextures{};
+        std::array<CompiledEffectFlippedTexture, 20> flippedTextures{};
         std::array<double, 2> savedDepthRange{{0.0, 1.0}};
         bool drawActive = false;
     };
@@ -628,6 +628,13 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     void BindCompiledEffectVertexBuffer(unsigned int vertexBuffer);
 
     /**
+     * @brief Applies the instance divisor for one reflected compiled-effect attribute.
+     * @param location Native vertex attribute location.
+     * @param divisor Zero for per-vertex input or the public instance frequency.
+     */
+    void SetCompiledEffectAttributeDivisor(unsigned int location, unsigned int divisor);
+
+    /**
      * @brief Copies a rendered two-dimensional source with vertically reversed destination rows.
      * @param resources Live compiled-effect resource set.
      * @param slot Pixel sampler slot whose private copy owns the result.
@@ -659,12 +666,15 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @param firstVertex First vertex for a non-indexed draw.
      * @param startIndex First element for an indexed draw.
      * @param baseVertex Value added to decoded indices.
+     * @param instanceCount Number of instances, or one for an ordinary draw.
+     * @param instanced Whether this came from the instanced public draw route.
      * @param thirtyTwoBitIndices Whether indexed data uses unsigned 32-bit elements.
      */
     void DrawCompiledEffectGeometry(
         CompiledEffectDrawResources& resources, unsigned int indexBuffer,
         int primitiveType, int elementCount,
-        int firstVertex, int startIndex, int baseVertex, bool thirtyTwoBitIndices);
+        int firstVertex, int startIndex, int baseVertex,
+        int instanceCount, bool instanced, bool thirtyTwoBitIndices);
 
     /**
      * @brief Ends or aborts a compiled draw and restores the caller's depth convention.
@@ -1106,6 +1116,18 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      * @return The live `GL_MAX_TEXTURE_IMAGE_UNITS` value.
      */
     [[nodiscard]] int GetMaxSamplerSlots();
+
+    /**
+     * @brief Returns MojoShader's physical texture-unit base for XNA vertex samplers.
+     * @return Unit 16 when the context exposes the four XNA vertex slots.
+     */
+    [[nodiscard]] int GetCompiledEffectVertexSamplerOffset();
+
+    /**
+     * @brief Returns the vertex sampler count compatible with MojoShader and this context.
+     * @return A value from zero through XNA's four vertex sampler slots.
+     */
+    [[nodiscard]] int GetMaxCompiledEffectVertexSamplerSlots();
 
     /**
      * @brief Returns the driver anisotropy ceiling found by rlgl's extension probe.

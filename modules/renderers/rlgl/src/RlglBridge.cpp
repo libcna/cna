@@ -1936,6 +1936,17 @@ void main()
         rlEnableVertexBuffer(vertexBuffer);
     }
 
+    void SetCompiledEffectAttributeDivisor(
+        const unsigned int location, const unsigned int divisor)
+    {
+        RequireInitialized("compiled-effect attribute divisor");
+        if (location >= 16u)
+            throw std::out_of_range(
+                "RLGL compiled effect: attribute location exceeds the XNA profile limit");
+        rlSetVertexAttributeDivisor(location, static_cast<int>(divisor));
+        ThrowIfGlError("compiled-effect attribute divisor");
+    }
+
     unsigned int PrepareCompiledEffectFlippedTexture(
         CompiledEffectDrawResources& resources, const int slot,
         const unsigned int sourceFramebuffer, const unsigned int sourceTexture,
@@ -1996,11 +2007,12 @@ void main()
         CompiledEffectDrawResources& resources, const unsigned int indexBuffer,
         const int primitiveType, const int elementCount,
         const int firstVertex, const int startIndex, const int baseVertex,
+        const int instanceCount, const bool instanced,
         const bool thirtyTwoBitIndices)
     {
         RequireInitialized("compiled-effect primitive draw");
         if (!resources.drawActive || elementCount <= 0 ||
-            firstVertex < 0 || startIndex < 0 || baseVertex < 0)
+            firstVertex < 0 || startIndex < 0 || baseVertex < 0 || instanceCount <= 0)
         {
             throw std::invalid_argument("RLGL compiled effect: invalid primitive draw request");
         }
@@ -2023,10 +2035,16 @@ void main()
         snapshot.firstVertex = firstVertex;
         snapshot.startIndex = startIndex;
         snapshot.baseVertex = baseVertex;
+        snapshot.instanceCount = instanceCount;
+        snapshot.instanced = instanced;
         snapshot.indexed = indexBuffer != 0;
         if (indexBuffer == 0)
         {
-            if (mode == GL_TRIANGLES)
+            if (instanced)
+            {
+                glDrawArraysInstanced(mode, firstVertex, elementCount, instanceCount);
+            }
+            else if (mode == GL_TRIANGLES)
             {
                 rlDrawVertexArray(firstVertex, elementCount);
                 snapshot.usedRlglDrawWrapper = true;
@@ -2046,7 +2064,24 @@ void main()
                 static_cast<std::uintptr_t>(startIndex) *
                 (thirtyTwoBitIndices ? sizeof(std::uint32_t) : sizeof(std::uint16_t));
             const void* const indices = reinterpret_cast<const void*>(byteOffset);
-            if (mode == GL_TRIANGLES && !thirtyTwoBitIndices &&
+            if (instanced && mode == GL_TRIANGLES && !thirtyTwoBitIndices &&
+                startIndex == 0 && baseVertex == 0)
+            {
+                rlDrawVertexArrayElementsInstanced(
+                    0, elementCount, nullptr, instanceCount);
+                snapshot.usedRlglDrawWrapper = true;
+            }
+            else if (instanced && baseVertex == 0)
+            {
+                glDrawElementsInstanced(
+                    mode, elementCount, indexType, indices, instanceCount);
+            }
+            else if (instanced)
+            {
+                glDrawElementsInstancedBaseVertex(
+                    mode, elementCount, indexType, indices, instanceCount, baseVertex);
+            }
+            else if (mode == GL_TRIANGLES && !thirtyTwoBitIndices &&
                 startIndex == 0 && baseVertex == 0)
             {
                 rlDrawVertexArrayElements(0, elementCount, nullptr);
@@ -4026,6 +4061,27 @@ void main()
         if (value <= 0)
             throw std::runtime_error("RLGL: driver reported no fragment texture units");
         return value;
+    }
+
+    int GetCompiledEffectVertexSamplerOffset()
+    {
+        const int cappedFragmentUnits = std::min(GetMaxSamplerSlots(), 20);
+        return cappedFragmentUnits > 16 ? 16 : cappedFragmentUnits;
+    }
+
+    int GetMaxCompiledEffectVertexSamplerSlots()
+    {
+        RequireInitialized("compiled-effect vertex-sampler limit query");
+        const int cappedFragmentUnits = std::min(GetMaxSamplerSlots(), 20);
+        const int mojoShaderSlots = std::max(cappedFragmentUnits - 16, 0);
+        GLint vertexUnits = 0;
+        GLint combinedUnits = 0;
+        glGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, &vertexUnits);
+        glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &combinedUnits);
+        ThrowIfGlError("compiled-effect vertex-sampler limit query");
+        return std::max(0, std::min({
+            mojoShaderSlots, static_cast<int>(vertexUnits),
+            static_cast<int>(combinedUnits) - GetCompiledEffectVertexSamplerOffset()}));
     }
 
     float GetMaxSamplerAnisotropy()

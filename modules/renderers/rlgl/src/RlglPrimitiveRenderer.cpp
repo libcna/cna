@@ -717,6 +717,19 @@ namespace CNA::Internal::Renderers::Rlgl
     {
         if (instanceCount != params.instanceCount)
             throw std::invalid_argument("RLGL: inconsistent instance count");
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        if (params.compiledEffectRuntime != nullptr)
+        {
+            const int elementCount = PrimitiveElementCount(primitive, primitiveCount);
+            ValidateDrawRange(
+                vertexBuffer, &indexBuffer, elementCount,
+                0, params.startIndex, params.baseVertex);
+            DrawCompiledEffectGeometry(
+                vertexBuffer, &indexBuffer, primitive, elementCount,
+                0, params.startIndex, params.baseVertex, params);
+            return;
+        }
+#endif
         RequireBaselineEffect(params, true);
         Submit(
             GetPrimitivePipeline(), vertexBuffer, &indexBuffer,

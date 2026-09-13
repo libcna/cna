@@ -227,6 +227,10 @@ namespace CNA::TestSupport
         /// suite still green: the read-back pixel was `Tint` whatever the backend did with its
         /// sampler state. Requires `includeSampler`.
         bool pixelShaderSamplesTexture = false;
+        /// RLGL-049: the drawable vertex shader samples the effect's selected sampler dimension
+        /// and adds the sampled red channel to POSITION0.x. This selects Shader Model 3.0 because
+        /// Direct3D 9 vertex texture fetch uses `texldl` and is unavailable in vs_2_0.
+        bool vertexShaderSamplesTexture = false;
         /// SDLGPU-75: the drawable pixel shader also writes `oC1` with the opposite Tint swizzle,
         /// making one ordinary compiled XNA Effect invocation observably target two MRT slots.
         bool pixelShaderWritesMrt = false;
@@ -429,7 +433,7 @@ namespace CNA::TestSupport
     }
 
     /**
-     * Assembles a Shader Model 2.0 vertex-shader program and its Direct3D 9 constant table.
+     * Assembles a Shader Model 2.0 or 3.0 vertex program and its Direct3D 9 constant table.
      *
      * plans/plan_fx.md FX-084. The program is
      * `oPos = mul(POSITION0 + TEXCOORD0 * StreamMix, Transform)` (the TEXCOORD0 term only when
@@ -440,14 +444,21 @@ namespace CNA::TestSupport
      * @param readsSecondStream Whether the shader declares and consumes a TEXCOORD0 input.
      * @param forwardsTexCoord plans/plan_fx.md FX-093: whether the shader also declares TEXCOORD0 and
      *        writes it to `oT0`, which is what a sampling pixel shader reads.
+     * @param forwardsThreeComponents Whether forwarded texture coordinates contain three values.
+     * @param samplesTexture Whether to emit a Shader Model 3.0 vertex texture fetch.
+     * @param samplerRegister Sampler register read by the optional vertex texture fetch.
+     * @param samplerKind Texture dimension declared for the optional vertex sampler.
      * @return The complete vertex-shader token buffer.
      */
-    inline std::vector<std::uint8_t> BuildSyntheticVertexShader(bool readsSecondStream,
-                                                                bool forwardsTexCoord = false,
-                                                                bool forwardsThreeComponents = false)
+    inline std::vector<std::uint8_t> BuildSyntheticVertexShader(
+        bool readsSecondStream, bool forwardsTexCoord = false,
+        bool forwardsThreeComponents = false, bool samplesTexture = false,
+        std::uint32_t samplerRegister = 0,
+        SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D)
     {
-        constexpr std::uint32_t versionToken = 0xFFFE0200u;
-        const std::uint32_t constantCount = readsSecondStream ? 2u : 1u;
+        const std::uint32_t versionToken = samplesTexture ? 0xFFFE0300u : 0xFFFE0200u;
+        const std::uint32_t constantCount =
+            1u + (readsSecondStream ? 1u : 0u) + (samplesTexture ? 1u : 0u);
 
         std::vector<std::uint8_t> ctab;
         AppendUInt32(ctab, 28);                 // 0  sizeof(D3DXSHADER_CONSTANTTABLE)
@@ -488,6 +499,23 @@ namespace CNA::TestSupport
         AppendUInt16(ctab, 0); // struct members
         AppendUInt32(ctab, 0); // struct member info
 
+        std::uint32_t samplerType = 0;
+        if (samplesTexture)
+        {
+            samplerType = static_cast<std::uint32_t>(ctab.size());
+            AppendUInt16(ctab, EffectFormat::ClassObject);
+            AppendUInt16(ctab, samplerKind == SyntheticSamplerKind::SamplerCube
+                                   ? EffectFormat::TypeSamplerCube
+                                   : samplerKind == SyntheticSamplerKind::Sampler3D
+                                         ? EffectFormat::TypeSampler3D
+                                         : EffectFormat::TypeSampler2D);
+            AppendUInt16(ctab, 1);
+            AppendUInt16(ctab, 1);
+            AppendUInt16(ctab, 1);
+            AppendUInt16(ctab, 0);
+            AppendUInt32(ctab, 0);
+        }
+
         const auto appendCtabString = [&ctab](const std::string& value) {
             const auto offset = static_cast<std::uint32_t>(ctab.size());
             ctab.insert(ctab.end(), value.begin(), value.end());
@@ -496,7 +524,9 @@ namespace CNA::TestSupport
         };
         const std::uint32_t transformName = appendCtabString("Transform");
         const std::uint32_t streamMixName = appendCtabString("StreamMix");
-        const std::uint32_t target = appendCtabString("vs_2_0");
+        const std::uint32_t samplerName =
+            samplesTexture ? appendCtabString("FxSampler") : 0;
+        const std::uint32_t target = appendCtabString(samplesTexture ? "vs_3_0" : "vs_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
         while ((ctab.size() & 3u) != 0) ctab.push_back(0);
 
@@ -507,13 +537,24 @@ namespace CNA::TestSupport
         ctab[constantInfo + 6] = 0;  // RegisterIndex c0
         ctab[constantInfo + 8] = 4;  // RegisterCount: four rows of the matrix
         PatchUInt32(ctab, constantInfo + 12, transformType);
+        std::uint32_t nextConstant = 1;
         if (readsSecondStream)
         {
-            PatchUInt32(ctab, constantInfo + 20, streamMixName);
-            ctab[constantInfo + 24] = 2;  // RegisterSet: float
-            ctab[constantInfo + 26] = 4;  // RegisterIndex c4
-            ctab[constantInfo + 28] = 1;  // RegisterCount
-            PatchUInt32(ctab, constantInfo + 32, streamMixType);
+            const std::uint32_t info = constantInfo + nextConstant++ * 20u;
+            PatchUInt32(ctab, info, streamMixName);
+            ctab[info + 4] = 2;  // RegisterSet: float
+            ctab[info + 6] = 4;  // RegisterIndex c4
+            ctab[info + 8] = 1;  // RegisterCount
+            PatchUInt32(ctab, info + 12, streamMixType);
+        }
+        if (samplesTexture)
+        {
+            const std::uint32_t info = constantInfo + nextConstant * 20u;
+            PatchUInt32(ctab, info, samplerName);
+            ctab[info + 4] = 3;  // RegisterSet: sampler
+            ctab[info + 6] = static_cast<std::uint8_t>(samplerRegister);
+            ctab[info + 8] = 1;  // RegisterCount
+            PatchUInt32(ctab, info + 12, samplerType);
         }
 
         // Direct3D 9 shader-token register types, and the two token shapes every instruction
@@ -523,6 +564,7 @@ namespace CNA::TestSupport
         constexpr std::uint32_t regConst = 2;
         constexpr std::uint32_t regRastOut = 4;
         constexpr std::uint32_t regTexCoordOut = 6;  // vs_2_0 oT#
+        constexpr std::uint32_t regSampler = 10;
         const auto registerBits = [](std::uint32_t type) {
             return ((type & 0x7u) << 28) | ((type >> 3) << 11);
         };
@@ -530,8 +572,9 @@ namespace CNA::TestSupport
                                                  std::uint32_t writeMask = 0xFu) {
             return 0x80000000u | registerBits(type) | number | (writeMask << 16);
         };
-        const auto source = [&registerBits](std::uint32_t type, std::uint32_t number) {
-            return 0x80000000u | registerBits(type) | number | (0xE4u << 16);
+        const auto source = [&registerBits](std::uint32_t type, std::uint32_t number,
+                                            std::uint32_t swizzle = 0xE4u) {
+            return 0x80000000u | registerBits(type) | number | (swizzle << 16);
         };
 
         std::vector<std::uint8_t> shader;
@@ -547,12 +590,42 @@ namespace CNA::TestSupport
         AppendUInt32(shader, destination(regInput, 0));
         // One declaration serves both consumers: the multi-stream fixture scales POSITION0 by it,
         // the sampling fixture forwards it, and a fixture that does both declares it once.
-        if (readsSecondStream || forwardsTexCoord)
+        if (readsSecondStream || forwardsTexCoord || samplesTexture)
         {
             // dcl_texcoord v1
             AppendUInt32(shader, 0x0000001Fu | (2u << 24));
             AppendUInt32(shader, 0x80000000u | 5u);        // D3DDECLUSAGE_TEXCOORD, index 0
             AppendUInt32(shader, destination(regInput, 1));
+        }
+        if (samplesTexture)
+        {
+            // vs_3_0 uses generic output registers and requires an output semantic declaration.
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+            AppendUInt32(shader, 0x80000000u);              // POSITION0
+            AppendUInt32(shader, destination(regTexCoordOut, 0));
+            const std::uint32_t samplerTextureType =
+                samplerKind == SyntheticSamplerKind::SamplerCube
+                    ? EffectFormat::SamplerTypeCube
+                    : samplerKind == SyntheticSamplerKind::Sampler3D
+                          ? EffectFormat::SamplerTypeVolume
+                          : EffectFormat::SamplerType2D;
+            // dcl_<2d|cube|volume> s<samplerRegister>
+            AppendUInt32(shader, 0x0000001Fu | (2u << 24));
+            AppendUInt32(shader, 0x80000000u | (samplerTextureType << 27));
+            AppendUInt32(shader, destination(regSampler, samplerRegister));
+            // texldl r0, v1, s#
+            AppendUInt32(shader, 0x0000005Fu | (3u << 24));
+            AppendUInt32(shader, destination(regTemp, 0));
+            AppendUInt32(shader, source(regInput, 1));
+            AppendUInt32(shader, source(regSampler, samplerRegister));
+            // mov r1, v0; add r1.x, v0.x, r0.x
+            AppendUInt32(shader, 0x00000001u | (2u << 24));
+            AppendUInt32(shader, destination(regTemp, 1));
+            AppendUInt32(shader, source(regInput, 0));
+            AppendUInt32(shader, 0x00000002u | (3u << 24));
+            AppendUInt32(shader, destination(regTemp, 1, 0x1u));
+            AppendUInt32(shader, source(regInput, 0, 0x00u));
+            AppendUInt32(shader, source(regTemp, 0, 0x00u));
         }
         if (readsSecondStream)
         {
@@ -565,8 +638,9 @@ namespace CNA::TestSupport
         }
         // m4x4 oPos, <r0|v0>, c0
         AppendUInt32(shader, 0x00000014u | (3u << 24));
-        AppendUInt32(shader, destination(regRastOut, 0));
-        AppendUInt32(shader, readsSecondStream ? source(regTemp, 0) : source(regInput, 0));
+        AppendUInt32(shader, destination(samplesTexture ? regTexCoordOut : regRastOut, 0));
+        AppendUInt32(shader, samplesTexture ? source(regTemp, 1) :
+                                  readsSecondStream ? source(regTemp, 0) : source(regInput, 0));
         AppendUInt32(shader, source(regConst, 0));
         if (forwardsTexCoord)
         {
@@ -958,7 +1032,9 @@ namespace CNA::TestSupport
         {
             const std::vector<std::uint8_t> vertexShader = BuildSyntheticVertexShader(
                 options.vertexShaderReadsSecondStream, options.pixelShaderSamplesTexture,
-                options.samplerKind != SyntheticSamplerKind::Sampler2D);
+                options.samplerKind != SyntheticSamplerKind::Sampler2D,
+                options.vertexShaderSamplesTexture, options.samplerRegister,
+                options.samplerKind);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: MS-PL
-// plans/plan_rlgl.md RLGL-047/RLGL-048/RLGL-051: RLGL runs the same public compiled-Effect
-// runtime, ordinary draw, and SpriteBatch contracts as the established renderers. Multi-stream,
-// instancing, and later draw families remain assigned to RLGL-049.
+// plans/plan_rlgl.md RLGL-047/RLGL-048/RLGL-049/RLGL-051: RLGL runs the same public
+// compiled-Effect runtime, draw, sampler, and SpriteBatch contracts as established renderers.
 
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
 
+#include "CNA/Internal/Renderers/Rlgl/RlglRenderer.hpp"
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include <gtest/gtest.h>
+
+#include <algorithm>
+#include <array>
 
 namespace
 {
@@ -26,6 +29,170 @@ namespace
         GraphicsDevice device;
         ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
         CNA::TestSupport::RunCompiledEffectDrawContract(device);
+    }
+
+    TEST(RlglCompiledEffectTest, SharedMultiStreamDrawContract)
+    {
+        GraphicsDevice device;
+        ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
+        CNA::TestSupport::RunCompiledEffectMultiStreamDrawContract(device);
+    }
+
+    TEST(RlglCompiledEffectTest, SharedInstancingDrawContract)
+    {
+        GraphicsDevice device;
+        ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
+        CNA::TestSupport::RunCompiledEffectInstancingDrawContract(device);
+    }
+
+    TEST(RlglCompiledEffectTest, VertexStageSamplersMoveGeometryFromTheirOwnTextures)
+    {
+        namespace Fx = CNA::TestSupport::EffectFormat;
+        using CNA::TestSupport::SyntheticEffectOptions;
+        using CNA::TestSupport::SyntheticSamplerState;
+        using Microsoft::Xna::Framework::Color;
+        using Microsoft::Xna::Framework::Matrix;
+        using Microsoft::Xna::Framework::Rectangle;
+        using Microsoft::Xna::Framework::Vector4;
+        using namespace Microsoft::Xna::Framework::Graphics;
+
+        GraphicsDevice device;
+        SyntheticEffectOptions options;
+        options.includeSampler = true;
+        options.includeDrawableProgram = true;
+        options.vertexShaderSamplesTexture = true;
+        options.samplerStates = {
+            SyntheticSamplerState{Fx::SampMagFilter, Fx::FilterPoint},
+            SyntheticSamplerState{Fx::SampMinFilter, Fx::FilterPoint},
+            SyntheticSamplerState{Fx::SampMipFilter, Fx::FilterPoint},
+            SyntheticSamplerState{Fx::SampAddressU, Fx::AddressClamp},
+            SyntheticSamplerState{Fx::SampAddressV, Fx::AddressClamp},
+        };
+        Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+        effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+        effect.getParametersProperty()["Tint"]->SetValue(
+            Vector4(0.5f, 0.25f, 0.75f, 1.0f));
+
+        Texture2D black(device, 1, 1);
+        Texture2D red(device, 1, 1);
+        const Color blackPixel[1] = {Color(0, 0, 0, 255)};
+        const Color redPixel[1] = {Color(255, 0, 0, 255)};
+        black.SetData(blackPixel, 1);
+        red.SetData(redPixel, 1);
+
+        struct Vertex
+        {
+            float x, y, z;
+            float u, v, lod, pad;
+        };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4,
+                          VertexElementUsage::TextureCoordinate, 0),
+        });
+        const Vertex leftQuad[6] = {
+            {-1,  1, 0, 0, 0, 0, 0}, {-1, -1, 0, 0, 0, 0, 0},
+            { 0, -1, 0, 0, 0, 0, 0}, {-1,  1, 0, 0, 0, 0, 0},
+            { 0, -1, 0, 0, 0, 0, 0}, { 0,  1, 0, 0, 0, 0, 0},
+        };
+
+        const auto draw = [&](Texture2D& vertexTexture, int x) {
+            RenderTarget2D target(device, 8, 8);
+            device.SetRenderTarget(&target);
+            device.Clear(Color(9, 19, 29, 255));
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getParametersProperty()["FxTexture"]->SetValue(&vertexTexture);
+            effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+            device.DrawUserPrimitives(
+                PrimitiveType::TriangleList, static_cast<const void*>(leftQuad), 0, 2,
+                declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color pixel;
+            const Rectangle probe(x, 4, 1, 1);
+            target.GetData(0, &probe, &pixel, 0, 1);
+            return pixel;
+        };
+
+        EXPECT_NEAR(draw(black, 2).getRProperty(), 128, 3)
+            << "a black vertex sample must retain the left-half geometry";
+        EXPECT_EQ(draw(black, 6).getRProperty(), 9);
+        EXPECT_EQ(draw(red, 2).getRProperty(), 9);
+        EXPECT_NEAR(draw(red, 6).getRProperty(), 128, 3)
+            << "a red vertex sample must move the geometry into the right half";
+
+        auto& renderer = dynamic_cast<
+            CNA::Internal::Renderers::Rlgl::RlglRenderer&>(device.GetRenderer());
+        const auto beforeLoss = renderer.GetContextRecoverySnapshotForTesting();
+        EXPECT_EQ(beforeLoss.realizedVertexSamplers, 1u);
+        EXPECT_EQ(beforeLoss.liveVertexSamplers, 1u);
+        EXPECT_NE(beforeLoss.vertexSamplerIds[0], 0u);
+
+        renderer.DebugSimulateContextLoss();
+        const auto lost = renderer.GetContextRecoverySnapshotForTesting();
+        EXPECT_EQ(lost.realizedVertexSamplers, 1u);
+        EXPECT_EQ(lost.liveVertexSamplers, 0u);
+        EXPECT_EQ(lost.vertexSamplerIds[0], 0u);
+
+        renderer.DebugRestoreContext();
+        const auto restored = renderer.GetContextRecoverySnapshotForTesting();
+        EXPECT_EQ(restored.realizedVertexSamplers, 1u);
+        EXPECT_EQ(restored.liveVertexSamplers, 1u);
+        EXPECT_NE(restored.vertexSamplerIds[0], 0u);
+        EXPECT_EQ(draw(black, 6).getRProperty(), 9)
+            << "the restored sampler must still retain black-texture geometry on the left";
+        EXPECT_NEAR(draw(red, 6).getRProperty(), 128, 3)
+            << "the restored effect, texture, and sampler must move geometry right again";
+
+        options.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
+        options.samplerRegister = 3;
+        Effect cubeEffect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+        cubeEffect.getParametersProperty()["Transform"]->SetValue(
+            Matrix::getIdentityProperty());
+        cubeEffect.getParametersProperty()["Tint"]->SetValue(
+            Vector4(0.5f, 0.25f, 0.75f, 1.0f));
+        TextureCube cube(device, 2, false, SurfaceFormat::Color);
+        const Color redFace[4] = {Color::Red, Color::Red, Color::Red, Color::Red};
+        const Color blackFace[4] = {Color::Black, Color::Black, Color::Black, Color::Black};
+        for (int face = 0; face < 6; ++face)
+        {
+            cube.SetData(
+                static_cast<CubeMapFace>(face),
+                face == static_cast<int>(CubeMapFace::PositiveX) ? redFace : blackFace, 4);
+        }
+        std::array<Vertex, 6> cubeQuad{};
+        std::copy(std::begin(leftQuad), std::end(leftQuad), cubeQuad.begin());
+        for (Vertex& vertex : cubeQuad)
+        {
+            vertex.u = 1.0f;
+            vertex.v = 0.0f;
+            vertex.lod = 0.0f;
+        }
+        RenderTarget2D cubeTarget(device, 8, 8);
+        device.SetRenderTarget(&cubeTarget);
+        device.Clear(Color(9, 19, 29, 255));
+        cubeEffect.getParametersProperty()["FxTexture"]->SetValue(&cube);
+        cubeEffect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        device.DrawUserPrimitives(
+            PrimitiveType::TriangleList, static_cast<const void*>(cubeQuad.data()), 0, 2,
+            declaration);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        Color cubeLeft;
+        Color cubeRight;
+        const Rectangle cubeLeftProbe(2, 4, 1, 1);
+        const Rectangle cubeRightProbe(6, 4, 1, 1);
+        cubeTarget.GetData(0, &cubeLeftProbe, &cubeLeft, 0, 1);
+        cubeTarget.GetData(0, &cubeRightProbe, &cubeRight, 0, 1);
+        EXPECT_EQ(cubeLeft.getRProperty(), 9);
+        EXPECT_NEAR(cubeRight.getRProperty(), 128, 3)
+            << "a +X vertex-stage cube sample must select the red cube face";
+        const auto afterCube = renderer.GetContextRecoverySnapshotForTesting();
+        EXPECT_EQ(afterCube.realizedVertexSamplers, 2u);
+        EXPECT_EQ(afterCube.liveVertexSamplers, 2u);
+        EXPECT_NE(afterCube.vertexSamplerIds[0], 0u);
+        EXPECT_NE(afterCube.vertexSamplerIds[3], 0u)
+            << "logical vertex sampler 3 must occupy the final XNA/MojoShader slot";
     }
 
     TEST(RlglCompiledEffectTest, SharedOrientationContract)
@@ -96,6 +263,13 @@ namespace
         GraphicsDevice device;
         ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
         CNA::TestSupport::RunCompiledEffectSpriteBatchRenderTargetSourceContract(device);
+    }
+
+    TEST(RlglCompiledEffectTest, SharedCubeAndVolumeSamplerContract)
+    {
+        GraphicsDevice device;
+        ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
+        CNA::TestSupport::RunCompiledEffectCubeAndVolumeSamplerContract(device);
     }
 
     TEST(RlglCompiledEffectTest, SpriteBatchUsesDeviceFallbackSlotsAndRestoresStockDraws)

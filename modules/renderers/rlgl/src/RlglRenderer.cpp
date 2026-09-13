@@ -682,6 +682,9 @@ namespace CNA::Internal::Renderers::Rlgl
         rlglInitialized_ = true;
         maxTextureSize_ = Bridge::GetMaxTextureSize();
         maxSamplerSlots_ = Bridge::GetMaxSamplerSlots();
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        maxVertexSamplerSlots_ = Bridge::GetMaxCompiledEffectVertexSamplerSlots();
+#endif
         maxRenderTargets_ = Bridge::GetMaxRenderTargets();
         maxSamplerAnisotropy_ = Bridge::GetMaxSamplerAnisotropy();
         nativeLossPollingAvailable_ =
@@ -702,6 +705,13 @@ namespace CNA::Internal::Renderers::Rlgl
             sampler.realized = sampler.realized || sampler.id != 0;
             sampler.id = 0;
         }
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        for (SamplerRecord& sampler : vertexSamplers_)
+        {
+            sampler.realized = sampler.realized || sampler.id != 0;
+            sampler.id = 0;
+        }
+#endif
         restorePrimitivePipeline_ = restorePrimitivePipeline_ || primitivePipeline_ != nullptr;
         primitivePipeline_.reset();
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
@@ -739,6 +749,15 @@ namespace CNA::Internal::Renderers::Rlgl
             samplers_[index].id = 0;
         }
         Bridge::DestroySamplers(samplerIds.data(), samplerIds.size());
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        std::array<unsigned int, 4> vertexSamplerIds{};
+        for (std::size_t index = 0; index < vertexSamplers_.size(); ++index)
+        {
+            vertexSamplerIds[index] = vertexSamplers_[index].id;
+            vertexSamplers_[index].id = 0;
+        }
+        Bridge::DestroySamplers(vertexSamplerIds.data(), vertexSamplerIds.size());
+#endif
     }
 
     void RlglRenderer::RestoreRendererNativeState()
@@ -750,6 +769,21 @@ namespace CNA::Internal::Renderers::Rlgl
             sampler.id = Bridge::CreateSampler();
             ApplySamplerRecord(static_cast<int>(index), sampler);
         }
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        for (std::size_t index = 0; index < vertexSamplers_.size(); ++index)
+        {
+            SamplerRecord& sampler = vertexSamplers_[index];
+            if (!sampler.realized) continue;
+            if (index >= static_cast<std::size_t>(maxVertexSamplerSlots_))
+            {
+                throw System::NotSupportedException(
+                    "RLGL context recovery: the replacement GL context exposes fewer "
+                    "compiled-effect vertex sampler slots");
+            }
+            sampler.id = Bridge::CreateSampler();
+            ApplyCompiledEffectVertexSamplerRecord(static_cast<int>(index), sampler);
+        }
+#endif
         if (restorePrimitivePipeline_)
         {
             primitivePipeline_ = std::make_unique<Bridge::PrimitivePipeline>(
@@ -1198,6 +1232,16 @@ namespace CNA::Internal::Renderers::Rlgl
             [](const SamplerRecord& sampler) { return sampler.id != 0; }));
         for (std::size_t index = 0; index < samplers_.size(); ++index)
             snapshot.samplerIds[index] = samplers_[index].id;
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+        snapshot.realizedVertexSamplers = static_cast<std::size_t>(std::count_if(
+            vertexSamplers_.begin(), vertexSamplers_.end(),
+            [](const SamplerRecord& sampler) { return sampler.realized; }));
+        snapshot.liveVertexSamplers = static_cast<std::size_t>(std::count_if(
+            vertexSamplers_.begin(), vertexSamplers_.end(),
+            [](const SamplerRecord& sampler) { return sampler.id != 0; }));
+        for (std::size_t index = 0; index < vertexSamplers_.size(); ++index)
+            snapshot.vertexSamplerIds[index] = vertexSamplers_[index].id;
+#endif
         snapshot.primitivePipelineRealized = restorePrimitivePipeline_;
         snapshot.primitivePipelineLive = primitivePipeline_ != nullptr;
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
@@ -1644,6 +1688,33 @@ namespace CNA::Internal::Renderers::Rlgl
             sampler.addressU, sampler.addressV, sampler.addressW,
             sampler.maxAnisotropy, sampler.maxMipLevel, sampler.lodBias);
     }
+
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+    RlglRenderer::SamplerRecord&
+    RlglRenderer::GetCompiledEffectVertexSamplerRecord(const int slot)
+    {
+        if (slot < 0 || slot >= static_cast<int>(vertexSamplers_.size()) ||
+            slot >= maxVertexSamplerSlots_)
+        {
+            throw System::NotSupportedException(
+                "RLGL compiled effect: vertex sampler register exceeds the live GL/MojoShader "
+                "limit");
+        }
+        SamplerRecord& sampler = vertexSamplers_[static_cast<std::size_t>(slot)];
+        if (sampler.id == 0) sampler.id = Bridge::CreateSampler();
+        sampler.realized = true;
+        return sampler;
+    }
+
+    void RlglRenderer::ApplyCompiledEffectVertexSamplerRecord(
+        const int slot, SamplerRecord& sampler)
+    {
+        Bridge::ApplySampler(
+            sampler.id, Bridge::GetCompiledEffectVertexSamplerOffset() + slot,
+            sampler.filter, sampler.addressU, sampler.addressV, sampler.addressW,
+            sampler.maxAnisotropy, sampler.maxMipLevel, sampler.lodBias);
+    }
+#endif
 
     void RlglRenderer::ApplySamplerState(
         const int slot, const int filter, const int addressU, const int addressV,
