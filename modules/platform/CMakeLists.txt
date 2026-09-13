@@ -6,8 +6,8 @@
 # (cmake/PlatformRatchet.cmake, PLAT-8) and, from PLAT-121, as a hard error.
 #
 # src/ is flat for the contract's own types; each implementation owns a subdirectory
-# (src/Sdl3/, src/Headless/, src/Terminal/), with src/Common/ holding the pieces more than one
-# of them shares.
+# (src/Sdl3/, src/Sdl2/, src/Win32/, src/Headless/, src/Terminal/), with src/Common/ holding the
+# pieces more than one of them shares.
 file(GLOB CNA_PLATFORM_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
 # The selected implementation, chosen by CNA_PLATFORM (cmake/PlatformSelection.cmake).
@@ -23,6 +23,15 @@ if(CNA_PLATFORM STREQUAL "SDL3")
 endif()
 if(CNA_PLATFORM STREQUAL "SDL2")
     file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/Sdl2/*.cpp")
+    list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
+endif()
+# The native Win32 backend (plans/plan_win32.md). Unlike Headless and Terminal below it is NOT
+# compiled unconditionally: every translation unit in src/Win32/ includes <windows.h>, so on a
+# non-Windows target there is nothing to compile it against. cmake/PlatformSelection.cmake has
+# already refused CNA_PLATFORM=WIN32 anywhere else, so this condition can never be the thing that
+# silently drops a requested implementation.
+if(CNA_PLATFORM STREQUAL "WIN32")
+    file(GLOB CNA_PLATFORM_IMPL_SOURCES CONFIGURE_DEPENDS "src/Win32/*.cpp")
     list(APPEND CNA_PLATFORM_SOURCES ${CNA_PLATFORM_IMPL_SOURCES})
 endif()
 
@@ -82,4 +91,22 @@ if(CNA_PLATFORM STREQUAL "SDL3")
 endif()
 if(CNA_PLATFORM STREQUAL "SDL2")
     target_link_libraries(cna_platform PRIVATE SDL2::SDL2)
+endif()
+
+# The Win32 backend's native libraries, PRIVATE for the same reason SDL is: an implementation
+# detail must not become a usage requirement of every consumer of CNA::Platform. None of these
+# is a third-party dependency -- they are the operating system's own import libraries, always
+# present in any Windows SDK or mingw-w64 sysroot, so there is nothing to fetch or vendor.
+#
+#   user32   windows, messages, input, clipboard, monitors, message boxes
+#   gdi32    device contexts, StretchDIBits presentation, DIB cursors
+#   opengl32 WGL context creation for IPlatformGlContext
+#   ole32    CoInitializeEx / CoCreateInstance for the shell file dialogs
+#   shell32  SHGetKnownFolderPath, ShellExecuteW
+#   uuid     the CLSID/IID constants the shell dialog interfaces are named by
+#
+# Vulkan is deliberately absent: vulkan-1.dll is loaded at run time, so a machine with no Vulkan
+# driver still runs a CNA binary -- the capability simply reports false.
+if(CNA_PLATFORM STREQUAL "WIN32")
+    target_link_libraries(cna_platform PRIVATE user32 gdi32 opengl32 ole32 shell32 uuid)
 endif()

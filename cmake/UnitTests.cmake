@@ -152,6 +152,17 @@ if(CNA_BUILD_TESTS)
             ".*/modules/audio/tests/.*/Sdl2AudioDeviceTests\\.cpp$")
     endif()
 
+    # plans/plan_win32.md WIN32-0004: the Win32 backend's own tests reach into
+    # CNA::Platform::Win32 -- its message translator, its scan-code table, its window -- all of
+    # which exist only when CNA_PLATFORM=WIN32 compiled src/Win32/. Under any other selection they
+    # would reference symbols that are not there and fail to link, exactly as the SDL3 and SDL2
+    # suites above would. The implementation-neutral suites (the contract, and the conformance
+    # suite parameterised over every available implementation) always build and pick Win32 up
+    # automatically wherever it is present.
+    if(NOT CNA_PLATFORM STREQUAL "WIN32")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Win32.*\\.cpp$")
+    endif()
+
     # plans/plan_platform.md PLAT-130: TerminalPlatform is built on termios and pseudo-terminals, so
     # both it and its tests are POSIX-only -- excluded on Windows for the same reason the
     # implementation directory is (modules/platform/CMakeLists.txt), not gated line-by-line.

@@ -150,7 +150,50 @@ set(CNA_TEST_DISPLAY ":0" CACHE STRING "DISPLAY value used by GPU/window-creatin
 include(cmake/ApplePlatform.cmake)
 
 include(cmake/ThirdPartySDL.cmake)
-cna_configure_vendored_sdl()
+
+# plans/plan_win32.md WIN32-0060 -- do not build SDL3 for a configuration that does not use it.
+#
+# CNA_PLATFORM and CNA_AUDIO_PLATFORM already make SDL an exchangeable backend at the *link*
+# level: no framework module outside cna_platform and cna_audio links it, and both edges are
+# conditional. What survived that is this call, which configured and built vendored
+# SDL3/SDL3_image/SDL3_mixer unconditionally -- so a fully native Windows build
+# (CNA_PLATFORM=WIN32 + CNA_AUDIO_PLATFORM=NULL + a DirectX renderer) still paid for, and
+# depended on, a toolkit no target in it referenced. That is the last place "SDL is CNA's
+# substrate" was still true, and it is what this gate removes.
+#
+# The test is deliberately conservative, and the reason is the ordering: this runs BEFORE
+# RendererSelection.cmake and PlatformSelection.cmake declare their cache defaults, so an
+# unset variable here means "not chosen explicitly", not "not SDL3". Every unset or SDL3-valued
+# axis therefore keeps SDL3, and only a configuration that has explicitly said no to all of them
+# skips it. The default build is bit-for-bit unaffected.
+set(_cna_sdl3_required ON)
+if(NOT "${CNA_PLATFORM}" STREQUAL "" AND NOT CNA_PLATFORM STREQUAL "SDL3"
+        AND NOT "${CNA_AUDIO_PLATFORM}" STREQUAL "" AND NOT CNA_AUDIO_PLATFORM STREQUAL "SDL3"
+        AND NOT "${CNA_GRAPHICS_RENDERER}" STREQUAL ""
+        AND NOT CNA_BUILD_TESTS AND NOT CNA_BUILD_EXAMPLES)
+    # The renderer families that link SDL3 themselves: two by identity (SDL_RENDERER, SDL_GPU)
+    # and three through an upstream dependency that owns an SDL renderer internally (FNA3D,
+    # FREEDIRECT, LLGL). The first four declare it as REQUIRES_PLATFORM SDL3 on their own target;
+    # that property is not readable this early, so the list is restated here and the
+    # Sdl2OnlyConfiguration gate cross-checks the same set.
+    set(_cna_sdl3_renderers SDL_RENDERER SDL_GPU FNA3D FREEDIRECT LLGL)
+    set(_cna_sdl3_required OFF)
+    foreach(_cna_selected IN LISTS CNA_GRAPHICS_RENDERER CNA_GRAPHICS_RENDERERS)
+        if(_cna_selected IN_LIST _cna_sdl3_renderers)
+            set(_cna_sdl3_required ON)
+        endif()
+    endforeach()
+    unset(_cna_sdl3_renderers)
+endif()
+
+if(_cna_sdl3_required)
+    cna_configure_vendored_sdl()
+else()
+    message(STATUS
+        "CNA: SDL3 not configured -- no target in this configuration uses it "
+        "(CNA_PLATFORM=${CNA_PLATFORM}, CNA_AUDIO_PLATFORM=${CNA_AUDIO_PLATFORM}, "
+        "CNA_GRAPHICS_RENDERER=${CNA_GRAPHICS_RENDERER}, tests and examples off)")
+endif()
 
 include(cmake/TestHelpers.cmake)
 

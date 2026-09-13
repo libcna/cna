@@ -12,13 +12,22 @@
 # capability is known -- not silently tolerated until something dereferences null.
 # =====================================================================================
 
-set(CNA_PLATFORM "SDL3" CACHE STRING "Platform implementation (SDL3 | SDL2 | HEADLESS | TERMINAL)")
+set(CNA_PLATFORM "SDL3" CACHE STRING
+        "Platform implementation (SDL3 | SDL2 | HEADLESS | TERMINAL | WIN32)")
 
-# Implemented today. TERMINAL is POSIX-only: it is built on termios, and there is no Windows
-# console path for it (plans/plan_platform.md Phase 10). Offering it on Windows would produce a
-# configure that succeeds and a build that does not.
+# Implemented today. Two of the five are host-conditional, for symmetrical reasons:
+#
+#   TERMINAL is POSIX-only -- it is built on termios, and there is no Windows console path for it
+#   (plans/plan_platform.md Phase 10). Offering it on Windows would produce a configure that
+#   succeeds and a build that does not.
+#
+#   WIN32 is Windows-only -- it is built on user32/gdi32 and an HWND (plans/plan_win32.md). It is
+#   offered wherever the target is Windows, which includes a mingw-w64 cross-build from Linux,
+#   because that targets Windows even though the build host does not run it.
 set(_cna_platforms_available SDL3 SDL2 HEADLESS)
-if(NOT WIN32)
+if(WIN32)
+    list(APPEND _cna_platforms_available WIN32)
+else()
     list(APPEND _cna_platforms_available TERMINAL)
 endif()
 
@@ -27,9 +36,14 @@ endif()
 # binary that is not what the user asked for. plans/plan_platform.md §12 records why each is
 # out of scope; PLAT-11 is explicit that a reserved identifier must never degrade
 # quietly.
-set(_cna_platforms_reserved SDL12 WIN32 EMSCRIPTEN)
+#
+# A host-conditional implementation is *reserved on the hosts it does not support*, so asking for
+# it there produces the same loud refusal rather than an "unknown platform" that reads as a typo.
+set(_cna_platforms_reserved SDL12 EMSCRIPTEN)
 if(WIN32)
     list(APPEND _cna_platforms_reserved TERMINAL)
+else()
+    list(APPEND _cna_platforms_reserved WIN32)
 endif()
 
 set_property(CACHE CNA_PLATFORM PROPERTY STRINGS ${_cna_platforms_available})
@@ -38,9 +52,13 @@ if(CNA_PLATFORM IN_LIST _cna_platforms_reserved)
     message(FATAL_ERROR
         "CNA: CNA_PLATFORM=${CNA_PLATFORM} is a reserved identifier that is NOT implemented.\n"
         "Only ${_cna_platforms_available} are available today.\n"
-        "See plans/plan_platform.md -- SDL 1.2, native Win32 and Emscripten are recorded in "
-        "\"Possible future implementations (NOT in scope)\". TERMINAL exists (Phase 10) but is "
-        "POSIX-only: it is built on termios and has no Windows console path.\n"
+        "See plans/plan_platform.md -- SDL 1.2 and Emscripten are recorded in "
+        "\"Possible future implementations (NOT in scope)\".\n"
+        "TERMINAL exists (plans/plan_platform.md Phase 10) but is POSIX-only: it is built on "
+        "termios and has no Windows console path.\n"
+        "WIN32 exists (plans/plan_win32.md) but is Windows-only: it is built on user32/gdi32 and "
+        "an HWND. Select it with a Windows toolchain -- natively, or from Linux with "
+        "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake.\n"
         "This is a hard error on purpose: falling back to SDL3 would build something other "
         "than what you asked for.")
 endif()
