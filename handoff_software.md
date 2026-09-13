@@ -1,6 +1,6 @@
 # CNA Software Renderer Adversarial Parity Handoff
 
-Updated: 2026-09-12, continued through SOFTWARE-478
+Updated: 2026-09-13, continued through SOFTWARE-481
 
 This document is the restart point for the hostile Software-versus-EasyGL classic XNA 4.0/Core
 parity review. Do not interpret the large completed task count or green regression suites as proof
@@ -35,24 +35,15 @@ infallible oracle.
 - Repository: `/rv/data/development/github.com/openeggbert/cnasoftware`
 - Branch: `software`, tracking `origin/software`
 - Adversarial challenge start: `92ed418b3dfcd4a2e03ea8c0d092a0b4caca9e9f`
-- Last technical commit before this handoff update: `c56bb9274` —
-  `fix(SOFTWARE-478): validate DCL result modifiers`
-- Campaign delta at that commit: 323 commits, 692 changed files, 65,374 insertions and 6,593
+- Last technical commit before this handoff update: `63be571e6` —
+  `fix(SOFTWARE-481): validate label source tokens`
+- Campaign delta at that commit: 328 commits, 695 changed files, 66,058 insertions and 6,593
   deletions relative to the challenge start. Recompute rather than copying these numbers into
   a future final report because this handoff commit and subsequent work change them.
-- `origin/software` was still at `d3a38f0f7` when this update was written. Before this handoff
-  commit, the local branch was thirteen commits ahead: `2ba060087` (SOFTWARE-471), `f59140696`
-  (SOFTWARE-472), `19f7cabe2` (a handoff snapshot), `9c7413c3d` (SOFTWARE-473),
-  `8e01919c1` (a handoff snapshot), `c9b7884ce` (SOFTWARE-474), `d718ac4ee` (a handoff
-  snapshot), `3417e6477` (SOFTWARE-475), `65d7b986c` (a handoff snapshot), `01d2b156c`
-  (SOFTWARE-476), `0f878352a` (SOFTWARE-477), `89a5c3b52` (a handoff snapshot), and
-  `c56bb9274` (SOFTWARE-478).
-  The owner explicitly requested pushes, but the execution environment rejected the attempted
-  `git push origin software` to `git@github-libcna:libcna/cna` because the accumulated payload and
-  destination lacked separately trusted approval in its remote-safety review; no workaround was
-  attempted. Re-establish the live branch/remote state and obtain explicit approval for that exact
-  remote and the current `d3a38f0f7..HEAD` payload before pushing the commits. This handoff commit
-  will make the local branch fourteen commits ahead.
+- `origin/software` was at `6861caf32` when this update was written. Before this handoff commit,
+  the local branch was three commits ahead: `1f08c30eb` (SOFTWARE-479), `f63424552`
+  (SOFTWARE-480), and `63be571e6` (SOFTWARE-481). This handoff commit will make it four commits
+  ahead. Do not push without a new explicit request in the active conversation.
 - The only expected worktree entry after the handoff commit is the user's untracked `.junie/`.
   Preserve it. Do not stage it.
 
@@ -104,7 +95,7 @@ the exact evidence and task mapping are in the `Final adversarial parity challen
 executes classic Effect Framework data through MojoShader/FNA3D-compatible structures. It is a real
 classic-XNA parity requirement, not a CNAEXT deferral.
 
-## Latest completed work: SOFTWARE-470 through SOFTWARE-478
+## Latest completed work: SOFTWARE-470 through SOFTWARE-481
 
 `SOFTWARE-470` audited the Shader Model 2 `SINCOS` scratch operands.
 
@@ -213,6 +204,32 @@ requires zero modifiers for miscellaneous inputs, samplers and vertex declaratio
 EasyGL passes 10/10, the complete isolated compiled family passes 601/601, the display-free
 Software runtime passes, and all 160 Software CTests pass.
 
+`SOFTWARE-479` audited the unchecked modifier and selector fields of Shader Model 3 `IF` sources.
+Real `d3dcompiler_47.dll` accepts plain/logical-NOT Boolean sources and plain/NOT predicate sources
+using any replicate selector in both pixel and vertex profiles. It rejects arithmetic negate with
+X5690/X5696 and vector predicate selectors with X5949/X5960. Software accepted all six forged
+invalid forms; EasyGL accepted the two vector-predicate forms and rejected the other four only
+during later GLSL translation. Managed patch 104 permits only `NONE`/`NOT` and requires predicate
+replication. Six negative and six positive controls pass; focused EasyGL is 38/38, the complete
+compiled family is 613/613, and Software remains 160/160.
+
+`SOFTWARE-480` extended that audit to `CALLNZ` and `BREAKP`. Microsoft accepts plain/NOT replicate
+predicates for both instructions and plain/NOT Boolean `CALLNZ` conditions, while rejecting
+arithmetic negate and vector predicate selectors. The shared parser accepted eight of ten invalid
+controls. EasyGL also formatted valid predicate `CALLNZ` conditions as Boolean vectors, so four
+positive NOT/Y selector cases failed GLSL compilation. Managed patch 105 adds the missing condition
+validation and scalar GLSL formatting. Ten negative and ten positive controls pass; focused EasyGL
+is 58/58, the complete family is 633/633, and Software remains 160/160.
+
+`SOFTWARE-481` audited all label-bearing source tokens. The real Microsoft assembler accepts only
+plain label operands for `CALL`, `CALLNZ` and `LABEL` in `ps_3_0` and `vs_3_0`. It rejects negate
+with X5690/X5696 and rejects `l0.x` with X2022 because scalar label registers cannot be swizzled.
+Software and EasyGL both accepted all twelve forged stage/opcode/modifier combinations before
+managed patch 106 required `SRCMOD_NONE` plus the identity selector in `check_label_register`.
+Twelve negative controls and two stage-level positive programs now pass. Focused EasyGL is 38/38,
+the complete isolated compiled family is 647/647, the display-free Software runtime passes, and all
+160 Software CTests pass.
+
 ## Recent compiled-Effect validation commits
 
 These commits form one evidence chain. Preserve their distinctions when debugging regressions:
@@ -238,6 +255,11 @@ These commits form one evidence chain. Preserve their distinctions when debuggin
 - `01d2b156c` — SOFTWARE-476, require texture-register destinations for pre-1.4 `TEXCOORD`.
 - `0f878352a` — SOFTWARE-477, reject Shader Model 1.4 `TEXDEPTH` result modifiers and shifts.
 - `c56bb9274` — SOFTWARE-478, enforce declaration modifiers by D3D9 register class.
+- `1f08c30eb` — SOFTWARE-479, validate `IF` source modifiers and predicate selectors.
+- `f63424552` — SOFTWARE-480, validate `CALLNZ`/`BREAKP` conditions and emit scalar GLSL
+  `CALLNZ` expressions.
+- `63be571e6` — SOFTWARE-481, require plain identity label sources for `CALL`, `CALLNZ` and
+  `LABEL`.
 
 The lesson from SOFTWARE-468 is important: never generalize an exact `ps_2_0` assembler result to
 `ps_2_x`, `ps_3_0`, or a vertex profile without measuring it. The Microsoft profile boundaries can
@@ -259,8 +281,8 @@ The following are the only non-complete rows in `plans/plan_software.md` at this
 | `SOFTWARE-86` | Historical optional performance work. Explicitly not a goal without a real impractical test. |
 
 All rows through `SOFTWARE-163`, the completed later ranges stated in the plan, and
-`SOFTWARE-315..478` are closed except for the rows above. Assign the next demonstrated issue as
-`SOFTWARE-479`; never add a task merely to keep numbering moving.
+`SOFTWARE-315..481` are closed except for the rows above. Assign the next demonstrated issue as
+`SOFTWARE-482`; never add a task merely to keep numbering moving.
 
 ## Recommended next audit direction
 
@@ -308,7 +330,7 @@ the flag incrementally.
 - Durable audit evidence: `plans/plan_software.md` and
   `docs/software-easygl-parity-ledger.md`
 
-The patch series contains 103 ordered patches at this handoff. New patches must be appended in
+The patch series contains 106 ordered patches at this handoff. New patches must be appended in
 dependency order and must apply to pinned MojoShader commit
 `6333f74dbd5644789a63e903816441b16c1e8b60` through FNA3D pin `3240147`.
 
@@ -367,7 +389,7 @@ The active local dependency checkout is `/tmp/cna-fna3d-soft474.XKYa5y/FNA3D`. I
 SOFTWARE-474 after another concurrent session repeatedly rewrote the former shared checkout and
 left its source/stamp inconsistent. Both active build trees now point to this isolated checkout;
 keep it while continuing with those builds. It is pinned to FNA3D `32401479a3ab5bd6b2e7f786e87bf4166aa03b0f`
-and MojoShader `6333f74dbd5644789a63e903816441b16c1e8b60`, with all 103 managed patches applied.
+and MojoShader `6333f74dbd5644789a63e903816441b16c1e8b60`, with all 106 managed patches applied.
 
 Its FNA3D Git object alternate points to `/tmp/fx126-current/fna3d-src/.git/objects`, and its
 MojoShader object alternate points to
@@ -385,7 +407,7 @@ skip required patches. Before trusting a configure, inspect a marker from the ap
 example:
 
 ```text
-rg -n 'pixel1_texture_stages|TEXM3X3SPEC final arg must be unmodified|TEXDEPTH destination must not use result modifiers|pixel input DCL only permits|MOJOSHADER_RS_BUMPENVMAT00' /tmp/cna-fna3d-soft474.XKYa5y/FNA3D/MojoShader/mojoshader.c /tmp/cna-fna3d-soft474.XKYa5y/FNA3D/MojoShader/mojoshader.h
+rg -n 'pixel1_texture_stages|TEXM3X3SPEC final arg must be unmodified|TEXDEPTH destination must not use result modifiers|pixel input DCL only permits|label source must not have|MOJOSHADER_RS_BUMPENVMAT00' /tmp/cna-fna3d-soft474.XKYa5y/FNA3D/MojoShader/mojoshader.c /tmp/cna-fna3d-soft474.XKYa5y/FNA3D/MojoShader/mojoshader.h
 ```
 
 If source and stamp disagree, remove only that stamp through the repository's approved editing
@@ -425,6 +447,7 @@ Useful temporary probe sources at handoff included:
 - `/tmp/cna_d3dassemble_texcoord_probe.cpp`
 - `/tmp/cna_d3dassemble_texdepth_probe.cpp`
 - `/tmp/cna_d3dassemble_dcl_modifier_probe.cpp`
+- `/tmp/cna_d3dassemble_predicate_flow_probe.cpp`
 
 These files are not committed and may disappear after reboot. Preserve every material measurement
 in the task row and ledger rather than treating `/tmp` output as durable evidence. Always include a
@@ -435,15 +458,17 @@ nearby Microsoft-positive control so an apparent rejection is not merely bad ass
 The last broad results relevant to the latest technical commit are:
 
 - Software renderer CTest label: 160/160 pass, display-free.
-- EasyGL compiled-Effect family: 601/601 pass on isolated Mesa/Xvfb.
+- EasyGL compiled-Effect family: 647/647 pass on isolated Mesa/Xvfb.
 - Focused SOFTWARE-470 EasyGL cases: 5/5 pass; focused SOFTWARE-471 cases: 7/7 pass;
   focused SOFTWARE-472 cases: 3/3 pass; focused SOFTWARE-473 cases: 9/9 pass; focused
   SOFTWARE-474 cases: 20/20 pass; focused SOFTWARE-475 plus the adjacent slot regression:
   22/22 pass; focused SOFTWARE-477 phase-state pair: 2/2 pass; focused SOFTWARE-478
-  declaration-modifier matrix: 10/10 pass.
+  declaration-modifier matrix: 10/10 pass; focused SOFTWARE-479 flow family: 38/38 pass;
+  focused SOFTWARE-480 flow family: 58/58 pass; focused SOFTWARE-481 call-graph/label family:
+  38/38 pass.
 - The last full Software `CnaGraphicsTests` checkpoint documented in the ledger is
   2,625/2,688 with 63 classified skips. It was not rerun for
-  SOFTWARE-470/471/472/473/474/475/476/477/478 because those tasks changed only compiled-Effect test/validation
+  SOFTWARE-470/471/472/473/474/475/476/477/478/479/480/481 because those tasks changed only compiled-Effect test/validation
   inputs covered by the focused runtime, full Software label, and complete EasyGL compiled family.
 
 The exact 63-skip classification is in
@@ -476,8 +501,6 @@ include start/end SHAs, branch, commit and LOC counts, new/completed/remaining t
 new findings, compiled-Effect verdict, exact skips, all test families run, and the reason for the
 classification. At this handoff the correct classification is C.
 
-This run stops after SOFTWARE-478 and this handoff are committed. Do not open SOFTWARE-479 until
-the owner explicitly resumes the campaign in the active conversation. The
-requested pushes remain blocked until the current execution environment receives explicit approval
-for the exact `git@github-libcna:libcna/cna` destination and current `d3a38f0f7..HEAD` payload
-described in the repository snapshot above.
+This run stops after SOFTWARE-481 and this handoff are committed. Do not open SOFTWARE-482 until
+the owner explicitly resumes the campaign in the active conversation. Do not push without a new
+explicit request for the current branch state.
