@@ -33,6 +33,7 @@
 #include <cmath>
 #include <cstdint>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace CNA::Internal::Renderers::Rlgl
@@ -51,13 +52,17 @@ namespace CNA::Internal::Renderers::Rlgl
         constexpr int kVertexCapacity = kMaximumSpritesPerGroup * 4;
         constexpr int kIndexCapacity = kMaximumSpritesPerGroup * 6;
 
-        class RlglSpriteBatchRenderer final : public ISpriteBatchRenderer
+        class RlglSpriteBatchRenderer final
+            : public ISpriteBatchRenderer, public IRlglNativeResource
         {
         public:
-            explicit RlglSpriteBatchRenderer(RlglRenderer& renderer)
+            RlglSpriteBatchRenderer(
+                RlglRenderer& renderer,
+                std::shared_ptr<RlglResourceLifetime> lifetime)
                 : renderer_(renderer)
                 , pipeline_(Bridge::CreateSpritePipeline(
                       kVertexCapacity, kIndexCapacity))
+                , lifetime_(std::move(lifetime))
             {
                 try
                 {
@@ -83,6 +88,7 @@ namespace CNA::Internal::Renderers::Rlgl
                     }
                     spriteMatrixParameterIndex_ = matrix->runtimeIndex;
 #endif
+                    lifetime_->Register(*this);
                 }
                 catch (...)
                 {
@@ -93,7 +99,7 @@ namespace CNA::Internal::Renderers::Rlgl
 
             ~RlglSpriteBatchRenderer() override
             {
-                Bridge::DestroySpritePipeline(pipeline_);
+                lifetime_->Dispose(*this);
             }
 
             RlglSpriteBatchRenderer(const RlglSpriteBatchRenderer&) = delete;
@@ -293,6 +299,11 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
         private:
+            void ReleaseNativeResource() noexcept override
+            {
+                Bridge::DestroySpritePipeline(pipeline_);
+            }
+
             [[nodiscard]] int VertexCount() const
             {
                 return static_cast<int>(vertices_.size() / kFloatsPerVertex);
@@ -505,12 +516,14 @@ namespace CNA::Internal::Renderers::Rlgl
             float lodBias_ = 0.0f;
             bool immediate_ = false;
             bool begun_ = false;
+            std::shared_ptr<RlglResourceLifetime> lifetime_;
         };
     }
 
     std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatchRenderer(
-        RlglRenderer& renderer)
+        RlglRenderer& renderer,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime)
     {
-        return std::make_unique<Detail::RlglSpriteBatchRenderer>(renderer);
+        return std::make_unique<Detail::RlglSpriteBatchRenderer>(renderer, lifetime);
     }
 }

@@ -148,6 +148,117 @@ namespace CNA::Internal::Renderers::Rlgl
         }
     }
 
+    RlglResourceLifetime::RlglResourceLifetime(
+        const std::shared_ptr<RlglThreadContextLeaseControl>& contextControl)
+        : contextControl_(contextControl)
+    {
+    }
+
+    void RlglResourceLifetime::Register(IRlglNativeResource& resource)
+    {
+        const auto control = contextControl_.lock();
+        if (!control)
+            throw std::runtime_error("RLGL: renderer resource lifetime is no longer available");
+
+        const std::scoped_lock lock(control->mutex);
+        if (!active_.load(std::memory_order_acquire))
+            throw std::runtime_error("RLGL: renderer resource lifetime is shutting down");
+        resources_.push_back(&resource);
+        registeredResources_.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    void RlglResourceLifetime::Dispose(IRlglNativeResource& resource) noexcept
+    {
+        const auto control = contextControl_.lock();
+        if (!control)
+        {
+            lateDisposals_.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+
+        const std::scoped_lock lock(control->mutex);
+        const auto found = std::find(resources_.begin(), resources_.end(), &resource);
+        if (found == resources_.end())
+        {
+            if (!active_.load(std::memory_order_acquire))
+                lateDisposals_.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+        resources_.erase(found);
+        registeredResources_.fetch_sub(1, std::memory_order_relaxed);
+
+        if (!active_.load(std::memory_order_acquire))
+        {
+            lateDisposals_.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+
+        try
+        {
+            const auto previousBinding = control->platformContext->GetCurrentBinding();
+            control->platformContext->MakeCurrent();
+            resource.ReleaseNativeResource();
+            releasedResources_.fetch_add(1, std::memory_order_relaxed);
+            control->platformContext->RestoreBinding(
+                previousBinding,
+                RendererThreadContextLeaseRelease::RestorePreviousBinding);
+        }
+        catch (const std::exception& error)
+        {
+            CNA::Logger::Error(
+                std::string("RLGL: failed to release a native resource: ") + error.what(),
+                CNA::LogCategory::RENDER);
+        }
+    }
+
+    void RlglResourceLifetime::Shutdown() noexcept
+    {
+        const auto control = contextControl_.lock();
+        if (!control)
+        {
+            active_.store(false, std::memory_order_release);
+            resources_.clear();
+            registeredResources_.store(0, std::memory_order_relaxed);
+            return;
+        }
+
+        const std::scoped_lock lock(control->mutex);
+        if (!active_.exchange(false, std::memory_order_acq_rel)) return;
+
+        try
+        {
+            const auto previousBinding = control->platformContext->GetCurrentBinding();
+            control->platformContext->MakeCurrent();
+            for (auto resource = resources_.rbegin(); resource != resources_.rend(); ++resource)
+            {
+                (*resource)->ReleaseNativeResource();
+                releasedResources_.fetch_add(1, std::memory_order_relaxed);
+            }
+            control->platformContext->RestoreBinding(
+                previousBinding,
+                RendererThreadContextLeaseRelease::RestorePreviousBinding);
+        }
+        catch (const std::exception& error)
+        {
+            CNA::Logger::Error(
+                std::string("RLGL: failed to release native children during shutdown: ") +
+                    error.what(),
+                CNA::LogCategory::RENDER);
+        }
+        resources_.clear();
+        registeredResources_.store(0, std::memory_order_relaxed);
+    }
+
+    RlglResourceLifetimeSnapshot
+    RlglResourceLifetime::GetSnapshotForTesting() const noexcept
+    {
+        return {
+            registeredResources_.load(std::memory_order_relaxed),
+            releasedResources_.load(std::memory_order_relaxed),
+            lateDisposals_.load(std::memory_order_relaxed),
+            active_.load(std::memory_order_acquire)};
+    }
+
     RlglRenderer::RlglRenderer(const GraphicsRendererCreateArgs& args)
         : surface_(args.surface)
         , platformGlService_(&RequirePlatformGlContext(args.glContext, kRendererName))
@@ -183,6 +294,8 @@ namespace CNA::Internal::Renderers::Rlgl
             platformContext_->SetSwapInterval(swapInterval_);
             threadContextLeaseControl_ =
                 std::make_shared<RlglThreadContextLeaseControl>(platformContext_);
+            resourceLifetime_ =
+                std::make_shared<RlglResourceLifetime>(threadContextLeaseControl_);
             IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
             registered_ = true;
 
@@ -197,6 +310,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 Bridge::Shutdown();
                 rlglInitialized_ = false;
             }
+            if (resourceLifetime_) resourceLifetime_->Shutdown();
+            resourceLifetime_.reset();
             threadContextLeaseControl_.reset();
             platformContext_.reset();
             ReleaseLifecycle();
@@ -217,6 +332,8 @@ namespace CNA::Internal::Renderers::Rlgl
             IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
             registered_ = false;
         }
+
+        if (resourceLifetime_) resourceLifetime_->Shutdown();
 
         if (rlglInitialized_ && platformContext_)
         {
@@ -254,6 +371,7 @@ namespace CNA::Internal::Renderers::Rlgl
             rlglInitialized_ = false;
         }
 
+        resourceLifetime_.reset();
         threadContextLeaseControl_.reset();
         platformContext_.reset();
         if (lifecycleClaimed_)
@@ -334,6 +452,12 @@ namespace CNA::Internal::Renderers::Rlgl
             ReleaseThreadContextLease(control);
             throw;
         }
+    }
+
+    std::shared_ptr<RlglResourceLifetime>
+    RlglRenderer::GetResourceLifetimeForTesting() const noexcept
+    {
+        return resourceLifetime_;
     }
 
     void RlglRenderer::Clear(const float r, const float g, const float b, const float a)
@@ -481,7 +605,7 @@ namespace CNA::Internal::Renderers::Rlgl
 
     std::unique_ptr<ITextureRenderer> RlglRenderer::CreateTexture(const ImageData& data)
     {
-        return CreateTextureRenderer(data);
+        return CreateTextureRenderer(data, resourceLifetime_);
     }
 
     std::unique_ptr<ITextureCubeRenderer> RlglRenderer::CreateTextureCube(
@@ -494,7 +618,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 "RLGL: requested TextureCube SurfaceFormat is not implemented "
                 "(plans/plan_rlgl.md RLGL-045)");
         }
-        return CreateTextureCubeRenderer(size, mipMap, surfaceFormat);
+        return CreateTextureCubeRenderer(size, mipMap, surfaceFormat, resourceLifetime_);
     }
 
     std::unique_ptr<IRenderTargetRenderer> RlglRenderer::CreateRenderTarget2D(
@@ -505,7 +629,8 @@ namespace CNA::Internal::Renderers::Rlgl
         return CreateRenderTargetRenderer(
             width, height, depthFormat, preserveContents,
             mipMap, multiSampleCount,
-            static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+            static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color),
+            resourceLifetime_);
     }
 
     std::unique_ptr<IRenderTargetRenderer> RlglRenderer::CreateRenderTarget2DEXT(
@@ -522,7 +647,7 @@ namespace CNA::Internal::Renderers::Rlgl
         }
         return CreateRenderTargetRenderer(
             width, height, depthFormat, preserveContents,
-            mipMap, multiSampleCount, surfaceFormat);
+            mipMap, multiSampleCount, surfaceFormat, resourceLifetime_);
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> RlglRenderer::CreateRenderTargetCube(
@@ -532,7 +657,8 @@ namespace CNA::Internal::Renderers::Rlgl
         return CreateRenderTargetCubeRenderer(
             size, depthFormat, preserveContents, mipMap, multiSampleCount,
             static_cast<int>(
-                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color),
+            resourceLifetime_);
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> RlglRenderer::CreateRenderTargetCubeEXT(
@@ -548,7 +674,7 @@ namespace CNA::Internal::Renderers::Rlgl
         }
         return CreateRenderTargetCubeRenderer(
             size, depthFormat, preserveContents,
-            mipMap, multiSampleCount, surfaceFormat);
+            mipMap, multiSampleCount, surfaceFormat, resourceLifetime_);
     }
 
     int RlglRenderer::GetMaxRenderTargetsForProfileEXT(const int graphicsProfile) const
@@ -655,12 +781,12 @@ namespace CNA::Internal::Renderers::Rlgl
 
     std::unique_ptr<ISpriteBatchRenderer> RlglRenderer::CreateSpriteBatch()
     {
-        return CreateSpriteBatchRenderer(*this);
+        return CreateSpriteBatchRenderer(*this, resourceLifetime_);
     }
 
     std::unique_ptr<IOcclusionQueryRenderer> RlglRenderer::CreateOcclusionQuery()
     {
-        return CreateOcclusionQueryRenderer();
+        return CreateOcclusionQueryRenderer(resourceLifetime_);
     }
 
     void RlglRenderer::GetSpriteBatchViewportSize(int& width, int& height)
@@ -1084,19 +1210,19 @@ namespace CNA::Internal::Renderers::Rlgl
     std::unique_ptr<IVertexBufferRenderer> RlglRenderer::CreateVertexBuffer(
         const int vertexCapacity)
     {
-        return CreateVertexBufferRenderer(vertexCapacity);
+        return CreateVertexBufferRenderer(vertexCapacity, resourceLifetime_);
     }
 
     std::unique_ptr<IIndexBufferRenderer> RlglRenderer::CreateIndexBuffer16(
         const int indexCapacity)
     {
-        return CreateIndexBufferRenderer(indexCapacity, false);
+        return CreateIndexBufferRenderer(indexCapacity, false, resourceLifetime_);
     }
 
     std::unique_ptr<IIndexBufferRenderer> RlglRenderer::CreateIndexBuffer32(
         const int indexCapacity)
     {
-        return CreateIndexBufferRenderer(indexCapacity, true);
+        return CreateIndexBufferRenderer(indexCapacity, true, resourceLifetime_);
     }
 
     void RlglRenderer::SetViewport(

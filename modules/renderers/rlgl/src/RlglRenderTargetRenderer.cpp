@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace CNA::Internal::Renderers::Rlgl
@@ -49,19 +50,23 @@ namespace CNA::Internal::Renderers::Rlgl
         }
 
         class RlglRenderTargetRenderer final
-            : public IRenderTargetRenderer, public IRlglTextureResource
+            : public IRenderTargetRenderer,
+              public IRlglTextureResource,
+              public IRlglNativeResource
         {
         public:
             RlglRenderTargetRenderer(
                 const int width, const int height, const int depthFormat,
                 const bool preserveContents, const bool mipMap,
-                const int multiSampleCount, const int surfaceFormat)
+                const int multiSampleCount, const int surfaceFormat,
+                std::shared_ptr<RlglResourceLifetime> lifetime)
                 : width_(width)
                 , height_(height)
                 , depthFormat_(depthFormat)
                 , levelCount_(mipMap ? CalculateMipLevels(width, height) : 1)
                 , surfaceFormat_(surfaceFormat)
                 , preserveContents_(preserveContents)
+                , lifetime_(std::move(lifetime))
             {
                 if (width_ <= 0 || height_ <= 0)
                     throw std::invalid_argument(
@@ -72,11 +77,20 @@ namespace CNA::Internal::Renderers::Rlgl
                 storage_ = Bridge::CreateRenderTarget2D(
                     width_, height_, levelCount_, depthFormat_,
                     multiSampleCount, surfaceFormat_);
+                try
+                {
+                    lifetime_->Register(*this);
+                }
+                catch (...)
+                {
+                    ReleaseNativeResource();
+                    throw;
+                }
             }
 
             ~RlglRenderTargetRenderer() override
             {
-                Bridge::DestroyRenderTarget2D(storage_);
+                lifetime_->Dispose(*this);
             }
 
             RlglRenderTargetRenderer(const RlglRenderTargetRenderer&) = delete;
@@ -221,6 +235,11 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
         private:
+            void ReleaseNativeResource() noexcept override
+            {
+                Bridge::DestroyRenderTarget2D(storage_);
+            }
+
             void ValidateLevel(
                 const int level, const int levelWidth, const int levelHeight) const
             {
@@ -240,17 +259,19 @@ namespace CNA::Internal::Renderers::Rlgl
             int levelCount_ = 1;
             int bytesPerTexel_ = 4;
             bool preserveContents_ = false;
+            std::shared_ptr<RlglResourceLifetime> lifetime_;
         };
     }
 
     std::unique_ptr<IRenderTargetRenderer> CreateRenderTargetRenderer(
         const int width, const int height, const int depthFormat,
         const bool preserveContents, const bool mipMap,
-        const int multiSampleCount, const int surfaceFormat)
+        const int multiSampleCount, const int surfaceFormat,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime)
     {
         return std::make_unique<RlglRenderTargetRenderer>(
             width, height, depthFormat, preserveContents,
-            mipMap, multiSampleCount, surfaceFormat);
+            mipMap, multiSampleCount, surfaceFormat, lifetime);
     }
 
     RenderTargetResourceSnapshot GetRenderTargetResourceSnapshotForTesting(

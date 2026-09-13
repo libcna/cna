@@ -3,6 +3,7 @@
 
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Rlgl/RlglResourceLifetime.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
 #include <cstddef>
@@ -31,10 +32,12 @@ namespace CNA::Internal::Renderers::Rlgl
     /**
      * @brief Creates the current RLGL two-dimensional texture implementation.
      * @param data Dimensions, format, mip count, and level-zero bytes.
+     * @param lifetime Owning device registry for context-current native disposal.
      * @return Renderer-owned texture record.
      */
     [[nodiscard]] std::unique_ptr<ITextureRenderer> CreateTextureRenderer(
-        const CNA::Internal::Graphics::ImageData& data);
+        const CNA::Internal::Graphics::ImageData& data,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
 
     /** @brief Complete renderer/native TextureCube facts exposed to focused validation. */
     struct TextureCubeResourceSnapshot
@@ -51,10 +54,12 @@ namespace CNA::Internal::Renderers::Rlgl
      * @param size Width and height of every cube face.
      * @param mipMap Whether to allocate a complete mip chain.
      * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+     * @param lifetime Owning device registry for context-current native disposal.
      * @return Renderer-owned cube resource.
      */
     [[nodiscard]] std::unique_ptr<ITextureCubeRenderer> CreateTextureCubeRenderer(
-        int size, bool mipMap, int surfaceFormat);
+        int size, bool mipMap, int surfaceFormat,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
 
     /**
      * @brief Captures TextureCube resource state for focused validation.
@@ -90,11 +95,13 @@ namespace CNA::Internal::Renderers::Rlgl
      * @param mipMap Whether to allocate and regenerate a full mip chain.
      * @param multiSampleCount Requested sample count, clamped to the live device limit.
      * @param surfaceFormat Raw supported XNA render-target SurfaceFormat ordinal.
+     * @param lifetime Owning device registry for context-current native disposal.
      * @return Renderer-owned framebuffer resource.
      */
     [[nodiscard]] std::unique_ptr<IRenderTargetRenderer> CreateRenderTargetRenderer(
         int width, int height, int depthFormat, bool preserveContents,
-        bool mipMap, int multiSampleCount, int surfaceFormat);
+        bool mipMap, int multiSampleCount, int surfaceFormat,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
 
     /**
      * @brief Captures RenderTarget2D resource state for focused validation.
@@ -129,12 +136,14 @@ namespace CNA::Internal::Renderers::Rlgl
      * @param mipMap Whether to allocate and regenerate a complete mip chain.
      * @param multiSampleCount Requested sample count.
      * @param surfaceFormat Raw classic render-target SurfaceFormat ordinal.
+     * @param lifetime Owning device registry for context-current native disposal.
      * @return Renderer-owned cube target.
      */
     [[nodiscard]] std::unique_ptr<IRenderTargetCubeRenderer>
     CreateRenderTargetCubeRenderer(
         int size, int depthFormat, bool preserveContents,
-        bool mipMap, int multiSampleCount, int surfaceFormat);
+        bool mipMap, int multiSampleCount, int surfaceFormat,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
 
     /**
      * @brief Captures RenderTargetCube resource state for focused validation.
@@ -156,17 +165,20 @@ namespace CNA::Internal::Renderers::Rlgl
     /**
      * @brief Creates the production low-level SpriteBatch implementation.
      * @param renderer Owning device used for viewport and sampler application.
+     * @param lifetime Owning device registry for context-current native disposal.
      * @return Renderer-owned sprite scheduler.
      */
     [[nodiscard]] std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatchRenderer(
-        RlglRenderer& renderer);
+        RlglRenderer& renderer,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
 
     /**
      * @brief Creates a precise desktop OpenGL occlusion-query resource.
+     * @param lifetime Owning device registry for context-current native disposal.
      * @return Renderer-owned query object using `GL_SAMPLES_PASSED`.
      */
     [[nodiscard]] std::unique_ptr<IOcclusionQueryRenderer>
-    CreateOcclusionQueryRenderer();
+    CreateOcclusionQueryRenderer(const std::shared_ptr<RlglResourceLifetime>& lifetime);
 
     /** @brief Complete renderer/native buffer facts exposed to focused validation. */
     struct BufferResourceSnapshot
@@ -203,19 +215,22 @@ namespace CNA::Internal::Renderers::Rlgl
     /**
      * @brief Creates a declaration-aware fixed-capacity vertex resource.
      * @param vertexCapacity Maximum vertex count.
+     * @param lifetime Owning device registry for context-current native disposal.
      * @return Renderer-owned resource; native allocation occurs when its stride is known.
      */
     [[nodiscard]] std::unique_ptr<IVertexBufferRenderer> CreateVertexBufferRenderer(
-        int vertexCapacity);
+        int vertexCapacity, const std::shared_ptr<RlglResourceLifetime>& lifetime);
 
     /**
      * @brief Creates a fixed-capacity index resource.
      * @param indexCapacity Maximum index count.
      * @param thirtyTwoBit True for 32-bit indices and false for 16-bit indices.
+     * @param lifetime Owning device registry for context-current native disposal.
      * @return Renderer-owned resource with native storage allocated immediately.
      */
     [[nodiscard]] std::unique_ptr<IIndexBufferRenderer> CreateIndexBufferRenderer(
-        int indexCapacity, bool thirtyTwoBit);
+        int indexCapacity, bool thirtyTwoBit,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
 
     /**
      * @brief Captures vertex-resource and native-storage state for focused validation.

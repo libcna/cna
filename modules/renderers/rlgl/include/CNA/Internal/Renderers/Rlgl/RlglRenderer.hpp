@@ -15,6 +15,7 @@ namespace Microsoft::Xna::Framework::Graphics
 namespace CNA::Internal::Renderers::Rlgl
 {
     class RlglCompiledEffect;
+    class RlglResourceLifetime;
     class RlglThreadContextLeaseControl;
 
     namespace Detail
@@ -56,6 +57,13 @@ namespace CNA::Internal::Renderers::Rlgl
             AcquireThreadContextLeaseEXT(
                 RendererThreadContextLeaseRelease release =
                     RendererThreadContextLeaseRelease::RestorePreviousBinding) override;
+
+        /**
+         * @brief Returns this device's resource lifetime for focused ownership validation.
+         * @return Shared lifetime state that remains observable after device shutdown.
+         */
+        [[nodiscard]] std::shared_ptr<RlglResourceLifetime>
+            GetResourceLifetimeForTesting() const noexcept;
 
         /** @brief RLGL devices cannot be copied because each owns a GL context lifecycle. */
         RlglRenderer(const RlglRenderer&) = delete;
@@ -747,6 +755,7 @@ namespace CNA::Internal::Renderers::Rlgl
         CNA::Platform::IPlatformGlContext* platformGlService_ = nullptr;
         std::shared_ptr<PlatformGlContextOwner> platformContext_;
         std::shared_ptr<RlglThreadContextLeaseControl> threadContextLeaseControl_;
+        std::shared_ptr<RlglResourceLifetime> resourceLifetime_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;

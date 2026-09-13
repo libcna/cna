@@ -204,6 +204,7 @@ namespace CNA::Internal::Renderers::Rlgl
         RlglRenderer& renderer, const std::uint8_t* effectCode,
         const std::size_t effectCodeLength)
         : renderer_(renderer)
+        , lifetime_(renderer.resourceLifetime_)
     {
         if (effectCode == nullptr || effectCodeLength == 0 ||
             effectCodeLength > std::numeric_limits<std::uint32_t>::max())
@@ -212,14 +213,24 @@ namespace CNA::Internal::Renderers::Rlgl
         }
         effectCode_ = std::make_shared<const std::vector<std::uint8_t>>(
             effectCode, effectCode + effectCodeLength);
-        CreateNativeEffect();
-        textures_.resize(static_cast<std::size_t>(effectData_->param_count), nullptr);
-        parameterValues_.resize(static_cast<std::size_t>(effectData_->param_count));
+        try
+        {
+            CreateNativeEffect();
+            textures_.resize(static_cast<std::size_t>(effectData_->param_count), nullptr);
+            parameterValues_.resize(static_cast<std::size_t>(effectData_->param_count));
+            lifetime_->Register(*this);
+        }
+        catch (...)
+        {
+            ReleaseNativeResource();
+            throw;
+        }
     }
 
     RlglCompiledEffect::RlglCompiledEffect(
         RlglRenderer& renderer, const RlglCompiledEffect& cloneSource)
         : renderer_(renderer)
+        , lifetime_(cloneSource.lifetime_)
         , effectCode_(cloneSource.effectCode_)
         , parameterValues_(cloneSource.parameterValues_)
         , techniqueIndex_(cloneSource.techniqueIndex_)
@@ -246,17 +257,21 @@ namespace CNA::Internal::Renderers::Rlgl
                         static_cast<std::uint32_t>(index), value.data(), value.size());
             }
             SetTechnique(techniqueIndex_);
+            lifetime_->Register(*this);
         }
         catch (...)
         {
-            if (MojoShaderEffect::CanSafelyDeleteNativeEffect(effectData_))
-                MOJOSHADER_deleteEffect(effectData_);
-            effectData_ = nullptr;
+            ReleaseNativeResource();
             throw;
         }
     }
 
     RlglCompiledEffect::~RlglCompiledEffect()
+    {
+        lifetime_->Dispose(*this);
+    }
+
+    void RlglCompiledEffect::ReleaseNativeResource() noexcept
     {
         if (effectData_ == nullptr) return;
         MOJOSHADER_glMakeContextCurrent(context_);
@@ -264,10 +279,12 @@ namespace CNA::Internal::Renderers::Rlgl
         {
             MOJOSHADER_effectEndPass(effectData_);
             MOJOSHADER_effectEnd(effectData_);
+            passActive_ = false;
         }
         if (MojoShaderEffect::CanSafelyDeleteNativeEffect(effectData_))
             MOJOSHADER_deleteEffect(effectData_);
         effectData_ = nullptr;
+        context_ = nullptr;
     }
 
     void RlglCompiledEffect::CreateNativeEffect()

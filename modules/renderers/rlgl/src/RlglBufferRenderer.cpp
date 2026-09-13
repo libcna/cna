@@ -15,6 +15,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace CNA::Internal::Renderers::Rlgl
@@ -56,20 +57,25 @@ namespace CNA::Internal::Renderers::Rlgl
             return CheckedByteCapacity(count, elementSize, label);
         }
 
-        class RlglVertexBufferRenderer final : public IVertexBufferRenderer
+        class RlglVertexBufferRenderer final
+            : public IVertexBufferRenderer, public IRlglNativeResource
         {
         public:
-            explicit RlglVertexBufferRenderer(const int vertexCapacity)
+            RlglVertexBufferRenderer(
+                const int vertexCapacity,
+                std::shared_ptr<RlglResourceLifetime> lifetime)
                 : capacity_(vertexCapacity)
+                , lifetime_(std::move(lifetime))
             {
                 if (capacity_ < 0)
                     throw std::invalid_argument(
                         "RLGL: vertex-buffer capacity must be non-negative");
+                lifetime_->Register(*this);
             }
 
             ~RlglVertexBufferRenderer() override
             {
-                Bridge::DestroyBuffer(id_);
+                lifetime_->Dispose(*this);
             }
 
             void SetData(
@@ -127,6 +133,12 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
         private:
+            void ReleaseNativeResource() noexcept override
+            {
+                Bridge::DestroyBuffer(id_);
+                id_ = 0;
+            }
+
             void EnsureStorage(const std::size_t stride)
             {
                 if (stride == 0)
@@ -194,25 +206,39 @@ namespace CNA::Internal::Renderers::Rlgl
             int ordinaryUploadCount_ = 0;
             int discardUploadCount_ = 0;
             int noOverwriteUploadCount_ = 0;
+            std::shared_ptr<RlglResourceLifetime> lifetime_;
         };
 
-        class RlglIndexBufferRenderer final : public IIndexBufferRenderer
+        class RlglIndexBufferRenderer final
+            : public IIndexBufferRenderer, public IRlglNativeResource
         {
         public:
-            RlglIndexBufferRenderer(const int indexCapacity, const bool thirtyTwoBit)
+            RlglIndexBufferRenderer(
+                const int indexCapacity, const bool thirtyTwoBit,
+                std::shared_ptr<RlglResourceLifetime> lifetime)
                 : capacity_(indexCapacity)
                 , thirtyTwoBit_(thirtyTwoBit)
                 , elementSize_(thirtyTwoBit ? sizeof(std::uint32_t) : sizeof(std::uint16_t))
+                , lifetime_(std::move(lifetime))
             {
                 const int byteCapacity =
                     CheckedByteCapacity(capacity_, elementSize_, "index-buffer");
                 id_ = Bridge::CreateIndexBuffer(byteCapacity);
-                cpuBytes_.assign(static_cast<std::size_t>(byteCapacity), 0u);
+                try
+                {
+                    cpuBytes_.assign(static_cast<std::size_t>(byteCapacity), 0u);
+                    lifetime_->Register(*this);
+                }
+                catch (...)
+                {
+                    ReleaseNativeResource();
+                    throw;
+                }
             }
 
             ~RlglIndexBufferRenderer() override
             {
-                Bridge::DestroyBuffer(id_);
+                lifetime_->Dispose(*this);
             }
 
             void SetData16(const void* const data, const int indexCount) override
@@ -266,6 +292,12 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
         private:
+            void ReleaseNativeResource() noexcept override
+            {
+                Bridge::DestroyBuffer(id_);
+                id_ = 0;
+            }
+
             void Upload(
                 const void* const data, const int indexCount,
                 const bool thirtyTwoBit, const SetDataOptions options)
@@ -310,19 +342,23 @@ namespace CNA::Internal::Renderers::Rlgl
             int ordinaryUploadCount_ = 0;
             int discardUploadCount_ = 0;
             int noOverwriteUploadCount_ = 0;
+            std::shared_ptr<RlglResourceLifetime> lifetime_;
         };
     }
 
     std::unique_ptr<IVertexBufferRenderer> CreateVertexBufferRenderer(
-        const int vertexCapacity)
+        const int vertexCapacity,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime)
     {
-        return std::make_unique<RlglVertexBufferRenderer>(vertexCapacity);
+        return std::make_unique<RlglVertexBufferRenderer>(vertexCapacity, lifetime);
     }
 
     std::unique_ptr<IIndexBufferRenderer> CreateIndexBufferRenderer(
-        const int indexCapacity, const bool thirtyTwoBit)
+        const int indexCapacity, const bool thirtyTwoBit,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime)
     {
-        return std::make_unique<RlglIndexBufferRenderer>(indexCapacity, thirtyTwoBit);
+        return std::make_unique<RlglIndexBufferRenderer>(
+            indexCapacity, thirtyTwoBit, lifetime);
     }
 
     BufferResourceSnapshot GetBufferResourceSnapshotForTesting(

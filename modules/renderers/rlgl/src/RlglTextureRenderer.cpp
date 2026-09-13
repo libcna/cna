@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace CNA::Internal::Renderers::Rlgl
@@ -68,15 +69,21 @@ namespace CNA::Internal::Renderers::Rlgl
             }
         }
 
-        class RlglTextureRenderer final : public ITextureRenderer, public IRlglTextureResource
+        class RlglTextureRenderer final
+            : public ITextureRenderer,
+              public IRlglTextureResource,
+              public IRlglNativeResource
         {
         public:
-            explicit RlglTextureRenderer(const CNA::Internal::Graphics::ImageData& data)
+            RlglTextureRenderer(
+                const CNA::Internal::Graphics::ImageData& data,
+                std::shared_ptr<RlglResourceLifetime> lifetime)
                 : width_(data.width)
                 , height_(data.height)
                 , mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
                 , surfaceFormat_(data.surfaceFormat)
                 , definedLevels_(static_cast<std::size_t>(mipLevels_), false)
+                , lifetime_(std::move(lifetime))
             {
                 if (width_ <= 0 || height_ <= 0)
                     throw std::invalid_argument("RLGL: Texture2D dimensions must be positive");
@@ -108,27 +115,35 @@ namespace CNA::Internal::Renderers::Rlgl
 
                 id_ = Bridge::CreateTexture2D(
                     surfaceFormat_, width_, height_, mipLevels_, data.pixels.data());
-                if (compressed_)
+                try
                 {
-                    compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
-                    compressedLevels_[0] = data.pixels;
-                    for (int level = 1; level < mipLevels_; ++level)
+                    if (compressed_)
                     {
-                        const int levelWidth = MipDimension(width_, level);
-                        const int levelHeight = MipDimension(height_, level);
-                        compressedLevels_[static_cast<std::size_t>(level)].assign(
-                            static_cast<std::size_t>((levelWidth + 3) / 4) *
-                                static_cast<std::size_t>((levelHeight + 3) / 4) * blockBytes_,
-                            0u);
+                        compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
+                        compressedLevels_[0] = data.pixels;
+                        for (int level = 1; level < mipLevels_; ++level)
+                        {
+                            const int levelWidth = MipDimension(width_, level);
+                            const int levelHeight = MipDimension(height_, level);
+                            compressedLevels_[static_cast<std::size_t>(level)].assign(
+                                static_cast<std::size_t>((levelWidth + 3) / 4) *
+                                    static_cast<std::size_t>((levelHeight + 3) / 4) * blockBytes_,
+                                0u);
+                        }
                     }
+                    definedLevels_[0] = true;
+                    lifetime_->Register(*this);
                 }
-                definedLevels_[0] = true;
+                catch (...)
+                {
+                    ReleaseNativeResource();
+                    throw;
+                }
             }
 
             ~RlglTextureRenderer() override
             {
-                Bridge::DestroyTexture2D(id_);
-                id_ = 0;
+                lifetime_->Dispose(*this);
             }
 
             RlglTextureRenderer(const RlglTextureRenderer&) = delete;
@@ -255,6 +270,12 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
         private:
+            void ReleaseNativeResource() noexcept override
+            {
+                Bridge::DestroyTexture2D(id_);
+                id_ = 0;
+            }
+
             void ValidateLevel(
                 const int level, const int levelWidth, const int levelHeight) const
             {
@@ -277,13 +298,15 @@ namespace CNA::Internal::Renderers::Rlgl
             bool nativeCompressed_ = false;
             std::vector<bool> definedLevels_;
             std::vector<std::vector<std::uint8_t>> compressedLevels_;
+            std::shared_ptr<RlglResourceLifetime> lifetime_;
         };
     }
 
     std::unique_ptr<ITextureRenderer> CreateTextureRenderer(
-        const CNA::Internal::Graphics::ImageData& data)
+        const CNA::Internal::Graphics::ImageData& data,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime)
     {
-        return std::make_unique<RlglTextureRenderer>(data);
+        return std::make_unique<RlglTextureRenderer>(data, lifetime);
     }
 
     unsigned int GetNativeTextureId(const ITextureRenderer& resource)

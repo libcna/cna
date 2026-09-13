@@ -10,6 +10,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
+#include "CNA/Internal/Renderers/Rlgl/RlglResourceLifetime.hpp"
 
 #include "mojoshader.h"
 
@@ -34,7 +35,8 @@ namespace CNA::Internal::Renderers::Rlgl
     /**
      * @brief One device-bound XNA Effect Framework binary compiled by MojoShader for RLGL's GL context.
      */
-    class RlglCompiledEffect final : public ICompiledEffectRuntime
+    class RlglCompiledEffect final
+        : public ICompiledEffectRuntime, public IRlglNativeResource
     {
     public:
         /**
@@ -119,8 +121,10 @@ namespace CNA::Internal::Renderers::Rlgl
 
         RlglCompiledEffect(RlglRenderer& renderer, const RlglCompiledEffect& cloneSource);
         void CreateNativeEffect();
+        void ReleaseNativeResource() noexcept override;
 
         RlglRenderer& renderer_;
+        std::shared_ptr<RlglResourceLifetime> lifetime_;
         MOJOSHADER_glContext* context_ = nullptr;
         MOJOSHADER_effect* effectData_ = nullptr;
         std::shared_ptr<const std::vector<std::uint8_t>> effectCode_;

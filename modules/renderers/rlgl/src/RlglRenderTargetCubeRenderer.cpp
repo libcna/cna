@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
+#include <utility>
 
 namespace CNA::Internal::Renderers::Rlgl
 {
@@ -34,17 +35,21 @@ namespace CNA::Internal::Renderers::Rlgl
         }
 
         class RlglRenderTargetCubeRenderer final
-            : public IRenderTargetCubeRenderer, public IRlglTextureResource
+            : public IRenderTargetCubeRenderer,
+              public IRlglTextureResource,
+              public IRlglNativeResource
         {
         public:
             RlglRenderTargetCubeRenderer(
                 const int size, const int depthFormat, const bool preserveContents,
-                const bool mipMap, const int multiSampleCount, const int surfaceFormat)
+                const bool mipMap, const int multiSampleCount, const int surfaceFormat,
+                std::shared_ptr<RlglResourceLifetime> lifetime)
                 : size_(size)
                 , depthFormat_(depthFormat)
                 , surfaceFormat_(surfaceFormat)
                 , levelCount_(mipMap ? CalculateMipLevels(size) : 1)
                 , preserveContents_(preserveContents)
+                , lifetime_(std::move(lifetime))
             {
                 if (size_ <= 0)
                     throw std::invalid_argument(
@@ -54,11 +59,20 @@ namespace CNA::Internal::Renderers::Rlgl
                 (void)Bridge::RenderTargetBytesPerTexel(surfaceFormat_);
                 storage_ = Bridge::CreateRenderTargetCube(
                     size_, levelCount_, depthFormat_, multiSampleCount, surfaceFormat_);
+                try
+                {
+                    lifetime_->Register(*this);
+                }
+                catch (...)
+                {
+                    ReleaseNativeResource();
+                    throw;
+                }
             }
 
             ~RlglRenderTargetCubeRenderer() override
             {
-                Bridge::DestroyRenderTargetCube(storage_);
+                lifetime_->Dispose(*this);
             }
 
             RlglRenderTargetCubeRenderer(const RlglRenderTargetCubeRenderer&) = delete;
@@ -199,6 +213,11 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
         private:
+            void ReleaseNativeResource() noexcept override
+            {
+                Bridge::DestroyRenderTargetCube(storage_);
+            }
+
             static void ValidateFace(const int face)
             {
                 if (face < 0 || face >= 6)
@@ -243,16 +262,18 @@ namespace CNA::Internal::Renderers::Rlgl
             int levelCount_ = 1;
             int activeFace_ = 0;
             bool preserveContents_ = false;
+            std::shared_ptr<RlglResourceLifetime> lifetime_;
         };
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeRenderer(
         const int size, const int depthFormat, const bool preserveContents,
-        const bool mipMap, const int multiSampleCount, const int surfaceFormat)
+        const bool mipMap, const int multiSampleCount, const int surfaceFormat,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime)
     {
         return std::make_unique<RlglRenderTargetCubeRenderer>(
             size, depthFormat, preserveContents,
-            mipMap, multiSampleCount, surfaceFormat);
+            mipMap, multiSampleCount, surfaceFormat, lifetime);
     }
 
     RenderTargetCubeResourceSnapshot GetRenderTargetCubeResourceSnapshotForTesting(

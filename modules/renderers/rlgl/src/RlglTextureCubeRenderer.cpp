@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 
 namespace CNA::Internal::Renderers::Rlgl
 {
@@ -41,14 +42,18 @@ namespace CNA::Internal::Renderers::Rlgl
         }
 
         class RlglTextureCubeRenderer final
-            : public ITextureCubeRenderer, public IRlglTextureResource
+            : public ITextureCubeRenderer,
+              public IRlglTextureResource,
+              public IRlglNativeResource
         {
         public:
             RlglTextureCubeRenderer(
-                const int size, const bool mipMap, const int surfaceFormat)
+                const int size, const bool mipMap, const int surfaceFormat,
+                std::shared_ptr<RlglResourceLifetime> lifetime)
                 : size_(size)
                 , levelCount_(mipMap ? MaximumMipLevels(size) : 1)
                 , surfaceFormat_(surfaceFormat)
+                , lifetime_(std::move(lifetime))
             {
                 if (size_ <= 0)
                     throw std::invalid_argument("RLGL: TextureCube size must be positive");
@@ -70,12 +75,20 @@ namespace CNA::Internal::Renderers::Rlgl
                 {
                     id_ = Bridge::CreateTextureCubeColor(size_, levelCount_);
                 }
+                try
+                {
+                    lifetime_->Register(*this);
+                }
+                catch (...)
+                {
+                    ReleaseNativeResource();
+                    throw;
+                }
             }
 
             ~RlglTextureCubeRenderer() override
             {
-                Bridge::DestroyTextureCube(id_);
-                id_ = 0;
+                lifetime_->Dispose(*this);
             }
 
             RlglTextureCubeRenderer(const RlglTextureCubeRenderer&) = delete;
@@ -166,6 +179,12 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
         private:
+            void ReleaseNativeResource() noexcept override
+            {
+                Bridge::DestroyTextureCube(id_);
+                id_ = 0;
+            }
+
             [[nodiscard]] int ValidateRegion(
                 const int face, const int level, const int x, const int y,
                 const int width, const int height,
@@ -201,13 +220,16 @@ namespace CNA::Internal::Renderers::Rlgl
             int blockBytes_ = 0;
             bool compressed_ = false;
             bool nativeCompressed_ = false;
+            std::shared_ptr<RlglResourceLifetime> lifetime_;
         };
     }
 
     std::unique_ptr<ITextureCubeRenderer> CreateTextureCubeRenderer(
-        const int size, const bool mipMap, const int surfaceFormat)
+        const int size, const bool mipMap, const int surfaceFormat,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime)
     {
-        return std::make_unique<RlglTextureCubeRenderer>(size, mipMap, surfaceFormat);
+        return std::make_unique<RlglTextureCubeRenderer>(
+            size, mipMap, surfaceFormat, lifetime);
     }
 
     TextureCubeResourceSnapshot GetTextureCubeResourceSnapshotForTesting(

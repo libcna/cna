@@ -4,21 +4,35 @@
 
 #include "RlglBridge.hpp"
 
+#include <utility>
+
 namespace CNA::Internal::Renderers::Rlgl
 {
     namespace
     {
-        class RlglOcclusionQueryRenderer final : public IOcclusionQueryRenderer
+        class RlglOcclusionQueryRenderer final
+            : public IOcclusionQueryRenderer, public IRlglNativeResource
         {
         public:
-            RlglOcclusionQueryRenderer()
+            explicit RlglOcclusionQueryRenderer(
+                std::shared_ptr<RlglResourceLifetime> lifetime)
                 : query_(Bridge::CreateOcclusionQuery())
+                , lifetime_(std::move(lifetime))
             {
+                try
+                {
+                    lifetime_->Register(*this);
+                }
+                catch (...)
+                {
+                    ReleaseNativeResource();
+                    throw;
+                }
             }
 
             ~RlglOcclusionQueryRenderer() override
             {
-                Bridge::DestroyOcclusionQuery(query_);
+                lifetime_->Dispose(*this);
             }
 
             void Begin() override
@@ -44,13 +58,20 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
         private:
+            void ReleaseNativeResource() noexcept override
+            {
+                Bridge::DestroyOcclusionQuery(query_);
+            }
+
             unsigned int query_ = 0;
             bool hasBeenBegun_ = false;
+            std::shared_ptr<RlglResourceLifetime> lifetime_;
         };
     }
 
-    std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQueryRenderer()
+    std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQueryRenderer(
+        const std::shared_ptr<RlglResourceLifetime>& lifetime)
     {
-        return std::make_unique<RlglOcclusionQueryRenderer>();
+        return std::make_unique<RlglOcclusionQueryRenderer>(lifetime);
     }
 }
