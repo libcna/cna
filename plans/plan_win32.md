@@ -1,6 +1,6 @@
 # CNA native Win32 platform backend (`CNA_PLATFORM=WIN32`) — Implementation Plan
 
-> **Status: IMPLEMENTED AND VALIDATED.** All 44 tasks below are complete;
+> **Status: IMPLEMENTED AND VALIDATED.** All 48 tasks below are complete;
 > §17 records the measured results. This plan converts the reserved `CNA_PLATFORM=WIN32` identifier
 > (rejected with a `FATAL_ERROR` since [`plans/plan_platform.md`](plan_platform.md) PLAT-11) into a
 > real, first-class CNA platform implementation built directly on the Win32 API — no SDL2, no SDL3,
