@@ -593,6 +593,26 @@ namespace CNA::TestSupport
         PixelIfPredicateReplicateY,
         /** @brief Invert a Shader Model 3 pixel Boolean used by `IF`. */
         PixelIfBooleanNot,
+        /** @brief Negate a Shader Model 3 pixel predicate used by `CALLNZ`. */
+        PixelCallNzPredicateNegate,
+        /** @brief Use a non-replicate Shader Model 3 pixel predicate selector with `CALLNZ`. */
+        PixelCallNzPredicateVectorSwizzle,
+        /** @brief Negate a Shader Model 3 pixel Boolean used by `CALLNZ`. */
+        PixelCallNzBooleanNegate,
+        /** @brief Invert a Shader Model 3 pixel predicate used by `CALLNZ`. */
+        PixelCallNzPredicateNot,
+        /** @brief Select the replicated Y component of a pixel predicate used by `CALLNZ`. */
+        PixelCallNzPredicateReplicateY,
+        /** @brief Invert a Shader Model 3 pixel Boolean used by `CALLNZ`. */
+        PixelCallNzBooleanNot,
+        /** @brief Negate a Shader Model 3 pixel predicate used by `BREAKP`. */
+        PixelBreakPPredicateNegate,
+        /** @brief Use a non-replicate Shader Model 3 pixel predicate selector with `BREAKP`. */
+        PixelBreakPPredicateVectorSwizzle,
+        /** @brief Invert a Shader Model 3 pixel predicate used by `BREAKP`. */
+        PixelBreakPPredicateNot,
+        /** @brief Select the replicated Y component of a pixel predicate used by `BREAKP`. */
+        PixelBreakPPredicateReplicateY,
         /** @brief Emit one legal loop/repeat level in an exact vertex Shader Model 2.0 program. */
         Vertex20LoopRepDepth1,
         /** @brief Emit two loop/repeat levels in an exact vertex Shader Model 2.0 program. */
@@ -627,6 +647,26 @@ namespace CNA::TestSupport
         Vertex30IfPredicateReplicateY,
         /** @brief Invert a Shader Model 3 vertex Boolean used by `IF`. */
         Vertex30IfBooleanNot,
+        /** @brief Negate a Shader Model 3 vertex predicate used by `CALLNZ`. */
+        Vertex30CallNzPredicateNegate,
+        /** @brief Use a non-replicate Shader Model 3 vertex predicate selector with `CALLNZ`. */
+        Vertex30CallNzPredicateVectorSwizzle,
+        /** @brief Negate a Shader Model 3 vertex Boolean used by `CALLNZ`. */
+        Vertex30CallNzBooleanNegate,
+        /** @brief Invert a Shader Model 3 vertex predicate used by `CALLNZ`. */
+        Vertex30CallNzPredicateNot,
+        /** @brief Select the replicated Y component of a vertex predicate used by `CALLNZ`. */
+        Vertex30CallNzPredicateReplicateY,
+        /** @brief Invert a Shader Model 3 vertex Boolean used by `CALLNZ`. */
+        Vertex30CallNzBooleanNot,
+        /** @brief Negate a Shader Model 3 vertex predicate used by `BREAKP`. */
+        Vertex30BreakPPredicateNegate,
+        /** @brief Use a non-replicate Shader Model 3 vertex predicate selector with `BREAKP`. */
+        Vertex30BreakPPredicateVectorSwizzle,
+        /** @brief Invert a Shader Model 3 vertex predicate used by `BREAKP`. */
+        Vertex30BreakPPredicateNot,
+        /** @brief Select the replicated Y component of a vertex predicate used by `BREAKP`. */
+        Vertex30BreakPPredicateReplicateY,
     };
 
     /** @brief Shader-stage/profile program used to probe D3D9 subroutine call-graph rules. */
@@ -2638,7 +2678,7 @@ namespace CNA::TestSupport
                 SyntheticDeclarationModifierProbe::Pixel30SamplerCentroid;
         const bool probesPixelFlowControl =
             flowControlProbe >= SyntheticFlowControlProbe::ProperlyNestedLoopIf &&
-            flowControlProbe <= SyntheticFlowControlProbe::PixelIfBooleanNot;
+            flowControlProbe <= SyntheticFlowControlProbe::PixelBreakPPredicateReplicateY;
         const bool probesPixelCallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Pixel2xDepth4 &&
             callGraphProbe <= SyntheticCallGraphProbe::Pixel30Label2047;
@@ -5792,6 +5832,14 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, source(registerType, 0, swizzle, modifier));
                 AppendUInt32(shader, 0x0000002Bu); // endif
             };
+            const auto appendProbedCallNz = [&](std::uint32_t registerType,
+                                                std::uint32_t swizzle,
+                                                std::uint32_t modifier)
+            {
+                AppendUInt32(shader, 0x0000001Au | (2u << 24)); // callnz l0, p0/b0
+                AppendUInt32(shader, source(regLabel, 0));
+                AppendUInt32(shader, source(registerType, 0, swizzle, modifier));
+            };
             const auto appendIfc = [&]()
             {
                 AppendUInt32(shader,
@@ -5810,6 +5858,14 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
                 AppendUInt32(shader, source(regConstInt, 0, 0x00u));
             };
+            const auto appendProbedBreakP = [&](std::uint32_t swizzle,
+                                                std::uint32_t modifier)
+            {
+                appendRep();
+                AppendUInt32(shader, 0x00000060u | (1u << 24)); // breakp p0
+                AppendUInt32(shader, source(regPredicate, 0, swizzle, modifier));
+                AppendUInt32(shader, 0x00000027u); // endrep
+            };
 
             AppendUInt32(shader, 0x0000002Fu | (2u << 24)); // defb b0, true
             AppendUInt32(shader, destination(regConstBool, 0, 0x1u));
@@ -5821,13 +5877,17 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 1u);
             AppendUInt32(shader, 0u);
 
-            const bool predicateIfProbe =
-                flowControlProbe == SyntheticFlowControlProbe::PixelIfPredicateNegate ||
-                flowControlProbe ==
-                    SyntheticFlowControlProbe::PixelIfPredicateVectorSwizzle ||
-                flowControlProbe == SyntheticFlowControlProbe::PixelIfPredicateNot ||
-                flowControlProbe == SyntheticFlowControlProbe::PixelIfPredicateReplicateY;
-            if (predicateIfProbe)
+            const bool booleanConditionProbe =
+                flowControlProbe == SyntheticFlowControlProbe::PixelIfBooleanNegate ||
+                flowControlProbe == SyntheticFlowControlProbe::PixelIfBooleanNot ||
+                flowControlProbe == SyntheticFlowControlProbe::PixelCallNzBooleanNegate ||
+                flowControlProbe == SyntheticFlowControlProbe::PixelCallNzBooleanNot;
+            const bool predicateConditionProbe =
+                flowControlProbe >= SyntheticFlowControlProbe::PixelIfPredicateNegate &&
+                flowControlProbe <=
+                    SyntheticFlowControlProbe::PixelBreakPPredicateReplicateY &&
+                !booleanConditionProbe;
+            if (predicateConditionProbe)
             {
                 AppendUInt32(shader,
                              0x0000005Eu | (1u << 16) |
@@ -5836,6 +5896,9 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, source(regConst, 0, 0x00u));
                 AppendUInt32(shader, source(regConst, 0, 0x55u));
             }
+            const bool callNzProbe =
+                flowControlProbe >= SyntheticFlowControlProbe::PixelCallNzPredicateNegate &&
+                flowControlProbe <= SyntheticFlowControlProbe::PixelCallNzBooleanNot;
 
             switch (flowControlProbe)
             {
@@ -5936,6 +5999,36 @@ namespace CNA::TestSupport
                 case SyntheticFlowControlProbe::PixelIfBooleanNot:
                     appendProbedIf(regConstBool, 0x00u, 13u);
                     break;
+                case SyntheticFlowControlProbe::PixelCallNzPredicateNegate:
+                    appendProbedCallNz(regPredicate, 0x00u, 1u);
+                    break;
+                case SyntheticFlowControlProbe::PixelCallNzPredicateVectorSwizzle:
+                    appendProbedCallNz(regPredicate, 0xE4u, 0u);
+                    break;
+                case SyntheticFlowControlProbe::PixelCallNzBooleanNegate:
+                    appendProbedCallNz(regConstBool, 0x00u, 1u);
+                    break;
+                case SyntheticFlowControlProbe::PixelCallNzPredicateNot:
+                    appendProbedCallNz(regPredicate, 0x00u, 13u);
+                    break;
+                case SyntheticFlowControlProbe::PixelCallNzPredicateReplicateY:
+                    appendProbedCallNz(regPredicate, 0x55u, 0u);
+                    break;
+                case SyntheticFlowControlProbe::PixelCallNzBooleanNot:
+                    appendProbedCallNz(regConstBool, 0x00u, 13u);
+                    break;
+                case SyntheticFlowControlProbe::PixelBreakPPredicateNegate:
+                    appendProbedBreakP(0x00u, 1u);
+                    break;
+                case SyntheticFlowControlProbe::PixelBreakPPredicateVectorSwizzle:
+                    appendProbedBreakP(0xE4u, 0u);
+                    break;
+                case SyntheticFlowControlProbe::PixelBreakPPredicateNot:
+                    appendProbedBreakP(0x00u, 13u);
+                    break;
+                case SyntheticFlowControlProbe::PixelBreakPPredicateReplicateY:
+                    appendProbedBreakP(0x55u, 0u);
+                    break;
                 case SyntheticFlowControlProbe::None:
                 case SyntheticFlowControlProbe::Vertex20LoopRepDepth1:
                 case SyntheticFlowControlProbe::Vertex20LoopRepDepth2: break;
@@ -5943,6 +6036,13 @@ namespace CNA::TestSupport
             AppendUInt32(shader, 0x00000001u | (2u << 24)); // mov oC0, c0
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regConst, 0));
+            if (callNzProbe)
+            {
+                AppendUInt32(shader, 0x0000001Cu); // ret from main
+                AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l0
+                AppendUInt32(shader, source(regLabel, 0));
+                AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+            }
         }
         else if (usesLoop || shaderModel2xUsesInvalidLoop)
         {
@@ -6729,9 +6829,10 @@ namespace CNA::TestSupport
         const bool probesVertex2xFlowControl =
             flowControlProbe == SyntheticFlowControlProbe::Vertex2xStaticFlowCount16 ||
             flowControlProbe == SyntheticFlowControlProbe::Vertex2xStaticFlowCount17;
-        const bool probesVertex30IfOperand =
+        const bool probesVertex30PredicateFlowOperand =
             flowControlProbe >= SyntheticFlowControlProbe::Vertex30IfPredicateNegate &&
-            flowControlProbe <= SyntheticFlowControlProbe::Vertex30IfBooleanNot;
+            flowControlProbe <=
+                SyntheticFlowControlProbe::Vertex30BreakPPredicateReplicateY;
         const bool probesVertexCallGraph =
             callGraphProbe >= SyntheticCallGraphProbe::Vertex20Depth1 &&
             callGraphProbe <= SyntheticCallGraphProbe::Vertex30Label2047;
@@ -6776,7 +6877,7 @@ namespace CNA::TestSupport
             probesVertex30TypedControlSource || probesVertex30SpecialControlSource ||
             probesVertexRelativeAddressing || probesVertexSemanticDeclarations ||
             probesVertexDeclarationModifier ||
-            probesVertex30IfOperand || probesVertex30CallGraph ||
+            probesVertex30PredicateFlowOperand || probesVertex30CallGraph ||
             probesMissingVertexSamplerDeclaration ||
             probesVertexImmediateConstantDefinition || probesVertexSamplerDuplicate;
         const bool probesVertex2xTemporary =
@@ -8112,11 +8213,30 @@ namespace CNA::TestSupport
             AppendUInt32(shader, source(regInput, 0));
             AppendUInt32(shader, source(regConst, 0));
         }
-        else if (probesVertex30IfOperand)
+        else if (probesVertex30PredicateFlowOperand)
         {
-            const bool predicate =
-                flowControlProbe != SyntheticFlowControlProbe::Vertex30IfBooleanNegate &&
-                flowControlProbe != SyntheticFlowControlProbe::Vertex30IfBooleanNot;
+            const bool booleanCondition =
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30IfBooleanNegate ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30IfBooleanNot ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30CallNzBooleanNegate ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30CallNzBooleanNot;
+            const bool predicate = !booleanCondition;
+            const bool callNz =
+                flowControlProbe >=
+                    SyntheticFlowControlProbe::Vertex30CallNzPredicateNegate &&
+                flowControlProbe <= SyntheticFlowControlProbe::Vertex30CallNzBooleanNot;
+            const bool breakP =
+                flowControlProbe >=
+                    SyntheticFlowControlProbe::Vertex30BreakPPredicateNegate;
+            if (breakP)
+            {
+                AppendUInt32(shader, 0x00000030u | (5u << 24)); // defi i0, 1, 0, 1, 0
+                AppendUInt32(shader, destination(regConstInt, 0, 0xFu));
+                AppendUInt32(shader, 1u);
+                AppendUInt32(shader, 0u);
+                AppendUInt32(shader, 1u);
+                AppendUInt32(shader, 0u);
+            }
             if (predicate)
             {
                 AppendUInt32(shader, 0x00000051u | (5u << 24)); // def c240, 1, 0, 0, 0
@@ -8141,26 +8261,67 @@ namespace CNA::TestSupport
 
             const bool negate =
                 flowControlProbe == SyntheticFlowControlProbe::Vertex30IfPredicateNegate ||
-                flowControlProbe == SyntheticFlowControlProbe::Vertex30IfBooleanNegate;
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30IfBooleanNegate ||
+                flowControlProbe ==
+                    SyntheticFlowControlProbe::Vertex30CallNzPredicateNegate ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30CallNzBooleanNegate ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30BreakPPredicateNegate;
             const bool invert =
                 flowControlProbe == SyntheticFlowControlProbe::Vertex30IfPredicateNot ||
-                flowControlProbe == SyntheticFlowControlProbe::Vertex30IfBooleanNot;
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30IfBooleanNot ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30CallNzPredicateNot ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30CallNzBooleanNot ||
+                flowControlProbe == SyntheticFlowControlProbe::Vertex30BreakPPredicateNot;
             const std::uint32_t swizzle =
                 flowControlProbe ==
-                        SyntheticFlowControlProbe::Vertex30IfPredicateVectorSwizzle
+                        SyntheticFlowControlProbe::Vertex30IfPredicateVectorSwizzle ||
+                    flowControlProbe ==
+                        SyntheticFlowControlProbe::Vertex30CallNzPredicateVectorSwizzle ||
+                    flowControlProbe ==
+                        SyntheticFlowControlProbe::Vertex30BreakPPredicateVectorSwizzle
                     ? 0xE4u
                 : flowControlProbe ==
-                        SyntheticFlowControlProbe::Vertex30IfPredicateReplicateY
+                            SyntheticFlowControlProbe::Vertex30IfPredicateReplicateY ||
+                        flowControlProbe ==
+                            SyntheticFlowControlProbe::Vertex30CallNzPredicateReplicateY ||
+                        flowControlProbe ==
+                            SyntheticFlowControlProbe::Vertex30BreakPPredicateReplicateY
                     ? 0x55u
                     : 0x00u;
-            AppendUInt32(shader, 0x00000028u | (1u << 24)); // if p0/b0
-            AppendUInt32(shader, source(predicate ? regPredicate : regConstBool, 0,
-                                        swizzle, negate ? 1u : invert ? 13u : 0u));
-            AppendUInt32(shader, 0x0000002Bu); // endif
+            const std::uint32_t condition =
+                source(predicate ? regPredicate : regConstBool, 0,
+                       swizzle, negate ? 1u : invert ? 13u : 0u);
+            if (callNz)
+            {
+                AppendUInt32(shader, 0x0000001Au | (2u << 24)); // callnz l0, p0/b0
+                AppendUInt32(shader, source(regLabel, 0));
+                AppendUInt32(shader, condition);
+            }
+            else if (breakP)
+            {
+                AppendUInt32(shader, 0x00000026u | (1u << 24)); // rep i0
+                AppendUInt32(shader, source(regConstInt, 0, 0x00u));
+                AppendUInt32(shader, 0x00000060u | (1u << 24)); // breakp p0
+                AppendUInt32(shader, condition);
+                AppendUInt32(shader, 0x00000027u); // endrep
+            }
+            else
+            {
+                AppendUInt32(shader, 0x00000028u | (1u << 24)); // if p0/b0
+                AppendUInt32(shader, condition);
+                AppendUInt32(shader, 0x0000002Bu); // endif
+            }
             AppendUInt32(shader, 0x00000014u | (3u << 24)); // m4x4 o0, v0, c0
             AppendUInt32(shader, destination(regTexCoordOut, 0));
             AppendUInt32(shader, source(regInput, 0));
             AppendUInt32(shader, source(regConst, 0));
+            if (callNz)
+            {
+                AppendUInt32(shader, 0x0000001Cu); // ret from main
+                AppendUInt32(shader, 0x0000001Eu | (1u << 24)); // label l0
+                AppendUInt32(shader, source(regLabel, 0));
+                AppendUInt32(shader, 0x0000001Cu); // ret from subroutine
+            }
         }
         else if (probesVertexCallGraph)
         {

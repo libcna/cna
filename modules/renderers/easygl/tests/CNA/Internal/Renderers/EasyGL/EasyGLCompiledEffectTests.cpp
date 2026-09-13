@@ -1861,7 +1861,7 @@ class EasyGLCompiledEffectInvalidFlowControlTest :
 };
 
 TEST_P(EasyGLCompiledEffectInvalidFlowControlTest,
-       RejectsInvalidStructureNestingOrIfOperand)
+       RejectsInvalidStructureNestingOrConditionOperand)
 {
     GraphicsDevice device;
     EasyGLRenderer* renderer = RendererOf(device);
@@ -1891,6 +1891,11 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::PixelIfPredicateNegate,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelIfPredicateVectorSwizzle,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelIfBooleanNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzPredicateNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzPredicateVectorSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzBooleanNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateVectorSwizzle,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth2,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17If,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount17Else,
@@ -1901,7 +1906,12 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex2xStaticFlowCount17,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfPredicateNegate,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfPredicateVectorSwizzle,
-        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfBooleanNegate));
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfBooleanNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzPredicateNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzPredicateVectorSwizzle,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzBooleanNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateNegate,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateVectorSwizzle));
 
 class EasyGLCompiledEffectValidFlowControlTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticFlowControlProbe>
@@ -1909,7 +1919,7 @@ class EasyGLCompiledEffectValidFlowControlTest :
 };
 
 TEST_P(EasyGLCompiledEffectValidFlowControlTest,
-       AcceptsLegalStructureBoundaryDepthAndIfOperand)
+       AcceptsLegalStructureBoundaryDepthAndConditionOperand)
 {
     GraphicsDevice device;
     EasyGLRenderer* renderer = RendererOf(device);
@@ -1932,12 +1942,22 @@ INSTANTIATE_TEST_SUITE_P(
         CNA::TestSupport::SyntheticFlowControlProbe::PixelIfPredicateNot,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelIfPredicateReplicateY,
         CNA::TestSupport::SyntheticFlowControlProbe::PixelIfBooleanNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzPredicateNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzPredicateReplicateY,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelCallNzBooleanNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::PixelBreakPPredicateReplicateY,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20LoopRepDepth1,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex20StaticFlowCount16,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex2xStaticFlowCount16,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfPredicateNot,
         CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfPredicateReplicateY,
-        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfBooleanNot));
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30IfBooleanNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzPredicateNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzPredicateReplicateY,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30CallNzBooleanNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateNot,
+        CNA::TestSupport::SyntheticFlowControlProbe::Vertex30BreakPPredicateReplicateY));
 
 class EasyGLCompiledEffectInvalidCallGraphTest :
     public ::testing::TestWithParam<CNA::TestSupport::SyntheticCallGraphProbe>

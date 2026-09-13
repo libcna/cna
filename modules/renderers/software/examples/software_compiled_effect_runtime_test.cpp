@@ -3890,6 +3890,11 @@ namespace
             Probe::PixelIfPredicateNegate,
             Probe::PixelIfPredicateVectorSwizzle,
             Probe::PixelIfBooleanNegate,
+            Probe::PixelCallNzPredicateNegate,
+            Probe::PixelCallNzPredicateVectorSwizzle,
+            Probe::PixelCallNzBooleanNegate,
+            Probe::PixelBreakPPredicateNegate,
+            Probe::PixelBreakPPredicateVectorSwizzle,
             Probe::Vertex20LoopRepDepth2,
             Probe::Vertex20StaticFlowCount17If,
             Probe::Vertex20StaticFlowCount17Else,
@@ -3901,6 +3906,11 @@ namespace
             Probe::Vertex30IfPredicateNegate,
             Probe::Vertex30IfPredicateVectorSwizzle,
             Probe::Vertex30IfBooleanNegate,
+            Probe::Vertex30CallNzPredicateNegate,
+            Probe::Vertex30CallNzPredicateVectorSwizzle,
+            Probe::Vertex30CallNzBooleanNegate,
+            Probe::Vertex30BreakPPredicateNegate,
+            Probe::Vertex30BreakPPredicateVectorSwizzle,
         };
         for (const Probe probe : invalidProbes)
         {
@@ -3918,7 +3928,8 @@ namespace
                 rejected = true;
             }
             Check(rejected,
-                  "compiled Effect parser accepted invalid structured flow control or IF operand");
+                  "compiled Effect parser accepted invalid structured flow control or condition "
+                  "operand " + std::to_string(static_cast<int>(probe)));
         }
 
         constexpr std::array validProbes{
@@ -3929,12 +3940,22 @@ namespace
             Probe::PixelIfPredicateNot,
             Probe::PixelIfPredicateReplicateY,
             Probe::PixelIfBooleanNot,
+            Probe::PixelCallNzPredicateNot,
+            Probe::PixelCallNzPredicateReplicateY,
+            Probe::PixelCallNzBooleanNot,
+            Probe::PixelBreakPPredicateNot,
+            Probe::PixelBreakPPredicateReplicateY,
             Probe::Vertex20LoopRepDepth1,
             Probe::Vertex20StaticFlowCount16,
             Probe::Vertex2xStaticFlowCount16,
             Probe::Vertex30IfPredicateNot,
             Probe::Vertex30IfPredicateReplicateY,
             Probe::Vertex30IfBooleanNot,
+            Probe::Vertex30CallNzPredicateNot,
+            Probe::Vertex30CallNzPredicateReplicateY,
+            Probe::Vertex30CallNzBooleanNot,
+            Probe::Vertex30BreakPPredicateNot,
+            Probe::Vertex30BreakPPredicateReplicateY,
         };
         for (const Probe probe : validProbes)
         {
@@ -3943,16 +3964,19 @@ namespace
             options.flowControlProbe = probe;
             const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
             bool accepted = true;
+            std::string errorMessage;
             try
             {
                 static_cast<void>(renderer.CreateCompiledEffect(bytes.data(), bytes.size()));
             }
-            catch (const std::runtime_error&)
+            catch (const std::runtime_error& error)
             {
                 accepted = false;
+                errorMessage = error.what();
             }
             Check(accepted,
-                  "compiled Effect parser rejected legal structured flow control or IF operand");
+                  "compiled Effect parser rejected legal structured flow control or condition "
+                  "operand " + std::to_string(static_cast<int>(probe)) + ": " + errorMessage);
         }
     }
 

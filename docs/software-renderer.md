@@ -444,6 +444,8 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   every modifier on miscellaneous inputs, sampler declarations and vertex declarations.
   SOFTWARE-479 completes `IF` source-token validation: patch 104 allows only plain/logical-NOT
   Boolean or predicate conditions and requires every predicate selector to replicate one component.
+  SOFTWARE-480 extends that contract to `CALLNZ`/`BREAKP` and makes EasyGL's GLSL `CALLNZ`
+  translation consume the encoded scalar predicate component instead of an invalid Boolean vector.
   Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
