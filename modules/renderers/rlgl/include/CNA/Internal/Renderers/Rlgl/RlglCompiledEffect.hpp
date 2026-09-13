@@ -123,6 +123,7 @@ namespace CNA::Internal::Renderers::Rlgl
         void CreateNativeEffect();
         void ReleaseNativeResource() noexcept override;
         void InvalidateNativeResource() noexcept override;
+        void RecreateNativeResource() override;
         [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override;
 
         RlglRenderer& renderer_;

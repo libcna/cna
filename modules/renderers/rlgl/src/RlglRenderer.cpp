@@ -240,6 +240,63 @@ namespace CNA::Internal::Renderers::Rlgl
         contextLossInvalidations_.fetch_add(1, std::memory_order_relaxed);
     }
 
+    void RlglResourceLifetime::RestoreNativeResourcesAfterContextRecreation()
+    {
+        const auto control = contextControl_.lock();
+        if (!control)
+            throw std::runtime_error("RLGL: renderer resource lifetime is no longer available");
+
+        const std::scoped_lock lock(control->mutex);
+        if (!active_.load(std::memory_order_acquire))
+            throw std::runtime_error("RLGL: renderer resource lifetime is shutting down");
+
+        std::vector<IRlglNativeResource*> restored;
+        restored.reserve(recoveryResources_.size());
+        try
+        {
+            for (std::size_t index = 0; index < recoveryResources_.size(); ++index)
+            {
+                if (const char* const requested =
+                        std::getenv("CNA_RLGL_DEBUG_FAIL_RESOURCE_RESTORE_AT"))
+                {
+                    char* end = nullptr;
+                    const unsigned long failAt = std::strtoul(requested, &end, 10);
+                    if (end != requested && *end == '\0' && failAt == index)
+                    {
+                        throw std::runtime_error(
+                            "RLGL: injected resource restoration failure at index " +
+                            std::to_string(index));
+                    }
+                }
+                IRlglNativeResource* const resource = recoveryResources_[index];
+                restored.push_back(resource);
+                resource->RecreateNativeResource();
+            }
+        }
+        catch (...)
+        {
+            for (auto resource = restored.rbegin(); resource != restored.rend(); ++resource)
+                (*resource)->ReleaseNativeResource();
+            failedResourceRestorations_.fetch_add(1, std::memory_order_relaxed);
+            throw;
+        }
+        resourceRestorations_.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    void RlglResourceLifetime::ReleaseNativeResourcesForRecoveryRollback() noexcept
+    {
+        const auto control = contextControl_.lock();
+        if (!control) return;
+
+        const std::scoped_lock lock(control->mutex);
+        if (!active_.load(std::memory_order_acquire)) return;
+        for (auto resource = recoveryResources_.rbegin();
+             resource != recoveryResources_.rend(); ++resource)
+        {
+            (*resource)->ReleaseNativeResource();
+        }
+    }
+
     void RlglResourceLifetime::Dispose(IRlglNativeResource& resource) noexcept
     {
         const auto control = contextControl_.lock();
@@ -349,6 +406,10 @@ namespace CNA::Internal::Renderers::Rlgl
                 registeredRecoveryResources_.load(std::memory_order_relaxed);
             snapshot.contextLossInvalidations =
                 contextLossInvalidations_.load(std::memory_order_relaxed);
+            snapshot.resourceRestorations =
+                resourceRestorations_.load(std::memory_order_relaxed);
+            snapshot.failedResourceRestorations =
+                failedResourceRestorations_.load(std::memory_order_relaxed);
             snapshot.recoveryEnabledForNewResources =
                 recoveryEnabled_.load(std::memory_order_acquire);
         };
@@ -587,7 +648,80 @@ namespace CNA::Internal::Renderers::Rlgl
                     Bridge::CreateCompiledEffectDrawResources());
         }
 #endif
-        ReapplyDeviceState();
+    }
+
+    void RlglRenderer::RestoreCurrentRenderTargets()
+    {
+        if (currentRenderTargetCount_ == 0)
+        {
+            Bridge::BindDefaultFramebuffer();
+            return;
+        }
+
+        if (currentRenderTargetCount_ == 1)
+        {
+            if (currentRenderTargets_[0] != nullptr)
+                currentRenderTargets_[0]->BindAsRenderTarget();
+            else if (currentRenderTargetCubes_[0] != nullptr)
+                currentRenderTargetCubes_[0]->BindAsRenderTargetFace(
+                    currentRenderTargetCubeFaces_[0]);
+            else
+                throw std::runtime_error(
+                    "RLGL: active render target was unavailable after context recreation");
+            return;
+        }
+
+        std::array<Bridge::MrtAttachment, 4> attachments{};
+        for (int slot = 0; slot < currentRenderTargetCount_; ++slot)
+        {
+            if (currentRenderTargets_[slot] != nullptr)
+            {
+                const RenderTargetResourceSnapshot snapshot =
+                    GetRenderTargetResourceSnapshotForTesting(
+                        *currentRenderTargets_[slot]);
+                attachments[slot] = {
+                    snapshot.colorTexture,
+                    snapshot.multisampleColorRenderbuffer,
+                    snapshot.depthStencilRenderbuffer,
+                    100,
+                    snapshot.depthFormat,
+                    snapshot.multiSampleCount};
+            }
+            else if (currentRenderTargetCubes_[slot] != nullptr)
+            {
+                const int face = currentRenderTargetCubeFaces_[slot];
+                const RenderTargetCubeResourceSnapshot snapshot =
+                    GetRenderTargetCubeResourceSnapshotForTesting(
+                        *currentRenderTargetCubes_[slot]);
+                attachments[slot] = {
+                    snapshot.colorTexture,
+                    snapshot.multisampleColorRenderbuffers[
+                        static_cast<std::size_t>(face)],
+                    snapshot.depthStencilRenderbuffer,
+                    face,
+                    snapshot.depthFormat,
+                    snapshot.multiSampleCount};
+            }
+            else
+            {
+                throw std::runtime_error(
+                    "RLGL: active MRT attachment was unavailable after context recreation");
+            }
+        }
+
+        unsigned int candidate = Bridge::CreateMrtFramebuffer(
+            attachments.data(), currentRenderTargetCount_);
+        try
+        {
+            Bridge::BindFramebuffer(candidate);
+            mrtFramebuffer_ = candidate;
+            candidate = 0;
+        }
+        catch (...)
+        {
+            Bridge::DestroyMrtFramebuffer(candidate);
+            throw;
+        }
     }
 
     void RlglRenderer::ReapplyDeviceState()
@@ -636,25 +770,31 @@ namespace CNA::Internal::Renderers::Rlgl
         }
         if (rasterizerStateApplied_) ApplyCurrentRasterizerState();
 
-        if (currentRenderTargetCount_ == 0 && viewport_.applied)
+        if (viewport_.applied)
         {
-            int physicalWidth = 0;
-            int physicalHeight = 0;
-            GetPhysicalSize(physicalWidth, physicalHeight);
-            (void)physicalWidth;
+            int framebufferHeight = currentRenderTargetHeight_;
+            if (currentRenderTargetCount_ == 0)
+            {
+                int physicalWidth = 0;
+                GetPhysicalSize(physicalWidth, framebufferHeight);
+                (void)physicalWidth;
+            }
             Bridge::SetViewport(
-                viewport_.x, physicalHeight - viewport_.y - viewport_.height,
+                viewport_.x, framebufferHeight - viewport_.y - viewport_.height,
                 viewport_.width, viewport_.height,
                 viewport_.minDepth, viewport_.maxDepth);
         }
-        if (currentRenderTargetCount_ == 0 && scissor_.applied)
+        if (scissor_.applied)
         {
-            int physicalWidth = 0;
-            int physicalHeight = 0;
-            GetPhysicalSize(physicalWidth, physicalHeight);
-            (void)physicalWidth;
+            int framebufferHeight = currentRenderTargetHeight_;
+            if (currentRenderTargetCount_ == 0)
+            {
+                int physicalWidth = 0;
+                GetPhysicalSize(physicalWidth, framebufferHeight);
+                (void)physicalWidth;
+            }
             Bridge::SetScissor(
-                scissor_.x, physicalHeight - scissor_.y - scissor_.height,
+                scissor_.x, framebufferHeight - scissor_.y - scissor_.height,
                 scissor_.width, scissor_.height);
         }
     }
@@ -817,6 +957,10 @@ namespace CNA::Internal::Renderers::Rlgl
             const std::string version = InitializeContextState();
             ThrowInjectedRecreateFailure("after-bridge");
             RestoreRendererNativeState();
+            if (resourceLifetime_)
+                resourceLifetime_->RestoreNativeResourcesAfterContextRecreation();
+            RestoreCurrentRenderTargets();
+            ReapplyDeviceState();
             ThrowInjectedRecreateFailure("after-state");
 
             ++contextGeneration_;
@@ -835,6 +979,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 try
                 {
                     platformContext_->MakeCurrent();
+                    if (resourceLifetime_)
+                        resourceLifetime_->ReleaseNativeResourcesForRecoveryRollback();
                     DestroyRendererNativeState();
                     Bridge::Shutdown();
                 }

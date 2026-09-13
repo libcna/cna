@@ -34,6 +34,9 @@ namespace CNA::Internal::Renderers::Rlgl
         /** @brief Clears old-context native identities without issuing graphics API calls. */
         virtual void InvalidateNativeResource() noexcept = 0;
 
+        /** @brief Recreates this resource from its retained CPU description in the current context. */
+        virtual void RecreateNativeResource() = 0;
+
         /**
          * @brief Describes CPU state retained for context recovery.
          * @return Retained byte count, defined texture subresources, and content-loss policy.
@@ -67,6 +70,10 @@ namespace CNA::Internal::Renderers::Rlgl
         std::size_t definedTextureSubresources = 0;
         /** @brief Number of context-loss invalidation passes applied to the live children. */
         std::size_t contextLossInvalidations = 0;
+        /** @brief Number of complete registered-resource restoration passes. */
+        std::size_t resourceRestorations = 0;
+        /** @brief Number of registered-resource restoration attempts rolled back after failure. */
+        std::size_t failedResourceRestorations = 0;
         /** @brief Whether resources created from now on join the recovery registry. */
         bool recoveryEnabledForNewResources = true;
     };
@@ -105,6 +112,12 @@ namespace CNA::Internal::Renderers::Rlgl
          */
         void InvalidateNativeResourcesForContextLoss() noexcept;
 
+        /** @brief Recreates every recovery-registered child in original creation order. */
+        void RestoreNativeResourcesAfterContextRecreation();
+
+        /** @brief Releases any replacement child identities after a later recovery-stage failure. */
+        void ReleaseNativeResourcesForRecoveryRollback() noexcept;
+
         /**
          * @brief Releases and unregisters a resource while the renderer context is current.
          * @param resource Resource entering its C++ destructor.
@@ -131,6 +144,8 @@ namespace CNA::Internal::Renderers::Rlgl
         std::atomic<std::size_t> releasedResources_{0};
         std::atomic<std::size_t> lateDisposals_{0};
         std::atomic<std::size_t> contextLossInvalidations_{0};
+        std::atomic<std::size_t> resourceRestorations_{0};
+        std::atomic<std::size_t> failedResourceRestorations_{0};
         std::atomic<bool> active_{true};
         std::atomic<bool> recoveryEnabled_{true};
     };

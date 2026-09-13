@@ -249,6 +249,13 @@ namespace CNA::Internal::Renderers::Rlgl
                 storage_.depthStencilRenderbuffer = 0;
             }
 
+            void RecreateNativeResource() override
+            {
+                storage_ = Bridge::CreateRenderTarget2D(
+                    width_, height_, levelCount_, depthFormat_,
+                    storage_.multiSampleCount, surfaceFormat_);
+            }
+
             [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
             {
                 return {0, 0, true};

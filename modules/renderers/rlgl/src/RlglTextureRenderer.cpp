@@ -349,6 +349,65 @@ namespace CNA::Internal::Renderers::Rlgl
                 id_ = 0;
             }
 
+            void RecreateNativeResource() override
+            {
+                const bool replacementNativeCompressed = compressed_ &&
+                    Bridge::SupportsDxtTexture2D(surfaceFormat_);
+                const auto& retainedLevels = compressed_ && !nativeCompressed_
+                    ? fallbackCompressedLevels_ : recoveryLevels_;
+                const std::vector<std::uint8_t>* levelZero = nullptr;
+                if (!compressed_ && sharedLevelZero_)
+                    levelZero = sharedLevelZero_.get();
+                else if (!retainedLevels.empty())
+                    levelZero = &retainedLevels[0];
+                if (levelZero == nullptr || levelZero->empty())
+                {
+                    throw std::runtime_error(
+                        "RLGL: Texture2D recovery has no defined level-zero shadow");
+                }
+
+                unsigned int replacement = Bridge::CreateTexture2D(
+                    surfaceFormat_, width_, height_, mipLevels_, levelZero->data());
+                try
+                {
+                    for (int level = 1; level < mipLevels_; ++level)
+                    {
+                        if (!definedLevels_[static_cast<std::size_t>(level)]) continue;
+                        const auto& bytes = retainedLevels[static_cast<std::size_t>(level)];
+                        if (bytes.empty())
+                        {
+                            throw std::runtime_error(
+                                "RLGL: Texture2D recovery shadow is incomplete");
+                        }
+                        Bridge::UpdateTexture2D(
+                            replacement, surfaceFormat_, level,
+                            MipDimension(width_, level), MipDimension(height_, level),
+                            bytes.data());
+                    }
+                }
+                catch (...)
+                {
+                    Bridge::DestroyTexture2D(replacement);
+                    throw;
+                }
+
+                if (compressed_ && replacementNativeCompressed != nativeCompressed_)
+                {
+                    if (replacementNativeCompressed)
+                    {
+                        recoveryLevels_ = fallbackCompressedLevels_;
+                        fallbackCompressedLevels_.clear();
+                    }
+                    else
+                    {
+                        fallbackCompressedLevels_ = recoveryLevels_;
+                        recoveryLevels_.clear();
+                    }
+                }
+                nativeCompressed_ = replacementNativeCompressed;
+                id_ = replacement;
+            }
+
             [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
             {
                 RlglResourceRecoveryInfo info;

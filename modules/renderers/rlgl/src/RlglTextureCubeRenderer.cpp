@@ -221,6 +221,54 @@ namespace CNA::Internal::Renderers::Rlgl
                 id_ = 0;
             }
 
+            void RecreateNativeResource() override
+            {
+                const bool replacementNativeCompressed = compressed_ &&
+                    Bridge::SupportsDxtTextureCube(surfaceFormat_);
+                unsigned int replacement = compressed_
+                    ? Bridge::CreateTextureCubeDxt(
+                        surfaceFormat_, size_, levelCount_, replacementNativeCompressed)
+                    : Bridge::CreateTextureCubeColor(size_, levelCount_);
+                try
+                {
+                    for (int face = 0; face < 6; ++face)
+                    {
+                        for (int level = 0; level < levelCount_; ++level)
+                        {
+                            const std::size_t index = SubresourceIndex(face, level);
+                            if (!definedSubresources_[index]) continue;
+                            const auto& bytes = recoverySubresources_[index];
+                            if (bytes.empty())
+                            {
+                                throw std::runtime_error(
+                                    "RLGL: TextureCube recovery shadow is incomplete");
+                            }
+                            const int levelSize = MipSize(size_, level);
+                            if (compressed_)
+                            {
+                                Bridge::UpdateTextureCubeDxt(
+                                    replacement, surfaceFormat_,
+                                    replacementNativeCompressed, face, level,
+                                    0, 0, levelSize, levelSize, bytes.data(), bytes.size());
+                            }
+                            else
+                            {
+                                Bridge::UpdateTextureCubeColor(
+                                    replacement, face, level, 0, 0,
+                                    levelSize, levelSize, bytes.data());
+                            }
+                        }
+                    }
+                }
+                catch (...)
+                {
+                    Bridge::DestroyTextureCube(replacement);
+                    throw;
+                }
+                nativeCompressed_ = replacementNativeCompressed;
+                id_ = replacement;
+            }
+
             [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
             {
                 RlglResourceRecoveryInfo info;

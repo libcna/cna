@@ -294,6 +294,28 @@ namespace CNA::Internal::Renderers::Rlgl
         context_ = nullptr;
     }
 
+    void RlglCompiledEffect::RecreateNativeResource()
+    {
+        CreateNativeEffect();
+        try
+        {
+            for (std::size_t index = 0; index < parameterValues_.size(); ++index)
+            {
+                const auto& value = parameterValues_[index];
+                if (value.empty()) continue;
+                MOJOSHADER_effectSetRawValueHandle(
+                    &effectData_->params[index], value.data(), 0,
+                    static_cast<unsigned int>(value.size()));
+            }
+            SetTechnique(techniqueIndex_);
+        }
+        catch (...)
+        {
+            ReleaseNativeResource();
+            throw;
+        }
+    }
+
     RlglResourceRecoveryInfo RlglCompiledEffect::GetRecoveryInfo() const noexcept
     {
         RlglResourceRecoveryInfo info;

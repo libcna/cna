@@ -46,6 +46,7 @@ success.
 | Native child-resource teardown | ✅ | One context-serialized lifetime registry releases every implemented child family in reverse order before renderer/context shutdown; two sequential contexts proved that delayed destructors cannot delete recycled GL names (`RLGL-054`) |
 | Recovery registry and CPU shadows | ✅ | A registry subset measures exact defined Texture2D mip and TextureCube face/mip bytes, buffer bytes/declarations, target descriptions, pipelines, queries, and optional effect state. `SetContextRecoveryEnabled(false)` gates future shadows while teardown remains intact; render targets retain no pixels and are classified for the existing `ContentLost` contract (`RLGL-055`) |
 | Native context recreation and renderer-owned state | ✅ | Lost/Resetting/Reset ordering closes drawing, replaces the CNA platform context, reloads standalone rlgl, limits and presentation settings, and restores realized samplers, fixed renderer pipelines, optional MojoShader core, and deterministic device state. Four injected failure stages remain named, unavailable, and retryable; two cycles and post-recreate readback passed (`RLGL-056`) |
+| Registered child-resource restoration | ✅ | Texture2D mip and TextureCube face/mip contents, buffer bytes/declarations, target attachments, SpriteBatch/query pipelines, and optional compiled effects are rebuilt transactionally before active 2D/cube/MRT rebinding. Injected child failure rolls every replacement name back for retry; two complete cycles, target `ContentLost`, stock/SpriteBatch/compiled pixels, native DXT, and decoded fallback passed (`RLGL-057`) |
 | `GraphicsDevice`, color/depth/stencil clear, backbuffer RGBA8 readback | ✅ | Exact pixels checked before `Present()`; combined clear also exercises depth/stencil planes |
 | Explicit `Present()` and swap-interval forwarding | ✅ | Both device lifecycles present; requested interval zero is retained and sent to the platform context |
 | Drawable resize and presentation rectangle refresh | ✅ | A `GraphicsDeviceManager` resize is followed by dimension and post-resize pixel checks |
@@ -72,7 +73,7 @@ success.
 | Classic stock-effect instancing | ✅ | Hardware indexed instancing preserves per-stream offsets/divisors, every topology, both index widths, start/base ranges, effect-World composition, dynamic updates, and state recovery. The shared suites passed 70/72 tests (two named EasyGL/D3D skips), the parity sample passed 6/6 pixels, the native-state fixture passed 28/28 gates, and both focused executables passed AddressSanitizer in `RLGL-016` |
 | Occlusion queries | ✅ | A renderer-private GL 3.3 bridge uses exact `GL_SAMPLES_PASSED`; visible/additive/zero/occluded counts, asynchronous completion, permissive Begin/End sequencing, state recovery, and resource/device lifetime passed `RLGL-052` |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
-| Device loss/reset and resource restoration | 🟨 | Native context recreation and renderer-owned state restoration are complete. Registered textures, buffers, targets, SpriteBatch/query pipelines, and compiled effects remain invalid until `RLGL-057`; ordinary presentation Reset and the final diagnostics matrix remain `RLGL-058` |
+| Device loss/reset and resource restoration | 🟨 | Debug-driven native context recreation and transactional restoration of every recovery-registered child family are complete. Automatic native-loss detection, ordinary presentation Reset, achieved backbuffer format/depth/MSAA reporting, and the final diagnostics/platform matrix remain `RLGL-058` |
 
 `SupportsCapability(AnisotropicFiltering)` follows rlgl's live extension probe and measured ceiling.
 `MultipleRenderTargets` additionally requires the current device profile's ceiling to exceed one,
@@ -118,6 +119,7 @@ cmake --build cmake-build-rlgl --parallel 3 --target \
       cna_test_rlgl_resource_lifetime \
       cna_test_rlgl_resource_recovery_shadow \
       cna_test_rlgl_context_recreate \
+      cna_test_rlgl_resource_recreate \
       cna_test_rlgl_texture cna_test_rlgl_sampler \
       cna_test_rlgl_texture_cube cna_test_rlgl_texture_cube_oracle \
       cna_test_rlgl_state cna_test_rlgl_spritebatch cna_test_rlgl_buffer \

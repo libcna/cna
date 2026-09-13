@@ -854,6 +854,7 @@ namespace CNA::Internal::Renderers::Rlgl
         void InvalidateRendererNativeState() noexcept;
         void DestroyRendererNativeState() noexcept;
         void RestoreRendererNativeState();
+        void RestoreCurrentRenderTargets();
         void ReapplyDeviceState();
         void NotifyDeviceEvent(RendererDeviceEvent event);
         void GetPhysicalSize(int& width, int& height) const;

@@ -145,6 +145,32 @@ namespace CNA::Internal::Renderers::Rlgl
                 id_ = 0;
             }
 
+            void RecreateNativeResource() override
+            {
+                if (stride_ == 0)
+                {
+                    id_ = 0;
+                    return;
+                }
+                unsigned int replacement = Bridge::CreateVertexBuffer(
+                    CheckedByteCapacity(capacity_, stride_, "vertex-buffer"));
+                try
+                {
+                    if (!cpuBytes_.empty())
+                    {
+                        Bridge::UpdateVertexBuffer(
+                            replacement, cpuBytes_.data(),
+                            static_cast<int>(cpuBytes_.size()));
+                    }
+                }
+                catch (...)
+                {
+                    Bridge::DestroyBuffer(replacement);
+                    throw;
+                }
+                id_ = replacement;
+            }
+
             [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
             {
                 return {cpuBytes_.size(), 0, false};
@@ -302,11 +328,14 @@ namespace CNA::Internal::Renderers::Rlgl
                 result.indexBuffer = true;
                 result.thirtyTwoBit = thirtyTwoBit_;
                 result.cpuBytes = cpuBytes_;
-                const Bridge::BufferSnapshot native =
-                    Bridge::GetBufferSnapshotForTesting(id_, true);
-                result.nativeByteSize = native.byteSize;
-                result.nativeUsage = native.usage;
-                result.nativeBytes = native.bytes;
+                if (id_ != 0)
+                {
+                    const Bridge::BufferSnapshot native =
+                        Bridge::GetBufferSnapshotForTesting(id_, true);
+                    result.nativeByteSize = native.byteSize;
+                    result.nativeUsage = native.usage;
+                    result.nativeBytes = native.bytes;
+                }
                 result.ordinaryUploadCount = ordinaryUploadCount_;
                 result.discardUploadCount = discardUploadCount_;
                 result.noOverwriteUploadCount = noOverwriteUploadCount_;
@@ -324,6 +353,27 @@ namespace CNA::Internal::Renderers::Rlgl
             void InvalidateNativeResource() noexcept override
             {
                 id_ = 0;
+            }
+
+            void RecreateNativeResource() override
+            {
+                unsigned int replacement = Bridge::CreateIndexBuffer(
+                    CheckedByteCapacity(capacity_, elementSize_, "index-buffer"));
+                try
+                {
+                    if (!cpuBytes_.empty())
+                    {
+                        Bridge::UpdateIndexBuffer(
+                            replacement, cpuBytes_.data(),
+                            static_cast<int>(cpuBytes_.size()));
+                    }
+                }
+                catch (...)
+                {
+                    Bridge::DestroyBuffer(replacement);
+                    throw;
+                }
+                id_ = replacement;
             }
 
             [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override

@@ -69,6 +69,12 @@ namespace CNA::Internal::Renderers::Rlgl
                 hasBeenBegun_ = false;
             }
 
+            void RecreateNativeResource() override
+            {
+                query_ = Bridge::CreateOcclusionQuery();
+                hasBeenBegun_ = false;
+            }
+
             unsigned int query_ = 0;
             bool hasBeenBegun_ = false;
             std::shared_ptr<RlglResourceLifetime> lifetime_;

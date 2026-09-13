@@ -311,6 +311,12 @@ namespace CNA::Internal::Renderers::Rlgl
                 begun_ = false;
             }
 
+            void RecreateNativeResource() override
+            {
+                pipeline_ = Bridge::CreateSpritePipeline(
+                    kVertexCapacity, kIndexCapacity);
+            }
+
             [[nodiscard]] int VertexCount() const
             {
                 return static_cast<int>(vertices_.size() / kFloatsPerVertex);
