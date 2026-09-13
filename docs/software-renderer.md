@@ -23,16 +23,11 @@ as ownership by the windowless Software device. The renderer only needs the same
 SDL3/SDL3_image/SDL3_mixer and
 `../sharp-runtime` checkout every other renderer already requires.
 
-The final adversarial challenge found one material classic-XNA boundary: Software does not execute
-compiled Direct3D 9 Effect Framework bytecode, while EasyGL does when built with
-`CNA_EASYGL_COMPILED_EFFECTS=ON`. `SOFTWARE-162` now provides an opt-in headless Effect parser,
-reflection/state runtime, preshader register files and validated Software-owned D3D9 token IR;
-`SOFTWARE-163` executes the committed effects' vertex programs and carries their declared outputs
-through clipping and perspective interpolation. `SOFTWARE-355` adds the first bounded pixel phase:
-texture-free D3D9 pixel programs now run through triangle rasterization and the existing
-discard/depth/stencil/blend/color-write output path. `SOFTWARE-356` binds the pass's live pixel
-texture slots and executes the observed SM1-3 2D/cube/volume texture forms with the Software
-sampler state, including W addressing, mip clamps and LOD bias:
+Software executes classic Direct3D 9 Effect Framework bytecode when built with the same opt-in
+MojoShader dependency model as EasyGL. `SOFTWARE-162..165` and the focused `SOFTWARE-355..484`
+campaign provide the parser/reflection/state runtime, both SM1-3 CPU shader stages, clipping,
+perspective interpolation, 2D/cube/volume sampling, MRT/output-merger behavior, SpriteBatch stage
+inheritance and complete profile/malformed-input validation:
 
 ```bash
 cmake -S . -B cmake-build-software-effects \
@@ -40,24 +35,20 @@ cmake -S . -B cmake-build-software-effects \
   -DCNA_SOFTWARE_COMPILED_EFFECTS=ON
 ```
 
-Those are real parser, vertex and sampled-pixel phases, not complete execution parity. Software still truthfully
-reports `GraphicsCapability::CompiledEffects=false`, so the public `Effect` bytecode constructor
-continues to reject those bytes rather than exposing a runtime that cannot shade a fragment. This
-is distinct from the excluded CNAEXT `ShaderEffect` API; `SOFTWARE-161` records the assessment,
-`SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371/373/374/375/376/377/378/379/380/381/382/383/384/385/386/387/388/389/390/391/433/434` are complete: the opt-in runtime now includes compiled MRT,
-render-target/cube sampling, SpriteBatch custom-effect routing and classic line/wireframe rasterization. `SOFTWARE-164/165` remain the
-encompassing shader-profile, lifecycle and content-conformance backlog.
-The independent EasyGL challenge in `SOFTWARE-367` also repaired MojoShader's invalid writemask-
-suffixed label identifiers and missing prototypes for legal nested forward subroutine calls;
-`SOFTWARE-366` completes the matching bounded CPU executor in both shader stages.
+With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software advertises
+`GraphicsCapability::CompiledEffects=true`; without the option it remains dependency-free and
+reports false. The full shared compiled-Effect contract, all formerly skipped public
+`Effect`/`EffectMaterial` tests, an independent interpreter/runtime executable and content/model
+reader coverage pass. No stock-effect substitution is used. This remains distinct from the
+excluded CNAEXT `ShaderEffect` source API.
 
 The same challenge confirmed a renderer-wide public-API hole: CNA stored
 `GraphicsDevice.VertexTextures` and `VertexSamplerStates`, but no renderer contract consumed them.
 `SOFTWARE-167` records that proof. `SOFTWARE-168` now passes both public collections into compiled
 draws, maps EasyGL's four vertex samplers to MojoShader's native units 16..19, and executes
 Software `vs_3_0 TEXLDL` against 2D/cube/volume textures. Exact output tests cover stage isolation,
-all seven sampler properties, mip clamp/bias, `AddressW`, null and disposal transitions. This does
-not enable Software's aggregate compiled-Effect capability while SOFTWARE-164/165 remain open.
+all seven sampler properties, mip clamp/bias, `AddressW`, null and disposal transitions. These
+paths are included in the enabled aggregate compiled-Effect capability closed by SOFTWARE-164/165.
 
 ## What this renderer is for
 
@@ -173,13 +164,11 @@ real rendering discrepancy. The comparator was also checked against a deliberate
 rather than always passing. `SOFTWARE-156` reduced the historical default tolerance of 40 to the
 measured one-byte bound; a wider tolerance now has to be an explicit, evidence-backed choice.
 
-## Current XNA/Core capabilities and intentional boundaries (2026-09-11)
+## Current XNA/Core capabilities and intentional boundaries (2026-09-13)
 
-- **Classic compiled XNA Effects are not yet executable** (`SOFTWARE-161`). The public bytecode
-  constructor accepts XNA/FNA Direct3D 9 Effect Framework bytes only on renderers whose real
-  runtime implements them. Opt-in EasyGL passes 56 tests covering reflection, techniques/passes,
-  parameters, draw pixels, state, SpriteBatch, instancing, multi-stream input and 2D/cube/volume
-  sampling plus loop/subroutine control flow. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software can parse and reflect those real
+- **Classic compiled XNA Effects are executable in opt-in builds** (`SOFTWARE-161..165`). The public bytecode
+  constructor accepts XNA/FNA Direct3D 9 Effect Framework bytes on Software when
+  `CNA_SOFTWARE_COMPILED_EFFECTS=ON`. Software parses and reflects those real
   binaries, apply their pass state, run their preshaders, retain validated D3D9 token/register IR
   (`SOFTWARE-162`) and execute the vertex programs used by all committed stock/authentic fixtures
   (`SOFTWARE-163`). Declaration semantics, draw offsets, signed base vertex, multiple streams,
@@ -251,8 +240,7 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   application, and derives CPU implicit LOD from the perturbed coordinates. Its managed MojoShader
   patch adds the missing validation/GLSL, while EasyGL now uploads the stage values before drawing.
   SOFTWARE-386 closes the adjacent shared parser hole by rejecting a second ps_1_4 `PHASE`
-  marker; valid two-phase programs remain accepted. Other unproven marker-placement and shader-
-  profile cases stay in the explicit backlog. SOFTWARE-387 added variable-length relative-source
+  marker; valid two-phase programs remain accepted. SOFTWARE-387 added variable-length relative-source
   decoding, but SOFTWARE-429 later proved from Microsoft's published register contracts, with a
   corroborating Wine D3DX differential, that its original pixel `c0[aL]` fixture was invalid.
   The corrected shared contract executes legal pixel
@@ -458,7 +446,7 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   SOFTWARE-484 completes the control-byte audit outside those comparison opcodes: patch 109 rejects
   nonzero controls on instructions that do not own the field, including forged pixel/vertex `NOP`
   and `MOV`, while retaining the separately bounded comparison and Shader Model 2+ `TEXLD` forms.
-  Remaining opcode-specific source rules remain SOFTWARE-164/165 work.
+  SOFTWARE-164/165 close the aggregate opcode/profile contract after these focused repairs.
   SOFTWARE-388 replaces the remaining SM3
   temporary-register heuristic with aligned 2x2 execution: the fully evaluated coordinate is
   differenced across helper lanes and fed to the 2D sampler as explicit gradients, including
@@ -468,9 +456,9 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   `_dz`/`_dw` now divide the swizzled source by the original register's z/w component rather than
   dividing raw x/y before the swizzle. SOFTWARE-391 also puts directly projected ps_1_4 texture
   loads through helper quads so mip selection uses the post-division footprint.
-  Full SM1-3 shader-profile, lifecycle and content closure still remain. Software therefore advertises
-  `CompiledEffects=false` and the public constructor rejects the same valid bytes. `SOFTWARE-164/165`
-  remain the phased execution backlog; CNAEXT `ShaderEffect` is a separate excluded API.
+  SOFTWARE-164/165 complete the full SM1-3 profile, lifecycle, malformed-input, stress and content
+  closure. Opt-in builds advertise `CompiledEffects=true`; CNAEXT `ShaderEffect` remains a separate
+  excluded API.
   SOFTWARE-360 also corrects gradient sampling to D3D9's real `TEXLDD` opcode 93; SOFTWARE-363
   subsequently executes opcode 94 as `SETP` and structured `IF`/`IFC`/`ELSE`/`ENDIF` without ever
   routing it through the sampler.
@@ -627,8 +615,8 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   chain plus bounded full/partial `SetData` and `GetData`. SOFTWARE-356 also provides opt-in classic
   compiled-Effect volume sampling with independent U/V/W addressing, mip selection and trilinear
   filtering. SOFTWARE-357 proves those samplers with rendered 2D and cube sources and proves four
-  independent compiled COLOR outputs through MSAA MRT blend/write-mask paths. The public capability
-  remains gated by the unfinished compiled-effect conformance work;
+  independent compiled COLOR outputs through MSAA MRT blend/write-mask paths. Opt-in builds expose
+  this through the public compiled-effect capability;
   this does not imply support for the excluded CNAEXT `ShaderEffect` API.
   `RenderTarget2D` does implement an actual four-sample CPU colour plane and generated mip levels.
   Unbind resolves the samples before mip generation; a level-zero `GetData` while the target is
@@ -1040,14 +1028,14 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
 - **Compiled Effect texture access respects reflected types** (`SOFTWARE-264`) — the shared public
   layer rejects incompatible texture getters and non-texture setters with `InvalidCastException`,
   while generic `Texture` parameters accept every classic dimension. This is executable on
-  compiled-capable EasyGL; Software continues to report that larger subsystem unsupported.
+  compiled-capable EasyGL and opt-in compiled-capable Software.
 - **Compiled-Effect conformance declares its HiDef prerequisite** (`SOFTWARE-265`) — its deliberate
   separate-alpha state is not legal under Reach. All backend wrappers now select HiDef and the
   shared helper guards that assumption, keeping the EasyGL reference evidence executable.
 - **Compiled Effect texture assignment enforces XNA resource lifetime** (`SOFTWARE-266`) — a
   disposed texture or currently bound render target is rejected before reflected parameter-type
   validation, matching Microsoft's observable exception order. The shared fix is exercised on
-  compiled-capable EasyGL; Software retains its honest compiled-effect capability skip.
+  compiled-capable EasyGL and opt-in compiled-capable Software.
 - **Compiled typed EffectParameter setters enforce reflected shape** (`SOFTWARE-267`) — Matrix,
   Vector2/3/4 and Quaternion scalar/array overloads reject incompatible class, dimensions and
   scalar-versus-array use exactly where recovered Microsoft IL does. The corrected synthetic
@@ -1079,8 +1067,8 @@ measured one-byte bound; a wider tolerance now has to be an explicit, evidence-b
   and typed full/window/box/mip transfers preserve their exact bytes. Software stores those bytes
   directly; EasyGL maps them to matching native volume images and uses an exact byte mirror for
   readback. Reach still refuses volume textures entirely. The opt-in compiled runtime samples these
-  Software volumes under SOFTWARE-356, while public compiled-effect enablement remains the separate
-  `SOFTWARE-164/165` backlog. SOFTWARE-357/358 close target/MRT/SpriteBatch and line/wireframe routing.
+  Software volumes under SOFTWARE-356. SOFTWARE-357/358 close target/MRT/SpriteBatch and line/wireframe
+  routing, and SOFTWARE-164/165 close aggregate public conformance.
 - **Texture3D accepts Microsoft's generic value-type transfer surface** (`SOFTWARE-278`) —
   application-defined trivially copyable types, packed vectors, scalar/vector floats, Color and
   byte elements all pass through the same exact-total and divisible-width validation. Their raw

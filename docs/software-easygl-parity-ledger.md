@@ -9,6 +9,18 @@ then prose. EasyGL is the CNA coverage reference, not permission to reproduce a 
 EasyGL bug. A similarly named implementation method is not evidence. A test that succeeds by
 recording an unsupported boundary is gap evidence, not parity evidence.
 
+## Compiled-Effect closure (2026-09-13)
+
+`SOFTWARE-164/165` supersede the earlier in-row statements that Software still advertised a false
+compiled-Effect capability. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software now reports
+`CompiledEffects=true` and runs the public bytecode constructor. One aggregate Software test calls
+every shared conformance group already exercised by the 679-test EasyGL compiled family, including
+all SM1-3/profile validators, draws, samplers, SpriteBatch, targets, lifecycle, 600-draw stress and
+every-byte truncation coverage. Its initial run found and repaired a stale SpriteBatch slot-zero
+sampler boundary. Full Software graphics then passed 2,640/2,688 with only 48 legitimate
+renderer/platform skips, all 160 Software CTests passed, and focused EffectMaterial/model XNB
+coverage passed 15/15. Opt-out builds remain dependency-free and truthfully report false.
+
 ## Classification vocabulary
 
 - `IN-SCOPE-XNA`: public XNA 4.0 behavior.
@@ -108,9 +120,10 @@ start, the plan had 94 explicit task rows: 91 complete, `SOFTWARE-100` blocked b
 repository-wide criteria, and the historical optional `SOFTWARE-85/86` pending.
 
 The `SOFTWARE-168` vertex-sampler closure was verified by the displayless Software runtime, two
-shared EasyGL output contracts and the complete 60/60 EasyGL compiled-effect family. The broad
-post-change graphics suites pass 2,625/2,688 on Software with 63 classified skips and
-2,635/2,688 on desktop EasyGL with 53 renderer/platform skips under isolated Mesa/Xvfb.
+shared EasyGL output contracts and the complete 60/60 EasyGL compiled-effect family. After
+`SOFTWARE-164/165`, the broad Software graphics suite passes 2,640/2,688 with 48 classified skips;
+the last isolated Mesa/Xvfb EasyGL run remains 2,635/2,688 with 53 renderer/platform skips, and its
+complete compiled-effect family remains 679/679.
 
 ### Prompted hypotheses
 
@@ -497,21 +510,22 @@ not change the API classification.
     texture-free triangle pixel/output slice; SOFTWARE-356 adds samplers, AddressW and texture
     instructions; SOFTWARE-357 closes MRT/target/SpriteBatch routing; SOFTWARE-358 closes classic
     line/wireframe routing; and SOFTWARE-361/362/363/364/366 close omitted modern/legacy arithmetic,
-    structured conditions plus bounded loop/break/call flow under the SOFTWARE-164 umbrella. SOFTWARE-164/165 close the remaining SM1-3,
-    content, lifecycle, stress and shared conformance before enabling the capability.
+    structured conditions plus bounded loop/break/call flow under the SOFTWARE-164 umbrella.
+    SOFTWARE-164/165 now close the remaining SM1-3, content, lifecycle, stress and shared
+    conformance and enable the opt-in capability.
 13. **Abstraction impact.** `ICompiledEffectRuntime` and the current draw token already provide the
     correct renderer-neutral boundary. The interpreter can remain reusable CPU-renderer code;
     common GraphicsDevice does not need shader opcodes or a GL-shaped API.
 14. **Parity requirement.** Yes. EasyGL demonstrably executes this classic public Effect surface,
-    SpriteBatch custom effects and content/model materials. Software advertises false and throws
-    for the same valid bytes. Boundary tests are honest capability reporting, but they prove the
-    gap rather than excuse it.
+    SpriteBatch custom effects and content/model materials. Opt-in Software now executes the same
+    shared public contract; opt-out Software continues to advertise false because it omits the
+    MojoShader dependency and runtime.
 
-The current evidence therefore rules out final classification A. The public vertex
-texture/sampler gap found by the audit is now closed by SOFTWARE-168. SOFTWARE-162/163/355/356/357/358/360/361/362/363/364/366/368/370/371/373/374/375/376/377/378/379/380/381/382/383/384/385/386 have completed bounded parser,
-vertex, pixel, texture-sampler, MRT/target, SpriteBatch and line/wireframe phases, but the
-SOFTWARE-164/165 compiled-Effect umbrellas remain pending. The final classification must account
-for that remaining aggregate capability gap after the state/resource/default/skip audit.
+The public vertex texture/sampler gap found by the audit is closed by SOFTWARE-168.
+SOFTWARE-162..165 plus the focused SOFTWARE-355..484 work complete the parser, vertex, pixel,
+texture-sampler, MRT/target, SpriteBatch, line/wireframe, profile and conformance phases. The
+compiled-Effect gap no longer prevents a final parity classification; the remaining plan rows must
+be classified independently.
 
 ### Property-level graphics-state audit
 
@@ -672,13 +686,13 @@ No other inherited no-op, null factory or optimistic classic capability remains 
 
 ### Exact Software `CnaGraphicsTests` skip classification
 
-The current challenge corpus contains 63 skips. Every skip was inspected by name, message and
-source-side guard; exactly 15 are evidence of an in-scope missing capability.
+The current challenge corpus contains 48 skips after SOFTWARE-165 activated the 15 formerly
+skipped compiled-Effect tests. Every remaining skip was inspected by name, message and source-side
+guard; none is evidence of an untracked in-scope missing Software capability.
 
 | Exact family/tests | Count | Classification and reason |
 |---|---:|---|
-| `EffectMaterialTest.InheritedCloneCarriesIndependentCompiledState`, `.CarriesTheSourceEffectsParametersAcross`, `.ParametersAreReachableByName`, `.TechniquesAreClonedTooNotLeftEmpty`, `.TheCloneIsIndependentOfItsSource`, `.RetainedParameterTexturesOutliveTheCallersHandle` | 6 | **REAL CLASSIC GAP:** all are gated only by the Software renderer's truthful lack of compiled-Effect execution; SOFTWARE-162..165 |
-| `EffectTest.CompiledTextureAccessorsValidateTheReflectedParameterType`, `.CompiledTextureSetterRejectsDisposedAndActiveRenderTargetsBeforeType`, `.CompiledTypedValueSettersValidateReflectedShape`, `.CompiledScalarSettersBroadcastAndRejectArrayParents`, `.CompiledNumericArraySettersRejectStructureParameters`, `.CompiledTypedGettersValidateShapeBroadcastAndConvert`, `.CompiledArrayGettersReturnRequestedLengthAndPackedValues`, `.CompiledNumericArraySettersConvertToReflectedStorageType`, `.AuthenticXna4ShaderStateIdentifiersSurvivePassApplication` | 9 | **REAL CLASSIC GAP:** all require an executable reflected classic compiled Effect; SOFTWARE-162..165 |
+| Former six `EffectMaterialTest` and nine compiled `EffectTest` capability skips | 0 | **CLOSED:** all 15 tests are active and pass with `CNA_SOFTWARE_COMPILED_EFFECTS=ON`; SOFTWARE-162..165 ✅ |
 | `GraphicsDeviceSubsystemLifecycleTest.AWindowedDeviceTakesExactlyOneVideoReference`, `.AnInitialisationFailureFollowedByASuccessBalances` | 2 | Build-shape/platform restriction: Software needs no video subsystem and this configuration has only one compiled renderer. The renderer-neutral zero-video-reference and lifecycle tests run |
 | `GraphicsDeviceWindowDescriptionTest.XnaOwnedWindowIsNonResizableFromCreation` and all five `GraphicsDevicePlatformWindowTests.*` | 6 | Not applicable: Software creates no native window. Reset, viewport, presentation parameters and device lifecycle are covered without inventing one |
 | `BuiltInVertexLayoutTest.SdlGpuObjectArrayWithStaticDeclarationRendersIntoATarget` | 1 | Exact SDL_GPU selector; equivalent public Software declaration/layout positives run |
@@ -692,9 +706,8 @@ source-side guard; exactly 15 are evidence of an in-scope missing capability.
 | four declaration-refusal tests in `DeclarationGuardTest` | 4 | Negative controls for renderers that infer/refuse layouts. Software translates them and runs `TheTranslatingRendererStillRendersEveryCollidingDeclaration` |
 | `DeclarationGuardTest.CustomShaderEffectKeepsItsElementIndexConvention` | 1 | CNAEXT custom-source shader selector; Software truthfully reports it does not execute source |
 
-Thus 48 of 63 skips are exact negative controls, foreign-renderer selectors, platform-only tests or
-CNAEXT facilities. The remaining 15 all identify the same acknowledged compiled-Effect gap; no
-skip conceals an additional Software stock-effect/state/resource feature.
+All 48 skips are exact negative controls, foreign-renderer selectors, platform-only tests or CNAEXT
+facilities. No skip conceals an additional Software stock-effect/state/resource feature.
 
 ## Deferred EasyGL example families
 

@@ -8486,8 +8486,8 @@ int main()
         CheckCompiledMrtRasterization(renderer);
         CheckCompiledLineAndWireframeRasterization(renderer);
         CheckCompiledSpriteBatchRouting();
-        Check(!renderer.SupportsCompiledEffects(),
-              "incomplete SOFTWARE-164/165 path must not advertise compiled effects");
+        Check(renderer.SupportsCompiledEffects(),
+              "completed SOFTWARE-164/165 build must advertise compiled effects");
 
         const std::string stockDirectory = CNA_SOFTWARE_STOCK_EFFECT_DIRECTORY;
         int textureFreePixelPrograms = 0;

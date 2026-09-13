@@ -1553,6 +1553,12 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         /**
+         * @brief Reports whether this build executes compiled XNA Effect bytecode.
+         *
+         * @return True for the complete opt-in Software compiled-Effect build; otherwise false.
+         */
+        [[nodiscard]] bool SupportsCompiledEffects() const override;
+        /**
          * @brief Reports support for linearly filtering half-float texture data.
          *
          * @return Always true because the CPU sampler filters decoded floating-point planes.

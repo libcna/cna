@@ -1,6 +1,6 @@
 # CNA Software Renderer Adversarial Parity Handoff
 
-Updated: 2026-09-13, continued through SOFTWARE-484
+Updated: 2026-09-13, continued through SOFTWARE-165 aggregate closure
 
 This document is the restart point for the hostile Software-versus-EasyGL classic XNA 4.0/Core
 parity review. Do not interpret the large completed task count or green regression suites as proof
@@ -83,11 +83,13 @@ The evidence-backed verdict remains:
 
 **C — HIGH PARITY, SPECIFIC GAPS REMAIN.**
 
-Do not upgrade that verdict. Software deliberately still reports
-`GraphicsCapability::CompiledEffects=false`, and the public compiled-Effect entry point rejects
-otherwise valid bytes. The opt-in Software executor now implements a large fraction of the actual
-D3D9 Effect surface, but complete profile, malformed-input, lifecycle, content/model and stress
-closure has not been proved. `SOFTWARE-164` and `SOFTWARE-165` remain open for that reason.
+`SOFTWARE-164/165` are now complete. With `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, Software advertises
+`GraphicsCapability::CompiledEffects=true`, accepts the public compiled-Effect entry point and
+passes the complete shared conformance surface plus the formerly skipped public Effect tests.
+Opt-out builds retain the dependency-free false capability. The remaining plan boundaries are
+`SOFTWARE-178`, `SOFTWARE-198`, `SOFTWARE-207`, the independently blocked repository-wide
+`SOFTWARE-100`, and the historical optional/no-goal `SOFTWARE-85/86`; do not treat this handoff as
+authority to stop before the active user's explicit completion goal is met.
 
 The prompted sampler, AddressW, and multisample-rasterizer hypotheses were all confirmed and fixed;
 the exact evidence and task mapping are in the `Final adversarial parity challenge` section of
@@ -312,7 +314,8 @@ All rows through `SOFTWARE-163`, the completed later ranges stated in the plan, 
 
 ## Recommended next audit direction
 
-Resume the adversarial opcode/profile review under SOFTWARE-164/165. A productive pattern has been:
+The adversarial opcode/profile review under SOFTWARE-164/165 is complete. For any future compiled
+Effect regression, retain the established pattern:
 
 1. inspect one MojoShader `state_*` validator, opcode-table restriction, FIXME, or Software
    interpreter branch;
@@ -415,7 +418,7 @@ The active local dependency checkout is `/tmp/cna-fna3d-soft474.XKYa5y/FNA3D`. I
 SOFTWARE-474 after another concurrent session repeatedly rewrote the former shared checkout and
 left its source/stamp inconsistent. Both active build trees now point to this isolated checkout;
 keep it while continuing with those builds. It is pinned to FNA3D `32401479a3ab5bd6b2e7f786e87bf4166aa03b0f`
-and MojoShader `6333f74dbd5644789a63e903816441b16c1e8b60`, with all 106 managed patches applied.
+and MojoShader `6333f74dbd5644789a63e903816441b16c1e8b60`, with all 109 managed patches applied.
 
 Its FNA3D Git object alternate points to `/tmp/fx126-current/fna3d-src/.git/objects`, and its
 MojoShader object alternate points to
@@ -493,16 +496,16 @@ The last broad results relevant to the latest technical commit are:
   focused SOFTWARE-480 flow family: 58/58 pass; focused SOFTWARE-481 call-graph/label family:
   38/38 pass; focused SOFTWARE-482 flow family: 72/72 pass; focused SOFTWARE-483 flow family:
   86/86 pass; focused SOFTWARE-484 flow family: 101/101 pass.
-- The last full Software `CnaGraphicsTests` checkpoint documented in the ledger is
-  2,625/2,688 with 63 classified skips. It was not rerun for
-  SOFTWARE-470/471/472/473/474/475/476/477/478/479/480/481/482/483/484 because those tasks changed only compiled-Effect test/validation
-  inputs covered by the focused runtime, full Software label, and complete EasyGL compiled family.
+- The post-SOFTWARE-165 full Software `CnaGraphicsTests` run is 2,640/2,688 with 48 classified
+  skips. All 15 formerly skipped compiled `Effect`/`EffectMaterial` tests are active and pass.
+- The aggregate Software shared compiled-Effect conformance test and the independent display-free
+  parser/interpreter/runtime executable pass. Focused EffectMaterial/model XNB coverage is 15/15.
 
-The exact 63-skip classification is in
+The exact former 63-skip classification is in
 `docs/software-easygl-parity-ledger.md` under `Exact Software CnaGraphicsTests skip classification`:
 
-- 15 skips are real classic compiled-Effect gaps, all owned by SOFTWARE-162..165.
-- 48 are exact negative controls, foreign-renderer selectors, platform-only cases, or CNAEXT
+- The 15 classic compiled-Effect gaps owned by SOFTWARE-162..165 are now active passing tests.
+- The remaining 48 are exact negative controls, foreign-renderer selectors, platform-only cases, or CNAEXT
   facilities.
 - No classified skip identifies a second untracked Software stock-effect/state/resource gap.
 
@@ -519,7 +522,8 @@ actual count, because parameterized fixtures frequently increase the EasyGL tota
 - Run `git diff --check`, the focused test, and the relevant Software/EasyGL regressions before
   committing.
 - Do not push unless the owner explicitly asks in the active conversation.
-- Do not enable `CompiledEffects` or declare full parity because one more audit slice is green.
+- Keep `CompiledEffects` conditional on `CNA_SOFTWARE_COMPILED_EFFECTS`; opt-out and reduced GDI
+  builds must continue to report false.
 - If a real gap is too large for a bounded implementation, document the architecture and remaining
   scope honestly instead of faking parity.
 
@@ -528,6 +532,6 @@ include start/end SHAs, branch, commit and LOC counts, new/completed/remaining t
 new findings, compiled-Effect verdict, exact skips, all test families run, and the reason for the
 classification. At this handoff the correct classification is C.
 
-This run stops after SOFTWARE-484 and this handoff are committed. Do not open SOFTWARE-485 until
-the owner explicitly resumes the campaign in the active conversation. Do not push without a new
-explicit request for the current branch state.
+The owner explicitly resumed the campaign and requested completion of the whole plan. Continue
+through the remaining plan rows; do not reinstate the obsolete SOFTWARE-484 stop condition. Do not
+push without a new explicit request for the current branch state.

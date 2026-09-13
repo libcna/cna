@@ -330,6 +330,15 @@ namespace CNA::Internal::Renderers::Software
         return true;
     }
 
+    bool SoftwareRenderer::SupportsCompiledEffects() const
+    {
+#if defined(CNA_SOFTWARE_COMPILED_EFFECTS) && !defined(CNA_SOFTWARE_2D_ONLY)
+        return true;
+#else
+        return false;
+#endif
+    }
+
     bool SoftwareRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         switch (capability)

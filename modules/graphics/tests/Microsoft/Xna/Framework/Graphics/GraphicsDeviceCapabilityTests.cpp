@@ -222,6 +222,7 @@ struct CapabilityExpectation
 #if defined(CNA_RENDERER_FNA3D) || \
     (defined(CNA_RENDERER_SDL_GPU) && defined(CNA_SDL_GPU_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_EASYGL) && defined(CNA_EASYGL_COMPILED_EFFECTS)) || \
+    (defined(CNA_RENDERER_SOFTWARE) && defined(CNA_SOFTWARE_COMPILED_EFFECTS)) || \
     (defined(CNA_RENDERER_VULKAN) && defined(CNA_VULKAN_COMPILED_EFFECTS))
 constexpr bool kExpectCompiledEffects = true;
 #else

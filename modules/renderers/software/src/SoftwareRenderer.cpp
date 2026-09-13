@@ -2538,8 +2538,15 @@ namespace CNA::Internal::Renderers::Software
                         "Software compiled effect: SpriteBatch slot zero requires sampler2D.");
                 }
 
-                const SoftwareSamplerState sampler =
-                    renderer_.GetSamplerState(request.samplerRegister);
+                // A compiled SpriteBatch draw enters the renderer below GraphicsDevice's ordinary
+                // draw-state flush. Read the public collection carried by Effect::FillGpuDrawParams
+                // so Begin's sampler and pass-assigned sampler state still reach slot zero; direct
+                // renderer probes without a GraphicsDevice collection retain the cached fallback.
+                const SoftwareSamplerState sampler = spriteTextureOverride &&
+                        params_.compiledDeviceSamplerStates != nullptr
+                    ? ToSoftwareSamplerState(
+                          (*params_.compiledDeviceSamplerStates)[request.samplerRegister])
+                    : renderer_.GetSamplerState(request.samplerRegister);
                 if (request.samplerType == SoftwareShaderSamplerTypeEXT::Texture2D ||
                     request.samplerType == SoftwareShaderSamplerTypeEXT::Unknown)
                 {
