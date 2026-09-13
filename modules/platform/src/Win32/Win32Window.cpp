@@ -118,25 +118,44 @@ namespace CNA::Platform::Win32 {
         // a window the platform already owns rather than producing a second wrapper for it.
         SetPropW(hwnd_, kOwnedWindowProperty, reinterpret_cast<HANDLE>(static_cast<LONG_PTR>(1)));
 
-        if (description.centered)
+        // Post-creation setup can still fail -- SetFullscreenMode throws when the window's monitor
+        // cannot be resolved. A throw from here means the constructor never completes, so the
+        // destructor will NOT run and the HWND this function already created would leak for the
+        // process lifetime. Undoing it by hand is the only way to keep "a failed CreateWindow
+        // leaves the platform able to retry" true.
+        try
         {
-            RECT monitor{};
-            if (MonitorRect(hwnd_, monitor))
+            if (description.centered)
             {
-                const int centreX =
-                    monitor.left + ((monitor.right - monitor.left) - outerWidth) / 2;
-                const int centreY =
-                    monitor.top + ((monitor.bottom - monitor.top) - outerHeight) / 2;
-                SetWindowPos(hwnd_, nullptr, centreX, centreY, 0, 0,
-                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                RECT monitor{};
+                if (MonitorRect(hwnd_, monitor))
+                {
+                    const int centreX =
+                        monitor.left + ((monitor.right - monitor.left) - outerWidth) / 2;
+                    const int centreY =
+                        monitor.top + ((monitor.bottom - monitor.top) - outerHeight) / 2;
+                    SetWindowPos(hwnd_, nullptr, centreX, centreY, 0, 0,
+                                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                }
             }
+
+            if (description.fullscreenMode != WindowFullscreenMode::Windowed)
+                SetFullscreenMode(description.fullscreenMode);
+
+            if (description.visible)
+                ShowWindow(hwnd_, SW_SHOW);
         }
-
-        if (description.fullscreenMode != WindowFullscreenMode::Windowed)
-            SetFullscreenMode(description.fullscreenMode);
-
-        if (description.visible)
-            ShowWindow(hwnd_, SW_SHOW);
+        catch (...)
+        {
+            if (fullscreenMode_ != WindowFullscreenMode::Windowed || exclusiveModeChanged_)
+                LeaveFullscreen();
+            RemovePropW(hwnd_, kOwnedWindowProperty);
+            SetWindowLongPtrW(hwnd_, GWLP_USERDATA, 0);
+            DestroyWindow(hwnd_);
+            hwnd_ = nullptr;
+            windowClass_.reset();
+            throw;
+        }
     }
 
     Win32Window::Win32Window(const HWND window, const WindowId id, Win32WindowHost& host, AdoptTag)

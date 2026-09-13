@@ -226,17 +226,29 @@ where a host has no window manager.
 
 ### Building and running without a full CNA configure
 
-`tools/platform/win32_standalone_tests/` builds the platform module and its whole test suite on
-their own. The platform module depends on nothing but the C++ standard library, so this works
-without the sharp-runtime sibling checkout — which is what makes the Win32 backend testable from a
-Linux host through mingw-w64 and Wine:
+`tools/platform/standalone_tests/` builds the platform module and its whole test suite on their
+own, for any `CNA_PLATFORM`. The platform module depends on nothing but the C++ standard library —
+exactly two of its fifty-odd test suites reach for SharpRuntime — so this works without the
+sharp-runtime sibling checkout, which is what makes the Win32 backend testable from a Linux host
+through mingw-w64 and Wine:
 
 ```sh
-cmake -S tools/platform/win32_standalone_tests -B cmake-build-win32 -G Ninja \
-      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCMAKE_BUILD_TYPE=Debug
+cmake -S tools/platform/standalone_tests -B cmake-build-win32 -G Ninja \
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
+      -DCNA_PLATFORM=WIN32 -DCMAKE_BUILD_TYPE=Debug
 cmake --build cmake-build-win32 --parallel
 Xvfb :97 -screen 0 1280x1024x24 &
-DISPLAY=:97 WINEDEBUG=-all wine64 cmake-build-win32/cna_platform_win32_tests.exe
+DISPLAY=:97 WINEDEBUG=-all wine64 cmake-build-win32/cna_platform_tests.exe
+```
+
+The same harness runs the suite for a host-native selection, which is how the other backends are
+checked for regressions without a full configure:
+
+```sh
+cmake -S tools/platform/standalone_tests -B cmake-build-platform-headless -G Ninja \
+      -DCNA_PLATFORM=HEADLESS -DCMAKE_BUILD_TYPE=Debug
+cmake --build cmake-build-platform-headless --parallel
+./cmake-build-platform-headless/cna_platform_tests
 ```
 
 The same directory builds `cna_win32_directx_probe`, which creates a real Direct3D 11 and

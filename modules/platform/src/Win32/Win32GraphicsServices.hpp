@@ -134,6 +134,11 @@ namespace CNA::Platform::Win32 {
      * The GDI path is the Win32 answer to "put this image on the screen", and it is what lets a
      * CPU rasteriser (`SOFTWARE`, `BLEND2D`) run on this platform without a GPU renderer. It is
      * not a drawing API: one finished frame arrives per present, exactly as the contract states.
+     *
+     * The presenter borrows its window and must not outlive it. That is the contract's own
+     * teardown order -- "destroy resources from the consumer inward: renderer resources, graphics
+     * context/surface, window" -- rather than a limitation of this backend, and it is the same
+     * relationship every other implementation's presenter has with its window.
      */
     class Win32SurfacePresenter final : public IPlatformSurfacePresenter
     {

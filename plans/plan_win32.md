@@ -205,7 +205,7 @@ Supporting, outside the module:
 | Path | Purpose |
 |---|---|
 | `spikes/win32-spike/` | WIN32-0000's existence gate: window, pump, DPI and QPC under MinGW + Wine |
-| `tools/platform/win32_standalone_tests/` | builds and runs the platform module and its suite without the sharp-runtime sibling; also builds `cna_win32_directx_probe`, the real D3D11/D3D12 device probe |
+| `tools/platform/standalone_tests/` | builds and runs the platform module and its suite for **any** `CNA_PLATFORM`, without the sharp-runtime sibling; also builds `cna_win32_directx_probe`, the real D3D11/D3D12 device probe |
 
 Modified:
 
@@ -648,7 +648,7 @@ Each is a *false* capability with a deterministic refusal, never a stub returnin
 This workstream was developed and validated on Linux with MinGW-w64 + Wine 9.0 + Xvfb. That
 distinction matters and is recorded rather than papered over:
 
-* **Verified by execution here** (385 tests, §17.1): compilation for `x86_64-w64-mingw32` with
+* **Verified by execution here** (386 tests, §17.1): compilation for `x86_64-w64-mingw32` with
   `-Wall -Wextra` and no warnings; window class registration and its refcounting across two live
   platforms; window creation, client-vs-outer sizing, title round trip through UTF-8, show/hide,
   minimise/maximise/restore, destroy, and the `WM_NCCREATE`/`WM_NCDESTROY` pointer discipline; the
@@ -689,8 +689,8 @@ DISPLAY=:97 WINEDEBUG=-all wine64 cmake-build-win32/cna_platform_win32_tests.exe
 ```
 
 ```
-[==========] 385 tests from 39 test suites ran.
-[  PASSED  ] 384 tests.
+[==========] 386 tests from 39 test suites ran.
+[  PASSED  ] 385 tests.
 [  SKIPPED ] 1 test
 [  SKIPPED ] EveryImplementation/PlatformConformance.AnUnsupportedCapabilityRefusesNamingItself/Win32
 ```
@@ -708,19 +708,20 @@ Per-suite, Win32's own coverage:
 
 | Suite | Cases | Result |
 |---|---:|---|
-| `Win32EventMapperTests` | 35 | pass |
+| `Win32EventMapperTests` (`Win32EventMapping`) | 35 | pass |
+| `Win32WindowTests` (`Win32WindowTest`) | 24 | pass |
 | `Win32InputServicesTests` | 20 | pass |
 | `Win32SystemServicesTests` | 18 | pass |
-| `Win32WindowTests` | 18 | pass |
+| `Win32PlatformTests` (`Win32PlatformTest` + `Win32PlatformFactory`) | 18 | pass |
 | `Win32GraphicsServicesTests` | 15 | pass |
-| `Win32PlatformTests` | 17 | pass |
-| `Win32KeyCodeTests` | 11 | pass |
-| `Win32ScancodeTests` | 11 | pass |
-| `Win32UtfTests` | 9 | pass |
+| `Win32ScancodeTests` | 14 | pass |
+| `Win32KeyCodeTests` | 12 | pass |
+| `Win32UtfTests` | 10 | pass |
+| `Win32DpiTests` (`Win32Dpi` + `Win32DpiWindow`) | 10 | pass |
 | `Win32FullscreenStateTests` | 9 | pass |
-| `Win32DpiTests` | 10 | pass |
-| `Win32DirectXIntegrationTests` | 8 | pass |
-| `Win32NoSdlTests` | 6 | pass |
+| `Win32DirectXIntegrationTests` (`Win32RendererBridge`) | 8 | pass |
+| `Win32NoSdlTests` (`Win32SourceAudit`) | 6 | pass |
+| **total, Win32-specific** | **199** | |
 
 **Three real defects were found by these tests and fixed**, which is the reason for writing them
 rather than asserting the implementation was correct:
@@ -841,17 +842,61 @@ same `TryGetWin32`, and `CreateSwapChainForHwnd` takes the same handle type — 
 exercises the D3D12 path in full the moment it runs on a machine with a device. This is an
 environment gap, recorded in §16, not an implementation gap.
 
-### 17.6 Build matrix
+### 17.6 Regression matrix
+
+The point of a new backend is that it changes shared files — `PlatformFactory.cpp`,
+`cmake/PlatformSelection.cmake`, `modules/platform/CMakeLists.txt`, `cmake/UnitTests.cmake`, the
+root `CMakeLists.txt` — so the other implementations have to be re-run, not assumed. The same
+harness builds the platform module for any selection, which is what makes that possible here
+without the sharp-runtime sibling.
+
+**Every selection was re-run, and none regressed.**
+
+| `CNA_PLATFORM` | Target | Tests | Passed | Skipped | Failed |
+|---|---|---:|---:|---:|---:|
+| `WIN32` | Windows via mingw-w64, executed under Wine | 386 | 385 | 1 | **0** |
+| `SDL3` | Linux, native, `SDL_VIDEODRIVER=dummy` | 443 | 436 | 7 | **0** |
+| `SDL2` | Linux, native, `SDL_VIDEODRIVER=dummy` | 304 | 303 | 1 | **0** |
+| `HEADLESS` | Linux, native | 270 | 269 | 1 | **0** |
+| `TERMINAL` | Linux, native | 270 | 269 | 1 | **0** |
+
+Every skip is environmental and reproduces on the baseline: no controlling TTY
+(`TerminalPlatformTest.ConstructionTouchesNoTerminalState`), no Vulkan loader, no OpenGL driver, no
+sensor or haptic device, and the by-design
+`PlatformConformance.AnUnsupportedCapabilityRefusesNamingItself` skip on any platform that *does*
+support surface presentation.
+
+Three caveats, all named rather than buried:
+
+* **SDL2 was linked against the host's SDL 2.30 package**, not the version
+  `cmake/ThirdPartySDL2.cmake` pins, because that one is fetched from git at configure time and this
+  worker builds it nowhere. The run therefore proves the SDL2 selection still compiles and its suite
+  still passes; it is not a statement about the pinned revision.
+* **`Sdl3XErrorHandlerTests` is excluded from the harness.** It provokes a real Xlib protocol error,
+  and Xlib's default handler calls `exit()` — which is the whole subject of the test.
+  `cmake/UnitTests.cmake` gives it a ctest process of its own for exactly that reason; a harness
+  that produces one binary would have it end the run at whatever came next, which is a fact about
+  process isolation rather than a result about the suite.
+* **Tests that include a SharpRuntime header are excluded** — detected by scanning rather than
+  listed, so the exclusion cannot go stale silently, and printed at configure time so a run is never
+  quietly narrower than it looks. On this tree that is `StandardFileSystemTests`,
+  `TerminalCapabilityProbeTests` and `Sdl3PlatformTests`. All three run unchanged in a normal
+  configure, and none is touched by this workstream.
+
+That three of the module's fifty-odd suites have that dependency — and that the other fifty need
+nothing but the standard library — is itself the measurement that makes the harness possible.
+
+### 17.7 Build matrix
 
 | Target | Result |
 |---|---|
 | `x86_64-w64-mingw32-g++` 13.2.0, `-Wall -Wextra`, C++23 | clean — no warnings from any Win32 source |
-| Platform module + full test suite, cross-built and executed under Wine | 384/385, 1 by-design skip |
+| Platform module + full test suite, cross-built and executed under Wine | 385/386, 1 by-design skip |
 | `cna_win32_directx_probe` | exit 0 |
 | MSVC | **not run here** — no Windows host available. Nothing in the backend is MSVC-only: it uses no GCC extension, no `__attribute__`, and no compiler-specific pragma. |
 
 A full CNA configure (the whole framework, not just the platform module) could not be run: it
 requires the `sharp-runtime` *sibling checkout*, which this sandbox cannot fetch. That is what
-`tools/platform/win32_standalone_tests/` exists to work around, and it is a limitation of the
+`tools/platform/standalone_tests/` exists to work around, and it is a limitation of the
 worker rather than of the change — the platform module has zero sharp-runtime includes, so the
 suite it runs is the same one `cmake/UnitTests.cmake` compiles.

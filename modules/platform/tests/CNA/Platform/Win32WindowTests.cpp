@@ -388,6 +388,41 @@ TEST_F(Win32WindowTest, AWindowMayOutliveItsPlatform)
     EXPECT_NO_THROW(window.reset());
 }
 
+TEST_F(Win32WindowTest, AFailedCreationLeavesThePlatformAbleToRetry)
+{
+    // Post-creation setup can throw after CreateWindowExW has already succeeded. The constructor
+    // then never completes, so the destructor does not run, and the HWND it made would leak for
+    // the process lifetime along with a window-class reference that can never be released.
+    //
+    // A zero-sized request is the reachable version of that: it is clamped rather than refused, so
+    // what this really asserts is the invariant the unwind protects -- a creation that did not
+    // produce a usable window leaves the platform exactly as it was.
+    WindowDescription description;
+    description.title = "degenerate";
+    description.width = 0;
+    description.height = 0;
+    description.visible = false;
+
+    try
+    {
+        const std::unique_ptr<IPlatformWindow> window = platform_->CreateWindow(description);
+        ASSERT_NE(window, nullptr);
+        window->Sync();
+        EXPECT_GE(window->GetClientBounds().width, 1) << "a zero size is clamped, not honoured";
+    }
+    catch (const PlatformException&)
+    {
+        // Refusing is equally correct; what must not happen is a leak either way.
+    }
+
+    // Whichever outcome the first call had, the next ordinary creation must still work -- which it
+    // cannot if the window class reference was stranded by a half-constructed window.
+    const std::unique_ptr<IPlatformWindow> replacement = Create(320, 240);
+    ASSERT_NE(replacement, nullptr);
+    replacement->Sync();
+    EXPECT_EQ(replacement->GetClientBounds().width, 320);
+}
+
 TEST_F(Win32WindowTest, DestroyingAWindowLeavesNoDanglingUserDataPointer)
 {
     // WM_NCDESTROY is the last message a window receives and is where the owner pointer is
