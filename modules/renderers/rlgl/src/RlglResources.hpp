@@ -70,6 +70,51 @@ namespace CNA::Internal::Renderers::Rlgl
     [[nodiscard]] Texture2DResourceSnapshot GetTexture2DResourceSnapshotForTesting(
         const ITextureRenderer& resource);
 
+    /** @brief Complete Texture3D recovery state exposed to focused validation. */
+    struct Texture3DResourceSnapshot
+    {
+        /** @brief Current native volume texture name. */
+        unsigned int texture = 0;
+        /** @brief Level-zero width in texels. */
+        int width = 0;
+        /** @brief Level-zero height in texels. */
+        int height = 0;
+        /** @brief Level-zero depth in texels. */
+        int depth = 0;
+        /** @brief Number of allocated mip levels. */
+        int levelCount = 1;
+        /** @brief Raw XNA SurfaceFormat ordinal. */
+        int surfaceFormat = 0;
+        /** @brief Whether this resource joined its device's recovery registry. */
+        bool recoveryRegistered = false;
+        /** @brief Exact mask of mip levels with defined retained contents. */
+        std::vector<bool> definedLevels;
+        /** @brief Full RGBA8 volume bytes retained for each defined mip level. */
+        std::vector<std::vector<std::uint8_t>> recoveryLevels;
+    };
+
+    /**
+     * @brief Creates a Color Texture3D with complete mip storage.
+     * @param width Level-zero width.
+     * @param height Level-zero height.
+     * @param depth Level-zero depth.
+     * @param mipMap Whether to allocate the complete width/height-derived mip chain.
+     * @param surfaceFormat Raw XNA SurfaceFormat ordinal; currently Color only.
+     * @param lifetime Owning device registry for context-current disposal and recovery.
+     * @return Renderer-owned volume resource.
+     */
+    [[nodiscard]] std::unique_ptr<ITexture3DRenderer> CreateTexture3DRenderer(
+        int width, int height, int depth, bool mipMap, int surfaceFormat,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime);
+
+    /**
+     * @brief Captures Texture3D native identity and retained recovery data.
+     * @param resource RLGL volume resource.
+     * @return Exact creation description and level-major recovery shadows.
+     */
+    [[nodiscard]] Texture3DResourceSnapshot GetTexture3DResourceSnapshotForTesting(
+        const ITexture3DRenderer& resource);
+
     /** @brief Complete renderer/native TextureCube facts exposed to focused validation. */
     struct TextureCubeResourceSnapshot
     {

@@ -410,6 +410,18 @@ namespace CNA::Internal::Renderers::Rlgl
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
 
         /**
+         * @brief Creates a sampled RGBA8 volume texture.
+         * @param w Level-zero width.
+         * @param h Level-zero height.
+         * @param depth Level-zero depth.
+         * @param mipMap Whether to allocate the complete width/height-derived mip chain.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal; currently Color only.
+         * @return Renderer-owned volume resource.
+         */
+        std::unique_ptr<ITexture3DRenderer> CreateTexture3D(
+            int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+
+        /**
          * @brief Creates a sampled cube texture with six independently writable faces.
          * @param size Width and height of every face.
          * @param mipMap Whether to allocate the complete mip chain.
@@ -443,6 +455,14 @@ namespace CNA::Internal::Renderers::Rlgl
             int graphicsProfile) const override;
 
         /**
+         * @brief Returns the live OpenGL volume-texture extent limit.
+         * @param graphicsProfile Raw XNA GraphicsProfile ordinal.
+         * @return The `GL_MAX_3D_TEXTURE_SIZE` value for either supported profile.
+         */
+        [[nodiscard]] int GetMaxVolumeExtentForProfileEXT(
+            int graphicsProfile) const override;
+
+        /**
          * @brief Classifies Texture2D formats whose complete storage path has passed validation.
          * @param surfaceFormat Raw `SurfaceFormat` ordinal.
          * @return Supported only for implemented exact layouts; Unsupported otherwise.
@@ -456,6 +476,14 @@ namespace CNA::Internal::Renderers::Rlgl
          * @return Supported for Color and the three DXT block formats; Unsupported otherwise.
          */
         [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(
+            int surfaceFormat) const override;
+
+        /**
+         * @brief Classifies formats with a complete RLGL volume storage and transfer path.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+         * @return Supported for Color and Unsupported for every other format.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTexture3DFormatEXT(
             int surfaceFormat) const override;
 
         /**
@@ -503,6 +531,9 @@ namespace CNA::Internal::Renderers::Rlgl
          * @return True; loaders retain DXT blocks until the renderer chooses native or fallback storage.
          */
         [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override;
+
+        /** @brief Returns true because source and compiled shaders sample real RLGL volumes. */
+        [[nodiscard]] bool SupportsTexture3DSamplingEXT() const override { return true; }
 
         /**
          * @brief Creates the renderer-owned SpriteBatch implementation.
@@ -1034,6 +1065,7 @@ namespace CNA::Internal::Renderers::Rlgl
         bool robustContext_ = false;
         bool nativeLossPollingAvailable_ = false;
         int maxTextureSize_ = 0;
+        int maxTexture3DSize_ = 0;
         int maxSamplerSlots_ = 0;
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
         int maxVertexSamplerSlots_ = 0;

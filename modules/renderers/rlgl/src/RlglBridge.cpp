@@ -131,6 +131,7 @@ namespace
         {
             glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture_);
             glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture2D_);
+            glGetIntegerv(GL_TEXTURE_BINDING_3D, &texture3D_);
             glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &textureCube_);
         }
 
@@ -138,6 +139,7 @@ namespace
         {
             glActiveTexture(static_cast<GLenum>(activeTexture_));
             glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture2D_));
+            glBindTexture(GL_TEXTURE_3D, static_cast<GLuint>(texture3D_));
             glBindTexture(GL_TEXTURE_CUBE_MAP, static_cast<GLuint>(textureCube_));
         }
 
@@ -147,6 +149,7 @@ namespace
     private:
         GLint activeTexture_ = GL_TEXTURE0;
         GLint texture2D_ = 0;
+        GLint texture3D_ = 0;
         GLint textureCube_ = 0;
     };
 
@@ -2833,6 +2836,7 @@ void main()
         rlActiveTextureSlot(slot);
         if (samplerKind == 0) rlDisableTexture();
         else if (samplerKind == 1) rlDisableTextureCubemap();
+        else if (samplerKind == 2) glBindTexture(GL_TEXTURE_3D, 0);
         else
         {
             throw std::invalid_argument(
@@ -3579,6 +3583,17 @@ void main()
         return value;
     }
 
+    int GetMaxTexture3DSize()
+    {
+        RequireInitialized("volume-texture-limit query");
+        GLint value = 0;
+        glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &value);
+        ThrowIfGlError("GL_MAX_3D_TEXTURE_SIZE query");
+        if (value <= 0)
+            throw std::runtime_error("RLGL: driver reported an invalid maximum volume extent");
+        return value;
+    }
+
     bool SupportsDxtTexture2D(const int surfaceFormat) noexcept
     {
         if (!bridgeInitialized) return false;
@@ -4100,6 +4115,163 @@ void main()
             &snapshot.internalFormat);
         ThrowIfGlError("TextureCube snapshot");
         return snapshot;
+    }
+
+    unsigned int CreateTexture3DColor(
+        const int width, const int height, const int depth, const int mipLevels)
+    {
+        RequireInitialized("Texture3D creation");
+        if (width <= 0 || height <= 0 || depth <= 0 || mipLevels <= 0)
+            throw std::invalid_argument("RLGL: invalid Texture3D creation request");
+
+        const TextureBindingRestore bindingRestore;
+        const UnpackAlignmentRestore unpackRestore;
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        unsigned int id = 0;
+        glGenTextures(1, &id);
+        if (id == 0)
+            throw std::runtime_error("RLGL: Texture3D allocation returned a zero texture name");
+
+        try
+        {
+            glBindTexture(GL_TEXTURE_3D, id);
+            int levelWidth = width;
+            int levelHeight = height;
+            int levelDepth = depth;
+            for (int level = 0; level < mipLevels; ++level)
+            {
+                glTexImage3D(
+                    GL_TEXTURE_3D, level, GL_RGBA8,
+                    levelWidth, levelHeight, levelDepth, 0,
+                    GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                levelWidth = std::max(1, levelWidth / 2);
+                levelHeight = std::max(1, levelHeight / 2);
+                levelDepth = std::max(1, levelDepth / 2);
+            }
+            glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_BASE_LEVEL, 0);
+            glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAX_LEVEL, mipLevels - 1);
+            glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_REPEAT);
+            ThrowIfGlError("Texture3D allocation");
+        }
+        catch (...)
+        {
+            glDeleteTextures(1, &id);
+            throw;
+        }
+        return id;
+    }
+
+    void DestroyTexture3D(const unsigned int id) noexcept
+    {
+        if (bridgeInitialized && id != 0) rlUnloadTexture(id);
+    }
+
+    void UpdateTexture3DColor(
+        const unsigned int id, const int level,
+        const int x, const int y, const int z,
+        const int width, const int height, const int depth,
+        const std::uint8_t* const pixels)
+    {
+        RequireInitialized("Texture3D update");
+        if (id == 0 || level < 0 || x < 0 || y < 0 || z < 0 ||
+            width <= 0 || height <= 0 || depth <= 0 || pixels == nullptr)
+        {
+            throw std::invalid_argument("RLGL: invalid Texture3D update request");
+        }
+
+        const TextureBindingRestore bindingRestore;
+        const UnpackAlignmentRestore unpackRestore;
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glBindTexture(GL_TEXTURE_3D, id);
+        glTexSubImage3D(
+            GL_TEXTURE_3D, level, x, y, z,
+            width, height, depth, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        ThrowIfGlError("Texture3D update");
+    }
+
+    void ReadTexture3DColor(
+        const unsigned int id, const int level,
+        const int levelWidth, const int levelHeight, const int levelDepth,
+        const int x, const int y, const int z,
+        const int width, const int height, const int depth,
+        std::uint8_t* const pixels)
+    {
+        RequireInitialized("Texture3D readback");
+        if (id == 0 || level < 0 || levelWidth <= 0 || levelHeight <= 0 ||
+            levelDepth <= 0 || x < 0 || y < 0 || z < 0 ||
+            width <= 0 || height <= 0 || depth <= 0 ||
+            x > levelWidth - width || y > levelHeight - height ||
+            z > levelDepth - depth || pixels == nullptr)
+        {
+            throw std::invalid_argument("RLGL: invalid Texture3D readback request");
+        }
+
+        const std::uint64_t levelByteCount =
+            static_cast<std::uint64_t>(levelWidth) * levelHeight * levelDepth * 4u;
+        if (levelByteCount > SIZE_MAX)
+            throw std::overflow_error("RLGL: Texture3D readback size overflow");
+
+        const TextureBindingRestore bindingRestore;
+        glBindTexture(GL_TEXTURE_3D, id);
+        GLint previousPackAlignment = 4;
+        glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        std::vector<std::uint8_t> levelPixels(
+            static_cast<std::size_t>(levelByteCount));
+        glGetTexImage(
+            GL_TEXTURE_3D, level, GL_RGBA, GL_UNSIGNED_BYTE, levelPixels.data());
+        glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+        ThrowIfGlError("Texture3D readback");
+
+        const std::size_t sourceRowBytes = static_cast<std::size_t>(levelWidth) * 4u;
+        const std::size_t sourceSliceBytes = sourceRowBytes * levelHeight;
+        const std::size_t destinationRowBytes = static_cast<std::size_t>(width) * 4u;
+        const std::size_t destinationSliceBytes = destinationRowBytes * height;
+        for (int slice = 0; slice < depth; ++slice)
+        {
+            for (int row = 0; row < height; ++row)
+            {
+                const std::uint8_t* const source = levelPixels.data() +
+                    static_cast<std::size_t>(z + slice) * sourceSliceBytes +
+                    static_cast<std::size_t>(y + row) * sourceRowBytes +
+                    static_cast<std::size_t>(x) * 4u;
+                std::memcpy(
+                    pixels + static_cast<std::size_t>(slice) * destinationSliceBytes +
+                        static_cast<std::size_t>(row) * destinationRowBytes,
+                    source, destinationRowBytes);
+            }
+        }
+    }
+
+    void BindTexture3D(const unsigned int id, const int unit)
+    {
+        RequireInitialized("Texture3D binding");
+        if (unit < 0)
+            throw std::out_of_range("RLGL: texture unit must be non-negative");
+        rlActiveTextureSlot(unit);
+        glBindTexture(GL_TEXTURE_3D, id);
+        ++performanceCounters.textureBinds;
+        ThrowIfGlError("Texture3D binding");
+    }
+
+    unsigned int GetBoundTexture3DForTesting(const int unit)
+    {
+        RequireInitialized("Texture3D binding query");
+        if (unit < 0)
+            throw std::out_of_range("RLGL: texture unit must be non-negative");
+
+        GLint previousActiveTexture = GL_TEXTURE0;
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+        glActiveTexture(static_cast<GLenum>(GL_TEXTURE0 + unit));
+        GLint texture = 0;
+        glGetIntegerv(GL_TEXTURE_BINDING_3D, &texture);
+        glActiveTexture(static_cast<GLenum>(previousActiveTexture));
+        ThrowIfGlError("Texture3D binding query");
+        return static_cast<unsigned int>(texture);
     }
 
     RenderTargetStorage CreateRenderTarget2D(

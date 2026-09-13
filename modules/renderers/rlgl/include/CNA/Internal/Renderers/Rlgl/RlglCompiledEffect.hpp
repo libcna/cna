@@ -25,6 +25,7 @@
 namespace CNA::Internal::Renderers
 {
     class ITextureRenderer;
+    class ITexture3DRenderer;
     class ITextureCubeRenderer;
 }
 
@@ -145,12 +146,18 @@ namespace CNA::Internal::Renderers::Rlgl
         std::array<std::shared_ptr<ITextureRenderer>,
                    Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             boundTexture2DResources_{};
+        std::array<std::shared_ptr<ITexture3DRenderer>,
+                   Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            boundTexture3DResources_{};
         std::array<std::shared_ptr<ITextureCubeRenderer>,
                    Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             boundTextureCubeResources_{};
         std::array<std::shared_ptr<ITextureRenderer>,
                    Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             boundVertexTexture2DResources_{};
+        std::array<std::shared_ptr<ITexture3DRenderer>,
+                   Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            boundVertexTexture3DResources_{};
         std::array<std::shared_ptr<ITextureCubeRenderer>,
                    Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             boundVertexTextureCubeResources_{};

@@ -843,6 +843,12 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     [[nodiscard]] int GetMaxTextureSize();
 
     /**
+     * @brief Returns the current context's maximum volume-texture extent.
+     * @return The value reported by `GL_MAX_3D_TEXTURE_SIZE`.
+     */
+    [[nodiscard]] int GetMaxTexture3DSize();
+
+    /**
      * @brief Reports whether rlgl's live extension probe exposes exact DXT storage.
      * @param surfaceFormat Raw DXT `SurfaceFormat` ordinal.
      * @return True only when the requested DXT format maps to a native GL internal format and the
@@ -1003,6 +1009,71 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
      */
     [[nodiscard]] TextureCubeSnapshot GetTextureCubeSnapshotForTesting(
         unsigned int id, int levelCount);
+
+    /**
+     * @brief Allocates every mip level of an RGBA8 volume texture.
+     * @param width Level-zero width.
+     * @param height Level-zero height.
+     * @param depth Level-zero depth.
+     * @param mipLevels Number of mip levels to allocate.
+     * @return Non-zero OpenGL texture name.
+     */
+    [[nodiscard]] unsigned int CreateTexture3DColor(
+        int width, int height, int depth, int mipLevels);
+
+    /** @brief Releases a volume texture while the rlgl device is live. */
+    void DestroyTexture3D(unsigned int id) noexcept;
+
+    /**
+     * @brief Uploads a tightly packed RGBA8 box to one volume mip level.
+     * @param id Volume texture name.
+     * @param level Mip level.
+     * @param x Box left edge.
+     * @param y Box top edge.
+     * @param z Box front edge.
+     * @param width Box width.
+     * @param height Box height.
+     * @param depth Box depth.
+     * @param pixels Source RGBA8 voxels in slice-major, row-major order.
+     */
+    void UpdateTexture3DColor(
+        unsigned int id, int level, int x, int y, int z,
+        int width, int height, int depth, const std::uint8_t* pixels);
+
+    /**
+     * @brief Reads one RGBA8 box from a volume mip level.
+     * @param id Volume texture name.
+     * @param level Mip level.
+     * @param levelWidth Complete level width.
+     * @param levelHeight Complete level height.
+     * @param levelDepth Complete level depth.
+     * @param x Box left edge.
+     * @param y Box top edge.
+     * @param z Box front edge.
+     * @param width Box width.
+     * @param height Box height.
+     * @param depth Box depth.
+     * @param pixels Destination RGBA8 voxels.
+     */
+    void ReadTexture3DColor(
+        unsigned int id, int level,
+        int levelWidth, int levelHeight, int levelDepth,
+        int x, int y, int z, int width, int height, int depth,
+        std::uint8_t* pixels);
+
+    /**
+     * @brief Binds a volume texture to one rlgl texture unit.
+     * @param id Texture name, or zero to unbind.
+     * @param unit Texture unit.
+     */
+    void BindTexture3D(unsigned int id, int unit);
+
+    /**
+     * @brief Returns the volume texture bound to a unit for focused validation.
+     * @param unit Texture unit.
+     * @return Current `GL_TEXTURE_3D` binding.
+     */
+    [[nodiscard]] unsigned int GetBoundTexture3DForTesting(int unit);
 
     /**
      * @brief Creates a framebuffer with a Color texture and exact XNA depth/stencil storage.

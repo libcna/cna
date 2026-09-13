@@ -38,11 +38,13 @@ namespace CNA::Internal::Renderers::Rlgl
         struct ResolvedTexture
         {
             std::shared_ptr<ITextureRenderer> texture2D;
+            std::shared_ptr<ITexture3DRenderer> texture3D;
             std::shared_ptr<ITextureCubeRenderer> textureCube;
 
             [[nodiscard]] bool IsValid() const noexcept
             {
-                return texture2D != nullptr || textureCube != nullptr;
+                return texture2D != nullptr || texture3D != nullptr ||
+                    textureCube != nullptr;
             }
         };
 
@@ -59,8 +61,13 @@ namespace CNA::Internal::Renderers::Rlgl
                     result.textureCube = renderer.shared_from_this();
                 return result;
             }
-            if (dynamic_cast<Texture3D*>(texture) != nullptr)
+            if (auto* volume = dynamic_cast<Texture3D*>(texture))
+            {
+                ITexture3DRenderer& renderer = volume->GetRenderer();
+                if (dynamic_cast<const IRlglTextureResource*>(&renderer) != nullptr)
+                    result.texture3D = renderer.shared_from_this();
                 return result;
+            }
             if (auto* texture2D = dynamic_cast<Texture2D*>(texture))
             {
                 ITextureRenderer& renderer = texture2D->GetRenderer();
@@ -353,8 +360,10 @@ namespace CNA::Internal::Renderers::Rlgl
             boundTextures_ = cloneSource.boundTextures_;
             boundVertexTextures_ = cloneSource.boundVertexTextures_;
             boundTexture2DResources_ = cloneSource.boundTexture2DResources_;
+            boundTexture3DResources_ = cloneSource.boundTexture3DResources_;
             boundTextureCubeResources_ = cloneSource.boundTextureCubeResources_;
             boundVertexTexture2DResources_ = cloneSource.boundVertexTexture2DResources_;
+            boundVertexTexture3DResources_ = cloneSource.boundVertexTexture3DResources_;
             boundVertexTextureCubeResources_ = cloneSource.boundVertexTextureCubeResources_;
             boundSamplers_ = cloneSource.boundSamplers_;
             boundVertexSamplers_ = cloneSource.boundVertexSamplers_;
@@ -591,6 +600,8 @@ namespace CNA::Internal::Renderers::Rlgl
             auto& textureSlot = change.vertexStage ? boundVertexTextures_ : boundTextures_;
             auto& texture2DSlot = change.vertexStage
                 ? boundVertexTexture2DResources_ : boundTexture2DResources_;
+            auto& texture3DSlot = change.vertexStage
+                ? boundVertexTexture3DResources_ : boundTexture3DResources_;
             auto& textureCubeSlot = change.vertexStage
                 ? boundVertexTextureCubeResources_ : boundTextureCubeResources_;
             auto& samplerSlot = change.vertexStage ? boundVertexSamplers_ : boundSamplers_;
@@ -606,6 +617,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 }
                 textureSlot[change.slot] = change.texture;
                 texture2DSlot[change.slot] = resolved.texture2D;
+                texture3DSlot[change.slot] = resolved.texture3D;
                 textureCubeSlot[change.slot] = resolved.textureCube;
             }
             if (change.samplerChanged)
@@ -788,27 +800,24 @@ namespace CNA::Internal::Renderers::Rlgl
                         "RLGL compiled effect: vertex sampler register exceeds the live "
                         "GL/MojoShader limit");
                 }
-                if (shaderSampler.type == MOJOSHADER_SAMPLER_VOLUME)
-                {
-                    throw System::NotSupportedException(
-                        "RLGL compiled effect: vertex sampler3D requires the unimplemented "
-                        "RLGL Texture3D resource");
-                }
-
                 const std::size_t slot = static_cast<std::size_t>(shaderSampler.index);
                 Texture* const selectedTexture = effect->boundVertexTextures_[slot];
                 const ITextureRenderer* const texture2D =
                     effect->boundVertexTexture2DResources_[slot].get();
+                const ITexture3DRenderer* const texture3D =
+                    effect->boundVertexTexture3DResources_[slot].get();
                 const ITextureCubeRenderer* const textureCube =
                     effect->boundVertexTextureCubeResources_[slot].get();
                 const bool expects2D = shaderSampler.type == MOJOSHADER_SAMPLER_2D;
+                const bool expects3D = shaderSampler.type == MOJOSHADER_SAMPLER_VOLUME;
                 const bool expectsCube = shaderSampler.type == MOJOSHADER_SAMPLER_CUBE;
-                if (!expects2D && !expectsCube)
+                if (!expects2D && !expects3D && !expectsCube)
                 {
                     throw System::NotSupportedException(
                         "RLGL compiled effect: unsupported reflected vertex sampler kind");
                 }
-                if (selectedTexture != nullptr && texture2D == nullptr && textureCube == nullptr)
+                if (selectedTexture != nullptr && texture2D == nullptr &&
+                    texture3D == nullptr && textureCube == nullptr)
                 {
                     throw System::NotSupportedException(
                         "RLGL compiled effect: the texture selected for vertex sampler slot " +
@@ -816,6 +825,7 @@ namespace CNA::Internal::Renderers::Rlgl
                         " is not an implemented resource of this device");
                 }
                 if ((texture2D != nullptr && !expects2D) ||
+                    (texture3D != nullptr && !expects3D) ||
                     (textureCube != nullptr && !expectsCube))
                 {
                     throw System::NotSupportedException(
@@ -854,6 +864,10 @@ namespace CNA::Internal::Renderers::Rlgl
                     {
                         texture2D->BindGL(physicalSlot);
                     }
+                }
+                else if (texture3D != nullptr)
+                {
+                    texture3D->BindGL(physicalSlot);
                 }
                 else if (textureCube != nullptr)
                 {
@@ -894,17 +908,12 @@ namespace CNA::Internal::Renderers::Rlgl
                         "RLGL compiled effect: pixel sampler register exceeds the live device "
                         "limit");
                 }
-                if (shaderSampler.type == MOJOSHADER_SAMPLER_VOLUME)
-                {
-                    throw System::NotSupportedException(
-                        "RLGL compiled effect: sampler3D requires the unimplemented RLGL "
-                        "Texture3D resource");
-                }
-
                 const std::size_t slot = static_cast<std::size_t>(shaderSampler.index);
                 Texture* selectedTexture = effect->boundTextures_[slot];
                 const ITextureRenderer* texture2D =
                     effect->boundTexture2DResources_[slot].get();
+                const ITexture3DRenderer* texture3D =
+                    effect->boundTexture3DResources_[slot].get();
                 const ITextureCubeRenderer* textureCube =
                     effect->boundTextureCubeResources_[slot].get();
                 ResolvedTexture fallbackTexture;
@@ -912,24 +921,29 @@ namespace CNA::Internal::Renderers::Rlgl
                 {
                     selectedTexture = nullptr;
                     texture2D = spriteBatchSlotZeroTexture;
+                    texture3D = nullptr;
                     textureCube = nullptr;
                 }
-                else if (texture2D == nullptr && textureCube == nullptr &&
+                else if (texture2D == nullptr && texture3D == nullptr &&
+                         textureCube == nullptr &&
                          spriteBatchTextures != nullptr)
                 {
                     selectedTexture = (*spriteBatchTextures)[shaderSampler.index];
                     fallbackTexture = ResolveTexture(selectedTexture);
                     texture2D = fallbackTexture.texture2D.get();
+                    texture3D = fallbackTexture.texture3D.get();
                     textureCube = fallbackTexture.textureCube.get();
                 }
                 const bool expects2D = shaderSampler.type == MOJOSHADER_SAMPLER_2D;
+                const bool expects3D = shaderSampler.type == MOJOSHADER_SAMPLER_VOLUME;
                 const bool expectsCube = shaderSampler.type == MOJOSHADER_SAMPLER_CUBE;
-                if (!expects2D && !expectsCube)
+                if (!expects2D && !expects3D && !expectsCube)
                 {
                     throw System::NotSupportedException(
                         "RLGL compiled effect: unsupported reflected sampler kind");
                 }
-                if (selectedTexture != nullptr && texture2D == nullptr && textureCube == nullptr)
+                if (selectedTexture != nullptr && texture2D == nullptr &&
+                    texture3D == nullptr && textureCube == nullptr)
                 {
                     throw System::NotSupportedException(
                         "RLGL compiled effect: the texture selected for pixel sampler slot " +
@@ -937,6 +951,7 @@ namespace CNA::Internal::Renderers::Rlgl
                         " is not an implemented resource of this device");
                 }
                 if ((texture2D != nullptr && !expects2D) ||
+                    (texture3D != nullptr && !expects3D) ||
                     (textureCube != nullptr && !expectsCube))
                 {
                     throw System::NotSupportedException(
@@ -974,6 +989,10 @@ namespace CNA::Internal::Renderers::Rlgl
                     {
                         texture2D->BindGL(shaderSampler.index);
                     }
+                }
+                else if (texture3D != nullptr)
+                {
+                    texture3D->BindGL(shaderSampler.index);
                 }
                 else if (textureCube != nullptr)
                 {

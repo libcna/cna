@@ -662,6 +662,7 @@ namespace CNA::Internal::Renderers::Rlgl
             platformContext_->GetLoader(), width, height);
         rlglInitialized_ = true;
         maxTextureSize_ = Bridge::GetMaxTextureSize();
+        maxTexture3DSize_ = Bridge::GetMaxTexture3DSize();
         maxSamplerSlots_ = Bridge::GetMaxSamplerSlots();
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
         maxVertexSamplerSlots_ = Bridge::GetMaxCompiledEffectVertexSamplerSlots();
@@ -1500,6 +1501,7 @@ namespace CNA::Internal::Renderers::Rlgl
             return maxRenderTargetSamples_ >= 2;
         case CNA::GraphicsCapability::MultipleRenderTargets:
             return maxRenderTargets_ >= 2;
+        case CNA::GraphicsCapability::Texture3D:
         case CNA::GraphicsCapability::ThreeD:
         case CNA::GraphicsCapability::WireFrame:
         case CNA::GraphicsCapability::OcclusionQuery:
@@ -1535,6 +1537,27 @@ namespace CNA::Internal::Renderers::Rlgl
     std::unique_ptr<ITextureRenderer> RlglRenderer::CreateTexture(const ImageData& data)
     {
         return CreateTextureRenderer(data, resourceLifetime_);
+    }
+
+    std::unique_ptr<ITexture3DRenderer> RlglRenderer::CreateTexture3D(
+        const int width, const int height, const int depth,
+        const bool mipMap, const int surfaceFormat)
+    {
+        if (ClassifyTexture3DFormatEXT(surfaceFormat) !=
+            RendererFormatVerdict::Supported)
+        {
+            throw System::NotSupportedException(
+                "RLGL: requested Texture3D SurfaceFormat is not implemented "
+                "(plans/plan_rlgl.md RLGL-062)");
+        }
+        if (width > maxTexture3DSize_ || height > maxTexture3DSize_ ||
+            depth > maxTexture3DSize_)
+        {
+            throw System::NotSupportedException(
+                "RLGL: requested Texture3D exceeds the live OpenGL volume extent limit");
+        }
+        return CreateTexture3DRenderer(
+            width, height, depth, mipMap, surfaceFormat, resourceLifetime_);
     }
 
     std::unique_ptr<ITextureCubeRenderer> RlglRenderer::CreateTextureCube(
@@ -1623,6 +1646,13 @@ namespace CNA::Internal::Renderers::Rlgl
         return std::min(maxTextureSize_, graphicsProfile == 1 ? 4096 : 512);
     }
 
+    int RlglRenderer::GetMaxVolumeExtentForProfileEXT(
+        const int graphicsProfile) const
+    {
+        (void)graphicsProfile;
+        return maxTexture3DSize_;
+    }
+
     RendererFormatVerdict RlglRenderer::ClassifySurfaceFormatEXT(
         const int surfaceFormat) const
     {
@@ -1665,6 +1695,15 @@ namespace CNA::Internal::Renderers::Rlgl
             format == SurfaceFormat::Dxt3 || format == SurfaceFormat::Dxt5
                 ? RendererFormatVerdict::Supported
                 : RendererFormatVerdict::Unsupported;
+    }
+
+    RendererFormatVerdict RlglRenderer::ClassifyTexture3DFormatEXT(
+        const int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        return static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::Color
+            ? RendererFormatVerdict::Supported
+            : RendererFormatVerdict::Unsupported;
     }
 
     RendererFormatVerdict RlglRenderer::ClassifyRenderTargetFormatEXT(

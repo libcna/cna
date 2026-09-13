@@ -104,6 +104,44 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_texture_cube_oracle PRIVATE SDL3::SDL3main)
     endif()
 
+    foreach(texture3d_contract IN ITEMS slices mip partial_box partial_box_readback)
+        add_executable(cna_test_rlgl_texture3d_${texture3d_contract}
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_texture3d_${texture3d_contract}_test.cpp")
+        target_link_libraries(cna_test_rlgl_texture3d_${texture3d_contract}
+            PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(cna_test_rlgl_texture3d_${texture3d_contract}
+                PRIVATE SDL3::SDL3main)
+        endif()
+    endforeach()
+
+    add_executable(cna_test_rlgl_shadereffect_texture3d
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_shadereffect_texture3d_test.cpp")
+    target_compile_definitions(cna_test_rlgl_shadereffect_texture3d PRIVATE CNA_RLGL_TEST=1)
+    target_link_libraries(cna_test_rlgl_shadereffect_texture3d
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_shadereffect_texture3d PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_texture3d_addressw
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_texture3d_addressw_test.cpp")
+    target_compile_definitions(cna_test_rlgl_texture3d_addressw PRIVATE CNA_RLGL_TEST=1)
+    target_link_libraries(cna_test_rlgl_texture3d_addressw
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_texture3d_addressw PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_texture3d_recovery rlgl_texture3d_recovery_test.cpp)
+    target_include_directories(cna_test_rlgl_texture3d_recovery
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    target_link_libraries(cna_test_rlgl_texture3d_recovery
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_texture3d_recovery PRIVATE SDL3::SDL3main)
+    endif()
+
     add_executable(cna_test_rlgl_sampler rlgl_sampler_test.cpp)
     target_include_directories(cna_test_rlgl_sampler PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     target_link_libraries(cna_test_rlgl_sampler PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
@@ -640,6 +678,28 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             NAME Rlgl_TextureCube_oracle
             COMMAND cna_test_rlgl_texture_cube_oracle
             TIMEOUT 60 LABELS "GraphicsTexture;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        foreach(texture3d_contract IN ITEMS slices mip partial_box partial_box_readback)
+            cna_register_renderer_test(
+                NAME Rlgl_Texture3D_${texture3d_contract}
+                COMMAND cna_test_rlgl_texture3d_${texture3d_contract}
+                TIMEOUT 60 LABELS "GraphicsTexture;GraphicsParity;Rlgl"
+                ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        endforeach()
+        cna_register_renderer_test(
+            NAME Rlgl_ShaderEffect_Texture3D
+            COMMAND cna_test_rlgl_shadereffect_texture3d
+            TIMEOUT 60 LABELS "GraphicsTexture;GraphicsEffect;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_Texture3D_AddressW
+            COMMAND cna_test_rlgl_texture3d_addressw
+            TIMEOUT 60 LABELS "GraphicsTexture;GraphicsSampler;GraphicsParity;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_Texture3D_Recovery
+            COMMAND cna_test_rlgl_texture3d_recovery
+            TIMEOUT 120 LABELS "GraphicsTexture;GraphicsLifetime;GraphicsParity;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_Sampler COMMAND cna_test_rlgl_sampler
             TIMEOUT 60 LABELS "GraphicsSampler;Rlgl"
