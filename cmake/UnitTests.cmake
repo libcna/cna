@@ -1409,7 +1409,7 @@ if(CNA_BUILD_TESTS)
 
             cna_register_renderer_test(NAME CnaX11WindowManagerTests
                 COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/x11_test_server.sh"
-                        --window-manager
+                        --require-window-manager
                         $<TARGET_FILE:CnaTests>
                         --gtest_filter=X11WithWindowManager.*
                 LABELS "platform" TIMEOUT 300)

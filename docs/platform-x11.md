@@ -327,6 +327,11 @@ rather than a hardcoded `:99` — a fixed number collides with a parallel ctest 
 looks like flakiness — and exits 77 (ctest's skip code) where `Xvfb` or `openbox` is absent, so a
 machine without them records a skip rather than a failure.
 
+The launcher owns the *server*; the window-manager suite's own fixture owns the *window manager*,
+because a test that needs one also needs to know when it became ready. Having both start `openbox`
+raced: the fixture's `--replace` displaced the launcher's mid-run, and a window leaving fullscreen
+stopped being noticed. `--require-window-manager` therefore only checks and skips.
+
 The split is not tidiness. A bare `Xvfb` has no window manager, so maximise, minimise, restore,
 EWMH fullscreen and focus do not happen there at all; asserting them against one would test the
 environment rather than the backend.

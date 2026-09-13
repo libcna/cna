@@ -243,7 +243,7 @@ shared by three backends.
 | X11-0101 | Xvfb integration tests | ✅ | `X11PlatformIntegrationTests.cpp` (34 cases) and `X11ClipboardInteropTests.cpp` (5 cases), driven by `tools/platform/x11_test_server.sh`, which **searches for a free display number** rather than assuming `:99` -- a fixed number collides with a parallel ctest job and the collision reads as flakiness -- and exits 77 (ctest's skip code) when `Xvfb` is absent. Registered as `CnaX11IntegrationTests`. The clipboard half exchanges selections with `xclip`, a genuinely external X client, including a 512 KB `INCR` transfer in both directions. |
 | X11-0102 | Window-manager integration | ✅ | `X11WindowManagerTests.cpp` (10 cases), registered as `CnaX11WindowManagerTests`, starting `openbox` under the same launcher. Covers EWMH fullscreen enter/leave and three repeated round trips, minimise/restore with their events, maximise/restore by observed size, focus on map, focus transfer between two windows, closing a secondary window not ending the application, and the title read back through `xdotool` rather than through CNA. Skips with the reason recorded when `openbox` is absent. |
 | X11-0103 | Conformance | ✅ | `EveryImplementation/PlatformConformance.*` and `PlatformWindowConformance.*` green for `X11`. **Two real defects found and fixed, neither by weakening a test:** the capability set was being recomputed per call and reported `textInput`/`clipboard` true while their accessors were still null before `Video`; and `AcquireSubsystem` refused the subsystems X11 has no facility for, where the cross-implementation rule is that acquisition is bookkeeping and absence is reported through a null service. See the evidence log. |
-| X11-0104 | Regression matrix | ⬜ | SDL3, SDL2, Headless, Terminal suites, ratchet, hot-path lint, contract check, CMake selection tests. |
+| X11-0104 | Regression matrix | ✅ | See §9. Every mechanical gate passes; the SDL3-platform baseline is unchanged; the X11 selection runs the whole `CnaTests` suite; and the platform suite additionally runs clean under AddressSanitizer + LeakSanitizer in three separate display environments (window manager, bare Xvfb, no `DISPLAY` at all). |
 | X11-0105 | `docs/platform-x11.md` | ✅ | `docs/platform-x11.md`: dependency table with what each optional library gates, the full capability boundary with a reason per row, the keyboard/text/mouse/display/fullscreen/clipboard/graphics designs, the DPI policy, the threading/locale/error-handler ownership rules, how to run the three suites, what Xvfb cannot cover, and the three independent mechanisms that keep SDL out. |
 ---
 
@@ -333,8 +333,51 @@ backend" boundary this workstream was given. It costs this branch nothing: platf
 independent axes, so the X11 regression matrix runs with the default SDL3 audio, and the SDL-free
 proof is the platform-layer claim that was actually asked for.
 
+### F-4 — one renderer is missing from the glTF index-width disposition table
+
+`GltfRendererIndexWidthPolicy.InventoryClassifiesEveryRenderer` scans `modules/renderers/` for
+families that mention `CreateIndexBuffer16` and compares the result against a hardcoded set of 45.
+The tree has **46**: `rlgl` is present and unclassified.
+
+Introduced by this branch's own baseline commit — `e05b3d0f merge(RLGL): integrate rlgl renderer
+into next` — and nothing to do with the platform axis. Not fixed here because the fix is a policy
+decision about whether `rlgl` refuses 32-bit indices explicitly or inherits the throwing default,
+and guessing it into one of the two fixed-size arrays would be worse than leaving it flagged.
+
+### F-5 — the content-pipeline suite needs fixtures and FFmpeg this configuration does not have
+
+The remaining failures in a raw `CnaTests` run are all content-pipeline and XNB tests
+(`XnaSourceToOutput`, `XnaBuildDeterminism`, `Cnj*`, `Cnb*`, `ContentManagerSkinnedModel*`). They
+depend on assets that ctest builds through fixture dependencies, and on an FFmpeg-backed video
+processor that `-DCNA_ENABLE_VIDEO=AUTO` disables on a machine without the libraries. Reproduced
+identically on the SDL3 baseline build at the same commit; see §10.
+
 ---
 
-## 8. Evidence log
+## 8. Defects this work found in its own implementation
+
+Recorded because the interesting output of a test suite is the bugs it caught, and every one of
+these was found by a test rather than by reading the code. None was fixed by weakening a test.
+
+| # | Defect | Found by | Why it was invisible |
+|---|---|---|---|
+| D-1 | Capabilities were recomputed per call, and advertised `textInput`/`clipboard` true while their accessors were still null before `Video` was acquired. | `PlatformConformance.EveryServiceIsNullExactlyWhenItsCapabilityIsFalse` | The rule is a cross-implementation one; nothing in the X11 code alone states it. |
+| D-2 | `AcquireSubsystem` refused the subsystems X11 has no facility for, where the cross-implementation rule is that acquisition is bookkeeping and absence is reported through a null service. | `PlatformConformance.SubsystemsAreRefcounted` | Reads as correct in isolation -- refusing what you cannot do is usually right. |
+| D-3 | **`GLXFBConfig` is itself an opaque pointer**, and the window stored the address of the array slot rather than the config. | `X11Live.AGlWindowGetsARealContextThatCanBeMadeCurrentAndSwapped` | Both are pointers, so it compiled; it produced `GLXBadFBConfig` from a perfectly valid config. |
+| D-4 | `X11Connection` unregistered from the error policy **before** `XCloseDisplay`. Closing flushes and can deliver a protocol error, so Xlib's `exit()`-calling default handler was back in place for it. | `X11WithWindowManager` teardown killed the test binary | Only reachable when another client destroys a window during teardown. |
+| D-5 | A window destroyed by the window manager was destroyed again by its wrapper. | the same run | `DestroyNotify` removed the window from the registry but never told the window. |
+| D-6 | `MouseSnapshot::scrollX/Y` were accumulated **in notches, not in XNA units** -- off by a factor of 120 from every other backend and from what `Mouse::GetState().ScrollWheelValue` means. | reading the contract while writing `X11Live.WheelNotchesAccumulateInXnaUnits...` | Both are plain `int`s; no compiler and no single-backend test can see it. |
+| D-7 | X's `Button4Mask`/`Button5Mask` are the **wheel**, and were copied into the snapshot's X1/X2 bits -- reporting a side button held for the duration of every scroll notch. | the same | The one-to-one translation is the obvious one and is wrong. |
+| D-8 | `WindowEventKind::Maximized` was computed and then never emitted, so a game reacting to maximise never heard. | `X11WithWindowManager.MaximizingReportsAMaximizedEvent...` | The size-based test passed throughout. |
+| D-9 | `_NET_WM_STATE` was written **directly** on an iconified window. An iconified window is unmapped but still *managed*, so this raced the window manager's own update and `Restore()` intermittently left the window iconic -- about one run in three inside the full suite, every time green in isolation. | `X11WithWindowManager.MinimizeAndRestoreRoundTrip` | The guard said "not mapped right now" where EWMH means "never mapped". Looks like flakiness. |
+| D-10 | `Sync()` round-tripped the X server but not the **window manager**. `XResizeWindow` on a managed window is redirected: the server forwards a `ConfigureRequest` and the window manager decides. So `SetSize(); Sync(); GetClientBounds()` read the old size whenever a window manager was running. | `PlatformWindowConformance.SizeChangeLandsAfterSync/X11` under `openbox` | It passed under bare Xvfb, where there is no window manager to wait for. |
+
+D-10 is the one worth the extra sentence: it is exactly the failure the plan predicted when it
+split the Xvfb and window-manager suites, and it would have shipped green had the suite only ever
+run against a bare virtual server.
+
+---
+
+## 9. Evidence log
 
 Filled in as tasks complete. Each entry names the exact command and its result.

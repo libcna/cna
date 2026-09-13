@@ -198,8 +198,26 @@ namespace CNA::Platform::X11 {
         /** @brief Gets whether the window is currently mapped. @return True when mapped. */
         [[nodiscard]] bool IsMapped() const { return mapped_; }
 
-        /** @brief Records that the window was mapped or unmapped. @param mapped The new state. */
-        void SetMapped(bool mapped) { mapped_ = mapped; }
+        /**
+         * @brief Records that the window was mapped or unmapped.
+         *
+         * @param mapped The new state.
+         */
+        void SetMapped(bool mapped)
+        {
+            mapped_ = mapped;
+            everMapped_ = everMapped_ || mapped;
+        }
+
+        /**
+         * @brief Gets whether the window manager has ever taken charge of this window.
+         *
+         * Distinct from @ref IsMapped, and the distinction matters: an **iconified** window is
+         * unmapped but still managed. EWMH says a client changes the state of a managed window by
+         * sending `_NET_WM_STATE` to the root; writing the property directly is correct only for a
+         * window that has never been mapped, because after that the window manager owns it.
+         */
+        [[nodiscard]] bool WasEverMapped() const { return everMapped_; }
 
         /**
          * @brief Records that the X server has already destroyed this window.
@@ -217,6 +235,42 @@ namespace CNA::Platform::X11 {
 
         /** @brief Records the fullscreen mode observed from `_NET_WM_STATE`. @param mode The mode. */
         void SetObservedFullscreenMode(WindowFullscreenMode mode) { fullscreenMode_ = mode; }
+
+        /**
+         * @brief Reads the window's minimised and maximised state from the server in one pass.
+         *
+         * Both answers come from `_NET_WM_STATE` where the window manager is EWMH-compliant, so
+         * asking for them together is one property read rather than two. `WM_STATE` is consulted
+         * only when `_NET_WM_STATE` did not settle the minimised question, which is the case for
+         * a window manager that implements no EWMH at all.
+         *
+         * @param minimized Receives whether the window is iconified or hidden.
+         * @param maximized Receives whether the window is maximised in **both** axes.
+         */
+        void ReadStateFlags(bool& minimized, bool& maximized) const;
+
+        /**
+         * @brief Gets the minimised state this object last observed, without asking the server.
+         *
+         * The comparison half of transition detection: an event is emitted when the server's
+         * answer differs from this, not every time a property changes.
+         */
+        [[nodiscard]] bool WasMinimized() const { return observedMinimized_; }
+
+        /** @brief Gets the maximised state this object last observed. */
+        [[nodiscard]] bool WasMaximized() const { return observedMaximized_; }
+
+        /**
+         * @brief Records the state the server most recently reported.
+         *
+         * @param minimized The observed minimised state.
+         * @param maximized The observed maximised state.
+         */
+        void SetObservedState(bool minimized, bool maximized)
+        {
+            observedMinimized_ = minimized;
+            observedMaximized_ = maximized;
+        }
 
         /**
          * @brief Applies creation-time size constraints and the resizable policy.
@@ -255,6 +309,9 @@ namespace CNA::Platform::X11 {
         bool borderless_ = false;
         bool focused_ = false;
         bool mapped_ = false;
+        bool everMapped_ = false;
+        bool observedMinimized_ = false;
+        bool observedMaximized_ = false;
         WindowFullscreenMode fullscreenMode_ = WindowFullscreenMode::Windowed;
 
         int minimumWidth_ = 0;
@@ -266,6 +323,11 @@ namespace CNA::Platform::X11 {
         int cachedHeight_ = 0;
         int cachedX_ = 0;
         int cachedY_ = 0;
+
+        /// The size a SetSize() asked for and Sync() is waiting to see applied. Zero when no
+        /// resize is outstanding.
+        int pendingWidth_ = 0;
+        int pendingHeight_ = 0;
     };
 
 } // namespace CNA::Platform::X11

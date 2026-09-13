@@ -554,6 +554,52 @@ namespace CNA::Platform::X11 {
         }
     }
 
+    void X11Platform::EmitWindowStateTransitions(X11Window& window,
+                                                 std::vector<PlatformEvent>& destination)
+    {
+        // Reads the server's answer once and reports only what CHANGED.
+        //
+        // `_NET_WM_STATE` changes for many reasons a game has no interest in -- a pager moving
+        // the window, a skip-taskbar toggle, a compositor marking it above others -- and the same
+        // state change also arrives as MapNotify/UnmapNotify. Emitting an event per property
+        // change would deliver duplicates for one user action and noise for none; deriving from
+        // the difference against what this object last observed delivers exactly one event per
+        // real transition.
+        bool minimized = false;
+        bool maximized = false;
+        {
+            // A window being closed is unmapped and then destroyed, so this read can race the
+            // DestroyNotify already in the queue behind us. That is an ordinary race, not a
+            // fault, and the trap is what keeps it from printing an alarming error line every
+            // time a user closes a window.
+            X11ErrorTrap trap(connection_->GetDisplay());
+            window.ReadStateFlags(minimized, maximized);
+            trap.Sync();
+            if (trap.HasError())
+            {
+                return;
+            }
+        }
+
+        const WindowId id = window.GetId();
+        if (minimized != window.WasMinimized())
+        {
+            WindowEvent event;
+            event.window = id;
+            event.kind = minimized ? WindowEventKind::Minimized : WindowEventKind::Restored;
+            destination.emplace_back(event);
+        }
+        if (maximized != window.WasMaximized())
+        {
+            WindowEvent event;
+            event.window = id;
+            event.kind = maximized ? WindowEventKind::Maximized : WindowEventKind::Restored;
+            destination.emplace_back(event);
+        }
+        window.SetObservedState(minimized, maximized);
+        window.SetObservedFullscreenMode(window.GetFullscreenMode());
+    }
+
     void X11Platform::TranslateEvent(XEvent& event, std::vector<PlatformEvent>& destination)
     {
         Display* display = connection_->GetDisplay();
@@ -697,45 +743,30 @@ namespace CNA::Platform::X11 {
             case MapNotify:
             {
                 if (window == nullptr) { return; }
+                const bool wasMapped = window->IsMapped();
                 window->SetMapped(true);
-                WindowEvent restored;
-                restored.window = windowId;
-                restored.kind = WindowEventKind::Restored;
-                destination.emplace_back(restored);
+                if (!wasMapped)
+                {
+                    // A window becoming visible is a return to the normal state, whether it was
+                    // hidden, iconified, or is being shown for the first time.
+                    WindowEvent restored;
+                    restored.window = windowId;
+                    restored.kind = WindowEventKind::Restored;
+                    destination.emplace_back(restored);
+                }
+                EmitWindowStateTransitions(*window, destination);
                 return;
             }
             case UnmapNotify:
             {
                 if (window == nullptr) { return; }
                 window->SetMapped(false);
-
                 // An unmap is how iconification looks on the wire under ICCCM: the window manager
                 // unmaps the window and sets WM_STATE to IconicState. Distinguishing that from an
-                // application's own Hide() means asking the server which it was.
-                //
-                // The trap is for the one case where that question cannot be answered: a window
-                // being *closed* is unmapped and then destroyed, and by the time this code runs
-                // the DestroyNotify may already be in the queue behind us -- so the property read
-                // is a BadWindow against an XID the server has released. That is an ordinary race
-                // rather than a fault, and without the trap it would print an alarming
-                // "X protocol error ignored" line every time a user closed a window.
-                bool minimized = false;
-                {
-                    X11ErrorTrap trap(display);
-                    minimized = window->IsMinimized();
-                    trap.Sync();
-                    if (trap.HasError())
-                    {
-                        minimized = false;
-                    }
-                }
-                if (minimized)
-                {
-                    WindowEvent event;
-                    event.window = windowId;
-                    event.kind = WindowEventKind::Minimized;
-                    destination.emplace_back(event);
-                }
+                // application's own Hide() means asking the server which it was, which is exactly
+                // what the transition helper does -- and it emits nothing when the answer has not
+                // changed, so a Hide() produces no phantom Minimized.
+                EmitWindowStateTransitions(*window, destination);
                 return;
             }
             case PropertyNotify:
@@ -753,21 +784,10 @@ namespace CNA::Platform::X11 {
                     }
                     return;
                 }
-                if (event.xproperty.atom == atoms.netWmState)
+                if (event.xproperty.atom == atoms.netWmState ||
+                    event.xproperty.atom == atoms.wmState)
                 {
-                    const WindowFullscreenMode mode = window->GetFullscreenMode();
-                    window->SetObservedFullscreenMode(mode);
-                    WindowEvent state;
-                    state.window = windowId;
-                    state.kind = window->IsMinimized() ? WindowEventKind::Minimized
-                                                       : WindowEventKind::Maximized;
-                    // Only a genuine transition is reported. _NET_WM_STATE changes for many
-                    // reasons -- a pager moving the window, a skip-taskbar toggle -- and
-                    // reporting Maximized for each would be noise the runtime would react to.
-                    if (window->IsMinimized())
-                    {
-                        destination.emplace_back(state);
-                    }
+                    EmitWindowStateTransitions(*window, destination);
                 }
                 return;
             }

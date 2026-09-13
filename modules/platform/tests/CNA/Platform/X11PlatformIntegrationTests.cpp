@@ -551,6 +551,81 @@ TEST_F(X11Live, ThePointerCanBeReadAndMovedInDesktopCoordinates)
     EXPECT_FLOAT_EQ(movedY, 77.0f);
 }
 
+TEST_F(X11Live, WheelNotchesAccumulateInXnaUnitsRatherThanInNotches)
+{
+    // `MouseSnapshot::scrollX/scrollY` are documented as XNA units -- 120 per whole notch, which
+    // is what `Mouse::GetState().ScrollWheelValue` reports and what every XNA game divides by.
+    // X delivers one button press per notch, so a backend that forwarded the notch count would
+    // disagree with the SDL3 backend by a factor of 120 and no compiler would notice.
+    window_ = MakeWindow();
+    window_->Show();
+    window_->Sync();
+    IPlatformMouse* mouse = platform_->GetMouse();
+    ASSERT_NE(mouse, nullptr);
+
+    if (std::system("command -v xdotool >/dev/null 2>&1") != 0)
+    {
+        GTEST_SKIP() << "xdotool is not installed, so there is no way to inject a wheel notch";
+    }
+
+    mouse->Update();
+    const int before = mouse->GetSnapshot().scrollY;
+
+    // Button 4 is X's wheel-up. Injected into this window specifically so a stray pointer
+    // position cannot send it somewhere else.
+    const std::string command = "xdotool click --window " +
+                                std::to_string(window_->GetWindowHandle()) + " 4 >/dev/null 2>&1";
+    (void) std::system(command.c_str());
+
+    float accumulated = 0.0f;
+    const bool sawWheel = PumpUntil([&accumulated](const std::vector<PlatformEvent>& events) {
+        accumulated = 0.0f;
+        for (const PlatformEvent& event : events)
+        {
+            if (const auto* wheel = std::get_if<MouseWheelEvent>(&event))
+            {
+                accumulated += wheel->y;
+            }
+        }
+        return accumulated != 0.0f;
+    });
+    if (!sawWheel)
+    {
+        GTEST_SKIP() << "this server did not deliver an injected wheel notch";
+    }
+
+    // The event itself is in notches; the snapshot is in XNA units. Both are contract-correct and
+    // they are deliberately different scales.
+    EXPECT_FLOAT_EQ(accumulated, 1.0f);
+    EXPECT_EQ(mouse->GetSnapshot().scrollY - before, 120);
+
+    // And no button event was produced for it. A game watching for clicks must not see a phantom
+    // click on every scroll notch.
+    const bool sawButton = std::any_of(seen_.begin(), seen_.end(), [](const PlatformEvent& event) {
+        return std::holds_alternative<MouseButtonEvent>(event);
+    });
+    EXPECT_FALSE(sawButton) << "a wheel notch must not reach a game as a button press";
+}
+
+TEST_F(X11Live, TheWheelButtonsAreNeverReportedAsHeldSideButtons)
+{
+    // X's pointer mask has exactly five bits and spends two of them (Button4Mask, Button5Mask) on
+    // the WHEEL. Copying them into the snapshot's X1/X2 bits -- which is what the obvious
+    // one-to-one translation does -- reports a side button held for the duration of every notch.
+    window_ = MakeWindow();
+    window_->Show();
+    window_->Sync();
+    IPlatformMouse* mouse = platform_->GetMouse();
+    ASSERT_NE(mouse, nullptr);
+
+    mouse->Update();
+    const std::uint8_t buttons = mouse->GetSnapshot().buttons;
+    // Nothing is pressed on a freshly started test server, so every bit must be clear -- and in
+    // particular the two that a wheel would wrongly set.
+    EXPECT_EQ(buttons & 0x18, 0) << "the wheel mask bits leaked into X1/X2";
+    EXPECT_EQ(buttons, 0);
+}
+
 TEST_F(X11Live, CursorShapesAreAcceptedAndVisibilityToggles)
 {
     window_ = MakeWindow();

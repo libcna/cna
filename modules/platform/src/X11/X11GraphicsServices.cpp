@@ -557,6 +557,57 @@ namespace CNA::Platform::X11 {
 
     // --- X11VulkanSurface -----------------------------------------------------------------------
 
+    namespace {
+
+        using VkGetInstanceProcAddrFn = void* (*) (void*, const char*);
+
+        /**
+         * Finds the process's `vkGetInstanceProcAddr`, without this module linking a Vulkan loader.
+         *
+         * `dlsym(RTLD_DEFAULT, ...)` first, and that is the case that matters: an application whose
+         * renderer links `libvulkan` -- which is what CNA's own Vulkan renderer does -- has the
+         * symbol in the global scope already, and using the caller's own loader is the only way the
+         * `VkInstance` it hands us is one our `vkCreateXlibSurfaceKHR` can act on.
+         *
+         * Failing that, the loader is opened here. An application that `dlopen`s Vulkan with
+         * `RTLD_LOCAL` (engines that pin a loader version do) leaves nothing in the global scope,
+         * and refusing there would mean the surface service works only for applications that
+         * happen to link the library the ordinary way. There is one system Vulkan loader, so the
+         * handle opened here resolves to the same implementation the caller's instance came from.
+         *
+         * The handle is never closed. Function pointers resolved through it stay live for as long
+         * as any surface exists, and a `dlclose` on a library whose entry points a renderer still
+         * holds is the kind of teardown crash that takes a week to find.
+         */
+        VkGetInstanceProcAddrFn ResolveVulkanProcAddr()
+        {
+            static VkGetInstanceProcAddrFn resolved = [] {
+                if (auto* fromProcess = reinterpret_cast<VkGetInstanceProcAddrFn>(
+                        dlsym(RTLD_DEFAULT, "vkGetInstanceProcAddr")))
+                {
+                    return fromProcess;
+                }
+                // The versioned SONAME first: it is what an application links, and the unversioned
+                // name exists only where the development package is installed.
+                for (const char* name : {"libvulkan.so.1", "libvulkan.so"})
+                {
+                    if (void* handle = dlopen(name, RTLD_NOW | RTLD_LOCAL))
+                    {
+                        if (auto* entry = reinterpret_cast<VkGetInstanceProcAddrFn>(
+                                dlsym(handle, "vkGetInstanceProcAddr")))
+                        {
+                            return entry;
+                        }
+                        dlclose(handle);
+                    }
+                }
+                return static_cast<VkGetInstanceProcAddrFn>(nullptr);
+            }();
+            return resolved;
+        }
+
+    } // namespace
+
     X11VulkanSurface::X11VulkanSurface(X11Connection& connection) : connection_(connection) {}
 
     std::vector<std::string> X11VulkanSurface::GetInstanceExtensions() const
@@ -602,21 +653,16 @@ namespace CNA::Platform::X11 {
         // VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR.
         constexpr int kXlibSurfaceCreateInfoType = 1000004000;
 
-        using VkGetInstanceProcAddrFn = void* (*) (void*, const char*);
         using VkCreateXlibSurfaceFn = int (*)(void*, const VkXlibSurfaceCreateInfo*, const void*,
                                               std::uint64_t*);
 
-        // Resolved from the process's own loader rather than from a library this module links.
-        // The renderer has already loaded libvulkan by the time it asks for a surface, so the
-        // symbol is present; a build with no Vulkan at all never reaches this call.
-        auto* getInstanceProcAddr = reinterpret_cast<VkGetInstanceProcAddrFn>(
-            dlsym(RTLD_DEFAULT, "vkGetInstanceProcAddr"));
+        VkGetInstanceProcAddrFn getInstanceProcAddr = ResolveVulkanProcAddr();
         if (getInstanceProcAddr == nullptr)
         {
             throw PlatformException(
                 "X11VulkanSurface::CreateSurface",
-                "vkGetInstanceProcAddr is not present in this process; the Vulkan loader is not "
-                "linked into the application");
+                "no Vulkan loader is reachable: vkGetInstanceProcAddr is absent from this process "
+                "and libvulkan.so.1 could not be opened");
         }
         auto* createSurface = reinterpret_cast<VkCreateXlibSurfaceFn>(
             getInstanceProcAddr(instance, "vkCreateXlibSurfaceKHR"));
@@ -651,10 +697,8 @@ namespace CNA::Platform::X11 {
         {
             return;
         }
-        using VkGetInstanceProcAddrFn = void* (*) (void*, const char*);
         using VkDestroySurfaceFn = void (*)(void*, std::uint64_t, const void*);
-        auto* getInstanceProcAddr = reinterpret_cast<VkGetInstanceProcAddrFn>(
-            dlsym(RTLD_DEFAULT, "vkGetInstanceProcAddr"));
+        VkGetInstanceProcAddrFn getInstanceProcAddr = ResolveVulkanProcAddr();
         if (getInstanceProcAddr == nullptr)
         {
             return;

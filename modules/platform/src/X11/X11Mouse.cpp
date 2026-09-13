@@ -10,6 +10,7 @@
 #include <X11/cursorfont.h>
 
 #include <algorithm>
+#include <limits>
 #include <vector>
 
 namespace CNA::Platform::X11 {
@@ -125,15 +126,21 @@ namespace CNA::Platform::X11 {
             snapshot_.y = windowY;
         }
 
-        // Button bits in the pointer mask are the server's own current state, which is what a
-        // level query needs: accumulating press and release events loses a button that went down
-        // while the application was not listening.
-        std::uint8_t buttons = 0;
+        // Bits 0-2 come from the server's own pointer mask, which is what a level query needs:
+        // accumulating press and release events loses a button that went down while the
+        // application was not listening.
+        //
+        // Bits 3-4 (X1, X2) do NOT. `Button4Mask` and `Button5Mask` are X's WHEEL buttons, not the
+        // side buttons -- the core protocol has exactly five mask bits and spends two of them on
+        // scrolling. Copying them into the X1/X2 bits would report a button held for the duration
+        // of every wheel notch. The core protocol has no mask bit for a real button 8 or 9 at all,
+        // so the only source for those is the press/release events the pump already tracks, which
+        // is why they are carried across rather than rebuilt here.
+        constexpr std::uint8_t kExtraButtonBits = 0x18;  // bits 3 and 4
+        std::uint8_t buttons = static_cast<std::uint8_t>(snapshot_.buttons & kExtraButtonBits);
         if ((mask & Button1Mask) != 0) { buttons |= 1u << 0; }
         if ((mask & Button2Mask) != 0) { buttons |= 1u << 1; }
         if ((mask & Button3Mask) != 0) { buttons |= 1u << 2; }
-        if ((mask & Button4Mask) != 0) { buttons |= 1u << 3; }
-        if ((mask & Button5Mask) != 0) { buttons |= 1u << 4; }
         snapshot_.buttons = buttons;
     }
 
@@ -455,8 +462,20 @@ namespace CNA::Platform::X11 {
 
     void X11Mouse::AccumulateScroll(const int x, const int y)
     {
-        snapshot_.scrollX += x;
-        snapshot_.scrollY += y;
+        // The snapshot's scroll fields are in XNA units -- 120 per whole notch, which is what
+        // `Mouse::GetState().ScrollWheelValue` reports and what every XNA game divides by. X
+        // delivers one button press per notch, so the conversion happens here rather than leaving
+        // a backend that counts in notches and one that counts in XNA units disagreeing by 120x.
+        constexpr long long kUnitsPerNotch = 120;
+        const auto accumulate = [](int& total, const int notches) {
+            const long long next =
+                static_cast<long long>(total) + static_cast<long long>(notches) * kUnitsPerNotch;
+            total = static_cast<int>(std::clamp(
+                next, static_cast<long long>(std::numeric_limits<int>::min()),
+                static_cast<long long>(std::numeric_limits<int>::max())));
+        };
+        accumulate(snapshot_.scrollX, x);
+        accumulate(snapshot_.scrollY, y);
     }
 
     void X11Mouse::ApplyCursor(const ::Cursor cursor)

@@ -205,6 +205,8 @@ namespace CNA::Platform::X11 {
         [[nodiscard]] X11Window* FindWindow(WindowId id) const;
         [[nodiscard]] X11Window* FindWindowByXid(::Window xid) const;
         void TranslateEvent(XEvent& event, std::vector<PlatformEvent>& destination);
+        void EmitWindowStateTransitions(X11Window& window,
+                                        std::vector<PlatformEvent>& destination);
 
         std::unique_ptr<X11Connection> connection_;
         /// Why the connection could not be opened, when it could not. Empty otherwise.

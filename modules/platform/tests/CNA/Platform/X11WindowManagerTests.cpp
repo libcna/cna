@@ -47,14 +47,33 @@ bool HasWindowManagerBinary()
     return std::system("command -v openbox >/dev/null 2>&1") == 0;
 }
 
-/// Starts a window manager on the current display and stops it in the destructor.
+/// Starts one window manager for the whole suite and stops it when the process exits.
+///
+/// ### Why once, and not per test
+///
+/// The first version started an `openbox --replace` per test and killed it in `TearDown`. Twelve
+/// start/replace/SIGTERM cycles in a row is itself unstable: `--replace` handshakes with the
+/// outgoing window manager, and terminating one mid-handshake leaves the display unmanaged for a
+/// moment. `MinimizeAndRestoreRoundTrip` failed intermittently inside the full suite while passing
+/// every time in isolation -- which is the signature of exactly that, and reads as flakiness in
+/// the backend rather than as a fault in the harness.
 ///
 /// Owning it here rather than expecting the harness to provide one keeps the test honest about
 /// what it needs: a run with no window manager skips instead of quietly measuring nothing.
-class ScopedWindowManager
+class SharedWindowManager
 {
 public:
-    ScopedWindowManager()
+    /// Gets the process-wide window manager, starting it on first use.
+    static SharedWindowManager& Instance()
+    {
+        static SharedWindowManager manager;
+        return manager;
+    }
+
+    [[nodiscard]] bool Started() const { return pid_ > 0; }
+
+private:
+    SharedWindowManager()
     {
         pid_ = fork();
         if (pid_ == 0)
@@ -68,7 +87,7 @@ public:
         }
     }
 
-    ~ScopedWindowManager()
+    ~SharedWindowManager()
     {
         if (pid_ > 0)
         {
@@ -78,12 +97,9 @@ public:
         }
     }
 
-    ScopedWindowManager(const ScopedWindowManager&) = delete;
-    ScopedWindowManager& operator=(const ScopedWindowManager&) = delete;
+    SharedWindowManager(const SharedWindowManager&) = delete;
+    SharedWindowManager& operator=(const SharedWindowManager&) = delete;
 
-    [[nodiscard]] bool Started() const { return pid_ > 0; }
-
-private:
     ::pid_t pid_ = -1;
 };
 
@@ -102,8 +118,7 @@ protected:
                             "perform them and asserting them here would test the environment";
         }
 
-        windowManager_ = std::make_unique<ScopedWindowManager>();
-        ASSERT_TRUE(windowManager_->Started());
+        ASSERT_TRUE(SharedWindowManager::Instance().Started());
 
         platform_ = PlatformFactory::Create("X11");
         try
@@ -133,7 +148,7 @@ protected:
             platform_->ReleaseSubsystem(PlatformSubsystem::Video);
         }
         platform_.reset();
-        windowManager_.reset();
+        // The window manager is deliberately NOT stopped here: it is shared by the whole suite.
     }
 
     bool WaitForWindowManager()
@@ -210,7 +225,6 @@ protected:
         return false;
     }
 
-    std::unique_ptr<ScopedWindowManager> windowManager_;
     std::unique_ptr<IPlatform> platform_;
     std::unique_ptr<IPlatformWindow> window_;
     std::vector<PlatformEvent> seen_;
@@ -326,6 +340,72 @@ TEST_F(X11WithWindowManager, MaximizeAndRestoreChangeTheWindowSize)
         return now.width == before.width && now.height == before.height;
     });
     EXPECT_TRUE(shrank) << "restoring did not return the window to its former size";
+}
+
+TEST_F(X11WithWindowManager, MaximizingReportsAMaximizedEventAndRestoringReportsARestoredOne)
+{
+    // The event half of maximise, which is separate from the size half above and was genuinely
+    // missing: the first implementation computed a Maximized event and then only ever pushed the
+    // Minimized one, so a game reacting to maximise never heard. A test that checked only the
+    // resulting window size would have passed throughout.
+    window_ = MakeVisibleWindow();
+    const WindowId id = window_->GetId();
+    seen_.clear();
+
+    window_->Maximize();
+    const bool sawMaximized = PumpUntil([id](const std::vector<PlatformEvent>& events) {
+        return std::any_of(events.begin(), events.end(), [id](const PlatformEvent& event) {
+            const auto* window = std::get_if<WindowEvent>(&event);
+            return window != nullptr && window->window == id &&
+                   window->kind == WindowEventKind::Maximized;
+        });
+    });
+    EXPECT_TRUE(sawMaximized);
+
+    seen_.clear();
+    window_->Restore();
+    const bool sawRestored = PumpUntil([id](const std::vector<PlatformEvent>& events) {
+        return std::any_of(events.begin(), events.end(), [id](const PlatformEvent& event) {
+            const auto* window = std::get_if<WindowEvent>(&event);
+            return window != nullptr && window->window == id &&
+                   window->kind == WindowEventKind::Restored;
+        });
+    });
+    EXPECT_TRUE(sawRestored);
+}
+
+TEST_F(X11WithWindowManager, AStateChangeThatChangesNothingProducesNoEvent)
+{
+    // `_NET_WM_STATE` changes for reasons a game has no interest in, and the same user action
+    // also arrives as MapNotify/UnmapNotify. Deriving events from the DIFFERENCE rather than from
+    // the property change is what keeps one user action from producing three events.
+    window_ = MakeVisibleWindow();
+    const WindowId id = window_->GetId();
+
+    window_->Maximize();
+    PumpUntil([id](const std::vector<PlatformEvent>& events) {
+        return std::any_of(events.begin(), events.end(), [id](const PlatformEvent& event) {
+            const auto* window = std::get_if<WindowEvent>(&event);
+            return window != nullptr && window->window == id &&
+                   window->kind == WindowEventKind::Maximized;
+        });
+    });
+
+    seen_.clear();
+    // Asking for a state the window is already in.
+    window_->Maximize();
+    PumpUntil([](const std::vector<PlatformEvent>&) { return false; },
+              std::chrono::milliseconds(600));
+
+    const int stateEvents =
+        static_cast<int>(std::count_if(seen_.begin(), seen_.end(), [id](const PlatformEvent& e) {
+            const auto* window = std::get_if<WindowEvent>(&e);
+            return window != nullptr && window->window == id &&
+                   (window->kind == WindowEventKind::Maximized ||
+                    window->kind == WindowEventKind::Minimized ||
+                    window->kind == WindowEventKind::Restored);
+        }));
+    EXPECT_EQ(stateEvents, 0) << "re-requesting a state the window already has must be silent";
 }
 
 TEST_F(X11WithWindowManager, AFocusedWindowReportsFocusAndTheEventThatMatchesIt)

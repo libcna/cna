@@ -7,7 +7,9 @@
 #include "X11Error.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
+#include <thread>
 #include <vector>
 
 namespace CNA::Platform::X11 {
@@ -171,8 +173,17 @@ namespace CNA::Platform::X11 {
         // device pixels, and a scaled session scales fonts and toolkits rather than the server's
         // coordinate space. So the drawable size IS the client size here, and reporting anything
         // else would make a renderer size its swapchain wrongly.
-        const WindowBounds bounds = GetClientBounds();
-        return {bounds.width, bounds.height};
+        //
+        // Deliberately NOT delegating to GetClientBounds(): that one also translates the origin to
+        // root coordinates, which is a second round trip for a position this caller does not
+        // want. A surface presenter reads the target size once per frame, so halving its server
+        // traffic is worth four lines.
+        XWindowAttributes attributes{};
+        if (XGetWindowAttributes(connection_.GetDisplay(), window_, &attributes) == 0)
+        {
+            return {cachedWidth_, cachedHeight_};
+        }
+        return {attributes.width, attributes.height};
     }
 
     void X11Window::SetSize(const int width, const int height)
@@ -196,6 +207,10 @@ namespace CNA::Platform::X11 {
         XResizeWindow(display, window_, static_cast<unsigned int>(width),
                       static_cast<unsigned int>(height));
         XFlush(display);
+        // Recorded so Sync() knows what it is waiting for. See Sync() for why an XSync alone is
+        // not enough under a window manager.
+        pendingWidth_ = width;
+        pendingHeight_ = height;
     }
 
     float X11Window::GetDisplayScale() const
@@ -339,16 +354,56 @@ namespace CNA::Platform::X11 {
         {
             XMapRaised(display, window_);
         }
-        SetNetWmState(atoms.netWmStateMaximizedVert, atoms.netWmStateMaximizedHorz, false);
+        // Only when it is actually maximised. Sending an un-maximise to a window that is not
+        // maximised is a second window-manager round trip that does nothing, and doing it in the
+        // same call as a de-iconify gives the two requests something to race over.
+        if (HasNetWmState(atoms.netWmStateMaximizedVert) ||
+            HasNetWmState(atoms.netWmStateMaximizedHorz))
+        {
+            SetNetWmState(atoms.netWmStateMaximizedVert, atoms.netWmStateMaximizedHorz, false);
+        }
         XFlush(display);
     }
 
     void X11Window::Sync()
     {
+        Display* display = connection_.GetDisplay();
+
         // The contract's reason for this method exactly: X11 window state changes are requests to
         // the server and, for anything a window manager mediates, requests to another process.
-        // XSync round-trips the connection so the server has certainly processed everything sent.
-        XSync(connection_.GetDisplay(), False);
+        XSync(display, kXFalse);
+
+        if (pendingWidth_ <= 0 || pendingHeight_ <= 0)
+        {
+            return;
+        }
+
+        // XSync alone is NOT enough for a resize. On a managed window `XResizeWindow` is a
+        // *redirected* request: the server does not apply it, it sends a ConfigureRequest to the
+        // window manager, which then decides and issues the real configure. XSync guarantees only
+        // that our request reached the server -- so `SetSize(); Sync(); GetClientBounds()` read
+        // the OLD size whenever a window manager was running, and passed under a bare Xvfb where
+        // there is none. The cross-implementation conformance suite caught exactly that.
+        //
+        // Polling the geometry rather than waiting on the ConfigureNotify, because consuming that
+        // event here would take it from PollEvents and the application would never see the
+        // Resized it is entitled to.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            XWindowAttributes attributes{};
+            if (XGetWindowAttributes(display, window_, &attributes) != 0 &&
+                attributes.width == pendingWidth_ && attributes.height == pendingHeight_)
+            {
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        // Cleared either way. A window manager may legitimately refuse a size -- size increments,
+        // a maximised window, a screen too small -- and blocking again on the next Sync() for a
+        // request that will never be honoured would turn one refusal into a permanent stall.
+        pendingWidth_ = 0;
+        pendingHeight_ = 0;
     }
 
     bool X11Window::IsMinimized() const
@@ -373,6 +428,58 @@ namespace CNA::Platform::X11 {
             return state == IconicState;
         }
         return false;
+    }
+
+    void X11Window::ReadStateFlags(bool& minimized, bool& maximized) const
+    {
+        minimized = false;
+        maximized = false;
+        if (window_ == kNone)
+        {
+            return;
+        }
+        const X11Atoms& atoms = connection_.GetAtoms();
+
+        std::vector<unsigned char> data;
+        int format = 0;
+        bool sawNetState = false;
+        bool maximizedVertically = false;
+        bool maximizedHorizontally = false;
+
+        if (connection_.ReadProperty(window_, atoms.netWmState, XA_ATOM, format, data) &&
+            format == 32)
+        {
+            sawNetState = true;
+            const std::size_t count = data.size() / sizeof(long);
+            for (std::size_t index = 0; index < count; ++index)
+            {
+                long value = 0;
+                std::memcpy(&value, data.data() + index * sizeof(long), sizeof(long));
+                const auto state = static_cast<Atom>(value);
+                if (state == atoms.netWmStateHidden) { minimized = true; }
+                else if (state == atoms.netWmStateMaximizedVert) { maximizedVertically = true; }
+                else if (state == atoms.netWmStateMaximizedHorz) { maximizedHorizontally = true; }
+            }
+        }
+        // Maximised means both axes. A window maximised vertically only -- which several window
+        // managers offer on a double-click of the title bar edge -- is not "maximised" in the
+        // sense a game asking about it means.
+        maximized = maximizedVertically && maximizedHorizontally;
+
+        if (!sawNetState || !minimized)
+        {
+            // The ICCCM fallback, and the correction for an EWMH window manager that iconifies
+            // without setting _NET_WM_STATE_HIDDEN.
+            std::vector<unsigned char> iccm;
+            int iccmFormat = 0;
+            if (connection_.ReadProperty(window_, atoms.wmState, atoms.wmState, iccmFormat, iccm) &&
+                iccmFormat == 32 && iccm.size() >= sizeof(long))
+            {
+                long state = 0;
+                std::memcpy(&state, iccm.data(), sizeof(long));
+                minimized = minimized || state == IconicState;
+            }
+        }
     }
 
     std::string X11Window::GetDisplayName() const
@@ -489,11 +596,18 @@ namespace CNA::Platform::X11 {
         }
         const X11Atoms& atoms = connection_.GetAtoms();
 
-        // Before the window is mapped, a _NET_WM_STATE client message has nobody to act on it:
-        // the window manager only starts managing the window at MapRequest. So an unmapped window
-        // gets the property written directly, which is the ICCCM-sanctioned way to ask for an
-        // initial state, and a mapped one gets the client message.
-        if (!mapped_)
+        // Before the window has EVER been mapped, a _NET_WM_STATE client message has nobody to
+        // act on it: the window manager only starts managing the window at MapRequest. So a
+        // never-mapped window gets the property written directly, which is the sanctioned way to
+        // ask for an initial state.
+        //
+        // The condition is "never mapped", NOT "not mapped right now". An iconified window is
+        // unmapped and still managed, and writing the property directly under the window
+        // manager's feet -- which is what the first version did -- raced its own map request:
+        // Restore() de-iconified and then overwrote the state the window manager was in the
+        // middle of updating, so the window intermittently stayed iconic. It failed roughly one
+        // run in three inside the full suite while passing every time in isolation.
+        if (!everMapped_)
         {
             std::vector<unsigned char> data;
             int format = 0;

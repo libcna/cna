@@ -18,18 +18,26 @@
 #     suite records that rather than reporting red.
 #
 # Usage:
-#   tools/platform/x11_test_server.sh [--window-manager] <command> [args...]
+#   tools/platform/x11_test_server.sh [--require-window-manager] <command> [args...]
+#
+# `--require-window-manager` CHECKS for a window manager binary and skips without one; it does not
+# start one. Starting it here would be the obvious thing and is wrong: the window-manager suite's
+# own fixture starts and stops `openbox` per test, because a test that needs a window manager also
+# needs to know when it became ready. Two instances raced -- the fixture's `openbox --replace`
+# displaced the launcher's mid-run and a window left fullscreen stopped being noticed -- which is
+# exactly the kind of failure that reads as flakiness. So the launcher owns the server and the
+# fixture owns the window manager, with no overlap.
 
 set -u
 
-WANT_WINDOW_MANAGER=0
-if [ "${1:-}" = "--window-manager" ]; then
-    WANT_WINDOW_MANAGER=1
+REQUIRE_WINDOW_MANAGER=0
+if [ "${1:-}" = "--require-window-manager" ]; then
+    REQUIRE_WINDOW_MANAGER=1
     shift
 fi
 
 if [ $# -eq 0 ]; then
-    echo "usage: $0 [--window-manager] <command> [args...]" >&2
+    echo "usage: $0 [--require-window-manager] <command> [args...]" >&2
     exit 2
 fi
 
@@ -38,7 +46,7 @@ if ! command -v Xvfb >/dev/null 2>&1; then
     exit 77
 fi
 
-if [ "$WANT_WINDOW_MANAGER" -eq 1 ] && ! command -v openbox >/dev/null 2>&1; then
+if [ "$REQUIRE_WINDOW_MANAGER" -eq 1 ] && ! command -v openbox >/dev/null 2>&1; then
     echo "SKIP: openbox is not installed; EWMH window-state transitions have no window manager" >&2
     exit 77
 fi
@@ -62,12 +70,7 @@ fi
 Xvfb ":$DISPLAY_NUMBER" -screen 0 1280x1024x24 -nolisten tcp >/dev/null 2>&1 &
 XVFB_PID=$!
 
-WM_PID=""
 cleanup() {
-    if [ -n "$WM_PID" ]; then
-        kill "$WM_PID" 2>/dev/null
-        wait "$WM_PID" 2>/dev/null
-    fi
     kill "$XVFB_PID" 2>/dev/null
     wait "$XVFB_PID" 2>/dev/null
     rm -f "/tmp/.X$DISPLAY_NUMBER-lock"
@@ -91,13 +94,5 @@ fi
 
 DISPLAY=":$DISPLAY_NUMBER"
 export DISPLAY
-
-if [ "$WANT_WINDOW_MANAGER" -eq 1 ]; then
-    openbox >/dev/null 2>&1 &
-    WM_PID=$!
-    # openbox claims _NET_SUPPORTING_WM_CHECK asynchronously. The test fixture waits for the
-    # capability itself, so this is only a head start rather than a correctness dependency.
-    sleep 0.5
-fi
 
 "$@"

@@ -6,6 +6,7 @@
 
 #include <X11/keysym.h>
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 
 namespace CNA::Platform::X11 {
@@ -533,7 +534,24 @@ namespace CNA::Platform::X11 {
                 return {};
             }
             const char* name = XKeysymToString(keysym);
-            return name != nullptr ? std::string(name) : std::string();
+            if (name == nullptr)
+            {
+                return {};
+            }
+
+            // X's keysym names are the protocol's own spelling, not a label: the A key is `a` and
+            // the space bar is `space`. This method's contract is the name a key-binding UI shows
+            // the user, which is what is printed on the keycap -- `A` and `Space`. The existing
+            // cross-implementation suite pins exactly that (KeyboardKeyNameTests asserts `"A"`,
+            // `"Z"` and `"Space"`), and it caught this: the first implementation returned X's
+            // spelling unchanged and the whole backend disagreed with every other one.
+            std::string label(name);
+            if (!label.empty())
+            {
+                label[0] = static_cast<char>(
+                    std::toupper(static_cast<unsigned char>(label[0])));
+            }
+            return label;
         }
         return {};
     }
@@ -544,7 +562,29 @@ namespace CNA::Platform::X11 {
         {
             return KeyCode::None;
         }
-        const KeySym keysym = XStringToKeysym(name.c_str());
+
+        // Tried as given first, because a caller may legitimately pass X's own spelling.
+        KeySym keysym = XStringToKeysym(name.c_str());
+
+        // Then as X spells it. GetKeyName capitalises for display, so `Space` must resolve even
+        // though X calls that keysym `space` -- otherwise the name this very class produces does
+        // not round-trip through it, which is what KeyboardKeyNameTests.NameToKeyReversesKeyToName
+        // asserts across every implementation.
+        if (keysym == NoSymbol)
+        {
+            std::string lowered = name;
+            lowered[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(lowered[0])));
+            keysym = XStringToKeysym(lowered.c_str());
+        }
+        if (keysym == NoSymbol)
+        {
+            // A single letter is the remaining case: `A` is the label, `a` is the keysym whose
+            // virtual key it names, and both must answer KeyCode::A.
+            std::string allLower = name;
+            std::transform(allLower.begin(), allLower.end(), allLower.begin(),
+                           [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            keysym = XStringToKeysym(allLower.c_str());
+        }
         if (keysym == NoSymbol)
         {
             return KeyCode::None;
