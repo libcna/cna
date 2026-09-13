@@ -11,6 +11,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ### Added
 
+- A native Win32 platform backend, selected with `CNA_PLATFORM=WIN32` on Windows targets and
+  refused loudly everywhere else. It is built directly on user32/gdi32/opengl32/ole32/shell32 and
+  uses no SDL for windowing, events, keyboard, mouse, text input, timing, clipboard, displays or
+  dialogs, so `CNA_PLATFORM=WIN32 + CNA_AUDIO_PLATFORM=NULL + CNA_GRAPHICS_RENDERER=DIRECTX11`
+  (or `DIRECTX12`) is a supported configuration with no SDL in it at all. The platform and
+  renderer axes stay independent: DirectX receives the window through the existing generic
+  `NativeWindowHandle`, and no renderer changed. See
+  [`docs/platform-win32.md`](docs/platform-win32.md) for the capability boundary and
+  [`plans/plan_win32.md`](plans/plan_win32.md) for the task log.
+
+### Changed
+
+- The root configure no longer builds vendored SDL3 for a configuration that does not use it. The
+  gate is conservative — every unset or SDL3-valued axis keeps SDL3, so the default build is
+  unaffected — and applies only when the platform, audio and renderer selections have all
+  explicitly said otherwise with tests and examples off.
+
 - Capability-gated CNAEXT base-instance drawing through
   `GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT`, with the append-only
   `RendererFeature::BaseInstanceDrawing` / C ABI 0.26.0 feature identity and a Vulkan
