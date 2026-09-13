@@ -11,12 +11,27 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 
 namespace CNA::Internal::Renderers::Rlgl
 {
+    class RlglThreadContextLeaseControl
+    {
+    public:
+        explicit RlglThreadContextLeaseControl(
+            std::shared_ptr<PlatformGlContextOwner> platformContext)
+            : platformContext(std::move(platformContext))
+        {
+        }
+
+        std::shared_ptr<PlatformGlContextOwner> platformContext;
+        std::recursive_mutex mutex;
+    };
+
     namespace
     {
         constexpr const char* kRendererName = "RLGL";
@@ -66,6 +81,71 @@ namespace CNA::Internal::Renderers::Rlgl
                 std::string(kRendererName) + ": " + operation +
                 " is not implemented yet (plans/plan_rlgl.md " + task + ")");
         }
+
+        class RlglThreadContextLease final : public IRendererThreadContextLease
+        {
+        public:
+            explicit RlglThreadContextLease(std::function<void()> release)
+                : release_(std::move(release))
+            {
+            }
+
+            ~RlglThreadContextLease() override
+            {
+                release_();
+            }
+
+        private:
+            std::function<void()> release_;
+        };
+
+        struct RlglThreadContextLeaseState
+        {
+            std::size_t depth = 0;
+            CNA::Platform::GlContextBinding previousBinding;
+            RendererThreadContextLeaseRelease release =
+                RendererThreadContextLeaseRelease::RestorePreviousBinding;
+        };
+
+        std::unordered_map<const RlglThreadContextLeaseControl*, RlglThreadContextLeaseState>&
+        ThreadContextLeaseStates()
+        {
+            static thread_local std::unordered_map<
+                const RlglThreadContextLeaseControl*, RlglThreadContextLeaseState> states;
+            return states;
+        }
+
+        void ReleaseThreadContextLease(
+            const std::shared_ptr<RlglThreadContextLeaseControl>& control) noexcept
+        {
+            auto& states = ThreadContextLeaseStates();
+            const auto it = states.find(control.get());
+            if (it == states.end() || it->second.depth == 0)
+            {
+                CNA::Logger::Error(
+                    "RLGL renderer context lease released without matching acquisition",
+                    CNA::LogCategory::RENDER);
+                return;
+            }
+
+            --it->second.depth;
+            if (it->second.depth == 0)
+            {
+                try
+                {
+                    control->platformContext->RestoreBinding(
+                        it->second.previousBinding, it->second.release);
+                }
+                catch (const std::exception& error)
+                {
+                    CNA::Logger::Error(
+                        std::string("Failed to release RLGL context ownership: ") + error.what(),
+                        CNA::LogCategory::RENDER);
+                }
+                states.erase(it);
+            }
+            control->mutex.unlock();
+        }
     }
 
     RlglRenderer::RlglRenderer(const GraphicsRendererCreateArgs& args)
@@ -101,6 +181,8 @@ namespace CNA::Internal::Renderers::Rlgl
             }
 
             platformContext_->SetSwapInterval(swapInterval_);
+            threadContextLeaseControl_ =
+                std::make_shared<RlglThreadContextLeaseControl>(platformContext_);
             IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
             registered_ = true;
 
@@ -115,6 +197,7 @@ namespace CNA::Internal::Renderers::Rlgl
                 Bridge::Shutdown();
                 rlglInitialized_ = false;
             }
+            threadContextLeaseControl_.reset();
             platformContext_.reset();
             ReleaseLifecycle();
             lifecycleClaimed_ = false;
@@ -124,6 +207,11 @@ namespace CNA::Internal::Renderers::Rlgl
 
     RlglRenderer::~RlglRenderer()
     {
+        const auto leaseControl = threadContextLeaseControl_;
+        std::unique_lock<std::recursive_mutex> operationLock;
+        if (leaseControl)
+            operationLock = std::unique_lock<std::recursive_mutex>(leaseControl->mutex);
+
         if (registered_)
         {
             IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
@@ -166,6 +254,7 @@ namespace CNA::Internal::Renderers::Rlgl
             rlglInitialized_ = false;
         }
 
+        threadContextLeaseControl_.reset();
         platformContext_.reset();
         if (lifecycleClaimed_)
         {
@@ -179,14 +268,14 @@ namespace CNA::Internal::Renderers::Rlgl
         const bool wantMultisampling = requestedMultiSampleCount > 1;
         try
         {
-            platformContext_ = std::make_unique<PlatformGlContextOwner>(
+            platformContext_ = std::make_shared<PlatformGlContextOwner>(
                 *platformGlService_, surface_.GetWindowId(),
                 RequestedContext(requestedMultiSampleCount, wantMultisampling));
         }
         catch (const CNA::Platform::PlatformException&)
         {
             if (!wantMultisampling) throw;
-            platformContext_ = std::make_unique<PlatformGlContextOwner>(
+            platformContext_ = std::make_shared<PlatformGlContextOwner>(
                 *platformGlService_, surface_.GetWindowId(),
                 RequestedContext(requestedMultiSampleCount, false));
         }
@@ -206,6 +295,45 @@ namespace CNA::Internal::Renderers::Rlgl
             granted.multisampleBuffers > 0 && granted.multisampleSamples > 1
                 ? granted.multisampleSamples
                 : 0;
+    }
+
+    std::unique_ptr<IRendererThreadContextLease>
+    RlglRenderer::AcquireThreadContextLeaseEXT(
+        const RendererThreadContextLeaseRelease release)
+    {
+        const auto control = threadContextLeaseControl_;
+        if (!control)
+            throw std::runtime_error("RLGL: renderer context is no longer available");
+
+        control->mutex.lock();
+        try
+        {
+            auto& state = ThreadContextLeaseStates()[control.get()];
+            if (state.depth == 0)
+            {
+                state.previousBinding = control->platformContext->GetCurrentBinding();
+                state.release = release;
+                control->platformContext->MakeCurrent();
+            }
+            ++state.depth;
+        }
+        catch (...)
+        {
+            ThreadContextLeaseStates().erase(control.get());
+            control->mutex.unlock();
+            throw;
+        }
+
+        try
+        {
+            return std::make_unique<RlglThreadContextLease>(
+                [control]() { ReleaseThreadContextLease(control); });
+        }
+        catch (...)
+        {
+            ReleaseThreadContextLease(control);
+            throw;
+        }
     }
 
     void RlglRenderer::Clear(const float r, const float g, const float b, const float a)

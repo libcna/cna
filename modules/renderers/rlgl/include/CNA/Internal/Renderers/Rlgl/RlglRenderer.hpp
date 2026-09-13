@@ -15,6 +15,7 @@ namespace Microsoft::Xna::Framework::Graphics
 namespace CNA::Internal::Renderers::Rlgl
 {
     class RlglCompiledEffect;
+    class RlglThreadContextLeaseControl;
 
     namespace Detail
     {
@@ -45,6 +46,16 @@ namespace CNA::Internal::Renderers::Rlgl
 
         /** @brief Shuts down rlgl before releasing the CNA-owned OpenGL context. */
         ~RlglRenderer() override;
+
+        /**
+         * @brief Serializes a complete operation while owning this renderer's GL context.
+         * @param release Selects whether this renderer's own prior binding is restored or released.
+         * @return A token that releases the calling thread's context ownership when destroyed.
+         */
+        [[nodiscard]] std::unique_ptr<IRendererThreadContextLease>
+            AcquireThreadContextLeaseEXT(
+                RendererThreadContextLeaseRelease release =
+                    RendererThreadContextLeaseRelease::RestorePreviousBinding) override;
 
         /** @brief RLGL devices cannot be copied because each owns a GL context lifecycle. */
         RlglRenderer(const RlglRenderer&) = delete;
@@ -734,7 +745,8 @@ namespace CNA::Internal::Renderers::Rlgl
 
         PlatformGlSurfaceState surface_;
         CNA::Platform::IPlatformGlContext* platformGlService_ = nullptr;
-        std::unique_ptr<PlatformGlContextOwner> platformContext_;
+        std::shared_ptr<PlatformGlContextOwner> platformContext_;
+        std::shared_ptr<RlglThreadContextLeaseControl> threadContextLeaseControl_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;

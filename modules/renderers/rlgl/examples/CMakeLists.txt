@@ -12,6 +12,30 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_smoke PRIVATE SDL3::SDL3main)
     endif()
 
+    add_executable(cna_test_rlgl_thread_context_lease_binding
+        rlgl_thread_context_lease_binding_test.cpp)
+    target_link_libraries(cna_test_rlgl_thread_context_lease_binding
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_thread_context_lease_binding PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_thread_context_lease_exclusion
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_thread_context_lease_exclusion_test.cpp")
+    target_link_libraries(cna_test_rlgl_thread_context_lease_exclusion
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_thread_context_lease_exclusion PRIVATE SDL3::SDL3main)
+    endif()
+
+    add_executable(cna_test_rlgl_background_content_context
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../easygl/examples/easygl_background_content_context_test.cpp")
+    target_link_libraries(cna_test_rlgl_background_content_context
+        PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_background_content_context PRIVATE SDL3::SDL3main)
+    endif()
+
     add_executable(cna_test_rlgl_texture rlgl_texture_test.cpp)
     target_include_directories(cna_test_rlgl_texture PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     target_link_libraries(cna_test_rlgl_texture PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
@@ -423,6 +447,23 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         enable_testing()
         cna_register_renderer_test(NAME Rlgl_Smoke COMMAND cna_test_rlgl_smoke
             TIMEOUT 60 LABELS "GraphicsSmoke;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ThreadContextLeaseBinding
+            COMMAND cna_test_rlgl_thread_context_lease_binding
+            TIMEOUT 60 LABELS "GraphicsLifetime;GraphicsThreading;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ThreadContextLeaseExclusion
+            COMMAND cna_test_rlgl_thread_context_lease_exclusion
+            TIMEOUT 60 LABELS "GraphicsLifetime;GraphicsThreading;Rlgl"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_BackgroundContentContext
+            COMMAND cna_test_rlgl_background_content_context
+            TIMEOUT 120 LABELS "GraphicsLifetime;GraphicsThreading;GraphicsContent;Rlgl"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_Texture COMMAND cna_test_rlgl_texture
             TIMEOUT 60 LABELS "GraphicsTexture;Rlgl"

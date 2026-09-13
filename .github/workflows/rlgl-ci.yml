@@ -106,6 +106,9 @@ jobs:
           cmake --build build-rlgl --parallel 2 --target \
             cna_renderer_rlgl \
             cna_test_rlgl_smoke \
+            cna_test_rlgl_thread_context_lease_binding \
+            cna_test_rlgl_thread_context_lease_exclusion \
+            cna_test_rlgl_background_content_context \
             cna_test_rlgl_texture \
             cna_test_rlgl_texture_cube \
             cna_test_rlgl_texture_cube_oracle \

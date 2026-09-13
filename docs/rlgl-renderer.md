@@ -42,6 +42,7 @@ success.
 | Capability | Status | Evidence or current behavior |
 |---|---:|---|
 | CNA-created GL 3.3 core context and standalone rlgl initialization | ✅ | Two sequential device lifecycles under SDL3's offscreen driver and Mesa llvmpipe |
+| Owning-thread context lease | ✅ | Exact restore/release and nested semantics, 240 two-worker acquisitions without frame overlap, a real background XNB model load, and a subsequent ordinary frame passed `RLGL-053` |
 | `GraphicsDevice`, color/depth/stencil clear, backbuffer RGBA8 readback | ✅ | Exact pixels checked before `Present()`; combined clear also exercises depth/stencil planes |
 | Explicit `Present()` and swap-interval forwarding | ✅ | Both device lifecycles present; requested interval zero is retained and sent to the platform context |
 | Drawable resize and presentation rectangle refresh | ✅ | A `GraphicsDeviceManager` resize is followed by dimension and post-resize pixel checks |
@@ -68,7 +69,7 @@ success.
 | Classic stock-effect instancing | ✅ | Hardware indexed instancing preserves per-stream offsets/divisors, every topology, both index widths, start/base ranges, effect-World composition, dynamic updates, and state recovery. The shared suites passed 70/72 tests (two named EasyGL/D3D skips), the parity sample passed 6/6 pixels, the native-state fixture passed 28/28 gates, and both focused executables passed AddressSanitizer in `RLGL-016` |
 | Occlusion queries | ✅ | A renderer-private GL 3.3 bridge uses exact `GL_SAMPLES_PASSED`; visible/additive/zero/occluded counts, asynchronous completion, permissive Begin/End sequencing, state recovery, and resource/device lifetime passed `RLGL-052` |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
-| Device loss/reset and resource restoration | ❌ | Not claimed until `RLGL-017` completes |
+| Device loss/reset and resource restoration | ❌ | Cross-thread leasing is complete; teardown hardening, recovery shadows/recreation, resources, Reset diagnostics, and failure injection remain `RLGL-054`–`RLGL-058` before `RLGL-017` can complete |
 
 `SupportsCapability(AnisotropicFiltering)` follows rlgl's live extension probe and measured ceiling.
 `MultipleRenderTargets` additionally requires the current device profile's ceiling to exceed one,
@@ -107,7 +108,11 @@ cmake -S . -B cmake-build-rlgl -G Ninja \
       -DCNA_GRAPHICS_RENDERER=RLGL \
       -DCNA_BUILD_TESTS=OFF
 cmake --build cmake-build-rlgl --parallel 3 --target \
-      cna_renderer_rlgl cna_test_rlgl_smoke cna_test_rlgl_texture cna_test_rlgl_sampler \
+      cna_renderer_rlgl cna_test_rlgl_smoke \
+      cna_test_rlgl_thread_context_lease_binding \
+      cna_test_rlgl_thread_context_lease_exclusion \
+      cna_test_rlgl_background_content_context \
+      cna_test_rlgl_texture cna_test_rlgl_sampler \
       cna_test_rlgl_texture_cube cna_test_rlgl_texture_cube_oracle \
       cna_test_rlgl_state cna_test_rlgl_spritebatch cna_test_rlgl_buffer \
       cna_test_rlgl_primitive cna_test_rlgl_instanced_parity \
