@@ -3124,6 +3124,9 @@ void main()
         {
             rlDisableVertexAttribute(location);
             rlSetVertexAttributeDivisor(location, 0);
+            constexpr float defaultAttribute[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+            rlSetVertexAttributeDefault(
+                static_cast<int>(location), defaultAttribute, RL_SHADER_ATTRIB_VEC4, 4);
         }
         for (int index = 0; index < attributeCount; ++index)
         {
