@@ -135,6 +135,7 @@ jobs:
             cna_test_rlgl_buffer \
             cna_test_rlgl_primitive \
             cna_test_rlgl_effect \
+            cna_test_rlgl_shader_effect \
             cna_test_rlgl_xna_pixel_center \
             cna_test_rlgl_basiceffect_one_light \
             cna_test_rlgl_basiceffect_multilight_emissive \

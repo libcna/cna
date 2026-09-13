@@ -3,6 +3,7 @@
 #include "CNA/Internal/Renderers/Rlgl/RlglRenderer.hpp"
 
 #include "CNA/Logger.hpp"
+#include "CNA/ShaderLanguageEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/NotSupportedException.hpp"
@@ -1426,12 +1427,22 @@ namespace CNA::Internal::Renderers::Rlgl
         case CNA::GraphicsCapability::MultipleRenderTargets:
             return maxRenderTargets_ >= 2;
         case CNA::GraphicsCapability::OcclusionQuery:
+        case CNA::GraphicsCapability::CustomEffects:
         case CNA::GraphicsCapability::MultiStreamVertexInput:
         case CNA::GraphicsCapability::Instancing:
             return true;
         default:
             return false;
         }
+    }
+
+    bool RlglRenderer::SupportsShaderLanguageEXT(
+        const int language, const int stage) const
+    {
+        if (language != static_cast<int>(CNA::ShaderLanguageEXT::GlslDesktop))
+            return false;
+        return stage == static_cast<int>(CNA::ShaderStageEXT::Vertex) ||
+            stage == static_cast<int>(CNA::ShaderStageEXT::Fragment);
     }
 
     void RlglRenderer::ReadBackbuffer(
@@ -1460,6 +1471,13 @@ namespace CNA::Internal::Renderers::Rlgl
                 "(plans/plan_rlgl.md RLGL-045)");
         }
         return CreateTextureCubeRenderer(size, mipMap, surfaceFormat, resourceLifetime_);
+    }
+
+    std::unique_ptr<IEffectRenderer> RlglRenderer::CreateEffectRenderer(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        return Bridge::CreateShaderEffectRenderer(
+            vertSrc, fragSrc, resourceLifetime_, maxSamplerSlots_);
     }
 
     std::unique_ptr<IRenderTargetRenderer> RlglRenderer::CreateRenderTarget2D(

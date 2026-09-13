@@ -271,6 +271,12 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
         target_link_libraries(cna_test_rlgl_effect PRIVATE SDL3::SDL3main)
     endif()
 
+    add_executable(cna_test_rlgl_shader_effect rlgl_shader_effect_test.cpp)
+    target_link_libraries(cna_test_rlgl_shader_effect PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_rlgl_shader_effect PRIVATE SDL3::SDL3main)
+    endif()
+
     add_executable(cna_test_rlgl_xna_pixel_center
         "${CNA_GRAPHICS_EXAMPLES_DIR}/xna_pixel_center_contract_test.cpp")
     target_link_libraries(cna_test_rlgl_xna_pixel_center PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
@@ -653,6 +659,11 @@ if(NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "RLGL" AND TARGET SDL3::SDL
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_Effect COMMAND cna_test_rlgl_effect
             TIMEOUT 60 LABELS "Graphics3D;GraphicsEffect;Rlgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+        cna_register_renderer_test(
+            NAME Rlgl_ShaderEffect
+            COMMAND cna_test_rlgl_shader_effect
+            TIMEOUT 120 LABELS "Graphics2D;Graphics3D;GraphicsEffect;GraphicsParity;Rlgl"
             ENVIRONMENT "SDL_VIDEODRIVER=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
         cna_register_renderer_test(NAME Rlgl_XnaPixelCenter COMMAND cna_test_rlgl_xna_pixel_center
             TIMEOUT 60 LABELS "Graphics3D;GraphicsContract;Rlgl"

@@ -6,17 +6,20 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace CNA::Internal::Renderers::Rlgl
 {
+    class RlglResourceLifetime;
     struct VertexAttributeBinding;
 }
 
 namespace CNA::Internal::Renderers
 {
     struct GpuDrawParams;
+    class IEffectRenderer;
 }
 
 namespace CNA::Internal::Renderers::Rlgl::Bridge
@@ -445,6 +448,19 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     [[nodiscard]] SpritePipeline CreateSpritePipeline(
         int vertexCapacity, int indexCapacity);
 
+    /**
+     * @brief Compiles a desktop-GL source effect with RLGL-owned native lifetime.
+     * @param vertexSource Caller-supplied GLSL vertex source.
+     * @param fragmentSource Caller-supplied GLSL fragment source.
+     * @param lifetime Owning device registry used for disposal and context recovery.
+     * @param maximumTextureUnits Live fragment texture-unit ceiling.
+     * @return Effect renderer retaining its source, uniforms, program, and draw VAO.
+     */
+    [[nodiscard]] std::unique_ptr<IEffectRenderer> CreateShaderEffectRenderer(
+        const std::string& vertexSource, const std::string& fragmentSource,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime,
+        int maximumTextureUnits);
+
     /** @brief Drains rlgl's global immediate batch before a CNA-owned low-level draw. */
     void FlushImmediateBatch();
 
@@ -510,7 +526,8 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         const SpritePipeline& pipeline,
         const float* vertices, int vertexCount,
         const std::uint16_t* indices, int indexCount,
-        const float* projectionColumnMajor);
+        const float* projectionColumnMajor,
+        IEffectRenderer* customEffectRenderer = nullptr);
 
     /**
      * @brief Allocates fixed-capacity vertex storage through rlgl.
@@ -601,6 +618,35 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
         const CNA::Internal::Renderers::GpuDrawParams& params,
         int primitiveType, int elementCount,
         int firstVertex, int startIndex, int baseVertex, bool thirtyTwoBitIndices);
+
+    /**
+     * @brief Submits declaration-indexed geometry through one source ShaderEffect program.
+     * @param effect Renderer-local compiled source program.
+     * @param vertexBuffer Primary vertex buffer name.
+     * @param indexBuffer Index buffer name, or zero for non-indexed drawing.
+     * @param attributes Concatenated per-vertex then per-instance declaration elements.
+     * @param attributeCount Number of attribute bindings.
+     * @param worldColumnMajor World matrix in GL upload order.
+     * @param viewColumnMajor View matrix in GL upload order.
+     * @param projectionColumnMajor Projection matrix in GL upload order.
+     * @param primitiveType Raw XNA PrimitiveType ordinal.
+     * @param elementCount Vertex or index count.
+     * @param firstVertex First vertex for a non-indexed draw.
+     * @param startIndex First index for an indexed draw.
+     * @param baseVertex Base vertex added to decoded indices.
+     * @param instanceCount Number of instances.
+     * @param instanced Whether the instanced public route requested hardware instancing.
+     * @param thirtyTwoBitIndices Whether indices are 32-bit rather than 16-bit.
+     */
+    void DrawShaderEffectGeometry(
+        IEffectRenderer& effect,
+        unsigned int vertexBuffer, unsigned int indexBuffer,
+        const VertexAttributeBinding* attributes, int attributeCount,
+        const float* worldColumnMajor, const float* viewColumnMajor,
+        const float* projectionColumnMajor,
+        int primitiveType, int elementCount,
+        int firstVertex, int startIndex, int baseVertex,
+        int instanceCount, bool instanced, bool thirtyTwoBitIndices);
 
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
     /**

@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -15,7 +16,6 @@
 
 #if defined(CNA_RLGL_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/Rlgl/RlglCompiledEffect.hpp"
-#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -131,18 +131,32 @@ namespace CNA::Internal::Renderers::Rlgl
                 Flush();
                 if (effect != nullptr)
                 {
-#if defined(CNA_RLGL_COMPILED_EFFECTS)
-                    if (dynamic_cast<RlglCompiledEffect*>(effect->GetCompiledRuntimePtr()) == nullptr)
+                    if (effect->GetCompiledRuntimePtr() == nullptr)
                     {
-                        throw System::NotSupportedException(
-                            "RLGL: SpriteBatch source/custom effects are deferred to "
-                            "plans/plan_rlgl.md RLGL-050");
+                        IEffectRenderer* const sourceRenderer =
+                            effect->GetEffectRendererPtr();
+                        if (sourceRenderer == nullptr || !sourceRenderer->IsValid())
+                        {
+                            throw System::NotSupportedException(
+                                "RLGL: SpriteBatch custom effect has no valid source program");
+                        }
                     }
+                    else
+                    {
+#if defined(CNA_RLGL_COMPILED_EFFECTS)
+                        if (dynamic_cast<RlglCompiledEffect*>(
+                                effect->GetCompiledRuntimePtr()) == nullptr)
+                        {
+                            throw System::NotSupportedException(
+                                "RLGL: SpriteBatch compiled effect belongs to another renderer");
+                        }
 #else
-                    throw System::NotSupportedException(
-                        "RLGL: compiled SpriteBatch effects require CNA_RLGL_COMPILED_EFFECTS=ON "
-                        "(plans/plan_rlgl.md RLGL-051)");
+                        throw System::NotSupportedException(
+                            "RLGL: compiled SpriteBatch effects require "
+                            "CNA_RLGL_COMPILED_EFFECTS=ON "
+                            "(plans/plan_rlgl.md RLGL-051)");
 #endif
+                    }
                 }
                 customEffect_ = effect;
             }
@@ -366,6 +380,19 @@ namespace CNA::Internal::Renderers::Rlgl
                 float projection[16] = {};
                 combined.ToColumnMajor(projection);
 
+                IEffectRenderer* sourceEffectRenderer = nullptr;
+                if (customEffect_ != nullptr)
+                {
+                    sourceEffectRenderer = customEffect_->GetEffectRendererPtr();
+                    if (sourceEffectRenderer == nullptr || !sourceEffectRenderer->IsValid())
+                    {
+                        ClearBatch();
+                        throw std::runtime_error(
+                            "RLGL: SpriteBatch lost its source ShaderEffect program");
+                    }
+                    customEffect_->Apply();
+                }
+
                 // The production path never records into rlgl's global immediate batch. Drain
                 // any diagnostic work before establishing CNA's texture/sampler bindings.
                 Bridge::FlushImmediateBatch();
@@ -376,7 +403,8 @@ namespace CNA::Internal::Renderers::Rlgl
                 renderer_.ApplySamplerAddressW(0, addressW_);
                 Bridge::DrawSpriteGeometry(
                     pipeline_, vertices_.data(), VertexCount(),
-                    indices_.data(), static_cast<int>(indices_.size()), projection);
+                    indices_.data(), static_cast<int>(indices_.size()), projection,
+                    sourceEffectRenderer);
 
                 ClearBatch();
             }

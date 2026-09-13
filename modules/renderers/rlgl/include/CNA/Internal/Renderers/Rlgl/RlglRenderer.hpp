@@ -325,6 +325,27 @@ namespace CNA::Internal::Renderers::Rlgl
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
         /**
+         * @brief Returns the source dialect accepted by RLGL ShaderEffect programs.
+         * @return Desktop OpenGL GLSL for the fixed GL 3.3 core context.
+         */
+        [[nodiscard]] ShaderDialectEXT GetShaderDialectEXT() const override
+        {
+            return ShaderDialectEXT::GlslDesktop;
+        }
+
+        /**
+         * @brief Reports the exact language/stage pairs compiled by RLGL ShaderEffect.
+         * @param language Raw `CNA::ShaderLanguageEXT` ordinal.
+         * @param stage Raw `CNA::ShaderStageEXT` ordinal.
+         * @return True only for desktop GLSL vertex and fragment stages.
+         */
+        [[nodiscard]] bool SupportsShaderLanguageEXT(
+            int language, int stage) const override;
+
+        /** @brief Returns true because RLGL compiles and executes supplied GLSL source. */
+        [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
+
+        /**
          * @brief Reads an RGBA8 region of the current back buffer in top-left row order.
          *
          * @param x Left edge in game/backbuffer coordinates.
@@ -353,6 +374,15 @@ namespace CNA::Internal::Renderers::Rlgl
          */
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(
             int size, bool mipMap, int surfaceFormat) override;
+
+        /**
+         * @brief Compiles one caller-supplied desktop GLSL ShaderEffect pair.
+         * @param vertSrc Vertex-stage GLSL source.
+         * @param fragSrc Fragment-stage GLSL source.
+         * @return RLGL-owned program with uniform, texture, draw, and recovery state.
+         */
+        std::unique_ptr<IEffectRenderer> CreateEffectRenderer(
+            const std::string& vertSrc, const std::string& fragSrc) override;
 
         /**
          * @brief Returns the current OpenGL context's maximum two-dimensional texture edge.

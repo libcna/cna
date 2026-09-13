@@ -535,6 +535,169 @@ namespace CNA::Internal::Renderers::Rlgl
             return result;
         }
 
+        [[nodiscard]] std::vector<VertexAttributeBinding>
+        BuildShaderEffectAttributes(
+            const IVertexBufferRenderer& primaryVertexBuffer,
+            const GpuDrawParams& params, const bool allowInstancing)
+        {
+            std::vector<VertexAttributeBinding> result;
+            unsigned int location = 0;
+            bool foundPerVertexStream = false;
+            bool foundInstanceStream = false;
+
+            const auto appendBuffer = [&result, &location](
+                const IVertexBufferRenderer& buffer, const int stride,
+                const int vertexOffset, const int divisor)
+            {
+                const auto& declaration = GetVertexDeclaration(buffer);
+                if (declaration.empty())
+                {
+                    throw System::NotSupportedException(
+                        "RLGL ShaderEffect: every source-shader stream requires a "
+                        "VertexDeclaration");
+                }
+                if (stride <= 0 ||
+                    GetVertexStride(buffer) != static_cast<std::size_t>(stride) ||
+                    vertexOffset < 0 || divisor < 0)
+                {
+                    throw std::invalid_argument(
+                        "RLGL ShaderEffect: invalid vertex stream layout");
+                }
+                if (vertexOffset > std::numeric_limits<int>::max() / stride)
+                    throw std::overflow_error(
+                        "RLGL ShaderEffect: vertex stream byte offset exceeds Int32");
+                if (declaration.size() > 16u - location)
+                {
+                    throw System::NotSupportedException(
+                        "RLGL ShaderEffect: declarations exceed CNA's 16-location XNA input "
+                        "convention");
+                }
+                const int baseOffset = vertexOffset * stride;
+                for (const VertexElement& element : declaration)
+                {
+                    VertexAttributeBinding binding = DescribeVertexAttribute(
+                        element, location++, stride, baseOffset);
+                    binding.vertexBuffer = GetNativeBufferId(buffer);
+                    binding.divisor = divisor;
+                    result.push_back(binding);
+                }
+            };
+
+            if (params.vertexStreamCount == 0)
+            {
+                const std::size_t nativeStride = GetVertexStride(primaryVertexBuffer);
+                if (nativeStride == 0 || nativeStride >
+                    static_cast<std::size_t>(std::numeric_limits<int>::max()))
+                {
+                    throw std::runtime_error(
+                        "RLGL ShaderEffect: primary vertex buffer has no usable stride");
+                }
+                appendBuffer(
+                    primaryVertexBuffer, static_cast<int>(nativeStride), 0, 0);
+                foundPerVertexStream = true;
+            }
+            else
+            {
+                if (params.vertexStreamCount < 0 ||
+                    params.vertexStreamCount >
+                        static_cast<int>(params.vertexStreams.size()))
+                {
+                    throw std::invalid_argument(
+                        "RLGL ShaderEffect: invalid vertex stream count");
+                }
+                std::array<bool, kMaxVertexStreams> occupiedSlots{};
+                for (int streamIndex = 0;
+                     streamIndex < params.vertexStreamCount; ++streamIndex)
+                {
+                    const GpuVertexStreamBinding& stream =
+                        params.vertexStreams[streamIndex];
+                    if (stream.buffer == nullptr || stream.slot < 0 ||
+                        stream.slot >= kMaxVertexStreams)
+                    {
+                        throw std::invalid_argument(
+                            "RLGL ShaderEffect: invalid vertex stream binding");
+                    }
+                    if (occupiedSlots[static_cast<std::size_t>(stream.slot)])
+                        throw std::invalid_argument(
+                            "RLGL ShaderEffect: duplicate vertex stream slot");
+                    occupiedSlots[static_cast<std::size_t>(stream.slot)] = true;
+                }
+                for (int ratePass = 0; ratePass < 2; ++ratePass)
+                {
+                    for (int streamIndex = 0;
+                         streamIndex < params.vertexStreamCount; ++streamIndex)
+                    {
+                        const GpuVertexStreamBinding& stream =
+                            params.vertexStreams[streamIndex];
+                        const bool instanceStream = stream.instanceFrequency > 0;
+                        if (instanceStream != (ratePass == 1)) continue;
+                        if (ratePass == 0)
+                        {
+                            foundPerVertexStream = true;
+                        }
+                        else
+                        {
+                            foundInstanceStream = true;
+                            if (!allowInstancing)
+                            {
+                                throw System::NotSupportedException(
+                                    "RLGL ShaderEffect: an ordinary draw cannot consume an "
+                                    "instance stream");
+                            }
+                        }
+                        appendBuffer(
+                            *stream.buffer, stream.strideInBytes,
+                            stream.vertexOffset, stream.instanceFrequency);
+                    }
+                }
+            }
+
+            if (!foundPerVertexStream || result.empty())
+                throw std::invalid_argument(
+                    "RLGL ShaderEffect: draw has no per-vertex declaration");
+            if (allowInstancing && !foundInstanceStream)
+                throw System::NotSupportedException(
+                    "RLGL ShaderEffect: instanced drawing requires an instance stream");
+            return result;
+        }
+
+        void SubmitShaderEffect(
+            const IVertexBufferRenderer& vertexBuffer,
+            const IIndexBufferRenderer* const indexBuffer,
+            const Matrix& world, const Matrix& view, const Matrix& projection,
+            const PrimitiveType primitive, const int elementCount,
+            const int firstVertex, const int startIndex, const int baseVertex,
+            const GpuDrawParams& params, const bool instanced)
+        {
+            if (params.customEffectRenderer == nullptr)
+                throw System::NotSupportedException(
+                    "RLGL ShaderEffect: the source program did not compile successfully");
+            if ((!instanced && params.instanceCount != 1) ||
+                (instanced && params.firstInstance != 0))
+            {
+                throw System::NotSupportedException(
+                    "RLGL ShaderEffect: invalid classic instancing range");
+            }
+            const std::vector<VertexAttributeBinding> attributes =
+                BuildShaderEffectAttributes(vertexBuffer, params, instanced);
+            float worldValues[16]{};
+            float viewValues[16]{};
+            float projectionValues[16]{};
+            world.ToColumnMajor(worldValues);
+            view.ToColumnMajor(viewValues);
+            projection.ToColumnMajor(projectionValues);
+            Bridge::DrawShaderEffectGeometry(
+                *params.customEffectRenderer,
+                GetNativeBufferId(vertexBuffer),
+                indexBuffer == nullptr ? 0u : GetNativeBufferId(*indexBuffer),
+                attributes.data(), static_cast<int>(attributes.size()),
+                worldValues, viewValues, projectionValues,
+                static_cast<int>(primitive), elementCount,
+                firstVertex, startIndex, baseVertex,
+                params.instanceCount, instanced,
+                indexBuffer != nullptr && indexBuffer->IsThirtyTwoBit());
+        }
+
         void RequireBaselineEffect(
             const GpuDrawParams& params, const bool allowInstancing = false)
         {
@@ -670,6 +833,18 @@ namespace CNA::Internal::Renderers::Rlgl
             return;
         }
 #endif
+        if (params.customEffectRequested || params.customEffectRenderer != nullptr)
+        {
+            const int elementCount = PrimitiveElementCount(primitive, primitiveCount);
+            ValidateDrawRange(
+                vertexBuffer, nullptr, elementCount,
+                params.vertexStart, 0, 0);
+            SubmitShaderEffect(
+                vertexBuffer, nullptr, world, view, projection,
+                primitive, elementCount, params.vertexStart, 0, 0,
+                params, false);
+            return;
+        }
         RequireBaselineEffect(params);
         Submit(
             GetPrimitivePipeline(), vertexBuffer, nullptr,
@@ -699,6 +874,18 @@ namespace CNA::Internal::Renderers::Rlgl
             return;
         }
 #endif
+        if (params.customEffectRequested || params.customEffectRenderer != nullptr)
+        {
+            const int elementCount = PrimitiveElementCount(primitive, primitiveCount);
+            ValidateDrawRange(
+                vertexBuffer, &indexBuffer, elementCount,
+                0, params.startIndex, params.baseVertex);
+            SubmitShaderEffect(
+                vertexBuffer, &indexBuffer, world, view, projection,
+                primitive, elementCount, 0, params.startIndex, params.baseVertex,
+                params, false);
+            return;
+        }
         RequireBaselineEffect(params);
         Submit(
             GetPrimitivePipeline(), vertexBuffer, &indexBuffer,
@@ -730,6 +917,18 @@ namespace CNA::Internal::Renderers::Rlgl
             return;
         }
 #endif
+        if (params.customEffectRequested || params.customEffectRenderer != nullptr)
+        {
+            const int elementCount = PrimitiveElementCount(primitive, primitiveCount);
+            ValidateDrawRange(
+                vertexBuffer, &indexBuffer, elementCount,
+                0, params.startIndex, params.baseVertex);
+            SubmitShaderEffect(
+                vertexBuffer, &indexBuffer, world, view, projection,
+                primitive, elementCount, 0, params.startIndex, params.baseVertex,
+                params, true);
+            return;
+        }
         RequireBaselineEffect(params, true);
         Submit(
             GetPrimitivePipeline(), vertexBuffer, &indexBuffer,

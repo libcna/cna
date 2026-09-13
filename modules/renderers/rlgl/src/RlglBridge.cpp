@@ -10,8 +10,11 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace
@@ -533,6 +536,707 @@ namespace CNA::Internal::Renderers::Rlgl::Bridge
     namespace
     {
         PrimitiveDrawSnapshot lastPrimitiveDraw;
+
+        class RlglShaderEffectRenderer final
+            : public IEffectRenderer, public IRlglNativeResource
+        {
+        public:
+            RlglShaderEffectRenderer(
+                std::string vertexSource, std::string fragmentSource,
+                std::shared_ptr<RlglResourceLifetime> lifetime,
+                const int maximumTextureUnits)
+                : vertexSource_(std::move(vertexSource))
+                , fragmentSource_(std::move(fragmentSource))
+                , lifetime_(std::move(lifetime))
+                , maximumTextureUnits_(maximumTextureUnits)
+            {
+                if (lifetime_ == nullptr)
+                    throw std::invalid_argument("RLGL ShaderEffect: resource lifetime is null");
+                if (maximumTextureUnits_ <= 0)
+                    throw std::invalid_argument("RLGL ShaderEffect: texture-unit limit is invalid");
+                if (CompileNativeProgram())
+                {
+                    try
+                    {
+                        recoveryRegistered_ = lifetime_->Register(*this);
+                        lifetimeRegistered_ = true;
+                    }
+                    catch (...)
+                    {
+                        ReleaseNativeResource();
+                        throw;
+                    }
+                }
+            }
+
+            ~RlglShaderEffectRenderer() override
+            {
+                if (lifetimeRegistered_) lifetime_->Dispose(*this);
+                else ReleaseNativeResource();
+            }
+
+            RlglShaderEffectRenderer(const RlglShaderEffectRenderer&) = delete;
+            RlglShaderEffectRenderer& operator=(const RlglShaderEffectRenderer&) = delete;
+
+            bool CompileProgram(
+                const std::string& vertexSource,
+                const std::string& fragmentSource) override
+            {
+                vertexSource_ = vertexSource;
+                fragmentSource_ = fragmentSource;
+                ReleaseNativeResource();
+                const bool valid = CompileNativeProgram();
+                if (valid && !lifetimeRegistered_)
+                {
+                    try
+                    {
+                        recoveryRegistered_ = lifetime_->Register(*this);
+                        lifetimeRegistered_ = true;
+                    }
+                    catch (...)
+                    {
+                        ReleaseNativeResource();
+                        throw;
+                    }
+                }
+                return valid;
+            }
+
+            void Bind() override
+            {
+                if (program_ != 0) rlEnableShader(program_);
+            }
+
+            void Unbind() override
+            {
+                // Every RLGL draw binds its program explicitly. Keeping this a no-op matches
+                // ShaderEffect's existing renderer contract and preserves call-anytime uniforms.
+            }
+
+            [[nodiscard]] bool IsValid() const override
+            {
+                return program_ != 0 && vertexArray_ != 0;
+            }
+
+            [[nodiscard]] std::string GetCompileError() const override
+            {
+                return compileError_;
+            }
+
+            void SetUniformFloat(const char* const name, const float value) override
+            {
+                StoreFloatUniform(name, UniformKind::Float, &value, 1);
+            }
+
+            void SetUniformInt(const char* const name, const int value) override
+            {
+                if (!ValidUniformName(name)) return;
+                UniformValue& stored = uniforms_[name];
+                stored.kind = UniformKind::Int;
+                stored.integer = value;
+                stored.floats.clear();
+                UploadUniform(name, stored);
+            }
+
+            void SetUniformVec2(
+                const char* const name, const float x, const float y) override
+            {
+                const float values[2] = {x, y};
+                StoreFloatUniform(name, UniformKind::Vec2, values, 2);
+            }
+
+            void SetUniformVec3(
+                const char* const name, const float x, const float y,
+                const float z) override
+            {
+                const float values[3] = {x, y, z};
+                StoreFloatUniform(name, UniformKind::Vec3, values, 3);
+            }
+
+            void SetUniformVec4(
+                const char* const name, const float x, const float y,
+                const float z, const float w) override
+            {
+                const float values[4] = {x, y, z, w};
+                StoreFloatUniform(name, UniformKind::Vec4, values, 4);
+            }
+
+            void SetUniformMat4(
+                const char* const name, const float* const matrix) override
+            {
+                StoreFloatUniform(name, UniformKind::Mat4, matrix, 16);
+            }
+
+            void SetUniformFloatArray(
+                const char* const name, const float* const values,
+                const int count) override
+            {
+                StoreFloatUniform(name, UniformKind::FloatArray, values, count);
+            }
+
+            void SetUniformVec2Array(
+                const char* const name, const float* const values,
+                const int count) override
+            {
+                StoreFloatUniform(name, UniformKind::Vec2Array, values, count * 2);
+            }
+
+            void SetUniformVec3Array(
+                const char* const name, const float* const values,
+                const int count) override
+            {
+                StoreFloatUniform(name, UniformKind::Vec3Array, values, count * 3);
+            }
+
+            void SetUniformMat4Array(
+                const char* const name, const float* const matrices,
+                const int count) override
+            {
+                StoreFloatUniform(name, UniformKind::Mat4Array, matrices, count * 16);
+            }
+
+            void BindTexture(const int unit, ITextureRenderer* const texture) override
+            {
+                if (texture == nullptr) return;
+                ValidateTextureUnit(unit);
+                Bind();
+                texture->BindGL(unit);
+                if (unit < static_cast<int>(renderTargetFlipV_.size()))
+                {
+                    renderTargetFlipV_[static_cast<std::size_t>(unit)] =
+                        SampledRowsAreBottomUp(*texture) ? 1.0f : 0.0f;
+                    StoreFloatUniform(
+                        "uRtFlipV", UniformKind::Vec4,
+                        renderTargetFlipV_.data(),
+                        static_cast<int>(renderTargetFlipV_.size()));
+                }
+                rlActiveTextureSlot(0);
+            }
+
+            void BindTextureCube(
+                const int unit, ITextureCubeRenderer* const texture) override
+            {
+                if (texture == nullptr) return;
+                ValidateTextureUnit(unit);
+                Bind();
+                texture->BindGL(unit);
+                rlActiveTextureSlot(0);
+            }
+
+            void BindTexture3D(
+                const int unit, ITexture3DRenderer* const texture) override
+            {
+                if (texture == nullptr) return;
+                ValidateTextureUnit(unit);
+                Bind();
+                texture->BindGL(unit);
+                rlActiveTextureSlot(0);
+            }
+
+            void Draw(
+                const unsigned int vertexBuffer, const unsigned int indexBuffer,
+                const VertexAttributeBinding* const attributes,
+                const int attributeCount,
+                const float* const worldColumnMajor,
+                const float* const viewColumnMajor,
+                const float* const projectionColumnMajor,
+                const int primitiveType, const int elementCount,
+                const int firstVertex, const int startIndex, const int baseVertex,
+                const int instanceCount, const bool instanced,
+                const bool thirtyTwoBitIndices)
+            {
+                if (!IsValid())
+                    throw std::runtime_error("RLGL ShaderEffect: source program is not valid");
+                if (vertexBuffer == 0 || attributes == nullptr || attributeCount <= 0 ||
+                    worldColumnMajor == nullptr || viewColumnMajor == nullptr ||
+                    projectionColumnMajor == nullptr || elementCount <= 0 ||
+                    firstVertex < 0 || startIndex < 0 || baseVertex < 0 ||
+                    instanceCount <= 0 || (instanced && indexBuffer == 0))
+                {
+                    throw std::invalid_argument("RLGL ShaderEffect: invalid draw request");
+                }
+
+                std::array<bool, 16> occupied{};
+                for (int index = 0; index < attributeCount; ++index)
+                {
+                    const VertexAttributeBinding& attribute = attributes[index];
+                    if (attribute.location >= occupied.size() || occupied[attribute.location] ||
+                        attribute.vertexBuffer == 0 || attribute.componentCount <= 0 ||
+                        attribute.stride <= 0 || attribute.offset < 0 || attribute.divisor < 0)
+                    {
+                        throw std::invalid_argument(
+                            "RLGL ShaderEffect: invalid vertex attribute binding");
+                    }
+                    occupied[attribute.location] = true;
+                }
+
+                GLenum mode = GL_TRIANGLES;
+                switch (primitiveType)
+                {
+                case 0: mode = GL_TRIANGLES; break;
+                case 1: mode = GL_TRIANGLE_STRIP; break;
+                case 2: mode = GL_LINES; break;
+                case 3: mode = GL_LINE_STRIP; break;
+                case 4: mode = GL_POINTS; break;
+                default:
+                    throw std::invalid_argument(
+                        "RLGL ShaderEffect: invalid PrimitiveType ordinal");
+                }
+
+                FlushImmediateBatch();
+                Bind();
+                SetUniformMat4("World", worldColumnMajor);
+                SetUniformMat4("View", viewColumnMajor);
+                SetUniformMat4("Projection", projectionColumnMajor);
+                if (!rlEnableVertexArray(vertexArray_))
+                {
+                    rlDisableShader();
+                    throw std::runtime_error("RLGL ShaderEffect: draw VAO is unavailable");
+                }
+
+                const auto cleanup = [&]() noexcept
+                {
+                    for (int index = 0; index < attributeCount; ++index)
+                    {
+                        if (attributes[index].divisor != 0)
+                            rlSetVertexAttributeDivisor(attributes[index].location, 0);
+                    }
+                    rlDisableVertexArray();
+                    rlDisableVertexBuffer();
+                    rlDisableVertexBufferElement();
+                    rlDisableShader();
+                };
+
+                try
+                {
+                    for (unsigned int location = 0; location < occupied.size(); ++location)
+                    {
+                        rlDisableVertexAttribute(location);
+                        rlSetVertexAttributeDivisor(location, 0);
+                    }
+                    for (int index = 0; index < attributeCount; ++index)
+                    {
+                        const VertexAttributeBinding& attribute = attributes[index];
+                        rlEnableVertexBuffer(attribute.vertexBuffer);
+                        rlEnableVertexAttribute(attribute.location);
+                        rlSetVertexAttribute(
+                            attribute.location, attribute.componentCount,
+                            attribute.scalarType, attribute.normalized,
+                            attribute.stride, attribute.offset);
+                        rlSetVertexAttributeDivisor(
+                            attribute.location, attribute.divisor);
+                    }
+
+                    PrimitiveDrawSnapshot snapshot;
+                    snapshot.attributeCount = attributeCount;
+                    for (int index = 0; index < attributeCount; ++index)
+                    {
+                        const VertexAttributeBinding& attribute = attributes[index];
+                        const std::size_t location = attribute.location;
+                        snapshot.attributeBuffers[location] = attribute.vertexBuffer;
+                        snapshot.attributeStrides[location] = attribute.stride;
+                        snapshot.attributeOffsets[location] = attribute.offset;
+                        snapshot.attributeDivisors[location] = attribute.divisor;
+                    }
+                    snapshot.primitiveMode = static_cast<int>(mode);
+                    snapshot.elementCount = elementCount;
+                    snapshot.firstVertex = firstVertex;
+                    snapshot.startIndex = startIndex;
+                    snapshot.baseVertex = baseVertex;
+                    snapshot.instanceCount = instanceCount;
+                    snapshot.indexed = indexBuffer != 0;
+                    snapshot.instanced = instanced;
+
+                    if (indexBuffer == 0)
+                    {
+                        if (instanced)
+                            glDrawArraysInstanced(mode, firstVertex, elementCount, instanceCount);
+                        else if (mode == GL_TRIANGLES)
+                        {
+                            rlDrawVertexArray(firstVertex, elementCount);
+                            snapshot.usedRlglDrawWrapper = true;
+                        }
+                        else glDrawArrays(mode, firstVertex, elementCount);
+                    }
+                    else
+                    {
+                        rlEnableVertexBufferElement(indexBuffer);
+                        const GLenum indexType = thirtyTwoBitIndices
+                            ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+                        snapshot.indexType = static_cast<int>(indexType);
+                        const std::uintptr_t byteOffset =
+                            static_cast<std::uintptr_t>(startIndex) *
+                            (thirtyTwoBitIndices
+                                ? sizeof(std::uint32_t) : sizeof(std::uint16_t));
+                        const void* const indices =
+                            reinterpret_cast<const void*>(byteOffset);
+                        if (instanced)
+                        {
+                            if (baseVertex == 0)
+                                glDrawElementsInstanced(
+                                    mode, elementCount, indexType, indices, instanceCount);
+                            else
+                                glDrawElementsInstancedBaseVertex(
+                                    mode, elementCount, indexType, indices,
+                                    instanceCount, baseVertex);
+                        }
+                        else if (mode == GL_TRIANGLES && !thirtyTwoBitIndices &&
+                                 startIndex == 0 && baseVertex == 0)
+                        {
+                            rlDrawVertexArrayElements(0, elementCount, nullptr);
+                            snapshot.usedRlglDrawWrapper = true;
+                        }
+                        else if (baseVertex == 0)
+                            glDrawElements(mode, elementCount, indexType, indices);
+                        else
+                            glDrawElementsBaseVertex(
+                                mode, elementCount, indexType, indices, baseVertex);
+                    }
+                    ThrowIfGlError("ShaderEffect draw");
+                    lastPrimitiveDraw = snapshot;
+                }
+                catch (...)
+                {
+                    cleanup();
+                    throw;
+                }
+                cleanup();
+            }
+
+        private:
+            enum class UniformKind
+            {
+                Float,
+                Int,
+                Vec2,
+                Vec3,
+                Vec4,
+                Mat4,
+                FloatArray,
+                Vec2Array,
+                Vec3Array,
+                Mat4Array
+            };
+
+            struct UniformValue
+            {
+                UniformKind kind = UniformKind::Float;
+                std::vector<float> floats;
+                int integer = 0;
+            };
+
+            [[nodiscard]] static bool ValidUniformName(const char* const name)
+            {
+                return name != nullptr && name[0] != '\0';
+            }
+
+            [[nodiscard]] static std::string ShaderLog(
+                const GLuint shader, const char* const stage)
+            {
+                GLint length = 0;
+                glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
+                std::string log(static_cast<std::size_t>(std::max(length, 1)), '\0');
+                GLsizei written = 0;
+                glGetShaderInfoLog(shader, length, &written, log.data());
+                log.resize(static_cast<std::size_t>(std::max(written, 0)));
+                return std::string(stage) + ": " + log;
+            }
+
+            [[nodiscard]] static std::string ProgramLog(const GLuint program)
+            {
+                GLint length = 0;
+                glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+                std::string log(static_cast<std::size_t>(std::max(length, 1)), '\0');
+                GLsizei written = 0;
+                glGetProgramInfoLog(program, length, &written, log.data());
+                log.resize(static_cast<std::size_t>(std::max(written, 0)));
+                return std::string("Link: ") + log;
+            }
+
+            [[nodiscard]] GLuint CompileStage(
+                const GLenum stage, const std::string& source,
+                const char* const stageName)
+            {
+                if (source.size() > static_cast<std::size_t>(
+                        (std::numeric_limits<GLint>::max)()))
+                {
+                    compileError_ = std::string(stageName) +
+                        ": shader source exceeds the GL length limit";
+                    return 0;
+                }
+                const GLuint shader = glCreateShader(stage);
+                if (shader == 0)
+                {
+                    compileError_ = std::string(stageName) +
+                        ": OpenGL returned no shader object";
+                    return 0;
+                }
+                const char* const sourcePointer = source.c_str();
+                const GLint sourceLength = static_cast<GLint>(source.size());
+                glShaderSource(shader, 1, &sourcePointer, &sourceLength);
+                glCompileShader(shader);
+                GLint status = GL_FALSE;
+                glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+                if (status == GL_FALSE)
+                {
+                    compileError_ = ShaderLog(shader, stageName);
+                    glDeleteShader(shader);
+                    return 0;
+                }
+                return shader;
+            }
+
+            [[nodiscard]] bool CompileNativeProgram()
+            {
+                compileError_.clear();
+                const GLuint vertexShader = CompileStage(
+                    GL_VERTEX_SHADER, vertexSource_, "VS");
+                if (vertexShader == 0) return false;
+                const GLuint fragmentShader = CompileStage(
+                    GL_FRAGMENT_SHADER, fragmentSource_, "FS");
+                if (fragmentShader == 0)
+                {
+                    glDeleteShader(vertexShader);
+                    return false;
+                }
+
+                const GLuint program = glCreateProgram();
+                if (program == 0)
+                {
+                    glDeleteShader(vertexShader);
+                    glDeleteShader(fragmentShader);
+                    compileError_ = "Link: OpenGL returned no program object";
+                    return false;
+                }
+                glAttachShader(program, vertexShader);
+                glAttachShader(program, fragmentShader);
+                glLinkProgram(program);
+                glDeleteShader(vertexShader);
+                glDeleteShader(fragmentShader);
+
+                GLint linked = GL_FALSE;
+                glGetProgramiv(program, GL_LINK_STATUS, &linked);
+                if (linked == GL_FALSE)
+                {
+                    compileError_ = ProgramLog(program);
+                    glDeleteProgram(program);
+                    return false;
+                }
+
+                GLint activeAttributes = 0;
+                GLint maximumNameLength = 0;
+                glGetProgramiv(program, GL_ACTIVE_ATTRIBUTES, &activeAttributes);
+                glGetProgramiv(
+                    program, GL_ACTIVE_ATTRIBUTE_MAX_LENGTH, &maximumNameLength);
+                std::vector<char> name(
+                    static_cast<std::size_t>(std::max(maximumNameLength, 1)), '\0');
+                for (GLint index = 0; index < activeAttributes; ++index)
+                {
+                    GLsizei nameLength = 0;
+                    GLint arraySize = 0;
+                    GLenum type = 0;
+                    glGetActiveAttrib(
+                        program, static_cast<GLuint>(index), maximumNameLength,
+                        &nameLength, &arraySize, &type, name.data());
+                    (void)arraySize;
+                    (void)type;
+                    const GLint location = glGetAttribLocation(program, name.data());
+                    if (location < 0 || location >= 16)
+                    {
+                        compileError_ =
+                            "Link: active vertex attribute '" +
+                            std::string(name.data(), static_cast<std::size_t>(nameLength)) +
+                            "' is outside CNA's 16-location XNA input convention";
+                        glDeleteProgram(program);
+                        return false;
+                    }
+                }
+
+                const unsigned int vertexArray = rlLoadVertexArray();
+                if (vertexArray == 0)
+                {
+                    glDeleteProgram(program);
+                    compileError_ = "Link: RLGL could not allocate the ShaderEffect draw VAO";
+                    return false;
+                }
+                program_ = program;
+                vertexArray_ = vertexArray;
+                try
+                {
+                    ReplayUniforms();
+                    ThrowIfGlError("ShaderEffect program creation");
+                }
+                catch (...)
+                {
+                    ReleaseNativeResource();
+                    throw;
+                }
+                return true;
+            }
+
+            void ValidateTextureUnit(const int unit) const
+            {
+                if (unit < 0 || unit >= maximumTextureUnits_)
+                    throw std::out_of_range("RLGL ShaderEffect: texture unit is invalid");
+            }
+
+            [[nodiscard]] GLint UniformLocation(
+                const char* const name, const bool array) const
+            {
+                GLint location = glGetUniformLocation(program_, name);
+                if (location < 0 && array)
+                {
+                    const std::string firstElement = std::string(name) + "[0]";
+                    location = glGetUniformLocation(program_, firstElement.c_str());
+                }
+                return location;
+            }
+
+            void StoreFloatUniform(
+                const char* const name, const UniformKind kind,
+                const float* const values, const int floatCount)
+            {
+                if (!ValidUniformName(name) || values == nullptr || floatCount <= 0) return;
+                UniformValue& stored = uniforms_[name];
+                stored.kind = kind;
+                stored.floats.assign(values, values + floatCount);
+                UploadUniform(name, stored);
+            }
+
+            void UploadUniform(const char* const name, const UniformValue& value)
+            {
+                if (program_ == 0) return;
+                Bind();
+                const bool array = value.kind == UniformKind::FloatArray ||
+                    value.kind == UniformKind::Vec2Array ||
+                    value.kind == UniformKind::Vec3Array ||
+                    value.kind == UniformKind::Mat4Array;
+                const GLint location = UniformLocation(name, array);
+                if (location < 0) return;
+                switch (value.kind)
+                {
+                case UniformKind::Float:
+                    glUniform1f(location, value.floats[0]); break;
+                case UniformKind::Int:
+                    glUniform1i(location, value.integer); break;
+                case UniformKind::Vec2:
+                    glUniform2fv(location, 1, value.floats.data()); break;
+                case UniformKind::Vec3:
+                    glUniform3fv(location, 1, value.floats.data()); break;
+                case UniformKind::Vec4:
+                    glUniform4fv(location, 1, value.floats.data()); break;
+                case UniformKind::Mat4:
+                    glUniformMatrix4fv(location, 1, GL_FALSE, value.floats.data()); break;
+                case UniformKind::FloatArray:
+                    glUniform1fv(
+                        location, static_cast<GLsizei>(value.floats.size()),
+                        value.floats.data());
+                    break;
+                case UniformKind::Vec2Array:
+                    glUniform2fv(
+                        location, static_cast<GLsizei>(value.floats.size() / 2),
+                        value.floats.data());
+                    break;
+                case UniformKind::Vec3Array:
+                    glUniform3fv(
+                        location, static_cast<GLsizei>(value.floats.size() / 3),
+                        value.floats.data());
+                    break;
+                case UniformKind::Mat4Array:
+                    glUniformMatrix4fv(
+                        location, static_cast<GLsizei>(value.floats.size() / 16),
+                        GL_FALSE, value.floats.data());
+                    break;
+                }
+            }
+
+            void ReplayUniforms()
+            {
+                for (const auto& [name, value] : uniforms_)
+                    UploadUniform(name.c_str(), value);
+            }
+
+            void ReleaseNativeResource() noexcept override
+            {
+                if (vertexArray_ != 0)
+                {
+                    rlUnloadVertexArray(vertexArray_);
+                    vertexArray_ = 0;
+                }
+                if (program_ != 0)
+                {
+                    rlUnloadShaderProgram(program_);
+                    program_ = 0;
+                }
+            }
+
+            void InvalidateNativeResource() noexcept override
+            {
+                vertexArray_ = 0;
+                program_ = 0;
+            }
+
+            void RecreateNativeResource() override
+            {
+                if (!CompileNativeProgram())
+                {
+                    throw std::runtime_error(
+                        "RLGL ShaderEffect: context recovery compilation failed: " +
+                        compileError_);
+                }
+            }
+
+            [[nodiscard]] RlglResourceRecoveryInfo GetRecoveryInfo() const noexcept override
+            {
+                if (!recoveryRegistered_) return {};
+                std::size_t retained = vertexSource_.size() + fragmentSource_.size();
+                for (const auto& [name, value] : uniforms_)
+                    retained += name.size() + value.floats.size() * sizeof(float) + sizeof(int);
+                return {retained, 0, false};
+            }
+
+            std::string vertexSource_;
+            std::string fragmentSource_;
+            std::string compileError_;
+            std::unordered_map<std::string, UniformValue> uniforms_;
+            std::array<float, 4> renderTargetFlipV_{};
+            std::shared_ptr<RlglResourceLifetime> lifetime_;
+            unsigned int program_ = 0;
+            unsigned int vertexArray_ = 0;
+            int maximumTextureUnits_ = 0;
+            bool lifetimeRegistered_ = false;
+            bool recoveryRegistered_ = false;
+        };
+    }
+
+    std::unique_ptr<IEffectRenderer> CreateShaderEffectRenderer(
+        const std::string& vertexSource, const std::string& fragmentSource,
+        const std::shared_ptr<RlglResourceLifetime>& lifetime,
+        const int maximumTextureUnits)
+    {
+        return std::make_unique<RlglShaderEffectRenderer>(
+            vertexSource, fragmentSource, lifetime, maximumTextureUnits);
+    }
+
+    void DrawShaderEffectGeometry(
+        IEffectRenderer& effect,
+        const unsigned int vertexBuffer, const unsigned int indexBuffer,
+        const VertexAttributeBinding* const attributes, const int attributeCount,
+        const float* const worldColumnMajor, const float* const viewColumnMajor,
+        const float* const projectionColumnMajor,
+        const int primitiveType, const int elementCount,
+        const int firstVertex, const int startIndex, const int baseVertex,
+        const int instanceCount, const bool instanced,
+        const bool thirtyTwoBitIndices)
+    {
+        auto* const renderer = dynamic_cast<RlglShaderEffectRenderer*>(&effect);
+        if (renderer == nullptr)
+            throw std::invalid_argument("RLGL ShaderEffect: renderer belongs to another backend");
+        renderer->Draw(
+            vertexBuffer, indexBuffer, attributes, attributeCount,
+            worldColumnMajor, viewColumnMajor, projectionColumnMajor,
+            primitiveType, elementCount, firstVertex, startIndex, baseVertex,
+            instanceCount, instanced, thirtyTwoBitIndices);
     }
 
     std::string Initialize(
@@ -1206,7 +1910,8 @@ void main()
         const SpritePipeline& pipeline,
         const float* vertices, const int vertexCount,
         const std::uint16_t* indices, const int indexCount,
-        const float* projectionColumnMajor)
+        const float* projectionColumnMajor,
+        IEffectRenderer* const customEffectRenderer)
     {
         RequireInitialized("SpriteBatch draw");
         if (pipeline.program == 0 || pipeline.vertexArray == 0 ||
@@ -1220,8 +1925,6 @@ void main()
         {
             throw std::out_of_range("RLGL: SpriteBatch upload exceeds its pipeline capacity");
         }
-
-        rlEnableShader(pipeline.program);
 
         ::Matrix projection{};
         projection.m0 = projectionColumnMajor[0];
@@ -1240,10 +1943,22 @@ void main()
         projection.m13 = projectionColumnMajor[13];
         projection.m14 = projectionColumnMajor[14];
         projection.m15 = projectionColumnMajor[15];
-        rlSetUniformMatrix(pipeline.projectionLocation, projection);
-        constexpr int textureUnit = 0;
-        rlSetUniform(
-            pipeline.textureLocation, &textureUnit, RL_SHADER_UNIFORM_INT, 1);
+        if (customEffectRenderer != nullptr)
+        {
+            if (!customEffectRenderer->IsValid())
+                throw std::runtime_error("RLGL ShaderEffect: SpriteBatch program is not valid");
+            customEffectRenderer->Bind();
+            customEffectRenderer->SetUniformMat4(
+                "projection", projectionColumnMajor);
+        }
+        else
+        {
+            rlEnableShader(pipeline.program);
+            rlSetUniformMatrix(pipeline.projectionLocation, projection);
+            constexpr int textureUnit = 0;
+            rlSetUniform(
+                pipeline.textureLocation, &textureUnit, RL_SHADER_UNIFORM_INT, 1);
+        }
 
         if (!rlEnableVertexArray(pipeline.vertexArray))
         {

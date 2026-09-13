@@ -57,7 +57,7 @@ success.
 | XNA `SamplerState` | ✅ | Independent GL sampler objects passed all filter/address ordinals, mip/bias, anisotropy, transition, slot-isolation, and sampled-pixel checks |
 | DXT1/DXT3/DXT5 `Texture2D` | ✅ | Native S3TC storage is selected from rlgl's live extension probe; contexts without S3TC decode blocks into RGBA8 renderer storage while retaining exact block-transfer/readback semantics. Both modes passed block-aligned partial updates, nonzero mips, exact bytes, invalid-transfer checks, and sampled red/blue pixels |
 | Blend/depth/stencil/rasterizer state | ✅ | Every blend/compare/stencil-operation ordinal, separate equations, four color masks, sample mask, blend factor, two-sided stencil, standalone reference changes, cull/fill/scissor, and normalized depth bias passed native transition checks; representative blend/mask/depth/stencil/cull/wire/scissor pixels passed |
-| SpriteBatch/SpriteFont | 🟨 | Built-in texture/font drawing uses CNA-owned batching over rlgl shader/VAO/VBO/IBO/draw wrappers and passed transforms, origin/rotation, flips, all sort modes, sampler forwarding, blend, viewport/scissor, fractional coordinates, capacity flush, and glyph pixels. With compiled effects enabled, classic bytecode also passes stock vertex inheritance, pass-major execution, texture-slot precedence/fallback, rendered-source orientation, and state recovery (`RLGL-051`); CNAEXT source `ShaderEffect` remains `RLGL-050` |
+| SpriteBatch/SpriteFont | ✅ | Built-in texture/font drawing uses CNA-owned batching over rlgl shader/VAO/VBO/IBO/draw wrappers and passed transforms, origin/rotation, flips, all sort modes, sampler forwarding, blend, viewport/scissor, fractional coordinates, capacity flush, and glyph pixels. Classic compiled effects add stock vertex inheritance, pass-major execution, texture-slot precedence/fallback, rendered-source orientation, and recovery (`RLGL-051`); CNAEXT source effects execute their own program with batch projection, texture, and persistent custom uniforms (`RLGL-050`) |
 | Vertex/index buffer resources | ✅ | Static/dynamic vertex plus 16/32-bit index resources use fixed-capacity rlgl VBO/EBO storage. Exact native bytes/size/usage, all declaration records, `None`/`Discard`/`NoOverwrite`, and invalid inputs passed `RLGL-030` |
 | Primitive and user draw calls | ✅ | Every point/line/triangle list/strip topology passed indexed and non-indexed pixels, exact 16/32-bit index dispatch, declaration semantic/type mapping, offsets, WVP transforms, public user routes, and SpriteBatch-to-primitive rebinding in `RLGL-031` |
 | Multi-stream vertex input | ✅ | Up to sixteen per-vertex or per-instance streams retain independent VBOs, declarations, strides, public slots, element offsets, and instance frequencies. Ordinary non-indexed/indexed draws passed `RLGL-032`; stock-effect instancing passed `RLGL-016`; reflected compiled effects passed the same multi-stream/instancing matrix in `RLGL-049`, including exact divisors, both index widths, every topology, start/base offsets, and ordinary/instanced transitions |
@@ -70,7 +70,8 @@ success.
 | `RenderTargetCube` (all eleven classic FNA target formats) | ✅ | Exact six-face/mip storage, per-face binding/readback, six independent MSAA color buffers, Depth16/Depth24/Depth24Stencil8, resolve/mips, Preserve/Discard, switching, and Color upload passed `RLGL-046`; public non-Color transfer is refused because CNA's current cube interface cannot express its format-native bytes |
 | Multiple render targets | ✅ | HiDef supports ordered sets of two through four RenderTarget2D objects, cube faces, or compatible mixtures through transactional rlgl-created FBOs and `rlActiveDrawBuffers`; indexed masks/Clear, slot-zero depth, mixed formats, MSAA resolve/mips, usage, transitions, and refusal safety passed `RLGL-040`/`046`. Reach correctly remains limited to one target |
 | Compiled XNA effects | ✅ | With `CNA_RLGL_COMPILED_EFFECTS=ON`, the pinned MojoShader path executes the same 17 shared contracts as DirectX11: reflection/state, ordinary/multi-stream/instanced indexed and non-indexed draws, SpriteBatch, reflected attributes/uniforms, fragment and vertex 2D/cube samplers, pass selection, render-target orientation, stock-compatible depth, switching, stress/truncation, and context restoration (`RLGL-047`/`048`/`049`/`051`). `GraphicsCapability::CompiledEffects` is true in this build. Volume sampling is explicitly refused at the missing RLGL `Texture3D` resource boundary. |
-| CNAEXT source `ShaderEffect` and general 3D workloads | ❌ | Source shaders remain an explicit failure owned separately by `RLGL-050`; the representative-workload audit remains a separate gate, so the umbrella `GraphicsCapability::ThreeD` stays false despite validated stock 3D and instanced draws |
+| CNAEXT source `ShaderEffect` | ✅ | RLGL-050 compiles and links caller desktop GLSL, reports structured diagnostics, maps declaration-order attributes, uploads every loose uniform/array form, binds Texture2D/TextureCube, drives indexed/non-indexed 3D and SpriteBatch draws, survives source/stock transitions, and rebuilds retained source/uniform state after context recreation. Real volume sampling remains unavailable because RLGL has no `Texture3D` resource. |
+| Representative general 3D workloads | ❌ | The workload ladder remains a separate RLGL-018 gate, so the umbrella `GraphicsCapability::ThreeD` stays false despite validated stock, source, compiled, multi-stream, and instanced primitive draws |
 | Classic stock-effect instancing | ✅ | Hardware indexed instancing preserves per-stream offsets/divisors, every topology, both index widths, start/base ranges, effect-World composition, dynamic updates, and state recovery. The shared suites passed 70/72 tests (two named EasyGL/D3D skips), the parity sample passed 6/6 pixels, the native-state fixture passed 28/28 gates, and both focused executables passed AddressSanitizer in `RLGL-016` |
 | Occlusion queries | ✅ | A renderer-private GL 3.3 bridge uses exact `GL_SAMPLES_PASSED`; visible/additive/zero/occluded counts, asynchronous completion, permissive Begin/End sequencing, state recovery, and resource/device lifetime passed `RLGL-052` |
 | Concurrent RLGL devices | ❌ | rlgl 6.0 has one process-global state object; a second live device is rejected |
@@ -80,7 +81,9 @@ success.
 `MultipleRenderTargets` additionally requires the current device profile's ceiling to exceed one,
 so it is false for Reach and true for a validated HiDef device with sufficient GL limits.
 `MultiStreamVertexInput` and `Instancing` are true for their validated ordinary, stock-effect, and
-optional compiled-effect routes. Unlisted capability results remain false.
+optional compiled-effect routes. `CustomEffects` and `ExecutesShaderEffectSourceEXT()` are true;
+the accepted source pairs are exactly desktop GLSL vertex and fragment stages. Unlisted capability
+results remain false.
 Native GL support alone is not treated as a CNA implementation promise; the renderer opts in only
 after its complete path and observable behavior are tested.
 
@@ -128,7 +131,8 @@ cmake --build cmake-build-rlgl --parallel 3 --target \
       cna_test_rlgl_primitive cna_test_rlgl_instanced_parity \
       cna_test_rlgl_occlusion_query cna_test_rlgl_occlusion_query_visible \
       cna_test_rlgl_occlusion_query_occluded cna_test_rlgl_occlusion_query_lifetime \
-      cna_test_rlgl_effect cna_test_rlgl_xna_pixel_center \
+      cna_test_rlgl_effect cna_test_rlgl_shader_effect \
+      cna_test_rlgl_xna_pixel_center \
       cna_test_rlgl_basiceffect_lighting cna_test_rlgl_dual_texture_effect \
       cna_test_rlgl_dual_texture_independent_uv cna_test_rlgl_environment_map \
       cna_test_rlgl_environment_map_terms cna_test_rlgl_environment_map_sampler_contract \
@@ -191,6 +195,8 @@ SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_primitive
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_effect
+SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
+  ./cmake-build-rlgl/cna_test_rlgl_shader_effect
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
   ./cmake-build-rlgl/cna_test_rlgl_xna_pixel_center
 SDL_VIDEODRIVER=offscreen LIBGL_ALWAYS_SOFTWARE=1 \
